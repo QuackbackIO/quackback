@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { createOrganization } from '@/lib/auth/client'
 import { buildOrgUrl } from '@/lib/routing'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 function slugify(text: string): string {
   return text
@@ -83,56 +85,51 @@ export function CreateOrgForm() {
         </div>
       )}
 
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-foreground">
+      <div className="space-y-2">
+        <label htmlFor="name" className="text-sm font-medium">
           Organization name
         </label>
-        <input
+        <Input
           id="name"
           type="text"
           value={name}
           onChange={(e) => handleNameChange(e.target.value)}
           required
-          className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder="Acme Inc"
         />
       </div>
 
-      <div>
-        <label htmlFor="slug" className="block text-sm font-medium text-foreground">
+      <div className="space-y-2">
+        <label htmlFor="slug" className="text-sm font-medium">
           URL
         </label>
-        <div className="mt-1 flex rounded-md shadow-sm">
+        <div className="flex rounded-md shadow-xs">
           <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
             {typeof window !== 'undefined'
               ? `${window.location.protocol}//`
               : 'https://'}
           </span>
-          <input
+          <Input
             id="slug"
             type="text"
             value={slug}
             onChange={(e) => handleSlugChange(e.target.value)}
             required
-            className="block w-full min-w-0 flex-1 border border-input bg-background px-3 py-2 text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
             placeholder="acme"
+            className="rounded-none border-x-0"
           />
           <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
             .localhost:3000
           </span>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           This will be your organization's unique URL
         </p>
       </div>
 
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={isLoading} className="w-full">
         {isLoading ? 'Creating...' : 'Create organization'}
-      </button>
+      </Button>
     </form>
   )
 }

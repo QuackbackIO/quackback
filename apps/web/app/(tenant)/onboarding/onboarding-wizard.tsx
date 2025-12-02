@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, MessageSquare, Sparkles, ArrowRight } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface OnboardingWizardProps {
   organizationName: string
@@ -71,34 +75,35 @@ export function OnboardingWizard({ organizationName, organizationId, userName }:
             Here's what we'll do:
           </h2>
           <div className="space-y-3">
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                1
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Create your first feedback board</p>
-                <p className="text-sm text-muted-foreground">A place for users to submit and vote on ideas</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                2
-              </div>
-              <div>
-                <p className="font-medium text-muted-foreground">Share with your users</p>
-                <p className="text-sm text-muted-foreground">Get your public board link or embed the widget</p>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="flex items-start gap-3 p-4">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">Create your first feedback board</p>
+                  <p className="text-sm text-muted-foreground">A place for users to submit and vote on ideas</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-start gap-3 p-4">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium text-muted-foreground">Share with your users</p>
+                  <p className="text-sm text-muted-foreground">Get your public board link or embed the widget</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
-        <button
-          onClick={() => setStep('create-board')}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-primary-foreground hover:bg-primary/90"
-        >
+        <Button onClick={() => setStep('create-board')} size="lg">
           Get started
           <ArrowRight className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
     )
   }
@@ -126,55 +131,54 @@ export function OnboardingWizard({ organizationName, organizationId, userName }:
           className="space-y-6"
         >
           {error && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </div>
           )}
 
-          <div>
-            <label htmlFor="boardName" className="block text-sm font-medium text-foreground">
+          <div className="space-y-2">
+            <label htmlFor="boardName" className="text-sm font-medium">
               Board name
             </label>
-            <input
+            <Input
               id="boardName"
               type="text"
               value={boardName}
               onChange={(e) => setBoardName(e.target.value)}
               required
-              className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
               placeholder="Feature Requests"
             />
           </div>
 
-          <div>
-            <label htmlFor="boardDescription" className="block text-sm font-medium text-foreground">
+          <div className="space-y-2">
+            <label htmlFor="boardDescription" className="text-sm font-medium">
               Description
             </label>
-            <textarea
+            <Textarea
               id="boardDescription"
               value={boardDescription}
               onChange={(e) => setBoardDescription(e.target.value)}
               rows={3}
-              className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
               placeholder="Share your ideas and vote on features"
             />
           </div>
 
           <div className="flex gap-3">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setStep('welcome')}
-              className="flex-1 rounded-md border border-input px-4 py-2 text-foreground hover:bg-accent"
+              className="flex-1"
             >
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={isLoading || !boardName.trim()}
-              className="flex-1 rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="flex-1"
             >
               {isLoading ? 'Creating...' : 'Create board'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -197,13 +201,10 @@ export function OnboardingWizard({ organizationName, organizationId, userName }:
           </p>
         </div>
 
-        <button
-          onClick={() => router.push('/admin')}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-primary-foreground hover:bg-primary/90"
-        >
+        <Button onClick={() => router.push('/admin')} size="lg">
           Go to dashboard
           <ArrowRight className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
     )
   }

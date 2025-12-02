@@ -2,6 +2,7 @@
 
 import { signIn } from '@/lib/auth/client'
 import { Github } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 interface OAuthButtonsProps {
   mode: 'signin' | 'signup'
@@ -26,18 +27,20 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
 
   return (
     <div className="space-y-3">
-      <button
+      <Button
         type="button"
+        variant="outline"
         onClick={handleGitHub}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+        className="w-full"
       >
         <Github className="h-5 w-5" />
         {actionText} with GitHub
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="outline"
         onClick={handleGoogle}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+        className="w-full"
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
@@ -58,7 +61,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
           />
         </svg>
         {actionText} with Google
-      </button>
+      </Button>
     </div>
   )
 }

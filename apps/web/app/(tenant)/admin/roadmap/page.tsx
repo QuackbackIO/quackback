@@ -1,4 +1,5 @@
 import { requireTenant } from '@/lib/tenant'
+import { Card, CardContent } from '@/components/ui/card'
 
 export default async function RoadmapPage() {
   await requireTenant()
@@ -12,9 +13,11 @@ export default async function RoadmapPage() {
         </p>
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-12 text-center">
-        <p className="text-muted-foreground">Roadmap feature coming soon</p>
-      </div>
+      <Card>
+        <CardContent className="p-12 text-center">
+          <p className="text-muted-foreground">Roadmap feature coming soon</p>
+        </CardContent>
+      </Card>
     </main>
   )
 }

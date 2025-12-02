@@ -7,7 +7,17 @@ import {
   setActiveOrganization,
 } from '@/lib/auth/client'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Plus } from 'lucide-react'
+import { ChevronDown, Plus, Check } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 interface Organization {
   id: string
@@ -17,7 +27,6 @@ interface Organization {
 
 export function OrgSwitcher() {
   const router = useRouter()
-  const [isOpen, setIsOpen] = useState(false)
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [activeOrg, setActiveOrg] = useState<Organization | null>(null)
 
@@ -34,64 +43,52 @@ export function OrgSwitcher() {
 
   async function handleSwitch(orgId: string) {
     await setActiveOrganization({ organizationId: orgId })
-    setIsOpen(false)
     router.refresh()
   }
 
   if (!activeOrg) return null
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent"
-      >
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-muted text-xs font-bold">
-          {activeOrg.name[0].toUpperCase()}
-        </div>
-        <span>{activeOrg.name}</span>
-        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-      </button>
-
-      {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card py-1 shadow-lg">
-            <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
-              Organizations
-            </div>
-            {organizations.map((org) => (
-              <button
-                key={org.id}
-                onClick={() => handleSwitch(org.id)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent ${
-                  org.id === activeOrg.id ? 'bg-accent' : ''
-                }`}
-              >
-                <div className="flex h-6 w-6 items-center justify-center rounded bg-muted text-xs font-bold">
-                  {org.name[0].toUpperCase()}
-                </div>
-                <span>{org.name}</span>
-                {org.id === activeOrg.id && (
-                  <span className="ml-auto text-xs text-primary">Active</span>
-                )}
-              </button>
-            ))}
-            <div className="border-t border-border mt-1 pt-1">
-              <button
-                onClick={() => router.push('/admin/settings/organization/new')}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:bg-accent"
-              >
-                <Plus className="h-4 w-4" />
-                Create organization
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="gap-2">
+          <Avatar className="h-6 w-6">
+            <AvatarFallback className="text-xs">
+              {activeOrg.name[0].toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span>{activeOrg.name}</span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+        {organizations.map((org) => (
+          <DropdownMenuItem
+            key={org.id}
+            onClick={() => handleSwitch(org.id)}
+            className="gap-2"
+          >
+            <Avatar className="h-6 w-6">
+              <AvatarFallback className="text-xs">
+                {org.name[0].toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span>{org.name}</span>
+            {org.id === activeOrg.id && (
+              <Check className="ml-auto h-4 w-4 text-primary" />
+            )}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => router.push('/admin/settings/organization/new')}
+          className="gap-2 text-muted-foreground"
+        >
+          <Plus className="h-4 w-4" />
+          Create organization
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

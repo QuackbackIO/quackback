@@ -2,6 +2,8 @@
 
 import { Building2, ChevronRight } from 'lucide-react'
 import { buildOrgUrl } from '@/lib/routing'
+import { Card, CardContent } from '@/components/ui/card'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 interface Organization {
   id: string
@@ -25,26 +27,27 @@ export function OrgSelector({ organizations, callbackUrl }: OrgSelectorProps) {
   return (
     <div className="space-y-3">
       {organizations.map((org) => (
-        <button
+        <Card
           key={org.id}
+          className="cursor-pointer transition-colors hover:bg-muted/50"
           onClick={() => handleSelectOrg(org)}
-          className="flex w-full items-center justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-input hover:bg-accent"
         >
-          <div className="flex items-center gap-3">
-            {org.logo ? (
-              <img src={org.logo} alt={org.name} className="h-10 w-10 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                <Building2 className="h-5 w-5 text-muted-foreground" />
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarImage src={org.logo || undefined} alt={org.name} />
+                <AvatarFallback>
+                  <Building2 className="h-5 w-5" />
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium text-foreground">{org.name}</p>
+                <p className="text-sm text-muted-foreground">{org.slug}</p>
               </div>
-            )}
-            <div>
-              <p className="font-medium text-foreground">{org.name}</p>
-              <p className="text-sm text-muted-foreground">{org.slug}</p>
             </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-        </button>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
       ))}
     </div>
   )
