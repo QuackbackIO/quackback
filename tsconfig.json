@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "declaration": true,
+    "declarationMap": true,
+    "composite": true
+  },
+  "references": [
+    { "path": "apps/web" },
+    { "path": "packages/db" },
+    { "path": "packages/shared" },
+    { "path": "packages/integrations" }
+  ]
+}
