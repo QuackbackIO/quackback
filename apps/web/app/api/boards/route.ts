@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, organizationId } = body
+    const { name, description, organizationId, isPublic = true } = body
 
     if (!name || !organizationId) {
       return NextResponse.json({ error: 'Name and organizationId are required' }, { status: 400 })
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         name,
         slug,
         description: description || null,
-        isPublic: true,
+        isPublic,
         settings: {},
       })
       .returning()
