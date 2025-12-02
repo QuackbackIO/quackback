@@ -21,7 +21,7 @@ export default async function AdminPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-lg font-medium text-foreground">Feedback Boards</h2>
         <Button asChild>
@@ -32,7 +32,7 @@ export default async function AdminPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {orgBoards.map((board) => (
           <Link key={board.id} href={`/boards/${board.slug}`} className="group">
             <Card className="h-full transition-colors hover:bg-muted/50">

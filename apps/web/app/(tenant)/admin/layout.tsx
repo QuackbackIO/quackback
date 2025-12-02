@@ -10,7 +10,12 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <AdminNav organizationName={organization.name} userEmail={user.email} />
+      <AdminNav
+        organizationName={organization.name}
+        userName={user.name}
+        userEmail={user.email}
+        userImage={user.image}
+      />
       {children}
     </div>
   )
