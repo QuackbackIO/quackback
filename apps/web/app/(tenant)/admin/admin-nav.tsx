@@ -16,7 +16,6 @@ import {
 import { signOut } from '@/lib/auth/client'
 
 interface AdminNavProps {
-  organizationName: string
   userName: string
   userEmail: string
   userImage?: string | null
@@ -35,7 +34,7 @@ const navItems = [
   },
 ]
 
-export function AdminNav({ organizationName, userName, userEmail, userImage }: AdminNavProps) {
+export function AdminNav({ userName, userEmail, userImage }: AdminNavProps) {
   const pathname = usePathname()
 
   // Get initials for avatar fallback
@@ -50,11 +49,9 @@ export function AdminNav({ organizationName, userName, userEmail, userImage }: A
     <header className="border-b border-border bg-card">
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">
-              {organizationName}
-            </h1>
-          </div>
+          <Link href="/admin">
+            <img src="/logo.png" alt="Quackback" width={32} height={32} />
+          </Link>
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href ||

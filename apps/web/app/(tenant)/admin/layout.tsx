@@ -6,12 +6,11 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { organization, user } = await requireTenant()
+  const { user } = await requireTenant()
 
   return (
     <div className="min-h-screen bg-background">
       <AdminNav
-        organizationName={organization.name}
         userName={user.name}
         userEmail={user.email}
         userImage={user.image}
