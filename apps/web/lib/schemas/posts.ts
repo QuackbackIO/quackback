@@ -13,8 +13,8 @@ export const createPostSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Description is required').max(10000),
   boardId: z.string().uuid('Select a board'),
-  status: postStatusSchema.default('open'),
-  tagIds: z.array(z.string().uuid()).default([]),
+  status: postStatusSchema,
+  tagIds: z.array(z.string().uuid()),
 })
 
 export type PostStatus = z.infer<typeof postStatusSchema>

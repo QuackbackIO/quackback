@@ -36,13 +36,14 @@ export function getUserIdentifierFromRequest(request: NextRequest): string {
 /**
  * Set user identifier cookie in response headers
  */
-export function setUserIdentifierCookie(
-  headers: Headers,
-  userIdentifier: string
-): void {
+export function setUserIdentifierCookie(headers: Headers, userIdentifier: string): void {
+  // Use COOKIE_DOMAIN env var for cross-subdomain support
+  const domain = process.env.COOKIE_DOMAIN || ''
+  const domainAttr = domain ? `; Domain=${domain}` : ''
+
   headers.set(
     'Set-Cookie',
-    `${USER_ID_COOKIE}=${userIdentifier}; Path=/; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax; HttpOnly`
+    `${USER_ID_COOKIE}=${userIdentifier}; Path=/${domainAttr}; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax; HttpOnly`
   )
 }
 

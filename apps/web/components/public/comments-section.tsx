@@ -3,13 +3,21 @@
 import { useRouter } from 'next/navigation'
 import { CommentThread } from './comment-thread'
 
+interface CommentReaction {
+  emoji: string
+  count: number
+  hasReacted: boolean
+}
+
 interface Comment {
   id: string
   content: string
   authorName: string | null
   createdAt: Date
   parentId: string | null
+  isTeamMember: boolean
   replies: Comment[]
+  reactions: CommentReaction[]
 }
 
 interface CommentsSectionProps {
@@ -18,7 +26,11 @@ interface CommentsSectionProps {
   allowCommenting?: boolean
 }
 
-export function CommentsSection({ postId, comments, allowCommenting = true }: CommentsSectionProps) {
+export function CommentsSection({
+  postId,
+  comments,
+  allowCommenting = true,
+}: CommentsSectionProps) {
   const router = useRouter()
 
   const handleCommentAdded = () => {

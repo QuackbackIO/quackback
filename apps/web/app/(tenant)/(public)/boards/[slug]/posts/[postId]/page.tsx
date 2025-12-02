@@ -2,14 +2,22 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentOrganization } from '@/lib/tenant'
-import { getPublicBoardBySlug, getPublicPostDetail, hasUserVotedOnPost } from '@quackback/db/queries/public'
+import {
+  getPublicBoardBySlug,
+  getPublicPostDetail,
+  hasUserVotedOnPost,
+} from '@quackback/db/queries/public'
 import { getBoardSettings } from '@quackback/db/types'
 import { getUserIdentifier } from '@/lib/user-identifier'
 import { VoteButton } from '@/components/public/vote-button'
 import { CommentsSection } from '@/components/public/comments-section'
+import { OfficialResponse } from '@/components/public/official-response'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PostStatus } from '@quackback/db'
+
+// Ensure page is not cached since it depends on user's cookie
+export const dynamic = 'force-dynamic'
 
 const STATUS_COLORS: Record<PostStatus, string> = {
   open: 'bg-blue-500',
@@ -47,8 +55,11 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     notFound()
   }
 
-  // Get post detail
-  const post = await getPublicPostDetail(postId)
+  // Get user identifier for tracking votes and reactions
+  const userIdentifier = await getUserIdentifier()
+
+  // Get post detail with user's reaction state
+  const post = await getPublicPostDetail(postId, userIdentifier)
   if (!post || post.board.slug !== slug) {
     notFound()
   }
@@ -57,7 +68,6 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const boardSettings = getBoardSettings(board)
 
   // Check if user has voted
-  const userIdentifier = await getUserIdentifier()
   const hasVoted = await hasUserVotedOnPost(postId, userIdentifier)
 
   return (
@@ -119,11 +129,21 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         <p className="whitespace-pre-wrap">{post.content}</p>
       </div>
 
+      {/* Official response */}
+      {post.officialResponse && (
+        <div className="mb-8">
+          <OfficialResponse
+            content={post.officialResponse.content}
+            authorName={post.officialResponse.authorName}
+            respondedAt={post.officialResponse.respondedAt}
+            organizationName={org.name}
+          />
+        </div>
+      )}
+
       {/* Comments section */}
       <div className="border-t pt-6">
-        <h2 className="text-lg font-semibold mb-4">
-          Comments ({post.comments.length})
-        </h2>
+        <h2 className="text-lg font-semibold mb-4">Comments ({post.comments.length})</h2>
 
         <CommentsSection
           postId={post.id}

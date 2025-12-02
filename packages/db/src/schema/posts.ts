@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
@@ -31,10 +32,17 @@ export const posts = pgTable(
     authorEmail: text('author_email'),
     status: text('status', {
       enum: ['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed'],
-    }).default('open').notNull(),
+    })
+      .default('open')
+      .notNull(),
     ownerId: text('owner_id'),
     estimated: text('estimated'),
     voteCount: integer('vote_count').default(0).notNull(),
+    // Official team response
+    officialResponse: text('official_response'),
+    officialResponseAuthorId: text('official_response_author_id'),
+    officialResponseAuthorName: text('official_response_author_name'),
+    officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -139,6 +147,7 @@ export const comments = pgTable(
     authorName: text('author_name'),
     authorEmail: text('author_email'),
     content: text('content').notNull(),
+    isTeamMember: boolean('is_team_member').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -155,7 +164,7 @@ export const comments = pgTable(
 ).enableRLS()
 
 export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
-export type ReactionEmoji = typeof REACTION_EMOJIS[number]
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 const commentReactionsOrgCheck = sql`comment_id IN (
   SELECT c.id FROM comments c

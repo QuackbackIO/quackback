@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { signUp, createOrganization, setActiveOrganization } from '@/lib/auth/client'
 import { signupSchema, type SignupInput } from '@/lib/schemas/auth'
 import { OAuthButtons } from './oauth-buttons'
@@ -23,7 +23,7 @@ export function SignupForm() {
   const [error, setError] = useState('')
 
   const form = useForm<SignupInput>({
-    resolver: zodResolver(signupSchema),
+    resolver: standardSchemaResolver(signupSchema),
     defaultValues: {
       name: '',
       email: '',
@@ -48,7 +48,10 @@ export function SignupForm() {
 
       const { data: org, error: orgError } = await createOrganization({
         name: data.orgName,
-        slug: data.orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+        slug: data.orgName
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9-]/g, ''),
       })
 
       if (orgError) {
@@ -81,9 +84,7 @@ export function SignupForm() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
 
           <FormField

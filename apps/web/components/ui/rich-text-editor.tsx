@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { Bold, Italic, List, ListOrdered, Undo, Redo } from 'lucide-react'
 
 interface RichTextEditorProps {
-  value: string
+  value: string | undefined
   onChange: (value: string) => void
   placeholder?: string
   className?: string
@@ -39,7 +39,7 @@ export function RichTextEditor({
         emptyEditorClass: 'is-editor-empty',
       }),
     ],
-    content: value,
+    content: value ?? '',
     editable: !disabled,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML())
@@ -54,7 +54,7 @@ export function RichTextEditor({
   // Sync external value changes
   useEffect(() => {
     if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value)
+      editor.commands.setContent(value ?? '')
     }
   }, [value, editor])
 

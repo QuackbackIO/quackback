@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createBoardSchema, type CreateBoardInput } from '@/lib/schemas/boards'
 import {
   Dialog,
@@ -39,7 +39,7 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
   const [error, setError] = useState('')
 
   const form = useForm<CreateBoardInput>({
-    resolver: zodResolver(createBoardSchema),
+    resolver: standardSchemaResolver(createBoardSchema),
     defaultValues: {
       name: '',
       description: '',
@@ -145,15 +145,10 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
                   <FormItem className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <FormLabel>Public board</FormLabel>
-                      <FormDescription>
-                        Anyone can view and submit feedback
-                      </FormDescription>
+                      <FormDescription>Anyone can view and submit feedback</FormDescription>
                     </div>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -161,11 +156,7 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
             </div>
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>

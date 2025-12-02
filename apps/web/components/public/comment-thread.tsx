@@ -1,16 +1,13 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Reply, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react'
+import { useState, useTransition, useEffect } from 'react'
+import { Reply, ChevronDown, ChevronRight, SmilePlus, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CommentForm } from './comment-form'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +25,7 @@ interface Comment {
   authorName: string | null
   createdAt: Date
   parentId: string | null
+  isTeamMember: boolean
   replies: Comment[]
   reactions: CommentReaction[]
 }
@@ -108,6 +106,11 @@ function CommentItem({
   const [isPending, startTransition] = useTransition()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
+  // Sync reactions from props when they change (e.g., on page refresh)
+  useEffect(() => {
+    setReactions(comment.reactions)
+  }, [comment.reactions])
+
   // Limit nesting depth for readability
   const maxDepth = 5
   const canNest = depth < maxDepth
@@ -136,25 +139,39 @@ function CommentItem({
   return (
     <div className="group/thread">
       {/* Thread container with Reddit-style indentation */}
-      <div
-        className={cn(
-          'relative',
-          depth > 0 && 'ml-4 pl-4'
-        )}
-      >
-
+      <div className={cn('relative', depth > 0 && 'ml-4 pl-4')}>
         {/* Comment content */}
         <div className="py-2">
           {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
-            <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="text-xs bg-muted">
-                {getInitials(comment.authorName)}
+            <Avatar
+              className={cn(
+                'h-8 w-8 shrink-0',
+                comment.isTeamMember && 'ring-2 ring-primary ring-offset-2'
+              )}
+            >
+              <AvatarFallback
+                className={cn(
+                  'text-xs',
+                  comment.isTeamMember ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                )}
+              >
+                {comment.isTeamMember ? (
+                  <Building2 className="h-4 w-4" />
+                ) : (
+                  getInitials(comment.authorName)
+                )}
               </AvatarFallback>
             </Avatar>
-            <span className="font-medium text-sm">
-              {comment.authorName || 'Anonymous'}
-            </span>
+            <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
+            {comment.isTeamMember && (
+              <Badge
+                variant="default"
+                className="bg-primary text-primary-foreground text-xs px-1.5 py-0"
+              >
+                Team
+              </Badge>
+            )}
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
           </div>

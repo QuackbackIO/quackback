@@ -15,21 +15,17 @@ export const updateBoardSchema = z.object({
 export const boardPublicSettingsSchema = z.object({
   publicVoting: z.boolean(),
   publicCommenting: z.boolean(),
-  roadmapStatuses: z.array(z.enum([
-    'open',
-    'under_review',
-    'planned',
-    'in_progress',
-    'complete',
-    'closed',
-  ])),
+  roadmapStatuses: z.array(
+    z.enum(['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed'])
+  ),
 })
 
 export const deleteBoardSchema = z.object({
   confirmName: z.string(),
 })
 
-export type CreateBoardInput = z.infer<typeof createBoardSchema>
+export type CreateBoardInput = z.input<typeof createBoardSchema>
+export type CreateBoardOutput = z.infer<typeof createBoardSchema>
 export type UpdateBoardInput = z.infer<typeof updateBoardSchema>
 export type BoardPublicSettingsInput = z.infer<typeof boardPublicSettingsSchema>
 export type DeleteBoardInput = z.infer<typeof deleteBoardSchema>

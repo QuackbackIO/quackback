@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { boardPublicSettingsSchema, type BoardPublicSettingsInput } from '@/lib/schemas/boards'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -40,7 +40,7 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
   const currentSettings = getBoardSettings(board)
 
   const form = useForm<BoardPublicSettingsInput>({
-    resolver: zodResolver(boardPublicSettingsSchema),
+    resolver: standardSchemaResolver(boardPublicSettingsSchema),
     defaultValues: {
       publicVoting: currentSettings.publicVoting,
       publicCommenting: currentSettings.publicCommenting,
@@ -81,9 +81,7 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
 
         {success && (
@@ -100,15 +98,10 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
             <FormItem className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <FormLabel>Allow public voting</FormLabel>
-                <FormDescription>
-                  Let visitors upvote posts without signing in
-                </FormDescription>
+                <FormDescription>Let visitors upvote posts without signing in</FormDescription>
               </div>
               <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
             </FormItem>
           )}
@@ -122,15 +115,10 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
             <FormItem className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <FormLabel>Allow public comments</FormLabel>
-                <FormDescription>
-                  Let visitors add comments without signing in
-                </FormDescription>
+                <FormDescription>Let visitors add comments without signing in</FormDescription>
               </div>
               <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
             </FormItem>
           )}
@@ -140,39 +128,42 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
         <FormField
           control={form.control}
           name="roadmapStatuses"
-          render={({ field }) => (
-            <FormItem>
-              <div>
-                <FormLabel>Roadmap statuses</FormLabel>
-                <FormDescription>
-                  Select which statuses should appear on the public roadmap
-                </FormDescription>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 mt-3">
-                {ALL_STATUSES.map((status) => (
-                  <div key={status.value} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`status-${status.value}`}
-                      checked={field.value.includes(status.value)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          field.onChange([...field.value, status.value])
-                        } else {
-                          field.onChange(field.value.filter((s) => s !== status.value))
-                        }
-                      }}
-                    />
-                    <label
-                      htmlFor={`status-${status.value}`}
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {status.label}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </FormItem>
-          )}
+          render={({ field }) => {
+            const statuses = field.value ?? []
+            return (
+              <FormItem>
+                <div>
+                  <FormLabel>Roadmap statuses</FormLabel>
+                  <FormDescription>
+                    Select which statuses should appear on the public roadmap
+                  </FormDescription>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 mt-3">
+                  {ALL_STATUSES.map((status) => (
+                    <div key={status.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`status-${status.value}`}
+                        checked={statuses.includes(status.value)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            field.onChange([...statuses, status.value])
+                          } else {
+                            field.onChange(statuses.filter((s) => s !== status.value))
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`status-${status.value}`}
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        {status.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </FormItem>
+            )
+          }}
         />
 
         <div className="flex justify-end">

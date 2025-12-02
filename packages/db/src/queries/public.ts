@@ -1,7 +1,14 @@
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
 import { db } from '../tenant-context'
 import { boards, tags } from '../schema/boards'
-import { posts, votes, comments, postTags, commentReactions, REACTION_EMOJIS } from '../schema/posts'
+import {
+  posts,
+  votes,
+  comments,
+  postTags,
+  commentReactions,
+  REACTION_EMOJIS,
+} from '../schema/posts'
 import type { Board, PostStatus } from '../types'
 
 // Types for public queries
@@ -36,6 +43,12 @@ export interface PublicPostListResult {
   hasMore: boolean
 }
 
+export interface OfficialResponse {
+  content: string
+  authorName: string | null
+  respondedAt: Date
+}
+
 export interface PublicPostDetail {
   id: string
   title: string
@@ -47,6 +60,7 @@ export interface PublicPostDetail {
   board: { id: string; name: string; slug: string }
   tags: { id: string; name: string; color: string }[]
   comments: PublicComment[]
+  officialResponse: OfficialResponse | null
 }
 
 export interface CommentReactionCount {
@@ -61,6 +75,7 @@ export interface PublicComment {
   authorName: string | null
   createdAt: Date
   parentId: string | null
+  isTeamMember: boolean
   replies: PublicComment[]
   reactions: CommentReactionCount[]
 }
@@ -76,9 +91,7 @@ export interface RoadmapPost {
 /**
  * Get public boards with post counts for an organization
  */
-export async function getPublicBoardsWithStats(
-  organizationId: string
-): Promise<BoardWithStats[]> {
+export async function getPublicBoardsWithStats(organizationId: string): Promise<BoardWithStats[]> {
   const result = await db
     .select({
       board: boards,
@@ -266,6 +279,7 @@ export async function getPublicPostDetail(
       authorName: comment.authorName,
       createdAt: comment.createdAt,
       parentId: comment.parentId,
+      isTeamMember: comment.isTeamMember,
       replies: [],
       reactions: Array.from(reactionCounts.entries()).map(([emoji, data]) => ({
         emoji,
@@ -303,6 +317,13 @@ export async function getPublicPostDetail(
     },
     tags: tagsResult,
     comments: rootComments,
+    officialResponse: post.officialResponse
+      ? {
+          content: post.officialResponse,
+          authorName: post.officialResponseAuthorName,
+          respondedAt: post.officialResponseAt!,
+        }
+      : null,
   }
 }
 
@@ -354,10 +375,7 @@ export async function getRoadmapPosts(
 /**
  * Check if a user has voted on a post
  */
-export async function hasUserVotedOnPost(
-  postId: string,
-  userIdentifier: string
-): Promise<boolean> {
+export async function hasUserVotedOnPost(postId: string, userIdentifier: string): Promise<boolean> {
   const vote = await db.query.votes.findFirst({
     where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
   })
@@ -438,10 +456,7 @@ export async function getBoardByPostId(postId: string): Promise<Board | null> {
 /**
  * Check if a comment exists for a given post
  */
-export async function commentExistsForPost(
-  postId: string,
-  commentId: string
-): Promise<boolean> {
+export async function commentExistsForPost(postId: string, commentId: string): Promise<boolean> {
   const comment = await db.query.comments.findFirst({
     where: and(eq(comments.id, commentId), eq(comments.postId, postId)),
   })
@@ -475,6 +490,7 @@ export async function addPublicComment(
     authorName: comment.authorName,
     createdAt: comment.createdAt,
     parentId: comment.parentId,
+    isTeamMember: comment.isTeamMember,
     replies: [],
     reactions: [],
   }

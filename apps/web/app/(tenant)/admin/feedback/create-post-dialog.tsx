@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createPostSchema, type CreatePostInput, type PostStatus } from '@/lib/schemas/posts'
 import {
   Dialog,
@@ -63,13 +63,13 @@ export function CreatePostDialog({
   const [error, setError] = useState('')
 
   const form = useForm<CreatePostInput>({
-    resolver: zodResolver(createPostSchema),
+    resolver: standardSchemaResolver(createPostSchema),
     defaultValues: {
       title: '',
       content: '',
       boardId: boards[0]?.id || '',
-      status: 'open',
-      tagIds: [],
+      status: 'open' as const,
+      tagIds: [] as string[],
     },
   })
 
@@ -220,47 +220,46 @@ export function CreatePostDialog({
                 <Controller
                   control={form.control}
                   name="tagIds"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tags</FormLabel>
-                      <div className="flex flex-wrap gap-2">
-                        {tags.map((tag) => {
-                          const isSelected = field.value.includes(tag.id)
-                          return (
-                            <Badge
-                              key={tag.id}
-                              variant={isSelected ? 'default' : 'outline'}
-                              className="cursor-pointer"
-                              style={
-                                isSelected
-                                  ? { backgroundColor: tag.color, borderColor: tag.color }
-                                  : { borderColor: tag.color, color: tag.color }
-                              }
-                              onClick={() => {
-                                if (isSelected) {
-                                  field.onChange(field.value.filter((id) => id !== tag.id))
-                                } else {
-                                  field.onChange([...field.value, tag.id])
+                  render={({ field }) => {
+                    const selectedIds = field.value ?? []
+                    return (
+                      <FormItem>
+                        <FormLabel>Tags</FormLabel>
+                        <div className="flex flex-wrap gap-2">
+                          {tags.map((tag) => {
+                            const isSelected = selectedIds.includes(tag.id)
+                            return (
+                              <Badge
+                                key={tag.id}
+                                variant={isSelected ? 'default' : 'outline'}
+                                className="cursor-pointer"
+                                style={
+                                  isSelected
+                                    ? { backgroundColor: tag.color, borderColor: tag.color }
+                                    : { borderColor: tag.color, color: tag.color }
                                 }
-                              }}
-                            >
-                              {tag.name}
-                            </Badge>
-                          )
-                        })}
-                      </div>
-                    </FormItem>
-                  )}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    field.onChange(selectedIds.filter((id) => id !== tag.id))
+                                  } else {
+                                    field.onChange([...selectedIds, tag.id])
+                                  }
+                                }}
+                              >
+                                {tag.name}
+                              </Badge>
+                            )
+                          })}
+                        </div>
+                      </FormItem>
+                    )
+                  }}
                 />
               )}
             </div>
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>

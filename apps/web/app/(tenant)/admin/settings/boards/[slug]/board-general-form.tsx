@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { updateBoardSchema, type UpdateBoardInput } from '@/lib/schemas/boards'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -37,7 +37,7 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   const [success, setSuccess] = useState(false)
 
   const form = useForm<UpdateBoardInput>({
-    resolver: zodResolver(updateBoardSchema),
+    resolver: standardSchemaResolver(updateBoardSchema),
     defaultValues: {
       name: board.name,
       description: board.description || '',
@@ -72,9 +72,7 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
 
         {success && (
@@ -118,15 +116,10 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
             <FormItem className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <FormLabel>Public board</FormLabel>
-                <FormDescription>
-                  Anyone can view and submit feedback
-                </FormDescription>
+                <FormDescription>Anyone can view and submit feedback</FormDescription>
               </div>
               <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
             </FormItem>
           )}

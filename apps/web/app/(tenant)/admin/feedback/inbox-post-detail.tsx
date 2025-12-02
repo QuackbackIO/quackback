@@ -1,9 +1,23 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { X, ThumbsUp, MessageSquare, ExternalLink, Loader2, ChevronDown, ChevronRight, SmilePlus, Reply } from 'lucide-react'
+import { useState, useTransition, useEffect } from 'react'
+import {
+  X,
+  ThumbsUp,
+  MessageSquare,
+  ExternalLink,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  SmilePlus,
+  Reply,
+  Building2,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -14,11 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxEmptyState } from './inbox-empty-state'
 import { CommentForm } from '@/components/public/comment-form'
@@ -27,11 +37,9 @@ import type { PostStatus, Tag, Board, Comment } from '@quackback/db'
 const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
 
 interface CommentReaction {
-  id: string
-  commentId: string
-  userIdentifier: string
   emoji: string
-  createdAt: Date
+  count: number
+  hasReacted: boolean
 }
 
 const STATUS_OPTIONS: { value: PostStatus; label: string }[] = [
@@ -50,6 +58,12 @@ interface TeamMember {
   image?: string | null
 }
 
+interface OfficialResponse {
+  content: string
+  authorName: string | null
+  respondedAt: Date
+}
+
 interface PostDetails {
   id: string
   title: string
@@ -63,6 +77,7 @@ interface PostDetails {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
+  officialResponse: OfficialResponse | null
 }
 
 interface CommentWithReplies extends Comment {
@@ -79,6 +94,7 @@ interface InboxPostDetailProps {
   onStatusChange: (status: PostStatus) => Promise<void>
   onOwnerChange: (ownerId: string | null) => Promise<void>
   onTagsChange: (tagIds: string[]) => Promise<void>
+  onOfficialResponseChange: (response: string | null) => Promise<void>
 }
 
 function formatDate(date: Date): string {
@@ -132,22 +148,13 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
   const [isPending, startTransition] = useTransition()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
-  // Aggregate reactions by emoji with tracking
-  const [reactions, setReactions] = useState(() => {
-    const counts = new Map<string, { count: number; hasReacted: boolean }>()
-    for (const reaction of comment.reactions || []) {
-      const existing = counts.get(reaction.emoji)
-      counts.set(reaction.emoji, {
-        count: (existing?.count || 0) + 1,
-        hasReacted: existing?.hasReacted || false,
-      })
-    }
-    return Array.from(counts.entries()).map(([emoji, data]) => ({
-      emoji,
-      count: data.count,
-      hasReacted: data.hasReacted,
-    }))
-  })
+  // Reactions are pre-aggregated from the server with hasReacted already computed
+  const [reactions, setReactions] = useState<CommentReaction[]>(comment.reactions || [])
+
+  // Sync reactions from props when they change (e.g., on data refresh)
+  useEffect(() => {
+    setReactions(comment.reactions || [])
+  }, [comment.reactions])
 
   const maxDepth = 5
   const canNest = depth < maxDepth
@@ -175,12 +182,7 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
 
   return (
     <div className="group/thread">
-      <div
-        className={cn(
-          'relative',
-          depth > 0 && 'ml-4 pl-4'
-        )}
-      >
+      <div className={cn('relative', depth > 0 && 'ml-4 pl-4')}>
         {/* Comment content */}
         <div className="py-2">
           {/* Comment header with avatar */}
@@ -190,9 +192,7 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
                 {getInitials(comment.authorName)}
               </AvatarFallback>
             </Avatar>
-            <span className="font-medium text-sm">
-              {comment.authorName || 'Anonymous'}
-            </span>
+            <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
             <span className="text-muted-foreground text-xs">·</span>
             <span className="text-xs text-muted-foreground">
               {formatDate(new Date(comment.createdAt))}
@@ -326,8 +326,11 @@ export function InboxPostDetail({
   onStatusChange,
   onOwnerChange,
   onTagsChange,
+  onOfficialResponseChange,
 }: InboxPostDetailProps) {
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isEditingResponse, setIsEditingResponse] = useState(false)
+  const [responseText, setResponseText] = useState('')
 
   if (isLoading) {
     return (
@@ -392,11 +395,7 @@ export function InboxPostDetail({
       <div className="p-4 space-y-6">
         {/* Status & Board */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Select
-            value={post.status}
-            onValueChange={handleStatusChange}
-            disabled={isUpdating}
-          >
+          <Select value={post.status} onValueChange={handleStatusChange} disabled={isUpdating}>
             <SelectTrigger className="w-[160px]">
               <SelectValue />
             </SelectTrigger>
@@ -419,9 +418,7 @@ export function InboxPostDetail({
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Avatar className="h-6 w-6">
-              <AvatarFallback className="text-xs">
-                {getInitials(post.authorName)}
-              </AvatarFallback>
+              <AvatarFallback className="text-xs">{getInitials(post.authorName)}</AvatarFallback>
             </Avatar>
             <span>{post.authorName || 'Anonymous'}</span>
           </div>
@@ -487,6 +484,114 @@ export function InboxPostDetail({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Official Response */}
+        <div>
+          <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Official Response
+          </h3>
+
+          {isEditingResponse ? (
+            <div className="space-y-3">
+              <Textarea
+                value={responseText}
+                onChange={(e) => setResponseText(e.target.value)}
+                placeholder="Write your official response to this feedback..."
+                rows={4}
+                className="resize-none"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={isUpdating || !responseText.trim()}
+                  onClick={async () => {
+                    setIsUpdating(true)
+                    try {
+                      await onOfficialResponseChange(responseText.trim())
+                      setIsEditingResponse(false)
+                    } finally {
+                      setIsUpdating(false)
+                    }
+                  }}
+                >
+                  {isUpdating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {post.officialResponse ? 'Update Response' : 'Publish Response'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditingResponse(false)
+                    setResponseText(post.officialResponse?.content || '')
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : post.officialResponse ? (
+            <Card className="border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="default" className="bg-primary text-primary-foreground">
+                    Published
+                  </Badge>
+                  {post.officialResponse.authorName && (
+                    <span className="text-xs text-muted-foreground">
+                      by {post.officialResponse.authorName}
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    · {formatDate(new Date(post.officialResponse.respondedAt))}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      setResponseText(post.officialResponse?.content || '')
+                      setIsEditingResponse(true)
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive hover:text-destructive"
+                    onClick={async () => {
+                      setIsUpdating(true)
+                      try {
+                        await onOfficialResponseChange(null)
+                      } finally {
+                        setIsUpdating(false)
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <p className="text-sm whitespace-pre-wrap">{post.officialResponse.content}</p>
+            </Card>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                setResponseText('')
+                setIsEditingResponse(true)
+              }}
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              Add Official Response
+            </Button>
+          )}
         </div>
 
         {/* View on board link */}

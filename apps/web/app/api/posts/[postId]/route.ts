@@ -44,13 +44,21 @@ export async function GET(
     }
 
     // Get comments with reactions in nested format
-    const commentsWithReplies = await getCommentsWithReplies(postId)
+    // Use user ID as identifier to track which reactions belong to current user
+    const commentsWithReplies = await getCommentsWithReplies(postId, session.user.id)
 
-    // Transform tags from junction table format
+    // Transform tags from junction table format and official response
     const transformedPost = {
       ...post,
       tags: post.tags.map((pt: { tag: { id: string; name: string; color: string } }) => pt.tag),
       comments: commentsWithReplies,
+      officialResponse: post.officialResponse
+        ? {
+            content: post.officialResponse,
+            authorName: post.officialResponseAuthorName,
+            respondedAt: post.officialResponseAt,
+          }
+        : null,
     }
 
     return NextResponse.json(transformedPost)
@@ -102,9 +110,30 @@ export async function PATCH(
     const updateData: {
       status?: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
       ownerId?: string | null
+      officialResponse?: string | null
+      officialResponseAuthorId?: string | null
+      officialResponseAuthorName?: string | null
+      officialResponseAt?: Date | null
     } = {}
     if (status !== undefined) updateData.status = status
     if (ownerId !== undefined) updateData.ownerId = ownerId
+
+    // Handle official response update
+    if (body.officialResponse !== undefined) {
+      if (body.officialResponse === null || body.officialResponse === '') {
+        // Clear the official response
+        updateData.officialResponse = null
+        updateData.officialResponseAuthorId = null
+        updateData.officialResponseAuthorName = null
+        updateData.officialResponseAt = null
+      } else {
+        // Set or update official response
+        updateData.officialResponse = body.officialResponse
+        updateData.officialResponseAuthorId = session.user.id
+        updateData.officialResponseAuthorName = session.user.name || session.user.email
+        updateData.officialResponseAt = new Date()
+      }
+    }
 
     const updatedPost = await updatePost(postId, updateData)
 

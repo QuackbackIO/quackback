@@ -1,6 +1,6 @@
 import { eq, and, desc, asc, sql, ilike, or, inArray, gte, lte, isNull } from 'drizzle-orm'
 import { db } from '../tenant-context'
-import { posts, votes, comments, postTags, commentReactions } from '../schema/posts'
+import { posts, votes, comments, postTags } from '../schema/posts'
 import { boards } from '../schema/boards'
 import type {
   NewPost,
@@ -12,6 +12,7 @@ import type {
   PostListItem,
   InboxPostListResult,
 } from '../types'
+import type { CommentReactionCount } from './public'
 
 export async function createPost(data: NewPost): Promise<Post> {
   const [post] = await db.insert(posts).values(data).returning()
@@ -51,15 +52,7 @@ export async function getPostList(params: {
   page?: number
   limit?: number
 }): Promise<{ items: Post[]; total: number }> {
-  const {
-    boardId,
-    status,
-    ownerId,
-    search,
-    sort = 'newest',
-    page = 1,
-    limit = 20,
-  } = params
+  const { boardId, status, ownerId, search, sort = 'newest', page = 1, limit = 20 } = params
 
   const conditions = []
 
@@ -73,12 +66,7 @@ export async function getPostList(params: {
     conditions.push(eq(posts.ownerId, ownerId))
   }
   if (search) {
-    conditions.push(
-      or(
-        ilike(posts.title, `%${search}%`),
-        ilike(posts.content, `%${search}%`)
-      )!
-    )
+    conditions.push(or(ilike(posts.title, `%${search}%`), ilike(posts.content, `%${search}%`))!)
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
@@ -108,10 +96,7 @@ export async function getPostList(params: {
   }
 }
 
-export async function updatePost(
-  id: string,
-  data: Partial<NewPost>
-): Promise<Post | undefined> {
+export async function updatePost(id: string, data: Partial<NewPost>): Promise<Post | undefined> {
   const [updated] = await db
     .update(posts)
     .set({ ...data, updatedAt: new Date() })
@@ -120,10 +105,7 @@ export async function updatePost(
   return updated
 }
 
-export async function updatePostStatus(
-  id: string,
-  status: PostStatus
-): Promise<Post | undefined> {
+export async function updatePostStatus(id: string, status: PostStatus): Promise<Post | undefined> {
   return updatePost(id, { status })
 }
 
@@ -134,16 +116,12 @@ export async function deletePost(id: string): Promise<void> {
 // Tag management for posts
 export async function addTagsToPost(postId: string, tagIds: string[]): Promise<void> {
   if (tagIds.length === 0) return
-  await db.insert(postTags).values(
-    tagIds.map((tagId) => ({ postId, tagId }))
-  )
+  await db.insert(postTags).values(tagIds.map((tagId) => ({ postId, tagId })))
 }
 
 export async function removeTagsFromPost(postId: string, tagIds: string[]): Promise<void> {
   if (tagIds.length === 0) return
-  await db.delete(postTags).where(
-    and(eq(postTags.postId, postId), inArray(postTags.tagId, tagIds))
-  )
+  await db.delete(postTags).where(and(eq(postTags.postId, postId), inArray(postTags.tagId, tagIds)))
 }
 
 export async function setPostTags(postId: string, tagIds: string[]): Promise<void> {
@@ -154,15 +132,9 @@ export async function setPostTags(postId: string, tagIds: string[]): Promise<voi
 }
 
 // Vote functions
-export async function toggleVote(
-  postId: string,
-  userIdentifier: string
-): Promise<boolean> {
+export async function toggleVote(postId: string, userIdentifier: string): Promise<boolean> {
   const existing = await db.query.votes.findFirst({
-    where: and(
-      eq(votes.postId, postId),
-      eq(votes.userIdentifier, userIdentifier)
-    ),
+    where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
   })
 
   if (existing) {
@@ -189,17 +161,32 @@ export async function getUserVotes(
   if (postIds.length === 0) return new Set()
 
   const userVotes = await db.query.votes.findMany({
-    where: and(
-      eq(votes.userIdentifier, userIdentifier),
-      inArray(votes.postId, postIds)
-    ),
+    where: and(eq(votes.userIdentifier, userIdentifier), inArray(votes.postId, postIds)),
   })
 
   return new Set(userVotes.map((v) => v.postId))
 }
 
+// Comment with nested replies and aggregated reactions
+export interface CommentWithRepliesAndReactions {
+  id: string
+  postId: string
+  parentId: string | null
+  authorId: string | null
+  authorName: string | null
+  authorEmail: string | null
+  content: string
+  isTeamMember: boolean
+  createdAt: Date
+  replies: CommentWithRepliesAndReactions[]
+  reactions: CommentReactionCount[]
+}
+
 // Comment functions (with nested threading support)
-export async function getCommentsWithReplies(postId: string) {
+export async function getCommentsWithReplies(
+  postId: string,
+  userIdentifier?: string
+): Promise<CommentWithRepliesAndReactions[]> {
   // Get all comments for the post with reactions
   const allComments = await db.query.comments.findMany({
     where: eq(comments.postId, postId),
@@ -209,13 +196,44 @@ export async function getCommentsWithReplies(postId: string) {
     orderBy: asc(comments.createdAt),
   })
 
-  // Build nested tree structure
-  const commentMap = new Map<string, typeof allComments[0] & { replies: typeof allComments }>()
-  const rootComments: (typeof allComments[0] & { replies: typeof allComments })[] = []
+  // Build nested tree structure with aggregated reactions
+  const commentMap = new Map<string, CommentWithRepliesAndReactions>()
+  const rootComments: CommentWithRepliesAndReactions[] = []
 
-  // First pass: create all nodes
+  // First pass: create all nodes with aggregated reactions
   allComments.forEach((comment) => {
-    commentMap.set(comment.id, { ...comment, replies: [] })
+    // Aggregate reactions by emoji
+    const reactionCounts = new Map<string, { count: number; hasReacted: boolean }>()
+    for (const reaction of comment.reactions) {
+      const existing = reactionCounts.get(reaction.emoji) || { count: 0, hasReacted: false }
+      existing.count++
+      if (userIdentifier && reaction.userIdentifier === userIdentifier) {
+        existing.hasReacted = true
+      }
+      reactionCounts.set(reaction.emoji, existing)
+    }
+
+    const aggregatedReactions: CommentReactionCount[] = Array.from(reactionCounts.entries()).map(
+      ([emoji, data]) => ({
+        emoji,
+        count: data.count,
+        hasReacted: data.hasReacted,
+      })
+    )
+
+    commentMap.set(comment.id, {
+      id: comment.id,
+      postId: comment.postId,
+      parentId: comment.parentId,
+      authorId: comment.authorId,
+      authorName: comment.authorName,
+      authorEmail: comment.authorEmail,
+      content: comment.content,
+      isTeamMember: comment.isTeamMember,
+      createdAt: comment.createdAt,
+      replies: [],
+      reactions: aggregatedReactions,
+    })
   })
 
   // Second pass: build tree
@@ -243,44 +261,8 @@ export async function deleteComment(id: string): Promise<void> {
   await db.delete(comments).where(eq(comments.id, id))
 }
 
-// Comment reaction functions
-export async function toggleCommentReaction(
-  commentId: string,
-  userIdentifier: string,
-  emoji: string
-): Promise<boolean> {
-  const existing = await db.query.commentReactions.findFirst({
-    where: and(
-      eq(commentReactions.commentId, commentId),
-      eq(commentReactions.userIdentifier, userIdentifier),
-      eq(commentReactions.emoji, emoji)
-    ),
-  })
-
-  if (existing) {
-    await db.delete(commentReactions).where(eq(commentReactions.id, existing.id))
-    return false
-  } else {
-    await db.insert(commentReactions).values({ commentId, userIdentifier, emoji })
-    return true
-  }
-}
-
-export async function getReactionCounts(commentId: string): Promise<Record<string, number>> {
-  const reactions = await db.query.commentReactions.findMany({
-    where: eq(commentReactions.commentId, commentId),
-  })
-
-  return reactions.reduce((acc, r) => {
-    acc[r.emoji] = (acc[r.emoji] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-}
-
 // Inbox query - fetches posts with board, tags, and comment count for the feedback inbox
-export async function getInboxPostList(
-  params: InboxPostListParams
-): Promise<InboxPostListResult> {
+export async function getInboxPostList(params: InboxPostListParams): Promise<InboxPostListResult> {
   const {
     organizationId,
     boardIds,
@@ -330,9 +312,7 @@ export async function getInboxPostList(
 
   // Search filter
   if (search) {
-    conditions.push(
-      or(ilike(posts.title, `%${search}%`), ilike(posts.content, `%${search}%`))!
-    )
+    conditions.push(or(ilike(posts.title, `%${search}%`), ilike(posts.content, `%${search}%`))!)
   }
 
   // Date range filters

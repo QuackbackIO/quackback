@@ -1,65 +1,56 @@
 /**
  * Database reset script for development.
- * Drops all tables and recreates them.
+ * Recreates the Docker container with a fresh volume.
  *
  * WARNING: This will delete all data!
  *
  * Usage: bun run db:reset
  */
-import { config } from 'dotenv'
-config({ path: '../../.env', quiet: true })
-
-import postgres from 'postgres'
-
-const connectionString = process.env.DATABASE_URL!
-const client = postgres(connectionString, {
-  onnotice: () => {}, // Suppress PostgreSQL NOTICE messages
-})
+import { $ } from 'bun'
 
 async function reset() {
   console.log('Resetting database...\n')
   console.log('WARNING: This will delete all data!\n')
 
-  // Drop all tables in public schema
-  await client`
-    DO $$ DECLARE
-      r RECORD;
-    BEGIN
-      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-      END LOOP;
-    END $$;
-  `
+  // Stop and remove the container
+  console.log('Stopping container...')
+  await $`docker compose stop postgres`.quiet()
+  await $`docker compose rm -f postgres`.quiet()
 
-  // Drop custom types
-  await client`
-    DO $$ DECLARE
-      r RECORD;
-    BEGIN
-      FOR r IN (SELECT typname FROM pg_type WHERE typnamespace = 'public'::regnamespace AND typtype = 'e') LOOP
-        EXECUTE 'DROP TYPE IF EXISTS ' || quote_ident(r.typname) || ' CASCADE';
-      END LOOP;
-    END $$;
-  `
+  // Remove the volume
+  console.log('Removing volume...')
+  await $`docker volume rm quackback-v2_postgres_data`.quiet().nothrow()
 
-  // Drop the app_user role if it exists
-  await client`
-    DO $$
-    BEGIN
-      IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
-        EXECUTE 'DROP ROLE app_user';
-      END IF;
-    END $$;
-  `
+  // Recreate the container
+  console.log('Starting fresh container...')
+  await $`docker compose up -d postgres`
 
-  console.log('Database reset complete!')
+  // Wait for postgres to be ready (able to accept connections)
+  console.log('Waiting for PostgreSQL to be ready...')
+  let ready = false
+  for (let i = 0; i < 60; i++) {
+    // Actually try to connect and run a query, not just pg_isready
+    const result = await $`docker compose exec postgres psql -U postgres -d quackback -c "SELECT 1"`
+      .quiet()
+      .nothrow()
+    if (result.exitCode === 0) {
+      ready = true
+      break
+    }
+    await Bun.sleep(500)
+  }
+
+  if (!ready) {
+    console.error('PostgreSQL did not become ready in time')
+    process.exit(1)
+  }
+
+  console.log('\nDatabase reset complete!')
   console.log('')
   console.log('Next steps:')
   console.log('  1. Push schema:  bun run db:push')
   console.log('  2. Seed data:    bun run db:seed')
   console.log('')
-
-  await client.end()
 }
 
 reset().catch((error) => {

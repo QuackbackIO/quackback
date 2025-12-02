@@ -17,6 +17,12 @@ interface TeamMember {
   image?: string | null
 }
 
+interface OfficialResponse {
+  content: string
+  authorName: string | null
+  respondedAt: Date
+}
+
 interface PostDetails {
   id: string
   title: string
@@ -30,14 +36,13 @@ interface PostDetails {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
+  officialResponse: OfficialResponse | null
 }
 
 interface CommentReaction {
-  id: string
-  commentId: string
-  userIdentifier: string
   emoji: string
-  createdAt: Date
+  count: number
+  hasReacted: boolean
 }
 
 interface CommentWithReplies {
@@ -48,6 +53,7 @@ interface CommentWithReplies {
   authorName: string | null
   authorEmail: string | null
   content: string
+  isTeamMember: boolean
   createdAt: Date
   replies: CommentWithReplies[]
   reactions: CommentReaction[]
@@ -97,17 +103,21 @@ export function InboxContainer({
   const isInitialMount = useRef(true)
 
   // Create a stable string key for filters to use in useEffect dependencies
-  const filtersKey = useMemo(() => JSON.stringify({
-    search: filters.search,
-    status: filters.status,
-    board: filters.board,
-    tags: filters.tags,
-    owner: filters.owner,
-    dateFrom: filters.dateFrom,
-    dateTo: filters.dateTo,
-    minVotes: filters.minVotes,
-    sort: filters.sort,
-  }), [filters])
+  const filtersKey = useMemo(
+    () =>
+      JSON.stringify({
+        search: filters.search,
+        status: filters.status,
+        board: filters.board,
+        tags: filters.tags,
+        owner: filters.owner,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        minVotes: filters.minVotes,
+        sort: filters.sort,
+      }),
+    [filters]
+  )
 
   // Fetch posts - accepts filters as parameter to avoid dependency issues
   const fetchPosts = useCallback(
@@ -131,7 +141,8 @@ export function InboxContainer({
         if (currentFilters.owner) params.set('owner', currentFilters.owner)
         if (currentFilters.dateFrom) params.set('dateFrom', currentFilters.dateFrom)
         if (currentFilters.dateTo) params.set('dateTo', currentFilters.dateTo)
-        if (currentFilters.minVotes !== undefined) params.set('minVotes', currentFilters.minVotes.toString())
+        if (currentFilters.minVotes !== undefined)
+          params.set('minVotes', currentFilters.minVotes.toString())
 
         const response = await fetch(`/api/posts?${params.toString()}`)
         if (!response.ok) throw new Error('Failed to fetch posts')
@@ -175,7 +186,9 @@ export function InboxContainer({
     const fetchPostDetails = async () => {
       setIsLoadingPost(true)
       try {
-        const response = await fetch(`/api/posts/${selectedPostId}?organizationId=${organizationId}`)
+        const response = await fetch(
+          `/api/posts/${selectedPostId}?organizationId=${organizationId}`
+        )
         if (!response.ok) throw new Error('Failed to fetch post')
         const data = await response.json()
         setSelectedPost(data)
@@ -208,9 +221,7 @@ export function InboxContainer({
 
       // Update local state
       setSelectedPost((prev) => (prev ? { ...prev, status } : null))
-      setPosts((prev) =>
-        prev.map((p) => (p.id === selectedPostId ? { ...p, status } : p))
-      )
+      setPosts((prev) => prev.map((p) => (p.id === selectedPostId ? { ...p, status } : p)))
       router.refresh()
     } catch (error) {
       console.error('Error updating status:', error)
@@ -269,6 +280,37 @@ export function InboxContainer({
     }
   }
 
+  const handleOfficialResponseChange = async (response: string | null) => {
+    if (!selectedPostId) return
+    try {
+      const res = await fetch(`/api/posts/${selectedPostId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ officialResponse: response, organizationId }),
+      })
+      if (!res.ok) throw new Error('Failed to update official response')
+
+      const updatedPost = await res.json()
+      setSelectedPost((prev) =>
+        prev
+          ? {
+              ...prev,
+              officialResponse: updatedPost.officialResponse
+                ? {
+                    content: updatedPost.officialResponse,
+                    authorName: updatedPost.officialResponseAuthorName,
+                    respondedAt: updatedPost.officialResponseAt,
+                  }
+                : null,
+            }
+          : null
+      )
+      router.refresh()
+    } catch (error) {
+      console.error('Error updating official response:', error)
+    }
+  }
+
   return (
     <InboxLayout
       hasActiveFilters={hasActiveFilters}
@@ -318,6 +360,7 @@ export function InboxContainer({
           onStatusChange={handleStatusChange}
           onOwnerChange={handleOwnerChange}
           onTagsChange={handleTagsChange}
+          onOfficialResponseChange={handleOfficialResponseChange}
         />
       }
     />

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { commentSchema, type CommentInput } from '@/lib/schemas/comments'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,7 +28,7 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel }: CommentFo
   const [isPending, startTransition] = useTransition()
 
   const form = useForm<CommentInput>({
-    resolver: zodResolver(commentSchema),
+    resolver: standardSchemaResolver(commentSchema),
     defaultValues: {
       content: '',
       authorName: '',
@@ -94,9 +94,7 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel }: CommentFo
             name="authorName"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-xs text-muted-foreground">
-                  Name (optional)
-                </FormLabel>
+                <FormLabel className="text-xs text-muted-foreground">Name (optional)</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="Your name"

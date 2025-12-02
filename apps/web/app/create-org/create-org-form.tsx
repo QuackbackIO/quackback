@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createOrganization } from '@/lib/auth/client'
 import { buildOrgUrl } from '@/lib/routing'
 import { createOrgSchema, type CreateOrgInput } from '@/lib/schemas/auth'
@@ -32,7 +32,7 @@ export function CreateOrgForm() {
   const [slugEdited, setSlugEdited] = useState(false)
 
   const form = useForm<CreateOrgInput>({
-    resolver: zodResolver(createOrgSchema),
+    resolver: standardSchemaResolver(createOrgSchema),
     defaultValues: {
       name: '',
       slug: '',

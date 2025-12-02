@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/schemas/boards'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -32,7 +32,7 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const [error, setError] = useState('')
 
   const form = useForm<DeleteBoardInput>({
-    resolver: zodResolver(deleteBoardSchema),
+    resolver: standardSchemaResolver(deleteBoardSchema),
     defaultValues: {
       confirmName: '',
     },
@@ -70,16 +70,14 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
         <div className="space-y-1">
           <p className="font-medium text-destructive">Delete this board</p>
           <p className="text-sm text-muted-foreground">
-            Once you delete a board, there is no going back. All feedback, votes, and
-            comments associated with this board will be permanently deleted.
+            Once you delete a board, there is no going back. All feedback, votes, and comments
+            associated with this board will be permanently deleted.
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
       )}
 
       <Form {...form}>

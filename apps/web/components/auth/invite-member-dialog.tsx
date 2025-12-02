@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { inviteMember } from '@/lib/auth/client'
 import { inviteSchema, type InviteInput } from '@/lib/schemas/auth'
 import {
@@ -36,16 +36,12 @@ interface InviteMemberDialogProps {
   onClose: () => void
 }
 
-export function InviteMemberDialog({
-  organizationId,
-  open,
-  onClose,
-}: InviteMemberDialogProps) {
+export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
   const form = useForm<InviteInput>({
-    resolver: zodResolver(inviteSchema),
+    resolver: standardSchemaResolver(inviteSchema),
     defaultValues: {
       email: '',
       role: 'member',
@@ -95,9 +91,7 @@ export function InviteMemberDialog({
 
         {success ? (
           <div className="py-8 text-center">
-            <div className="text-primary text-lg font-medium">
-              Invitation sent!
-            </div>
+            <div className="text-primary text-lg font-medium">Invitation sent!</div>
             <p className="mt-2 text-muted-foreground">
               {form.getValues('email')} will receive an email with instructions to join.
             </p>
@@ -118,11 +112,7 @@ export function InviteMemberDialog({
                   <FormItem>
                     <FormLabel>Email Address</FormLabel>
                     <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="colleague@example.com"
-                        {...field}
-                      />
+                      <Input type="email" placeholder="colleague@example.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -142,8 +132,12 @@ export function InviteMemberDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="member">Member - Can view and create feedback</SelectItem>
-                        <SelectItem value="admin">Admin - Can manage settings and members</SelectItem>
+                        <SelectItem value="member">
+                          Member - Can view and create feedback
+                        </SelectItem>
+                        <SelectItem value="admin">
+                          Admin - Can manage settings and members
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
