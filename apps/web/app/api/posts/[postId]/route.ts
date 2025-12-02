@@ -1,35 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
 import { getPostWithDetails, getCommentsWithReplies, updatePost } from '@quackback/db'
-import { getSession } from '@/lib/auth/server'
-import { auth } from '@/lib/auth/index'
+import { validateApiTenantAccess } from '@/lib/tenant'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { postId } = await params
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === organizationId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     const post = await getPostWithDetails(postId)
@@ -39,13 +24,16 @@ export async function GET(
     }
 
     // Verify the post belongs to a board in this organization
-    if (post.board.organizationId !== organizationId) {
+    if (post.board.organizationId !== validation.organization.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Get comments with reactions in nested format
-    // Use user ID as identifier to track which reactions belong to current user
-    const commentsWithReplies = await getCommentsWithReplies(postId, session.user.id)
+    // Use member ID as identifier to track which reactions belong to current user
+    const commentsWithReplies = await getCommentsWithReplies(
+      postId,
+      `member:${validation.member.id}`
+    )
 
     // Transform tags from junction table format and official response
     const transformedPost = {
@@ -73,27 +61,14 @@ export async function PATCH(
   { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { postId } = await params
     const body = await request.json()
     const { organizationId, status, ownerId } = body
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === organizationId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     // Get the post to verify it belongs to this org
@@ -102,7 +77,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    if (existingPost.board.organizationId !== organizationId) {
+    if (existingPost.board.organizationId !== validation.organization.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -110,13 +85,18 @@ export async function PATCH(
     const updateData: {
       status?: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
       ownerId?: string | null
+      ownerMemberId?: string | null
       officialResponse?: string | null
       officialResponseAuthorId?: string | null
+      officialResponseMemberId?: string | null
       officialResponseAuthorName?: string | null
       officialResponseAt?: Date | null
     } = {}
     if (status !== undefined) updateData.status = status
-    if (ownerId !== undefined) updateData.ownerId = ownerId
+    if (ownerId !== undefined) {
+      updateData.ownerId = ownerId
+      // TODO: Look up ownerMemberId from ownerId when assigning owner
+    }
 
     // Handle official response update
     if (body.officialResponse !== undefined) {
@@ -124,13 +104,15 @@ export async function PATCH(
         // Clear the official response
         updateData.officialResponse = null
         updateData.officialResponseAuthorId = null
+        updateData.officialResponseMemberId = null
         updateData.officialResponseAuthorName = null
         updateData.officialResponseAt = null
       } else {
-        // Set or update official response
+        // Set or update official response with member-scoped identity
         updateData.officialResponse = body.officialResponse
-        updateData.officialResponseAuthorId = session.user.id
-        updateData.officialResponseAuthorName = session.user.name || session.user.email
+        updateData.officialResponseAuthorId = validation.user.id
+        updateData.officialResponseMemberId = validation.member.id
+        updateData.officialResponseAuthorName = validation.user.name || validation.user.email
         updateData.officialResponseAt = new Date()
       }
     }

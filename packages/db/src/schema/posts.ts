@@ -11,6 +11,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
 import { boards, tags, roadmaps } from './boards'
+import { member } from './auth'
 import { appUser } from './rls'
 
 const postsOrgCheck = sql`board_id IN (
@@ -27,6 +28,11 @@ export const posts = pgTable(
       .references(() => boards.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     content: text('content').notNull(),
+    // Member-scoped identity (Hub-and-Spoke model)
+    // memberId links to the organization-scoped member record
+    // For anonymous posts, memberId is null and authorName/authorEmail are used
+    memberId: text('member_id').references(() => member.id, { onDelete: 'set null' }),
+    // Legacy fields (kept for anonymous posts and migration compatibility)
     authorId: text('author_id'),
     authorName: text('author_name'),
     authorEmail: text('author_email'),
@@ -35,12 +41,17 @@ export const posts = pgTable(
     })
       .default('open')
       .notNull(),
-    ownerId: text('owner_id'),
+    // Owner is also member-scoped (team member assigned to this post)
+    ownerMemberId: text('owner_member_id').references(() => member.id, { onDelete: 'set null' }),
+    ownerId: text('owner_id'), // Legacy, kept for migration
     estimated: text('estimated'),
     voteCount: integer('vote_count').default(0).notNull(),
-    // Official team response
+    // Official team response (member-scoped)
     officialResponse: text('official_response'),
-    officialResponseAuthorId: text('official_response_author_id'),
+    officialResponseMemberId: text('official_response_member_id').references(() => member.id, {
+      onDelete: 'set null',
+    }),
+    officialResponseAuthorId: text('official_response_author_id'), // Legacy
     officialResponseAuthorName: text('official_response_author_name'),
     officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -49,7 +60,9 @@ export const posts = pgTable(
   (table) => [
     index('posts_board_id_idx').on(table.boardId),
     index('posts_status_idx').on(table.status),
-    index('posts_owner_id_idx').on(table.ownerId),
+    index('posts_member_id_idx').on(table.memberId),
+    index('posts_owner_member_id_idx').on(table.ownerMemberId),
+    index('posts_owner_id_idx').on(table.ownerId), // Legacy index
     index('posts_created_at_idx').on(table.createdAt),
     index('posts_vote_count_idx').on(table.voteCount),
     pgPolicy('posts_tenant_isolation', {
@@ -143,6 +156,11 @@ export const comments = pgTable(
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     parentId: uuid('parent_id'),
+    // Member-scoped identity (Hub-and-Spoke model)
+    // memberId links to the organization-scoped member record
+    // For anonymous comments, memberId is null and authorName/authorEmail are used
+    memberId: text('member_id').references(() => member.id, { onDelete: 'set null' }),
+    // Legacy fields (kept for anonymous comments and migration compatibility)
     authorId: text('author_id'),
     authorName: text('author_name'),
     authorEmail: text('author_email'),
@@ -153,6 +171,7 @@ export const comments = pgTable(
   (table) => [
     index('comments_post_id_idx').on(table.postId),
     index('comments_parent_id_idx').on(table.parentId),
+    index('comments_member_id_idx').on(table.memberId),
     index('comments_created_at_idx').on(table.createdAt),
     pgPolicy('comments_tenant_isolation', {
       for: 'all',
@@ -206,6 +225,24 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.boardId],
     references: [boards.id],
   }),
+  // Member-scoped author (Hub-and-Spoke identity)
+  author: one(member, {
+    fields: [posts.memberId],
+    references: [member.id],
+    relationName: 'postAuthor',
+  }),
+  // Member-scoped owner (team member assigned)
+  owner: one(member, {
+    fields: [posts.ownerMemberId],
+    references: [member.id],
+    relationName: 'postOwner',
+  }),
+  // Member-scoped official response author
+  officialResponseAuthor: one(member, {
+    fields: [posts.officialResponseMemberId],
+    references: [member.id],
+    relationName: 'postOfficialResponseAuthor',
+  }),
   votes: many(votes),
   comments: many(comments),
   tags: many(postTags),
@@ -234,6 +271,12 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
   post: one(posts, {
     fields: [comments.postId],
     references: [posts.id],
+  }),
+  // Member-scoped author (Hub-and-Spoke identity)
+  author: one(member, {
+    fields: [comments.memberId],
+    references: [member.id],
+    relationName: 'commentAuthor',
   }),
   parent: one(comments, {
     fields: [comments.parentId],

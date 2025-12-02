@@ -1,32 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
 import { getInboxPostList, createPost, setPostTags, getBoardById } from '@quackback/db'
-import { getSession } from '@/lib/auth/server'
-import { auth } from '@/lib/auth/index'
+import { validateApiTenantAccess } from '@/lib/tenant'
 import { createPostSchema, type PostStatus } from '@/lib/schemas/posts'
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === organizationId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     // Parse filter params
@@ -51,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await getInboxPostList({
-      organizationId,
+      organizationId: validation.organization.id,
       boardIds: boardIds.length > 0 ? boardIds : undefined,
       status: status.length > 0 ? status : undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
@@ -74,16 +59,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { organizationId } = body
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     // Validate the post data with Zod schema
@@ -97,30 +79,23 @@ export async function POST(request: NextRequest) {
 
     const { title, content, boardId, status, tagIds } = result.data
 
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === organizationId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     // Verify the board belongs to this organization
     const board = await getBoardById(boardId)
     if (!board || board.organizationId !== organizationId) {
       return NextResponse.json({ error: 'Board not found' }, { status: 404 })
     }
 
-    // Create the post
+    // Create the post with member-scoped identity
     const post = await createPost({
       boardId,
       title,
       content,
       status: status || 'open',
-      authorName: session.user.name || 'Team',
-      authorEmail: session.user.email,
+      // Member-scoped identity (Hub-and-Spoke model)
+      memberId: validation.member.id,
+      // Legacy fields for display compatibility
+      authorName: validation.user.name || 'Team',
+      authorEmail: validation.user.email,
     })
 
     // Add tags if provided

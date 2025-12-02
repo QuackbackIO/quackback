@@ -1,14 +1,8 @@
-import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
-import * as schema from './schema'
+import { db, type Database } from './client'
 
-const connectionString = process.env.DATABASE_URL!
-
-const queryClient = postgres(connectionString)
-export const db = drizzle(queryClient, { schema })
-
-export type Database = PostgresJsDatabase<typeof schema>
+// Re-export db and Database type for consumers
+export { db, type Database }
 
 /**
  * Creates a tenant-scoped database transaction.

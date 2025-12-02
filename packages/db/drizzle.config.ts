@@ -12,8 +12,10 @@ export default defineConfig({
   },
   entities: {
     roles: {
-      provider: '',
-      exclude: ['postgres', 'pg_*'],
+      // Don't try to create roles in drizzle push/migrate
+      // The app_user role should be created manually or in a separate migration
+      provider: 'supabase',
+      exclude: ['postgres', 'pg_*', 'app_user'],
     },
   },
 })

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { togglePublicVote, getBoardByPostId } from '@quackback/db/queries/public'
 import { getBoardSettings } from '@quackback/db/types'
-import { getUserIdentifierFromRequest, setUserIdentifierCookie, hasUserIdentifierCookie } from '@/lib/user-identifier'
+import {
+  getUserIdentifierFromRequest,
+  getRawUserIdentifierFromRequest,
+  setUserIdentifierCookie,
+  hasUserIdentifierCookie,
+} from '@/lib/user-identifier'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -22,16 +27,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Voting is disabled for this board' }, { status: 403 })
   }
 
-  // Get or create user identifier
+  // Get or create user identifier (uses anon:{uuid} format for public users)
   const userIdentifier = getUserIdentifierFromRequest(request)
 
   // Toggle the vote
   const result = await togglePublicVote(postId, userIdentifier)
 
-  // Set the user identifier cookie if it's a new user
+  // Set the user identifier cookie if it's a new user (use raw UUID for cookie)
   const headers = new Headers()
   if (!hasUserIdentifierCookie(request)) {
-    setUserIdentifierCookie(headers, userIdentifier)
+    const rawUuid = getRawUserIdentifierFromRequest(request)
+    setUserIdentifierCookie(headers, rawUuid)
   }
 
   return NextResponse.json(result, { headers })

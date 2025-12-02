@@ -23,6 +23,10 @@ export const user = pgTable('user', {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
+  // SSO isolation metadata (Hub-and-Spoke identity model)
+  // Stores { realEmail: string, ssoIsolated: true, organizationId: string }
+  // for users created via SSO in strict mode organizations
+  metadata: text('metadata'),
 })
 
 export const session = pgTable(
@@ -92,6 +96,11 @@ export const organization = pgTable('organization', {
   logo: text('logo'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
+  // SSO Strict Mode (Hub-and-Spoke identity model)
+  // When true, SSO logins create isolated user records (Fork, Don't Merge)
+  // Email is salted to ensure uniqueness: user@domain.com -> user@domain.com+sso-{orgId}
+  // Real email stored in user metadata for display/notifications
+  strictSsoMode: boolean('strict_sso_mode').default(false).notNull(),
 })
 
 export const member = pgTable(

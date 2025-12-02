@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { toggleCommentReaction, getReactionEmojis } from '@quackback/db/queries/public'
-import { getUserIdentifierFromRequest, setUserIdentifierCookie, hasUserIdentifierCookie } from '@/lib/user-identifier'
+import {
+  getUserIdentifierFromRequest,
+  getRawUserIdentifierFromRequest,
+  setUserIdentifierCookie,
+  hasUserIdentifierCookie,
+} from '@/lib/user-identifier'
 
 const reactionSchema = z.object({
   emoji: z.string().min(1),
@@ -35,22 +40,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Validate emoji is in allowed list
   const allowedEmojis = getReactionEmojis()
   if (!allowedEmojis.includes(emoji)) {
-    return NextResponse.json(
-      { error: 'Invalid emoji' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Invalid emoji' }, { status: 400 })
   }
 
-  // Get user identifier for tracking
+  // Get user identifier for tracking (uses anon:{uuid} format for public users)
   const userIdentifier = getUserIdentifierFromRequest(request)
 
   // Toggle the reaction
   const { added, reactions } = await toggleCommentReaction(commentId, userIdentifier, emoji)
 
-  // Set the user identifier cookie if it's a new user
+  // Set the user identifier cookie if it's a new user (use raw UUID for cookie)
   const headers = new Headers()
   if (!hasUserIdentifierCookie(request)) {
-    setUserIdentifierCookie(headers, userIdentifier)
+    const rawUuid = getRawUserIdentifierFromRequest(request)
+    setUserIdentifierCookie(headers, rawUuid)
   }
 
   return NextResponse.json({ added, reactions }, { headers })

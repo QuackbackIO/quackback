@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@better-auth/sso": "^1.4.4",
     "@hookform/resolvers": "^5.2.2",
     "@quackback/db": "workspace:*",
     "@quackback/domain": "workspace:*",

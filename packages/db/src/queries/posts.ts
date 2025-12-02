@@ -172,6 +172,9 @@ export interface CommentWithRepliesAndReactions {
   id: string
   postId: string
   parentId: string | null
+  // Member-scoped identity (Hub-and-Spoke model)
+  memberId: string | null
+  // Legacy/anonymous identity fields
   authorId: string | null
   authorName: string | null
   authorEmail: string | null
@@ -225,6 +228,7 @@ export async function getCommentsWithReplies(
       id: comment.id,
       postId: comment.postId,
       parentId: comment.parentId,
+      memberId: comment.memberId,
       authorId: comment.authorId,
       authorName: comment.authorName,
       authorEmail: comment.authorEmail,

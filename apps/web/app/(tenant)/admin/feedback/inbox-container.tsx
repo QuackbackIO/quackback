@@ -29,6 +29,10 @@ interface PostDetails {
   content: string
   status: PostStatus
   voteCount: number
+  // Member-scoped identity (Hub-and-Spoke model)
+  memberId: string | null
+  ownerMemberId: string | null
+  // Legacy/anonymous identity fields
   authorName: string | null
   authorEmail: string | null
   ownerId: string | null
@@ -49,6 +53,9 @@ interface CommentWithReplies {
   id: string
   postId: string
   parentId: string | null
+  // Member-scoped identity (Hub-and-Spoke model)
+  memberId: string | null
+  // Legacy/anonymous identity fields
   authorId: string | null
   authorName: string | null
   authorEmail: string | null

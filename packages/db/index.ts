@@ -1,10 +1,6 @@
 // Client and tenant context
-export { db } from './src/tenant-context'
-export {
-  withTenantContext,
-  setTenantContext,
-  clearTenantContext,
-} from './src/tenant-context'
+export { db, type Database } from './src/tenant-context'
+export { withTenantContext, setTenantContext, clearTenantContext } from './src/tenant-context'
 
 // Schema
 export * from './src/schema'
@@ -21,4 +17,22 @@ export * from './src/queries/changelog'
 export * from './src/queries/public'
 
 // Re-export common drizzle-orm utilities
-export { eq, and, or, ne, gt, gte, lt, lte, like, ilike, inArray, notInArray, isNull, isNotNull, sql, desc, asc } from 'drizzle-orm'
+export {
+  eq,
+  and,
+  or,
+  ne,
+  gt,
+  gte,
+  lt,
+  lte,
+  like,
+  ilike,
+  inArray,
+  notInArray,
+  isNull,
+  isNotNull,
+  sql,
+  desc,
+  asc,
+} from 'drizzle-orm'

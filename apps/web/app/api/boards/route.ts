@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
 import { db, boards, eq, and } from '@quackback/db'
-import { getSession } from '@/lib/auth/server'
-import { auth } from '@/lib/auth/index'
+import { validateApiTenantAccess } from '@/lib/tenant'
 import { createBoardSchema } from '@/lib/schemas/boards'
 
 function slugify(text: string): string {
@@ -16,16 +14,13 @@ function slugify(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { organizationId } = body
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     // Validate the board data with Zod schema
@@ -39,16 +34,6 @@ export async function POST(request: NextRequest) {
 
     const { name, description, isPublic } = result.data
 
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === organizationId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     // Generate unique slug
     let slug = slugify(name)
     let counter = 0
@@ -56,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     while (!isUnique) {
       const existingBoard = await db.query.boards.findFirst({
-        where: and(eq(boards.organizationId, organizationId), eq(boards.slug, slug)),
+        where: and(eq(boards.organizationId, validation.organization.id), eq(boards.slug, slug)),
       })
 
       if (!existingBoard) {
@@ -71,7 +56,7 @@ export async function POST(request: NextRequest) {
     const [newBoard] = await db
       .insert(boards)
       .values({
-        organizationId,
+        organizationId: validation.organization.id,
         name,
         slug,
         description: description || null,
@@ -89,30 +74,17 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === organizationId)
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     const orgBoards = await db.query.boards.findMany({
-      where: eq(boards.organizationId, organizationId),
+      where: eq(boards.organizationId, validation.organization.id),
       orderBy: (boards, { desc }) => [desc(boards.createdAt)],
     })
 

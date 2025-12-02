@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
 import { db, boards, eq } from '@quackback/db'
-import { getSession } from '@/lib/auth/server'
-import { auth } from '@/lib/auth/index'
+import { validateApiTenantAccess } from '@/lib/tenant'
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { boardId } = await params
     const body = await request.json()
-    const { name, description, isPublic, settings } = body
+    const { name, description, isPublic, settings, organizationId } = body
+
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
+    }
 
     // Get the board to verify ownership
     const board = await db.query.boards.findFirst({
@@ -27,13 +26,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Board not found' }, { status: 404 })
     }
 
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === board.organizationId)
-    if (!hasAccess) {
+    // Verify board belongs to this organization
+    if (board.organizationId !== validation.organization.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -41,7 +35,7 @@ export async function PATCH(
     let mergedSettings = board.settings
     if (settings !== undefined) {
       mergedSettings = {
-        ...(board.settings as object || {}),
+        ...((board.settings as object) || {}),
         ...settings,
       }
     }
@@ -71,12 +65,15 @@ export async function DELETE(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   try {
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { boardId } = await params
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
+    }
 
     // Get the board to verify ownership
     const board = await db.query.boards.findFirst({
@@ -87,13 +84,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Board not found' }, { status: 404 })
     }
 
-    // Verify user has access to this organization
-    const orgs = await auth.api.listOrganizations({
-      headers: await headers(),
-    })
-
-    const hasAccess = orgs?.some((org) => org.id === board.organizationId)
-    if (!hasAccess) {
+    // Verify board belongs to this organization
+    if (board.organizationId !== validation.organization.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

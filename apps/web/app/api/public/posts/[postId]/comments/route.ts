@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { addPublicComment, getBoardByPostId, commentExistsForPost } from '@quackback/db/queries/public'
+import {
+  addPublicComment,
+  getBoardByPostId,
+  commentExistsForPost,
+} from '@quackback/db/queries/public'
 import { getBoardSettings } from '@quackback/db/types'
-import { getUserIdentifierFromRequest, setUserIdentifierCookie, hasUserIdentifierCookie } from '@/lib/user-identifier'
+import {
+  getRawUserIdentifierFromRequest,
+  setUserIdentifierCookie,
+  hasUserIdentifierCookie,
+} from '@/lib/user-identifier'
 import { commentSchema } from '@/lib/schemas/comments'
 
 interface RouteParams {
@@ -49,10 +57,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  // Get user identifier for tracking
-  const userIdentifier = getUserIdentifierFromRequest(request)
-
-  // Add the comment
+  // Add the comment (public comments use authorName/authorEmail, not memberId)
   const comment = await addPublicComment(
     postId,
     content,
@@ -61,10 +66,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     parentId || undefined
   )
 
-  // Set the user identifier cookie if it's a new user
+  // Set the user identifier cookie if it's a new user (use raw UUID for cookie)
   const headers = new Headers()
   if (!hasUserIdentifierCookie(request)) {
-    setUserIdentifierCookie(headers, userIdentifier)
+    const rawUuid = getRawUserIdentifierFromRequest(request)
+    setUserIdentifierCookie(headers, rawUuid)
   }
 
   return NextResponse.json(comment, { status: 201, headers })
