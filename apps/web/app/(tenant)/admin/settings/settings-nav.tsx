@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Settings, Users, CreditCard, Layout } from 'lucide-react'
+import { User, Settings, Users, CreditCard, Layout, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navSections = [
@@ -17,14 +17,13 @@ const navSections = [
     label: 'Organization',
     items: [
       { label: 'Team Members', href: '/admin/settings/team', icon: Users },
+      { label: 'Security', href: '/admin/settings/security', icon: Shield },
       { label: 'Billing', href: '/admin/settings/billing', icon: CreditCard },
     ],
   },
   {
     label: 'Portal',
-    items: [
-      { label: 'Boards', href: '/admin/settings/boards', icon: Layout },
-    ],
+    items: [{ label: 'Boards', href: '/admin/settings/boards', icon: Layout }],
   },
 ]
 

@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPostWithDetails, getCommentsWithReplies, updatePost } from '@quackback/db'
+import {
+  getPostWithDetails,
+  getCommentsWithReplies,
+  updatePost,
+  db,
+  member,
+  eq,
+  and,
+} from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
 
 export async function GET(
@@ -95,7 +103,18 @@ export async function PATCH(
     if (status !== undefined) updateData.status = status
     if (ownerId !== undefined) {
       updateData.ownerId = ownerId
-      // TODO: Look up ownerMemberId from ownerId when assigning owner
+      // Look up ownerMemberId from ownerId (user ID -> member ID for this org)
+      if (ownerId) {
+        const ownerMember = await db.query.member.findFirst({
+          where: and(
+            eq(member.userId, ownerId),
+            eq(member.organizationId, validation.organization.id)
+          ),
+        })
+        updateData.ownerMemberId = ownerMember?.id ?? null
+      } else {
+        updateData.ownerMemberId = null
+      }
     }
 
     // Handle official response update
