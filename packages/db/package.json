@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./index.ts"
   },
   "scripts": {
-    "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
-    "studio": "drizzle-kit studio"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/migrate.ts",
+    "db:migrate:cli": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "drizzle-orm": "^0.38",
