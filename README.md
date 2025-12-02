@@ -9,7 +9,7 @@ bun run setup   # One-time setup
 bun run dev     # Start dev server
 ```
 
-Open [http://app.localhost:3000](http://app.localhost:3000)
+Open [http://app.quackback.localhost:3000](http://app.quackback.localhost:3000)
 
 ## Prerequisites
 
@@ -78,8 +78,8 @@ cp .env.example .env
 
 Quackback uses subdomains for multi-tenancy. Modern browsers resolve `*.localhost` automatically:
 
-- **Main app**: `http://app.localhost:3000`
-- **Tenant portals**: `http://{org-slug}.localhost:3000`
+- **Main app**: `http://app.quackback.localhost:3000`
+- **Tenant portals**: `http://{org-slug}.quackback.localhost:3000`
 
 No hosts file changes needed on modern browsers (Chrome, Firefox, Edge).
 

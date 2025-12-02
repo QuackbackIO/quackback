@@ -24,6 +24,7 @@
     "postgres": "^3"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.1.0",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.30"
   }

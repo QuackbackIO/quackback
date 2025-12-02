@@ -20,17 +20,8 @@ function buildTrustedOrigins(): string[] {
     return [appUrl, `https://*.${domain}`]
   }
 
-  // Development: support common local dev setups
-  const origins = [
-    'http://localhost:3000',
-    'http://*.localhost:3000',
-  ]
-
-  // Add nip.io origins if configured
-  if (cookieDomain?.includes('nip.io')) {
-    const domain = cookieDomain.startsWith('.') ? cookieDomain.slice(1) : cookieDomain
-    origins.push(`http://${domain}:3000`, `http://*.${domain}:3000`)
-  }
+  // Development: support quackback.localhost subdomains
+  const origins = ['http://quackback.localhost:3000', 'http://*.quackback.localhost:3000']
 
   // Add custom app URL if set
   if (appUrl && !origins.includes(appUrl)) {

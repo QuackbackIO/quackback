@@ -19,25 +19,16 @@ function getAppUrl(): string {
 
 /**
  * Extract subdomain from host header
- * Handles: acme.quackback.com, acme.localhost:3000, acme.127.0.0.1.nip.io:3000
+ * Handles: acme.quackback.com, acme.quackback.localhost:3000
  */
 export function parseSubdomain(host: string): string | null {
   const hostWithoutPort = host.split(':')[0]
 
-  // localhost development: acme.localhost -> acme
+  // localhost development: acme.quackback.localhost -> acme
+  // Base domain is 2 parts (quackback.localhost), subdomain adds 1
   if (hostWithoutPort.endsWith('.localhost') || hostWithoutPort === 'localhost') {
     const parts = hostWithoutPort.split('.')
-    if (parts.length > 1 && parts[0] !== 'www') {
-      return parts[0]
-    }
-    return null
-  }
-
-  // nip.io development: acme.127.0.0.1.nip.io -> acme
-  // Base domain is 6 parts (127.0.0.1.nip.io), subdomain adds 1
-  if (hostWithoutPort.endsWith('.nip.io')) {
-    const parts = hostWithoutPort.split('.')
-    if (parts.length > 6 && parts[0] !== 'www') {
+    if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'app') {
       return parts[0]
     }
     return null
@@ -45,7 +36,7 @@ export function parseSubdomain(host: string): string | null {
 
   // Production: acme.quackback.com -> acme
   const parts = hostWithoutPort.split('.')
-  if (parts.length > 2 && parts[0] !== 'www') {
+  if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'app') {
     return parts[0]
   }
 
@@ -81,13 +72,12 @@ export function getMainDomainUrl(ctx: HostContext, path: string = '/'): string {
   let mainDomain: string
 
   if (hostWithoutPort.endsWith('.localhost') || hostWithoutPort === 'localhost') {
-    mainDomain = 'localhost'
-  } else if (hostWithoutPort.endsWith('.nip.io')) {
-    // Keep last 6 parts: 127.0.0.1.nip.io
-    mainDomain = hostWithoutPort.split('.').slice(-6).join('.')
+    // Keep last 2 parts: quackback.localhost (use app.quackback.localhost for main domain)
+    mainDomain = 'app.' + hostWithoutPort.split('.').slice(-2).join('.')
   } else {
-    // Keep last 2 parts: example.com
-    mainDomain = hostWithoutPort.split('.').slice(-2).join('.')
+    // Production: use app.example.com as main domain
+    const parts = hostWithoutPort.split('.')
+    mainDomain = 'app.' + parts.slice(-2).join('.')
   }
 
   return `${protocol}://${mainDomain}${port}${path}`
@@ -99,15 +89,8 @@ export function getMainDomainUrl(ctx: HostContext, path: string = '/'): string {
 export function getSubdomainUrl(ctx: HostContext, orgSlug: string, path: string = '/'): string {
   const { protocol, hostWithoutPort, port } = parseHost(ctx)
 
-  let baseDomain: string
-
-  if (hostWithoutPort.endsWith('.localhost') || hostWithoutPort === 'localhost') {
-    baseDomain = 'localhost'
-  } else if (hostWithoutPort.endsWith('.nip.io')) {
-    baseDomain = hostWithoutPort.split('.').slice(-6).join('.')
-  } else {
-    baseDomain = hostWithoutPort.split('.').slice(-2).join('.')
-  }
+  // Keep last 2 parts as base domain (quackback.localhost or example.com)
+  const baseDomain = hostWithoutPort.split('.').slice(-2).join('.')
 
   return `${protocol}://${orgSlug}.${baseDomain}${port}${path}`
 }
@@ -124,10 +107,18 @@ export function buildOrgUrl(orgSlug: string, path: string = '/'): string {
   const appUrl = getAppUrl()
   const url = new URL(appUrl)
 
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+  if (url.hostname.endsWith('.localhost')) {
+    // Replace 'app.quackback.localhost' with 'acme.quackback.localhost'
+    const parts = url.hostname.split('.')
+    parts[0] = orgSlug
+    url.hostname = parts.join('.')
+  } else if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
     url.hostname = `${orgSlug}.localhost`
   } else {
-    url.hostname = `${orgSlug}.${url.hostname}`
+    // Production: replace first part (app.example.com -> acme.example.com)
+    const parts = url.hostname.split('.')
+    parts[0] = orgSlug
+    url.hostname = parts.join('.')
   }
 
   url.pathname = path

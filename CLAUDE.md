@@ -15,7 +15,7 @@ bun run setup    # One-time setup
 bun run dev      # Start dev server
 ```
 
-Open http://app.localhost:3000
+Open http://app.quackback.localhost:3000
 
 ## Tech Stack
 
@@ -52,7 +52,7 @@ quackback/
 ## Multi-tenancy Model
 
 - Uses **Better-auth organizations plugin** for multi-tenancy
-- **Subdomain routing**: `{org-slug}.localhost:3000` for tenant-specific views
+- **Subdomain routing**: `{org-slug}.quackback.localhost:3000` for tenant-specific views
 - Users can belong to multiple organizations
 - Data tables reference `organization_id` for isolation
 - Roles: `owner` > `admin` > `member`
@@ -104,10 +104,10 @@ See `.env.example` for all available variables. Key ones:
 
 ## Local Development
 
-The app uses `*.localhost` subdomains which resolve automatically in modern browsers:
+The app uses `*.quackback.localhost` subdomains which resolve automatically in modern browsers:
 
-- Main app: `http://app.localhost:3000`
-- Tenant portals: `http://{org-slug}.localhost:3000`
+- Main app: `http://app.quackback.localhost:3000`
+- Tenant portals: `http://{org-slug}.quackback.localhost:3000`
 
 ## Demo Credentials
 
@@ -115,4 +115,4 @@ After running `bun run db:seed`:
 
 - Email: `demo@example.com`
 - Password: `demo1234`
-- Organization: Acme Corp (`http://acme.localhost:3000`)
+- Organization: Acme Corp (`http://acme.quackback.localhost:3000`)

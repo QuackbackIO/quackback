@@ -75,9 +75,7 @@ export function CreateOrgForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
 
         <FormField
@@ -106,9 +104,7 @@ export function CreateOrgForm() {
               <FormLabel>URL</FormLabel>
               <div className="flex rounded-md shadow-xs">
                 <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                  {typeof window !== 'undefined'
-                    ? `${window.location.protocol}//`
-                    : 'https://'}
+                  {typeof window !== 'undefined' ? `${window.location.protocol}//` : 'https://'}
                 </span>
                 <FormControl>
                   <Input
@@ -119,12 +115,10 @@ export function CreateOrgForm() {
                   />
                 </FormControl>
                 <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                  .localhost:3000
+                  .quackback.localhost:3000
                 </span>
               </div>
-              <FormDescription>
-                This will be your organization's unique URL
-              </FormDescription>
+              <FormDescription>This will be your organization's unique URL</FormDescription>
               <FormMessage />
             </FormItem>
           )}
