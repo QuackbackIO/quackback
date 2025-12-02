@@ -78,13 +78,13 @@ export function CreateOrgForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label htmlFor="name" className="block text-sm font-medium text-foreground">
           Organization name
         </label>
         <input
@@ -93,17 +93,17 @@ export function CreateOrgForm() {
           value={name}
           onChange={(e) => handleNameChange(e.target.value)}
           required
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+          className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
           placeholder="Acme Inc"
         />
       </div>
 
       <div>
-        <label htmlFor="slug" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label htmlFor="slug" className="block text-sm font-medium text-foreground">
           URL
         </label>
         <div className="mt-1 flex rounded-md shadow-sm">
-          <span className="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400">
+          <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
             {typeof window !== 'undefined'
               ? `${window.location.protocol}//`
               : 'https://'}
@@ -114,14 +114,14 @@ export function CreateOrgForm() {
             value={slug}
             onChange={(e) => handleSlugChange(e.target.value)}
             required
-            className="block w-full min-w-0 flex-1 border border-gray-300 px-3 py-2 focus:border-black focus:outline-none focus:ring-1 focus:ring-black dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            className="block w-full min-w-0 flex-1 border border-input bg-background px-3 py-2 text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
             placeholder="acme"
           />
-          <span className="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400">
+          <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
             .localhost:3000
           </span>
         </div>
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <p className="mt-1 text-xs text-muted-foreground">
           This will be your organization's unique URL
         </p>
       </div>
@@ -129,7 +129,7 @@ export function CreateOrgForm() {
       <button
         type="submit"
         disabled={isLoading}
-        className="w-full rounded-md bg-black px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-200"
+        className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
         {isLoading ? 'Creating...' : 'Create organization'}
       </button>

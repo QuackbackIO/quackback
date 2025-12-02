@@ -37,20 +37,20 @@ export default async function SelectOrgPage({
 
   // User has multiple orgs - show selector
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-900 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+          <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
             Select Organization
           </h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-sm text-muted-foreground">
             Choose which organization you want to access
           </p>
         </div>
 
         {error && (
-          <div className="rounded-md bg-red-50 p-4 dark:bg-red-900/20">
-            <p className="text-sm text-red-700 dark:text-red-400">
+          <div className="rounded-md bg-destructive/10 p-4">
+            <p className="text-sm text-destructive">
               {error === 'org_not_found'
                 ? 'Organization not found'
                 : error === 'not_a_member'

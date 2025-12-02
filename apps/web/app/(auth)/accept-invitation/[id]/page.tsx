@@ -47,29 +47,29 @@ export default function AcceptInvitationPage({
       <div className="w-full max-w-md text-center px-4">
         {status === 'loading' && (
           <div>
-            <div className="animate-spin h-8 w-8 border-2 border-gray-900 border-t-transparent rounded-full mx-auto" />
-            <p className="mt-4 text-gray-600">Accepting invitation...</p>
+            <div className="animate-spin h-8 w-8 border-2 border-foreground border-t-transparent rounded-full mx-auto" />
+            <p className="mt-4 text-muted-foreground">Accepting invitation...</p>
           </div>
         )}
 
         {status === 'success' && (
           <div>
-            <div className="text-green-600 text-xl font-medium">
+            <div className="text-primary text-xl font-medium">
               Welcome to the team!
             </div>
-            <p className="mt-2 text-gray-600">Redirecting to dashboard...</p>
+            <p className="mt-2 text-muted-foreground">Redirecting to dashboard...</p>
           </div>
         )}
 
         {status === 'error' && (
           <div>
-            <div className="text-red-600 text-xl font-medium">
+            <div className="text-destructive text-xl font-medium">
               Unable to accept invitation
             </div>
-            <p className="mt-2 text-gray-600">{error}</p>
+            <p className="mt-2 text-muted-foreground">{error}</p>
             <button
               onClick={() => router.push('/login')}
-              className="mt-4 text-black underline"
+              className="mt-4 text-foreground underline"
             >
               Go to login
             </button>

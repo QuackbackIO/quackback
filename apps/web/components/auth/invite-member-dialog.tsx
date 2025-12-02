@@ -55,10 +55,10 @@ export function InviteMemberDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+      <div className="relative w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
         >
           <X className="h-5 w-5" />
         </button>
@@ -67,17 +67,17 @@ export function InviteMemberDialog({
 
         {success ? (
           <div className="py-8 text-center">
-            <div className="text-green-600 text-lg font-medium">
+            <div className="text-primary text-lg font-medium">
               Invitation sent!
             </div>
-            <p className="mt-2 text-gray-600">
+            <p className="mt-2 text-muted-foreground">
               {email} will receive an email with instructions to join.
             </p>
           </div>
         ) : (
           <form onSubmit={handleInvite} className="mt-4 space-y-4">
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -92,7 +92,7 @@ export function InviteMemberDialog({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                className="mt-1 block w-full rounded-md border border-input px-3 py-2"
                 placeholder="colleague@example.com"
               />
             </div>
@@ -105,7 +105,7 @@ export function InviteMemberDialog({
                 id="role"
                 value={role}
                 onChange={(e) => setRole(e.target.value as 'admin' | 'member')}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                className="mt-1 block w-full rounded-md border border-input px-3 py-2"
               >
                 <option value="member">Member - Can view and create feedback</option>
                 <option value="admin">Admin - Can manage settings and members</option>
@@ -116,14 +116,14 @@ export function InviteMemberDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                className="rounded-md border border-input px-4 py-2 text-sm font-medium hover:bg-accent"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {isLoading ? 'Sending...' : 'Send Invitation'}
               </button>

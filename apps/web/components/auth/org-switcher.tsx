@@ -44,13 +44,13 @@ export function OrgSwitcher() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
+        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent"
       >
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-gray-200 text-xs font-bold">
+        <div className="flex h-6 w-6 items-center justify-center rounded bg-muted text-xs font-bold">
           {activeOrg.name[0].toUpperCase()}
         </div>
         <span>{activeOrg.name}</span>
-        <ChevronDown className="h-4 w-4 text-gray-500" />
+        <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </button>
 
       {isOpen && (
@@ -59,31 +59,31 @@ export function OrgSwitcher() {
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-            <div className="px-3 py-2 text-xs font-medium text-gray-500">
+          <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card py-1 shadow-lg">
+            <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
               Organizations
             </div>
             {organizations.map((org) => (
               <button
                 key={org.id}
                 onClick={() => handleSwitch(org.id)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${
-                  org.id === activeOrg.id ? 'bg-gray-50' : ''
+                className={`flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent ${
+                  org.id === activeOrg.id ? 'bg-accent' : ''
                 }`}
               >
-                <div className="flex h-6 w-6 items-center justify-center rounded bg-gray-200 text-xs font-bold">
+                <div className="flex h-6 w-6 items-center justify-center rounded bg-muted text-xs font-bold">
                   {org.name[0].toUpperCase()}
                 </div>
                 <span>{org.name}</span>
                 {org.id === activeOrg.id && (
-                  <span className="ml-auto text-xs text-green-600">Active</span>
+                  <span className="ml-auto text-xs text-primary">Active</span>
                 )}
               </button>
             ))}
-            <div className="border-t border-gray-100 mt-1 pt-1">
+            <div className="border-t border-border mt-1 pt-1">
               <button
                 onClick={() => router.push('/admin/settings/organization/new')}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:bg-accent"
               >
                 <Plus className="h-4 w-4" />
                 Create organization

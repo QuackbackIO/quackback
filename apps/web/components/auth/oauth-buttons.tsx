@@ -29,7 +29,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
       <button
         type="button"
         onClick={handleGitHub}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
       >
         <Github className="h-5 w-5" />
         {actionText} with GitHub
@@ -37,7 +37,7 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
       <button
         type="button"
         onClick={handleGoogle}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path

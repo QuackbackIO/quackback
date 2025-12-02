@@ -5,7 +5,7 @@ import { MessageSquare, Plus, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function AdminPage() {
-  const { organization, user } = await requireTenant()
+  const { organization } = await requireTenant()
 
   // Check if org has boards - if not, redirect to onboarding
   const orgBoards = await db.query.boards.findMany({
@@ -18,27 +18,12 @@ export default async function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {organization.name}
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Admin</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 dark:text-gray-400">{user.email}</span>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Feedback Boards</h2>
+          <h2 className="text-lg font-medium text-foreground">Feedback Boards</h2>
           <Link
             href="/boards/new"
-            className="inline-flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             New Board
@@ -50,17 +35,17 @@ export default async function AdminPage() {
             <Link
               key={board.id}
               href={`/boards/${board.slug}`}
-              className="group rounded-lg border border-gray-200 bg-white p-5 transition-colors hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
+              className="group rounded-lg border border-border bg-card p-5 transition-colors hover:bg-accent"
             >
               <div className="flex items-start justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                  <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <MessageSquare className="h-5 w-5 text-primary" />
                 </div>
-                <ExternalLink className="h-4 w-4 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
-              <h3 className="mt-4 font-medium text-gray-900 dark:text-white">{board.name}</h3>
+              <h3 className="mt-4 font-medium text-foreground">{board.name}</h3>
               {board.description && (
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                   {board.description}
                 </p>
               )}
@@ -68,8 +53,8 @@ export default async function AdminPage() {
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                     board.isPublic
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                      : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted text-muted-foreground'
                   }`}
                 >
                   {board.isPublic ? 'Public' : 'Private'}
@@ -78,7 +63,6 @@ export default async function AdminPage() {
             </Link>
           ))}
         </div>
-      </main>
-    </div>
+    </main>
   )
 }

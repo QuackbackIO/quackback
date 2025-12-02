@@ -28,22 +28,22 @@ export function OrgSelector({ organizations, callbackUrl }: OrgSelectorProps) {
         <button
           key={org.id}
           onClick={() => handleSelectOrg(org)}
-          className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white p-4 text-left transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+          className="flex w-full items-center justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-input hover:bg-accent"
         >
           <div className="flex items-center gap-3">
             {org.logo ? (
               <img src={org.logo} alt={org.name} className="h-10 w-10 rounded-full object-cover" />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
-                <Building2 className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
               </div>
             )}
             <div>
-              <p className="font-medium text-gray-900 dark:text-white">{org.name}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{org.slug}</p>
+              <p className="font-medium text-foreground">{org.name}</p>
+              <p className="text-sm text-muted-foreground">{org.slug}</p>
             </div>
           </div>
-          <ChevronRight className="h-5 w-5 text-gray-400" />
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
       ))}
     </div>
