@@ -2,30 +2,44 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { signUp, createOrganization, setActiveOrganization } from '@/lib/auth/client'
+import { signupSchema, type SignupInput } from '@/lib/schemas/auth'
 import { OAuthButtons } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 
 export function SignupForm() {
   const router = useRouter()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [orgName, setOrgName] = useState('')
   const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setIsLoading(true)
+  const form = useForm<SignupInput>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      name: '',
+      email: '',
+      password: '',
+      orgName: '',
+    },
+  })
+
+  async function onSubmit(data: SignupInput) {
     setError('')
 
     try {
       const { error: signUpError } = await signUp.email({
-        email,
-        password,
-        name,
+        email: data.email,
+        password: data.password,
+        name: data.name,
       })
 
       if (signUpError) {
@@ -33,8 +47,8 @@ export function SignupForm() {
       }
 
       const { data: org, error: orgError } = await createOrganization({
-        name: orgName,
-        slug: orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+        name: data.orgName,
+        slug: data.orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
       })
 
       if (orgError) {
@@ -48,8 +62,6 @@ export function SignupForm() {
       router.push('/admin')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -66,74 +78,75 @@ export function SignupForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {error && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
 
-        <div className="space-y-2">
-          <label htmlFor="name" className="text-sm font-medium">
-            Your Name
-          </label>
-          <Input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            placeholder="John Doe"
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Your Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="John Doe" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </div>
 
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="you@example.com"
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input type="email" placeholder="you@example.com" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </div>
 
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium">
-            Password
-          </label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            placeholder="Min. 8 characters"
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <Input type="password" placeholder="Min. 8 characters" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </div>
 
-        <div className="space-y-2">
-          <label htmlFor="orgName" className="text-sm font-medium">
-            Organization Name
-          </label>
-          <Input
-            id="orgName"
-            type="text"
-            value={orgName}
-            onChange={(e) => setOrgName(e.target.value)}
-            required
-            placeholder="Acme Inc."
+          <FormField
+            control={form.control}
+            name="orgName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Organization Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Acme Inc." {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </div>
 
-        <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? 'Creating account...' : 'Create account'}
-        </Button>
-      </form>
+          <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
+            {form.formState.isSubmitting ? 'Creating account...' : 'Create account'}
+          </Button>
+        </form>
+      </Form>
     </div>
   )
 }

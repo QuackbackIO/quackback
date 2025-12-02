@@ -8,6 +8,25 @@ import type { changelogEntries } from './schema/changelog'
 export type Board = InferSelectModel<typeof boards>
 export type NewBoard = InferInsertModel<typeof boards>
 
+// Board settings (stored in boards.settings JSONB column)
+export interface BoardSettings {
+  publicVoting?: boolean          // default: true
+  publicCommenting?: boolean      // default: true
+  roadmapStatuses?: PostStatus[]  // default: ['planned', 'in_progress', 'complete']
+  allowAnonymousPosts?: boolean   // default: false
+}
+
+// Helper to get typed board settings with defaults
+export function getBoardSettings(board: Board): Required<BoardSettings> {
+  const settings = (board.settings || {}) as BoardSettings
+  return {
+    publicVoting: settings.publicVoting ?? true,
+    publicCommenting: settings.publicCommenting ?? true,
+    roadmapStatuses: settings.roadmapStatuses ?? ['planned', 'in_progress', 'complete'],
+    allowAnonymousPosts: settings.allowAnonymousPosts ?? false,
+  }
+}
+
 // Roadmap types (filtered views of posts within a board)
 export type Roadmap = InferSelectModel<typeof roadmaps>
 export type NewRoadmap = InferInsertModel<typeof roadmaps>
@@ -81,4 +100,32 @@ export type RoadmapWithPosts = Roadmap & {
 
 export type BoardWithRoadmaps = Board & {
   roadmaps: Roadmap[]
+}
+
+// Inbox query types
+export interface InboxPostListParams {
+  organizationId: string
+  boardIds?: string[]
+  status?: PostStatus[]
+  tagIds?: string[]
+  ownerId?: string | null // null = unassigned
+  search?: string
+  dateFrom?: Date
+  dateTo?: Date
+  minVotes?: number
+  sort?: 'newest' | 'oldest' | 'votes'
+  page?: number
+  limit?: number
+}
+
+export type PostListItem = Post & {
+  board: Pick<Board, 'id' | 'name' | 'slug'>
+  tags: Pick<Tag, 'id' | 'name' | 'color'>[]
+  commentCount: number
+}
+
+export interface InboxPostListResult {
+  items: PostListItem[]
+  total: number
+  hasMore: boolean
 }

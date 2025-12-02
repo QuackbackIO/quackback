@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { db, boards, eq, and } from '@quackback/db'
 import { getSession } from '@/lib/auth/server'
 import { auth } from '@/lib/auth/index'
+import { createBoardSchema } from '@/lib/schemas/boards'
 
 function slugify(text: string): string {
   return text
@@ -21,11 +22,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, organizationId, isPublic = true } = body
+    const { organizationId } = body
 
-    if (!name || !organizationId) {
-      return NextResponse.json({ error: 'Name and organizationId are required' }, { status: 400 })
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
+
+    // Validate the board data with Zod schema
+    const result = createBoardSchema.safeParse(body)
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error.issues[0]?.message || 'Invalid input' },
+        { status: 400 }
+      )
+    }
+
+    const { name, description, isPublic } = result.data
 
     // Verify user has access to this organization
     const orgs = await auth.api.listOrganizations({

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { cookies } from 'next/headers'
+import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import './globals.css'
 import { cn } from '@/lib/utils'
 import { Toaster } from '@/components/ui/sonner'
@@ -47,15 +48,17 @@ export default async function RootLayout({
         )}
       </head>
       <body className={cn('min-h-screen bg-background font-sans antialiased', inter.variable)}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme={theme}
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        <NuqsAdapter>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme={theme}
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+            <Toaster />
+          </ThemeProvider>
+        </NuqsAdapter>
       </body>
     </html>
   )

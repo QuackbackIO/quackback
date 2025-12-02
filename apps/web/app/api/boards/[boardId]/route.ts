@@ -16,7 +16,7 @@ export async function PATCH(
 
     const { boardId } = await params
     const body = await request.json()
-    const { name, description, isPublic } = body
+    const { name, description, isPublic, settings } = body
 
     // Get the board to verify ownership
     const board = await db.query.boards.findFirst({
@@ -37,6 +37,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Merge settings with existing settings if provided
+    let mergedSettings = board.settings
+    if (settings !== undefined) {
+      mergedSettings = {
+        ...(board.settings as object || {}),
+        ...settings,
+      }
+    }
+
     // Update the board
     const [updatedBoard] = await db
       .update(boards)
@@ -44,6 +53,7 @@ export async function PATCH(
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
         ...(isPublic !== undefined && { isPublic }),
+        ...(settings !== undefined && { settings: mergedSettings }),
         updatedAt: new Date(),
       })
       .where(eq(boards.id, boardId))

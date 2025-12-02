@@ -2,9 +2,20 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/schemas/boards'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 
 interface Board {
   id: string
@@ -18,16 +29,21 @@ interface DeleteBoardFormProps {
 
 export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [confirmName, setConfirmName] = useState('')
 
+  const form = useForm<DeleteBoardInput>({
+    resolver: zodResolver(deleteBoardSchema),
+    defaultValues: {
+      confirmName: '',
+    },
+  })
+
+  const confirmName = form.watch('confirmName')
   const canDelete = confirmName === board.name
 
-  async function handleDelete() {
+  async function onSubmit() {
     if (!canDelete) return
 
-    setIsLoading(true)
     setError('')
 
     try {
@@ -44,7 +60,6 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete board')
-      setIsLoading(false)
     }
   }
 
@@ -67,25 +82,33 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
         </div>
       )}
 
-      <div className="space-y-2">
-        <label htmlFor="confirmName" className="text-sm font-medium">
-          Type <span className="font-mono font-bold">{board.name}</span> to confirm
-        </label>
-        <Input
-          id="confirmName"
-          value={confirmName}
-          onChange={(e) => setConfirmName(e.target.value)}
-          placeholder={board.name}
-        />
-      </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="confirmName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Type <span className="font-mono font-bold">{board.name}</span> to confirm
+                </FormLabel>
+                <FormControl>
+                  <Input placeholder={board.name} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-      <Button
-        variant="destructive"
-        onClick={handleDelete}
-        disabled={!canDelete || isLoading}
-      >
-        {isLoading ? 'Deleting...' : 'Delete board'}
-      </Button>
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={!canDelete || form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting ? 'Deleting...' : 'Delete board'}
+          </Button>
+        </form>
+      </Form>
     </div>
   )
 }

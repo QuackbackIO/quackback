@@ -24,7 +24,7 @@ interface AdminNavProps {
 const navItems = [
   {
     label: 'Feedback',
-    href: '/admin',
+    href: '/admin/feedback',
     icon: MessageSquare,
   },
   {
@@ -54,8 +54,7 @@ export function AdminNav({ userName, userEmail, userImage }: AdminNavProps) {
           </Link>
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
-              const isActive = pathname === item.href ||
-                (item.href !== '/admin' && pathname.startsWith(item.href))
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               const Icon = item.icon
 
               return (

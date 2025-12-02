@@ -18,6 +18,7 @@ export * from './src/queries/roadmaps'
 export * from './src/queries/posts'
 export * from './src/queries/integrations'
 export * from './src/queries/changelog'
+export * from './src/queries/public'
 
 // Re-export common drizzle-orm utilities
 export { eq, and, or, ne, gt, gte, lt, lte, like, ilike, inArray, notInArray, isNull, isNotNull, sql, desc, asc } from 'drizzle-orm'

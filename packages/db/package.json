@@ -6,7 +6,9 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./queries/public": "./src/queries/public.ts",
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

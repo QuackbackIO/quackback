@@ -1,7 +1,13 @@
 import { redirect } from 'next/navigation'
-import { validateTenantAccess, getOrgSlug } from '@/lib/tenant'
+import { getOrgSlug, getCurrentOrganization } from '@/lib/tenant'
 import { buildMainDomainUrl } from '@/lib/routing'
 
+/**
+ * Root tenant layout - only validates organization exists
+ * Auth validation is handled by child layouts:
+ * - (public)/* routes don't require auth
+ * - admin/* routes require auth via their own layout
+ */
 export default async function TenantLayout({
   children,
 }: {
@@ -14,15 +20,11 @@ export default async function TenantLayout({
     redirect(buildMainDomainUrl('/select-org'))
   }
 
-  const result = await validateTenantAccess()
+  // Validate org exists (but don't require auth - that's done by child layouts)
+  const org = await getCurrentOrganization()
 
-  if (!result.valid) {
-    const redirectMap = {
-      not_authenticated: '/login',
-      org_not_found: '/select-org?error=org_not_found',
-      not_a_member: '/select-org?error=not_a_member',
-    } as const
-    redirect(buildMainDomainUrl(redirectMap[result.reason]))
+  if (!org) {
+    redirect(buildMainDomainUrl('/select-org?error=org_not_found'))
   }
 
   return <>{children}</>

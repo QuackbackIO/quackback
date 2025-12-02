@@ -20,6 +20,12 @@ const mainDomainOnlyRoutes = [
 ]
 
 /**
+ * Public routes on tenant subdomains (no auth required)
+ * These are the public-facing portal pages
+ */
+const publicTenantRoutes = ['/', '/boards', '/roadmap']
+
+/**
  * Get host context from request for URL building
  */
 function getHostContext(request: NextRequest) {
@@ -83,7 +89,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(getMainDomainUrl(ctx, pathname)))
   }
 
-  // Require authentication
+  // Check if this is a public tenant route (no auth required)
+  const isPublicTenantRoute = publicTenantRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  )
+
+  if (isPublicTenantRoute) {
+    // Allow public access without authentication
+    return NextResponse.next({
+      request: { headers: requestHeaders },
+    })
+  }
+
+  // Admin routes require authentication
   if (!sessionCookie) {
     const loginUrl = new URL(getMainDomainUrl(ctx, '/login'))
     const callbackUrl = `${ctx.protocol}://${ctx.host}${pathname}${request.nextUrl.search}`

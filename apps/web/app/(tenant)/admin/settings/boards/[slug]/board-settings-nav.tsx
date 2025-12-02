@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings } from 'lucide-react'
+import { Settings, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface BoardSettingsNavProps {
@@ -15,6 +15,7 @@ export function BoardSettingsNav({ boardSlug }: BoardSettingsNavProps) {
 
   const navItems = [
     { label: 'General', href: basePath, icon: Settings },
+    { label: 'Public Portal', href: `${basePath}/public`, icon: Globe },
   ]
 
   return (

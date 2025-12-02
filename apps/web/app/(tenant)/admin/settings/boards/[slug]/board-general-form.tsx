@@ -2,10 +2,22 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { updateBoardSchema, type UpdateBoardInput } from '@/lib/schemas/boards'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 
 interface Board {
   id: string
@@ -21,16 +33,19 @@ interface BoardGeneralFormProps {
 
 export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
-  const [name, setName] = useState(board.name)
-  const [description, setDescription] = useState(board.description || '')
-  const [isPublic, setIsPublic] = useState(board.isPublic)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setIsLoading(true)
+  const form = useForm<UpdateBoardInput>({
+    resolver: zodResolver(updateBoardSchema),
+    defaultValues: {
+      name: board.name,
+      description: board.description || '',
+      isPublic: board.isPublic,
+    },
+  })
+
+  async function onSubmit(data: UpdateBoardInput) {
     setError('')
     setSuccess(false)
 
@@ -38,86 +53,91 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
       const response = await fetch(`/api/boards/${board.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          description,
-          isPublic,
-        }),
+        body: JSON.stringify(data),
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update board')
+        const responseData = await response.json()
+        throw new Error(responseData.error || 'Failed to update board')
       }
 
       setSuccess(true)
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update board')
-    } finally {
-      setIsLoading(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {error && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-      {success && (
-        <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
-          Board updated successfully
-        </div>
-      )}
+        {success && (
+          <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
+            Board updated successfully
+          </div>
+        )}
 
-      <div className="space-y-2">
-        <label htmlFor="name" className="text-sm font-medium">
-          Board name
-        </label>
-        <Input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Board name</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="space-y-2">
-        <label htmlFor="description" className="text-sm font-medium">
-          Description
-        </label>
-        <Textarea
-          id="description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea rows={3} {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <label htmlFor="isPublic" className="text-sm font-medium">
-            Public board
-          </label>
-          <p className="text-sm text-muted-foreground">
-            Anyone can view and submit feedback
-          </p>
+        <FormField
+          control={form.control}
+          name="isPublic"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <FormLabel>Public board</FormLabel>
+                <FormDescription>
+                  Anyone can view and submit feedback
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? 'Saving...' : 'Save changes'}
+          </Button>
         </div>
-        <Switch
-          id="isPublic"
-          checked={isPublic}
-          onCheckedChange={setIsPublic}
-        />
-      </div>
-
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isLoading || !name.trim()}>
-          {isLoading ? 'Saving...' : 'Save changes'}
-        </Button>
-      </div>
-    </form>
+      </form>
+    </Form>
   )
 }

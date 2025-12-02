@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { createBoardSchema, type CreateBoardInput } from '@/lib/schemas/boards'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +19,15 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Plus } from 'lucide-react'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 
 interface CreateBoardDialogProps {
   organizationId: string
@@ -24,15 +36,18 @@ interface CreateBoardDialogProps {
 export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [isPublic, setIsPublic] = useState(true)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setIsLoading(true)
+  const form = useForm<CreateBoardInput>({
+    resolver: zodResolver(createBoardSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      isPublic: true,
+    },
+  })
+
+  async function onSubmit(data: CreateBoardInput) {
     setError('')
 
     try {
@@ -40,32 +55,34 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
-          description,
-          isPublic,
+          ...data,
           organizationId,
         }),
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create board')
+        const responseData = await response.json()
+        throw new Error(responseData.error || 'Failed to create board')
       }
 
       setOpen(false)
-      setName('')
-      setDescription('')
-      setIsPublic(true)
+      form.reset()
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create board')
-    } finally {
-      setIsLoading(false)
+    }
+  }
+
+  function handleOpenChange(isOpen: boolean) {
+    setOpen(isOpen)
+    if (!isOpen) {
+      form.reset()
+      setError('')
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4" />
@@ -73,77 +90,90 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Create new board</DialogTitle>
-            <DialogDescription>
-              Create a new feedback board to collect ideas from your users.
-            </DialogDescription>
-          </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <DialogHeader>
+              <DialogTitle>Create new board</DialogTitle>
+              <DialogDescription>
+                Create a new feedback board to collect ideas from your users.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+            <div className="space-y-4 py-4">
+              {error && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
 
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-medium">
-                Board name
-              </label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Feature Requests"
-                required
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Board name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Feature Requests" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Share your ideas and vote on features"
+                        rows={3}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isPublic"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <FormLabel>Public board</FormLabel>
+                      <FormDescription>
+                        Anyone can view and submit feedback
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
               />
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="description" className="text-sm font-medium">
-                Description
-              </label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Share your ideas and vote on features"
-                rows={3}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <label htmlFor="isPublic" className="text-sm font-medium">
-                  Public board
-                </label>
-                <p className="text-sm text-muted-foreground">
-                  Anyone can view and submit feedback
-                </p>
-              </div>
-              <Switch
-                id="isPublic"
-                checked={isPublic}
-                onCheckedChange={setIsPublic}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading || !name.trim()}>
-              {isLoading ? 'Creating...' : 'Create board'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? 'Creating...' : 'Create board'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
