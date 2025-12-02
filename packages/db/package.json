@@ -15,7 +15,9 @@
     "db:migrate": "bun run src/migrate.ts",
     "db:migrate:cli": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "bun src/seed.ts",
+    "db:reset": "bun src/reset.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.7",

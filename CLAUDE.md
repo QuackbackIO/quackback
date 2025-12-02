@@ -1,84 +1,78 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-This is a **pre-implementation planning repository** for Quackback, an open-source customer feedback platform. The repository contains work package prompts and implementation plans - no code has been written yet.
+Quackback is an open-source customer feedback platform. Collect, organize, and act on user feedback with public boards, roadmaps, and changelogs.
 
-**Project**: Quackback
 **License**: BSL-1.1 (Business Source License)
+
+## Quick Start
+
+```bash
+bun run setup    # One-time setup
+bun run dev      # Start dev server
+```
+
+Open http://app.localhost:3000
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| **Framework** | Next.js 16 (App Router) |
-| **Database** | PostgreSQL with Drizzle ORM |
-| **Auth** | Better-auth with organizations plugin |
-| **Multi-tenancy** | Better-auth organizations (teams/orgs) |
-| **Runtime** | Bun 1.3.3+ |
-| **Package Manager** | Bun |
-| **Styling** | Tailwind CSS |
-| **Testing** | Vitest, Playwright |
-| **Validation** | Zod |
-
-## Multi-tenancy Model
-
-- Uses **Better-auth organizations plugin** for multi-tenancy
-- Users can belong to multiple organizations
-- Each organization is a separate tenant with isolated data
-- Data tables reference `organization_id` from Better-auth
-- Roles: `owner` > `admin` > `member`
+| Layer             | Technology                                     |
+| ----------------- | ---------------------------------------------- |
+| **Framework**     | Next.js 16 (App Router)                        |
+| **Database**      | PostgreSQL with Drizzle ORM                    |
+| **Auth**          | Better-auth with organizations plugin          |
+| **Multi-tenancy** | Subdomain-based with Better-auth organizations |
+| **Runtime**       | Bun 1.3.3+                                     |
+| **Styling**       | Tailwind CSS v4                                |
+| **UI Components** | shadcn/ui                                      |
+| **Testing**       | Vitest                                         |
+| **Validation**    | Zod                                            |
 
 ## Repository Structure
 
 ```
-IMPLEMENTATION_PLAN.md      # Master plan with 10 consolidated work packages
-AGENT_ALLOCATION.md         # Agent assignments and execution strategy
-AGENT_PROMPTS/              # Detailed prompts for each work package (WP-01 to WP-10)
-```
-
-## Work Packages (10 Total)
-
-| ID | Name | Dependencies |
-|----|------|--------------|
-| WP-01 | Project Initialization | None |
-| WP-02 | Database Schema (Drizzle ORM) | WP-01 |
-| WP-03 | Authentication (Better-auth + orgs) | WP-01, WP-02 |
-| WP-04 | Dashboard Layout | WP-03 |
-| WP-05 | Feedback CRUD | WP-02, WP-04 |
-| WP-06 | Public Features (Board, Roadmap, Changelog) | WP-05 |
-| WP-07 | Integrations (GitHub, Slack, Discord) | WP-05 |
-| WP-08 | Embeddable Widget | WP-05 |
-| WP-09 | Docker Deployment | All |
-| WP-10 | Monitoring & Documentation | All |
-
-## Using Work Packages
-
-Each work package in `AGENT_PROMPTS/` is a self-contained implementation prompt containing:
-- Overview and dependencies
-- Acceptance criteria checklist
-- Files to create with paths
-- Implementation code snippets
-- Testing checklists
-
-**To implement a work package**: Read the corresponding `WP-XX-*.md` file and follow its instructions. Check dependencies in `AGENT_ALLOCATION.md` before starting.
-
-## Target Architecture (Post-Implementation)
-
-```
 quackback/
 ├── apps/web/              # Next.js application
-│   ├── app/               # App Router (auth, dashboard, public, api routes)
-│   ├── components/        # UI, forms, feature components
-│   └── lib/               # Utilities, auth, monitoring
+│   ├── app/               # App Router pages and API routes
+│   ├── components/        # UI and feature components
+│   └── lib/               # Utilities, auth config
 ├── packages/
 │   ├── db/                # Drizzle schema, migrations, queries
+│   ├── domain/            # Business logic
+│   ├── email/             # Email service (Resend)
 │   ├── integrations/      # GitHub, Slack, Discord
-│   ├── widget/            # Embeddable feedback widget
 │   └── shared/            # Types, constants, utilities
-└── docker/                # Docker deployment configs
+├── scripts/               # Development scripts
+└── docker-compose.yml     # Local PostgreSQL
+```
+
+## Multi-tenancy Model
+
+- Uses **Better-auth organizations plugin** for multi-tenancy
+- **Subdomain routing**: `{org-slug}.localhost:3000` for tenant-specific views
+- Users can belong to multiple organizations
+- Data tables reference `organization_id` for isolation
+- Roles: `owner` > `admin` > `member`
+
+## Commands
+
+```bash
+# Development
+bun run dev           # Start dev server (auto-migrates)
+bun run build         # Build for production
+bun run lint          # Run ESLint
+bun run test          # Run Vitest tests
+
+# Database
+bun run db:push       # Push schema to database
+bun run db:generate   # Generate migrations
+bun run db:migrate    # Run migrations
+bun run db:studio     # Open Drizzle Studio
+bun run db:seed       # Seed demo data
+bun run db:reset      # Reset database (destructive)
 ```
 
 ## Key Conventions
@@ -87,25 +81,38 @@ quackback/
 - **Components**: PascalCase (`UserProfile`)
 - **Functions**: camelCase (`getUserProfile`)
 - **Database tables**: snake_case (`feedback_items`)
-- **Multi-tenancy**: `organization_id` on all data tables (from Better-auth)
+- **Multi-tenancy**: `organization_id` on all data tables
 - **Server Components by default**, `'use client'` only when needed
 
 ## Database Notes
 
 - Drizzle ORM for type-safe database access
-- Better-auth creates its own tables: `user`, `session`, `account`, `organization`, `member`, `invitation`
-- Application tables reference `organization_id` for data isolation
-- No RLS needed - Drizzle queries filter by organization
+- Better-auth tables: `user`, `session`, `account`, `organization`, `member`, `invitation`
+- Application tables: `boards`, `posts`, `comments`, `votes`, `tags`, `roadmaps`, `changelog_entries`
+- RLS policies use `app.organization_id` session variable for tenant isolation
 
-## Commands (After WP-01 Implementation)
+## Environment Variables
 
-```bash
-bun install           # Install dependencies
-bun run dev           # Start development server
-bun run build         # Build for production
-bun run lint          # Run ESLint
-bun run test          # Run Vitest tests
-bun run db:generate   # Generate Drizzle migrations
-bun run db:migrate    # Run migrations
-bun run db:studio     # Open Drizzle Studio
-```
+See `.env.example` for all available variables. Key ones:
+
+| Variable              | Description                           |
+| --------------------- | ------------------------------------- |
+| `DATABASE_URL`        | PostgreSQL connection string          |
+| `BETTER_AUTH_SECRET`  | Auth secret (auto-generated by setup) |
+| `NEXT_PUBLIC_APP_URL` | Public app URL                        |
+| `COOKIE_DOMAIN`       | Cross-subdomain cookie domain         |
+
+## Local Development
+
+The app uses `*.localhost` subdomains which resolve automatically in modern browsers:
+
+- Main app: `http://app.localhost:3000`
+- Tenant portals: `http://{org-slug}.localhost:3000`
+
+## Demo Credentials
+
+After running `bun run db:seed`:
+
+- Email: `demo@example.com`
+- Password: `demo1234`
+- Organization: Acme Corp (`http://acme.localhost:3000`)
