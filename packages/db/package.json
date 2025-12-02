@@ -16,10 +16,11 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "drizzle-orm": "^0.38",
+    "drizzle-orm": "^0.44.7",
     "postgres": "^3"
   },
   "devDependencies": {
+    "dotenv": "^17.2.3",
     "drizzle-kit": "^0.30"
   }
 }
