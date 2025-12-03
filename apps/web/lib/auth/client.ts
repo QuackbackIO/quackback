@@ -5,11 +5,18 @@ import { organizationClient } from 'better-auth/client/plugins'
 import { ssoClient } from '@better-auth/sso/client'
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL!,
   plugins: [organizationClient(), ssoClient()],
 })
 
-export const { signIn, signUp, signOut, useSession } = authClient
+export const { signIn, signUp, useSession } = authClient
+
+/**
+ * Sign out using a simple relative fetch (works on any subdomain)
+ */
+export async function signOut() {
+  await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' })
+  window.location.href = '/'
+}
 
 export const {
   create: createOrganization,

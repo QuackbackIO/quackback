@@ -3,6 +3,8 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
 import { db, organization as orgTable, user as userTable, eq } from '@quackback/db'
+import bcrypt from 'bcryptjs'
+import { trustLogin } from './plugins/trust-login'
 
 /**
  * User metadata structure for SSO-isolated users
@@ -56,29 +58,23 @@ function generateSaltedEmail(email: string, organizationId: string): string {
 /**
  * Build trusted origins list for CSRF protection
  * Supports wildcards for subdomains
+ *
+ * Uses APP_DOMAIN env var (e.g., "quackback.io" or "localhost:3000")
  */
 function buildTrustedOrigins(): string[] {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  const cookieDomain = process.env.COOKIE_DOMAIN
+  const domain = process.env.APP_DOMAIN
 
-  if (process.env.NODE_ENV === 'production') {
-    if (!appUrl || !cookieDomain) {
-      throw new Error('NEXT_PUBLIC_APP_URL and COOKIE_DOMAIN are required in production')
-    }
-    // Remove leading dot from cookie domain for wildcard pattern
-    const domain = cookieDomain.startsWith('.') ? cookieDomain.slice(1) : cookieDomain
-    return [appUrl, `https://*.${domain}`]
+  // During build time, APP_DOMAIN may not be set - use a placeholder
+  // that will be replaced at runtime
+  if (!domain) {
+    // Allow build to proceed but require APP_DOMAIN at runtime
+    // This is safe because trustedOrigins is checked per-request
+    return ['http://localhost:3000', 'http://*.localhost:3000']
   }
 
-  // Development: support quackback.localhost subdomains
-  const origins = ['http://quackback.localhost:3000', 'http://*.quackback.localhost:3000']
-
-  // Add custom app URL if set
-  if (appUrl && !origins.includes(appUrl)) {
-    origins.push(appUrl)
-  }
-
-  return origins
+  // Use https in production, http for localhost
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
+  return [`${protocol}://${domain}`, `${protocol}://*.${domain}`]
 }
 
 export const auth = betterAuth({
@@ -89,6 +85,12 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
+    // Use bcrypt for password hashing (compatible with bcryptjs and Bun.password)
+    password: {
+      hash: async (password: string) => bcrypt.hash(password, 10),
+      verify: async ({ password, hash }: { password: string; hash: string }) =>
+        bcrypt.compare(password, hash),
+    },
   },
 
   socialProviders: {
@@ -102,14 +104,23 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       enabled: !!process.env.GOOGLE_CLIENT_ID,
     },
+    microsoft: {
+      clientId: process.env.MICROSOFT_CLIENT_ID!,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+      enabled: !!process.env.MICROSOFT_CLIENT_ID,
+      // Use 'common' tenant for multi-tenant apps (personal + work/school accounts)
+      // Change to 'organizations' for work/school only, or specific tenant ID
+      tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
+    },
   },
 
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // Update session every 24 hours
+    // Disable cookie caching to allow manual session creation
+    // Cookie cache stores encrypted session data which we can't manually create
     cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes
+      enabled: false,
     },
   },
 
@@ -117,10 +128,10 @@ export const auth = betterAuth({
   trustedOrigins: buildTrustedOrigins(),
 
   advanced: {
+    // Disable cross-subdomain cookies for tenant isolation
+    // Each subdomain has its own session cookie
     crossSubDomainCookies: {
-      enabled: true,
-      // Domain must start with dot for subdomain sharing (e.g., '.example.com')
-      domain: process.env.COOKIE_DOMAIN,
+      enabled: false,
     },
     defaultCookieAttributes: {
       sameSite: 'lax',
@@ -128,15 +139,11 @@ export const auth = betterAuth({
     },
   },
 
-  // Database hooks for Hub-and-Spoke identity model
-  // Note: Fork-Don't-Merge SSO isolation is implemented in the SSO plugin's
-  // provisionUser hook, which has access to the SSO provider context.
+  // Database hooks for tenant isolation
   databaseHooks: {
     user: {
       create: {
         before: async (user) => {
-          // Log user creation for debugging
-          console.log(`[Auth] Creating user: ${user.email}`)
           return { data: user }
         },
       },
@@ -144,18 +151,28 @@ export const auth = betterAuth({
   },
 
   plugins: [
+    // Trust login plugin for cross-domain session transfer
+    trustLogin(),
+
     organization({
-      allowUserToCreateOrganization: true,
+      // Tenant creation is handled by create-workspace flow, not direct API
+      allowUserToCreateOrganization: false,
       creatorRole: 'owner',
       memberRole: 'member',
       sendInvitationEmail: async ({ email, organization, inviter, invitation }) => {
         const { sendInvitationEmail } = await import('@quackback/email')
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        // Build the subdomain URL for the org
+        const domain = process.env.APP_DOMAIN
+        if (!domain) {
+          throw new Error('APP_DOMAIN environment variable is required')
+        }
+        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
+        const inviteLink = `${protocol}://${organization.slug}.${domain}/accept-invitation/${invitation.id}`
         await sendInvitationEmail({
           to: email,
           invitedByEmail: inviter.user.email,
           organizationName: organization.name,
-          inviteLink: `${appUrl}/accept-invitation/${invitation.id}`,
+          inviteLink,
         })
       },
     }),
@@ -175,20 +192,14 @@ export const auth = betterAuth({
       // provisionUser hook implements Fork-Don't-Merge logic
       // This is called AFTER user creation, so we update the user if strict mode is enabled
       provisionUser: async ({ user, userInfo: _userInfo, provider }) => {
-        console.log(`[SSO] User provisioned: ${user.email} via provider ${provider.providerId}`)
-
         // Skip if user email is already salted (re-login of isolated user)
         if (isEmailSalted(user.email)) {
-          console.log(`[SSO] User ${user.email} is already SSO-isolated, skipping`)
           return
         }
 
         // Check if this SSO provider is linked to an organization
         const orgId = provider.organizationId
         if (!orgId) {
-          console.log(
-            `[SSO] Provider ${provider.providerId} has no organization, skipping isolation`
-          )
           return
         }
 
@@ -198,7 +209,6 @@ export const auth = betterAuth({
         })
 
         if (!org?.strictSsoMode) {
-          console.log(`[SSO] Organization ${orgId} does not have strict SSO mode enabled`)
           return
         }
 
@@ -210,8 +220,6 @@ export const auth = betterAuth({
           organizationId: orgId,
         }
 
-        console.log(`[SSO] Applying Fork-Don't-Merge: ${user.email} -> ${saltedEmail}`)
-
         // Update the user with salted email and metadata
         await db
           .update(userTable)
@@ -220,8 +228,6 @@ export const auth = betterAuth({
             metadata: JSON.stringify(ssoMetadata),
           })
           .where(eq(userTable.id, user.id))
-
-        console.log(`[SSO] User ${user.id} email isolated for org ${orgId}`)
       },
     }),
   ],

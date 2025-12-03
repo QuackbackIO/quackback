@@ -80,16 +80,13 @@ export function extractMemberId(identifier: string): string | null {
 
 /**
  * Set user identifier cookie in response headers
+ * Cookie is per-subdomain (no cross-subdomain sharing)
  * Note: Pass the raw UUID, not the prefixed identifier
  */
 export function setUserIdentifierCookie(headers: Headers, rawUuid: string): void {
-  // Use COOKIE_DOMAIN env var for cross-subdomain support
-  const domain = process.env.COOKIE_DOMAIN || ''
-  const domainAttr = domain ? `; Domain=${domain}` : ''
-
   headers.set(
     'Set-Cookie',
-    `${USER_ID_COOKIE}=${rawUuid}; Path=/${domainAttr}; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax; HttpOnly`
+    `${USER_ID_COOKIE}=${rawUuid}; Path=/; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax; HttpOnly`
   )
 }
 

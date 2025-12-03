@@ -11,39 +11,93 @@
 import { headers } from 'next/headers'
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
-import { db, organization, member, eq, and, withTenantContext, type Database } from '@quackback/db'
+import {
+  db,
+  organization,
+  member,
+  workspaceDomain,
+  eq,
+  and,
+  withTenantContext,
+  type Database,
+} from '@quackback/db'
 import { getSession } from './auth/server'
-import { buildMainDomainUrl } from './routing'
 
 // =============================================================================
-// Org Slug from Headers (set by proxy.ts)
+// Domain Resolution
 // =============================================================================
 
 /**
- * Get the org slug from the x-org-slug header set by proxy.ts
+ * Get the current host from the request headers
+ * @throws Error if host header is missing
+ */
+export const getHost = cache(async (): Promise<string> => {
+  const headersList = await headers()
+  const host = headersList.get('host')
+  if (!host) {
+    throw new Error('Missing host header')
+  }
+  return host
+})
+
+/**
+ * Get the org slug from the current domain
  */
 export const getOrgSlug = cache(async (): Promise<string | null> => {
-  const headersList = await headers()
-  return headersList.get('x-org-slug')
+  const org = await getCurrentOrganization()
+  return org?.slug ?? null
 })
 
 // =============================================================================
-// Organization Lookup
+// Organization Lookup (via workspace_domain table)
 // =============================================================================
 
 /**
- * Get the current organization from the subdomain
- * Returns null if no subdomain or org not found
+ * Get the current organization from the domain
+ *
+ * Looks up the host in the workspace_domain table.
+ * Supports both subdomains (acme.quackback.io) and custom domains (feedback.acme.com).
  */
 export const getCurrentOrganization = cache(async () => {
-  const slug = await getOrgSlug()
-  if (!slug) return null
+  const host = await getHost()
 
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, slug),
+  const domainRecord = await db.query.workspaceDomain.findFirst({
+    where: eq(workspaceDomain.domain, host),
+    with: { organization: true },
   })
 
-  return org ?? null
+  return domainRecord?.organization ?? null
+})
+
+// =============================================================================
+// Optional User Role (for public pages that show different UI based on role)
+// =============================================================================
+
+/**
+ * Get the current user's role in the organization, if logged in.
+ * Returns null if not logged in or not a member of this org.
+ *
+ * Use this for public pages that want to show different UI based on role
+ * (e.g., "Admin" button vs "Log in" button).
+ */
+export const getCurrentUserRole = cache(async (): Promise<'owner' | 'admin' | 'member' | null> => {
+  const [session, org] = await Promise.all([getSession(), getCurrentOrganization()])
+
+  if (!session?.user || !org) {
+    return null
+  }
+
+  // Check if user belongs to this org
+  if (session.user.organizationId !== org.id) {
+    return null
+  }
+
+  // Get member record for role
+  const memberRecord = await db.query.member.findFirst({
+    where: and(eq(member.organizationId, org.id), eq(member.userId, session.user.id)),
+  })
+
+  return (memberRecord?.role as 'owner' | 'admin' | 'member') ?? null
 })
 
 // =============================================================================
@@ -51,7 +105,7 @@ export const getCurrentOrganization = cache(async () => {
 // =============================================================================
 
 type ValidationResult =
-  | { valid: false; reason: 'not_authenticated' | 'org_not_found' | 'not_a_member' }
+  | { valid: false; reason: 'not_authenticated' | 'org_not_found' | 'wrong_tenant' }
   | {
       valid: true
       organization: NonNullable<Awaited<ReturnType<typeof getCurrentOrganization>>>
@@ -60,8 +114,15 @@ type ValidationResult =
     }
 
 /**
- * Validate that the current user has access to the current organization
- * Returns the organization and member info if valid
+ * Validate that the current user has access to the current organization.
+ *
+ * Full Tenant Isolation: Users are scoped to a single organization via organizationId.
+ * This validates:
+ * 1. User is authenticated
+ * 2. Organization exists for this subdomain
+ * 3. User's organizationId matches the subdomain's organization
+ *
+ * Returns the organization and member info if valid.
  */
 export const validateTenantAccess = cache(async (): Promise<ValidationResult> => {
   const [session, org] = await Promise.all([getSession(), getCurrentOrganization()])
@@ -74,12 +135,19 @@ export const validateTenantAccess = cache(async (): Promise<ValidationResult> =>
     return { valid: false, reason: 'org_not_found' }
   }
 
+  // Full Tenant Isolation: User's organizationId must match the subdomain org
+  if (session.user.organizationId !== org.id) {
+    return { valid: false, reason: 'wrong_tenant' }
+  }
+
+  // Get member record (for role info)
   const memberRecord = await db.query.member.findFirst({
     where: and(eq(member.organizationId, org.id), eq(member.userId, session.user.id)),
   })
 
   if (!memberRecord) {
-    return { valid: false, reason: 'not_a_member' }
+    // This shouldn't happen in tenant isolation, but handle gracefully
+    return { valid: false, reason: 'wrong_tenant' }
   }
 
   return {
@@ -95,18 +163,22 @@ export const validateTenantAccess = cache(async (): Promise<ValidationResult> =>
 // =============================================================================
 
 /**
- * Require valid tenant access - redirects if invalid
+ * Require valid tenant access - redirects if invalid.
+ *
+ * Full Tenant Isolation: All redirects stay on the subdomain.
+ * Users are scoped to their organization and cannot access other tenants.
  */
 export async function requireTenant() {
   const result = await validateTenantAccess()
 
   if (!result.valid) {
+    // All redirects stay on the subdomain in tenant isolation model
     const redirectMap = {
       not_authenticated: '/login',
-      org_not_found: '/select-org?error=org_not_found',
-      not_a_member: '/select-org?error=not_a_member',
+      org_not_found: '/login?error=org_not_found',
+      wrong_tenant: '/login?error=wrong_tenant',
     } as const
-    redirect(buildMainDomainUrl(redirectMap[result.reason]))
+    redirect(redirectMap[result.reason])
   }
 
   return result
@@ -168,7 +240,7 @@ export async function withAuthenticatedTenant<T>(
     const errorMessages = {
       not_authenticated: 'Authentication required',
       org_not_found: 'Organization not found',
-      not_a_member: 'Not a member of this organization',
+      wrong_tenant: 'Access denied for this organization',
     } as const
     throw new Error(errorMessages[result.reason])
   }
@@ -225,7 +297,9 @@ type ApiTenantResult =
 
 /**
  * Validate tenant access for API routes that receive organizationId as a parameter.
- * Unlike subdomain-based validation, this validates against an explicitly provided org ID.
+ *
+ * Full Tenant Isolation: Validates that the user's organizationId matches the requested org.
+ * Users can only access data for their own organization.
  *
  * @param organizationId - The organization ID to validate access for
  * @returns Validation result with organization, member, and user if successful
@@ -249,7 +323,12 @@ export async function validateApiTenantAccess(
     return { success: false, error: 'Unauthorized', status: 401 }
   }
 
-  // Check if user is a member of this organization
+  // Full Tenant Isolation: User's organizationId must match the requested org
+  if (session.user.organizationId !== organizationId) {
+    return { success: false, error: 'Forbidden', status: 403 }
+  }
+
+  // Get member record for role info
   const memberRecord = await db.query.member.findFirst({
     where: and(eq(member.organizationId, organizationId), eq(member.userId, session.user.id)),
   })
