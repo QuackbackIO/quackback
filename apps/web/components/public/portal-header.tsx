@@ -4,10 +4,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useSession } from '@/lib/auth/client'
 
 interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
+  /** User's role in the organization (passed from server) */
+  userRole?: 'owner' | 'admin' | 'member' | null
 }
 
 const navItems = [
@@ -15,8 +18,12 @@ const navItems = [
   { href: '/roadmap', label: 'Roadmap' },
 ]
 
-export function PortalHeader({ orgName, orgLogo }: PortalHeaderProps) {
+export function PortalHeader({ orgName, orgLogo, userRole }: PortalHeaderProps) {
   const pathname = usePathname()
+  const { data: session, isPending } = useSession()
+
+  const isLoggedIn = !!session?.user
+  const canAccessAdmin = isLoggedIn && (userRole === 'owner' || userRole === 'admin')
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -61,10 +68,23 @@ export function PortalHeader({ orgName, orgLogo }: PortalHeaderProps) {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Login / Admin Link */}
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/admin">Admin</Link>
-        </Button>
+        {/* Auth Buttons */}
+        {isPending ? (
+          <div className="h-8 w-16 animate-pulse rounded bg-muted" />
+        ) : canAccessAdmin ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin">Admin</Link>
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/login">Log in</Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/signup">Sign up</Link>
+            </Button>
+          </div>
+        )}
       </div>
     </header>
   )
