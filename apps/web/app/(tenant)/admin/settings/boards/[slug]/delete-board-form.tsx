@@ -25,9 +25,10 @@ interface Board {
 
 interface DeleteBoardFormProps {
   board: Board
+  organizationId: string
 }
 
-export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
+export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps) {
   const router = useRouter()
   const [error, setError] = useState('')
 
@@ -47,7 +48,7 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
     setError('')
 
     try {
-      const response = await fetch(`/api/boards/${board.id}`, {
+      const response = await fetch(`/api/boards/${board.id}?organizationId=${organizationId}`, {
         method: 'DELETE',
       })
 

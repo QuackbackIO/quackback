@@ -14,10 +14,7 @@ export default async function BoardGeneralSettingsPage({
   const { slug } = await params
 
   const board = await db.query.boards.findFirst({
-    where: and(
-      eq(boards.organizationId, organization.id),
-      eq(boards.slug, slug)
-    ),
+    where: and(eq(boards.organizationId, organization.id), eq(boards.slug, slug)),
   })
 
   if (!board) {
@@ -44,7 +41,7 @@ export default async function BoardGeneralSettingsPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DeleteBoardForm board={board} />
+          <DeleteBoardForm board={board} organizationId={organization.id} />
         </CardContent>
       </Card>
     </div>
