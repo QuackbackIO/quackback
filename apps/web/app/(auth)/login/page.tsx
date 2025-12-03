@@ -1,8 +1,12 @@
 import { Suspense } from 'react'
+import { headers } from 'next/headers'
 import { LoginForm } from '@/components/auth/login-form'
 import Link from 'next/link'
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const headersList = await headers()
+  const orgSlug = headersList.get('x-org-slug')
+
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-md space-y-8 px-4">
@@ -11,7 +15,7 @@ export default function LoginPage() {
           <p className="mt-2 text-muted-foreground">Sign in to your account</p>
         </div>
         <Suspense fallback={<div className="animate-pulse h-64 bg-muted rounded-lg" />}>
-          <LoginForm />
+          <LoginForm orgSlug={orgSlug ?? undefined} />
         </Suspense>
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}
