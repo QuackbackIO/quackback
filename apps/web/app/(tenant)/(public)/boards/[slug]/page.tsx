@@ -1,6 +1,11 @@
 import { notFound } from 'next/navigation'
 import { getCurrentOrganization } from '@/lib/tenant'
-import { getPublicBoardBySlug, getPublicPostList, getUserVotedPostIds } from '@quackback/db/queries/public'
+import {
+  getPublicBoardBySlug,
+  getPublicPostList,
+  getUserVotedPostIds,
+} from '@quackback/db/queries/public'
+import { getStatusesByOrganization } from '@quackback/db'
 import { getUserIdentifier } from '@/lib/user-identifier'
 import { PostCard } from '@/components/public/post-card'
 import { Input } from '@/components/ui/input'
@@ -40,13 +45,16 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
   }
 
   const userIdentifier = await getUserIdentifier()
-  const { items: posts, total, hasMore } = await getPublicPostList({
-    boardId: board.id,
-    search,
-    sort,
-    page: parseInt(page),
-    limit: 20,
-  })
+  const [{ items: posts, total, hasMore }, statuses] = await Promise.all([
+    getPublicPostList({
+      boardId: board.id,
+      search,
+      sort,
+      page: parseInt(page),
+      limit: 20,
+    }),
+    getStatusesByOrganization(org.id),
+  ])
 
   // Get user's voted posts
   const postIds = posts.map((p) => p.id)
@@ -57,9 +65,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
       {/* Board header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">{board.name}</h1>
-        {board.description && (
-          <p className="text-muted-foreground">{board.description}</p>
-        )}
+        {board.description && <p className="text-muted-foreground">{board.description}</p>}
       </div>
 
       {/* Search and sort */}
@@ -106,6 +112,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
               title={post.title}
               content={post.content}
               status={post.status}
+              statuses={statuses}
               voteCount={post.voteCount}
               commentCount={post.commentCount}
               authorName={post.authorName}

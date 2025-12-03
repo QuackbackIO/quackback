@@ -3,13 +3,12 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getPublicBoardsWithStats, getRoadmapPosts } from '@quackback/db/queries/public'
+import { getStatusesByOrganization } from '@quackback/db'
 import { BoardCard } from '@/components/public/board-card'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { PortalHeader } from '@/components/public/portal-header'
-import type { PostStatus } from '@quackback/db'
 
 const APP_DOMAIN = process.env.APP_DOMAIN
-const DEFAULT_ROADMAP_STATUSES: PostStatus[] = ['planned', 'in_progress', 'complete']
 
 /**
  * Root Page - handles both main domain and tenant domains
@@ -98,9 +97,14 @@ async function TenantHomePage({
   orgLogo?: string | null
   userRole: 'owner' | 'admin' | 'member' | null
 }) {
+  // Fetch statuses for the org
+  const allStatuses = await getStatusesByOrganization(orgId)
+  const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
+  const statusSlugs = roadmapStatuses.map((s) => s.slug)
+
   const [boards, roadmapPosts] = await Promise.all([
     getPublicBoardsWithStats(orgId),
-    getRoadmapPosts(orgId, DEFAULT_ROADMAP_STATUSES),
+    getRoadmapPosts(orgId, statusSlugs),
   ])
 
   return (
@@ -150,7 +154,7 @@ async function TenantHomePage({
             </Link>
           </div>
 
-          <RoadmapBoard posts={roadmapPosts} />
+          <RoadmapBoard posts={roadmapPosts} statuses={roadmapStatuses} />
         </section>
       </main>
     </div>

@@ -1,7 +1,6 @@
 import { RoadmapCard } from './roadmap-card'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import type { PostStatus } from '@quackback/db'
 
 interface RoadmapPost {
   id: string
@@ -15,7 +14,6 @@ interface RoadmapPost {
 
 interface RoadmapColumnProps {
   title: string
-  status: PostStatus
   posts: RoadmapPost[]
   color: string
 }
@@ -26,7 +24,7 @@ export function RoadmapColumn({ title, posts, color }: RoadmapColumnProps) {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className={`h-3 w-3 rounded-full ${color}`} />
+            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
             <CardTitle className="text-base font-semibold">{title}</CardTitle>
           </div>
           <Badge variant="secondary" className="text-xs">

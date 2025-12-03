@@ -7,6 +7,7 @@ import {
   getPublicPostDetail,
   hasUserVotedOnPost,
 } from '@quackback/db/queries/public'
+import { getStatusesByOrganization } from '@quackback/db'
 import { getBoardSettings } from '@quackback/db/types'
 import { getUserIdentifier } from '@/lib/user-identifier'
 import { VoteButton } from '@/components/public/vote-button'
@@ -14,28 +15,9 @@ import { CommentsSection } from '@/components/public/comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
-import type { PostStatus } from '@quackback/db'
 
 // Ensure page is not cached since it depends on user's cookie
 export const dynamic = 'force-dynamic'
-
-const STATUS_COLORS: Record<PostStatus, string> = {
-  open: 'bg-blue-500',
-  under_review: 'bg-yellow-500',
-  planned: 'bg-purple-500',
-  in_progress: 'bg-orange-500',
-  complete: 'bg-green-500',
-  closed: 'bg-gray-500',
-}
-
-const STATUS_LABELS: Record<PostStatus, string> = {
-  open: 'Open',
-  under_review: 'Under Review',
-  planned: 'Planned',
-  in_progress: 'In Progress',
-  complete: 'Complete',
-  closed: 'Closed',
-}
 
 interface PostDetailPageProps {
   params: Promise<{ slug: string; postId: string }>
@@ -67,6 +49,10 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   // Get board settings
   const boardSettings = getBoardSettings(board)
 
+  // Get statuses for display
+  const statuses = await getStatusesByOrganization(org.id)
+  const currentStatus = statuses.find((s) => s.slug === post.status)
+
   // Check if user has voted
   const hasVoted = await hasUserVotedOnPost(postId, userIdentifier)
 
@@ -95,9 +81,10 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
             <h1 className="text-2xl font-bold flex-1">{post.title}</h1>
             <Badge
               variant="outline"
-              className={`shrink-0 text-white ${STATUS_COLORS[post.status]}`}
+              className="shrink-0 text-white"
+              style={{ backgroundColor: currentStatus?.color || '#6b7280' }}
             >
-              {STATUS_LABELS[post.status]}
+              {currentStatus?.name || post.status}
             </Badge>
           </div>
 

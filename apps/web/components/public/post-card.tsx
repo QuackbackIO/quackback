@@ -3,31 +3,14 @@ import { ChevronUp, MessageSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { TimeAgo } from '@/components/ui/time-ago'
-import type { PostStatus } from '@quackback/db'
-
-const STATUS_COLORS: Record<PostStatus, string> = {
-  open: 'bg-blue-500',
-  under_review: 'bg-yellow-500',
-  planned: 'bg-purple-500',
-  in_progress: 'bg-orange-500',
-  complete: 'bg-green-500',
-  closed: 'bg-gray-500',
-}
-
-const STATUS_LABELS: Record<PostStatus, string> = {
-  open: 'Open',
-  under_review: 'Under Review',
-  planned: 'Planned',
-  in_progress: 'In Progress',
-  complete: 'Complete',
-  closed: 'Closed',
-}
+import type { PostStatus, PostStatusEntity } from '@quackback/db'
 
 interface PostCardProps {
   id: string
   title: string
   content: string
   status: PostStatus
+  statuses: PostStatusEntity[]
   voteCount: number
   commentCount: number
   authorName: string | null
@@ -42,6 +25,7 @@ export function PostCard({
   title,
   content,
   status,
+  statuses,
   voteCount,
   commentCount,
   authorName,
@@ -50,6 +34,8 @@ export function PostCard({
   tags,
   hasVoted = false,
 }: PostCardProps) {
+  const currentStatus = statuses.find((s) => s.slug === status)
+
   return (
     <Link href={`/boards/${boardSlug}/posts/${id}`}>
       <Card className="h-full transition-colors hover:bg-muted/50">
@@ -71,9 +57,10 @@ export function PostCard({
                 <h3 className="font-semibold text-base line-clamp-1">{title}</h3>
                 <Badge
                   variant="outline"
-                  className={`shrink-0 text-xs text-white ${STATUS_COLORS[status]}`}
+                  className="shrink-0 text-xs text-white"
+                  style={{ backgroundColor: currentStatus?.color || '#6b7280' }}
                 >
-                  {STATUS_LABELS[status]}
+                  {currentStatus?.name || status}
                 </Badge>
               </div>
 
