@@ -23,7 +23,10 @@ const navSections = [
   },
   {
     label: 'Portal',
-    items: [{ label: 'Boards', href: '/admin/settings/boards', icon: Layout }],
+    items: [
+      { label: 'Boards', href: '/admin/settings/boards', icon: Layout },
+      { label: 'Public Statuses', href: '/admin/settings/statuses', icon: Settings },
+    ],
   },
 ]
 
