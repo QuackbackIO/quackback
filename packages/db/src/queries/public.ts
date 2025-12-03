@@ -329,12 +329,14 @@ export async function getPublicPostDetail(
 
 /**
  * Get posts for roadmap view across all public boards
+ * @param organizationId - The organization ID
+ * @param statusSlugs - Array of status slugs to filter by (e.g., ['planned', 'in_progress'])
  */
 export async function getRoadmapPosts(
   organizationId: string,
-  statuses: PostStatus[]
+  statusSlugs: string[]
 ): Promise<RoadmapPost[]> {
-  if (statuses.length === 0) {
+  if (statusSlugs.length === 0) {
     return []
   }
 
@@ -354,7 +356,7 @@ export async function getRoadmapPosts(
       and(
         eq(boards.organizationId, organizationId),
         eq(boards.isPublic, true),
-        inArray(posts.status, statuses)
+        inArray(posts.status, statusSlugs as PostStatus[])
       )
     )
     .orderBy(desc(posts.voteCount))

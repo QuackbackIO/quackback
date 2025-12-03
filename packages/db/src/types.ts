@@ -1,8 +1,20 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import type { boards, roadmaps, tags } from './schema/boards'
-import type { posts, postTags, postRoadmaps, votes, comments, commentReactions } from './schema/posts'
+import type { postStatuses, STATUS_CATEGORIES, StatusCategory } from './schema/statuses'
+import type {
+  posts,
+  postTags,
+  postRoadmaps,
+  votes,
+  comments,
+  commentReactions,
+} from './schema/posts'
 import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
+
+// Re-export status types
+export type { StatusCategory }
+export { STATUS_CATEGORIES }
 
 // Board types
 export type Board = InferSelectModel<typeof boards>
@@ -10,10 +22,10 @@ export type NewBoard = InferInsertModel<typeof boards>
 
 // Board settings (stored in boards.settings JSONB column)
 export interface BoardSettings {
-  publicVoting?: boolean          // default: true
-  publicCommenting?: boolean      // default: true
-  roadmapStatuses?: PostStatus[]  // default: ['planned', 'in_progress', 'complete']
-  allowAnonymousPosts?: boolean   // default: false
+  publicVoting?: boolean // default: true
+  publicCommenting?: boolean // default: true
+  roadmapStatuses?: PostStatus[] // default: ['planned', 'in_progress', 'complete']
+  allowAnonymousPosts?: boolean // default: false
 }
 
 // Helper to get typed board settings with defaults
@@ -34,6 +46,10 @@ export type NewRoadmap = InferInsertModel<typeof roadmaps>
 // Tag types
 export type Tag = InferSelectModel<typeof tags>
 export type NewTag = InferInsertModel<typeof tags>
+
+// Post status types (customizable statuses)
+export type PostStatusEntity = InferSelectModel<typeof postStatuses>
+export type NewPostStatusEntity = InferInsertModel<typeof postStatuses>
 
 // Post types
 export type Post = InferSelectModel<typeof posts>

@@ -7,6 +7,7 @@ export * from './auth'
 
 // Application schemas
 export * from './boards'
+export * from './statuses'
 export * from './posts'
 export * from './integrations'
 export * from './changelog'

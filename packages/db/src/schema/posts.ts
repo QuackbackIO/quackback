@@ -11,6 +11,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
 import { boards, tags, roadmaps } from './boards'
+import { postStatuses } from './statuses'
 import { member } from './auth'
 import { appUser } from './rls'
 
@@ -36,11 +37,14 @@ export const posts = pgTable(
     authorId: text('author_id'),
     authorName: text('author_name'),
     authorEmail: text('author_email'),
+    // Legacy status field - kept during migration, will be removed
     status: text('status', {
       enum: ['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed'],
     })
       .default('open')
       .notNull(),
+    // New status reference to post_statuses table
+    statusId: uuid('status_id').references(() => postStatuses.id, { onDelete: 'set null' }),
     // Owner is also member-scoped (team member assigned to this post)
     ownerMemberId: text('owner_member_id').references(() => member.id, { onDelete: 'set null' }),
     ownerId: text('owner_id'), // Legacy, kept for migration
@@ -60,6 +64,7 @@ export const posts = pgTable(
   (table) => [
     index('posts_board_id_idx').on(table.boardId),
     index('posts_status_idx').on(table.status),
+    index('posts_status_id_idx').on(table.statusId),
     index('posts_member_id_idx').on(table.memberId),
     index('posts_owner_member_id_idx').on(table.ownerMemberId),
     index('posts_owner_id_idx').on(table.ownerId), // Legacy index
@@ -225,6 +230,11 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.boardId],
     references: [boards.id],
   }),
+  // Status reference (new customizable status system)
+  postStatus: one(postStatuses, {
+    fields: [posts.statusId],
+    references: [postStatuses.id],
+  }),
   // Member-scoped author (Hub-and-Spoke identity)
   author: one(member, {
     fields: [posts.memberId],
@@ -303,4 +313,9 @@ export const postTagsRelations = relations(postTags, ({ one }) => ({
     fields: [postTags.tagId],
     references: [tags.id],
   }),
+}))
+
+// Post statuses relations (defined here to avoid circular dependency with statuses.ts)
+export const postStatusesRelations = relations(postStatuses, ({ many }) => ({
+  posts: many(posts),
 }))
