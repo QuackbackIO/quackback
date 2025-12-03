@@ -1,5 +1,4 @@
 import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
@@ -27,11 +26,12 @@ export default async function RootPage() {
     return <LandingPage />
   }
 
-  // Tenant domain - show portal home
+  // Tenant domain - show portal home (workspace validated in proxy.ts)
   const [org, userRole] = await Promise.all([getCurrentOrganization(), getCurrentUserRole()])
 
+  // Org is guaranteed to exist here due to proxy validation
   if (!org) {
-    redirect('/login?error=workspace_not_found')
+    throw new Error('Organization should exist - validated in proxy')
   }
 
   return <TenantHomePage orgId={org.id} orgName={org.name} orgLogo={org.logo} userRole={userRole} />

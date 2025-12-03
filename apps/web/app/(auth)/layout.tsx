@@ -8,9 +8,7 @@ const APP_DOMAIN = process.env.APP_DOMAIN
  *
  * Auth routes (login, signup, sso) are only available on tenant subdomains.
  * Main domain requests are redirected to create-workspace.
- *
- * Note: This layout does NOT validate org exists - the login form handles
- * showing the error if the workspace is not found.
+ * Workspace validation happens in proxy.ts.
  */
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
   const headersList = await headers()

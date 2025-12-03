@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { db, workspaceDomain, eq } from '@quackback/db'
 
 /**
  * Multi-Tenant Routing Proxy (Next.js 16)
@@ -67,7 +68,18 @@ export async function proxy(request: NextRequest) {
   }
 
   // === TENANT DOMAIN ===
-  // (Domain validated against workspace_domain table in tenant.ts)
+  // Validate workspace exists before processing tenant routes
+  const domainRecord = await db.query.workspaceDomain.findFirst({
+    where: eq(workspaceDomain.domain, host),
+  })
+
+  if (!domainRecord) {
+    // Workspace not found - rewrite to workspace-not-found page
+    // This preserves the URL while showing the 404 content
+    const url = request.nextUrl.clone()
+    url.pathname = '/workspace-not-found'
+    return NextResponse.rewrite(url)
+  }
 
   // Auth routes (login, signup, sso)
   if (tenantAuthRoutes.some((route) => pathname.startsWith(route))) {
