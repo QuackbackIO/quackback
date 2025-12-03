@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "microsoft_oauth_enabled" boolean DEFAULT true NOT NULL;

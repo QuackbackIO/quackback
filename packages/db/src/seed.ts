@@ -12,7 +12,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { eq } from 'drizzle-orm'
 import { scrypt } from '@noble/hashes/scrypt.js'
-import { user, organization, member, account } from './schema/auth'
+import { user, organization, member, account, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, comments, votes } from './schema/posts'
 
@@ -418,32 +418,79 @@ function weightedStatus(): PostStatus {
 async function seed() {
   console.log('🌱 Seeding database with faker data...\n')
 
-  // Check if demo user already exists
-  const existingUser = await db.select().from(user).where(eq(user.email, DEMO_USER.email))
-  if (existingUser.length > 0) {
-    console.log('Demo data already exists. To re-seed, run:')
-    console.log('  bun run db:reset && bun run db:seed\n')
-    await client.end()
-    process.exit(0)
-  }
-
   // Pre-hash the demo password (used for all seeded accounts)
   const hashedPassword = hashPassword(DEMO_USER.password)
 
   // =========================================================================
-  // Create Users
+  // Create Organizations FIRST (users now require organizationId)
+  // =========================================================================
+  console.log('🏢 Creating organizations...')
+
+  const orgRecords: Array<{ id: string; name: string; slug: string }> = []
+
+  // Create demo org first
+  const demoOrgId = uuid()
+  await db.insert(organization).values({
+    id: demoOrgId,
+    name: DEMO_ORG.name,
+    slug: DEMO_ORG.slug,
+    logo: null,
+    createdAt: new Date(),
+  })
+  // Create workspace domain for demo org
+  await db.insert(workspaceDomain).values({
+    id: uuid(),
+    organizationId: demoOrgId,
+    domain: `${DEMO_ORG.slug}.localhost:3000`,
+    domainType: 'subdomain',
+    isPrimary: true,
+    verified: true,
+  })
+  orgRecords.push({ id: demoOrgId, name: DEMO_ORG.name, slug: DEMO_ORG.slug })
+
+  // Create additional orgs
+  const additionalOrgs = [
+    { name: 'Nexaflow', slug: 'nexaflow' },
+    { name: 'Brightpath Labs', slug: 'brightpath' },
+  ]
+
+  for (const orgData of additionalOrgs) {
+    const orgId = uuid()
+    await db.insert(organization).values({
+      id: orgId,
+      name: orgData.name,
+      slug: orgData.slug,
+      createdAt: randomDate(120),
+    })
+    // Create workspace domain for each org
+    await db.insert(workspaceDomain).values({
+      id: uuid(),
+      organizationId: orgId,
+      domain: `${orgData.slug}.localhost:3000`,
+      domainType: 'subdomain',
+      isPrimary: true,
+      verified: true,
+    })
+    orgRecords.push({ id: orgId, ...orgData })
+  }
+
+  console.log(`   Created ${orgRecords.length} organizations`)
+
+  // =========================================================================
+  // Create Users (with organizationId - tenant isolation)
   // =========================================================================
   console.log('👤 Creating users...')
 
   const demoUserId = uuid()
-  const userRecords: Array<{ id: string; name: string; email: string }> = []
+  const userRecords: Array<{ id: string; name: string; email: string; orgId: string }> = []
 
-  // Create demo user (fixed credentials)
+  // Create demo user in demo org (fixed credentials)
   await db.insert(user).values({
     id: demoUserId,
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     emailVerified: true,
+    organizationId: demoOrgId,
     createdAt: new Date(),
     updatedAt: new Date(),
   })
@@ -458,9 +505,26 @@ async function seed() {
     updatedAt: new Date(),
   })
 
-  userRecords.push({ id: demoUserId, name: DEMO_USER.name, email: DEMO_USER.email })
+  // Also create member record for demo user
+  await db.insert(member).values({
+    id: uuid(),
+    organizationId: demoOrgId,
+    userId: demoUserId,
+    role: 'owner',
+    createdAt: new Date(),
+  })
 
-  // Create users from personas (realistic names) plus some random ones
+  userRecords.push({
+    id: demoUserId,
+    name: DEMO_USER.name,
+    email: DEMO_USER.email,
+    orgId: demoOrgId,
+  })
+
+  // Create users distributed across organizations
+  // First, ensure each org gets at least one user (for posts to have authors)
+  const orgsNeedingUsers = new Set(orgRecords.slice(1).map((o) => o.id)) // Skip demo org (already has demo user)
+
   for (let i = 0; i < CONFIG.users; i++) {
     const userId = uuid()
     let firstName: string
@@ -478,14 +542,35 @@ async function seed() {
     const name = `${firstName} ${lastName}`
     const email = faker.internet.email({ firstName, lastName }).toLowerCase()
 
+    // Assign user to an org
+    // First few users go to orgs that need users, then 70% to demo org
+    let assignedOrg: (typeof orgRecords)[0]
+    if (orgsNeedingUsers.size > 0) {
+      const orgId = Array.from(orgsNeedingUsers)[0]
+      assignedOrg = orgRecords.find((o) => o.id === orgId)!
+      orgsNeedingUsers.delete(orgId)
+    } else {
+      assignedOrg = faker.datatype.boolean({ probability: 0.7 }) ? orgRecords[0] : pick(orgRecords)
+    }
+
     await db.insert(user).values({
       id: userId,
       name,
       email,
       emailVerified: faker.datatype.boolean({ probability: 0.8 }),
       image: faker.datatype.boolean({ probability: 0.6 }) ? faker.image.avatar() : null,
+      organizationId: assignedOrg.id,
       createdAt: randomDate(180),
       updatedAt: new Date(),
+    })
+
+    // Also create member record
+    await db.insert(member).values({
+      id: uuid(),
+      organizationId: assignedOrg.id,
+      userId: userId,
+      role: pick(['admin', 'member', 'member', 'member']),
+      createdAt: randomDate(90),
     })
 
     // Some users have password accounts
@@ -495,97 +580,16 @@ async function seed() {
         accountId: userId,
         providerId: 'credential',
         userId: userId,
-        password: hashedPassword, // Same password for testing
+        password: hashedPassword,
         createdAt: randomDate(180),
         updatedAt: new Date(),
       })
     }
 
-    userRecords.push({ id: userId, name, email })
+    userRecords.push({ id: userId, name, email, orgId: assignedOrg.id })
   }
 
   console.log(`   Created ${userRecords.length} users`)
-
-  // =========================================================================
-  // Create Organizations
-  // =========================================================================
-  console.log('🏢 Creating organizations...')
-
-  const orgRecords: Array<{ id: string; name: string; slug: string }> = []
-
-  // Create demo org (owned by demo user)
-  const demoOrgId = uuid()
-  await db.insert(organization).values({
-    id: demoOrgId,
-    name: DEMO_ORG.name,
-    slug: DEMO_ORG.slug,
-    logo: null,
-    createdAt: new Date(),
-  })
-
-  await db.insert(member).values({
-    id: uuid(),
-    organizationId: demoOrgId,
-    userId: demoUserId,
-    role: 'owner',
-    createdAt: new Date(),
-  })
-
-  orgRecords.push({ id: demoOrgId, name: DEMO_ORG.name, slug: DEMO_ORG.slug })
-
-  // Add some random users as members of demo org
-  const demoOrgMembers = pickMultiple(
-    userRecords.filter((u) => u.id !== demoUserId),
-    randomInt(5, 10)
-  )
-  for (const memberUser of demoOrgMembers) {
-    await db.insert(member).values({
-      id: uuid(),
-      organizationId: demoOrgId,
-      userId: memberUser.id,
-      role: pick(['admin', 'member', 'member', 'member']), // More members than admins
-      createdAt: randomDate(90),
-    })
-  }
-
-  // Create additional orgs with realistic but fictional company names
-  const additionalOrgs = [
-    { name: 'Nexaflow', slug: 'nexaflow' },
-    { name: 'Brightpath Labs', slug: 'brightpath' },
-  ]
-
-  for (const orgData of additionalOrgs) {
-    const orgId = uuid()
-    const owner = pick(userRecords.filter((u) => u.id !== demoUserId))
-
-    await db.insert(organization).values({
-      id: orgId,
-      name: orgData.name,
-      slug: orgData.slug,
-      createdAt: randomDate(120),
-    })
-
-    await db.insert(member).values({
-      id: uuid(),
-      organizationId: orgId,
-      userId: owner.id,
-      role: 'owner',
-      createdAt: randomDate(120),
-    })
-
-    // Add demo user as member of other orgs (for testing org switching)
-    await db.insert(member).values({
-      id: uuid(),
-      organizationId: orgId,
-      userId: demoUserId,
-      role: 'member',
-      createdAt: randomDate(60),
-    })
-
-    orgRecords.push({ id: orgId, ...orgData })
-  }
-
-  console.log(`   Created ${orgRecords.length} organizations`)
 
   // =========================================================================
   // Create Tags (per organization)
@@ -684,9 +688,8 @@ async function seed() {
   for (const org of orgRecords) {
     const orgBoards = boardRecords.get(org.id) || []
     const orgTags = tagRecords.get(org.id) || []
-    const orgMembers = userRecords.filter(() =>
-      org.id === demoOrgId ? true : faker.datatype.boolean({ probability: 0.3 })
-    )
+    // Filter users who belong to this org (tenant isolation)
+    const orgMembers = userRecords.filter((u) => u.orgId === org.id)
 
     for (const board of orgBoards) {
       const postCount = randomInt(CONFIG.postsPerBoard.min, CONFIG.postsPerBoard.max)
@@ -847,7 +850,7 @@ async function seed() {
   console.log('Organizations:')
   for (const org of orgRecords) {
     console.log(`  • ${org.name}`)
-    console.log(`    http://${org.slug}.quackback.localhost:3000`)
+    console.log(`    http://${org.slug}.localhost:3000`)
   }
   console.log('')
   console.log('Summary:')

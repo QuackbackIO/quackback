@@ -10,24 +10,32 @@
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
 import { relations } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core'
 
-export const user = pgTable('user', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  emailVerified: boolean('email_verified').default(false).notNull(),
-  image: text('image'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-  // SSO isolation metadata (Hub-and-Spoke identity model)
-  // Stores { realEmail: string, ssoIsolated: true, organizationId: string }
-  // for users created via SSO in strict mode organizations
-  metadata: text('metadata'),
-})
+export const user = pgTable(
+  'user',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    email: text('email').notNull(), // Unique per organization, not globally
+    emailVerified: boolean('email_verified').default(false).notNull(),
+    image: text('image'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    // Tenant isolation: users belong to exactly one organization
+    organizationId: text('organization_id').notNull(),
+    // SSO isolation metadata (stores realEmail for SSO users with salted emails)
+    metadata: text('metadata'),
+  },
+  (table) => [
+    // Email is unique within an organization, not globally
+    uniqueIndex('user_email_org_unique_idx').on(table.email, table.organizationId),
+    index('user_organization_id_idx').on(table.organizationId),
+  ]
+)
 
 export const session = pgTable(
   'session',
@@ -96,11 +104,15 @@ export const organization = pgTable('organization', {
   logo: text('logo'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
-  // SSO Strict Mode (Hub-and-Spoke identity model)
-  // When true, SSO logins create isolated user records (Fork, Don't Merge)
-  // Email is salted to ensure uniqueness: user@domain.com -> user@domain.com+sso-{orgId}
-  // Real email stored in user metadata for display/notifications
+  // SSO Strict Mode - salts SSO user emails for additional isolation
   strictSsoMode: boolean('strict_sso_mode').default(false).notNull(),
+  // Per-organization authentication method settings
+  passwordAuthEnabled: boolean('password_auth_enabled').default(true).notNull(),
+  googleOAuthEnabled: boolean('google_oauth_enabled').default(true).notNull(),
+  githubOAuthEnabled: boolean('github_oauth_enabled').default(true).notNull(),
+  microsoftOAuthEnabled: boolean('microsoft_oauth_enabled').default(true).notNull(),
+  // Allow public signup on tenant subdomain (vs invitation-only)
+  openSignupEnabled: boolean('open_signup_enabled').default(false).notNull(),
 })
 
 export const member = pgTable(
@@ -144,12 +156,54 @@ export const invitation = pgTable(
   ]
 )
 
+/**
+ * SSO Provider table for Better-Auth SSO plugin
+ *
+ * Stores SAML and OIDC provider configurations per organization.
+ * Used by the SSO plugin to authenticate users via enterprise identity providers.
+ *
+ * @see https://www.better-auth.com/docs/plugins/sso
+ */
+export const ssoProvider = pgTable(
+  'sso_provider',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    // Issuer identifier (e.g., "https://accounts.google.com" or SAML entityId)
+    issuer: text('issuer').notNull(),
+    // Domain for email-based provider routing (e.g., "acme.com")
+    domain: text('domain').notNull(),
+    // Unique provider identifier used in login URLs
+    providerId: text('provider_id').notNull().unique(),
+    // OIDC configuration (JSON): { clientId, clientSecret, discoveryUrl, ... }
+    oidcConfig: text('oidc_config'),
+    // SAML configuration (JSON): { ssoUrl, certificate, signRequest, ... }
+    samlConfig: text('saml_config'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('sso_provider_org_id_idx').on(table.organizationId),
+    uniqueIndex('sso_provider_domain_idx').on(table.domain),
+  ]
+)
+
 // Relations for Drizzle relational queries (enables experimental joins)
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [user.organizationId],
+    references: [organization.id],
+  }),
   sessions: many(session),
   accounts: many(account),
   members: many(member),
   invitations: many(invitation),
+  sessionTransferTokens: many(sessionTransferToken),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -167,8 +221,11 @@ export const accountRelations = relations(account, ({ one }) => ({
 }))
 
 export const organizationRelations = relations(organization, ({ many }) => ({
+  users: many(user),
   members: many(member),
   invitations: many(invitation),
+  ssoProviders: many(ssoProvider),
+  domains: many(workspaceDomain),
 }))
 
 export const memberRelations = relations(member, ({ one }) => ({
@@ -190,5 +247,79 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
   inviter: one(user, {
     fields: [invitation.inviterId],
     references: [user.id],
+  }),
+}))
+
+export const ssoProviderRelations = relations(ssoProvider, ({ one }) => ({
+  organization: one(organization, {
+    fields: [ssoProvider.organizationId],
+    references: [organization.id],
+  }),
+}))
+
+/**
+ * Session Transfer Token table for per-subdomain session creation
+ *
+ * When auth flows happen on the main domain but sessions need to be
+ * created on tenant subdomains, this table stores one-time tokens
+ * that are exchanged for session cookies on the target subdomain.
+ *
+ * Used by:
+ * - OAuth callbacks (main domain -> subdomain)
+ * - Workspace creation (main domain -> new subdomain)
+ */
+export const sessionTransferToken = pgTable(
+  'session_transfer_token',
+  {
+    id: text('id').primaryKey(),
+    token: text('token').notNull().unique(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    targetSubdomain: text('target_subdomain').notNull(),
+    callbackUrl: text('callback_url').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('session_transfer_token_token_idx').on(table.token)]
+)
+
+export const sessionTransferTokenRelations = relations(sessionTransferToken, ({ one }) => ({
+  user: one(user, {
+    fields: [sessionTransferToken.userId],
+    references: [user.id],
+  }),
+}))
+
+/**
+ * Workspace Domain table for multi-domain support
+ *
+ * Each workspace can have multiple domains:
+ * - Auto-generated subdomain (e.g., acme.quackback.io)
+ * - Custom domains (e.g., feedback.acme.com)
+ *
+ * The proxy uses this table to resolve which organization a request belongs to.
+ */
+export const workspaceDomain = pgTable(
+  'workspace_domain',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull().unique(),
+    domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
+    isPrimary: boolean('is_primary').default(false).notNull(),
+    verified: boolean('verified').default(true).notNull(),
+    verificationToken: text('verification_token'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('workspace_domain_org_id_idx').on(table.organizationId)]
+)
+
+export const workspaceDomainRelations = relations(workspaceDomain, ({ one }) => ({
+  organization: one(organization, {
+    fields: [workspaceDomain.organizationId],
+    references: [organization.id],
   }),
 }))
