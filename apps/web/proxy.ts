@@ -1,120 +1,103 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { parseSubdomain, getMainDomainUrl } from './lib/routing'
 
 /**
- * Routes that don't require authentication (on main domain)
+ * Multi-Tenant Routing Proxy (Next.js 16)
+ *
+ * Simple domain routing:
+ * - Main domain (APP_DOMAIN): Landing page, workspace creation
+ * - Tenant domains (anything else): Looked up in workspace_domain table
  */
-const publicRoutes = ['/login', '/signup', '/forgot-password', '/accept-invitation']
+
+const APP_DOMAIN = process.env.APP_DOMAIN
 
 /**
- * Routes that are only accessible on the main domain (no subdomain)
+ * Public routes on main domain (no auth required)
  */
-const mainDomainOnlyRoutes = [
-  '/login',
-  '/signup',
-  '/forgot-password',
-  '/accept-invitation',
-  '/select-org',
-  '/create-org',
+const mainDomainPublicRoutes = [
+  '/', // Landing page
+  '/create-workspace', // Tenant provisioning flow
+  '/forgot-password', // Password reset
+  '/accept-invitation', // Invitation acceptance
+  '/api/auth', // Auth API routes
+  '/api/workspace', // Workspace creation API
 ]
 
 /**
- * Public routes on tenant subdomains (no auth required)
- * These are the public-facing portal pages
+ * Auth routes on tenant domains (no auth required to access)
  */
-const publicTenantRoutes = ['/', '/boards', '/roadmap']
+const tenantAuthRoutes = ['/login', '/signup', '/sso']
 
 /**
- * Get host context from request for URL building
+ * Public routes on tenant domains (no auth required)
  */
-function getHostContext(request: NextRequest) {
-  return {
-    host: request.headers.get('host') || 'localhost:3000',
-    protocol: request.headers.get('x-forwarded-proto') || 'http',
-  }
+const tenantPublicRoutes = ['/', '/boards', '/roadmap']
+
+/**
+ * Check if this is the main application domain
+ */
+function isMainDomain(host: string): boolean {
+  return host === APP_DOMAIN
+}
+
+/**
+ * Get protocol from request headers
+ */
+function getProtocol(request: NextRequest): string {
+  return request.headers.get('x-forwarded-proto') || 'http'
 }
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const ctx = getHostContext(request)
-  const subdomain = parseSubdomain(ctx.host)
+  const host = request.headers.get('host')
+  if (!host) {
+    return new NextResponse('Bad Request: Missing Host header', { status: 400 })
+  }
+  const protocol = getProtocol(request)
   const sessionCookie = request.cookies.get('better-auth.session_token')
 
-  // Pass subdomain to downstream server components via header
-  const requestHeaders = new Headers(request.headers)
-  if (subdomain) {
-    requestHeaders.set('x-org-slug', subdomain)
-  }
-
-  // === MAIN DOMAIN (no subdomain) ===
-  if (!subdomain) {
+  // === MAIN DOMAIN ===
+  if (isMainDomain(host)) {
     // Public routes - allow access
-    if (publicRoutes.some((route) => pathname.startsWith(route))) {
-      // If logged in on auth routes, redirect to org selection
-      if (sessionCookie && ['/login', '/signup'].some((r) => pathname.startsWith(r))) {
-        return NextResponse.redirect(new URL('/select-org', request.url))
-      }
+    if (mainDomainPublicRoutes.some((route) => pathname.startsWith(route))) {
       return NextResponse.next()
     }
-
-    // Org management routes - require auth
-    if (pathname.startsWith('/select-org') || pathname.startsWith('/create-org')) {
-      if (!sessionCookie) {
-        return NextResponse.redirect(new URL('/login', request.url))
-      }
-      return NextResponse.next()
-    }
-
-    // Homepage - redirect based on auth
-    if (pathname === '/') {
-      return NextResponse.redirect(new URL(sessionCookie ? '/select-org' : '/login', request.url))
-    }
-
-    // Other routes on main domain - require auth
-    if (!sessionCookie) {
-      const loginUrl = new URL('/login', request.url)
-      loginUrl.searchParams.set('callbackUrl', pathname)
-      return NextResponse.redirect(loginUrl)
-    }
-
-    // Logged in but no subdomain - go to org selection
-    return NextResponse.redirect(new URL('/select-org', request.url))
+    // Any other route on main domain - redirect to landing page
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
-  // === SUBDOMAIN (tenant context) ===
+  // === TENANT DOMAIN ===
+  // (Domain validated against workspace_domain table in tenant.ts)
 
-  // Redirect auth routes to main domain
-  if (mainDomainOnlyRoutes.some((route) => pathname.startsWith(route))) {
-    return NextResponse.redirect(new URL(getMainDomainUrl(ctx, pathname)))
+  // Auth routes (login, signup, sso)
+  if (tenantAuthRoutes.some((route) => pathname.startsWith(route))) {
+    // If logged in and no error, redirect to admin
+    const hasError = request.nextUrl.searchParams.has('error')
+    if (sessionCookie && !hasError) {
+      return NextResponse.redirect(new URL(`${protocol}://${host}/admin`))
+    }
+    return NextResponse.next()
   }
 
-  // Check if this is a public tenant route (no auth required)
-  const isPublicTenantRoute = publicTenantRoutes.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  )
-
-  if (isPublicTenantRoute) {
-    // Allow public access without authentication
-    return NextResponse.next({
-      request: { headers: requestHeaders },
-    })
+  // Public routes (/boards, /roadmap)
+  if (tenantPublicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
+    return NextResponse.next()
   }
 
-  // Admin routes require authentication
+  // Protected routes require authentication
   if (!sessionCookie) {
-    const loginUrl = new URL(getMainDomainUrl(ctx, '/login'))
-    const callbackUrl = `${ctx.protocol}://${ctx.host}${pathname}${request.nextUrl.search}`
-    loginUrl.searchParams.set('callbackUrl', callbackUrl)
+    const loginUrl = new URL(`${protocol}://${host}/login`)
+    loginUrl.searchParams.set(
+      'callbackUrl',
+      `${protocol}://${host}${pathname}${request.nextUrl.search}`
+    )
     return NextResponse.redirect(loginUrl)
   }
 
-  // Authenticated on subdomain - allow access
-  return NextResponse.next({
-    request: { headers: requestHeaders },
-  })
+  // Authenticated - allow access
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|public).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|public|api).*)'],
 }

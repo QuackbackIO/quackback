@@ -46,9 +46,7 @@ export default function ForgotPasswordPage() {
 
         {success ? (
           <div className="rounded-md bg-primary/10 p-4 text-center">
-            <p className="text-primary">
-              Check your email for a password reset link.
-            </p>
+            <p className="text-primary">Check your email for a password reset link.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

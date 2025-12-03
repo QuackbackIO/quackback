@@ -1,30 +1,34 @@
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getOrgSlug, getCurrentOrganization } from '@/lib/tenant'
-import { buildMainDomainUrl } from '@/lib/routing'
+import { getCurrentOrganization } from '@/lib/tenant'
+
+const APP_DOMAIN = process.env.APP_DOMAIN
 
 /**
- * Root tenant layout - only validates organization exists
+ * Tenant Layout - validates domain exists in workspace_domain table
+ *
+ * This layout:
+ * 1. Redirects main domain requests to the landing page
+ * 2. Validates the domain exists in workspace_domain table
+ * 3. Redirects to login with error if workspace not found
+ *
  * Auth validation is handled by child layouts:
- * - (public)/* routes don't require auth
- * - admin/* routes require auth via their own layout
+ * - Public routes (/boards, /roadmap) don't require auth
+ * - Admin routes require auth via their own layout
  */
-export default async function TenantLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const orgSlug = await getOrgSlug()
+export default async function TenantLayout({ children }: { children: React.ReactNode }) {
+  const headersList = await headers()
+  const host = headersList.get('host')
 
-  // If no subdomain, this layout shouldn't be reached (proxy handles it)
-  if (!orgSlug) {
-    redirect(buildMainDomainUrl('/select-org'))
+  // Tenant routes are only for tenant domains
+  if (host === APP_DOMAIN) {
+    redirect('/')
   }
 
-  // Validate org exists (but don't require auth - that's done by child layouts)
   const org = await getCurrentOrganization()
 
   if (!org) {
-    redirect(buildMainDomainUrl('/select-org?error=org_not_found'))
+    redirect('/login?error=workspace_not_found')
   }
 
   return <>{children}</>

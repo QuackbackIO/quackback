@@ -2,45 +2,75 @@
  * URL and subdomain routing utilities
  *
  * This module handles all URL building and subdomain parsing for multi-tenant routing.
- * Split into server-side and client-side compatible functions.
+ * Works consistently across all domains without special-case logic.
+ *
+ * Domain Structure:
+ * - Main domain: example.com (apex domain)
+ * - Tenant subdomains: acme.example.com
  */
 
 // =============================================================================
-// Configuration
-// =============================================================================
-
-function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-}
-
-// =============================================================================
-// Subdomain Parsing (Server-side - used by proxy/middleware)
+// Subdomain Parsing
 // =============================================================================
 
 /**
  * Extract subdomain from host header
- * Handles: acme.quackback.com, acme.quackback.localhost:3000
+ *
+ * example.com -> null (main domain)
+ * acme.example.com -> acme (tenant)
+ * www.example.com -> null (www treated as main)
  */
 export function parseSubdomain(host: string): string | null {
   const hostWithoutPort = host.split(':')[0]
+  const parts = hostWithoutPort.split('.')
 
-  // localhost development: acme.quackback.localhost -> acme
-  // Base domain is 2 parts (quackback.localhost), subdomain adds 1
-  if (hostWithoutPort.endsWith('.localhost') || hostWithoutPort === 'localhost') {
-    const parts = hostWithoutPort.split('.')
-    if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'app') {
-      return parts[0]
+  // Single-part hostname (e.g., "localhost") = main domain
+  if (parts.length === 1) {
+    return null
+  }
+
+  // Two-part hostname (e.g., "example.com" or "acme.localhost")
+  if (parts.length === 2) {
+    // If second part is a TLD-like suffix, it's apex domain
+    // If second part is "localhost", first part is subdomain
+    if (parts[1] === 'localhost') {
+      return parts[0] === 'www' ? null : parts[0]
     }
     return null
   }
 
-  // Production: acme.quackback.com -> acme
+  // Three+ parts: first part is subdomain (unless www)
+  if (parts[0] === 'www') {
+    return null
+  }
+  return parts[0]
+}
+
+/**
+ * Get the base domain from a hostname (strips subdomain)
+ *
+ * acme.example.com -> example.com
+ * example.com -> example.com
+ * acme.localhost -> localhost
+ * localhost -> localhost
+ */
+export function getBaseDomain(host: string): string {
+  const hostWithoutPort = host.split(':')[0]
+  const port = host.includes(':') ? `:${host.split(':')[1]}` : ''
   const parts = hostWithoutPort.split('.')
-  if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'app') {
-    return parts[0]
+
+  // Single-part: use as-is
+  if (parts.length === 1) {
+    return hostWithoutPort + port
   }
 
-  return null
+  // Two-part: if second is "localhost", return just "localhost"
+  if (parts.length === 2 && parts[1] === 'localhost') {
+    return 'localhost' + port
+  }
+
+  // Two-part apex domain or 3+ parts: return last 2 parts
+  return parts.slice(-2).join('.') + port
 }
 
 // =============================================================================
@@ -53,83 +83,49 @@ interface HostContext {
 }
 
 /**
- * Parse host into components for URL building
- */
-function parseHost(ctx: HostContext) {
-  const protocol = ctx.protocol || 'http'
-  const hostWithoutPort = ctx.host.split(':')[0]
-  const port = ctx.host.includes(':') ? `:${ctx.host.split(':')[1]}` : ''
-
-  return { protocol, hostWithoutPort, port }
-}
-
-/**
  * Get the main domain URL (without subdomain) from request context
  */
 export function getMainDomainUrl(ctx: HostContext, path: string = '/'): string {
-  const { protocol, hostWithoutPort, port } = parseHost(ctx)
-
-  let mainDomain: string
-
-  if (hostWithoutPort.endsWith('.localhost') || hostWithoutPort === 'localhost') {
-    // Keep last 2 parts: quackback.localhost (use app.quackback.localhost for main domain)
-    mainDomain = 'app.' + hostWithoutPort.split('.').slice(-2).join('.')
-  } else {
-    // Production: use app.example.com as main domain
-    const parts = hostWithoutPort.split('.')
-    mainDomain = 'app.' + parts.slice(-2).join('.')
-  }
-
-  return `${protocol}://${mainDomain}${port}${path}`
+  const protocol = ctx.protocol || 'http'
+  const baseDomain = getBaseDomain(ctx.host)
+  return `${protocol}://${baseDomain}${path}`
 }
 
 /**
  * Build URL for a specific organization subdomain from request context
  */
 export function getSubdomainUrl(ctx: HostContext, orgSlug: string, path: string = '/'): string {
-  const { protocol, hostWithoutPort, port } = parseHost(ctx)
-
-  // Keep last 2 parts as base domain (quackback.localhost or example.com)
-  const baseDomain = hostWithoutPort.split('.').slice(-2).join('.')
-
-  return `${protocol}://${orgSlug}.${baseDomain}${port}${path}`
+  const protocol = ctx.protocol || 'http'
+  const baseDomain = getBaseDomain(ctx.host)
+  return `${protocol}://${orgSlug}.${baseDomain}${path}`
 }
 
 // =============================================================================
-// URL Building (Client/Server compatible - uses env vars)
+// URL Building (Client-side only - uses window.location)
 // =============================================================================
 
 /**
- * Build a URL for a specific organization subdomain
- * Works in both client and server components using NEXT_PUBLIC_APP_URL
+ * Build a URL for a specific organization subdomain (client-side only)
  */
 export function buildOrgUrl(orgSlug: string, path: string = '/'): string {
-  const appUrl = getAppUrl()
-  const url = new URL(appUrl)
-
-  if (url.hostname.endsWith('.localhost')) {
-    // Replace 'app.quackback.localhost' with 'acme.quackback.localhost'
-    const parts = url.hostname.split('.')
-    parts[0] = orgSlug
-    url.hostname = parts.join('.')
-  } else if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-    url.hostname = `${orgSlug}.localhost`
-  } else {
-    // Production: replace first part (app.example.com -> acme.example.com)
-    const parts = url.hostname.split('.')
-    parts[0] = orgSlug
-    url.hostname = parts.join('.')
+  if (typeof window === 'undefined') {
+    throw new Error('buildOrgUrl can only be called on the client')
   }
 
-  url.pathname = path
-  return url.toString()
+  const baseDomain = getBaseDomain(window.location.host)
+  const protocol = window.location.protocol
+  return `${protocol}//${orgSlug}.${baseDomain}${path}`
 }
 
 /**
- * Get the main domain URL using NEXT_PUBLIC_APP_URL
- * Works in both client and server components
+ * Get the main domain URL (client-side only)
  */
 export function buildMainDomainUrl(path: string = '/'): string {
-  const appUrl = getAppUrl()
-  return `${appUrl}${path}`
+  if (typeof window === 'undefined') {
+    throw new Error('buildMainDomainUrl can only be called on the client')
+  }
+
+  const baseDomain = getBaseDomain(window.location.host)
+  const protocol = window.location.protocol
+  return `${protocol}//${baseDomain}${path}`
 }

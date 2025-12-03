@@ -4,11 +4,7 @@ import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { acceptInvitation, useSession } from '@/lib/auth/client'
 
-export default function AcceptInvitationPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default function AcceptInvitationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const { data: session } = useSession()
@@ -54,18 +50,14 @@ export default function AcceptInvitationPage({
 
         {status === 'success' && (
           <div>
-            <div className="text-primary text-xl font-medium">
-              Welcome to the team!
-            </div>
+            <div className="text-primary text-xl font-medium">Welcome to the team!</div>
             <p className="mt-2 text-muted-foreground">Redirecting to dashboard...</p>
           </div>
         )}
 
         {status === 'error' && (
           <div>
-            <div className="text-destructive text-xl font-medium">
-              Unable to accept invitation
-            </div>
+            <div className="text-destructive text-xl font-medium">Unable to accept invitation</div>
             <p className="mt-2 text-muted-foreground">{error}</p>
             <button
               onClick={() => router.push('/login')}
