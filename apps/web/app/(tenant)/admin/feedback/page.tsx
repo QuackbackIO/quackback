@@ -8,6 +8,7 @@ import {
   eq,
   getInboxPostList,
   getTagsByOrganization,
+  getStatusesByOrganization,
 } from '@quackback/db'
 import { InboxContainer } from './inbox-container'
 
@@ -33,7 +34,7 @@ export default async function FeedbackInboxPage({
   // nuqs uses comma-separated values for arrays in the URL
   const getArrayParam = (key: string): string[] => {
     const value = params[key]
-    if (Array.isArray(value)) return value.flatMap(v => v.split(','))
+    if (Array.isArray(value)) return value.flatMap((v) => v.split(','))
     if (typeof value === 'string') return value.split(',').filter(Boolean)
     return []
   }
@@ -49,7 +50,14 @@ export default async function FeedbackInboxPage({
     boardIds: getArrayParam('board').length > 0 ? getArrayParam('board') : undefined,
     status:
       getArrayParam('status').length > 0
-        ? (getArrayParam('status') as ('open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed')[])
+        ? (getArrayParam('status') as (
+            | 'open'
+            | 'under_review'
+            | 'planned'
+            | 'in_progress'
+            | 'complete'
+            | 'closed'
+          )[])
         : undefined,
     tagIds: getArrayParam('tags').length > 0 ? getArrayParam('tags') : undefined,
     ownerId: getStringParam('owner') === 'unassigned' ? null : getStringParam('owner'),
@@ -64,6 +72,9 @@ export default async function FeedbackInboxPage({
 
   // Fetch tags for this organization
   const orgTags = await getTagsByOrganization(organization.id)
+
+  // Fetch statuses for this organization
+  const orgStatuses = await getStatusesByOrganization(organization.id)
 
   // Fetch team members
   const teamMembers = await db
@@ -83,6 +94,7 @@ export default async function FeedbackInboxPage({
       initialPosts={initialPosts}
       boards={orgBoards}
       tags={orgTags}
+      statuses={orgStatuses}
       members={teamMembers}
     />
   )

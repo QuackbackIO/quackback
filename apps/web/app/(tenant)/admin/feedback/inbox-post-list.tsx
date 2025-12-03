@@ -13,11 +13,12 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxPostCard } from './inbox-post-card'
 import { InboxEmptyState } from './inbox-empty-state'
-import type { PostListItem } from '@quackback/db'
+import type { PostListItem, PostStatusEntity } from '@quackback/db'
 import type { InboxFilters } from './use-inbox-filters'
 
 interface InboxPostListProps {
   posts: PostListItem[]
+  statuses: PostStatusEntity[]
   total: number
   hasMore: boolean
   isLoading: boolean
@@ -56,6 +57,7 @@ function PostListSkeleton() {
 
 export function InboxPostList({
   posts,
+  statuses,
   total,
   hasMore,
   isLoading,
@@ -92,19 +94,14 @@ export function InboxPostList({
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       // Ignore if in input/textarea
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         if (e.key === 'Escape') {
           ;(e.target as HTMLElement).blur()
         }
         return
       }
 
-      const currentIndex = selectedPostId
-        ? posts.findIndex((p) => p.id === selectedPostId)
-        : -1
+      const currentIndex = selectedPostId ? posts.findIndex((p) => p.id === selectedPostId) : -1
 
       switch (e.key) {
         case 'j':
@@ -171,7 +168,10 @@ export function InboxPostList({
         <span className="text-xs text-muted-foreground">
           {total} {total === 1 ? 'post' : 'posts'}
         </span>
-        <Select value={sort || 'newest'} onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}>
+        <Select
+          value={sort || 'newest'}
+          onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
+        >
           <SelectTrigger className="h-7 w-[100px] text-xs">
             <SelectValue />
           </SelectTrigger>
@@ -189,6 +189,7 @@ export function InboxPostList({
           <InboxPostCard
             key={post.id}
             post={post}
+            statuses={statuses}
             isSelected={post.id === selectedPostId}
             onClick={() => onSelectPost(post.id)}
           />

@@ -26,7 +26,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { PenSquare } from 'lucide-react'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import type { Board, Tag } from '@quackback/db'
+import type { Board, Tag, PostStatusEntity } from '@quackback/db'
 import {
   Form,
   FormControl,
@@ -36,19 +36,11 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 
-const STATUS_OPTIONS: { value: PostStatus; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'under_review', label: 'Under Review' },
-  { value: 'planned', label: 'Planned' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'complete', label: 'Complete' },
-  { value: 'closed', label: 'Closed' },
-]
-
 interface CreatePostDialogProps {
   organizationId: string
   boards: Board[]
   tags: Tag[]
+  statuses: PostStatusEntity[]
   onPostCreated?: () => void
 }
 
@@ -56,8 +48,11 @@ export function CreatePostDialog({
   organizationId,
   boards,
   tags,
+  statuses,
   onPostCreated,
 }: CreatePostDialogProps) {
+  // Find the default status for new posts
+  const defaultStatus = statuses.find((s) => s.isDefault)?.slug || statuses[0]?.slug || 'open'
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
@@ -68,7 +63,7 @@ export function CreatePostDialog({
       title: '',
       content: '',
       boardId: boards[0]?.id || '',
-      status: 'open' as const,
+      status: defaultStatus as PostStatus,
       tagIds: [] as string[],
     },
   })
@@ -203,9 +198,15 @@ export function CreatePostDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {STATUS_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                          {statuses.map((status) => (
+                            <SelectItem key={status.id} value={status.slug}>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: status.color }}
+                                />
+                                {status.name}
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>

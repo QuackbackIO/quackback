@@ -4,16 +4,7 @@ import { ChevronUp, MessageSquare } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import type { PostListItem, PostStatus } from '@quackback/db'
-
-const STATUS_CONFIG: Record<PostStatus, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  open: { label: 'Open', variant: 'default' },
-  under_review: { label: 'Under Review', variant: 'secondary' },
-  planned: { label: 'Planned', variant: 'secondary' },
-  in_progress: { label: 'In Progress', variant: 'secondary' },
-  complete: { label: 'Complete', variant: 'secondary' },
-  closed: { label: 'Closed', variant: 'outline' },
-}
+import type { PostListItem, PostStatusEntity } from '@quackback/db'
 
 function formatRelativeDate(date: Date): string {
   const now = new Date()
@@ -38,20 +29,19 @@ function formatRelativeDate(date: Date): string {
 
 interface InboxPostCardProps {
   post: PostListItem
+  statuses: PostStatusEntity[]
   isSelected: boolean
   onClick: () => void
 }
 
-export function InboxPostCard({ post, isSelected, onClick }: InboxPostCardProps) {
-  const statusConfig = STATUS_CONFIG[post.status]
+export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPostCardProps) {
+  const currentStatus = statuses.find((s) => s.slug === post.status)
 
   return (
     <Card
       className={cn(
         'p-4 cursor-pointer transition-colors',
-        isSelected
-          ? 'bg-primary/5 border-primary/20'
-          : 'hover:bg-muted/50'
+        isSelected ? 'bg-primary/5 border-primary/20' : 'hover:bg-muted/50'
       )}
       onClick={onClick}
     >
@@ -69,18 +59,21 @@ export function InboxPostCard({ post, isSelected, onClick }: InboxPostCardProps)
             <Badge variant="outline" className="text-xs truncate max-w-[120px]">
               {post.board.name}
             </Badge>
-            <Badge variant={statusConfig.variant} className="text-xs">
-              {statusConfig.label}
-            </Badge>
+            {currentStatus && (
+              <Badge
+                className="text-xs text-white"
+                style={{ backgroundColor: currentStatus.color }}
+              >
+                {currentStatus.name}
+              </Badge>
+            )}
           </div>
 
           {/* Title */}
           <h3 className="font-medium text-foreground line-clamp-1">{post.title}</h3>
 
           {/* Excerpt */}
-          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-            {post.content}
-          </p>
+          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{post.content}</p>
 
           {/* Meta row */}
           <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
@@ -112,9 +105,7 @@ export function InboxPostCard({ post, isSelected, onClick }: InboxPostCardProps)
                 </Badge>
               ))}
               {post.tags.length > 3 && (
-                <span className="text-xs text-muted-foreground">
-                  +{post.tags.length - 3}
-                </span>
+                <span className="text-xs text-muted-foreground">+{post.tags.length - 3}</span>
               )}
             </div>
           )}

@@ -14,18 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useDebounce } from '@/lib/hooks/use-debounce'
-import { cn } from '@/lib/utils'
 import type { InboxFilters } from './use-inbox-filters'
-import type { PostStatus, Board, Tag } from '@quackback/db'
-
-const STATUS_OPTIONS: { value: PostStatus; label: string; color: string }[] = [
-  { value: 'open', label: 'Open', color: 'bg-blue-500' },
-  { value: 'under_review', label: 'Under Review', color: 'bg-yellow-500' },
-  { value: 'planned', label: 'Planned', color: 'bg-purple-500' },
-  { value: 'in_progress', label: 'In Progress', color: 'bg-orange-500' },
-  { value: 'complete', label: 'Complete', color: 'bg-green-500' },
-  { value: 'closed', label: 'Closed', color: 'bg-gray-500' },
-]
+import type { PostStatus, Board, Tag, PostStatusEntity } from '@quackback/db'
 
 interface TeamMember {
   id: string
@@ -41,6 +31,7 @@ interface InboxFiltersProps {
   hasActiveFilters: boolean
   boards: Board[]
   tags: Tag[]
+  statuses: PostStatusEntity[]
   members: TeamMember[]
   headerAction?: React.ReactNode
 }
@@ -82,6 +73,7 @@ export function InboxFiltersPanel({
   hasActiveFilters,
   boards,
   tags,
+  statuses,
   members,
   headerAction,
 }: InboxFiltersProps) {
@@ -181,20 +173,18 @@ export function InboxFiltersPanel({
       {/* Status Filter */}
       <FilterSection title="Status">
         <div className="space-y-2">
-          {STATUS_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className="flex items-center gap-2 cursor-pointer text-sm"
-            >
+          {statuses.map((status) => (
+            <label key={status.id} className="flex items-center gap-2 cursor-pointer text-sm">
               <Checkbox
-                checked={filters.status?.includes(option.value) || false}
-                onCheckedChange={() => handleStatusToggle(option.value)}
+                checked={filters.status?.includes(status.slug as PostStatus) || false}
+                onCheckedChange={() => handleStatusToggle(status.slug as PostStatus)}
               />
               <span
-                className={cn('h-2 w-2 rounded-full', option.color)}
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: status.color }}
                 aria-hidden="true"
               />
-              <span className="text-foreground">{option.label}</span>
+              <span className="text-foreground">{status.name}</span>
             </label>
           ))}
         </div>
@@ -205,10 +195,7 @@ export function InboxFiltersPanel({
         <FilterSection title="Board">
           <div className="space-y-2">
             {boards.map((board) => (
-              <label
-                key={board.id}
-                className="flex items-center gap-2 cursor-pointer text-sm"
-              >
+              <label key={board.id} className="flex items-center gap-2 cursor-pointer text-sm">
                 <Checkbox
                   checked={filters.board?.includes(board.id) || false}
                   onCheckedChange={() => handleBoardToggle(board.id)}
@@ -276,9 +263,7 @@ export function InboxFiltersPanel({
             <Input
               type="date"
               value={filters.dateFrom || ''}
-              onChange={(e) =>
-                onFiltersChange({ dateFrom: e.target.value || undefined })
-              }
+              onChange={(e) => onFiltersChange({ dateFrom: e.target.value || undefined })}
               className="mt-1"
             />
           </div>
@@ -287,9 +272,7 @@ export function InboxFiltersPanel({
             <Input
               type="date"
               value={filters.dateTo || ''}
-              onChange={(e) =>
-                onFiltersChange({ dateTo: e.target.value || undefined })
-              }
+              onChange={(e) => onFiltersChange({ dateTo: e.target.value || undefined })}
               className="mt-1"
             />
           </div>

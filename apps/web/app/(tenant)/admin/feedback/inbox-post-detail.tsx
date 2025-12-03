@@ -32,7 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxEmptyState } from './inbox-empty-state'
 import { CommentForm } from '@/components/public/comment-form'
-import type { PostStatus, Tag, Board, Comment } from '@quackback/db'
+import type { PostStatus, Tag, Board, Comment, PostStatusEntity } from '@quackback/db'
 
 const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
 
@@ -41,15 +41,6 @@ interface CommentReaction {
   count: number
   hasReacted: boolean
 }
-
-const STATUS_OPTIONS: { value: PostStatus; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'under_review', label: 'Under Review' },
-  { value: 'planned', label: 'Planned' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'complete', label: 'Complete' },
-  { value: 'closed', label: 'Closed' },
-]
 
 interface TeamMember {
   id: string
@@ -94,6 +85,7 @@ interface InboxPostDetailProps {
   isLoading: boolean
   members: TeamMember[]
   allTags: Tag[]
+  statuses: PostStatusEntity[]
   onClose: () => void
   onStatusChange: (status: PostStatus) => Promise<void>
   onOwnerChange: (ownerId: string | null) => Promise<void>
@@ -326,6 +318,7 @@ export function InboxPostDetail({
   isLoading,
   members,
   allTags,
+  statuses,
   onClose,
   onStatusChange,
   onOwnerChange,
@@ -404,9 +397,15 @@ export function InboxPostDetail({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {STATUS_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+              {statuses.map((status) => (
+                <SelectItem key={status.id} value={status.slug}>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: status.color }}
+                    />
+                    {status.name}
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>

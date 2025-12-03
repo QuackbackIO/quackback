@@ -8,7 +8,14 @@ import { InboxPostList } from './inbox-post-list'
 import { InboxPostDetail } from './inbox-post-detail'
 import { CreatePostDialog } from './create-post-dialog'
 import { useInboxFilters, type InboxFilters } from './use-inbox-filters'
-import type { PostListItem, PostStatus, Board, Tag, InboxPostListResult } from '@quackback/db'
+import type {
+  PostListItem,
+  PostStatus,
+  Board,
+  Tag,
+  InboxPostListResult,
+  PostStatusEntity,
+} from '@quackback/db'
 
 interface TeamMember {
   id: string
@@ -71,6 +78,7 @@ interface InboxContainerProps {
   initialPosts: InboxPostListResult
   boards: Board[]
   tags: Tag[]
+  statuses: PostStatusEntity[]
   members: TeamMember[]
 }
 
@@ -79,6 +87,7 @@ export function InboxContainer({
   initialPosts,
   boards,
   tags,
+  statuses,
   members,
 }: InboxContainerProps) {
   const router = useRouter()
@@ -330,12 +339,14 @@ export function InboxContainer({
           hasActiveFilters={hasActiveFilters}
           boards={boards}
           tags={tags}
+          statuses={statuses}
           members={members}
           headerAction={
             <CreatePostDialog
               organizationId={organizationId}
               boards={boards}
               tags={tags}
+              statuses={statuses}
               onPostCreated={() => fetchPosts(1, filters)}
             />
           }
@@ -344,6 +355,7 @@ export function InboxContainer({
       postList={
         <InboxPostList
           posts={posts}
+          statuses={statuses}
           total={total}
           hasMore={hasMore}
           isLoading={isLoading}
@@ -363,6 +375,7 @@ export function InboxContainer({
           isLoading={isLoadingPost}
           members={members}
           allTags={tags}
+          statuses={statuses}
           onClose={() => setSelectedPostId(null)}
           onStatusChange={handleStatusChange}
           onOwnerChange={handleOwnerChange}
