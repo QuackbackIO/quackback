@@ -72,11 +72,11 @@ bun run setup
 bun run dev
 ```
 
-Open [http://app.quackback.localhost:3000](http://app.quackback.localhost:3000)
+Open [http://localhost:3000](http://localhost:3000)
 
 ### Demo Account
 
-After running `bun run db:seed`, log in with `demo@example.com` / `demo1234` and visit [acme.quackback.localhost:3000](http://acme.quackback.localhost:3000).
+After running `bun run db:seed`, log in with `demo@example.com` / `demo1234` and visit [acme.localhost:3000](http://acme.localhost:3000).
 
 ## Self-Hosting
 
