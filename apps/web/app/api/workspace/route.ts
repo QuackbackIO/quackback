@@ -8,6 +8,7 @@ import {
   eq,
   sessionTransferToken,
   workspaceDomain,
+  seedDefaultStatuses,
 } from '@quackback/db'
 import { createWorkspaceSchema } from '@/lib/schemas/auth'
 import { getBaseDomain } from '@/lib/routing'
@@ -210,6 +211,10 @@ export async function POST(request: NextRequest) {
         expiresAt: new Date(Date.now() + 60000), // 60 seconds
       })
     })
+
+    // Seed default post statuses for the new organization
+    // Done outside transaction as it uses the main db connection
+    await seedDefaultStatuses(orgId)
 
     // Build redirect URL to subdomain with transfer token
     const subdomainUrl = buildSubdomainUrl(workspaceSlug, request)
