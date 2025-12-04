@@ -208,11 +208,8 @@ function SetupPage() {
           </div>
 
           {/* Footer badges */}
-          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-              Open-source
-            </span>
+          <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+            <span>Open-source</span>
             <span className="text-border">•</span>
             <span>Self-hostable</span>
             <span className="text-border">•</span>
