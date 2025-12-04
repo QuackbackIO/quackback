@@ -28,13 +28,6 @@ export default function CreateWorkspacePage() {
           </div>
 
           <CreateWorkspaceForm />
-
-          <p className="text-center text-sm text-muted-foreground">
-            Already have a workspace?{' '}
-            <Link href="/" className="font-medium text-primary hover:underline">
-              Find your workspaces
-            </Link>
-          </p>
         </div>
       </main>
     </div>
