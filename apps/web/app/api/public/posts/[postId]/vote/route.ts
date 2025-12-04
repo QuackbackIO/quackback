@@ -3,7 +3,6 @@ import { togglePublicVote, getBoardByPostId } from '@quackback/db/queries/public
 import { getBoardSettings } from '@quackback/db/types'
 import { db, member, organization, eq, and } from '@quackback/db'
 import {
-  getUserIdentifierFromRequest,
   getRawUserIdentifierFromRequest,
   setUserIdentifierCookie,
   hasUserIdentifierCookie,
@@ -67,15 +66,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Get or create anonymous user identifier
-  userIdentifier = getUserIdentifierFromRequest(request)
+  // Generate UUID once and reuse to ensure consistency
+  const hasCookie = hasUserIdentifierCookie(request)
+  const rawUuid = hasCookie ? getRawUserIdentifierFromRequest(request) : crypto.randomUUID()
+  userIdentifier = `anon:${rawUuid}`
 
   // Toggle the vote
   const result = await togglePublicVote(postId, userIdentifier)
 
-  // Set the user identifier cookie if it's a new user (use raw UUID for cookie)
+  // Set the user identifier cookie if it's a new user
   const headers = new Headers()
-  if (!hasUserIdentifierCookie(request)) {
-    const rawUuid = getRawUserIdentifierFromRequest(request)
+  if (!hasCookie) {
     setUserIdentifierCookie(headers, rawUuid)
   }
 

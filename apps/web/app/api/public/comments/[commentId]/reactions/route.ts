@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { toggleCommentReaction, getReactionEmojis } from '@quackback/db/queries/public'
 import {
-  getUserIdentifierFromRequest,
   getRawUserIdentifierFromRequest,
   setUserIdentifierCookie,
   hasUserIdentifierCookie,
@@ -44,15 +43,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Get user identifier for tracking (uses anon:{uuid} format for public users)
-  const userIdentifier = getUserIdentifierFromRequest(request)
+  // Generate UUID once and reuse to ensure consistency
+  const hasCookie = hasUserIdentifierCookie(request)
+  const rawUuid = hasCookie ? getRawUserIdentifierFromRequest(request) : crypto.randomUUID()
+  const userIdentifier = `anon:${rawUuid}`
 
   // Toggle the reaction
   const { added, reactions } = await toggleCommentReaction(commentId, userIdentifier, emoji)
 
-  // Set the user identifier cookie if it's a new user (use raw UUID for cookie)
+  // Set the user identifier cookie if it's a new user
   const headers = new Headers()
-  if (!hasUserIdentifierCookie(request)) {
-    const rawUuid = getRawUserIdentifierFromRequest(request)
+  if (!hasCookie) {
     setUserIdentifierCookie(headers, rawUuid)
   }
 

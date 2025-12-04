@@ -35,6 +35,17 @@ export interface PublicPostListItem {
   createdAt: Date
   commentCount: number
   tags: { id: string; name: string; color: string }[]
+  board?: { id: string; name: string; slug: string }
+}
+
+export interface AllBoardsPostListParams {
+  organizationId: string
+  boardSlug?: string
+  search?: string
+  status?: PostStatus[]
+  sort?: 'top' | 'new' | 'trending'
+  page?: number
+  limit?: number
 }
 
 export interface PublicPostListResult {
@@ -53,6 +64,7 @@ export interface PublicPostDetail {
   id: string
   title: string
   content: string
+  contentJson: unknown
   status: PostStatus
   voteCount: number
   authorName: string | null
@@ -229,6 +241,122 @@ export async function getPublicPostList(
 }
 
 /**
+ * Get posts from all public boards in an organization
+ * Optionally filter by board slug
+ */
+export async function getPublicPostListAllBoards(
+  params: AllBoardsPostListParams
+): Promise<PublicPostListResult> {
+  const { organizationId, boardSlug, search, status, sort = 'top', page = 1, limit = 20 } = params
+  const offset = (page - 1) * limit
+
+  // Build where conditions
+  const conditions = [eq(boards.organizationId, organizationId), eq(boards.isPublic, true)]
+
+  if (boardSlug) {
+    conditions.push(eq(boards.slug, boardSlug))
+  }
+
+  if (status && status.length > 0) {
+    conditions.push(inArray(posts.status, status))
+  }
+
+  if (search) {
+    conditions.push(
+      sql`(${posts.title} ILIKE ${'%' + search + '%'} OR ${posts.content} ILIKE ${'%' + search + '%'})`
+    )
+  }
+
+  // Get total count
+  const [countResult] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(and(...conditions))
+
+  const total = countResult?.count || 0
+
+  // Determine sort order
+  // 'top' = most votes, 'new' = newest, 'trending' = votes weighted by recency
+  const orderBy =
+    sort === 'new'
+      ? desc(posts.createdAt)
+      : sort === 'trending'
+        ? sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
+        : desc(posts.voteCount) // 'top' is default
+
+  const postsResult = await db
+    .select({
+      id: posts.id,
+      title: posts.title,
+      content: posts.content,
+      status: posts.status,
+      voteCount: posts.voteCount,
+      authorName: posts.authorName,
+      createdAt: posts.createdAt,
+      commentCount: sql<number>`(
+        SELECT count(*)::int FROM comments WHERE comments.post_id = ${posts.id}
+      )`,
+      boardId: boards.id,
+      boardName: boards.name,
+      boardSlug: boards.slug,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(and(...conditions))
+    .orderBy(orderBy)
+    .limit(limit)
+    .offset(offset)
+
+  // Get tags for all posts
+  const postIds = postsResult.map((p) => p.id)
+  const tagsResult =
+    postIds.length > 0
+      ? await db
+          .select({
+            postId: postTags.postId,
+            id: tags.id,
+            name: tags.name,
+            color: tags.color,
+          })
+          .from(postTags)
+          .innerJoin(tags, eq(tags.id, postTags.tagId))
+          .where(inArray(postTags.postId, postIds))
+      : []
+
+  // Group tags by post
+  const tagsByPost = new Map<string, { id: string; name: string; color: string }[]>()
+  for (const row of tagsResult) {
+    const existing = tagsByPost.get(row.postId) || []
+    existing.push({ id: row.id, name: row.name, color: row.color })
+    tagsByPost.set(row.postId, existing)
+  }
+
+  const items: PublicPostListItem[] = postsResult.map((post) => ({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    status: post.status,
+    voteCount: post.voteCount,
+    authorName: post.authorName,
+    createdAt: post.createdAt,
+    commentCount: post.commentCount,
+    tags: tagsByPost.get(post.id) || [],
+    board: {
+      id: post.boardId,
+      name: post.boardName,
+      slug: post.boardSlug,
+    },
+  }))
+
+  return {
+    items,
+    total,
+    hasMore: offset + items.length < total,
+  }
+}
+
+/**
  * Get a single post with details for public view
  */
 export async function getPublicPostDetail(
@@ -316,6 +444,7 @@ export async function getPublicPostDetail(
     id: post.id,
     title: post.title,
     content: post.content,
+    contentJson: post.contentJson,
     status: post.status,
     voteCount: post.voteCount,
     authorName: post.authorName,

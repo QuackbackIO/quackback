@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  const { title, content } = result.data
+  const { title, content, contentJson } = result.data
 
   // 6. Get default status for this organization
   const defaultStatus = await getDefaultStatus(board.organizationId)
@@ -84,6 +84,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     boardId,
     title,
     content,
+    contentJson,
     // Use custom status ID if available, status defaults to 'open' in schema
     statusId: defaultStatus?.id,
     memberId: memberRecord.id,

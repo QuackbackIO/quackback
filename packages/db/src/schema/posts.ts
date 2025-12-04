@@ -7,6 +7,7 @@ import {
   boolean,
   index,
   uniqueIndex,
+  jsonb,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
@@ -29,6 +30,8 @@ export const posts = pgTable(
       .references(() => boards.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     content: text('content').notNull(),
+    // Rich content stored as TipTap JSON (optional, for rich text support)
+    contentJson: jsonb('content_json'),
     // Member-scoped identity (Hub-and-Spoke model)
     // memberId links to the organization-scoped member record
     // For anonymous posts, memberId is null and authorName/authorEmail are used
