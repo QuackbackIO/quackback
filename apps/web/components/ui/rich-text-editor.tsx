@@ -1,18 +1,23 @@
 'use client'
 
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, type Editor, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { useEffect } from 'react'
+import Link from '@tiptap/extension-link'
+import { useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { Bold, Italic, List, ListOrdered, Undo, Redo } from 'lucide-react'
+import { Bold, Italic, List, ListOrdered, Undo, Redo, Link as LinkIcon } from 'lucide-react'
+import { Button } from './button'
 
 interface RichTextEditorProps {
-  value: string | undefined
-  onChange: (value: string) => void
+  value?: string | JSONContent
+  onChange?: (json: JSONContent, html: string) => void
   placeholder?: string
   className?: string
   disabled?: boolean
+  minHeight?: string
+  borderless?: boolean
+  toolbarPosition?: 'top' | 'bottom' | 'none'
 }
 
 export function RichTextEditor({
@@ -21,40 +26,51 @@ export function RichTextEditor({
   placeholder = 'Write something...',
   className,
   disabled = false,
+  minHeight = '120px',
+  borderless = false,
+  toolbarPosition = borderless ? 'none' : 'top',
 }: RichTextEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        bulletList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-        orderedList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
+        heading: false,
+        codeBlock: false,
+        blockquote: false,
+        horizontalRule: false,
       }),
       Placeholder.configure({
         placeholder,
         emptyEditorClass: 'is-editor-empty',
       }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-primary underline',
+        },
+      }),
     ],
     content: value ?? '',
     editable: !disabled,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      onChange?.(editor.getJSON(), editor.getHTML())
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none min-h-[120px] px-3 py-2 focus:outline-none',
+        class: cn(
+          'prose prose-sm prose-neutral dark:prose-invert max-w-none focus:outline-none',
+          'min-h-[var(--editor-min-height)]',
+          borderless ? 'py-0' : 'px-3 py-2'
+        ),
+        style: `--editor-min-height: ${minHeight}`,
       },
     },
   })
 
   // Sync external value changes
   useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value ?? '')
+    if (editor && value === '') {
+      editor.commands.clearContent()
     }
   }, [value, editor])
 
@@ -69,79 +85,33 @@ export function RichTextEditor({
     return null
   }
 
+  const showToolbar = toolbarPosition !== 'none'
+
   return (
     <div
       className={cn(
-        'rounded-md border border-input bg-background',
+        'overflow-hidden',
+        !borderless && 'rounded-md border border-input bg-background',
         disabled && 'opacity-50 cursor-not-allowed',
         className
       )}
     >
-      {/* Toolbar */}
-      <div className="flex items-center gap-1 border-b border-input px-2 py-1.5">
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          isActive={editor.isActive('bold')}
-          disabled={disabled}
-          title="Bold"
-        >
-          <Bold className="h-4 w-4" />
-        </ToolbarButton>
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          isActive={editor.isActive('italic')}
-          disabled={disabled}
-          title="Italic"
-        >
-          <Italic className="h-4 w-4" />
-        </ToolbarButton>
-
-        <div className="mx-1 h-4 w-px bg-border" />
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          isActive={editor.isActive('bulletList')}
-          disabled={disabled}
-          title="Bullet list"
-        >
-          <List className="h-4 w-4" />
-        </ToolbarButton>
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          isActive={editor.isActive('orderedList')}
-          disabled={disabled}
-          title="Numbered list"
-        >
-          <ListOrdered className="h-4 w-4" />
-        </ToolbarButton>
-
-        <div className="mx-1 h-4 w-px bg-border" />
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={disabled || !editor.can().undo()}
-          title="Undo"
-        >
-          <Undo className="h-4 w-4" />
-        </ToolbarButton>
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={disabled || !editor.can().redo()}
-          title="Redo"
-        >
-          <Redo className="h-4 w-4" />
-        </ToolbarButton>
-      </div>
+      {/* Toolbar - top position */}
+      {showToolbar && toolbarPosition === 'top' && (
+        <MenuBar editor={editor} disabled={disabled} position="top" />
+      )}
 
       {/* Editor content */}
       <EditorContent editor={editor} />
 
+      {/* Toolbar - bottom position */}
+      {showToolbar && toolbarPosition === 'bottom' && (
+        <MenuBar editor={editor} disabled={disabled} position="bottom" />
+      )}
+
       <style jsx global>{`
         .tiptap p.is-editor-empty:first-child::before {
-          color: hsl(var(--muted-foreground));
+          color: color-mix(in oklch, var(--muted-foreground), transparent 50%);
           content: attr(data-placeholder);
           float: left;
           height: 0;
@@ -152,35 +122,194 @@ export function RichTextEditor({
   )
 }
 
-interface ToolbarButtonProps {
-  onClick: () => void
-  isActive?: boolean
-  disabled?: boolean
-  title: string
-  children: React.ReactNode
-}
+function MenuBar({
+  editor,
+  disabled,
+  position = 'top',
+}: {
+  editor: Editor
+  disabled: boolean
+  position?: 'top' | 'bottom'
+}) {
+  const setLink = useCallback(() => {
+    if (!editor) return
 
-function ToolbarButton({
-  onClick,
-  isActive = false,
-  disabled = false,
-  title,
-  children,
-}: ToolbarButtonProps) {
+    const previousUrl = editor.getAttributes('link').href
+    const url = window.prompt('URL', previousUrl)
+
+    if (url === null) return
+
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
+
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }, [editor])
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
+    <div
       className={cn(
-        'inline-flex h-7 w-7 items-center justify-center rounded text-sm font-medium transition-colors',
-        'hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-        'disabled:pointer-events-none disabled:opacity-50',
-        isActive && 'bg-muted text-foreground'
+        'flex items-center gap-1',
+        position === 'top' ? 'px-2 py-1.5 border-b border-input bg-muted/30' : 'pt-2'
       )}
     >
-      {children}
-    </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn('h-7 w-7 p-0', editor.isActive('bold') && 'bg-muted')}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
+      >
+        <Bold className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn('h-7 w-7 p-0', editor.isActive('italic') && 'bg-muted')}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
+      >
+        <Italic className="h-4 w-4" />
+      </Button>
+      <div className="w-px h-4 bg-border mx-1" />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn('h-7 w-7 p-0', editor.isActive('bulletList') && 'bg-muted')}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        disabled={disabled}
+      >
+        <List className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn('h-7 w-7 p-0', editor.isActive('orderedList') && 'bg-muted')}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        disabled={disabled}
+      >
+        <ListOrdered className="h-4 w-4" />
+      </Button>
+      <div className="w-px h-4 bg-border mx-1" />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn('h-7 w-7 p-0', editor.isActive('link') && 'bg-muted')}
+        onClick={setLink}
+        disabled={disabled}
+      >
+        <LinkIcon className="h-4 w-4" />
+      </Button>
+      <div className="flex-1" />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        onClick={() => editor.chain().focus().undo().run()}
+        disabled={disabled || !editor.can().chain().focus().undo().run()}
+      >
+        <Undo className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        onClick={() => editor.chain().focus().redo().run()}
+        disabled={disabled || !editor.can().chain().focus().redo().run()}
+      >
+        <Redo className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
+// Read-only content renderer
+interface RichTextContentProps {
+  content: JSONContent | string
+  className?: string
+}
+
+export function RichTextContent({ content, className }: RichTextContentProps) {
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        blockquote: false,
+        horizontalRule: false,
+      }),
+      Link.configure({
+        openOnClick: true,
+        HTMLAttributes: {
+          class: 'text-primary underline',
+        },
+      }),
+    ],
+    content,
+    editable: false,
+    editorProps: {
+      attributes: {
+        class: cn('prose prose-neutral dark:prose-invert max-w-none', className),
+      },
+    },
+  })
+
+  return <EditorContent editor={editor} />
+}
+
+// Helper to convert TipTap JSON to plain text
+export function richTextToPlainText(content: JSONContent): string {
+  if (!content.content) return ''
+
+  return content.content
+    .map((node) => {
+      if (node.type === 'paragraph' && node.content) {
+        return node.content
+          .map((child) => {
+            if (child.type === 'text') return child.text || ''
+            return ''
+          })
+          .join('')
+      }
+      if (node.type === 'bulletList' || node.type === 'orderedList') {
+        return (
+          node.content
+            ?.map((item) => {
+              if (item.type === 'listItem' && item.content) {
+                return item.content
+                  .map((p) => {
+                    if (p.type === 'paragraph' && p.content) {
+                      return p.content.map((c) => c.text || '').join('')
+                    }
+                    return ''
+                  })
+                  .join('')
+              }
+              return ''
+            })
+            .join('\n') || ''
+        )
+      }
+      return ''
+    })
+    .join('\n')
+}
+
+// Helper to check if content is TipTap JSON
+export function isRichTextContent(content: unknown): content is JSONContent {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'type' in content &&
+    (content as JSONContent).type === 'doc'
   )
 }
