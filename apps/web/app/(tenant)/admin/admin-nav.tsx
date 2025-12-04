@@ -32,6 +32,11 @@ const navItems = [
     href: '/admin/roadmap',
     icon: Map,
   },
+  {
+    label: 'Settings',
+    href: '/admin/settings',
+    icon: Settings,
+  },
 ]
 
 export function AdminNav({ userName, userEmail, userImage }: AdminNavProps) {
