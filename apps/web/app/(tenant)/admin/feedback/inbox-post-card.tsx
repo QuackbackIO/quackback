@@ -39,8 +39,10 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
   return (
     <div
       className={cn(
-        'flex cursor-pointer transition-colors',
-        isSelected ? 'bg-primary/10' : 'hover:bg-muted/30'
+        'flex cursor-pointer transition-colors relative',
+        isSelected
+          ? 'bg-muted/50 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-primary'
+          : 'hover:bg-muted/30'
       )}
       onClick={onClick}
     >
