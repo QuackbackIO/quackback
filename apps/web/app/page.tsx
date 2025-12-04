@@ -1,6 +1,8 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
+import { ArrowRight, MessageSquare, BarChart3, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
@@ -137,70 +139,85 @@ export default async function RootPage({ searchParams }: RootPageProps) {
  */
 function SetupPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-background to-muted/30">
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">
-        <div className="w-full max-w-lg space-y-8 text-center">
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Subtle gradient overlay */}
+      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+
+      <main className="relative flex flex-1 flex-col items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md space-y-8">
           {/* Logo/Brand */}
-          <div className="space-y-2">
-            <h1 className="text-4xl font-bold">Quackback</h1>
-            <p className="text-muted-foreground">Customer feedback platform</p>
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <div className="absolute -inset-4 bg-primary/10 rounded-full blur-2xl" />
+              <Image src="/logo.png" alt="Quackback" width={80} height={80} className="relative" />
+            </div>
+            <div className="text-center space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight">Quackback</h1>
+              <p className="text-muted-foreground">Open-source customer feedback platform</p>
+            </div>
           </div>
 
           {/* Welcome Card */}
-          <div className="rounded-xl border bg-card p-8 shadow-sm text-left space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold">Welcome!</h2>
-              <p className="text-muted-foreground">
-                Let&apos;s set up your feedback portal. This will only take a minute.
+          <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm space-y-6">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold">Welcome!</h2>
+              <p className="text-sm text-muted-foreground">
+                Set up your feedback portal in under a minute.
               </p>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                  1
+            {/* Features */}
+            <div className="grid gap-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <MessageSquare className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium">Create your workspace</p>
-                  <p className="text-sm text-muted-foreground">
-                    Set up your organization and admin account
+                  <p className="text-sm font-medium">Collect feedback</p>
+                  <p className="text-xs text-muted-foreground">
+                    Public boards for feature requests
                   </p>
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
-                  2
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <BarChart3 className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-muted-foreground">Configure your boards</p>
-                  <p className="text-sm text-muted-foreground">
-                    Create feedback boards for your products
-                  </p>
+                  <p className="text-sm font-medium">Track progress</p>
+                  <p className="text-xs text-muted-foreground">Roadmaps and status updates</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
-                  3
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Users className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-muted-foreground">Start collecting feedback</p>
-                  <p className="text-sm text-muted-foreground">
-                    Share your portal and gather insights
-                  </p>
+                  <p className="text-sm font-medium">Engage users</p>
+                  <p className="text-xs text-muted-foreground">Voting, comments, and updates</p>
                 </div>
               </div>
             </div>
 
             <Link href="/create-workspace" className="block">
-              <Button size="lg" className="w-full">
+              <Button size="lg" className="w-full group">
                 Get started
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Button>
             </Link>
           </div>
 
-          <p className="text-sm text-muted-foreground">
-            Open-source &middot; Self-hostable &middot; Privacy-focused
-          </p>
+          {/* Footer badges */}
+          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Open-source
+            </span>
+            <span className="text-border">•</span>
+            <span>Self-hostable</span>
+            <span className="text-border">•</span>
+            <span>Privacy-focused</span>
+          </div>
         </div>
       </main>
     </div>
