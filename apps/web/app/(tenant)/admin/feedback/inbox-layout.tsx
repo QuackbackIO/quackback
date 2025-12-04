@@ -23,9 +23,9 @@ export function InboxLayout({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   return (
-    <div className="flex h-[calc(100vh-69px)]">
+    <div className="flex h-[calc(100vh-69px)] bg-background">
       {/* Filters - Desktop */}
-      <aside className="hidden lg:flex w-60 xl:w-64 shrink-0 flex-col border-r bg-card overflow-hidden">
+      <aside className="hidden lg:flex w-60 xl:w-64 shrink-0 flex-col border-r border-border/50 bg-card/50 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-4">{filters}</div>
         </ScrollArea>
@@ -35,8 +35,8 @@ export function InboxLayout({
       <div className="lg:hidden fixed bottom-4 left-4 z-50">
         <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
           <SheetTrigger asChild>
-            <Button size="lg" className="rounded-full shadow-lg">
-              <Filter className="h-5 w-5 mr-2" />
+            <Button size="lg" className="rounded-full shadow-md">
+              <Filter className="h-4 w-4 mr-2" />
               Filters
               {hasActiveFilters && (
                 <span className="ml-2 h-2 w-2 rounded-full bg-primary-foreground" />
@@ -44,7 +44,7 @@ export function InboxLayout({
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-80 p-0">
-            <SheetHeader className="px-4 py-3 border-b">
+            <SheetHeader className="px-4 py-3 border-b border-border/50">
               <SheetTitle>Filters</SheetTitle>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-60px)]">
@@ -55,12 +55,12 @@ export function InboxLayout({
       </div>
 
       {/* Post List - narrow column */}
-      <main className="w-[300px] lg:w-[360px] shrink-0 flex flex-col border-r overflow-hidden">
+      <main className="w-[300px] lg:w-[360px] shrink-0 flex flex-col border-r border-border/50 bg-card overflow-hidden">
         <ScrollArea className="h-full">{postList}</ScrollArea>
       </main>
 
       {/* Post Detail - Desktop (always visible, takes remaining space) */}
-      <aside className="hidden md:flex flex-1 min-w-0 flex-col bg-card overflow-hidden">
+      <aside className="hidden md:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
         <ScrollArea className="h-full">{postDetail}</ScrollArea>
       </aside>
 

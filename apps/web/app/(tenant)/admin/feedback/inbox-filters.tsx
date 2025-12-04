@@ -5,7 +5,6 @@ import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -46,20 +45,16 @@ function FilterSection({
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   return (
-    <div className="border-b border-border pb-4 last:border-0">
+    <div className="border-b border-border/30 pb-4 last:border-0">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-2 text-sm font-medium text-foreground hover:text-foreground/80"
+        className="flex w-full items-center justify-between py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
       >
         {title}
-        {isOpen ? (
-          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        )}
+        {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
-      {isOpen && <div className="mt-2">{children}</div>}
+      {isOpen && <div className="mt-3">{children}</div>}
     </div>
   )
 }
@@ -111,27 +106,37 @@ export function InboxFiltersPanel({
     <div className="space-y-4">
       {/* Clear Filters */}
       {hasActiveFilters && (
-        <Button variant="ghost" size="sm" onClick={onClearFilters} className="w-full">
-          <X className="h-4 w-4 mr-2" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearFilters}
+          className="w-full text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5 mr-1.5" />
           Clear all filters
         </Button>
       )}
 
       {/* Status Filter */}
       <FilterSection title="Status">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {statuses.map((status) => (
-            <label key={status.id} className="flex items-center gap-2 cursor-pointer text-sm">
+            <label
+              key={status.id}
+              className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
+            >
               <Checkbox
                 checked={filters.status?.includes(status.slug as PostStatus) || false}
                 onCheckedChange={() => handleStatusToggle(status.slug as PostStatus)}
               />
               <span
-                className="h-2 w-2 rounded-full"
+                className="h-2 w-2 rounded-full shrink-0"
                 style={{ backgroundColor: status.color }}
                 aria-hidden="true"
               />
-              <span className="text-foreground">{status.name}</span>
+              <span className="text-foreground/80 group-hover:text-foreground transition-colors">
+                {status.name}
+              </span>
             </label>
           ))}
         </div>
@@ -140,14 +145,19 @@ export function InboxFiltersPanel({
       {/* Board Filter */}
       {boards.length > 0 && (
         <FilterSection title="Board">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {boards.map((board) => (
-              <label key={board.id} className="flex items-center gap-2 cursor-pointer text-sm">
+              <label
+                key={board.id}
+                className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
+              >
                 <Checkbox
                   checked={filters.board?.includes(board.id) || false}
                   onCheckedChange={() => handleBoardToggle(board.id)}
                 />
-                <span className="text-foreground truncate">{board.name}</span>
+                <span className="text-foreground/80 group-hover:text-foreground transition-colors truncate">
+                  {board.name}
+                </span>
               </label>
             ))}
           </div>
@@ -157,22 +167,24 @@ export function InboxFiltersPanel({
       {/* Tags Filter */}
       {tags.length > 0 && (
         <FilterSection title="Tags" defaultOpen={true}>
-          <div className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <Badge
-                key={tag.id}
-                variant={filters.tags?.includes(tag.id) ? 'default' : 'outline'}
-                className="cursor-pointer"
-                style={
-                  filters.tags?.includes(tag.id)
-                    ? { backgroundColor: tag.color, borderColor: tag.color }
-                    : { borderColor: tag.color, color: tag.color }
-                }
-                onClick={() => handleTagToggle(tag.id)}
-              >
-                {tag.name}
-              </Badge>
-            ))}
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((tag) => {
+              const isSelected = filters.tags?.includes(tag.id)
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => handleTagToggle(tag.id)}
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: isSelected ? tag.color : `${tag.color}15`,
+                    color: isSelected ? '#fff' : tag.color,
+                  }}
+                >
+                  {tag.name}
+                </button>
+              )
+            })}
           </div>
         </FilterSection>
       )}
@@ -203,31 +215,31 @@ export function InboxFiltersPanel({
       )}
 
       {/* Date Range Filter */}
-      <FilterSection title="Date Range" defaultOpen={true}>
-        <div className="space-y-2">
+      <FilterSection title="Date Range" defaultOpen={false}>
+        <div className="space-y-3">
           <div>
-            <label className="text-xs text-muted-foreground">From</label>
+            <label className="text-[11px] text-muted-foreground mb-1 block">From</label>
             <Input
               type="date"
               value={filters.dateFrom || ''}
               onChange={(e) => onFiltersChange({ dateFrom: e.target.value || undefined })}
-              className="mt-1"
+              className="h-8 text-sm"
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground">To</label>
+            <label className="text-[11px] text-muted-foreground mb-1 block">To</label>
             <Input
               type="date"
               value={filters.dateTo || ''}
               onChange={(e) => onFiltersChange({ dateTo: e.target.value || undefined })}
-              className="mt-1"
+              className="h-8 text-sm"
             />
           </div>
         </div>
       </FilterSection>
 
       {/* Min Votes Filter */}
-      <FilterSection title="Minimum Votes" defaultOpen={true}>
+      <FilterSection title="Minimum Votes" defaultOpen={false}>
         <Input
           type="number"
           min={0}
@@ -238,6 +250,7 @@ export function InboxFiltersPanel({
               minVotes: e.target.value ? parseInt(e.target.value, 10) : undefined,
             })
           }
+          className="h-8 text-sm"
         />
       </FilterSection>
     </div>

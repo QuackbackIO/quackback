@@ -165,7 +165,7 @@ export function InboxPostList({
   }, [posts, selectedPostId, onSelectPost])
 
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-card border-b px-3 py-2 flex items-center gap-2">
+    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5 flex items-center gap-2">
       <div className="relative flex-1">
         <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -173,14 +173,14 @@ export function InboxPostList({
           placeholder="Search..."
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
-          className="pl-8 pr-8 h-8 text-sm"
+          className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
           data-search-input
         />
         {searchValue && (
           <button
             type="button"
             onClick={() => setSearchValue('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -190,7 +190,7 @@ export function InboxPostList({
         value={sort || 'newest'}
         onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
       >
-        <SelectTrigger className="h-8 w-[90px] text-xs">
+        <SelectTrigger className="h-8 w-[90px] text-xs border-border/50">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -229,7 +229,7 @@ export function InboxPostList({
       {headerContent}
 
       {/* Post List */}
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-border/50">
         {posts.map((post) => (
           <InboxPostCard
             key={post.id}
@@ -242,11 +242,16 @@ export function InboxPostList({
 
         {/* Load more trigger */}
         {hasMore && (
-          <div ref={loadMoreRef} className="py-3 flex justify-center">
+          <div ref={loadMoreRef} className="py-4 flex justify-center">
             {isLoadingMore ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             ) : (
-              <Button variant="ghost" onClick={onLoadMore}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLoadMore}
+                className="text-muted-foreground"
+              >
                 Load more
               </Button>
             )}

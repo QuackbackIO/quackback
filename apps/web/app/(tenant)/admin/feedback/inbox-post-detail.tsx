@@ -16,7 +16,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -280,7 +279,7 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
 
           {/* Reply form */}
           {showReplyForm && (
-            <Card className="mt-3 ml-8 max-w-lg p-3">
+            <div className="mt-3 ml-8 max-w-lg p-3 bg-muted/30 rounded-lg border border-border/30">
               <CommentForm
                 postId={postId}
                 parentId={comment.id}
@@ -290,7 +289,7 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
                 }}
                 onCancel={() => setShowReplyForm(false)}
               />
-            </Card>
+            </div>
           )}
         </div>
 
@@ -332,9 +331,9 @@ export function InboxPostDetail({
   if (isLoading) {
     return (
       <div>
-        <div className="sticky top-0 bg-card border-b px-4 py-3 flex items-center justify-between">
-          <h2 className="font-semibold">Post Details</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+        <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">Post Details</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -381,19 +380,19 @@ export function InboxPostDetail({
   return (
     <div>
       {/* Header */}
-      <div className="sticky top-0 bg-card border-b px-4 py-3 flex items-center justify-between z-10">
-        <h2 className="font-semibold">Post Details</h2>
-        <Button variant="ghost" size="icon" onClick={onClose}>
+      <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-3 flex items-center justify-between z-10">
+        <h2 className="text-sm font-semibold text-foreground">Post Details</h2>
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
           <X className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Content */}
-      <div className="p-4 space-y-6">
+      <div className="p-5 space-y-6">
         {/* Status & Board */}
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={post.status} onValueChange={handleStatusChange} disabled={isUpdating}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-[160px] h-9 border-border/50">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -410,55 +409,58 @@ export function InboxPostDetail({
               ))}
             </SelectContent>
           </Select>
-          <Badge variant="outline">{post.board.name}</Badge>
+          <Badge variant="secondary" className="text-xs">
+            {post.board.name}
+          </Badge>
           {isUpdating && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
 
         {/* Title */}
-        <h1 className="text-xl font-semibold">{post.title}</h1>
+        <h1 className="text-xl font-bold text-foreground">{post.title}</h1>
 
         {/* Author & Date */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Avatar className="h-6 w-6">
-              <AvatarFallback className="text-xs">{getInitials(post.authorName)}</AvatarFallback>
-            </Avatar>
-            <span>{post.authorName || 'Anonymous'}</span>
-          </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Avatar className="h-6 w-6">
+            <AvatarFallback className="text-xs bg-muted">
+              {getInitials(post.authorName)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="font-medium text-foreground/90">{post.authorName || 'Anonymous'}</span>
+          <span className="text-muted-foreground/60">·</span>
           <span>{formatDate(new Date(post.createdAt))}</span>
-        </div>
-
-        {/* Votes */}
-        <div className="flex items-center gap-2 text-sm">
-          <ThumbsUp className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{post.voteCount} votes</span>
+          <span className="text-muted-foreground/60">·</span>
+          <span className="flex items-center gap-1">
+            <ThumbsUp className="h-3.5 w-3.5" />
+            <span className="font-medium">{post.voteCount}</span>
+          </span>
         </div>
 
         {/* Content */}
-        <div className="prose prose-sm max-w-none text-foreground">
-          <p className="whitespace-pre-wrap">{post.content}</p>
+        <div className="prose prose-sm max-w-none text-foreground/90">
+          <p className="whitespace-pre-wrap leading-relaxed">{post.content}</p>
         </div>
 
         {/* Tags */}
-        <div>
-          <h3 className="text-sm font-medium mb-2">Tags</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="border-t border-border/30 pt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Tags
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
             {allTags.map((tag) => {
               const isSelected = post.tags.some((t) => t.id === tag.id)
               return (
-                <Badge
+                <button
                   key={tag.id}
-                  variant={isSelected ? 'default' : 'outline'}
-                  className="cursor-pointer"
-                  style={
-                    isSelected
-                      ? { backgroundColor: tag.color, borderColor: tag.color }
-                      : { borderColor: tag.color, color: tag.color }
-                  }
+                  type="button"
                   onClick={() => handleTagToggle(tag.id)}
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: isSelected ? tag.color : `${tag.color}15`,
+                    color: isSelected ? '#fff' : tag.color,
+                  }}
                 >
                   {tag.name}
-                </Badge>
+                </button>
               )
             })}
             {allTags.length === 0 && (
@@ -468,14 +470,16 @@ export function InboxPostDetail({
         </div>
 
         {/* Owner Assignment */}
-        <div>
-          <h3 className="text-sm font-medium mb-2">Assigned To</h3>
+        <div className="border-t border-border/30 pt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Assigned To
+          </h3>
           <Select
             value={post.ownerId || 'unassigned'}
             onValueChange={handleOwnerChange}
             disabled={isUpdating}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full h-9 border-border/50">
               <SelectValue placeholder="Unassigned" />
             </SelectTrigger>
             <SelectContent>
@@ -490,9 +494,9 @@ export function InboxPostDetail({
         </div>
 
         {/* Official Response */}
-        <div>
-          <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
+        <div className="border-t border-border/30 pt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+            <Building2 className="h-3.5 w-3.5" />
             Official Response
           </h3>
 
@@ -535,12 +539,10 @@ export function InboxPostDetail({
               </div>
             </div>
           ) : post.officialResponse ? (
-            <Card className="border-primary/30 bg-primary/5 p-4">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
               <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant="default" className="bg-primary text-primary-foreground">
-                    Published
-                  </Badge>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="text-[10px] px-1.5 py-0">Published</Badge>
                   {post.officialResponse.authorName && (
                     <span className="text-xs text-muted-foreground">
                       by {post.officialResponse.authorName}
@@ -579,13 +581,15 @@ export function InboxPostDetail({
                   </Button>
                 </div>
               </div>
-              <p className="text-sm whitespace-pre-wrap">{post.officialResponse.content}</p>
-            </Card>
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                {post.officialResponse.content}
+              </p>
+            </div>
           ) : (
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              className="w-full border-border/50"
               onClick={() => {
                 setResponseText('')
                 setIsEditingResponse(true)
@@ -598,21 +602,23 @@ export function InboxPostDetail({
         </div>
 
         {/* View on portal link */}
-        <Button variant="outline" size="sm" asChild>
-          <a
-            href={`/${post.board.slug}/posts/${post.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            View on portal
-          </a>
-        </Button>
+        <div className="border-t border-border/30 pt-5">
+          <Button variant="outline" size="sm" asChild className="border-border/50">
+            <a
+              href={`/${post.board.slug}/posts/${post.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              View on portal
+            </a>
+          </Button>
+        </div>
 
         {/* Comments Section */}
-        <div>
-          <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" />
+        <div className="border-t border-border/30 pt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+            <MessageSquare className="h-3.5 w-3.5" />
             Comments ({post.comments.length})
           </h3>
           {post.comments.length > 0 ? (
