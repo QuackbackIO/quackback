@@ -106,7 +106,6 @@ export function InboxContainer({
   }
 
   const [posts, setPosts] = useState<PostListItem[]>(initialPosts.items)
-  const [total, setTotal] = useState(initialPosts.total)
   const [hasMore, setHasMore] = useState(initialPosts.hasMore)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
@@ -117,6 +116,23 @@ export function InboxContainer({
 
   // Track if this is the initial mount to skip fetching (we have initialPosts)
   const isInitialMount = useRef(true)
+  const hasInitializedDefaults = useRef(false)
+
+  // Initialize default filters (all boards and statuses selected) on first mount
+  useEffect(() => {
+    if (hasInitializedDefaults.current) return
+    hasInitializedDefaults.current = true
+
+    // Only set defaults if no board/status filters are in URL
+    const hasNoFiltersInUrl = !filters.board?.length && !filters.status?.length
+
+    if (hasNoFiltersInUrl && boards.length > 0 && statuses.length > 0) {
+      setFilters({
+        board: boards.map((b) => b.id),
+        status: statuses.map((s) => s.slug) as PostStatus[],
+      })
+    }
+  }, [boards, statuses, filters.board, filters.status, setFilters])
 
   // Create a stable string key for filters to use in useEffect dependencies
   const filtersKey = useMemo(
@@ -170,7 +186,6 @@ export function InboxContainer({
         } else {
           setPosts(data.items)
         }
-        setTotal(data.total)
         setHasMore(data.hasMore)
         setPage(pageNum)
       } catch (error) {
@@ -341,6 +356,24 @@ export function InboxContainer({
           tags={tags}
           statuses={statuses}
           members={members}
+        />
+      }
+      postList={
+        <InboxPostList
+          posts={posts}
+          statuses={statuses}
+          hasMore={hasMore}
+          isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
+          selectedPostId={selectedPostId}
+          onSelectPost={setSelectedPostId}
+          onLoadMore={handleLoadMore}
+          sort={filters.sort}
+          onSortChange={(sort) => setFilters({ sort })}
+          search={filters.search}
+          onSearchChange={(search) => setFilters({ search })}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
           headerAction={
             <CreatePostDialog
               organizationId={organizationId}
@@ -350,23 +383,6 @@ export function InboxContainer({
               onPostCreated={() => fetchPosts(1, filters)}
             />
           }
-        />
-      }
-      postList={
-        <InboxPostList
-          posts={posts}
-          statuses={statuses}
-          total={total}
-          hasMore={hasMore}
-          isLoading={isLoading}
-          isLoadingMore={isLoadingMore}
-          selectedPostId={selectedPostId}
-          onSelectPost={setSelectedPostId}
-          onLoadMore={handleLoadMore}
-          sort={filters.sort}
-          onSortChange={(sort) => setFilters({ sort })}
-          hasActiveFilters={hasActiveFilters}
-          onClearFilters={clearFilters}
         />
       }
       postDetail={

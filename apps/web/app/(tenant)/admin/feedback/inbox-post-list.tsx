@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Loader2, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDebounce } from '@/lib/hooks/use-debounce'
 import { InboxPostCard } from './inbox-post-card'
 import { InboxEmptyState } from './inbox-empty-state'
 import type { PostListItem, PostStatusEntity } from '@quackback/db'
@@ -19,7 +21,6 @@ import type { InboxFilters } from './use-inbox-filters'
 interface InboxPostListProps {
   posts: PostListItem[]
   statuses: PostStatusEntity[]
-  total: number
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean
@@ -28,8 +29,11 @@ interface InboxPostListProps {
   onLoadMore: () => void
   sort: InboxFilters['sort']
   onSortChange: (sort: InboxFilters['sort']) => void
+  search: string | undefined
+  onSearchChange: (search: string | undefined) => void
   hasActiveFilters: boolean
   onClearFilters: () => void
+  headerAction?: React.ReactNode
 }
 
 function PostListSkeleton() {
@@ -58,7 +62,6 @@ function PostListSkeleton() {
 export function InboxPostList({
   posts,
   statuses,
-  total,
   hasMore,
   isLoading,
   isLoadingMore,
@@ -67,10 +70,37 @@ export function InboxPostList({
   onLoadMore,
   sort,
   onSortChange,
+  search,
+  onSearchChange,
   hasActiveFilters,
   onClearFilters,
+  headerAction,
 }: InboxPostListProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null)
+  const [searchValue, setSearchValue] = useState(search || '')
+  const debouncedSearch = useDebounce(searchValue, 300)
+  const isInitialMount = useRef(true)
+  const lastSyncedSearch = useRef(search)
+
+  // Sync search input when URL changes externally (e.g., clear filters)
+  useEffect(() => {
+    if (search !== lastSyncedSearch.current) {
+      setSearchValue(search || '')
+      lastSyncedSearch.current = search
+    }
+  }, [search])
+
+  // Update filters when debounced search changes (skip initial mount)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    if (debouncedSearch !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = debouncedSearch || undefined
+      onSearchChange(debouncedSearch || undefined)
+    }
+  }, [debouncedSearch, onSearchChange])
 
   // Infinite scroll observer
   useEffect(() => {
@@ -134,13 +164,49 @@ export function InboxPostList({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [posts, selectedPostId, onSelectPost])
 
+  const headerContent = (
+    <div className="sticky top-0 z-10 bg-card border-b px-3 py-2 flex items-center gap-2">
+      <div className="relative flex-1">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          placeholder="Search..."
+          value={searchValue}
+          onChange={(e) => setSearchValue(e.target.value)}
+          className="pl-8 pr-8 h-8 text-sm"
+          data-search-input
+        />
+        {searchValue && (
+          <button
+            type="button"
+            onClick={() => setSearchValue('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <Select
+        value={sort || 'newest'}
+        onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
+      >
+        <SelectTrigger className="h-8 w-[90px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="newest">Newest</SelectItem>
+          <SelectItem value="oldest">Oldest</SelectItem>
+          <SelectItem value="votes">Top Votes</SelectItem>
+        </SelectContent>
+      </Select>
+      {headerAction}
+    </div>
+  )
+
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b bg-card sticky top-0 z-10">
-          <span className="text-xs text-muted-foreground">Loading...</span>
-        </div>
+      <div>
+        {headerContent}
         <PostListSkeleton />
       </div>
     )
@@ -148,11 +214,8 @@ export function InboxPostList({
 
   if (posts.length === 0) {
     return (
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b bg-card sticky top-0 z-10">
-          <span className="text-xs text-muted-foreground">0 posts</span>
-        </div>
+      <div>
+        {headerContent}
         <InboxEmptyState
           type={hasActiveFilters ? 'no-results' : 'no-posts'}
           onClearFilters={hasActiveFilters ? onClearFilters : undefined}
@@ -162,29 +225,11 @@ export function InboxPostList({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b bg-card sticky top-0 z-10">
-        <span className="text-xs text-muted-foreground">
-          {total} {total === 1 ? 'post' : 'posts'}
-        </span>
-        <Select
-          value={sort || 'newest'}
-          onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
-        >
-          <SelectTrigger className="h-7 w-[100px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Newest</SelectItem>
-            <SelectItem value="oldest">Oldest</SelectItem>
-            <SelectItem value="votes">Top Votes</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div>
+      {headerContent}
 
       {/* Post List */}
-      <div className="flex-1 p-4 space-y-3">
+      <div className="divide-y divide-border">
         {posts.map((post) => (
           <InboxPostCard
             key={post.id}
@@ -197,7 +242,7 @@ export function InboxPostList({
 
         {/* Load more trigger */}
         {hasMore && (
-          <div ref={loadMoreRef} className="py-4 flex justify-center">
+          <div ref={loadMoreRef} className="py-3 flex justify-center">
             {isLoadingMore ? (
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : (

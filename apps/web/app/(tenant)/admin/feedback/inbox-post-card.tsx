@@ -1,7 +1,6 @@
 'use client'
 
 import { ChevronUp, MessageSquare } from 'lucide-react'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { PostListItem, PostStatusEntity } from '@quackback/db'
@@ -38,10 +37,10 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
   const currentStatus = statuses.find((s) => s.slug === post.status)
 
   return (
-    <Card
+    <div
       className={cn(
-        'p-4 cursor-pointer transition-colors',
-        isSelected ? 'bg-primary/5 border-primary/20' : 'hover:bg-muted/50'
+        'px-3 py-3 cursor-pointer transition-colors',
+        isSelected ? 'bg-primary/5' : 'hover:bg-muted/50'
       )}
       onClick={onClick}
     >
@@ -111,6 +110,6 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
           )}
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

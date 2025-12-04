@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useDebounce } from '@/lib/hooks/use-debounce'
 import type { InboxFilters } from './use-inbox-filters'
 import type { PostStatus, Board, Tag, PostStatusEntity } from '@quackback/db'
 
@@ -33,7 +32,6 @@ interface InboxFiltersProps {
   tags: Tag[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
-  headerAction?: React.ReactNode
 }
 
 function FilterSection({
@@ -75,33 +73,7 @@ export function InboxFiltersPanel({
   tags,
   statuses,
   members,
-  headerAction,
 }: InboxFiltersProps) {
-  const [searchValue, setSearchValue] = useState(filters.search || '')
-  const debouncedSearch = useDebounce(searchValue, 300)
-  const isInitialMount = useRef(true)
-  const lastSyncedSearch = useRef(filters.search)
-
-  // Sync search input when URL changes externally (e.g., clear filters)
-  useEffect(() => {
-    if (filters.search !== lastSyncedSearch.current) {
-      setSearchValue(filters.search || '')
-      lastSyncedSearch.current = filters.search
-    }
-  }, [filters.search])
-
-  // Update filters when debounced search changes (skip initial mount)
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false
-      return
-    }
-    if (debouncedSearch !== lastSyncedSearch.current) {
-      lastSyncedSearch.current = debouncedSearch || undefined
-      onFiltersChange({ search: debouncedSearch || undefined })
-    }
-  }, [debouncedSearch, onFiltersChange])
-
   const handleStatusToggle = useCallback(
     (status: PostStatus) => {
       const currentStatuses = filters.status || []
@@ -137,31 +109,6 @@ export function InboxFiltersPanel({
 
   return (
     <div className="space-y-4">
-      {/* Search + Create */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            className="pl-9 pr-9"
-            data-search-input
-          />
-          {searchValue && (
-            <button
-              type="button"
-              onClick={() => setSearchValue('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {headerAction}
-      </div>
-
       {/* Clear Filters */}
       {hasActiveFilters && (
         <Button variant="ghost" size="sm" onClick={onClearFilters} className="w-full">
@@ -209,7 +156,7 @@ export function InboxFiltersPanel({
 
       {/* Tags Filter */}
       {tags.length > 0 && (
-        <FilterSection title="Tags" defaultOpen={false}>
+        <FilterSection title="Tags" defaultOpen={true}>
           <div className="flex flex-wrap gap-2">
             {tags.map((tag) => (
               <Badge
@@ -232,7 +179,7 @@ export function InboxFiltersPanel({
 
       {/* Owner Filter */}
       {members.length > 0 && (
-        <FilterSection title="Assigned To" defaultOpen={false}>
+        <FilterSection title="Assigned To" defaultOpen={true}>
           <Select
             value={filters.owner || 'all'}
             onValueChange={(value) =>
@@ -256,7 +203,7 @@ export function InboxFiltersPanel({
       )}
 
       {/* Date Range Filter */}
-      <FilterSection title="Date Range" defaultOpen={false}>
+      <FilterSection title="Date Range" defaultOpen={true}>
         <div className="space-y-2">
           <div>
             <label className="text-xs text-muted-foreground">From</label>
@@ -280,7 +227,7 @@ export function InboxFiltersPanel({
       </FilterSection>
 
       {/* Min Votes Filter */}
-      <FilterSection title="Minimum Votes" defaultOpen={false}>
+      <FilterSection title="Minimum Votes" defaultOpen={true}>
         <Input
           type="number"
           min={0}
