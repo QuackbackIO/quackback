@@ -49,4 +49,4 @@ bun.lockb
 *.log
 
 # Temporary plan files
-*.plan
+*.planapps/web/next-env.d.ts
