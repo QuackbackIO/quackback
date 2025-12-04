@@ -1,8 +1,21 @@
 import { Resend } from 'resend'
 import { InvitationEmail } from './templates/invitation'
 import { WelcomeEmail } from './templates/welcome'
+import { FindWorkspacesEmail } from './templates/find-workspaces'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Lazy initialization to avoid build errors when API key is not set
+let resend: Resend | null = null
+
+function getResend(): Resend {
+  if (!resend) {
+    const apiKey = process.env.RESEND_API_KEY
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY environment variable is not set')
+    }
+    resend = new Resend(apiKey)
+  }
+  return resend
+}
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'Quackback <noreply@quackback.io>'
 
@@ -16,7 +29,7 @@ interface SendInvitationParams {
 export async function sendInvitationEmail(params: SendInvitationParams) {
   const { to, invitedByEmail, organizationName, inviteLink } = params
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM_EMAIL,
     to,
     subject: `You've been invited to join ${organizationName} on Quackback`,
@@ -38,7 +51,7 @@ export async function sendWelcomeEmail(params: SendWelcomeParams) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.quackback.io'
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM_EMAIL,
     to,
     subject: 'Welcome to Quackback!',
@@ -46,5 +59,31 @@ export async function sendWelcomeEmail(params: SendWelcomeParams) {
   })
 }
 
+interface Workspace {
+  name: string
+  slug: string
+  loginUrl: string
+}
+
+interface SendFindWorkspacesParams {
+  to: string
+  workspaces: Workspace[]
+}
+
+export async function sendFindWorkspacesEmail(params: SendFindWorkspacesParams) {
+  const { to, workspaces } = params
+
+  await getResend().emails.send({
+    from: FROM_EMAIL,
+    to,
+    subject:
+      workspaces.length > 0
+        ? `Your Quackback workspaces (${workspaces.length} found)`
+        : 'Your Quackback workspaces',
+    react: FindWorkspacesEmail({ workspaces }),
+  })
+}
+
 export { InvitationEmail } from './templates/invitation'
 export { WelcomeEmail } from './templates/welcome'
+export { FindWorkspacesEmail } from './templates/find-workspaces'

@@ -31,7 +31,9 @@ export default function CreateWorkspacePage() {
 
           <p className="text-center text-sm text-muted-foreground">
             Already have a workspace?{' '}
-            <span className="text-foreground">Go to your workspace URL to sign in</span>
+            <Link href="/" className="font-medium text-primary hover:underline">
+              Find your workspaces
+            </Link>
           </p>
         </div>
       </main>
