@@ -28,7 +28,7 @@ interface PortalHeaderProps {
 }
 
 const navItems = [
-  { href: '/', label: 'Boards' },
+  { href: '/', label: 'Feedback' },
   { href: '/roadmap', label: 'Roadmap' },
 ]
 
@@ -63,7 +63,7 @@ export function PortalHeader({
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex h-14 items-center">
+      <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex h-14 items-center">
         {/* Logo / Org Name */}
         <Link href="/" className="flex items-center gap-2 mr-6">
           {orgLogo ? (
@@ -81,7 +81,7 @@ export function PortalHeader({
           {navItems.map((item) => {
             const isActive =
               item.href === '/'
-                ? pathname === '/' || pathname.startsWith('/boards')
+                ? pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
                 : pathname.startsWith(item.href)
 
             return (

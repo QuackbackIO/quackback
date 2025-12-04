@@ -89,12 +89,7 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
           )}
         />
 
-        {user ? (
-          <p className="text-sm text-muted-foreground">
-            Posting as{' '}
-            <span className="font-medium text-foreground">{user.name || user.email}</span>
-          </p>
-        ) : (
+        {!user && (
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
@@ -141,13 +136,19 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          {user && (
+            <p className="text-xs text-muted-foreground mr-auto">
+              Posting as{' '}
+              <span className="font-medium text-foreground">{user.name || user.email}</span>
+            </p>
+          )}
           {onCancel && (
-            <Button type="button" variant="ghost" onClick={onCancel} disabled={isPending}>
+            <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
               Cancel
             </Button>
           )}
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" size="sm" disabled={isPending}>
             {isPending ? 'Posting...' : parentId ? 'Reply' : 'Comment'}
           </Button>
         </div>

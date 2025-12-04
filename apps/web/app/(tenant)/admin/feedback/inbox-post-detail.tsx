@@ -597,15 +597,15 @@ export function InboxPostDetail({
           )}
         </div>
 
-        {/* View on board link */}
+        {/* View on portal link */}
         <Button variant="outline" size="sm" asChild>
           <a
-            href={`/boards/${post.board.slug}/posts/${post.id}`}
+            href={`/${post.board.slug}/posts/${post.id}`}
             target="_blank"
             rel="noopener noreferrer"
           >
             <ExternalLink className="h-4 w-4 mr-2" />
-            View on board
+            View on portal
           </a>
         </Button>
 

@@ -58,12 +58,7 @@ export function CommentThread({
   return (
     <div className="space-y-6">
       {/* Add comment form */}
-      {allowCommenting && (
-        <div className="border rounded-lg p-4 bg-muted/50">
-          <h3 className="text-sm font-medium mb-3">Leave a comment</h3>
-          <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />
-        </div>
-      )}
+      {allowCommenting && <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />}
 
       {/* Comments list */}
       {comments.length === 0 ? (
@@ -182,12 +177,12 @@ function CommentItem({
           </div>
 
           {/* Comment content - always visible */}
-          <p className="text-sm whitespace-pre-wrap mt-1.5 ml-8 text-foreground/90 leading-relaxed">
+          <p className="text-sm whitespace-pre-wrap mt-1.5 ml-10 text-foreground/90 leading-relaxed">
             {comment.content}
           </p>
 
           {/* Actions row: expand/collapse, reactions, reply - always visible */}
-          <div className="flex items-center gap-1 mt-2 ml-2">
+          <div className="flex items-center gap-1 mt-2 ml-10">
             {/* Expand/Collapse button - first item, icon only */}
             {hasReplies && (
               <Button
@@ -266,7 +261,7 @@ function CommentItem({
 
           {/* Reply form */}
           {showReplyForm && (
-            <Card className="mt-3 ml-8 max-w-lg p-3">
+            <Card className="mt-3 ml-10 max-w-lg p-3">
               <CommentForm
                 postId={postId}
                 parentId={comment.id}
