@@ -16,7 +16,6 @@ import { CommentsSection } from '@/components/public/comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
 import { PostContent } from '@/components/public/post-content'
 import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
 import { TimeAgo } from '@/components/ui/time-ago'
 
 // Ensure page is not cached since it depends on user's cookie
@@ -63,79 +62,89 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const session = await getSession()
 
   return (
-    <div className="max-w-4xl mx-auto py-8">
+    <div className="max-w-3xl mx-auto py-6 px-4 sm:px-6">
       {/* Back link */}
       <Link
         href={`/?board=${slug}`}
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to {board.name}
+        <span>{board.name}</span>
       </Link>
 
-      <Card className="p-6">
+      {/* Main content card */}
+      <div className="bg-card border border-border/50 rounded-lg shadow-sm overflow-hidden">
         {/* Post header */}
-        <div className="flex gap-4 mb-4">
-          <VoteButton
-            postId={post.id}
-            initialVoteCount={post.voteCount}
-            initialHasVoted={hasVoted}
-            disabled={!boardSettings.publicVoting}
-          />
+        <div className="flex">
+          {/* Vote section - left column */}
+          <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30">
+            <VoteButton
+              postId={post.id}
+              initialVoteCount={post.voteCount}
+              initialHasVoted={hasVoted}
+              disabled={!boardSettings.publicVoting}
+            />
+          </div>
 
-          <div className="flex-1">
-            <div className="flex items-start gap-2 mb-2">
-              <h1 className="text-2xl font-bold flex-1">{post.title}</h1>
-              <Badge
-                variant="outline"
-                className="shrink-0"
-                style={{
-                  backgroundColor: `${currentStatus?.color || '#6b7280'}20`,
-                  color: currentStatus?.color || '#6b7280',
-                  borderColor: `${currentStatus?.color || '#6b7280'}50`,
-                }}
-              >
-                {currentStatus?.name || post.status}
-              </Badge>
-            </div>
+          {/* Content section */}
+          <div className="flex-1 p-6">
+            {/* Status badge */}
+            <Badge
+              variant="outline"
+              className="text-[11px] font-medium mb-3"
+              style={{
+                backgroundColor: `${currentStatus?.color || '#6b7280'}15`,
+                color: currentStatus?.color || '#6b7280',
+                borderColor: `${currentStatus?.color || '#6b7280'}40`,
+              }}
+            >
+              {currentStatus?.name || post.status}
+            </Badge>
 
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{post.authorName || 'Anonymous'}</span>
-              <span>·</span>
+            {/* Title */}
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-2">{post.title}</h1>
+
+            {/* Author & time */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+              <span className="font-medium text-foreground/90">
+                {post.authorName || 'Anonymous'}
+              </span>
+              <span className="text-muted-foreground/60">·</span>
               <TimeAgo date={post.createdAt} />
             </div>
+
+            {/* Tags */}
+            {post.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {post.tags.map((tag) => (
+                  <Badge
+                    key={tag.id}
+                    variant="outline"
+                    className="text-[11px]"
+                    style={{
+                      backgroundColor: `${tag.color}15`,
+                      color: tag.color,
+                      borderColor: `${tag.color}40`,
+                    }}
+                  >
+                    {tag.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Post content */}
+            <PostContent
+              content={post.content}
+              contentJson={post.contentJson}
+              className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/90"
+            />
           </div>
         </div>
 
-        {/* Tags */}
-        {post.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {post.tags.map((tag) => (
-              <Badge
-                key={tag.id}
-                variant="secondary"
-                style={{
-                  backgroundColor: `${tag.color}20`,
-                  color: tag.color,
-                  borderColor: `${tag.color}50`,
-                }}
-              >
-                {tag.name}
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        {/* Post content */}
-        <PostContent
-          content={post.content}
-          contentJson={post.contentJson}
-          className="prose prose-neutral dark:prose-invert max-w-none"
-        />
-
         {/* Official response */}
         {post.officialResponse && (
-          <div className="mt-6">
+          <div className="border-t border-border/30 p-6">
             <OfficialResponse
               content={post.officialResponse.content}
               authorName={post.officialResponse.authorName}
@@ -146,9 +155,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         )}
 
         {/* Comments section */}
-        <div className="mt-6 pt-6 border-t">
-          <h2 className="text-sm font-medium text-muted-foreground mb-4">
-            {post.comments.length} {post.comments.length === 1 ? 'comment' : 'comments'}
+        <div className="border-t border-border/30 p-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+            {post.comments.length} {post.comments.length === 1 ? 'Comment' : 'Comments'}
           </h2>
 
           <CommentsSection
@@ -160,7 +169,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
             }
           />
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

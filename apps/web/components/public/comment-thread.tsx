@@ -3,7 +3,6 @@
 import { useState, useTransition, useEffect } from 'react'
 import { Reply, ChevronDown, ChevronRight, SmilePlus, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -261,7 +260,7 @@ function CommentItem({
 
           {/* Reply form */}
           {showReplyForm && (
-            <Card className="mt-3 ml-10 max-w-lg p-3">
+            <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 rounded-lg border border-border/30">
               <CommentForm
                 postId={postId}
                 parentId={comment.id}
@@ -272,7 +271,7 @@ function CommentItem({
                 onCancel={() => setShowReplyForm(false)}
                 user={user}
               />
-            </Card>
+            </div>
           )}
         </div>
 

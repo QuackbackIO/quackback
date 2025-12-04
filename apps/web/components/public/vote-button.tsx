@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react'
 import { ChevronUp } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 interface VoteButtonProps {
@@ -55,19 +54,21 @@ export function VoteButton({
   }
 
   return (
-    <Button
-      variant="outline"
-      size="lg"
+    <button
+      type="button"
       className={cn(
-        'flex flex-col items-center justify-center h-auto py-3 px-4 min-w-[60px]',
-        hasVoted && 'bg-primary/10 border-primary text-primary hover:bg-primary/20',
-        isPending && 'opacity-70'
+        'flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors',
+        hasVoted ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+        isPending && 'opacity-70',
+        disabled && 'cursor-not-allowed opacity-50'
       )}
       onClick={handleVote}
       disabled={disabled || isPending}
     >
-      <ChevronUp className="h-5 w-5" />
-      <span className="text-sm font-semibold">{voteCount}</span>
-    </Button>
+      <ChevronUp className={cn('h-6 w-6', hasVoted && 'fill-primary')} />
+      <span className={cn('text-lg font-bold', hasVoted ? 'text-primary' : 'text-foreground')}>
+        {voteCount}
+      </span>
+    </button>
   )
 }

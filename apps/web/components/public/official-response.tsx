@@ -1,5 +1,4 @@
 import { CircleCheck } from 'lucide-react'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 
@@ -17,24 +16,24 @@ export function OfficialResponse({
   organizationName,
 }: OfficialResponseProps) {
   return (
-    <Card className="border-primary/30 bg-primary/5 p-4">
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
       <div className="flex items-start gap-3">
-        <div className="shrink-0 rounded-full bg-primary/10 p-2">
-          <CircleCheck className="h-5 w-5 text-primary" />
+        <div className="shrink-0 rounded-full bg-primary/15 p-1.5">
+          <CircleCheck className="h-4 w-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-semibold">{organizationName}</span>
-            <Badge variant="default" className="bg-primary text-primary-foreground">
-              Official Response
-            </Badge>
-            <span className="text-muted-foreground">·</span>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-sm font-semibold text-foreground">{organizationName}</span>
+            <Badge className="text-[10px] px-1.5 py-0">Official</Badge>
+            <span className="text-muted-foreground/60">·</span>
             <TimeAgo date={respondedAt} className="text-xs text-muted-foreground" />
           </div>
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{content}</p>
-          {authorName && <p className="text-xs text-muted-foreground mt-2">— {authorName}</p>}
+          <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+            {content}
+          </p>
+          {authorName && <p className="text-xs text-muted-foreground mt-3">— {authorName}</p>}
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
