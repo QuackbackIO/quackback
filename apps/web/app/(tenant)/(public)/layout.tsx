@@ -31,7 +31,7 @@ export default async function PublicLayout({ children }: { children: React.React
         userEmail={session?.user.email}
         userImage={session?.user.image}
       />
-      <main>{children}</main>
+      <main className="mx-auto max-w-5xl">{children}</main>
     </div>
   )
 }

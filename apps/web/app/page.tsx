@@ -4,13 +4,29 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
-import { getPublicBoardsWithStats, getRoadmapPosts } from '@quackback/db/queries/public'
+import {
+  getPublicBoardsWithStats,
+  getPublicPostListAllBoards,
+  getUserVotedPostIds,
+} from '@quackback/db/queries/public'
 import { db, organization, workspaceDomain, getStatusesByOrganization, eq } from '@quackback/db'
-import { BoardCard } from '@/components/public/board-card'
-import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { PortalHeader } from '@/components/public/portal-header'
+import { FeedbackContainer } from '@/app/(tenant)/(public)/feedback-container'
+import { getUserIdentifier } from '@/lib/user-identifier'
 
 const APP_DOMAIN = process.env.APP_DOMAIN
+
+// Force dynamic rendering since we read session cookies
+export const dynamic = 'force-dynamic'
+
+interface RootPageProps {
+  searchParams: Promise<{
+    board?: string
+    search?: string
+    sort?: 'top' | 'new' | 'trending'
+    page?: string
+  }>
+}
 
 /**
  * Root Page - handles both main domain and tenant domains
@@ -18,9 +34,9 @@ const APP_DOMAIN = process.env.APP_DOMAIN
  * Main domain (APP_DOMAIN):
  *   - If single workspace exists: redirect to that workspace's login
  *   - Otherwise: show setup wizard for new installation
- * Tenant domain: Shows tenant portal home with boards & roadmap
+ * Tenant domain: Shows feedback portal with posts list
  */
-export default async function RootPage() {
+export default async function RootPage({ searchParams }: RootPageProps) {
   const headersList = await headers()
   const host = headersList.get('host')
 
@@ -50,7 +66,7 @@ export default async function RootPage() {
     return <SetupPage />
   }
 
-  // Tenant domain - show portal home (workspace validated in proxy.ts)
+  // Tenant domain - show feedback portal (workspace validated in proxy.ts)
   const [org, userRole, session] = await Promise.all([
     getCurrentOrganization(),
     getCurrentUserRole(),
@@ -62,16 +78,55 @@ export default async function RootPage() {
     throw new Error('Organization should exist - validated in proxy')
   }
 
+  const { board, search, sort = 'top', page = '1' } = await searchParams
+  const userIdentifier = await getUserIdentifier()
+
+  // Fetch data in parallel
+  const [boards, { items: posts, total, hasMore }, statuses] = await Promise.all([
+    getPublicBoardsWithStats(org.id),
+    getPublicPostListAllBoards({
+      organizationId: org.id,
+      boardSlug: board,
+      search,
+      sort,
+      page: parseInt(page),
+      limit: 20,
+    }),
+    getStatusesByOrganization(org.id),
+  ])
+
+  // Get user's voted posts
+  const postIds = posts.map((p) => p.id)
+  const votedPostIds = await getUserVotedPostIds(postIds, userIdentifier)
+
   return (
-    <TenantHomePage
-      orgId={org.id}
-      orgName={org.name}
-      orgLogo={org.logo}
-      userRole={userRole}
-      userName={session?.user.name}
-      userEmail={session?.user.email}
-      userImage={session?.user.image}
-    />
+    <div className="min-h-screen bg-background">
+      <PortalHeader
+        orgName={org.name}
+        orgLogo={org.logo}
+        userRole={userRole}
+        userName={session?.user.name}
+        userEmail={session?.user.email}
+        userImage={session?.user.image}
+      />
+
+      <main className="mx-auto max-w-5xl py-6 sm:px-6 lg:px-8">
+        <FeedbackContainer
+          organizationName={org.name}
+          boards={boards}
+          posts={posts}
+          statuses={statuses}
+          total={total}
+          hasMore={hasMore}
+          votedPostIds={Array.from(votedPostIds)}
+          currentBoard={board}
+          currentSearch={search}
+          currentSort={sort}
+          currentPage={parseInt(page)}
+          defaultBoardId={boards[0]?.id}
+        />
+      </main>
+    </div>
   )
 }
 
@@ -147,97 +202,6 @@ function SetupPage() {
             Open-source &middot; Self-hostable &middot; Privacy-focused
           </p>
         </div>
-      </main>
-    </div>
-  )
-}
-
-/**
- * Tenant portal home page
- */
-async function TenantHomePage({
-  orgId,
-  orgName,
-  orgLogo,
-  userRole,
-  userName,
-  userEmail,
-  userImage,
-}: {
-  orgId: string
-  orgName: string
-  orgLogo?: string | null
-  userRole: 'owner' | 'admin' | 'member' | 'user' | null
-  userName?: string
-  userEmail?: string
-  userImage?: string | null
-}) {
-  // Fetch statuses for the org
-  const allStatuses = await getStatusesByOrganization(orgId)
-  const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
-  const statusSlugs = roadmapStatuses.map((s) => s.slug)
-
-  const [boards, roadmapPosts] = await Promise.all([
-    getPublicBoardsWithStats(orgId),
-    getRoadmapPosts(orgId, statusSlugs),
-  ])
-
-  return (
-    <div className="min-h-screen bg-background">
-      <PortalHeader
-        orgName={orgName}
-        orgLogo={orgLogo}
-        userRole={userRole}
-        userName={userName}
-        userEmail={userEmail}
-        userImage={userImage}
-      />
-
-      {/* Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Boards Section */}
-        <section className="mb-12">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Boards</h2>
-            <Link
-              href="/boards"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              View all →
-            </Link>
-          </div>
-
-          {boards.length === 0 ? (
-            <p className="text-muted-foreground">No public boards available.</p>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {boards.map((board) => (
-                <BoardCard
-                  key={board.id}
-                  slug={board.slug}
-                  name={board.name}
-                  description={board.description}
-                  postCount={board.postCount}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Roadmap Section */}
-        <section>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Roadmap</h2>
-            <Link
-              href="/roadmap"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              View full roadmap →
-            </Link>
-          </div>
-
-          <RoadmapBoard posts={roadmapPosts} statuses={roadmapStatuses} />
-        </section>
       </main>
     </div>
   )
