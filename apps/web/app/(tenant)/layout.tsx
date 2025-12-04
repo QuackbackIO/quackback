@@ -11,7 +11,7 @@ const APP_DOMAIN = process.env.APP_DOMAIN
  * 2. Workspace validation happens in proxy.ts
  *
  * Auth validation is handled by child layouts:
- * - Public routes (/boards, /roadmap) don't require auth
+ * - Public routes (/, /roadmap, /:slug/posts/:id) don't require auth
  * - Admin routes require auth via their own layout
  */
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {

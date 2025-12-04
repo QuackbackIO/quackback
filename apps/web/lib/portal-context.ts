@@ -30,9 +30,8 @@ export function getAuthContext(searchParams: URLSearchParams, _pathname: string)
   }
   if (
     callbackUrl === '/' ||
-    callbackUrl.includes('/boards') ||
     callbackUrl.includes('/roadmap') ||
-    callbackUrl.startsWith('/posts/')
+    /^\/[^/]+\/posts\//.test(callbackUrl)
   ) {
     return 'portal'
   }

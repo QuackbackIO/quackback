@@ -32,7 +32,14 @@ const tenantAuthRoutes = ['/login', '/signup', '/sso']
 /**
  * Public routes on tenant domains (no auth required)
  */
-const tenantPublicRoutes = ['/', '/boards', '/roadmap']
+const tenantPublicRoutes = ['/', '/roadmap']
+
+/**
+ * Check if pathname matches public post detail route pattern: /:boardSlug/posts/:postId
+ */
+function isPublicPostRoute(pathname: string): boolean {
+  return /^\/[^/]+\/posts\/[^/]+$/.test(pathname)
+}
 
 /**
  * Check if this is the main application domain
@@ -92,8 +99,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Public routes (/boards, /roadmap)
-  if (tenantPublicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
+  // Public routes (/, /roadmap, /:boardSlug/posts/:postId)
+  if (
+    tenantPublicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
+    isPublicPostRoute(pathname)
+  ) {
     return NextResponse.next()
   }
 
