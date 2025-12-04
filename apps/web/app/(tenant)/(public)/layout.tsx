@@ -1,6 +1,7 @@
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
+import { PoweredByFooter } from '@/components/public/powered-by-footer'
 
 // Force dynamic rendering since we read session cookies
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ export default async function PublicLayout({ children }: { children: React.React
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <PortalHeader
         orgName={org.name}
         orgLogo={org.logo}
@@ -31,7 +32,8 @@ export default async function PublicLayout({ children }: { children: React.React
         userEmail={session?.user.email}
         userImage={session?.user.image}
       />
-      <main className="mx-auto max-w-5xl">{children}</main>
+      <main className="mx-auto max-w-5xl w-full flex-1">{children}</main>
+      <PoweredByFooter />
     </div>
   )
 }
