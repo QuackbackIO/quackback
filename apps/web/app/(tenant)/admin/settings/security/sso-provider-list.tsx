@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Trash2, Loader2 } from 'lucide-react'
+import { Trash2, Loader2, Plus } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { CreateSsoProviderDialog } from './create-sso-provider-dialog'
 
 interface SsoProvider {
   id: string
@@ -117,7 +117,12 @@ export function SsoProviderList({ organizationId }: SsoProviderListProps) {
               Configure SAML and OIDC providers for your organization
             </CardDescription>
           </div>
-          <CreateSsoProviderDialog organizationId={organizationId} onSuccess={fetchProviders} />
+          <Button asChild size="sm">
+            <Link href="/admin/settings/security/sso/new">
+              <Plus className="h-4 w-4" />
+              Add Provider
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           {error && (

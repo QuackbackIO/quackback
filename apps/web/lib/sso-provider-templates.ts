@@ -146,18 +146,6 @@ export const SSO_PROVIDER_TEMPLATES: Record<string, SsoProviderTemplate> = {
     docsUrl: 'https://docs.pingidentity.com/r/en-us/pingone/p1_add_app_oidc',
   },
 
-  // Social providers as OIDC (for unified SSO management)
-  google: {
-    id: 'google',
-    name: 'Google',
-    type: 'oidc',
-    description: 'Google accounts (consumer)',
-    discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
-    issuer: 'https://accounts.google.com',
-    fields: [],
-    docsUrl: 'https://developers.google.com/identity/openid-connect/openid-connect',
-  },
-
   // Custom providers
   custom_oidc: {
     id: 'custom_oidc',
@@ -178,7 +166,7 @@ export const SSO_PROVIDER_TEMPLATES: Record<string, SsoProviderTemplate> = {
 
 /**
  * Get ordered list of provider templates for display
- * Enterprise providers first, then social, then custom options
+ * Enterprise providers first, then custom options
  */
 export function getOrderedProviderTemplates(): SsoProviderTemplate[] {
   const order = [
@@ -189,7 +177,6 @@ export function getOrderedProviderTemplates(): SsoProviderTemplate[] {
     'jumpcloud',
     'auth0',
     'ping',
-    'google',
     'custom_oidc',
     'custom_saml',
   ]
