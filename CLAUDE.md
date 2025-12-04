@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -57,9 +57,9 @@ quackback/
 - **Domain resolution**: Uses `workspace_domain` table to map domains to organizations (supports custom domains)
 - Users are scoped to a single organization (`organizationId` on user table)
 - Per-subdomain session cookies (no cross-subdomain session sharing)
-- OAuth flows through main domain with one-time DB token transfer
+- OAuth flows through main domain with one-time DB token transfer via `trustLogin` plugin
 - Data tables reference `organization_id` for isolation
-- Roles: `owner` > `admin` > `member`
+- Team roles: `owner` > `admin` > `member`; Portal users have role `user`
 
 ## Next.js 16 Notes
 
@@ -74,7 +74,8 @@ quackback/
 bun run dev           # Start dev server (auto-migrates)
 bun run build         # Build for production
 bun run lint          # Run ESLint
-bun run test          # Run Vitest tests
+bun run test          # Run all Vitest tests
+bun run test <file>   # Run single test file (e.g., bun run test packages/db/src/foo.test.ts)
 
 # Database
 bun run db:push       # Push schema to database
@@ -83,6 +84,7 @@ bun run db:migrate    # Run migrations
 bun run db:studio     # Open Drizzle Studio
 bun run db:seed       # Seed demo data
 bun run db:reset      # Reset database (destructive)
+bun run reset         # Reset + push + seed (full reset)
 ```
 
 ## Key Conventions
@@ -94,12 +96,41 @@ bun run db:reset      # Reset database (destructive)
 - **Multi-tenancy**: `organization_id` on all data tables
 - **Server Components by default**, `'use client'` only when needed
 
+## App Route Groups
+
+Routes in `apps/web/app/` are organized by route groups:
+
+- `(main)/` - Main domain routes (landing, create-workspace, accept-invitation)
+- `(tenant)/` - Tenant subdomain routes
+  - `(public)/` - Public portal (feedback boards, roadmap)
+  - `admin/` - Admin dashboard (requires team role)
+  - `onboarding/` - User onboarding flow
+- `(auth)/` - Auth-related pages
+- `api/` - API routes (public and authenticated)
+
 ## Database Notes
 
 - Drizzle ORM for type-safe database access
 - Better-auth tables: `user`, `session`, `account`, `organization`, `member`, `invitation`
-- Application tables: `boards`, `posts`, `comments`, `votes`, `tags`, `roadmaps`, `changelog_entries`
+- Application tables: `boards`, `posts`, `comments`, `votes`, `tags`, `roadmaps`, `changelog_entries`, `statuses`
 - RLS policies use `app.organization_id` session variable for tenant isolation
+
+## RLS and Tenant Context
+
+Database queries requiring tenant isolation use `withTenantContext` or `withAuthenticatedTenant`:
+
+```typescript
+// In API routes - validates auth and sets RLS context
+const result = await withApiTenantContext(organizationId, async ({ db }) => {
+  return db.query.posts.findMany() // RLS auto-filters by org
+})
+
+// In server components - redirects on auth failure
+const { withRLS } = await requireAuthenticatedTenant()
+const posts = await withRLS((db) => db.query.posts.findMany())
+```
+
+The tenant context (`packages/db/src/tenant-context.ts`) sets PostgreSQL session variables and switches to the `app_user` role for RLS policy enforcement.
 
 ## Environment Variables
 
