@@ -39,76 +39,82 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
   return (
     <div
       className={cn(
-        'px-3 py-3 cursor-pointer transition-colors',
-        isSelected ? 'bg-primary/5' : 'hover:bg-muted/50'
+        'flex cursor-pointer transition-colors',
+        isSelected ? 'bg-primary/10' : 'hover:bg-muted/30'
       )}
       onClick={onClick}
     >
-      <div className="flex items-start gap-3">
-        {/* Vote count */}
-        <div className="flex flex-col items-center text-muted-foreground shrink-0 w-8">
-          <ChevronUp className="h-4 w-4" />
-          <span className="text-sm font-medium">{post.voteCount}</span>
-        </div>
+      {/* Vote section */}
+      <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/30 text-muted-foreground py-3">
+        <ChevronUp className="h-4 w-4" />
+        <span className="text-sm font-bold text-foreground">{post.voteCount}</span>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Board & Status */}
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <Badge variant="outline" className="text-xs truncate max-w-[120px]">
-              {post.board.name}
-            </Badge>
-            {currentStatus && (
-              <Badge
-                className="text-xs text-white"
-                style={{ backgroundColor: currentStatus.color }}
-              >
-                {currentStatus.name}
-              </Badge>
-            )}
-          </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0 px-3 py-3">
+        {/* Status badge */}
+        {currentStatus && (
+          <Badge
+            variant="outline"
+            className="text-[11px] font-medium mb-1.5"
+            style={{
+              backgroundColor: `${currentStatus.color}15`,
+              color: currentStatus.color,
+              borderColor: `${currentStatus.color}40`,
+            }}
+          >
+            {currentStatus.name}
+          </Badge>
+        )}
 
-          {/* Title */}
-          <h3 className="font-medium text-foreground line-clamp-1">{post.title}</h3>
+        {/* Title */}
+        <h3 className="font-semibold text-[15px] text-foreground line-clamp-1">{post.title}</h3>
 
-          {/* Excerpt */}
-          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{post.content}</p>
+        {/* Excerpt */}
+        <p className="text-sm text-muted-foreground/80 line-clamp-2 mt-1">{post.content}</p>
 
-          {/* Meta row */}
-          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-            <span>{post.authorName || 'Anonymous'}</span>
-            <span>{formatRelativeDate(new Date(post.createdAt))}</span>
-            {post.commentCount > 0 && (
-              <span className="flex items-center gap-1">
+        {/* Meta row */}
+        <div className="flex items-center gap-2.5 mt-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/90">{post.authorName || 'Anonymous'}</span>
+          <span className="text-muted-foreground/60">·</span>
+          <span>{formatRelativeDate(new Date(post.createdAt))}</span>
+          {post.commentCount > 0 && (
+            <>
+              <span className="text-muted-foreground/60">·</span>
+              <span className="flex items-center gap-1 text-muted-foreground/70">
                 <MessageSquare className="h-3 w-3" />
                 {post.commentCount}
               </span>
+            </>
+          )}
+          <div className="flex-1" />
+          <Badge variant="secondary" className="text-[11px]">
+            {post.board.name}
+          </Badge>
+        </div>
+
+        {/* Tags */}
+        {post.tags.length > 0 && (
+          <div className="flex gap-1.5 mt-2 flex-wrap">
+            {post.tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag.id}
+                variant="outline"
+                className="text-[11px]"
+                style={{
+                  backgroundColor: `${tag.color}15`,
+                  color: tag.color,
+                  borderColor: `${tag.color}40`,
+                }}
+              >
+                {tag.name}
+              </Badge>
+            ))}
+            {post.tags.length > 3 && (
+              <span className="text-[11px] text-muted-foreground">+{post.tags.length - 3}</span>
             )}
           </div>
-
-          {/* Tags */}
-          {post.tags.length > 0 && (
-            <div className="flex gap-1 mt-2 flex-wrap">
-              {post.tags.slice(0, 3).map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant="secondary"
-                  className="text-xs"
-                  style={{
-                    backgroundColor: `${tag.color}20`,
-                    color: tag.color,
-                    borderColor: `${tag.color}40`,
-                  }}
-                >
-                  {tag.name}
-                </Badge>
-              ))}
-              {post.tags.length > 3 && (
-                <span className="text-xs text-muted-foreground">+{post.tags.length - 3}</span>
-              )}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )

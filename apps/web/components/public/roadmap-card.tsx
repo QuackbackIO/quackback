@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import { ChevronUp } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 
 interface RoadmapCardProps {
   id: string
@@ -16,30 +14,23 @@ interface RoadmapCardProps {
 
 export function RoadmapCard({ id, title, voteCount, board }: RoadmapCardProps) {
   return (
-    <Link href={`/boards/${board.slug}/posts/${id}`}>
-      <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
-        <CardContent className="p-3">
-          <div className="flex items-start gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto flex flex-col items-center px-2 py-1 text-muted-foreground hover:text-foreground"
-              asChild
-            >
-              <div>
-                <ChevronUp className="h-4 w-4" />
-                <span className="text-xs font-medium">{voteCount}</span>
-              </div>
-            </Button>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium line-clamp-2">{title}</p>
-              <Badge variant="outline" className="mt-2 text-xs">
-                {board.name}
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <Link
+      href={`/${board.slug}/posts/${id}`}
+      className="flex bg-card rounded-lg border border-border/50 shadow-sm hover:bg-muted/30 transition-colors"
+    >
+      {/* Vote section */}
+      <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">
+        <ChevronUp className="h-4 w-4" />
+        <span className="text-sm font-bold text-foreground">{voteCount}</span>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 p-3">
+        <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>
+        <Badge variant="secondary" className="mt-2 text-[11px]">
+          {board.name}
+        </Badge>
+      </div>
     </Link>
   )
 }
