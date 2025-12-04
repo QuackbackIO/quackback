@@ -29,9 +29,10 @@ interface Board {
 
 interface BoardGeneralFormProps {
   board: Board
+  organizationId: string
 }
 
-export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
+export function BoardGeneralForm({ board, organizationId }: BoardGeneralFormProps) {
   const router = useRouter()
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -53,7 +54,7 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
       const response = await fetch(`/api/boards/${board.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, organizationId }),
       })
 
       if (!response.ok) {

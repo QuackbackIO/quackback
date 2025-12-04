@@ -13,10 +13,7 @@ export default async function BoardPublicSettingsPage({
   const { slug } = await params
 
   const board = await db.query.boards.findFirst({
-    where: and(
-      eq(boards.organizationId, organization.id),
-      eq(boards.slug, slug)
-    ),
+    where: and(eq(boards.organizationId, organization.id), eq(boards.slug, slug)),
   })
 
   if (!board) {
@@ -28,12 +25,10 @@ export default async function BoardPublicSettingsPage({
       <Card>
         <CardHeader>
           <CardTitle>Public Portal Settings</CardTitle>
-          <CardDescription>
-            Configure how this board appears on the public portal
-          </CardDescription>
+          <CardDescription>Configure how this board appears on the public portal</CardDescription>
         </CardHeader>
         <CardContent>
-          <BoardPublicForm board={board} />
+          <BoardPublicForm board={board} organizationId={organization.id} />
         </CardContent>
       </Card>
     </div>
