@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { X, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -25,8 +24,6 @@ interface TeamMember {
 interface InboxFiltersProps {
   filters: InboxFilters
   onFiltersChange: (updates: Partial<InboxFilters>) => void
-  onClearFilters: () => void
-  hasActiveFilters: boolean
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
@@ -62,8 +59,6 @@ function FilterSection({
 export function InboxFiltersPanel({
   filters,
   onFiltersChange,
-  onClearFilters,
-  hasActiveFilters,
   boards,
   tags,
   statuses,
@@ -104,19 +99,6 @@ export function InboxFiltersPanel({
 
   return (
     <div className="space-y-4">
-      {/* Clear Filters */}
-      {hasActiveFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClearFilters}
-          className="w-full text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5 mr-1.5" />
-          Clear all filters
-        </Button>
-      )}
-
       {/* Status Filter */}
       <FilterSection title="Status">
         <div className="space-y-1.5">

@@ -351,8 +351,6 @@ export function InboxContainer({
         <InboxFiltersPanel
           filters={filters}
           onFiltersChange={setFilters}
-          onClearFilters={clearFilters}
-          hasActiveFilters={hasActiveFilters}
           boards={boards}
           tags={tags}
           statuses={statuses}
