@@ -126,6 +126,16 @@ export async function getPublicBoardBySlug(
 }
 
 /**
+ * Get a board by ID (for public post submissions)
+ * Returns board with organizationId for member validation
+ */
+export async function getPublicBoardById(boardId: string): Promise<Board | undefined> {
+  return db.query.boards.findFirst({
+    where: eq(boards.id, boardId),
+  })
+}
+
+/**
  * Get posts for a public board with pagination
  */
 export async function getPublicPostList(

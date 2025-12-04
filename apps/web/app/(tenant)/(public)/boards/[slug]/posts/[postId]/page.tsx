@@ -10,6 +10,7 @@ import {
 import { getStatusesByOrganization } from '@quackback/db'
 import { getBoardSettings } from '@quackback/db/types'
 import { getUserIdentifier } from '@/lib/user-identifier'
+import { getSession } from '@/lib/auth/server'
 import { VoteButton } from '@/components/public/vote-button'
 import { CommentsSection } from '@/components/public/comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
@@ -55,6 +56,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
   // Check if user has voted
   const hasVoted = await hasUserVotedOnPost(postId, userIdentifier)
+
+  // Get session for authenticated commenting
+  const session = await getSession()
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -136,6 +140,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
           postId={post.id}
           comments={post.comments}
           allowCommenting={boardSettings.publicCommenting}
+          user={session?.user ? { name: session.user.name, email: session.user.email } : undefined}
         />
       </div>
     </div>

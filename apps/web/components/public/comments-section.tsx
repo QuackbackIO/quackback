@@ -24,12 +24,14 @@ interface CommentsSectionProps {
   postId: string
   comments: Comment[]
   allowCommenting?: boolean
+  user?: { name: string | null; email: string }
 }
 
 export function CommentsSection({
   postId,
   comments,
   allowCommenting = true,
+  user,
 }: CommentsSectionProps) {
   const router = useRouter()
 
@@ -44,6 +46,7 @@ export function CommentsSection({
       comments={comments}
       allowCommenting={allowCommenting}
       onCommentAdded={handleCommentAdded}
+      user={user}
     />
   )
 }

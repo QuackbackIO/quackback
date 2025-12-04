@@ -15,6 +15,7 @@ export const updateBoardSchema = z.object({
 export const boardPublicSettingsSchema = z.object({
   publicVoting: z.boolean(),
   publicCommenting: z.boolean(),
+  allowUserSubmissions: z.boolean(),
   roadmapStatuses: z.array(
     z.enum(['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed'])
   ),

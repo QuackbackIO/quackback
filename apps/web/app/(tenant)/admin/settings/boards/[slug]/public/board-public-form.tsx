@@ -44,6 +44,7 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
     defaultValues: {
       publicVoting: currentSettings.publicVoting,
       publicCommenting: currentSettings.publicCommenting,
+      allowUserSubmissions: currentSettings.allowUserSubmissions,
       roadmapStatuses: currentSettings.roadmapStatuses,
     },
   })
@@ -55,6 +56,7 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
     const settings: BoardSettings = {
       publicVoting: data.publicVoting,
       publicCommenting: data.publicCommenting,
+      allowUserSubmissions: data.allowUserSubmissions,
       roadmapStatuses: data.roadmapStatuses,
     }
 
@@ -116,6 +118,25 @@ export function BoardPublicForm({ board }: BoardPublicFormProps) {
               <div className="space-y-0.5">
                 <FormLabel>Allow public comments</FormLabel>
                 <FormDescription>Let visitors add comments without signing in</FormDescription>
+              </div>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        {/* User Submissions */}
+        <FormField
+          control={form.control}
+          name="allowUserSubmissions"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <FormLabel>Allow user submissions</FormLabel>
+                <FormDescription>
+                  Let signed-in users submit feedback directly on this board
+                </FormDescription>
               </div>
               <FormControl>
                 <Switch checked={field.value} onCheckedChange={field.onChange} />

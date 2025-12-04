@@ -5,9 +5,11 @@ import {
   getPublicPostList,
   getUserVotedPostIds,
 } from '@quackback/db/queries/public'
-import { getStatusesByOrganization } from '@quackback/db'
+import { getStatusesByOrganization, getBoardSettings } from '@quackback/db'
+import { getSession } from '@/lib/auth/server'
 import { getUserIdentifier } from '@/lib/user-identifier'
 import { PostCard } from '@/components/public/post-card'
+import { SubmitPostButton } from '@/components/public/submit-post-button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -44,6 +46,11 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
     notFound()
   }
 
+  // Get session for auth check and board settings
+  const session = await getSession()
+  const boardSettings = getBoardSettings(board)
+  const isAuthenticated = !!session?.user
+
   const userIdentifier = await getUserIdentifier()
   const [{ items: posts, total, hasMore }, statuses] = await Promise.all([
     getPublicPostList({
@@ -68,7 +75,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         {board.description && <p className="text-muted-foreground">{board.description}</p>}
       </div>
 
-      {/* Search and sort */}
+      {/* Search, sort, and submit */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <form className="relative flex-1" method="get">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -96,6 +103,12 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
             </SelectContent>
           </Select>
         </form>
+
+        <SubmitPostButton
+          boardId={board.id}
+          allowSubmissions={boardSettings.allowUserSubmissions}
+          isAuthenticated={isAuthenticated}
+        />
       </div>
 
       {/* Posts list */}

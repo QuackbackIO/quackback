@@ -21,9 +21,10 @@ interface CommentFormProps {
   parentId?: string
   onSuccess?: () => void
   onCancel?: () => void
+  user?: { name: string | null; email: string }
 }
 
-export function CommentForm({ postId, parentId, onSuccess, onCancel }: CommentFormProps) {
+export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: CommentFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -88,48 +89,55 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel }: CommentFo
           )}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="authorName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs text-muted-foreground">Name (optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Your name"
-                    disabled={isPending}
-                    {...field}
-                    value={field.value || ''}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        {user ? (
+          <p className="text-sm text-muted-foreground">
+            Posting as{' '}
+            <span className="font-medium text-foreground">{user.name || user.email}</span>
+          </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="authorName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">Name (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Your name"
+                      disabled={isPending}
+                      {...field}
+                      value={field.value || ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="authorEmail"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs text-muted-foreground">
-                  Email (optional, not shown publicly)
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    placeholder="your@email.com"
-                    disabled={isPending}
-                    {...field}
-                    value={field.value || ''}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+            <FormField
+              control={form.control}
+              name="authorEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Email (optional, not shown publicly)
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="your@email.com"
+                      disabled={isPending}
+                      {...field}
+                      value={field.value || ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 

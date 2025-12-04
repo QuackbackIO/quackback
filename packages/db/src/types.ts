@@ -26,6 +26,7 @@ export interface BoardSettings {
   publicCommenting?: boolean // default: true
   roadmapStatuses?: PostStatus[] // default: ['planned', 'in_progress', 'complete']
   allowAnonymousPosts?: boolean // default: false
+  allowUserSubmissions?: boolean // default: true - allow authenticated users (role='user') to submit posts
 }
 
 // Helper to get typed board settings with defaults
@@ -36,6 +37,7 @@ export function getBoardSettings(board: Board): Required<BoardSettings> {
     publicCommenting: settings.publicCommenting ?? true,
     roadmapStatuses: settings.roadmapStatuses ?? ['planned', 'in_progress', 'complete'],
     allowAnonymousPosts: settings.allowAnonymousPosts ?? false,
+    allowUserSubmissions: settings.allowUserSubmissions ?? true,
   }
 }
 

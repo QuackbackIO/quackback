@@ -19,3 +19,11 @@ export const createPostSchema = z.object({
 
 export type PostStatus = z.infer<typeof postStatusSchema>
 export type CreatePostInput = z.infer<typeof createPostSchema>
+
+// Simplified schema for public post submissions (authenticated users)
+export const publicPostSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  content: z.string().min(1, 'Description is required').max(10000),
+})
+
+export type PublicPostInput = z.infer<typeof publicPostSchema>

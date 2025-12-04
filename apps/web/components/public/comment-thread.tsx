@@ -35,6 +35,7 @@ interface CommentThreadProps {
   comments: Comment[]
   allowCommenting?: boolean
   onCommentAdded?: () => void
+  user?: { name: string | null; email: string }
 }
 
 function getInitials(name: string | null): string {
@@ -52,6 +53,7 @@ export function CommentThread({
   comments,
   allowCommenting = true,
   onCommentAdded,
+  user,
 }: CommentThreadProps) {
   return (
     <div className="space-y-6">
@@ -59,7 +61,7 @@ export function CommentThread({
       {allowCommenting && (
         <div className="border rounded-lg p-4 bg-muted/50">
           <h3 className="text-sm font-medium mb-3">Leave a comment</h3>
-          <CommentForm postId={postId} onSuccess={onCommentAdded} />
+          <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />
         </div>
       )}
 
@@ -77,6 +79,7 @@ export function CommentThread({
               comment={comment}
               allowCommenting={allowCommenting}
               onCommentAdded={onCommentAdded}
+              user={user}
             />
           ))}
         </div>
@@ -91,6 +94,7 @@ interface CommentItemProps {
   allowCommenting: boolean
   onCommentAdded?: () => void
   depth?: number
+  user?: { name: string | null; email: string }
 }
 
 function CommentItem({
@@ -99,6 +103,7 @@ function CommentItem({
   allowCommenting,
   onCommentAdded,
   depth = 0,
+  user,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -270,6 +275,7 @@ function CommentItem({
                   onCommentAdded?.()
                 }}
                 onCancel={() => setShowReplyForm(false)}
+                user={user}
               />
             </Card>
           )}
@@ -286,6 +292,7 @@ function CommentItem({
                 allowCommenting={allowCommenting}
                 onCommentAdded={onCommentAdded}
                 depth={depth + 1}
+                user={user}
               />
             ))}
           </div>
