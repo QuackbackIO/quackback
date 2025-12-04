@@ -11,10 +11,18 @@ import {
   getPublicPostListAllBoards,
   getUserVotedPostIds,
 } from '@quackback/db/queries/public'
-import { db, organization, workspaceDomain, getStatusesByOrganization, eq } from '@quackback/db'
+import {
+  db,
+  organization,
+  workspaceDomain,
+  getStatusesByOrganization,
+  eq,
+  member,
+  and,
+} from '@quackback/db'
 import { PortalHeader } from '@/components/public/portal-header'
 import { FeedbackContainer } from '@/app/(tenant)/(public)/feedback-container'
-import { getUserIdentifier } from '@/lib/user-identifier'
+import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 
 const APP_DOMAIN = process.env.APP_DOMAIN
 
@@ -81,7 +89,17 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   }
 
   const { board, search, sort = 'top', page = '1' } = await searchParams
-  const userIdentifier = await getUserIdentifier()
+
+  // Get user identifier - use member ID for authenticated users, anonymous cookie for others
+  let userIdentifier = await getUserIdentifier()
+  if (session?.user) {
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, org.id)),
+    })
+    if (memberRecord) {
+      userIdentifier = getMemberIdentifier(memberRecord.id)
+    }
+  }
 
   // Fetch data in parallel
   const [boards, { items: posts, total, hasMore }, statuses] = await Promise.all([
