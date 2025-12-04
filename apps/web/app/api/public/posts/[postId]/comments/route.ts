@@ -4,7 +4,6 @@ import {
   getBoardByPostId,
   commentExistsForPost,
 } from '@quackback/db/queries/public'
-import { getBoardSettings } from '@quackback/db/types'
 import { db, member, organization, eq, and } from '@quackback/db'
 import {
   getRawUserIdentifierFromRequest,
@@ -21,16 +20,19 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { postId } = await params
 
-  // Get the board to check if commenting is allowed
+  // Get the board to find organization
   const board = await getBoardByPostId(postId)
   if (!board || !board.isPublic) {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  // Check if public commenting is enabled for this board
-  const settings = getBoardSettings(board)
-  if (!settings.publicCommenting) {
-    return NextResponse.json({ error: 'Commenting is disabled for this board' }, { status: 403 })
+  // Get organization to check if commenting is allowed
+  const org = await db.query.organization.findFirst({
+    where: eq(organization.id, board.organizationId),
+  })
+
+  if (!org?.portalPublicCommenting) {
+    return NextResponse.json({ error: 'Commenting is disabled' }, { status: 403 })
   }
 
   // Parse and validate request body
@@ -87,11 +89,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Anonymous user - check if anonymous commenting is allowed
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, board.organizationId),
-  })
-
-  if (org?.portalRequireAuth) {
+  if (org.portalRequireAuth) {
     return NextResponse.json(
       { error: 'Authentication required to comment. Please sign in or create an account.' },
       { status: 401 }

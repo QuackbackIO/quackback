@@ -21,9 +21,8 @@ export type Board = InferSelectModel<typeof boards>
 export type NewBoard = InferInsertModel<typeof boards>
 
 // Board settings (stored in boards.settings JSONB column)
+// Note: publicVoting and publicCommenting have been moved to organization-level settings
 export interface BoardSettings {
-  publicVoting?: boolean // default: true
-  publicCommenting?: boolean // default: true
   roadmapStatuses?: PostStatus[] // default: ['planned', 'in_progress', 'complete']
   allowAnonymousPosts?: boolean // default: false
   allowUserSubmissions?: boolean // default: true - allow authenticated users (role='user') to submit posts
@@ -33,8 +32,6 @@ export interface BoardSettings {
 export function getBoardSettings(board: Board): Required<BoardSettings> {
   const settings = (board.settings || {}) as BoardSettings
   return {
-    publicVoting: settings.publicVoting ?? true,
-    publicCommenting: settings.publicCommenting ?? true,
     roadmapStatuses: settings.roadmapStatuses ?? ['planned', 'in_progress', 'complete'],
     allowAnonymousPosts: settings.allowAnonymousPosts ?? false,
     allowUserSubmissions: settings.allowUserSubmissions ?? true,

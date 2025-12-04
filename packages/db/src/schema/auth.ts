@@ -119,6 +119,9 @@ export const organization = pgTable('organization', {
   portalGoogleEnabled: boolean('portal_google_enabled').default(true).notNull(),
   portalGithubEnabled: boolean('portal_github_enabled').default(true).notNull(),
   portalRequireAuth: boolean('portal_require_auth').default(false).notNull(),
+  // Portal interaction settings (org-wide defaults)
+  portalPublicVoting: boolean('portal_public_voting').default(true).notNull(),
+  portalPublicCommenting: boolean('portal_public_commenting').default(true).notNull(),
 })
 
 export const member = pgTable(

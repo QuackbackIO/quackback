@@ -7,9 +7,8 @@ import {
   getPublicPostDetail,
   hasUserVotedOnPost,
 } from '@quackback/db/queries/public'
-import { getStatusesByOrganization } from '@quackback/db'
-import { getBoardSettings } from '@quackback/db/types'
-import { getUserIdentifier } from '@/lib/user-identifier'
+import { getStatusesByOrganization, db, member, eq, and } from '@quackback/db'
+import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { VoteButton } from '@/components/public/vote-button'
 import { CommentsSection } from '@/components/public/comments-section'
@@ -39,8 +38,19 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     notFound()
   }
 
-  // Get user identifier for tracking votes and reactions
-  const userIdentifier = await getUserIdentifier()
+  // Get session for authenticated commenting
+  const session = await getSession()
+
+  // Get user identifier - use member ID for authenticated users, anonymous cookie for others
+  let userIdentifier = await getUserIdentifier()
+  if (session?.user) {
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, org.id)),
+    })
+    if (memberRecord) {
+      userIdentifier = getMemberIdentifier(memberRecord.id)
+    }
+  }
 
   // Get post detail with user's reaction state
   const post = await getPublicPostDetail(postId, userIdentifier)
@@ -48,18 +58,12 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     notFound()
   }
 
-  // Get board settings
-  const boardSettings = getBoardSettings(board)
-
   // Get statuses for display
   const statuses = await getStatusesByOrganization(org.id)
   const currentStatus = statuses.find((s) => s.slug === post.status)
 
   // Check if user has voted
   const hasVoted = await hasUserVotedOnPost(postId, userIdentifier)
-
-  // Get session for authenticated commenting
-  const session = await getSession()
 
   return (
     <div className="max-w-3xl mx-auto py-6 px-4 sm:px-6">
@@ -82,7 +86,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
               postId={post.id}
               initialVoteCount={post.voteCount}
               initialHasVoted={hasVoted}
-              disabled={!boardSettings.publicVoting}
+              disabled={!org.portalPublicVoting}
             />
           </div>
 
@@ -163,7 +167,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
           <CommentsSection
             postId={post.id}
             comments={post.comments}
-            allowCommenting={boardSettings.publicCommenting}
+            allowCommenting={org.portalPublicCommenting}
             user={
               session?.user ? { name: session.user.name, email: session.user.email } : undefined
             }

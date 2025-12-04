@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { togglePublicVote, getBoardByPostId } from '@quackback/db/queries/public'
-import { getBoardSettings } from '@quackback/db/types'
 import { db, member, organization, eq, and } from '@quackback/db'
 import {
   getRawUserIdentifierFromRequest,
@@ -17,16 +16,19 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { postId } = await params
 
-  // Get the board to check if voting is allowed
+  // Get the board to find organization
   const board = await getBoardByPostId(postId)
   if (!board || !board.isPublic) {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  // Check if public voting is enabled for this board
-  const settings = getBoardSettings(board)
-  if (!settings.publicVoting) {
-    return NextResponse.json({ error: 'Voting is disabled for this board' }, { status: 403 })
+  // Get organization to check if voting is allowed
+  const org = await db.query.organization.findFirst({
+    where: eq(organization.id, board.organizationId),
+  })
+
+  if (!org?.portalPublicVoting) {
+    return NextResponse.json({ error: 'Voting is disabled' }, { status: 403 })
   }
 
   // Check for authenticated user
@@ -54,11 +56,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Anonymous user - check if anonymous voting is allowed
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, board.organizationId),
-  })
-
-  if (org?.portalRequireAuth) {
+  if (org.portalRequireAuth) {
     return NextResponse.json(
       { error: 'Authentication required to vote. Please sign in or create an account.' },
       { status: 401 }

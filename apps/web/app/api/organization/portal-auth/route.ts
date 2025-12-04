@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
       portalGoogleEnabled: org.portalGoogleEnabled,
       portalGithubEnabled: org.portalGithubEnabled,
       portalRequireAuth: org.portalRequireAuth,
+      portalPublicVoting: org.portalPublicVoting,
+      portalPublicCommenting: org.portalPublicCommenting,
     })
   } catch (error) {
     console.error('Error fetching portal auth settings:', error)
@@ -62,6 +64,8 @@ export async function GET(request: NextRequest) {
  *   portalGoogleEnabled?: boolean,
  *   portalGithubEnabled?: boolean,
  *   portalRequireAuth?: boolean,
+ *   portalPublicVoting?: boolean,
+ *   portalPublicCommenting?: boolean,
  * }
  */
 export async function PATCH(request: NextRequest) {
@@ -74,6 +78,8 @@ export async function PATCH(request: NextRequest) {
       portalGoogleEnabled,
       portalGithubEnabled,
       portalRequireAuth,
+      portalPublicVoting,
+      portalPublicCommenting,
     } = body
 
     // Validate tenant access (handles auth + org membership check)
@@ -94,6 +100,8 @@ export async function PATCH(request: NextRequest) {
       portalGoogleEnabled: boolean
       portalGithubEnabled: boolean
       portalRequireAuth: boolean
+      portalPublicVoting: boolean
+      portalPublicCommenting: boolean
     }> = {}
 
     if (typeof portalAuthEnabled === 'boolean') {
@@ -110,6 +118,12 @@ export async function PATCH(request: NextRequest) {
     }
     if (typeof portalRequireAuth === 'boolean') {
       updates.portalRequireAuth = portalRequireAuth
+    }
+    if (typeof portalPublicVoting === 'boolean') {
+      updates.portalPublicVoting = portalPublicVoting
+    }
+    if (typeof portalPublicCommenting === 'boolean') {
+      updates.portalPublicCommenting = portalPublicCommenting
     }
 
     if (Object.keys(updates).length === 0) {
@@ -130,6 +144,8 @@ export async function PATCH(request: NextRequest) {
       portalGoogleEnabled: updated.portalGoogleEnabled,
       portalGithubEnabled: updated.portalGithubEnabled,
       portalRequireAuth: updated.portalRequireAuth,
+      portalPublicVoting: updated.portalPublicVoting,
+      portalPublicCommenting: updated.portalPublicCommenting,
     })
   } catch (error) {
     console.error('Error updating portal auth settings:', error)
