@@ -16,14 +16,19 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-2xl">
-        <OnboardingWizard
-          organizationName={organization.name}
-          organizationId={organization.id}
-          userName={user.name}
-        />
-      </div>
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Subtle gradient overlay */}
+      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+
+      <main className="relative flex flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-lg">
+          <OnboardingWizard
+            organizationName={organization.name}
+            organizationId={organization.id}
+            userName={user.name}
+          />
+        </div>
+      </main>
     </div>
   )
 }

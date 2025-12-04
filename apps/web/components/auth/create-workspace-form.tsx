@@ -7,7 +7,7 @@ import { createWorkspaceSchema, type CreateWorkspaceInput } from '@/lib/schemas/
 import { getBaseDomain } from '@/lib/routing'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Building2, User } from 'lucide-react'
 import {
   Form,
   FormControl,
@@ -88,7 +88,12 @@ export function CreateWorkspaceForm() {
         )}
 
         <div className="space-y-4">
-          <h3 className="text-lg font-medium">Workspace Details</h3>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <Building2 className="h-4 w-4 text-primary" />
+            </div>
+            <h3 className="font-medium">Workspace Details</h3>
+          </div>
 
           <FormField
             control={form.control}
@@ -124,7 +129,12 @@ export function CreateWorkspaceForm() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-lg font-medium">Your Account</h3>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <User className="h-4 w-4 text-primary" />
+            </div>
+            <h3 className="font-medium">Your Account</h3>
+          </div>
 
           <FormField
             control={form.control}
