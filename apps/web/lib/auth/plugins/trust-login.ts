@@ -17,7 +17,7 @@
 import { createAuthEndpoint } from 'better-auth/api'
 import type { BetterAuthPlugin } from 'better-auth'
 import { z } from 'zod'
-import { db, sessionTransferToken, eq, and, gt } from '@quackback/db'
+import { db, sessionTransferToken, member, workspaceDomain, eq, and, gt } from '@quackback/db'
 
 export const trustLogin = () => {
   return {
@@ -48,9 +48,8 @@ export const trustLogin = () => {
 
           // 2. Validate target domain matches current host (prevents token theft)
           const currentHost = ctx.request?.headers?.get('host') || ''
-          const expectedPrefix = `${transfer.targetSubdomain}.`
-          if (!currentHost.startsWith(expectedPrefix)) {
-            // Token was issued for a different subdomain - reject
+          if (currentHost !== transfer.targetDomain) {
+            // Token was issued for a different domain - reject
             await db.delete(sessionTransferToken).where(eq(sessionTransferToken.id, transfer.id))
             return ctx.redirect('/login?error=invalid_domain')
           }
@@ -58,7 +57,28 @@ export const trustLogin = () => {
           // 3. Delete token (one-time use)
           await db.delete(sessionTransferToken).where(eq(sessionTransferToken.id, transfer.id))
 
-          // 4. Create session using Better-Auth's internal adapter
+          // 4. If portal context, ensure member has role='user' (portal-only access)
+          if (transfer.context === 'portal') {
+            // Look up organization by domain
+            const domain = await db.query.workspaceDomain.findFirst({
+              where: eq(workspaceDomain.domain, currentHost),
+            })
+
+            if (domain?.organizationId) {
+              // Update member role to 'user' for portal-only access
+              await db
+                .update(member)
+                .set({ role: 'user' })
+                .where(
+                  and(
+                    eq(member.userId, transfer.userId),
+                    eq(member.organizationId, domain.organizationId)
+                  )
+                )
+            }
+          }
+
+          // 5. Create session using Better-Auth's internal adapter
           const session = await ctx.context.internalAdapter.createSession(
             transfer.userId,
             false // dontRememberMe
@@ -68,7 +88,7 @@ export const trustLogin = () => {
             return ctx.redirect('/login?error=session_error')
           }
 
-          // 5. Set the session cookie
+          // 6. Set the session cookie
           await ctx.setSignedCookie(
             ctx.context.authCookies.sessionToken.name,
             session.token,
@@ -76,8 +96,9 @@ export const trustLogin = () => {
             ctx.context.authCookies.sessionToken.options
           )
 
-          // 6. Redirect to admin dashboard (hardcoded to prevent open redirect)
-          return ctx.redirect('/admin')
+          // 7. Redirect based on context (hardcoded paths to prevent open redirect)
+          const redirectUrl = transfer.context === 'portal' ? '/' : '/admin'
+          return ctx.redirect(redirectUrl)
         }
       ),
     },

@@ -29,6 +29,7 @@ export async function GET(
   const { provider } = await params
   const { searchParams } = new URL(request.url)
   const subdomain = searchParams.get('subdomain')
+  const context = searchParams.get('context') || 'team' // 'team' or 'portal'
 
   if (!subdomain) {
     return NextResponse.json({ error: 'subdomain parameter is required' }, { status: 400 })
@@ -37,6 +38,11 @@ export async function GET(
   // Validate subdomain format (alphanumeric and hyphens only)
   if (!/^[a-z0-9-]+$/.test(subdomain)) {
     return NextResponse.json({ error: 'Invalid subdomain format' }, { status: 400 })
+  }
+
+  // Validate context
+  if (context !== 'team' && context !== 'portal') {
+    return NextResponse.json({ error: 'Invalid context' }, { status: 400 })
   }
 
   // Validate provider
@@ -55,8 +61,8 @@ export async function GET(
   const nonce = randomBytes(16).toString('hex')
   const timestamp = Date.now()
 
-  // Create state payload and sign it (callback hardcoded in trust-login to prevent open redirect)
-  const statePayload = JSON.stringify({ subdomain, nonce, timestamp })
+  // Create state payload and sign it (includes context for role assignment)
+  const statePayload = JSON.stringify({ subdomain, context, nonce, timestamp })
   const signature = signState(statePayload, secret)
 
   // Store signed state in cookie

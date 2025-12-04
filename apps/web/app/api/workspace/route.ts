@@ -202,11 +202,15 @@ export async function POST(request: NextRequest) {
       })
 
       // 6. Create one-time transfer token
+      // Compute target domain before inserting (matches workspace_domain table)
+      const subdomainUrl = buildSubdomainUrl(workspaceSlug, request)
+      const targetDomain = new URL(subdomainUrl).host
+
       await tx.insert(sessionTransferToken).values({
         id: tokenId,
         token: transferToken,
         userId,
-        targetSubdomain: workspaceSlug,
+        targetDomain,
         callbackUrl: '/admin',
         expiresAt: new Date(Date.now() + 60000), // 60 seconds
       })
@@ -216,12 +220,12 @@ export async function POST(request: NextRequest) {
     // Done outside transaction as it uses the main db connection
     await seedDefaultStatuses(orgId)
 
-    // Build redirect URL to subdomain with transfer token
-    const subdomainUrl = buildSubdomainUrl(workspaceSlug, request)
+    // Redirect to subdomain with transfer token
+    const redirectSubdomainUrl = buildSubdomainUrl(workspaceSlug, request)
 
     return NextResponse.json({
       success: true,
-      redirectUrl: `${subdomainUrl}/api/auth/trust-login?token=${transferToken}`,
+      redirectUrl: `${redirectSubdomainUrl}/api/auth/trust-login?token=${transferToken}`,
     })
   } catch (error) {
     // Check for unique constraint violations

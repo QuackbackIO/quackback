@@ -4,13 +4,27 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { useSession } from '@/lib/auth/client'
+import { signOut } from '@/lib/auth/client'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { LogOut, Settings } from 'lucide-react'
 
 interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
   /** User's role in the organization (passed from server) */
-  userRole?: 'owner' | 'admin' | 'member' | null
+  userRole?: 'owner' | 'admin' | 'member' | 'user' | null
+  /** User info (passed from server) */
+  userName?: string
+  userEmail?: string
+  userImage?: string | null
 }
 
 const navItems = [
@@ -18,12 +32,34 @@ const navItems = [
   { href: '/roadmap', label: 'Roadmap' },
 ]
 
-export function PortalHeader({ orgName, orgLogo, userRole }: PortalHeaderProps) {
+export function PortalHeader({
+  orgName,
+  orgLogo,
+  userRole,
+  userName,
+  userEmail,
+  userImage,
+}: PortalHeaderProps) {
   const pathname = usePathname()
-  const { data: session, isPending } = useSession()
 
-  const isLoggedIn = !!session?.user
-  const canAccessAdmin = isLoggedIn && (userRole === 'owner' || userRole === 'admin')
+  const isLoggedIn = !!userName
+  // Team members (owner, admin, member) can access admin dashboard
+  const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(userRole || '')
+
+  const handleSignOut = async () => {
+    await signOut()
+    window.location.href = '/'
+  }
+
+  // Get initials for avatar fallback (same logic as AdminNav)
+  const initials = userName
+    ? userName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : '?'
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -69,13 +105,41 @@ export function PortalHeader({ orgName, orgLogo, userRole }: PortalHeaderProps) 
         <div className="flex-1" />
 
         {/* Auth Buttons */}
-        {isPending ? (
-          <div className="h-8 w-16 animate-pulse rounded bg-muted" />
-        ) : canAccessAdmin ? (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin">Admin</Link>
-          </Button>
+        {isLoggedIn ? (
+          // Logged-in user - show user dropdown
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={userImage || undefined} alt={userName} />
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium">{userName}</p>
+                  <p className="text-xs text-muted-foreground">{userEmail}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {canAccessAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link href="/admin">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Admin
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : (
+          // Anonymous user - show login/signup buttons
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/login">Log in</Link>

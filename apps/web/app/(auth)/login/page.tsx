@@ -1,11 +1,16 @@
 import { Suspense } from 'react'
-import { headers } from 'next/headers'
-import { LoginForm } from '@/components/auth/login-form'
+import { PortalLoginForm } from '@/components/auth/portal-login-form'
+import { getOrgSlug } from '@/lib/tenant'
 import Link from 'next/link'
 
+/**
+ * Portal Login Page
+ *
+ * For portal users (visitors) to sign in.
+ * Uses the organization's portal auth settings.
+ */
 export default async function LoginPage() {
-  const headersList = await headers()
-  const orgSlug = headersList.get('x-org-slug')
+  const orgSlug = await getOrgSlug()
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -15,7 +20,7 @@ export default async function LoginPage() {
           <p className="mt-2 text-muted-foreground">Sign in to your account</p>
         </div>
         <Suspense fallback={<div className="animate-pulse h-64 bg-muted rounded-lg" />}>
-          <LoginForm orgSlug={orgSlug ?? undefined} />
+          <PortalLoginForm orgSlug={orgSlug ?? undefined} />
         </Suspense>
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}

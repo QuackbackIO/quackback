@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { togglePublicVote, getBoardByPostId } from '@quackback/db/queries/public'
 import { getBoardSettings } from '@quackback/db/types'
+import { db, member, organization, eq, and } from '@quackback/db'
 import {
   getUserIdentifierFromRequest,
   getRawUserIdentifierFromRequest,
   setUserIdentifierCookie,
   hasUserIdentifierCookie,
+  getMemberIdentifier,
 } from '@/lib/user-identifier'
+import { getSession } from '@/lib/auth/server'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -27,8 +30,44 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Voting is disabled for this board' }, { status: 403 })
   }
 
-  // Get or create user identifier (uses anon:{uuid} format for public users)
-  const userIdentifier = getUserIdentifierFromRequest(request)
+  // Check for authenticated user
+  const session = await getSession()
+  let userIdentifier: string
+
+  if (session?.user) {
+    // Authenticated user - get their member record for this organization
+    const memberRecord = await db.query.member.findFirst({
+      where: and(
+        eq(member.userId, session.user.id),
+        eq(member.organizationId, board.organizationId)
+      ),
+    })
+
+    if (memberRecord) {
+      // Use member identifier for authenticated users
+      userIdentifier = getMemberIdentifier(memberRecord.id)
+
+      // Toggle the vote - no need to set cookie for authenticated users
+      const result = await togglePublicVote(postId, userIdentifier)
+      return NextResponse.json(result)
+    }
+    // User is authenticated but not a member of this org - fall through to anonymous
+  }
+
+  // Anonymous user - check if anonymous voting is allowed
+  const org = await db.query.organization.findFirst({
+    where: eq(organization.id, board.organizationId),
+  })
+
+  if (org?.portalRequireAuth) {
+    return NextResponse.json(
+      { error: 'Authentication required to vote. Please sign in or create an account.' },
+      { status: 401 }
+    )
+  }
+
+  // Get or create anonymous user identifier
+  userIdentifier = getUserIdentifierFromRequest(request)
 
   // Toggle the vote
   const result = await togglePublicVote(postId, userIdentifier)

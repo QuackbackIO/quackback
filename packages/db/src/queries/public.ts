@@ -467,13 +467,16 @@ export async function commentExistsForPost(postId: string, commentId: string): P
 
 /**
  * Add a comment to a post
+ * For authenticated users, pass memberId and authorName (from member record)
+ * For anonymous users, pass authorName and authorEmail (memberId should be undefined)
  */
 export async function addPublicComment(
   postId: string,
   content: string,
   authorName: string | null,
   authorEmail: string | null,
-  parentId?: string
+  parentId?: string,
+  memberId?: string
 ): Promise<PublicComment> {
   const [comment] = await db
     .insert(comments)
@@ -483,6 +486,7 @@ export async function addPublicComment(
       authorName,
       authorEmail,
       parentId: parentId || null,
+      memberId: memberId || null,
     })
     .returning()
 

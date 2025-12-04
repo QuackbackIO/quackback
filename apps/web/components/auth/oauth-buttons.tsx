@@ -10,6 +10,8 @@ interface OAuthButtonsProps {
   showGithub?: boolean
   showMicrosoft?: boolean
   callbackUrl?: string
+  /** 'team' for admin access, 'portal' for portal users (role='user') */
+  context?: 'team' | 'portal'
 }
 
 /**
@@ -28,6 +30,7 @@ export function OAuthButtons({
   showGithub = true,
   showMicrosoft = true,
   callbackUrl = '/admin',
+  context = 'team',
 }: OAuthButtonsProps) {
   /**
    * Redirect to main domain OAuth initiation
@@ -44,6 +47,7 @@ export function OAuthButtons({
     const oauthUrl = new URL(`${mainDomain}/api/auth/oauth/${provider}`)
     oauthUrl.searchParams.set('subdomain', subdomain)
     oauthUrl.searchParams.set('callback', callbackUrl)
+    oauthUrl.searchParams.set('context', context)
 
     window.location.href = oauthUrl.toString()
   }

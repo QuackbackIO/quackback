@@ -113,6 +113,12 @@ export const organization = pgTable('organization', {
   microsoftOAuthEnabled: boolean('microsoft_oauth_enabled').default(true).notNull(),
   // Allow public signup on tenant subdomain (vs invitation-only)
   openSignupEnabled: boolean('open_signup_enabled').default(false).notNull(),
+  // Portal authentication settings (separate from team auth above)
+  portalAuthEnabled: boolean('portal_auth_enabled').default(true).notNull(),
+  portalPasswordEnabled: boolean('portal_password_enabled').default(true).notNull(),
+  portalGoogleEnabled: boolean('portal_google_enabled').default(true).notNull(),
+  portalGithubEnabled: boolean('portal_github_enabled').default(true).notNull(),
+  portalRequireAuth: boolean('portal_require_auth').default(false).notNull(),
 })
 
 export const member = pgTable(
@@ -276,8 +282,10 @@ export const sessionTransferToken = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    targetSubdomain: text('target_subdomain').notNull(),
+    targetDomain: text('target_domain').notNull(),
     callbackUrl: text('callback_url').notNull(),
+    /** 'team' for admin access, 'portal' for portal users (role='user') */
+    context: text('context').default('team').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

@@ -83,10 +83,11 @@ export async function proxy(request: NextRequest) {
 
   // Auth routes (login, signup, sso)
   if (tenantAuthRoutes.some((route) => pathname.startsWith(route))) {
-    // If logged in and no error, redirect to admin
+    // If logged in and no error, redirect to portal home
+    // (Portal users go to /, team members can navigate to /admin from there)
     const hasError = request.nextUrl.searchParams.has('error')
     if (sessionCookie && !hasError) {
-      return NextResponse.redirect(new URL(`${protocol}://${host}/admin`))
+      return NextResponse.redirect(new URL(`${protocol}://${host}/`))
     }
     return NextResponse.next()
   }

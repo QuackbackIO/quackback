@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
+import { getSession } from '@/lib/auth/server'
 import { getPublicBoardsWithStats, getRoadmapPosts } from '@quackback/db/queries/public'
 import { getStatusesByOrganization } from '@quackback/db'
 import { BoardCard } from '@/components/public/board-card'
@@ -26,14 +27,28 @@ export default async function RootPage() {
   }
 
   // Tenant domain - show portal home (workspace validated in proxy.ts)
-  const [org, userRole] = await Promise.all([getCurrentOrganization(), getCurrentUserRole()])
+  const [org, userRole, session] = await Promise.all([
+    getCurrentOrganization(),
+    getCurrentUserRole(),
+    getSession(),
+  ])
 
   // Org is guaranteed to exist here due to proxy validation
   if (!org) {
     throw new Error('Organization should exist - validated in proxy')
   }
 
-  return <TenantHomePage orgId={org.id} orgName={org.name} orgLogo={org.logo} userRole={userRole} />
+  return (
+    <TenantHomePage
+      orgId={org.id}
+      orgName={org.name}
+      orgLogo={org.logo}
+      userRole={userRole}
+      userName={session?.user.name}
+      userEmail={session?.user.email}
+      userImage={session?.user.image}
+    />
+  )
 }
 
 /**
@@ -91,11 +106,17 @@ async function TenantHomePage({
   orgName,
   orgLogo,
   userRole,
+  userName,
+  userEmail,
+  userImage,
 }: {
   orgId: string
   orgName: string
   orgLogo?: string | null
-  userRole: 'owner' | 'admin' | 'member' | null
+  userRole: 'owner' | 'admin' | 'member' | 'user' | null
+  userName?: string
+  userEmail?: string
+  userImage?: string | null
 }) {
   // Fetch statuses for the org
   const allStatuses = await getStatusesByOrganization(orgId)
@@ -109,7 +130,14 @@ async function TenantHomePage({
 
   return (
     <div className="min-h-screen bg-background">
-      <PortalHeader orgName={orgName} orgLogo={orgLogo} userRole={userRole} />
+      <PortalHeader
+        orgName={orgName}
+        orgLogo={orgLogo}
+        userRole={userRole}
+        userName={userName}
+        userEmail={userEmail}
+        userImage={userImage}
+      />
 
       {/* Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

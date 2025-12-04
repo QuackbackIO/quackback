@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, user, member, account, session, eq } from '@quackback/db'
+import { db, user, member, account, session, workspaceDomain, eq } from '@quackback/db'
 import { tenantSignupSchema } from '@/lib/schemas/auth'
 import bcrypt from 'bcryptjs'
 
@@ -25,11 +25,11 @@ function generateSessionToken(): string {
 /**
  * Tenant Signup API
  *
- * Creates a new user in an existing tenant (organization).
+ * Creates a new team member in an existing tenant (organization).
  * Only works if the organization has openSignupEnabled = true.
  *
  * Flow:
- * 1. Get organization from x-org-slug header
+ * 1. Get organization from host header via workspace_domain lookup
  * 2. Verify organization exists and has open signup enabled
  * 3. Check email uniqueness within the organization
  * 4. Create user with organizationId
@@ -40,11 +40,25 @@ function generateSessionToken(): string {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get organization slug from header (set by middleware)
-    const orgSlug = request.headers.get('x-org-slug')
-    if (!orgSlug) {
+    // Get organization from host header via workspace_domain lookup
+    const host = request.headers.get('host')
+    if (!host) {
       return NextResponse.json(
-        { error: 'Signup is only available on tenant subdomains' },
+        { error: 'Signup is only available on tenant domains' },
+        { status: 400 }
+      )
+    }
+
+    // Look up organization from workspace_domain table
+    const domainRecord = await db.query.workspaceDomain.findFirst({
+      where: eq(workspaceDomain.domain, host),
+      with: { organization: true },
+    })
+
+    const org = domainRecord?.organization
+    if (!org) {
+      return NextResponse.json(
+        { error: 'Signup is only available on tenant domains' },
         { status: 400 }
       )
     }
@@ -61,15 +75,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, email, password } = parsed.data
-
-    // Find the organization
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.slug, orgSlug),
-    })
-
-    if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-    }
 
     // Check if open signup is enabled
     if (!org.openSignupEnabled) {

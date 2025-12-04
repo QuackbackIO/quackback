@@ -80,25 +80,27 @@ export const getCurrentOrganization = cache(async () => {
  * Use this for public pages that want to show different UI based on role
  * (e.g., "Admin" button vs "Log in" button).
  */
-export const getCurrentUserRole = cache(async (): Promise<'owner' | 'admin' | 'member' | null> => {
-  const [session, org] = await Promise.all([getSession(), getCurrentOrganization()])
+export const getCurrentUserRole = cache(
+  async (): Promise<'owner' | 'admin' | 'member' | 'user' | null> => {
+    const [session, org] = await Promise.all([getSession(), getCurrentOrganization()])
 
-  if (!session?.user || !org) {
-    return null
+    if (!session?.user || !org) {
+      return null
+    }
+
+    // Check if user belongs to this org
+    if (session.user.organizationId !== org.id) {
+      return null
+    }
+
+    // Get member record for role
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.organizationId, org.id), eq(member.userId, session.user.id)),
+    })
+
+    return (memberRecord?.role as 'owner' | 'admin' | 'member' | 'user') ?? null
   }
-
-  // Check if user belongs to this org
-  if (session.user.organizationId !== org.id) {
-    return null
-  }
-
-  // Get member record for role
-  const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.organizationId, org.id), eq(member.userId, session.user.id)),
-  })
-
-  return (memberRecord?.role as 'owner' | 'admin' | 'member') ?? null
-})
+)
 
 // =============================================================================
 // Access Validation
@@ -185,13 +187,15 @@ export async function requireTenant() {
 }
 
 /**
- * Require specific role within the tenant
+ * Require specific role within the tenant.
+ * Redirects to portal home if user doesn't have required role.
  */
 export async function requireTenantRole(allowedRoles: string[]) {
   const result = await requireTenant()
 
   if (!allowedRoles.includes(result.member.role)) {
-    throw new Error('Forbidden: insufficient permissions')
+    // Portal users (role='user') get redirected to portal home
+    redirect('/')
   }
 
   return result

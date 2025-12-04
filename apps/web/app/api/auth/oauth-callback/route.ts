@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse the verified payload
-    const { subdomain, timestamp } = JSON.parse(payload)
+    const { subdomain, context, timestamp } = JSON.parse(payload)
 
     // Check timestamp (5 minute window to prevent replay)
     const maxAge = 5 * 60 * 1000
@@ -87,17 +87,19 @@ export async function GET(request: NextRequest) {
     const token = generateSecureToken()
     const tokenId = crypto.randomUUID()
 
+    // Build redirect URL to subdomain
+    const subdomainUrl = buildSubdomainUrl(subdomain, '/api/auth/trust-login', request)
+    const targetDomain = subdomainUrl.host // Full domain e.g. "acme.localhost:3000"
+
     await db.insert(sessionTransferToken).values({
       id: tokenId,
       token,
       userId: session.user.id,
-      targetSubdomain: subdomain,
-      callbackUrl: '/admin', // Hardcoded - trust-login ignores this value
+      targetDomain,
+      callbackUrl: context === 'portal' ? '/' : '/admin',
+      context: context || 'team',
       expiresAt: new Date(Date.now() + 30000), // 30 seconds
     })
-
-    // Build redirect URL to subdomain
-    const subdomainUrl = buildSubdomainUrl(subdomain, '/api/auth/trust-login', request)
     subdomainUrl.searchParams.set('token', token)
 
     // Create response that clears cookies and redirects
