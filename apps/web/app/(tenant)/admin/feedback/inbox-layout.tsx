@@ -23,10 +23,10 @@ export function InboxLayout({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   return (
-    <div className="flex h-[calc(100vh-65px)]">
+    <div className="flex h-[calc(100vh-69px)]">
       {/* Filters - Desktop */}
-      <aside className="hidden lg:flex w-60 xl:w-64 shrink-0 flex-col border-r bg-card">
-        <ScrollArea className="flex-1">
+      <aside className="hidden lg:flex w-60 xl:w-64 shrink-0 flex-col border-r bg-card overflow-hidden">
+        <ScrollArea className="h-full">
           <div className="p-4">{filters}</div>
         </ScrollArea>
       </aside>
@@ -55,13 +55,13 @@ export function InboxLayout({
       </div>
 
       {/* Post List - narrow column */}
-      <main className="w-[300px] lg:w-[360px] shrink-0 flex flex-col border-r">
-        <ScrollArea className="flex-1">{postList}</ScrollArea>
+      <main className="w-[300px] lg:w-[360px] shrink-0 flex flex-col border-r overflow-hidden">
+        <ScrollArea className="h-full">{postList}</ScrollArea>
       </main>
 
       {/* Post Detail - Desktop (always visible, takes remaining space) */}
-      <aside className="hidden md:flex flex-1 min-w-0 flex-col bg-card">
-        <ScrollArea className="flex-1">{postDetail}</ScrollArea>
+      <aside className="hidden md:flex flex-1 min-w-0 flex-col bg-card overflow-hidden">
+        <ScrollArea className="h-full">{postDetail}</ScrollArea>
       </aside>
 
       {/* Post Detail - Mobile Sheet (only when post selected) */}
