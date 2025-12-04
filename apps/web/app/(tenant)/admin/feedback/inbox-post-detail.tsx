@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxEmptyState } from './inbox-empty-state'
 import { CommentForm } from '@/components/public/comment-form'
+import { PostContent } from '@/components/public/post-content'
 import type { PostStatus, Tag, Board, Comment, PostStatusEntity } from '@quackback/db'
 
 const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
@@ -58,6 +59,7 @@ interface PostDetails {
   id: string
   title: string
   content: string
+  contentJson?: unknown
   status: PostStatus
   voteCount: number
   // Member-scoped identity (Hub-and-Spoke model)
@@ -436,9 +438,11 @@ export function InboxPostDetail({
         </div>
 
         {/* Content */}
-        <div className="prose prose-sm max-w-none text-foreground/90">
-          <p className="whitespace-pre-wrap leading-relaxed">{post.content}</p>
-        </div>
+        <PostContent
+          content={post.content}
+          contentJson={post.contentJson}
+          className="prose prose-sm max-w-none text-foreground/90 leading-relaxed"
+        />
 
         {/* Tags */}
         <div className="border-t border-border/30 pt-5">

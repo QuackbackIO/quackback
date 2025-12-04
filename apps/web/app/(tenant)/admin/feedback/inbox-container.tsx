@@ -34,6 +34,7 @@ interface PostDetails {
   id: string
   title: string
   content: string
+  contentJson?: unknown
   status: PostStatus
   voteCount: number
   // Member-scoped identity (Hub-and-Spoke model)
