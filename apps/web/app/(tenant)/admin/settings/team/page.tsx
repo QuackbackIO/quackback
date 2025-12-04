@@ -1,10 +1,9 @@
 import { requireTenant } from '@/lib/tenant'
 import { db, member, user, eq } from '@quackback/db'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Users, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Plus } from 'lucide-react'
 
 export default async function TeamPage() {
   const { organization } = await requireTenant()
@@ -24,12 +23,18 @@ export default async function TeamPage() {
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Team Members</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage who has access to {organization.name}
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Users className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Team Members</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage who has access to {organization.name}
+            </p>
+          </div>
         </div>
         <Button>
           <Plus className="h-4 w-4" />
@@ -37,42 +42,49 @@ export default async function TeamPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-          <CardDescription>{members.length} member{members.length !== 1 ? 's' : ''}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="divide-y divide-border">
-            {members.map((m) => {
-              const initials = m.userName
-                .split(' ')
-                .map((n) => n[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2)
+      {/* Members List */}
+      <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-border/50">
+          <p className="text-sm text-muted-foreground">
+            {members.length} member{members.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <ul className="divide-y divide-border/50">
+          {members.map((m) => {
+            const initials = m.userName
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()
+              .slice(0, 2)
 
-              return (
-                <li key={m.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarImage src={m.userImage || undefined} alt={m.userName} />
-                      <AvatarFallback>{initials}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-foreground">{m.userName}</p>
-                      <p className="text-sm text-muted-foreground">{m.userEmail}</p>
-                    </div>
+            return (
+              <li key={m.id} className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarImage src={m.userImage || undefined} alt={m.userName} />
+                    <AvatarFallback>{initials}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium text-foreground">{m.userName}</p>
+                    <p className="text-sm text-muted-foreground">{m.userEmail}</p>
                   </div>
-                  <Badge variant={m.role === 'owner' ? 'default' : 'secondary'}>
-                    {m.role}
-                  </Badge>
-                </li>
-              )
-            })}
-          </ul>
-        </CardContent>
-      </Card>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    m.role === 'owner'
+                      ? 'bg-primary/10 text-primary border-primary/30'
+                      : 'bg-muted/50'
+                  }
+                >
+                  {m.role}
+                </Badge>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     </div>
   )
 }

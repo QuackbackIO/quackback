@@ -1,5 +1,5 @@
 import { requireTenantRole } from '@/lib/tenant'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Shield } from 'lucide-react'
 import { StrictSsoToggle } from './strict-sso-toggle'
 import { SsoProviderList } from './sso-provider-list'
 import { PasswordAuthToggle } from './password-auth-toggle'
@@ -16,62 +16,62 @@ export default async function SecurityPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Authentication</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage authentication methods for {organization.name}
-        </p>
+      {/* Page Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <Shield className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Authentication</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage authentication methods for {organization.name}
+          </p>
+        </div>
       </div>
 
       {/* Password Authentication */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Password Authentication</CardTitle>
-          <CardDescription>Allow users to sign in with email and password</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PasswordAuthToggle
-            organizationId={organization.id}
-            initialValue={organization.passwordAuthEnabled}
-          />
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+        <h2 className="font-medium mb-1">Password Authentication</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Allow users to sign in with email and password
+        </p>
+        <PasswordAuthToggle
+          organizationId={organization.id}
+          initialValue={organization.passwordAuthEnabled}
+        />
+      </div>
 
       {/* Social Login */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Social Login</CardTitle>
-          <CardDescription>Allow users to sign in with external accounts</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <OAuthProviderToggles
-            organizationId={organization.id}
-            googleEnabled={organization.googleOAuthEnabled}
-            githubEnabled={organization.githubOAuthEnabled}
-            microsoftEnabled={organization.microsoftOAuthEnabled}
-            googleAvailable={googleAvailable}
-            githubAvailable={githubAvailable}
-            microsoftAvailable={microsoftAvailable}
-          />
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+        <h2 className="font-medium mb-1">Social Login</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Allow users to sign in with external accounts
+        </p>
+        <OAuthProviderToggles
+          organizationId={organization.id}
+          googleEnabled={organization.googleOAuthEnabled}
+          githubEnabled={organization.githubOAuthEnabled}
+          microsoftEnabled={organization.microsoftOAuthEnabled}
+          googleAvailable={googleAvailable}
+          githubAvailable={githubAvailable}
+          microsoftAvailable={microsoftAvailable}
+        />
+      </div>
 
       {/* Enterprise SSO */}
       <SsoProviderList organizationId={organization.id} />
 
       {/* Advanced: SSO Identity Isolation */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Advanced: SSO Identity Isolation</CardTitle>
-          <CardDescription>Control how SSO users are linked to existing accounts</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StrictSsoToggle
-            organizationId={organization.id}
-            initialValue={organization.strictSsoMode}
-          />
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+        <h2 className="font-medium mb-1">Advanced: SSO Identity Isolation</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Control how SSO users are linked to existing accounts
+        </p>
+        <StrictSsoToggle
+          organizationId={organization.id}
+          initialValue={organization.strictSsoMode}
+        />
+      </div>
     </div>
   )
 }

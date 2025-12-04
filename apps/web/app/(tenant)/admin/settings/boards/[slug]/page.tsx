@@ -29,7 +29,7 @@ export default async function BoardGeneralSettingsPage({
           <CardDescription>Update your board details</CardDescription>
         </CardHeader>
         <CardContent>
-          <BoardGeneralForm board={board} />
+          <BoardGeneralForm board={board} organizationId={organization.id} />
         </CardContent>
       </Card>
 

@@ -1,5 +1,5 @@
 import { requireTenant } from '@/lib/tenant'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -16,33 +16,35 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your personal information
-        </p>
+      {/* Page Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <User className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Profile</h1>
+          <p className="text-sm text-muted-foreground">Manage your personal information</p>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Avatar</CardTitle>
-          <CardDescription>Your profile picture</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center gap-4">
+      {/* Avatar Section */}
+      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+        <h2 className="font-medium mb-1">Avatar</h2>
+        <p className="text-sm text-muted-foreground mb-4">Your profile picture</p>
+        <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16">
             <AvatarImage src={user.image || undefined} alt={user.name} />
             <AvatarFallback className="text-lg">{initials}</AvatarFallback>
           </Avatar>
           <Button variant="outline">Change avatar</Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Personal Information</CardTitle>
-          <CardDescription>Update your personal details</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* Personal Information */}
+      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+        <h2 className="font-medium mb-1">Personal Information</h2>
+        <p className="text-sm text-muted-foreground mb-4">Update your personal details</p>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="name" className="text-sm font-medium">
@@ -60,8 +62,8 @@ export default async function ProfilePage() {
           <div className="flex justify-end">
             <Button>Save changes</Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }
