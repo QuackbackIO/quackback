@@ -22,6 +22,7 @@ import {
   and,
 } from '@quackback/db'
 import { PortalHeader } from '@/components/public/portal-header'
+import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { FeedbackContainer } from '@/app/(tenant)/(public)/feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 
@@ -125,7 +126,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   const votedPostIds = await getUserVotedPostIds(postIds, userIdentifier)
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
@@ -136,7 +137,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
         userImage={session?.user.image}
       />
 
-      <main className="mx-auto max-w-5xl py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
         <FeedbackContainer
           organizationName={org.name}
           boards={boards}
@@ -152,6 +153,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
           defaultBoardId={boards[0]?.id}
         />
       </main>
+      <PoweredByFooter />
     </div>
   )
 }
