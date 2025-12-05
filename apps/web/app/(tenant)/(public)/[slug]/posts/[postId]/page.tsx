@@ -88,7 +88,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const commentAvatarMap = await getBulkMemberAvatarData(commentMemberIds)
 
   return (
-    <div className="max-w-3xl mx-auto py-6 px-4 sm:px-6">
+    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6">
       {/* Back link */}
       <Link
         href={`/?board=${slug}`}
