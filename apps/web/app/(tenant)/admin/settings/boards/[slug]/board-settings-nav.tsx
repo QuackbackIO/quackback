@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Globe } from 'lucide-react'
+import { Settings, Globe, Upload, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface BoardSettingsNavProps {
@@ -16,6 +16,8 @@ export function BoardSettingsNav({ boardSlug }: BoardSettingsNavProps) {
   const navItems = [
     { label: 'General', href: basePath, icon: Settings },
     { label: 'Public Portal', href: `${basePath}/public`, icon: Globe },
+    { label: 'Import Data', href: `${basePath}/import`, icon: Upload },
+    { label: 'Export Data', href: `${basePath}/export`, icon: Download },
   ]
 
   return (
