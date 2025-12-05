@@ -29,7 +29,6 @@ interface OrgAuthConfig {
 }
 
 interface TenantSignupFormProps {
-  orgSlug: string
   authConfig?: OrgAuthConfig | null
 }
 
@@ -39,7 +38,7 @@ interface TenantSignupFormProps {
  * Used on tenant subdomains for users to join an existing organization.
  * Only works if the organization has openSignupEnabled = true.
  */
-export function TenantSignupForm({ orgSlug: _orgSlug, authConfig }: TenantSignupFormProps) {
+export function TenantSignupForm({ authConfig }: TenantSignupFormProps) {
   const router = useRouter()
   const [error, setError] = useState('')
 

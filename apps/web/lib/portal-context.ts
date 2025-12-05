@@ -16,7 +16,7 @@ export type AuthContext = 'team' | 'portal'
  * 2. Infer from `callbackUrl` - admin paths = team, portal paths = portal
  * 3. Default to team context
  */
-export function getAuthContext(searchParams: URLSearchParams, _pathname: string): AuthContext {
+export function getAuthContext(searchParams: URLSearchParams): AuthContext {
   // Check explicit context param first
   const explicitContext = searchParams.get('context')
   if (explicitContext === 'portal' || explicitContext === 'team') {

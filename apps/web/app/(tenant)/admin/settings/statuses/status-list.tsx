@@ -115,7 +115,7 @@ const PRESET_COLORS = [
 
 export function StatusList({ initialStatuses, organizationId }: StatusListProps) {
   const router = useRouter()
-  const [_isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   const [statuses, setStatuses] = useState(initialStatuses)
   const [savedStatuses, setSavedStatuses] = useState(initialStatuses)
   const [deleteStatus, setDeleteStatus] = useState<PostStatusEntity | null>(null)

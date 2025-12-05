@@ -69,5 +69,5 @@ async function SignupFormWithConfig({ orgSlug }: { orgSlug: string }) {
     // Silently fail - use defaults
   }
 
-  return <TenantSignupForm orgSlug={orgSlug} authConfig={authConfig} />
+  return <TenantSignupForm authConfig={authConfig} />
 }

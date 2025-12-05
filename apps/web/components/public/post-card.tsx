@@ -49,7 +49,7 @@ export function PostCard({
   createdAt,
   boardSlug,
   boardName,
-  tags: _tags,
+  tags,
   hasVoted = false,
 }: PostCardProps) {
   const currentStatus = statuses.find((s) => s.slug === status)
@@ -126,7 +126,30 @@ export function PostCard({
         <h3 className="font-semibold text-[15px] text-foreground line-clamp-1 mb-1">{title}</h3>
 
         {/* Description */}
-        <p className="text-sm text-muted-foreground/80 line-clamp-2 mb-3">{content}</p>
+        <p className="text-sm text-muted-foreground/80 line-clamp-2 mb-2">{content}</p>
+
+        {/* Tags */}
+        {tags.length > 0 && (
+          <div className="flex gap-1.5 mb-3 flex-wrap">
+            {tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag.id}
+                variant="outline"
+                className="text-[11px]"
+                style={{
+                  backgroundColor: `${tag.color}15`,
+                  color: tag.color,
+                  borderColor: `${tag.color}40`,
+                }}
+              >
+                {tag.name}
+              </Badge>
+            ))}
+            {tags.length > 3 && (
+              <span className="text-[11px] text-muted-foreground">+{tags.length - 3}</span>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center gap-2.5 text-xs text-muted-foreground">

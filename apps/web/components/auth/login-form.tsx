@@ -48,7 +48,6 @@ export function LoginForm({ orgSlug }: LoginFormProps) {
   const [ssoProvider, setSsoProvider] = useState<SsoProviderInfo | null>(null)
   const [authConfig, setAuthConfig] = useState<OrgAuthConfig | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(!!orgSlug)
-  const [_checkingSso, setCheckingSso] = useState(false)
 
   const form = useForm<LoginInput>({
     resolver: standardSchemaResolver(loginSchema),
@@ -94,7 +93,6 @@ export function LoginForm({ orgSlug }: LoginFormProps) {
       return
     }
 
-    setCheckingSso(true)
     try {
       const response = await fetch('/api/auth/sso-check', {
         method: 'POST',
@@ -118,7 +116,7 @@ export function LoginForm({ orgSlug }: LoginFormProps) {
       // Silently fail - SSO check is optional
       setSsoProvider(null)
     } finally {
-      setCheckingSso(false)
+      // SSO check complete
     }
   }, [])
 

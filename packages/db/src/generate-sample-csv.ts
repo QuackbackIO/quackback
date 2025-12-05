@@ -307,21 +307,6 @@ function weightedStatus(): string {
 }
 
 /**
- * Generate a power-law distributed value (Pareto distribution).
- * This creates the "long tail" distribution typical of social platforms:
- * - Most posts have few votes (0-10)
- * - Some posts have moderate votes (10-50)
- * - Few posts have high votes (50-200)
- * - Very few posts go viral (200-1000+)
- */
-function _powerLawVotes(min: number = 0, max: number = 1000, alpha: number = 1.5): number {
-  // Pareto distribution: P(X > x) = (x_min / x)^alpha
-  const u = Math.random()
-  const value = min / Math.pow(1 - u, 1 / alpha)
-  return Math.min(Math.floor(value), max)
-}
-
-/**
  * Generate vote count with realistic distribution.
  * Based on typical feedback platform patterns:
  * - 60% of posts: 0-5 votes (low engagement)
