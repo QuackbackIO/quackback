@@ -2,6 +2,7 @@ import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { PoweredByFooter } from '@/components/public/powered-by-footer'
+import { theme } from '@quackback/shared'
 
 // Force dynamic rendering since we read session cookies
 export const dynamic = 'force-dynamic'
@@ -22,8 +23,13 @@ export default async function PublicLayout({ children }: { children: React.React
     return null
   }
 
+  // Generate theme CSS from org config
+  const themeConfig = theme.parseThemeConfig(org.themeConfig)
+  const themeStyles = themeConfig ? theme.generateThemeCSS(themeConfig) : ''
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
         orgLogo={org.logo}

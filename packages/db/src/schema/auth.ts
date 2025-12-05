@@ -122,6 +122,8 @@ export const organization = pgTable('organization', {
   // Portal interaction settings (org-wide defaults)
   portalPublicVoting: boolean('portal_public_voting').default(true).notNull(),
   portalPublicCommenting: boolean('portal_public_commenting').default(true).notNull(),
+  // Theme customization for the public portal
+  themeConfig: text('theme_config'), // JSON: { preset?: string, primary?: string, ... }
 })
 
 export const member = pgTable(

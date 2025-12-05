@@ -6,6 +6,7 @@ import { ArrowRight, MessageSquare, BarChart3, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
+import { theme } from '@quackback/shared'
 import {
   getPublicBoardsWithStats,
   getPublicPostListAllBoards,
@@ -88,6 +89,10 @@ export default async function RootPage({ searchParams }: RootPageProps) {
     throw new Error('Organization should exist - validated in proxy')
   }
 
+  // Generate theme CSS from org config
+  const themeConfig = theme.parseThemeConfig(org.themeConfig)
+  const themeStyles = themeConfig ? theme.generateThemeCSS(themeConfig) : ''
+
   const { board, search, sort = 'top', page = '1' } = await searchParams
 
   // Get user identifier - use member ID for authenticated users, anonymous cookie for others
@@ -121,6 +126,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
         orgLogo={org.logo}

@@ -1,4 +1,8 @@
 // @quackback/shared - Shared utilities, types, and constants
-// Common types and utilities will be defined here
 
-export {}
+// Theme customization - namespace export
+export * as theme from './theme'
+
+// Theme types - direct exports for easier importing
+export type { ThemeVariables, ThemeConfig, ThemePreset, CoreThemeVariable } from './theme'
+export { CORE_THEME_VARIABLES } from './theme'
