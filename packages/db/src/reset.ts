@@ -1,51 +1,68 @@
 /**
- * Database reset script for development.
- * Recreates the Docker container with a fresh volume.
+ * Reset script for development.
+ * Recreates Docker containers with fresh volumes.
  *
  * WARNING: This will delete all data!
  *
- * Usage: bun run db:reset
+ * Usage: bun run reset
  */
 import { $ } from 'bun'
 
 async function reset() {
-  console.log('Resetting database...\n')
+  console.log('Resetting all services...\n')
   console.log('WARNING: This will delete all data!\n')
 
-  // Stop and remove the container
-  console.log('Stopping container...')
-  await $`docker compose stop postgres`.quiet()
-  await $`docker compose rm -f postgres`.quiet()
+  // Stop and remove containers
+  console.log('Stopping containers...')
+  await $`docker compose stop postgres dragonfly`.quiet()
+  await $`docker compose rm -f postgres dragonfly`.quiet()
 
-  // Remove the volume
-  console.log('Removing volume...')
+  // Remove volumes
+  console.log('Removing volumes...')
   await $`docker volume rm quackback-v2_postgres_data`.quiet().nothrow()
+  await $`docker volume rm quackback-v2_dragonfly_data`.quiet().nothrow()
 
-  // Recreate the container
-  console.log('Starting fresh container...')
-  await $`docker compose up -d postgres`
+  // Recreate containers
+  console.log('Starting fresh containers...')
+  await $`docker compose up -d postgres dragonfly`
 
-  // Wait for postgres to be ready (able to accept connections)
+  // Wait for postgres to be ready
   console.log('Waiting for PostgreSQL to be ready...')
-  let ready = false
+  let postgresReady = false
   for (let i = 0; i < 60; i++) {
-    // Actually try to connect and run a query, not just pg_isready
     const result = await $`docker compose exec postgres psql -U postgres -d quackback -c "SELECT 1"`
       .quiet()
       .nothrow()
     if (result.exitCode === 0) {
-      ready = true
+      postgresReady = true
       break
     }
     await Bun.sleep(500)
   }
 
-  if (!ready) {
+  if (!postgresReady) {
     console.error('PostgreSQL did not become ready in time')
     process.exit(1)
   }
 
-  console.log('\nDatabase reset complete!')
+  // Wait for dragonfly to be ready
+  console.log('Waiting for Dragonfly to be ready...')
+  let dragonflyReady = false
+  for (let i = 0; i < 30; i++) {
+    const result = await $`docker compose exec dragonfly redis-cli ping`.quiet().nothrow()
+    if (result.exitCode === 0) {
+      dragonflyReady = true
+      break
+    }
+    await Bun.sleep(500)
+  }
+
+  if (!dragonflyReady) {
+    console.error('Dragonfly did not become ready in time')
+    process.exit(1)
+  }
+
+  console.log('\nReset complete!')
   console.log('')
   console.log('Next steps:')
   console.log('  1. Push schema:  bun run db:push')

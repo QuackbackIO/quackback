@@ -20,7 +20,7 @@
     "db:studio": "bun run --cwd packages/db db:studio",
     "db:seed": "bun packages/db/src/seed.ts",
     "db:reset": "bun packages/db/src/reset.ts",
-    "reset": "bun packages/db/src/reset.ts && bun run db:push && bun packages/db/src/seed.ts",
+    "reset": "bun packages/db/src/reset.ts",
     "prepare": "husky"
   },
   "devDependencies": {
