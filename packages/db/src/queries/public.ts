@@ -32,6 +32,8 @@ export interface PublicPostListItem {
   status: PostStatus
   voteCount: number
   authorName: string | null
+  /** Member ID for fetching avatar data (null for anonymous posts) */
+  memberId: string | null
   createdAt: Date
   commentCount: number
   tags: { id: string; name: string; color: string }[]
@@ -85,6 +87,8 @@ export interface PublicComment {
   id: string
   content: string
   authorName: string | null
+  /** Member ID for fetching avatar data (null for anonymous comments) */
+  memberId: string | null
   createdAt: Date
   parentId: string | null
   isTeamMember: boolean
@@ -193,6 +197,7 @@ export async function getPublicPostList(
       status: posts.status,
       voteCount: posts.voteCount,
       authorName: posts.authorName,
+      memberId: posts.memberId,
       createdAt: posts.createdAt,
       commentCount: sql<number>`(
         SELECT count(*)::int FROM comments WHERE comments.post_id = ${posts.id}
@@ -293,6 +298,7 @@ export async function getPublicPostListAllBoards(
       status: posts.status,
       voteCount: posts.voteCount,
       authorName: posts.authorName,
+      memberId: posts.memberId,
       createdAt: posts.createdAt,
       commentCount: sql<number>`(
         SELECT count(*)::int FROM comments WHERE comments.post_id = ${posts.id}
@@ -339,6 +345,7 @@ export async function getPublicPostListAllBoards(
     status: post.status,
     voteCount: post.voteCount,
     authorName: post.authorName,
+    memberId: post.memberId,
     createdAt: post.createdAt,
     commentCount: post.commentCount,
     tags: tagsByPost.get(post.id) || [],
@@ -415,6 +422,7 @@ export async function getPublicPostDetail(
       id: comment.id,
       content: comment.content,
       authorName: comment.authorName,
+      memberId: comment.memberId,
       createdAt: comment.createdAt,
       parentId: comment.parentId,
       isTeamMember: comment.isTeamMember,
@@ -633,6 +641,7 @@ export async function addPublicComment(
     id: comment.id,
     content: comment.content,
     authorName: comment.authorName,
+    memberId: comment.memberId,
     createdAt: comment.createdAt,
     parentId: comment.parentId,
     isTeamMember: comment.isTeamMember,

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { ChevronUp, MessageSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PostStatus, PostStatusEntity } from '@quackback/db'
 
@@ -17,6 +17,8 @@ interface PostCardProps {
   voteCount: number
   commentCount: number
   authorName: string | null
+  /** Avatar URL for the author (base64 data URL or external URL) */
+  authorAvatarUrl?: string | null
   createdAt: Date
   boardSlug: string
   boardName?: string
@@ -43,6 +45,7 @@ export function PostCard({
   voteCount,
   commentCount,
   authorName,
+  authorAvatarUrl,
   createdAt,
   boardSlug,
   boardName,
@@ -128,6 +131,7 @@ export function PostCard({
         {/* Footer */}
         <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
           <Avatar className="h-5 w-5">
+            {authorAvatarUrl && <AvatarImage src={authorAvatarUrl} alt={authorName || 'Author'} />}
             <AvatarFallback className="text-[10px] bg-muted">
               {getInitials(authorName)}
             </AvatarFallback>

@@ -49,6 +49,8 @@ interface PostDetails {
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
   officialResponse: OfficialResponse | null
+  /** Map of memberId to avatar URL (base64 or external URL) */
+  avatarUrls?: Record<string, string | null>
 }
 
 interface CommentReaction {
@@ -391,6 +393,7 @@ export function InboxContainer({
           members={members}
           allTags={tags}
           statuses={statuses}
+          avatarUrls={selectedPost?.avatarUrls}
           onClose={() => setSelectedPostId(null)}
           onStatusChange={handleStatusChange}
           onOwnerChange={handleOwnerChange}

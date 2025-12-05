@@ -6,16 +6,34 @@ import {
   getPublicBoardBySlug,
   getPublicPostDetail,
   hasUserVotedOnPost,
+  type PublicComment,
 } from '@quackback/db/queries/public'
 import { getStatusesByOrganization, db, member, eq, and } from '@quackback/db'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
+import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { VoteButton } from '@/components/public/vote-button'
 import { CommentsSection } from '@/components/public/comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
 import { PostContent } from '@/components/public/post-content'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
+
+/**
+ * Recursively collect all member IDs from comments and their nested replies
+ */
+function collectCommentMemberIds(comments: PublicComment[]): string[] {
+  const memberIds: string[] = []
+  for (const comment of comments) {
+    if (comment.memberId) {
+      memberIds.push(comment.memberId)
+    }
+    if (comment.replies.length > 0) {
+      memberIds.push(...collectCommentMemberIds(comment.replies))
+    }
+  }
+  return memberIds
+}
 
 // Ensure page is not cached since it depends on user's cookie
 export const dynamic = 'force-dynamic'
@@ -64,6 +82,10 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
   // Check if user has voted
   const hasVoted = await hasUserVotedOnPost(postId, userIdentifier)
+
+  // Fetch avatar URLs for all comment authors
+  const commentMemberIds = collectCommentMemberIds(post.comments)
+  const commentAvatarMap = await getBulkMemberAvatarData(commentMemberIds)
 
   return (
     <div className="max-w-3xl mx-auto py-6 px-4 sm:px-6">
@@ -168,6 +190,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
             postId={post.id}
             comments={post.comments}
             allowCommenting={org.portalPublicCommenting}
+            avatarUrls={Object.fromEntries(commentAvatarMap)}
             user={
               session?.user ? { name: session.user.name, email: session.user.email } : undefined
             }

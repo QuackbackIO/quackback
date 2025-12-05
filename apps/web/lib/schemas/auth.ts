@@ -61,9 +61,17 @@ export const tenantSignupSchema = z.object({
   password: passwordSchema,
 })
 
+/**
+ * Schema for updating user profile
+ */
+export const updateProfileSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>
 export type InviteInput = z.infer<typeof inviteSchema>
 export type CreateOrgInput = z.infer<typeof createOrgSchema>
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>
 export type TenantSignupInput = z.infer<typeof tenantSignupSchema>
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>

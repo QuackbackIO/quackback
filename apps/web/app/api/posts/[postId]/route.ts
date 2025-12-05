@@ -7,8 +7,26 @@ import {
   member,
   eq,
   and,
+  type CommentWithRepliesAndReactions,
 } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { getBulkMemberAvatarData } from '@/lib/avatar'
+
+/**
+ * Recursively collect all member IDs from comments and their nested replies
+ */
+function collectCommentMemberIds(comments: CommentWithRepliesAndReactions[]): string[] {
+  const memberIds: string[] = []
+  for (const comment of comments) {
+    if (comment.memberId) {
+      memberIds.push(comment.memberId)
+    }
+    if (comment.replies.length > 0) {
+      memberIds.push(...collectCommentMemberIds(comment.replies))
+    }
+  }
+  return memberIds
+}
 
 export async function GET(
   request: NextRequest,
@@ -43,6 +61,14 @@ export async function GET(
       `member:${validation.member.id}`
     )
 
+    // Collect member IDs from post author and all comments for avatar lookup
+    const memberIds: string[] = []
+    if (post.memberId) memberIds.push(post.memberId)
+    memberIds.push(...collectCommentMemberIds(commentsWithReplies))
+
+    // Fetch avatar URLs for all members
+    const avatarMap = await getBulkMemberAvatarData(memberIds)
+
     // Transform tags from junction table format and official response
     const transformedPost = {
       ...post,
@@ -55,6 +81,8 @@ export async function GET(
             respondedAt: post.officialResponseAt,
           }
         : null,
+      // Include avatar URLs map for SSR-like rendering
+      avatarUrls: Object.fromEntries(avatarMap),
     }
 
     return NextResponse.json(transformedPost)

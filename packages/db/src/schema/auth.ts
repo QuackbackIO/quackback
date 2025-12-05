@@ -10,7 +10,34 @@
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
 import { relations } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  index,
+  uniqueIndex,
+  customType,
+} from 'drizzle-orm/pg-core'
+
+// Custom type for PostgreSQL bytea (binary data)
+const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
+  dataType() {
+    return 'bytea'
+  },
+  toDriver(value: Buffer): Buffer {
+    return value
+  },
+  fromDriver(value: unknown): Buffer {
+    if (Buffer.isBuffer(value)) {
+      return value
+    }
+    if (value instanceof Uint8Array) {
+      return Buffer.from(value)
+    }
+    throw new Error('Expected Buffer or Uint8Array from database')
+  },
+})
 
 export const user = pgTable(
   'user',
@@ -20,6 +47,9 @@ export const user = pgTable(
     email: text('email').notNull(), // Unique per organization, not globally
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
+    // Profile image stored as blob (alternative to URL in 'image' field)
+    imageBlob: bytea('image_blob'),
+    imageType: text('image_type'), // MIME type: image/jpeg, image/png, etc.
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Select,
   SelectContent,
@@ -89,6 +89,8 @@ interface InboxPostDetailProps {
   members: TeamMember[]
   allTags: Tag[]
   statuses: PostStatusEntity[]
+  /** Map of memberId to avatar URL (base64 or external URL) */
+  avatarUrls?: Record<string, string | null>
   onClose: () => void
   onStatusChange: (status: PostStatus) => Promise<void>
   onOwnerChange: (ownerId: string | null) => Promise<void>
@@ -137,11 +139,12 @@ function DetailSkeleton() {
 interface CommentItemProps {
   postId: string
   comment: CommentWithReplies
+  avatarUrls?: Record<string, string | null>
   onCommentAdded?: () => void
   depth?: number
 }
 
-function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItemProps) {
+function CommentItem({ postId, comment, avatarUrls, onCommentAdded, depth = 0 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -187,6 +190,12 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
           {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
             <Avatar className="h-8 w-8 shrink-0">
+              {comment.memberId && avatarUrls?.[comment.memberId] && (
+                <AvatarImage
+                  src={avatarUrls[comment.memberId]!}
+                  alt={comment.authorName || 'Comment author'}
+                />
+              )}
               <AvatarFallback className="text-xs bg-muted">
                 {getInitials(comment.authorName)}
               </AvatarFallback>
@@ -305,6 +314,7 @@ function CommentItem({ postId, comment, onCommentAdded, depth = 0 }: CommentItem
                 key={reply.id}
                 postId={postId}
                 comment={reply}
+                avatarUrls={avatarUrls}
                 onCommentAdded={onCommentAdded}
                 depth={depth + 1}
               />
@@ -322,6 +332,7 @@ export function InboxPostDetail({
   members,
   allTags,
   statuses,
+  avatarUrls,
   onClose,
   onStatusChange,
   onOwnerChange,
@@ -726,7 +737,12 @@ export function InboxPostDetail({
         {post.comments.length > 0 ? (
           <div className="space-y-0">
             {post.comments.map((comment) => (
-              <CommentItem key={comment.id} postId={post.id} comment={comment} />
+              <CommentItem
+                key={comment.id}
+                postId={post.id}
+                comment={comment}
+                avatarUrls={avatarUrls}
+              />
             ))}
           </div>
         ) : (

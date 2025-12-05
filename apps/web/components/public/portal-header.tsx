@@ -24,7 +24,8 @@ interface PortalHeaderProps {
   /** User info (passed from server) */
   userName?: string
   userEmail?: string
-  userImage?: string | null
+  /** Avatar URL (base64 data URL for SSR, or external URL) */
+  userAvatarUrl?: string | null
 }
 
 const navItems = [
@@ -38,7 +39,7 @@ export function PortalHeader({
   userRole,
   userName,
   userEmail,
-  userImage,
+  userAvatarUrl,
 }: PortalHeaderProps) {
   const pathname = usePathname()
 
@@ -111,7 +112,7 @@ export function PortalHeader({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={userImage || undefined} alt={userName} />
+                  <AvatarImage src={userAvatarUrl || undefined} alt={userName} />
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
               </Button>

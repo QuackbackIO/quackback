@@ -2,6 +2,7 @@ import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { PoweredByFooter } from '@/components/public/powered-by-footer'
+import { getUserAvatarData } from '@/lib/avatar'
 import { theme } from '@quackback/shared'
 
 // Force dynamic rendering since we read session cookies
@@ -23,6 +24,11 @@ export default async function PublicLayout({ children }: { children: React.React
     return null
   }
 
+  // Get avatar URL with base64 data for SSR (no flicker)
+  const avatarData = session?.user
+    ? await getUserAvatarData(session.user.id, session.user.image)
+    : null
+
   // Generate theme CSS from org config
   const themeConfig = theme.parseThemeConfig(org.themeConfig)
   const themeStyles = themeConfig ? theme.generateThemeCSS(themeConfig) : ''
@@ -36,7 +42,7 @@ export default async function PublicLayout({ children }: { children: React.React
         userRole={userRole}
         userName={session?.user.name}
         userEmail={session?.user.email}
-        userImage={session?.user.image}
+        userAvatarUrl={avatarData?.avatarUrl}
       />
       <main className="mx-auto max-w-5xl w-full flex-1">{children}</main>
       <PoweredByFooter />

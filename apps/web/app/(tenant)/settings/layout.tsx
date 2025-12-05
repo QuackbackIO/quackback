@@ -1,6 +1,7 @@
 import { requireTenant, getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { PortalHeader } from '@/components/public/portal-header'
 import { SettingsNav } from './settings-nav'
+import { getUserAvatarData } from '@/lib/avatar'
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   // Allow ALL authenticated users (including portal users with role='user')
@@ -11,6 +12,9 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     return null
   }
 
+  // Get avatar URL with base64 data for SSR (no flicker)
+  const avatarData = await getUserAvatarData(user.id, user.image)
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <PortalHeader
@@ -19,7 +23,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
         userRole={userRole}
         userName={user.name}
         userEmail={user.email}
-        userImage={user.image}
+        userAvatarUrl={avatarData.avatarUrl}
       />
       <div className="flex gap-8 px-6 py-8 max-w-5xl mx-auto w-full flex-1">
         <SettingsNav />

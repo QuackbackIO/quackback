@@ -18,7 +18,8 @@ import { signOut } from '@/lib/auth/client'
 interface AdminNavProps {
   userName: string
   userEmail: string
-  userImage?: string | null
+  /** Avatar URL (base64 data URL for SSR, or external URL) */
+  userAvatarUrl?: string | null
 }
 
 const navItems = [
@@ -39,7 +40,7 @@ const navItems = [
   },
 ]
 
-export function AdminNav({ userName, userEmail, userImage }: AdminNavProps) {
+export function AdminNav({ userName, userEmail, userAvatarUrl }: AdminNavProps) {
   const pathname = usePathname()
 
   // Get initials for avatar fallback
@@ -82,7 +83,7 @@ export function AdminNav({ userName, userEmail, userImage }: AdminNavProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-9 w-9 rounded-full">
               <Avatar className="h-9 w-9">
-                <AvatarImage src={userImage || undefined} alt={userName} />
+                <AvatarImage src={userAvatarUrl || undefined} alt={userName} />
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
             </Button>

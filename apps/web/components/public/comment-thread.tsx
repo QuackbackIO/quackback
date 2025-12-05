@@ -5,7 +5,7 @@ import { Reply, ChevronDown, ChevronRight, SmilePlus, Building2 } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CommentForm } from './comment-form'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,7 @@ interface Comment {
   id: string
   content: string
   authorName: string | null
+  memberId: string | null
   createdAt: Date
   parentId: string | null
   isTeamMember: boolean
@@ -33,6 +34,8 @@ interface CommentThreadProps {
   postId: string
   comments: Comment[]
   allowCommenting?: boolean
+  /** Map of memberId to avatar URL (base64 or external URL) */
+  avatarUrls?: Record<string, string | null>
   onCommentAdded?: () => void
   user?: { name: string | null; email: string }
 }
@@ -51,6 +54,7 @@ export function CommentThread({
   postId,
   comments,
   allowCommenting = true,
+  avatarUrls,
   onCommentAdded,
   user,
 }: CommentThreadProps) {
@@ -72,6 +76,7 @@ export function CommentThread({
               postId={postId}
               comment={comment}
               allowCommenting={allowCommenting}
+              avatarUrls={avatarUrls}
               onCommentAdded={onCommentAdded}
               user={user}
             />
@@ -86,6 +91,7 @@ interface CommentItemProps {
   postId: string
   comment: Comment
   allowCommenting: boolean
+  avatarUrls?: Record<string, string | null>
   onCommentAdded?: () => void
   depth?: number
   user?: { name: string | null; email: string }
@@ -95,6 +101,7 @@ function CommentItem({
   postId,
   comment,
   allowCommenting,
+  avatarUrls,
   onCommentAdded,
   depth = 0,
   user,
@@ -149,6 +156,12 @@ function CommentItem({
                 comment.isTeamMember && 'ring-2 ring-primary ring-offset-2'
               )}
             >
+              {comment.memberId && avatarUrls?.[comment.memberId] && (
+                <AvatarImage
+                  src={avatarUrls[comment.memberId]!}
+                  alt={comment.authorName || 'Comment author'}
+                />
+              )}
               <AvatarFallback
                 className={cn(
                   'text-xs',
@@ -284,6 +297,7 @@ function CommentItem({
                 postId={postId}
                 comment={reply}
                 allowCommenting={allowCommenting}
+                avatarUrls={avatarUrls}
                 onCommentAdded={onCommentAdded}
                 depth={depth + 1}
                 user={user}

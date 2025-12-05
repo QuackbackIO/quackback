@@ -13,6 +13,7 @@ interface Comment {
   id: string
   content: string
   authorName: string | null
+  memberId: string | null
   createdAt: Date
   parentId: string | null
   isTeamMember: boolean
@@ -24,6 +25,8 @@ interface CommentsSectionProps {
   postId: string
   comments: Comment[]
   allowCommenting?: boolean
+  /** Map of memberId to avatar URL (base64 or external URL) */
+  avatarUrls?: Record<string, string | null>
   user?: { name: string | null; email: string }
 }
 
@@ -31,6 +34,7 @@ export function CommentsSection({
   postId,
   comments,
   allowCommenting = true,
+  avatarUrls,
   user,
 }: CommentsSectionProps) {
   const router = useRouter()
@@ -45,6 +49,7 @@ export function CommentsSection({
       postId={postId}
       comments={comments}
       allowCommenting={allowCommenting}
+      avatarUrls={avatarUrls}
       onCommentAdded={handleCommentAdded}
       user={user}
     />

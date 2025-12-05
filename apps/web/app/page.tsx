@@ -6,6 +6,7 @@ import { ArrowRight, MessageSquare, BarChart3, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
+import { getUserAvatarData, getBulkMemberAvatarData } from '@/lib/avatar'
 import { theme } from '@quackback/shared'
 import {
   getPublicBoardsWithStats,
@@ -125,6 +126,15 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   const postIds = posts.map((p) => p.id)
   const votedPostIds = await getUserVotedPostIds(postIds, userIdentifier)
 
+  // Get avatar URLs for post authors (base64 for SSR, no flicker)
+  const postMemberIds = posts.map((p) => p.memberId)
+  const postAvatarMap = await getBulkMemberAvatarData(postMemberIds)
+
+  // Get avatar URL with base64 data for SSR (no flicker)
+  const avatarData = session?.user
+    ? await getUserAvatarData(session.user.id, session.user.image)
+    : null
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -134,7 +144,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
         userRole={userRole}
         userName={session?.user.name}
         userEmail={session?.user.email}
-        userImage={session?.user.image}
+        userAvatarUrl={avatarData?.avatarUrl}
       />
 
       <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
@@ -146,6 +156,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
           total={total}
           hasMore={hasMore}
           votedPostIds={Array.from(votedPostIds)}
+          postAvatarUrls={Object.fromEntries(postAvatarMap)}
           currentBoard={board}
           currentSearch={search}
           currentSort={sort}

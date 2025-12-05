@@ -18,6 +18,8 @@ interface FeedbackContainerProps {
   total: number
   hasMore: boolean
   votedPostIds: string[]
+  /** Map of memberId to avatar URL (base64 or external URL) */
+  postAvatarUrls: Record<string, string | null>
   currentBoard?: string
   currentSearch?: string
   currentSort?: 'top' | 'new' | 'trending'
@@ -33,6 +35,7 @@ export function FeedbackContainer({
   total,
   hasMore,
   votedPostIds,
+  postAvatarUrls,
   currentBoard,
   currentSearch,
   currentSort = 'top',
@@ -133,6 +136,7 @@ export function FeedbackContainer({
                     voteCount={post.voteCount}
                     commentCount={post.commentCount}
                     authorName={post.authorName}
+                    authorAvatarUrl={post.memberId ? postAvatarUrls[post.memberId] : null}
                     createdAt={post.createdAt}
                     boardSlug={post.board?.slug || ''}
                     boardName={post.board?.name}
