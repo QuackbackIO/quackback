@@ -5,13 +5,93 @@ import * as AvatarPrimitive from '@radix-ui/react-avatar'
 
 import { cn } from '@/lib/utils'
 
-function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
+/**
+ * Compute initials from a name string
+ */
+function getInitials(name: string | null | undefined): string {
+  if (!name) return '?'
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
+
+interface AvatarProps extends React.ComponentProps<typeof AvatarPrimitive.Root> {
+  /**
+   * Image URL for the avatar. Can be a regular URL or base64 data URL.
+   * When provided without children, enables the simple API.
+   */
+  src?: string | null
+  /**
+   * Name used to generate initials for the fallback.
+   * Also used as alt text for the image.
+   */
+  name?: string | null
+  /**
+   * Explicit fallback content (overrides auto-generated initials from name).
+   */
+  fallback?: React.ReactNode
+  /**
+   * Class name for the fallback element.
+   */
+  fallbackClassName?: string
+}
+
+/**
+ * Avatar component with two usage patterns:
+ *
+ * Simple API (recommended):
+ * ```tsx
+ * <Avatar src={avatarUrl} name="John Doe" />
+ * <Avatar src={avatarUrl} fallback="JD" />
+ * <Avatar name="John Doe" /> // No image, just initials
+ * ```
+ *
+ * Advanced API (for edge cases):
+ * ```tsx
+ * <Avatar>
+ *   <AvatarImage src={url} />
+ *   <AvatarFallback>JD</AvatarFallback>
+ * </Avatar>
+ * ```
+ */
+function Avatar({
+  className,
+  src,
+  name,
+  fallback,
+  fallbackClassName,
+  children,
+  ...props
+}: AvatarProps) {
+  // If children are provided, use advanced API (passthrough)
+  if (children) {
+    return (
+      <AvatarPrimitive.Root
+        data-slot="avatar"
+        className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}
+        {...props}
+      >
+        {children}
+      </AvatarPrimitive.Root>
+    )
+  }
+
+  // Simple API: auto-render image and fallback
+  const initials = fallback ?? getInitials(name)
+  const altText = name || 'Avatar'
+
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
       className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}
       {...props}
-    />
+    >
+      {src && <AvatarImage src={src} alt={altText} />}
+      <AvatarFallback className={fallbackClassName}>{initials}</AvatarFallback>
+    </AvatarPrimitive.Root>
   )
 }
 
@@ -44,7 +124,8 @@ function AvatarImage({
 
 function AvatarFallback({
   className,
-  delayMs = 600,
+  // Default to 0 for instant SSR rendering (no delay waiting for image)
+  delayMs = 0,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
   return (

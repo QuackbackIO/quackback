@@ -2,7 +2,7 @@ import { requireTenant } from '@/lib/tenant'
 import { db, member, user, eq } from '@quackback/db'
 import { Users, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { getBulkUserAvatarData } from '@/lib/avatar'
 
@@ -55,21 +55,12 @@ export default async function TeamPage() {
         </div>
         <ul className="divide-y divide-border/50">
           {members.map((m) => {
-            const initials = m.userName
-              .split(' ')
-              .map((n) => n[0])
-              .join('')
-              .toUpperCase()
-              .slice(0, 2)
             const avatarUrl = avatarMap.get(m.userId)
 
             return (
               <li key={m.id} className="flex items-center justify-between px-6 py-4">
                 <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarImage src={avatarUrl || undefined} alt={m.userName} />
-                    <AvatarFallback>{initials}</AvatarFallback>
-                  </Avatar>
+                  <Avatar src={avatarUrl} name={m.userName} />
                   <div>
                     <p className="font-medium text-foreground">{m.userName}</p>
                     <p className="text-sm text-muted-foreground">{m.userEmail}</p>

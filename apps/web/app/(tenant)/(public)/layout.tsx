@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { getUserAvatarData } from '@/lib/avatar'
+import { UserProfileProvider } from '@/components/providers/user-profile-provider'
 import { theme } from '@quackback/shared'
 
 // Force dynamic rendering since we read session cookies
@@ -33,19 +34,42 @@ export default async function PublicLayout({ children }: { children: React.React
   const themeConfig = theme.parseThemeConfig(org.themeConfig)
   const themeStyles = themeConfig ? theme.generateThemeCSS(themeConfig) : ''
 
-  return (
+  // Build initial user data for SSR (used by both header props and provider)
+  const initialUserData = session?.user
+    ? {
+        name: session.user.name,
+        email: session.user.email,
+        avatarUrl: avatarData?.avatarUrl ?? null,
+      }
+    : undefined
+
+  const content = (
     <div className="min-h-screen bg-background flex flex-col">
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
         orgLogo={org.logo}
         userRole={userRole}
-        userName={session?.user.name}
-        userEmail={session?.user.email}
-        userAvatarUrl={avatarData?.avatarUrl}
+        initialUserData={initialUserData}
       />
       <main className="mx-auto max-w-5xl w-full flex-1">{children}</main>
       <PoweredByFooter />
     </div>
   )
+
+  // Only wrap with provider if user is logged in
+  if (session?.user && initialUserData) {
+    return (
+      <UserProfileProvider
+        initialData={{
+          ...initialUserData,
+          hasCustomAvatar: avatarData?.hasCustomAvatar ?? false,
+        }}
+      >
+        {content}
+      </UserProfileProvider>
+    )
+  }
+
+  return content
 }

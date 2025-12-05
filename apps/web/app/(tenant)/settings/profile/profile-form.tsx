@@ -6,6 +6,8 @@ import { Camera, Loader2, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ImageCropper } from '@/components/ui/image-cropper'
+import { useUserProfileStore } from '@/lib/stores/user-profile'
 
 interface ProfileFormProps {
   user: {
@@ -30,6 +32,16 @@ export function ProfileForm({
   // Store the current avatar URL - starts with SSR value, updated after uploads
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Cropper state
+  const [showCropper, setShowCropper] = useState(false)
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+
+  // Zustand store for syncing avatar across the app
+  const {
+    setAvatarUrl: setGlobalAvatarUrl,
+    setName: setGlobalName,
+    clearAvatar: clearGlobalAvatar,
+  } = useUserProfileStore()
 
   const initials = name
     .split(' ')
@@ -45,7 +57,7 @@ export function ProfileForm({
     fileInputRef.current?.click()
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -56,20 +68,38 @@ export function ProfileForm({
       return
     }
 
-    // Validate file size (5MB)
+    // Validate file size (5MB) - basic check before cropping
     if (file.size > 5 * 1024 * 1024) {
       toast.error('File too large. Maximum size is 5MB')
       return
     }
 
-    // Create local preview immediately (no flicker)
-    const localPreviewUrl = URL.createObjectURL(file)
+    // Create URL for cropper and show modal
+    const imageUrl = URL.createObjectURL(file)
+    setCropImageSrc(imageUrl)
+    setShowCropper(true)
+
+    // Reset file input for re-selection
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    // Clean up the original image URL
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+      setCropImageSrc(null)
+    }
+
+    // Create local preview from cropped blob
+    const localPreviewUrl = URL.createObjectURL(croppedBlob)
 
     setIsUploadingAvatar(true)
 
     try {
       const formData = new FormData()
-      formData.append('avatar', file)
+      formData.append('avatar', croppedBlob, 'avatar.jpg')
 
       const response = await fetch('/api/user/profile', {
         method: 'PATCH',
@@ -84,6 +114,8 @@ export function ProfileForm({
       // Update to local preview URL (already loaded, no flicker)
       setAvatarUrl(localPreviewUrl)
       setHasCustomAvatar(true)
+      // Sync with global store so header updates instantly
+      setGlobalAvatarUrl(localPreviewUrl, true)
       toast.success('Avatar updated')
     } catch (error) {
       // Revoke the object URL on error
@@ -91,11 +123,15 @@ export function ProfileForm({
       toast.error(error instanceof Error ? error.message : 'Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
     }
+  }
+
+  const handleCropperClose = (open: boolean) => {
+    if (!open && cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+      setCropImageSrc(null)
+    }
+    setShowCropper(open)
   }
 
   const handleDeleteAvatar = async () => {
@@ -113,6 +149,8 @@ export function ProfileForm({
 
       setHasCustomAvatar(false)
       setAvatarUrl(null) // Clear avatar, will show fallback initials
+      // Sync with global store so header updates instantly
+      clearGlobalAvatar()
       toast.success('Avatar removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')
@@ -150,6 +188,8 @@ export function ProfileForm({
         throw new Error(data.error || 'Failed to update profile')
       }
 
+      // Sync with global store so header updates instantly
+      setGlobalName(name.trim())
       toast.success('Profile updated')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update profile')
@@ -261,6 +301,16 @@ export function ProfileForm({
           </div>
         </div>
       </form>
+
+      {/* Image Cropper Modal */}
+      {cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          open={showCropper}
+          onOpenChange={handleCropperClose}
+          onCropComplete={handleCropComplete}
+        />
+      )}
     </div>
   )
 }
