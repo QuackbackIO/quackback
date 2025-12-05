@@ -8,15 +8,7 @@ export const authClient = createAuthClient({
   plugins: [organizationClient(), ssoClient()],
 })
 
-export const { signIn, signUp, useSession } = authClient
-
-/**
- * Sign out using a simple relative fetch (works on any subdomain)
- */
-export async function signOut() {
-  await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' })
-  window.location.href = '/'
-}
+export const { signIn, signUp, signOut, useSession } = authClient
 
 export const {
   create: createOrganization,

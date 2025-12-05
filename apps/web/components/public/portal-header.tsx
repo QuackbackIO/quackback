@@ -13,19 +13,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { LogOut, Settings, Shield } from 'lucide-react'
+import { useUserProfileStore } from '@/lib/stores/user-profile'
 
 interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
   /** User's role in the organization (passed from server) */
   userRole?: 'owner' | 'admin' | 'member' | 'user' | null
-  /** User info (passed from server) */
-  userName?: string
-  userEmail?: string
-  /** Avatar URL (base64 data URL for SSR, or external URL) */
-  userAvatarUrl?: string | null
+  /** Initial user data for SSR (store values override these after hydration) */
+  initialUserData?: {
+    name: string | null
+    email: string | null
+    avatarUrl: string | null
+  }
 }
 
 const navItems = [
@@ -33,34 +35,30 @@ const navItems = [
   { href: '/roadmap', label: 'Roadmap' },
 ]
 
-export function PortalHeader({
-  orgName,
-  orgLogo,
-  userRole,
-  userName,
-  userEmail,
-  userAvatarUrl,
-}: PortalHeaderProps) {
+export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {
   const pathname = usePathname()
+  const storeData = useUserProfileStore()
 
-  const isLoggedIn = !!userName
+  // Use store values if hydrated, fall back to initial props for SSR
+  const name = storeData.name ?? initialUserData?.name ?? null
+  const email = storeData.email ?? initialUserData?.email ?? null
+  const avatarUrl = storeData.avatarUrl ?? initialUserData?.avatarUrl ?? null
+
+  // Use userRole from server as source of truth for auth state (prevents flicker)
+  // userRole is null for anonymous users, set for logged-in users
+  const isLoggedIn = userRole !== null && userRole !== undefined
   // Team members (owner, admin, member) can access admin dashboard
   const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(userRole || '')
 
-  const handleSignOut = async () => {
-    await signOut()
-    window.location.href = '/'
+  const handleSignOut = () => {
+    signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          window.location.href = '/'
+        },
+      },
+    })
   }
-
-  // Get initials for avatar fallback (same logic as AdminNav)
-  const initials = userName
-    ? userName
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2)
-    : '?'
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -111,17 +109,14 @@ export function PortalHeader({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={userAvatarUrl || undefined} alt={userName} />
-                  <AvatarFallback>{initials}</AvatarFallback>
-                </Avatar>
+                <Avatar className="h-9 w-9" src={avatarUrl} name={name} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{userName}</p>
-                  <p className="text-xs text-muted-foreground">{userEmail}</p>
+                  <p className="text-sm font-medium">{name}</p>
+                  <p className="text-xs text-muted-foreground">{email}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
