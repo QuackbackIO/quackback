@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 export function PoweredByFooter() {
   return (
-    <footer className="border-t border-border/30 py-4 mt-auto">
+    <footer className="py-4 mt-auto">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70">
           <span>Powered by</span>
