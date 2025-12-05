@@ -10,7 +10,6 @@ config({ path: '../../.env', quiet: true })
 import { faker } from '@faker-js/faker'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { eq } from 'drizzle-orm'
 import { scrypt } from '@noble/hashes/scrypt.js'
 import { user, organization, member, account, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
@@ -37,9 +36,8 @@ const CONFIG = {
   users: 15,
   orgsPerUser: 1, // Demo user owns 1 org, others are members
   boardsPerOrg: 3,
-  postsPerBoard: { min: 8, max: 15 },
-  commentsPerPost: { min: 0, max: 5 },
-  votesPerPost: { min: 0, max: 50 },
+  totalPosts: 500, // Total posts to generate (distributed across boards)
+  batchSize: 100, // Insert in batches for performance
 }
 
 // Fixed demo credentials
@@ -415,6 +413,40 @@ function weightedStatus(): PostStatus {
   return 'open'
 }
 
+/**
+ * Generate vote count with realistic power-law distribution.
+ * - 60% of posts: 0-5 votes (low engagement)
+ * - 25% of posts: 5-25 votes (moderate)
+ * - 10% of posts: 25-100 votes (popular)
+ * - 4% of posts: 100-500 votes (very popular)
+ * - 1% of posts: 500+ votes (viral)
+ */
+function generateVoteCount(): number {
+  const roll = Math.random()
+  if (roll < 0.6) return Math.floor(Math.random() * 6)
+  if (roll < 0.85) return 5 + Math.floor(Math.random() * 21)
+  if (roll < 0.95) return 25 + Math.floor(Math.random() * 76)
+  if (roll < 0.99) return 100 + Math.floor(Math.random() * 401)
+  return 500 + Math.floor(Math.random() * 1001)
+}
+
+/**
+ * Generate comment count with realistic power-law distribution.
+ * - 50% of posts: 0-2 comments (minimal engagement)
+ * - 25% of posts: 3-10 comments (some discussion)
+ * - 15% of posts: 10-30 comments (active thread)
+ * - 7% of posts: 30-80 comments (popular)
+ * - 3% of posts: 80-150 comments (viral)
+ */
+function generateCommentCount(): number {
+  const roll = Math.random()
+  if (roll < 0.5) return Math.floor(Math.random() * 3)
+  if (roll < 0.75) return 3 + Math.floor(Math.random() * 8)
+  if (roll < 0.9) return 10 + Math.floor(Math.random() * 21)
+  if (roll < 0.97) return 30 + Math.floor(Math.random() * 51)
+  return 80 + Math.floor(Math.random() * 71)
+}
+
 async function seed() {
   console.log('🌱 Seeding database with faker data...\n')
 
@@ -678,108 +710,161 @@ async function seed() {
   console.log(`   Created ${roadmapRecords.size} roadmaps`)
 
   // =========================================================================
-  // Create Posts
+  // Create Posts (batch insert with power-law distributions)
   // =========================================================================
   console.log('📝 Creating posts...')
 
-  let totalPosts = 0
-  const postRecords: Array<{ id: string; boardId: string; orgId: string }> = []
+  // Build flat list of all boards with their org context
+  const allBoards: Array<{
+    boardId: string
+    orgId: string
+    orgTags: Array<{ id: string; name: string; color: string }>
+    orgMembers: Array<{ id: string; name: string; email: string; orgId: string }>
+    roadmapId?: string
+  }> = []
 
   for (const org of orgRecords) {
     const orgBoards = boardRecords.get(org.id) || []
     const orgTags = tagRecords.get(org.id) || []
-    // Filter users who belong to this org (tenant isolation)
     const orgMembers = userRecords.filter((u) => u.orgId === org.id)
 
     for (const board of orgBoards) {
-      const postCount = randomInt(CONFIG.postsPerBoard.min, CONFIG.postsPerBoard.max)
+      const roadmap = roadmapRecords.get(board.id)
+      allBoards.push({
+        boardId: board.id,
+        orgId: org.id,
+        orgTags,
+        orgMembers,
+        roadmapId: roadmap?.id,
+      })
+    }
+  }
 
-      for (let i = 0; i < postCount; i++) {
-        const postId = uuid()
-        const author = pick(orgMembers)
-        const isAnonymous = faker.datatype.boolean({ probability: 0.15 })
-        const status = weightedStatus()
-        const createdAt = randomDate(120)
+  let totalPosts = 0
+  const postRecords: Array<{
+    id: string
+    boardId: string
+    orgId: string
+    voteCount: number
+    commentCount: number
+  }> = []
 
-        // Add official response to posts that aren't "open" (70% chance)
-        const hasOfficialResponse =
-          status !== 'open' && faker.datatype.boolean({ probability: 0.7 })
-        const responder = hasOfficialResponse ? pick(orgMembers) : null
+  // Generate posts in batches
+  const totalBatches = Math.ceil(CONFIG.totalPosts / CONFIG.batchSize)
 
-        // voteCount will be updated after votes are created
-        await db.insert(posts).values({
-          id: postId,
-          boardId: board.id,
-          title: pick(feedbackTitles),
-          content: pick(feedbackContent),
-          authorId: isAnonymous ? null : author.id,
-          authorName: isAnonymous ? 'Anonymous' : author.name,
-          authorEmail: isAnonymous ? null : author.email,
-          status,
-          voteCount: 0,
-          ownerId: faker.datatype.boolean({ probability: 0.4 }) ? pick(orgMembers).id : null,
-          estimated: faker.datatype.boolean({ probability: 0.3 })
-            ? pick(['small', 'medium', 'large'])
-            : null,
-          officialResponse: hasOfficialResponse ? pick(officialResponses) : null,
-          officialResponseAuthorId: responder?.id ?? null,
-          officialResponseAuthorName: responder?.name ?? null,
-          officialResponseAt: hasOfficialResponse ? randomDate(30) : null,
-          createdAt,
-          updatedAt: new Date(),
-        })
+  for (let batch = 0; batch < totalBatches; batch++) {
+    const batchStart = batch * CONFIG.batchSize
+    const batchEnd = Math.min(batchStart + CONFIG.batchSize, CONFIG.totalPosts)
+    const batchSize = batchEnd - batchStart
 
-        postRecords.push({ id: postId, boardId: board.id, orgId: org.id })
-        totalPosts++
+    process.stdout.write(`   Batch ${batch + 1}/${totalBatches} (${batchSize} posts)...`)
 
-        // Add tags to post (0-3 tags)
-        const postTagCount = randomInt(0, 3)
-        if (postTagCount > 0 && orgTags.length > 0) {
-          const selectedTags = pickMultiple(orgTags, Math.min(postTagCount, orgTags.length))
-          for (const tag of selectedTags) {
-            await db.insert(postTags).values({
-              postId,
-              tagId: tag.id,
-            })
-          }
-        }
+    const postInserts: (typeof posts.$inferInsert)[] = []
+    const postTagInserts: (typeof postTags.$inferInsert)[] = []
+    const postRoadmapInserts: (typeof postRoadmaps.$inferInsert)[] = []
 
-        // Add to roadmap if status is planned/in_progress/complete
-        const roadmap = roadmapRecords.get(board.id)
-        if (roadmap && ['planned', 'in_progress', 'complete'].includes(status)) {
-          if (faker.datatype.boolean({ probability: 0.7 })) {
-            await db.insert(postRoadmaps).values({
-              postId,
-              roadmapId: roadmap.id,
-            })
-          }
+    for (let i = 0; i < batchSize; i++) {
+      const postId = uuid()
+      // Distribute posts across boards (weighted toward demo org)
+      const boardCtx = faker.datatype.boolean({ probability: 0.7 })
+        ? allBoards.find((b) => b.orgId === orgRecords[0].id) || pick(allBoards)
+        : pick(allBoards)
+
+      const author = pick(boardCtx.orgMembers)
+      const isAnonymous = faker.datatype.boolean({ probability: 0.15 })
+      const status = weightedStatus()
+      const createdAt = randomDate(365)
+      const voteCount = generateVoteCount()
+      const commentCount = generateCommentCount()
+
+      const hasOfficialResponse = status !== 'open' && faker.datatype.boolean({ probability: 0.7 })
+      const responder = hasOfficialResponse ? pick(boardCtx.orgMembers) : null
+
+      postInserts.push({
+        id: postId,
+        boardId: boardCtx.boardId,
+        title: pick(feedbackTitles),
+        content: pick(feedbackContent),
+        authorId: isAnonymous ? null : author.id,
+        authorName: isAnonymous ? 'Anonymous' : author.name,
+        authorEmail: isAnonymous ? null : author.email,
+        status,
+        voteCount,
+        ownerId: faker.datatype.boolean({ probability: 0.3 }) ? pick(boardCtx.orgMembers).id : null,
+        estimated: faker.datatype.boolean({ probability: 0.2 })
+          ? pick(['small', 'medium', 'large'])
+          : null,
+        officialResponse: hasOfficialResponse ? pick(officialResponses) : null,
+        officialResponseAuthorId: responder?.id ?? null,
+        officialResponseAuthorName: responder?.name ?? null,
+        officialResponseAt: hasOfficialResponse ? randomDate(30) : null,
+        createdAt,
+        updatedAt: new Date(),
+      })
+
+      postRecords.push({
+        id: postId,
+        boardId: boardCtx.boardId,
+        orgId: boardCtx.orgId,
+        voteCount,
+        commentCount,
+      })
+
+      // Add tags (0-3 per post)
+      const postTagCount = randomInt(0, 3)
+      if (postTagCount > 0 && boardCtx.orgTags.length > 0) {
+        const selectedTags = pickMultiple(
+          boardCtx.orgTags,
+          Math.min(postTagCount, boardCtx.orgTags.length)
+        )
+        for (const tag of selectedTags) {
+          postTagInserts.push({ postId, tagId: tag.id })
         }
       }
+
+      // Add to roadmap if applicable
+      if (
+        boardCtx.roadmapId &&
+        ['planned', 'in_progress', 'complete'].includes(status) &&
+        faker.datatype.boolean({ probability: 0.7 })
+      ) {
+        postRoadmapInserts.push({ postId, roadmapId: boardCtx.roadmapId })
+      }
+
+      totalPosts++
     }
+
+    // Batch insert
+    await db.insert(posts).values(postInserts)
+    if (postTagInserts.length > 0) {
+      await db.insert(postTags).values(postTagInserts)
+    }
+    if (postRoadmapInserts.length > 0) {
+      await db.insert(postRoadmaps).values(postRoadmapInserts)
+    }
+
+    console.log(' ✓')
   }
 
   console.log(`   Created ${totalPosts} posts`)
 
   // =========================================================================
-  // Create Comments
+  // Create Comments (batch insert)
   // =========================================================================
   console.log('💬 Creating comments...')
 
   let totalComments = 0
   let teamComments = 0
+  let commentBatch = 0
+  const commentInserts: (typeof comments.$inferInsert)[] = []
 
   for (const post of postRecords) {
-    const commentCount = randomInt(CONFIG.commentsPerPost.min, CONFIG.commentsPerPost.max)
-    const relevantUsers = userRecords.filter(() => faker.datatype.boolean({ probability: 0.5 }))
-
-    for (let i = 0; i < commentCount; i++) {
-      const author = pick(relevantUsers.length > 0 ? relevantUsers : userRecords)
+    for (let i = 0; i < post.commentCount; i++) {
+      const author = pick(userRecords)
       const isAnonymous = faker.datatype.boolean({ probability: 0.2 })
-
-      // 15% chance of being a team member comment
       const isTeamMember = faker.datatype.boolean({ probability: 0.15 })
 
-      await db.insert(comments).values({
+      commentInserts.push({
         id: uuid(),
         postId: post.id,
         authorId: isAnonymous ? null : author.id,
@@ -793,47 +878,76 @@ async function seed() {
       totalComments++
       if (isTeamMember) teamComments++
     }
+
+    // Insert in batches of 1000
+    if (commentInserts.length >= 1000) {
+      commentBatch++
+      process.stdout.write(`   Comment batch ${commentBatch}...`)
+      await db.insert(comments).values(commentInserts)
+      console.log(` ✓ (${totalComments} total)`)
+      commentInserts.length = 0
+    }
+  }
+
+  // Insert remaining comments
+  if (commentInserts.length > 0) {
+    commentBatch++
+    process.stdout.write(`   Comment batch ${commentBatch}...`)
+    await db.insert(comments).values(commentInserts)
+    console.log(' ✓')
   }
 
   console.log(`   Created ${totalComments} comments (${teamComments} from team members)`)
 
   // =========================================================================
-  // Create Votes
+  // Create Votes (batch insert)
   // =========================================================================
   console.log('👍 Creating votes...')
 
   let totalVotes = 0
-  const postVoteCounts: Map<string, number> = new Map()
+  let voteBatch = 0
+  const voteInserts: (typeof votes.$inferInsert)[] = []
 
   for (const post of postRecords) {
-    // Variable number of voters per post (0-30 with weighted distribution)
-    const voterCount = randomInt(CONFIG.votesPerPost.min, CONFIG.votesPerPost.max)
-    const voters = pickMultiple(userRecords, Math.min(voterCount, userRecords.length))
-    let postVotes = 0
+    // Use sequential numbered identifiers per post to guarantee uniqueness
+    const shuffledUsers = [...userRecords].sort(() => Math.random() - 0.5)
 
-    for (const voter of voters) {
-      // Use either the user ID or an anonymous identifier
-      const userIdentifier = faker.datatype.boolean({ probability: 0.7 })
-        ? voter.id
-        : `anon_${faker.string.alphanumeric(16)}`
+    for (let v = 0; v < post.voteCount; v++) {
+      let userIdentifier: string
 
-      await db.insert(votes).values({
+      // Use real user IDs for first N votes (up to user count), rest are anonymous
+      if (v < shuffledUsers.length && faker.datatype.boolean({ probability: 0.7 })) {
+        userIdentifier = shuffledUsers[v].id
+      } else {
+        userIdentifier = `anon_${post.id.slice(0, 8)}_${v}`
+      }
+
+      voteInserts.push({
         id: uuid(),
         postId: post.id,
         userIdentifier,
         createdAt: randomDate(90),
       })
 
-      postVotes++
       totalVotes++
     }
 
-    postVoteCounts.set(post.id, postVotes)
+    // Insert in batches of 2000
+    if (voteInserts.length >= 2000) {
+      voteBatch++
+      process.stdout.write(`   Vote batch ${voteBatch}...`)
+      await db.insert(votes).values(voteInserts)
+      console.log(` ✓ (${totalVotes} total)`)
+      voteInserts.length = 0
+    }
   }
 
-  // Update vote counts on posts to match actual votes
-  for (const [postId, voteCount] of postVoteCounts) {
-    await db.update(posts).set({ voteCount }).where(eq(posts.id, postId))
+  // Insert remaining votes
+  if (voteInserts.length > 0) {
+    voteBatch++
+    process.stdout.write(`   Vote batch ${voteBatch}...`)
+    await db.insert(votes).values(voteInserts)
+    console.log(' ✓')
   }
 
   console.log(`   Created ${totalVotes} votes`)
