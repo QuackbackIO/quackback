@@ -52,12 +52,17 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   const headersList = await headers()
   const host = headersList.get('host')
 
-  // Main domain - check for single workspace or show landing page
+  // Main domain - check workspace count to determine what to show
   if (host === APP_DOMAIN) {
-    // Query all organizations (limit 2 to check if there's exactly 1)
+    // Query organizations (limit 2 to distinguish between 0, 1, or 2+)
     const orgs = await db.select().from(organization).limit(2)
 
-    // If exactly one workspace exists, redirect to its login page
+    // No workspaces exist - show setup page for new installation
+    if (orgs.length === 0) {
+      return <SetupPage />
+    }
+
+    // Exactly one workspace exists - redirect to it
     if (orgs.length === 1) {
       const singleOrg = orgs[0]
 
@@ -69,13 +74,12 @@ export default async function RootPage({ searchParams }: RootPageProps) {
 
       if (domain) {
         const protocol = headersList.get('x-forwarded-proto') || 'http'
-        const loginUrl = `${protocol}://${domain.domain}/admin/login`
-        redirect(loginUrl)
+        redirect(`${protocol}://${domain.domain}`)
       }
     }
 
-    // No workspaces exist - show setup page for new installation
-    return <SetupPage />
+    // Multiple workspaces exist - show marketing landing page
+    return <MarketingPage />
   }
 
   // Tenant domain - show feedback portal (workspace validated in proxy.ts)
@@ -262,6 +266,68 @@ function SetupPage() {
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Button>
             </Link>
+          </div>
+
+          {/* Footer badges */}
+          <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+            <span>Open-source</span>
+            <span className="text-border">•</span>
+            <span>Self-hostable</span>
+            <span className="text-border">•</span>
+            <span>Privacy-focused</span>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+/**
+ * Marketing page for multi-workspace installations
+ *
+ * Shown when multiple workspaces exist - directs users to quackback.io
+ * for creating their own feedback portal.
+ */
+function MarketingPage() {
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Subtle gradient overlay */}
+      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+
+      <main className="relative flex flex-1 flex-col items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md space-y-8">
+          {/* Logo/Brand */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <div className="absolute -inset-4 bg-primary/10 rounded-full blur-2xl" />
+              <Image src="/logo.png" alt="Quackback" width={80} height={80} className="relative" />
+            </div>
+            <div className="text-center space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight">Quackback</h1>
+              <p className="text-muted-foreground">Open-source customer feedback platform</p>
+            </div>
+          </div>
+
+          {/* CTA Card */}
+          <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm space-y-6">
+            <div className="space-y-2 text-center">
+              <h2 className="text-xl font-semibold">Want to collect customer feedback?</h2>
+              <p className="text-sm text-muted-foreground">
+                Create your own feedback portal with public boards, roadmaps, and changelogs.
+              </p>
+            </div>
+
+            <a
+              href="https://quackback.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <Button size="lg" className="w-full group">
+                Get started at quackback.io
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </a>
           </div>
 
           {/* Footer badges */}
