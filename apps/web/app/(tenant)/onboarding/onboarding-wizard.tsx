@@ -32,10 +32,8 @@ export function OnboardingWizard({
 }: OnboardingWizardProps) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('welcome')
-  const [boardName, setBoardName] = useState('Feature Requests')
-  const [boardDescription, setBoardDescription] = useState(
-    'Share your ideas and vote on features you want to see'
-  )
+  const [boardName, setBoardName] = useState('')
+  const [boardDescription, setBoardDescription] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 

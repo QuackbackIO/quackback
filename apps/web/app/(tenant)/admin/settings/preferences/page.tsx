@@ -1,5 +1,6 @@
 import { requireTenant } from '@/lib/tenant'
 import { Settings } from 'lucide-react'
+import { ThemeSwitcher } from '@/components/theme-switcher'
 
 export default async function PreferencesPage() {
   await requireTenant()
@@ -21,8 +22,9 @@ export default async function PreferencesPage() {
       <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
         <h2 className="font-medium mb-1">Appearance</h2>
         <p className="text-sm text-muted-foreground mb-4">Customize how the app looks</p>
-        <div className="rounded-lg bg-muted/30 p-4">
-          <p className="text-sm text-muted-foreground">Theme and appearance settings coming soon</p>
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Theme</p>
+          <ThemeSwitcher />
         </div>
       </div>
 
