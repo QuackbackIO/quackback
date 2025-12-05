@@ -113,7 +113,7 @@ Visit [http://acme.localhost:3000](http://acme.localhost:3000) and log in with `
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details.
 
-- [GitHub Discussions](https://github.com/your-org/quackback/discussions) — Questions & ideas
+- [GitHub Discussions](https://github.com/QuackbackIO/quackback/discussions) — Questions & ideas
 - [Discord](https://discord.gg/quackback) — Chat with the community
 
 ## License
