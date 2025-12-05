@@ -41,7 +41,7 @@ const presetList = theme.presetNames.map((id) => ({
 
 export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCustomizerProps) {
   // Preset selection
-  const [selectedPreset, setSelectedPreset] = useState(initialThemeConfig.preset || 'indigo')
+  const [selectedPreset, setSelectedPreset] = useState(initialThemeConfig.preset || 'default')
 
   // Advanced mode toggle
   const [showAdvanced, setShowAdvanced] = useState(
@@ -61,7 +61,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   // Get current preset data
-  const currentPreset = theme.themePresets[selectedPreset] || theme.themePresets.indigo
+  const currentPreset = theme.themePresets[selectedPreset] || theme.themePresets.default
 
   // Compute effective colors for preview (preset + overrides)
   const effectiveLight = useMemo(() => {
@@ -177,7 +177,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
           Choose a color scheme for your public portal
         </p>
 
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+        <div className="flex flex-wrap gap-3">
           {presetList.map((preset) => {
             const isSelected = selectedPreset === preset.id
             return (
