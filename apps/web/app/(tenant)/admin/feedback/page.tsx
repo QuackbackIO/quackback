@@ -17,7 +17,7 @@ export default async function FeedbackInboxPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const { organization } = await requireTenant()
+  const { organization, user: currentUser } = await requireTenant()
   const params = await searchParams
 
   // Check if org has boards - if not, redirect to onboarding
@@ -96,6 +96,7 @@ export default async function FeedbackInboxPage({
       tags={orgTags}
       statuses={orgStatuses}
       members={teamMembers}
+      currentUser={{ name: currentUser.name, email: currentUser.email }}
     />
   )
 }

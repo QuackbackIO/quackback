@@ -10,7 +10,7 @@ config({ path: '../../.env', quiet: true })
 import { faker } from '@faker-js/faker'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { scrypt } from '@noble/hashes/scrypt.js'
+import bcrypt from 'bcryptjs'
 import { user, organization, member, account, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, comments, votes } from './schema/posts'
@@ -19,16 +19,9 @@ const connectionString = process.env.DATABASE_URL!
 const client = postgres(connectionString)
 const db = drizzle(client)
 
-// Hash password using better-auth's scrypt format
+// Hash password using bcrypt (matches Better-Auth config)
 function hashPassword(password: string): string {
-  const salt = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('hex')
-  const key = scrypt(password.normalize('NFKC'), salt, {
-    N: 16384,
-    r: 16,
-    p: 1,
-    dkLen: 64,
-  })
-  return `${salt}:${Buffer.from(key).toString('hex')}`
+  return bcrypt.hashSync(password, 10)
 }
 
 // Configuration

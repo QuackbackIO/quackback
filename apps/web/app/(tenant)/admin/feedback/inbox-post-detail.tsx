@@ -83,6 +83,11 @@ interface CommentWithReplies extends Comment {
   reactions: CommentReaction[]
 }
 
+interface CurrentUser {
+  name: string
+  email: string
+}
+
 interface InboxPostDetailProps {
   post: PostDetails | null
   isLoading: boolean
@@ -91,11 +96,13 @@ interface InboxPostDetailProps {
   statuses: PostStatusEntity[]
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
+  currentUser: CurrentUser
   onClose: () => void
   onStatusChange: (status: PostStatus) => Promise<void>
   onOwnerChange: (ownerId: string | null) => Promise<void>
   onTagsChange: (tagIds: string[]) => Promise<void>
   onOfficialResponseChange: (response: string | null) => Promise<void>
+  onCommentAdded?: () => void
 }
 
 function formatDate(date: Date): string {
@@ -140,11 +147,19 @@ interface CommentItemProps {
   postId: string
   comment: CommentWithReplies
   avatarUrls?: Record<string, string | null>
+  currentUser: CurrentUser
   onCommentAdded?: () => void
   depth?: number
 }
 
-function CommentItem({ postId, comment, avatarUrls, onCommentAdded, depth = 0 }: CommentItemProps) {
+function CommentItem({
+  postId,
+  comment,
+  avatarUrls,
+  currentUser,
+  onCommentAdded,
+  depth = 0,
+}: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -208,12 +223,12 @@ function CommentItem({ postId, comment, avatarUrls, onCommentAdded, depth = 0 }:
           </div>
 
           {/* Comment content */}
-          <p className="text-sm whitespace-pre-wrap mt-1.5 ml-8 text-foreground/90 leading-relaxed">
+          <p className="text-sm whitespace-pre-wrap mt-1.5 ml-10 text-foreground/90 leading-relaxed">
             {comment.content}
           </p>
 
           {/* Actions row: expand/collapse, reactions, reply */}
-          <div className="flex items-center gap-1 mt-2 ml-2">
+          <div className="flex items-center gap-1 mt-2 ml-10">
             {/* Expand/Collapse button */}
             {hasReplies && (
               <Button
@@ -292,10 +307,11 @@ function CommentItem({ postId, comment, avatarUrls, onCommentAdded, depth = 0 }:
 
           {/* Reply form */}
           {showReplyForm && (
-            <div className="mt-3 ml-8 max-w-lg p-3 bg-muted/30 rounded-lg border border-border/30">
+            <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 rounded-lg border border-border/30">
               <CommentForm
                 postId={postId}
                 parentId={comment.id}
+                user={currentUser}
                 onSuccess={() => {
                   setShowReplyForm(false)
                   onCommentAdded?.()
@@ -315,6 +331,7 @@ function CommentItem({ postId, comment, avatarUrls, onCommentAdded, depth = 0 }:
                 postId={postId}
                 comment={reply}
                 avatarUrls={avatarUrls}
+                currentUser={currentUser}
                 onCommentAdded={onCommentAdded}
                 depth={depth + 1}
               />
@@ -333,11 +350,13 @@ export function InboxPostDetail({
   allTags,
   statuses,
   avatarUrls,
+  currentUser,
   onClose,
   onStatusChange,
   onOwnerChange,
   onTagsChange,
   onOfficialResponseChange,
+  onCommentAdded,
 }: InboxPostDetailProps) {
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditingResponse, setIsEditingResponse] = useState(false)
@@ -742,6 +761,8 @@ export function InboxPostDetail({
                 postId={post.id}
                 comment={comment}
                 avatarUrls={avatarUrls}
+                currentUser={currentUser}
+                onCommentAdded={onCommentAdded}
               />
             ))}
           </div>

@@ -25,7 +25,8 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^10.1.0",
-    "@noble/hashes": "^2.0.1",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^2.4.3",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.30"
   }

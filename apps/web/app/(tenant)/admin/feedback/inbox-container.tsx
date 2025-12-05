@@ -76,6 +76,11 @@ interface CommentWithReplies {
   reactions: CommentReaction[]
 }
 
+interface CurrentUser {
+  name: string
+  email: string
+}
+
 interface InboxContainerProps {
   organizationId: string
   initialPosts: InboxPostListResult
@@ -83,6 +88,7 @@ interface InboxContainerProps {
   tags: Tag[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
+  currentUser: CurrentUser
 }
 
 export function InboxContainer({
@@ -92,6 +98,7 @@ export function InboxContainer({
   tags,
   statuses,
   members,
+  currentUser,
 }: InboxContainerProps) {
   const router = useRouter()
   const {
@@ -242,6 +249,19 @@ export function InboxContainer({
       fetchPosts(page + 1, filters, true)
     }
   }, [fetchPosts, hasMore, isLoadingMore, page, filters])
+
+  // Refetch post details (e.g., after adding a comment)
+  const refetchPostDetails = useCallback(async () => {
+    if (!selectedPostId) return
+    try {
+      const response = await fetch(`/api/posts/${selectedPostId}?organizationId=${organizationId}`)
+      if (!response.ok) throw new Error('Failed to fetch post')
+      const data = await response.json()
+      setSelectedPost(data)
+    } catch (error) {
+      console.error('Error refetching post details:', error)
+    }
+  }, [selectedPostId, organizationId])
 
   const handleStatusChange = async (status: PostStatus) => {
     if (!selectedPostId) return
@@ -394,11 +414,13 @@ export function InboxContainer({
           allTags={tags}
           statuses={statuses}
           avatarUrls={selectedPost?.avatarUrls}
+          currentUser={currentUser}
           onClose={() => setSelectedPostId(null)}
           onStatusChange={handleStatusChange}
           onOwnerChange={handleOwnerChange}
           onTagsChange={handleTagsChange}
           onOfficialResponseChange={handleOfficialResponseChange}
+          onCommentAdded={refetchPostDetails}
         />
       }
     />

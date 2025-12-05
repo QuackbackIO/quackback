@@ -26,13 +26,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   }
 
-  // Get organization to check if commenting is allowed
+  // Get organization to check settings
   const org = await db.query.organization.findFirst({
     where: eq(organization.id, board.organizationId),
   })
 
-  if (!org?.portalPublicCommenting) {
-    return NextResponse.json({ error: 'Commenting is disabled' }, { status: 403 })
+  if (!org) {
+    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
   }
 
   // Parse and validate request body
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  // Check for authenticated user
+  // Check for authenticated user FIRST - team members can always comment
   const session = await getSession()
 
   if (session?.user) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     if (memberRecord) {
-      // Add comment with memberId for authenticated users
+      // Team members can always comment, regardless of portalPublicCommenting setting
       const comment = await addPublicComment(
         postId,
         content,
@@ -85,10 +85,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
       return NextResponse.json(comment, { status: 201 })
     }
-    // User is authenticated but not a member of this org - fall through to anonymous
+    // User is authenticated but not a member of this org - fall through to public user checks
   }
 
-  // Anonymous user - check if anonymous commenting is allowed
+  // For non-team-members, check if public commenting is enabled
+  if (!org.portalPublicCommenting) {
+    return NextResponse.json({ error: 'Commenting is disabled' }, { status: 403 })
+  }
+
+  // Check if anonymous commenting is allowed
   if (org.portalRequireAuth) {
     return NextResponse.json(
       { error: 'Authentication required to comment. Please sign in or create an account.' },
