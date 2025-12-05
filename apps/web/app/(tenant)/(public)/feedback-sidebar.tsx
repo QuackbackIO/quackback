@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+import Link from 'next/link'
 import { LayoutList, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { BoardWithStats } from '@quackback/db/queries/public'
@@ -63,6 +65,18 @@ export function FeedbackSidebar({ boards, currentBoard, onBoardChange }: Feedbac
           })}
         </nav>
       </div>
+
+      {/* Powered by */}
+      <Link
+        href="https://quackback.io"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-3"
+      >
+        <span>Powered by</span>
+        <Image src="/logo.png" alt="" width={12} height={12} className="opacity-50" />
+        <span className="font-medium">Quackback</span>
+      </Link>
     </aside>
   )
 }

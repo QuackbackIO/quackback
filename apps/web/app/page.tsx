@@ -23,7 +23,6 @@ import {
   and,
 } from '@quackback/db'
 import { PortalHeader } from '@/components/public/portal-header'
-import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { FeedbackContainer } from '@/app/(tenant)/(public)/feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { UserProfileProvider } from '@/components/providers/user-profile-provider'
@@ -38,7 +37,6 @@ interface RootPageProps {
     board?: string
     search?: string
     sort?: 'top' | 'new' | 'trending'
-    page?: string
   }>
 }
 
@@ -96,7 +94,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   const themeConfig = theme.parseThemeConfig(org.themeConfig)
   const themeStyles = themeConfig ? theme.generateThemeCSS(themeConfig) : ''
 
-  const { board, search, sort = 'top', page = '1' } = await searchParams
+  const { board, search, sort = 'top' } = await searchParams
 
   // Get user identifier - use member ID for authenticated users, anonymous cookie for others
   let userIdentifier = await getUserIdentifier()
@@ -110,14 +108,14 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   }
 
   // Fetch data in parallel
-  const [boards, { items: posts, total, hasMore }, statuses] = await Promise.all([
+  const [boards, { items: posts, hasMore }, statuses] = await Promise.all([
     getPublicBoardsWithStats(org.id),
     getPublicPostListAllBoards({
       organizationId: org.id,
       boardSlug: board,
       search,
       sort,
-      page: parseInt(page),
+      page: 1,
       limit: 20,
     }),
     getStatusesByOrganization(org.id),
@@ -157,22 +155,20 @@ export default async function RootPage({ searchParams }: RootPageProps) {
 
       <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
         <FeedbackContainer
+          organizationId={org.id}
           organizationName={org.name}
           boards={boards}
           posts={posts}
           statuses={statuses}
-          total={total}
           hasMore={hasMore}
           votedPostIds={Array.from(votedPostIds)}
           postAvatarUrls={Object.fromEntries(postAvatarMap)}
           currentBoard={board}
           currentSearch={search}
           currentSort={sort}
-          currentPage={parseInt(page)}
           defaultBoardId={boards[0]?.id}
         />
       </main>
-      <PoweredByFooter />
     </div>
   )
 

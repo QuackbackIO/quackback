@@ -156,3 +156,7 @@ After running `bun run db:seed`:
 - Email: `demo@example.com`
 - Password: `demo1234`
 - Organization: Acme Corp (`http://acme.localhost:3000`)
+
+## Git Commits
+
+- Never add co-author trailers to commits
