@@ -118,11 +118,11 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for deta
 
 ## License
 
-Quackback is licensed under the [Business Source License 1.1](LICENSE.md).
+Quackback is licensed under the [Business Source License 1.1](LICENSE).
 
-**TL;DR:** You can use Quackback freely for internal feedback management. For commercial use (selling as a service), please contact us for a commercial license.
+**TL;DR:** Free to use for internal feedback management. Commercial use (offering as a managed service) requires a commercial license.
 
-The license converts to Apache 2.0 after 4 years.
+Each version converts to Apache 2.0 four years after its release.
 
 ---
 
