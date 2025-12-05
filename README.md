@@ -11,14 +11,15 @@
 </p>
 
 <p align="center">
-  Collect, organize, and act on user feedback with public boards, roadmaps, and changelogs.
+  Collect, organize, and act on user feedback with public boards, roadmaps, and changelogs. <br />
+  Self-host or use our cloud — the open-source alternative to UserVoice, Canny, and Productboard.
 </p>
 
 <p align="center">
   <a href="https://quackback.io">Website</a> •
+  <a href="#get-started">Get Started</a> •
   <a href="#features">Features</a> •
-  <a href="#getting-started">Getting Started</a> •
-  <a href="#self-hosting">Self-Hosting</a> •
+  <a href="#self-hosted">Self-Hosted</a> •
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -29,64 +30,67 @@
 
 ---
 
+## Get Started
+
+**Cloud** — Get started in minutes at [quackback.io](https://quackback.io). No setup required.
+
+**Self-Hosted** — See the [installation guide](#self-hosted) below.
+
 ## Why Quackback?
 
-The open-source alternative to Canny, UserVoice, and Productboard. Own your data, self-host anywhere, and customize everything.
+Feedback tools should be simple. Quackback focuses on the essentials: voting, roadmaps, and changelogs. Open-source, transparent, and free from vendor lock-in.
+
+- **Your choice:** Use our managed cloud or self-host on your own infrastructure.
+- **Own your data:** No vendor lock-in. Export anytime, or run it yourself.
+- **Modern Stack:** Built with Next.js 16, RSC, and Tailwind. Fast by default.
+- **Customizable:** It's code. Tweak the logic, style the UI, and make it yours.
 
 ## Features
 
-**Feedback Portal** — Public boards, voting, status tracking, nested comments with reactions, official responses
+- **🗳️ Feedback Portal** — Public boards, upvoting, status tracking, and nested comments.
+- **📥 Admin Inbox** — Unified view to triage feedback. Powerful filtering and bulk actions.
+- **🗺️ Roadmap & Changelog** — Visually show users what you're building and what you've shipped.
+- **🔌 Integrations** — _(Coming soon)_ Slack, Linear, and Jira.
 
-**Admin Inbox** — Unified view, powerful filtering, team assignment, tags, bulk actions
+## Tech Stack
 
-**Roadmap & Changelog** — Public roadmap, release announcements, board-specific views
+- **Framework:** Next.js 16 (App Router)
+- **Database:** PostgreSQL + Drizzle ORM
+- **Auth:** Better Auth
+- **Styling:** Tailwind CSS + shadcn/ui
+- **Runtime:** Bun
 
-**Team Management** — Multi-organization, role-based access (Owner/Admin/Member), SSO with GitHub & Google
+## Self-Hosted
 
-**Integrations** _(coming soon)_ — Slack, Intercom, Zendesk, Jira, Linear, Zapier
+Quackback can be deployed anywhere that supports Docker or Node.js.
 
-## Getting Started
-
-### Prerequisites
-
-- [Bun](https://bun.sh/) v1.3.3+ (or Node.js 20+)
-- [Docker](https://docker.com/) (for PostgreSQL)
-
-### Quick Start
+### Production (Docker)
 
 ```bash
-# Clone the repository
 git clone https://github.com/your-org/quackback.git
 cd quackback
-
-# Run setup (installs deps, starts DB, configures env)
-bun run setup
-
-# Start the development server
-bun run dev
+cp .env.example .env   # Edit with your configuration
+docker build -t quackback .
+docker run -p 3000:3000 --env-file .env quackback
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+You'll need to provide your own PostgreSQL database. Set `DATABASE_URL` in your `.env` file.
 
-### Demo Account
+### Local Development
 
-After running `bun run db:seed`, log in with `demo@example.com` / `demo1234` and visit [acme.localhost:3000](http://acme.localhost:3000).
-
-## Self-Hosting
-
-Deploy anywhere that runs Node.js. Requires PostgreSQL 14+ and a reverse proxy for subdomain routing.
+Prerequisites: [Bun](https://bun.sh/) v1.3.3+ and [Docker](https://docker.com/)
 
 ```bash
-# 1. Set up PostgreSQL and configure .env
-# 2. Push schema and build
-bun run db:push
-bun run build
-
-# 3. Start the server
-bun run start
+git clone https://github.com/your-org/quackback.git
+cd quackback
+bun run setup          # Install deps, create .env
+docker-compose up -d   # Start local PostgreSQL
+bun run db:push        # Push schema
+bun run db:seed        # (Optional) Seed demo data
+bun run dev            # Start dev server
 ```
 
-See [Self-Hosting Guide](docs/self-hosting.md) for detailed instructions.
+Visit [http://acme.localhost:3000](http://acme.localhost:3000) and log in with `demo@example.com` / `demo1234`.
 
 ## Roadmap
 
@@ -119,10 +123,6 @@ Quackback is licensed under the [Business Source License 1.1](LICENSE.md).
 **TL;DR:** You can use Quackback freely for internal feedback management. For commercial use (selling as a service), please contact us for a commercial license.
 
 The license converts to Apache 2.0 after 4 years.
-
-## Tech Stack
-
-Next.js 16 • PostgreSQL • Drizzle ORM • Better Auth • Tailwind CSS • shadcn/ui • Bun
 
 ---
 
