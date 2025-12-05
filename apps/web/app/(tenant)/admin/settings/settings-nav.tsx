@@ -2,17 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Settings, Users, CreditCard, Layout, Shield, Lock, Palette } from 'lucide-react'
+import { Settings, Users, CreditCard, Layout, Shield, Lock, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navSections = [
-  {
-    label: 'Personal',
-    items: [
-      { label: 'Profile', href: '/admin/settings/profile', icon: User },
-      { label: 'Preferences', href: '/admin/settings/preferences', icon: Settings },
-    ],
-  },
   {
     label: 'Organization',
     items: [

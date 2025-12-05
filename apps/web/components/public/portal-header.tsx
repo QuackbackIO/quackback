@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { LogOut, Settings } from 'lucide-react'
+import { LogOut, Settings, Shield } from 'lucide-react'
 
 interface PortalHeaderProps {
   orgName: string
@@ -124,10 +124,16 @@ export function PortalHeader({
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
               {canAccessAdmin && (
                 <DropdownMenuItem asChild>
                   <Link href="/admin">
-                    <Settings className="mr-2 h-4 w-4" />
+                    <Shield className="mr-2 h-4 w-4" />
                     Admin
                   </Link>
                 </DropdownMenuItem>
