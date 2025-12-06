@@ -36,6 +36,11 @@ yarn-error.log*
 coverage
 .nyc_output
 
+# Playwright
+playwright-report/
+test-results/
+apps/web/e2e/.auth/
+
 # Turbo
 .turbo
 

@@ -27,7 +27,7 @@ const mainDomainPublicRoutes = [
 /**
  * Auth routes on tenant domains (no auth required to access)
  */
-const tenantAuthRoutes = ['/login', '/signup', '/sso']
+const tenantAuthRoutes = ['/login', '/signup', '/sso', '/admin/login', '/admin/signup']
 
 /**
  * Public routes on tenant domains (no auth required)

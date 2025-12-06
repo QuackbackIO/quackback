@@ -1,0 +1,114 @@
+import { test, expect } from '@playwright/test'
+
+test.describe('Public Voting', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to the public portal
+    await page.goto('/')
+    // Wait for posts to load
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('displays vote count on posts', async ({ page }) => {
+    // Look for vote buttons (buttons containing chevron up icon)
+    const voteButtons = page.locator('button').filter({
+      has: page.locator('svg.lucide-chevron-up'),
+    })
+
+    await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+
+    // Vote count should be displayed as a number
+    const voteCount = voteButtons.first().locator('span')
+    await expect(voteCount).toBeVisible()
+    const countText = await voteCount.textContent()
+    expect(countText).toMatch(/^\d+$/)
+  })
+
+  test('can upvote a post', async ({ page }) => {
+    // Use 2nd post to avoid conflicts with other tests
+    const voteButtons = page.locator('button').filter({
+      has: page.locator('svg.lucide-chevron-up'),
+    })
+    const voteButton = voteButtons.nth(1)
+    await expect(voteButton).toBeVisible({ timeout: 10000 })
+
+    // Get the initial vote count
+    const voteCountSpan = voteButton.locator('span')
+    const initialCountText = await voteCountSpan.textContent()
+    const initialCount = parseInt(initialCountText || '0', 10)
+
+    // Click to vote
+    await voteButton.click()
+
+    // Wait for the vote to be processed and verify increase
+    await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+  })
+
+  test('can toggle vote off', async ({ page }) => {
+    // Use 3rd post to avoid conflicts with other tests
+    const voteButtons = page.locator('button').filter({
+      has: page.locator('svg.lucide-chevron-up'),
+    })
+    const voteButton = voteButtons.nth(2)
+    await expect(voteButton).toBeVisible({ timeout: 10000 })
+
+    const voteCountSpan = voteButton.locator('span')
+    const initialCountText = await voteCountSpan.textContent()
+    const initialCount = parseInt(initialCountText || '0', 10)
+
+    // First click - vote (should increase by 1)
+    await voteButton.click()
+    await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+
+    // Second click - unvote (should return to initial count)
+    await voteButton.click()
+    await expect(voteCountSpan).toHaveText(String(initialCount), { timeout: 5000 })
+  })
+
+  test('vote button shows active state when voted', async ({ page }) => {
+    // Use 4th post to avoid conflicts with other tests
+    const voteButtons = page.locator('button').filter({
+      has: page.locator('svg.lucide-chevron-up'),
+    })
+    const voteButton = voteButtons.nth(3)
+    await expect(voteButton).toBeVisible({ timeout: 10000 })
+
+    // Click to vote
+    await voteButton.click()
+
+    // Button should have active styling (text-primary class)
+    await expect(voteButton).toHaveClass(/text-primary/, { timeout: 5000 })
+  })
+
+  test('can vote on post detail page', async ({ page }) => {
+    // Navigate to 2nd post detail page to avoid conflicts
+    const postLinks = page.locator('a[href*="/posts/"]')
+    await expect(postLinks.nth(1)).toBeVisible({ timeout: 10000 })
+
+    // Click the 2nd post link
+    await postLinks.nth(1).click()
+
+    // Wait for detail page to load
+    await page.waitForLoadState('networkidle')
+
+    // Find vote button on detail page
+    const voteButton = page.locator('button').filter({
+      has: page.locator('svg.lucide-chevron-up'),
+    })
+
+    if ((await voteButton.count()) > 0) {
+      const firstVoteButton = voteButton.first()
+      await expect(firstVoteButton).toBeVisible()
+
+      // Get initial count
+      const voteCountSpan = firstVoteButton.locator('span').first()
+      const initialCountText = await voteCountSpan.textContent()
+      const initialCount = parseInt(initialCountText || '0', 10)
+
+      // Vote
+      await firstVoteButton.click()
+
+      // Verify count increased
+      await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+    }
+  })
+})
