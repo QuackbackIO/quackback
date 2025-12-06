@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPublicBoardById } from '@quackback/db/queries/public'
-import { createPost, getDefaultStatus, getBoardSettings, db, member, eq, and } from '@quackback/db'
+import {
+  createPost,
+  getDefaultStatus,
+  getBoardSettings,
+  getMemberByUserAndOrg,
+} from '@quackback/db'
 import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
 
@@ -47,9 +52,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // 4. Get member record for this organization
-  const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.userId, session.user.id), eq(member.organizationId, board.organizationId)),
-  })
+  const memberRecord = await getMemberByUserAndOrg(session.user.id, board.organizationId)
 
   if (!memberRecord) {
     return NextResponse.json(

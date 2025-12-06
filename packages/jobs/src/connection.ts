@@ -2,9 +2,19 @@ import { Redis } from 'ioredis'
 import type { ConnectionOptions } from 'bullmq'
 
 /**
+ * Redis connection options (non-cluster mode)
+ */
+interface RedisConnectionOptions {
+  host: string
+  port: number
+  password?: string
+  username?: string
+}
+
+/**
  * Parse Redis URL into connection options for BullMQ
  */
-function parseRedisUrl(url: string): ConnectionOptions {
+function parseRedisUrl(url: string): RedisConnectionOptions {
   const parsed = new URL(url)
   return {
     host: parsed.hostname,
@@ -17,7 +27,7 @@ function parseRedisUrl(url: string): ConnectionOptions {
 /**
  * Get Redis connection options from environment
  */
-export function getConnectionOptions(): ConnectionOptions {
+export function getConnectionOptions(): RedisConnectionOptions {
   const redisUrl = process.env.REDIS_URL
   if (!redisUrl) {
     throw new Error('REDIS_URL environment variable is not set')
@@ -29,7 +39,7 @@ export function getConnectionOptions(): ConnectionOptions {
  * Shared connection options for BullMQ queues and workers
  * Uses lazy initialization to avoid connection issues during module load
  */
-let _connection: ConnectionOptions | null = null
+let _connection: RedisConnectionOptions | null = null
 
 export function getConnection(): ConnectionOptions {
   if (!_connection) {

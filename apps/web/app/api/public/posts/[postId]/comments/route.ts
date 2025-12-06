@@ -4,7 +4,7 @@ import {
   getBoardByPostId,
   commentExistsForPost,
 } from '@quackback/db/queries/public'
-import { db, member, organization, eq, and } from '@quackback/db'
+import { db, organization, eq, getMemberByUserAndOrg } from '@quackback/db'
 import {
   getRawUserIdentifierFromRequest,
   setUserIdentifierCookie,
@@ -66,12 +66,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (session?.user) {
     // Authenticated user - get their member record for this organization
-    const memberRecord = await db.query.member.findFirst({
-      where: and(
-        eq(member.userId, session.user.id),
-        eq(member.organizationId, board.organizationId)
-      ),
-    })
+    const memberRecord = await getMemberByUserAndOrg(session.user.id, board.organizationId)
 
     if (memberRecord) {
       // Team members can always comment, regardless of portalPublicCommenting setting

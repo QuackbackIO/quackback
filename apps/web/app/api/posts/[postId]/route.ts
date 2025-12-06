@@ -3,10 +3,7 @@ import {
   getPostWithDetails,
   getCommentsWithReplies,
   updatePost,
-  db,
-  member,
-  eq,
-  and,
+  getMemberByUserAndOrg,
   type CommentWithRepliesAndReactions,
 } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
@@ -133,12 +130,7 @@ export async function PATCH(
       updateData.ownerId = ownerId
       // Look up ownerMemberId from ownerId (user ID -> member ID for this org)
       if (ownerId) {
-        const ownerMember = await db.query.member.findFirst({
-          where: and(
-            eq(member.userId, ownerId),
-            eq(member.organizationId, validation.organization.id)
-          ),
-        })
+        const ownerMember = await getMemberByUserAndOrg(ownerId, validation.organization.id)
         updateData.ownerMemberId = ownerMember?.id ?? null
       } else {
         updateData.ownerMemberId = null

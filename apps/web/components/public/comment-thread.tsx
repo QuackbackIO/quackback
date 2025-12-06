@@ -9,8 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CommentForm } from './comment-form'
 import { cn } from '@/lib/utils'
-
-const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
+import { getInitials, REACTION_EMOJIS } from '@quackback/shared'
 
 interface CommentReaction {
   emoji: string
@@ -38,16 +37,6 @@ interface CommentThreadProps {
   avatarUrls?: Record<string, string | null>
   onCommentAdded?: () => void
   user?: { name: string | null; email: string }
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return '?'
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
 }
 
 export function CommentThread({

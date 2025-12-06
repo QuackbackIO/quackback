@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
+import { getInitials } from '@quackback/shared'
 import type { PostStatus, PostStatusEntity } from '@quackback/db'
 
 interface PostCardProps {
@@ -25,16 +26,6 @@ interface PostCardProps {
   boardName?: string
   tags: { id: string; name: string; color: string }[]
   hasVoted?: boolean
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return '?'
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
 }
 
 export function PostCard({

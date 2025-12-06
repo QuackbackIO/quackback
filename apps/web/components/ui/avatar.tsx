@@ -4,19 +4,7 @@ import * as React from 'react'
 import * as AvatarPrimitive from '@radix-ui/react-avatar'
 
 import { cn } from '@/lib/utils'
-
-/**
- * Compute initials from a name string
- */
-function getInitials(name: string | null | undefined): string {
-  if (!name) return '?'
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
-}
+import { getInitials } from '@quackback/shared'
 
 interface AvatarProps extends React.ComponentProps<typeof AvatarPrimitive.Root> {
   /**

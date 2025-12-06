@@ -17,6 +17,7 @@ export * from './src/queries/statuses'
 export * from './src/queries/integrations'
 export * from './src/queries/changelog'
 export * from './src/queries/public'
+export * from './src/queries/members'
 
 // Re-export common drizzle-orm utilities
 export {
