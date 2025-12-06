@@ -204,18 +204,40 @@ function CommentItem({
         <div className="py-2">
           {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
-            <Avatar className="h-8 w-8 shrink-0">
+            <Avatar
+              className={cn(
+                'h-8 w-8 shrink-0',
+                comment.isTeamMember && 'ring-2 ring-primary ring-offset-2'
+              )}
+            >
               {comment.memberId && avatarUrls?.[comment.memberId] && (
                 <AvatarImage
                   src={avatarUrls[comment.memberId]!}
                   alt={comment.authorName || 'Comment author'}
                 />
               )}
-              <AvatarFallback className="text-xs bg-muted">
-                {getInitials(comment.authorName)}
+              <AvatarFallback
+                className={cn(
+                  'text-xs',
+                  comment.isTeamMember ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                )}
+              >
+                {comment.isTeamMember ? (
+                  <Building2 className="h-4 w-4" />
+                ) : (
+                  getInitials(comment.authorName)
+                )}
               </AvatarFallback>
             </Avatar>
             <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
+            {comment.isTeamMember && (
+              <Badge
+                variant="default"
+                className="bg-primary text-primary-foreground text-xs px-1.5 py-0"
+              >
+                Team
+              </Badge>
+            )}
             <span className="text-muted-foreground text-xs">·</span>
             <span className="text-xs text-muted-foreground">
               {formatDate(new Date(comment.createdAt))}
