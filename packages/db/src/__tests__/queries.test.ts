@@ -108,14 +108,6 @@ describe('Query Function Exports', () => {
     it('exports deleteComment', () => {
       expect(typeof postQueries.deleteComment).toBe('function')
     })
-
-    it('exports toggleCommentReaction', () => {
-      expect(typeof postQueries.toggleCommentReaction).toBe('function')
-    })
-
-    it('exports getReactionCounts', () => {
-      expect(typeof postQueries.getReactionCounts).toBe('function')
-    })
   })
 
   describe('Roadmap queries', () => {

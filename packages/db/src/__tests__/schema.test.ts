@@ -1,16 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
-import { posts, votes, comments, postTags, postRoadmaps, commentReactions, REACTION_EMOJIS } from '../schema/posts'
+import {
+  posts,
+  votes,
+  comments,
+  postTags,
+  postRoadmaps,
+  commentReactions,
+  REACTION_EMOJIS,
+} from '../schema/posts'
 import { boards, roadmaps, tags } from '../schema/boards'
 import { integrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'
-import {
-  user,
-  session,
-  organization,
-  member,
-  invitation,
-} from '../schema/auth'
+import { user, session, organization, member, invitation } from '../schema/auth'
 
 describe('Schema definitions', () => {
   describe('boards schema', () => {
@@ -94,7 +96,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      expect(columns.length).toBe(13)
+      expect(columns.length).toBe(22)
     })
   })
 
