@@ -290,7 +290,7 @@ export async function requireAuthenticatedTenant(): Promise<
 /**
  * Result type for API tenant validation
  */
-type ApiTenantResult =
+export type ApiTenantResult =
   | { success: false; error: string; status: 401 | 403 | 400 }
   | {
       success: true

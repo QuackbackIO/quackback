@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, ssoProvider, eq } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole, forbiddenResponse } from '@/lib/api-handler'
 import { createSsoProviderSchema } from '@/lib/schemas/sso-providers'
 
 /**
@@ -19,8 +20,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Only owners and admins can view SSO providers
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Fetch SSO providers for this organization
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Only owners and admins can create SSO providers
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Validate input

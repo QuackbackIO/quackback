@@ -12,7 +12,7 @@ import type {
   PostListItem,
   InboxPostListResult,
 } from '../types'
-import type { CommentReactionCount } from './public'
+import { buildCommentTree, type CommentNode } from './comments'
 
 export async function createPost(data: NewPost): Promise<Post> {
   const [post] = await db.insert(posts).values(data).returning()
@@ -167,30 +167,14 @@ export async function getUserVotes(
   return new Set(userVotes.map((v) => v.postId))
 }
 
-// Comment with nested replies and aggregated reactions
-export interface CommentWithRepliesAndReactions {
-  id: string
-  postId: string
-  parentId: string | null
-  // Member-scoped identity (Hub-and-Spoke model)
-  memberId: string | null
-  // Legacy/anonymous identity fields
-  authorId: string | null
-  authorName: string | null
-  authorEmail: string | null
-  content: string
-  isTeamMember: boolean
-  createdAt: Date
-  replies: CommentWithRepliesAndReactions[]
-  reactions: CommentReactionCount[]
-}
+// Re-export CommentNode type for backwards compatibility
+export type CommentWithRepliesAndReactions = CommentNode
 
 // Comment functions (with nested threading support)
 export async function getCommentsWithReplies(
   postId: string,
   userIdentifier?: string
 ): Promise<CommentWithRepliesAndReactions[]> {
-  // Get all comments for the post with reactions
   const allComments = await db.query.comments.findMany({
     where: eq(comments.postId, postId),
     with: {
@@ -199,61 +183,7 @@ export async function getCommentsWithReplies(
     orderBy: asc(comments.createdAt),
   })
 
-  // Build nested tree structure with aggregated reactions
-  const commentMap = new Map<string, CommentWithRepliesAndReactions>()
-  const rootComments: CommentWithRepliesAndReactions[] = []
-
-  // First pass: create all nodes with aggregated reactions
-  allComments.forEach((comment) => {
-    // Aggregate reactions by emoji
-    const reactionCounts = new Map<string, { count: number; hasReacted: boolean }>()
-    for (const reaction of comment.reactions) {
-      const existing = reactionCounts.get(reaction.emoji) || { count: 0, hasReacted: false }
-      existing.count++
-      if (userIdentifier && reaction.userIdentifier === userIdentifier) {
-        existing.hasReacted = true
-      }
-      reactionCounts.set(reaction.emoji, existing)
-    }
-
-    const aggregatedReactions: CommentReactionCount[] = Array.from(reactionCounts.entries()).map(
-      ([emoji, data]) => ({
-        emoji,
-        count: data.count,
-        hasReacted: data.hasReacted,
-      })
-    )
-
-    commentMap.set(comment.id, {
-      id: comment.id,
-      postId: comment.postId,
-      parentId: comment.parentId,
-      memberId: comment.memberId,
-      authorId: comment.authorId,
-      authorName: comment.authorName,
-      authorEmail: comment.authorEmail,
-      content: comment.content,
-      isTeamMember: comment.isTeamMember,
-      createdAt: comment.createdAt,
-      replies: [],
-      reactions: aggregatedReactions,
-    })
-  })
-
-  // Second pass: build tree
-  allComments.forEach((comment) => {
-    const node = commentMap.get(comment.id)!
-    if (comment.parentId) {
-      const parent = commentMap.get(comment.parentId)
-      if (parent) {
-        parent.replies.push(node)
-      }
-    } else {
-      rootComments.push(node)
-    }
-  })
-
-  return rootComments
+  return buildCommentTree(allComments, userIdentifier)
 }
 
 export async function createComment(data: NewComment): Promise<Comment> {

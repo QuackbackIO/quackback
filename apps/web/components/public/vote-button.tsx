@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
 import { ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePostVote } from '@/lib/hooks/use-post-vote'
 
 interface VoteButtonProps {
   postId: string
@@ -17,40 +17,15 @@ export function VoteButton({
   initialHasVoted,
   disabled = false,
 }: VoteButtonProps) {
-  const [voteCount, setVoteCount] = useState(initialVoteCount)
-  const [hasVoted, setHasVoted] = useState(initialHasVoted)
-  const [isPending, startTransition] = useTransition()
+  const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
+    postId,
+    initialVoteCount,
+    initialHasVoted,
+  })
 
-  const handleVote = () => {
+  const onClick = () => {
     if (disabled) return
-
-    // Optimistic update
-    const previousVoteCount = voteCount
-    const previousHasVoted = hasVoted
-
-    setHasVoted(!hasVoted)
-    setVoteCount(hasVoted ? voteCount - 1 : voteCount + 1)
-
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/public/posts/${postId}/vote`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to vote')
-        }
-
-        const data = await response.json()
-        setVoteCount(data.newCount)
-        setHasVoted(data.voted)
-      } catch {
-        // Revert on error
-        setVoteCount(previousVoteCount)
-        setHasVoted(previousHasVoted)
-      }
-    })
+    handleVote()
   }
 
   return (
@@ -62,7 +37,7 @@ export function VoteButton({
         isPending && 'opacity-70',
         disabled && 'cursor-not-allowed opacity-50'
       )}
-      onClick={handleVote}
+      onClick={onClick}
       disabled={disabled || isPending}
     >
       <ChevronUp className={cn('h-6 w-6', hasVoted && 'fill-primary')} />

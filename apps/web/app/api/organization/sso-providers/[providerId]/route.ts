@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, ssoProvider, eq, and } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole, forbiddenResponse } from '@/lib/api-handler'
 import { updateSsoProviderSchema } from '@/lib/schemas/sso-providers'
 
 type RouteContext = {
@@ -24,8 +25,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     // Only owners and admins can update SSO providers
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Validate input
@@ -123,8 +124,8 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     }
 
     // Only owners and admins can delete SSO providers
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Find the existing provider

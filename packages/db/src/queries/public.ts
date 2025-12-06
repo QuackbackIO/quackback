@@ -10,6 +10,7 @@ import {
   REACTION_EMOJIS,
 } from '../schema/posts'
 import type { Board, PostStatus } from '../types'
+import { buildCommentTree, aggregateReactions } from './comments'
 
 // Types for public queries
 export interface BoardWithStats extends Board {
@@ -402,51 +403,23 @@ export async function getPublicPostDetail(
     orderBy: asc(comments.createdAt),
   })
 
-  // Build nested comment tree with reactions
-  const commentMap = new Map<string, PublicComment>()
-  const rootComments: PublicComment[] = []
+  // Build nested comment tree using shared helper
+  const commentTree = buildCommentTree(commentsResult, userIdentifier)
 
-  for (const comment of commentsResult) {
-    // Build reaction counts
-    const reactionCounts = new Map<string, { count: number; hasReacted: boolean }>()
-    for (const reaction of comment.reactions) {
-      const existing = reactionCounts.get(reaction.emoji) || { count: 0, hasReacted: false }
-      existing.count++
-      if (userIdentifier && reaction.userIdentifier === userIdentifier) {
-        existing.hasReacted = true
-      }
-      reactionCounts.set(reaction.emoji, existing)
-    }
+  // Map to PublicComment format
+  const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => ({
+    id: node.id,
+    content: node.content,
+    authorName: node.authorName,
+    memberId: node.memberId,
+    createdAt: node.createdAt,
+    parentId: node.parentId,
+    isTeamMember: node.isTeamMember,
+    replies: node.replies.map(mapToPublicComment),
+    reactions: node.reactions,
+  })
 
-    const publicComment: PublicComment = {
-      id: comment.id,
-      content: comment.content,
-      authorName: comment.authorName,
-      memberId: comment.memberId,
-      createdAt: comment.createdAt,
-      parentId: comment.parentId,
-      isTeamMember: comment.isTeamMember,
-      replies: [],
-      reactions: Array.from(reactionCounts.entries()).map(([emoji, data]) => ({
-        emoji,
-        count: data.count,
-        hasReacted: data.hasReacted,
-      })),
-    }
-    commentMap.set(comment.id, publicComment)
-  }
-
-  for (const comment of commentsResult) {
-    const publicComment = commentMap.get(comment.id)!
-    if (comment.parentId) {
-      const parent = commentMap.get(comment.parentId)
-      if (parent) {
-        parent.replies.push(publicComment)
-      }
-    } else {
-      rootComments.push(publicComment)
-    }
-  }
+  const rootComments = commentTree.map(mapToPublicComment)
 
   return {
     id: post.id,
@@ -675,28 +648,14 @@ export async function toggleCommentReaction(
     await db.insert(commentReactions).values({ commentId, userIdentifier, emoji })
   }
 
-  // Get updated reaction counts
+  // Get updated reaction counts using shared helper
   const allReactions = await db.query.commentReactions.findMany({
     where: eq(commentReactions.commentId, commentId),
   })
 
-  const reactionCounts = new Map<string, { count: number; hasReacted: boolean }>()
-  for (const reaction of allReactions) {
-    const data = reactionCounts.get(reaction.emoji) || { count: 0, hasReacted: false }
-    data.count++
-    if (reaction.userIdentifier === userIdentifier) {
-      data.hasReacted = true
-    }
-    reactionCounts.set(reaction.emoji, data)
-  }
-
   return {
     added: !existing,
-    reactions: Array.from(reactionCounts.entries()).map(([e, data]) => ({
-      emoji: e,
-      count: data.count,
-      hasReacted: data.hasReacted,
-    })),
+    reactions: aggregateReactions(allReactions, userIdentifier),
   }
 }
 

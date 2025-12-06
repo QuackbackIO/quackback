@@ -15,7 +15,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.2.2",
     "@quackback/db": "workspace:*",
-    "@quackback/domain": "workspace:*",
     "@quackback/email": "workspace:*",
     "@quackback/jobs": "workspace:*",
     "@quackback/shared": "workspace:*",

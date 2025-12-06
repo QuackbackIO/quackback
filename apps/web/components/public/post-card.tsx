@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { ChevronUp, MessageSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { usePostVote } from '@/lib/hooks/use-post-vote'
 import type { PostStatus, PostStatusEntity } from '@quackback/db'
 
 interface PostCardProps {
@@ -53,42 +54,16 @@ export function PostCard({
   hasVoted = false,
 }: PostCardProps) {
   const currentStatus = statuses.find((s) => s.slug === status)
-  const [currentVoteCount, setCurrentVoteCount] = useState(voteCount)
-  const [currentHasVoted, setCurrentHasVoted] = useState(hasVoted)
-  const [isPending, startTransition] = useTransition()
-
-  const handleVote = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    // Optimistic update
-    const previousVoteCount = currentVoteCount
-    const previousHasVoted = currentHasVoted
-
-    setCurrentHasVoted(!currentHasVoted)
-    setCurrentVoteCount(currentHasVoted ? currentVoteCount - 1 : currentVoteCount + 1)
-
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/public/posts/${id}/vote`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to vote')
-        }
-
-        const data = await response.json()
-        setCurrentVoteCount(data.newCount)
-        setCurrentHasVoted(data.voted)
-      } catch {
-        // Revert on error
-        setCurrentVoteCount(previousVoteCount)
-        setCurrentHasVoted(previousHasVoted)
-      }
-    })
-  }
+  const {
+    voteCount: currentVoteCount,
+    hasVoted: currentHasVoted,
+    isPending,
+    handleVote,
+  } = usePostVote({
+    postId: id,
+    initialVoteCount: voteCount,
+    initialHasVoted: hasVoted,
+  })
 
   return (
     <Link href={`/${boardSlug}/posts/${id}`} className="flex transition-colors hover:bg-muted/30">
@@ -110,17 +85,11 @@ export function PostCard({
       {/* Content section */}
       <div className="flex-1 min-w-0 px-4 py-3">
         {/* Status badge */}
-        <Badge
-          variant="outline"
-          className="text-[11px] font-medium mb-2"
-          style={{
-            backgroundColor: `${currentStatus?.color || '#6b7280'}15`,
-            color: currentStatus?.color || '#6b7280',
-            borderColor: `${currentStatus?.color || '#6b7280'}40`,
-          }}
-        >
-          {currentStatus?.name || status}
-        </Badge>
+        <StatusBadge
+          name={currentStatus?.name || status}
+          color={currentStatus?.color}
+          className="mb-2"
+        />
 
         {/* Title */}
         <h3 className="font-semibold text-[15px] text-foreground line-clamp-1 mb-1">{title}</h3>

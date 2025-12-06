@@ -2,29 +2,10 @@
 
 import { ChevronUp, MessageSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
 import type { PostListItem, PostStatusEntity } from '@quackback/db'
-
-function formatRelativeDate(date: Date): string {
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    if (diffHours === 0) {
-      const diffMins = Math.floor(diffMs / (1000 * 60))
-      if (diffMins < 1) return 'just now'
-      return `${diffMins}m ago`
-    }
-    return `${diffHours}h ago`
-  }
-  if (diffDays === 1) return 'yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
-  return `${Math.floor(diffDays / 365)}y ago`
-}
 
 interface InboxPostCardProps {
   post: PostListItem
@@ -56,17 +37,7 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
       <div className="flex-1 min-w-0 px-3 py-3">
         {/* Status badge */}
         {currentStatus && (
-          <Badge
-            variant="outline"
-            className="text-[11px] font-medium mb-1.5"
-            style={{
-              backgroundColor: `${currentStatus.color}15`,
-              color: currentStatus.color,
-              borderColor: `${currentStatus.color}40`,
-            }}
-          >
-            {currentStatus.name}
-          </Badge>
+          <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-1.5" />
         )}
 
         {/* Title */}
@@ -79,7 +50,7 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
         <div className="flex items-center gap-2.5 mt-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground/90">{post.authorName || 'Anonymous'}</span>
           <span className="text-muted-foreground/60">·</span>
-          <span>{formatRelativeDate(new Date(post.createdAt))}</span>
+          <TimeAgo date={new Date(post.createdAt)} />
           {post.commentCount > 0 && (
             <>
               <span className="text-muted-foreground/60">·</span>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole, forbiddenResponse } from '@/lib/api-handler'
 
 /**
  * GET /api/organization/portal-auth?organizationId={id}
@@ -24,8 +25,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Only owners and admins can view portal auth settings
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     const org = await db.query.organization.findFirst({
@@ -89,8 +90,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Only owners and admins can update portal auth settings
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Build update object with only provided fields

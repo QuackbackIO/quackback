@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole, forbiddenResponse } from '@/lib/api-handler'
 import { theme } from '@quackback/shared'
 
 // Re-export type for consumers
@@ -28,8 +29,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Only owners and admins can view theme settings
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     const org = await db.query.organization.findFirst({
@@ -76,8 +77,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Only owners and admins can update theme settings
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Validate themeConfig structure

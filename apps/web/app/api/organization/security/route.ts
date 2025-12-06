@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole, forbiddenResponse, errorResponse } from '@/lib/api-handler'
 
 /**
  * GET /api/organization/security?organizationId={id}
@@ -24,8 +25,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Only owners and admins can view security settings
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     const org = await db.query.organization.findFirst({
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching organization security settings:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse('Internal server error')
   }
 }
 
@@ -83,8 +84,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Only owners and admins can update security settings
-    if (!['owner', 'admin'].includes(validation.member.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+      return forbiddenResponse()
     }
 
     // Build update object with only provided fields
@@ -133,6 +134,6 @@ export async function PATCH(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error updating organization security settings:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse('Internal server error')
   }
 }

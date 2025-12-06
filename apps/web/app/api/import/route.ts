@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Papa from 'papaparse'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole } from '@/lib/api-handler'
 import { addImportJob, type ImportJobData } from '@quackback/jobs'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
 import { db, boards, eq, and } from '@quackback/db'
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check role - only admin/owner can import
-    if (!['owner', 'admin'].includes(validation.member.role)) {
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
       return NextResponse.json({ error: 'Only admins can import data' }, { status: 403 })
     }
 

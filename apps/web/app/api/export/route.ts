@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiTenantAccess } from '@/lib/tenant'
+import { requireRole } from '@/lib/api-handler'
 import { db, posts, boards, eq, and } from '@quackback/db'
 
 export async function GET(request: NextRequest) {
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check role - only admin/owner can export
-    if (!['owner', 'admin'].includes(validation.member.role)) {
+    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
       return NextResponse.json({ error: 'Only admins can export data' }, { status: 403 })
     }
 
