@@ -61,7 +61,7 @@ export async function fillRichTextEditor(page: Page, content: string) {
  */
 export async function getRichTextContent(page: Page): Promise<string> {
   const editor = page.locator('.ProseMirror[contenteditable="true"]')
-  return editor.textContent() || ''
+  return (await editor.textContent()) ?? ''
 }
 
 /**
