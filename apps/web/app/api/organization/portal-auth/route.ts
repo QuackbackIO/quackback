@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
-import { validateApiTenantAccess } from '@/lib/tenant'
-import { requireRole, forbiddenResponse } from '@/lib/api-handler'
+import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 /**
  * GET /api/organization/portal-auth?organizationId={id}
@@ -9,32 +8,14 @@ import { requireRole, forbiddenResponse } from '@/lib/api-handler'
  * Get portal authentication settings for an organization.
  * Requires owner or admin role.
  */
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can view portal auth settings
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
-
+export const GET = withApiHandler(
+  async (_request, { validation }) => {
     const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
+      where: eq(organization.id, validation.organization.id),
     })
 
     if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+      throw new ApiError('Organization not found', 404)
     }
 
     return NextResponse.json({
@@ -46,11 +27,9 @@ export async function GET(request: NextRequest) {
       portalPublicVoting: org.portalPublicVoting,
       portalPublicCommenting: org.portalPublicCommenting,
     })
-  } catch (error) {
-    console.error('Error fetching portal auth settings:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)
 
 /**
  * PATCH /api/organization/portal-auth
@@ -69,11 +48,10 @@ export async function GET(request: NextRequest) {
  *   portalPublicCommenting?: boolean,
  * }
  */
-export async function PATCH(request: NextRequest) {
-  try {
+export const PATCH = withApiHandler(
+  async (request, { validation }) => {
     const body = await request.json()
     const {
-      organizationId,
       portalAuthEnabled,
       portalPasswordEnabled,
       portalGoogleEnabled,
@@ -82,17 +60,6 @@ export async function PATCH(request: NextRequest) {
       portalPublicVoting,
       portalPublicCommenting,
     } = body
-
-    // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can update portal auth settings
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
 
     // Build update object with only provided fields
     const updates: Partial<{
@@ -128,17 +95,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: 'At least one setting must be provided' }, { status: 400 })
+      throw new ApiError('At least one setting must be provided', 400)
     }
 
     // Update the organization
     const [updated] = await db
       .update(organization)
       .set(updates)
-      .where(eq(organization.id, organizationId))
+      .where(eq(organization.id, validation.organization.id))
       .returning()
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       portalAuthEnabled: updated.portalAuthEnabled,
       portalPasswordEnabled: updated.portalPasswordEnabled,
@@ -148,8 +115,6 @@ export async function PATCH(request: NextRequest) {
       portalPublicVoting: updated.portalPublicVoting,
       portalPublicCommenting: updated.portalPublicCommenting,
     })
-  } catch (error) {
-    console.error('Error updating portal auth settings:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)

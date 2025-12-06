@@ -1,29 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, ssoProvider, eq } from '@quackback/db'
-import { validateApiTenantAccess } from '@/lib/tenant'
-import { requireRole, forbiddenResponse } from '@/lib/api-handler'
+import { withApiHandler, ApiError, validateBody, successResponse } from '@/lib/api-handler'
 import { createSsoProviderSchema } from '@/lib/schemas/sso-providers'
 
 /**
  * GET /api/organization/sso-providers
  * List all SSO providers for an organization
  */
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can view SSO providers
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
-
+export const GET = withApiHandler(
+  async (_request, { validation }) => {
     // Fetch SSO providers for this organization
     const providers = await db.query.ssoProvider.findMany({
       where: eq(ssoProvider.organizationId, validation.organization.id),
@@ -38,42 +23,21 @@ export async function GET(request: NextRequest) {
     }))
 
     return NextResponse.json(safeProviders)
-  } catch (error) {
-    console.error('Error fetching SSO providers:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)
 
 /**
  * POST /api/organization/sso-providers
  * Create a new SSO provider
  */
-export async function POST(request: NextRequest) {
-  try {
+export const POST = withApiHandler(
+  async (request, { validation }) => {
     const body = await request.json()
-    const { organizationId, ...providerData } = body
-
-    // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can create SSO providers
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
-
-    // Validate input
-    const result = createSsoProviderSchema.safeParse(providerData)
-    if (!result.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', issues: result.error.issues },
-        { status: 400 }
-      )
-    }
-
-    const { type, issuer, domain, oidcConfig, samlConfig } = result.data
+    const { type, issuer, domain, oidcConfig, samlConfig } = validateBody(
+      createSsoProviderSchema,
+      body
+    )
 
     // Check if domain is already in use
     const existingProvider = await db.query.ssoProvider.findFirst({
@@ -81,10 +45,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingProvider) {
-      return NextResponse.json(
-        { error: 'Domain is already associated with an SSO provider' },
-        { status: 409 }
-      )
+      throw new ApiError('Domain is already associated with an SSO provider', 409)
     }
 
     // Generate a unique provider ID
@@ -104,16 +65,14 @@ export async function POST(request: NextRequest) {
       })
       .returning()
 
-    return NextResponse.json({
+    return successResponse({
       ...created,
       oidcConfig: created.oidcConfig ? maskOidcConfig(JSON.parse(created.oidcConfig)) : null,
       samlConfig: created.samlConfig ? JSON.parse(created.samlConfig) : null,
     })
-  } catch (error) {
-    console.error('Error creating SSO provider:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)
 
 /**
  * Mask sensitive fields in OIDC config for safe display

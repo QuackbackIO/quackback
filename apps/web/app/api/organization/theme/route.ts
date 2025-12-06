@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
-import { validateApiTenantAccess } from '@/lib/tenant'
-import { requireRole, forbiddenResponse } from '@/lib/api-handler'
+import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 import { theme } from '@quackback/shared'
 
 // Re-export type for consumers
@@ -13,42 +12,21 @@ export type { ThemeConfig } from '@quackback/shared/theme'
  * Get theme configuration for an organization.
  * Requires owner or admin role.
  */
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can view theme settings
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
-
+export const GET = withApiHandler(
+  async (_request, { validation }) => {
     const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
+      where: eq(organization.id, validation.organization.id),
     })
 
     if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+      throw new ApiError('Organization not found', 404)
     }
 
     const themeConfig = theme.parseThemeConfig(org.themeConfig) || {}
-
     return NextResponse.json({ themeConfig })
-  } catch (error) {
-    console.error('Error fetching theme settings:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)
 
 /**
  * PATCH /api/organization/theme
@@ -61,44 +39,27 @@ export async function GET(request: NextRequest) {
  *   themeConfig: ThemeConfig
  * }
  */
-export async function PATCH(request: NextRequest) {
-  try {
+export const PATCH = withApiHandler(
+  async (request, { validation }) => {
     const body = await request.json()
-    const { organizationId, themeConfig } = body
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can update theme settings
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
+    const { themeConfig } = body
 
     // Validate themeConfig structure
     if (themeConfig && typeof themeConfig !== 'object') {
-      return NextResponse.json({ error: 'Invalid themeConfig structure' }, { status: 400 })
+      throw new ApiError('Invalid themeConfig structure', 400)
     }
 
     // Update the organization
     const [updated] = await db
       .update(organization)
       .set({ themeConfig: themeConfig ? theme.serializeThemeConfig(themeConfig) : null })
-      .where(eq(organization.id, organizationId))
+      .where(eq(organization.id, validation.organization.id))
       .returning()
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       themeConfig: theme.parseThemeConfig(updated.themeConfig) || {},
     })
-  } catch (error) {
-    console.error('Error updating theme settings:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)

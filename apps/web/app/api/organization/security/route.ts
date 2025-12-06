@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
-import { validateApiTenantAccess } from '@/lib/tenant'
-import { requireRole, forbiddenResponse, errorResponse } from '@/lib/api-handler'
+import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 /**
  * GET /api/organization/security?organizationId={id}
@@ -9,32 +8,14 @@ import { requireRole, forbiddenResponse, errorResponse } from '@/lib/api-handler
  * Get security and authentication settings for an organization.
  * Requires owner or admin role.
  */
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can view security settings
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
-
+export const GET = withApiHandler(
+  async (_request, { validation }) => {
     const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
+      where: eq(organization.id, validation.organization.id),
     })
 
     if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+      throw new ApiError('Organization not found', 404)
     }
 
     return NextResponse.json({
@@ -44,11 +25,9 @@ export async function GET(request: NextRequest) {
       githubOAuthEnabled: org.githubOAuthEnabled,
       microsoftOAuthEnabled: org.microsoftOAuthEnabled,
     })
-  } catch (error) {
-    console.error('Error fetching organization security settings:', error)
-    return errorResponse('Internal server error')
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)
 
 /**
  * PATCH /api/organization/security
@@ -65,28 +44,16 @@ export async function GET(request: NextRequest) {
  *   microsoftOAuthEnabled?: boolean,
  * }
  */
-export async function PATCH(request: NextRequest) {
-  try {
+export const PATCH = withApiHandler(
+  async (request, { validation }) => {
     const body = await request.json()
     const {
-      organizationId,
       strictSsoMode,
       passwordAuthEnabled,
       googleOAuthEnabled,
       githubOAuthEnabled,
       microsoftOAuthEnabled,
     } = body
-
-    // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: validation.status })
-    }
-
-    // Only owners and admins can update security settings
-    if (!requireRole(validation.member.role, ['owner', 'admin'])) {
-      return forbiddenResponse()
-    }
 
     // Build update object with only provided fields
     const updates: Partial<{
@@ -114,17 +81,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: 'At least one setting must be provided' }, { status: 400 })
+      throw new ApiError('At least one setting must be provided', 400)
     }
 
     // Update the organization
     const [updated] = await db
       .update(organization)
       .set(updates)
-      .where(eq(organization.id, organizationId))
+      .where(eq(organization.id, validation.organization.id))
       .returning()
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       strictSsoMode: updated.strictSsoMode,
       passwordAuthEnabled: updated.passwordAuthEnabled,
@@ -132,8 +99,6 @@ export async function PATCH(request: NextRequest) {
       githubOAuthEnabled: updated.githubOAuthEnabled,
       microsoftOAuthEnabled: updated.microsoftOAuthEnabled,
     })
-  } catch (error) {
-    console.error('Error updating organization security settings:', error)
-    return errorResponse('Internal server error')
-  }
-}
+  },
+  { roles: ['owner', 'admin'] }
+)

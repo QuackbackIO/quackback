@@ -1,7 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { ZodSchema } from 'zod'
 import { validateApiTenantAccess, type ApiTenantResult } from '@/lib/tenant'
 
 type Role = 'owner' | 'admin' | 'member'
+
+/**
+ * Custom error class for API errors that should be returned to the client.
+ */
+export class ApiError extends Error {
+  constructor(
+    public override message: string,
+    public status: number
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+/**
+ * Verify that a resource exists and belongs to the expected organization.
+ * Throws ApiError if resource is not found (404) or doesn't belong to org (403).
+ *
+ * @example
+ * const board = await db.query.boards.findFirst({ where: eq(boards.id, boardId) })
+ * verifyResourceOwnership(board, validation.organization.id, 'Board')
+ * // board is now guaranteed to be non-null and belong to the org
+ */
+export function verifyResourceOwnership<T extends { organizationId: string }>(
+  resource: T | null | undefined,
+  expectedOrgId: string,
+  resourceName: string = 'Resource'
+): asserts resource is T {
+  if (!resource) {
+    throw new ApiError(`${resourceName} not found`, 404)
+  }
+  if (resource.organizationId !== expectedOrgId) {
+    throw new ApiError('Forbidden', 403)
+  }
+}
+
+/**
+ * Validate request body against a Zod schema.
+ * Throws ApiError with 400 status if validation fails.
+ *
+ * @example
+ * const body = await request.json()
+ * const { name, description } = validateBody(createBoardSchema, body)
+ */
+export function validateBody<T>(schema: ZodSchema<T>, body: unknown): T {
+  const result = schema.safeParse(body)
+  if (!result.success) {
+    throw new ApiError(result.error.issues[0]?.message || 'Invalid input', 400)
+  }
+  return result.data
+}
 
 /**
  * Role hierarchy for permission checks.
@@ -118,6 +170,9 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
       // Call the handler
       return await handler(request, { validation })
     } catch (error) {
+      if (error instanceof ApiError) {
+        return NextResponse.json({ error: error.message }, { status: error.status })
+      }
       console.error('API error:', error)
       return errorResponse('Internal server error', 500)
     }
@@ -138,4 +193,83 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
  */
 export function requireRole(userRole: string, allowedRoles: Role[]): boolean {
   return isAllowedRole(userRole, allowedRoles)
+}
+
+/**
+ * Context passed to handler with route params.
+ */
+interface ApiHandlerContextWithParams<P> extends ApiHandlerContext {
+  params: P
+}
+
+type ApiHandlerWithParams<P> = (
+  request: NextRequest,
+  context: ApiHandlerContextWithParams<P>
+) => Promise<NextResponse>
+
+/**
+ * Wrap an API route handler that has route params with standardized error handling,
+ * tenant validation, and optional role checking.
+ *
+ * @example
+ * export const PATCH = withApiHandlerParams<{ id: string }>(
+ *   async (request, { validation, params }) => {
+ *     const { id } = params
+ *     // ... handler logic
+ *     return successResponse(result)
+ *   },
+ *   { roles: ['owner', 'admin'] }
+ * )
+ */
+export function withApiHandlerParams<P>(
+  handler: ApiHandlerWithParams<P>,
+  options: ApiHandlerOptions = {}
+) {
+  return async (
+    request: NextRequest,
+    routeContext: { params: Promise<P> }
+  ): Promise<NextResponse> => {
+    try {
+      const params = await routeContext.params
+
+      // Extract organizationId from body or query params
+      let organizationId: string | null = null
+
+      if (request.method === 'GET' || request.method === 'DELETE') {
+        const { searchParams } = new URL(request.url)
+        organizationId = searchParams.get('organizationId')
+      } else {
+        // For POST/PATCH/PUT, try to parse the body
+        const clonedRequest = request.clone()
+        try {
+          const body = await clonedRequest.json()
+          organizationId = body.organizationId ?? null
+        } catch {
+          // Body might not be JSON or might be empty
+        }
+      }
+
+      // Validate tenant access
+      const validation = await validateApiTenantAccess(organizationId)
+      if (!validation.success) {
+        return NextResponse.json({ error: validation.error }, { status: validation.status })
+      }
+
+      // Check role if required
+      if (options.roles && options.roles.length > 0) {
+        if (!isAllowedRole(validation.member.role, options.roles)) {
+          return forbiddenResponse()
+        }
+      }
+
+      // Call the handler with params
+      return await handler(request, { validation, params })
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return NextResponse.json({ error: error.message }, { status: error.status })
+      }
+      console.error('API error:', error)
+      return errorResponse('Internal server error', 500)
+    }
+  }
 }
