@@ -1,0 +1,46 @@
+Quackback Enterprise Edition License Agreement
+
+Copyright (c) 2024-present Quackback
+
+NOTICE: The code and files in this directory (ee/) are licensed under a
+proprietary commercial license that is separate from the main Quackback
+codebase (which is licensed under BSL-1.1).
+
+TERMS AND CONDITIONS:
+
+1. LICENSE GRANT
+   Subject to the terms of this Agreement and payment of applicable fees,
+   Quackback grants you a limited, non-exclusive, non-transferable license
+   to use the Enterprise Edition features for your internal business purposes.
+
+2. RESTRICTIONS
+   You may NOT:
+   - Distribute, sublicense, or resell this software
+   - Modify or create derivative works
+   - Remove or alter any proprietary notices
+   - Use without a valid Enterprise license key
+
+3. ENTERPRISE FEATURES INCLUDED
+   - SSO/SAML Authentication
+   - SCIM User Provisioning
+   - Extended Audit Logs
+   - Advanced Analytics
+   - White-label Branding
+   - Priority Support
+
+4. SUPPORT AND UPDATES
+   Enterprise license includes access to updates and priority support
+   for the duration of your subscription term.
+
+5. TERMINATION
+   This license automatically terminates if you fail to comply with its
+   terms or upon expiration of your subscription.
+
+6. WARRANTY DISCLAIMER
+   THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+
+7. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL QUACKBACK BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
+   SPECIAL, OR CONSEQUENTIAL DAMAGES.
+
+For licensing inquiries: enterprise@quackback.io
