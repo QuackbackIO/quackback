@@ -1,0 +1,91 @@
+/**
+ * Service Context Types
+ *
+ * This module defines the core types for the service layer execution context.
+ * ServiceContext captures all necessary information about the authenticated user
+ * and their organization for service operations.
+ */
+
+/**
+ * Execution context for service layer operations.
+ * Contains authenticated user and organization information.
+ */
+export interface ServiceContext {
+  /** Organization ID for multi-tenant isolation */
+  organizationId: string
+  /** User ID of the authenticated user */
+  userId: string
+  /** Member ID (join table between user and organization) */
+  memberId: string
+  /** Member's role in the organization */
+  memberRole: 'owner' | 'admin' | 'member' | 'user'
+  /** User's display name */
+  userName: string
+  /** User's email address */
+  userEmail: string
+  /** Optional identifier for anonymous/portal users */
+  userIdentifier?: string
+}
+
+/**
+ * Auth validation result structure used to build ServiceContext.
+ * This matches the shape returned by auth validation helpers.
+ */
+export interface AuthValidation {
+  organization: {
+    id: string
+  }
+  user: {
+    id: string
+    name: string | null
+    email: string
+  }
+  member: {
+    id: string
+    role: string
+  }
+}
+
+/**
+ * Builds a ServiceContext from auth validation result.
+ *
+ * @param validation - Auth validation result containing organization, user, and member data
+ * @returns ServiceContext ready for service layer operations
+ */
+export function buildServiceContext(validation: AuthValidation): ServiceContext {
+  return {
+    organizationId: validation.organization.id,
+    userId: validation.user.id,
+    memberId: validation.member.id,
+    memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
+    userName: validation.user.name || validation.user.email,
+    userEmail: validation.user.email,
+  }
+}
+
+/**
+ * Pagination parameters for list operations.
+ */
+export interface PaginationParams {
+  /** Maximum number of items to return */
+  limit?: number
+  /** Number of items to skip (offset-based pagination) */
+  offset?: number
+  /** Cursor for cursor-based pagination */
+  cursor?: string
+}
+
+/**
+ * Paginated result wrapper.
+ * Contains items along with pagination metadata.
+ */
+export interface PaginatedResult<T> {
+  /** Array of items for the current page */
+  items: T[]
+  /** Total count of items across all pages */
+  total: number
+  /** Whether more items exist after this page */
+  hasMore: boolean
+  /** Cursor for fetching the next page (cursor-based pagination) */
+  nextCursor?: string
+}
