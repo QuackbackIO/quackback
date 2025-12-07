@@ -5,7 +5,8 @@
   "packageManager": "bun@1.3.3",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "ee"
   ],
   "scripts": {
     "setup": "./scripts/setup.sh",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@hookform/resolvers": "^5.2.2",
+    "@types/node": "^24.10.1",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-prettier": "^10.1.8",

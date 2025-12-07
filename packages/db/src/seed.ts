@@ -14,6 +14,7 @@ import bcrypt from 'bcryptjs'
 import { user, organization, member, account, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, comments, votes } from './schema/posts'
+import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 
 const connectionString = process.env.DATABASE_URL!
 const client = postgres(connectionString)
@@ -500,6 +501,22 @@ async function seed() {
   }
 
   console.log(`   Created ${orgRecords.length} organizations`)
+
+  // =========================================================================
+  // Create Default Statuses (per organization)
+  // =========================================================================
+  console.log('📊 Creating default statuses...')
+
+  for (const org of orgRecords) {
+    for (const statusData of DEFAULT_STATUSES) {
+      await db.insert(postStatuses).values({
+        organizationId: org.id,
+        ...statusData,
+      })
+    }
+  }
+
+  console.log(`   Created ${DEFAULT_STATUSES.length} statuses per organization`)
 
   // =========================================================================
   // Create Users (with organizationId - tenant isolation)

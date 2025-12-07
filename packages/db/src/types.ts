@@ -11,6 +11,7 @@ import type {
 } from './schema/posts'
 import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
+import type { member } from './schema/auth'
 
 // Re-export status types
 export type { StatusCategory }
@@ -85,6 +86,10 @@ export type IntegrationStatus = Integration['status']
 // Changelog types
 export type ChangelogEntry = InferSelectModel<typeof changelogEntries>
 export type NewChangelogEntry = InferInsertModel<typeof changelogEntries>
+
+// Member types
+export type Member = InferSelectModel<typeof member>
+export type NewMember = InferInsertModel<typeof member>
 
 // Extended types for queries with relations
 export type PostWithTags = Post & {

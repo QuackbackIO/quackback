@@ -11,11 +11,13 @@
     "noEmit": true,
     "declaration": true,
     "declarationMap": true,
-    "composite": true
+    "composite": true,
+    "types": ["node"]
   },
   "references": [
     { "path": "apps/web" },
     { "path": "packages/db" },
+    { "path": "packages/domain" },
     { "path": "packages/shared" },
     { "path": "packages/integrations" }
   ]

@@ -61,6 +61,7 @@ export function PostCard({
       {/* Vote section - left column */}
       <button
         type="button"
+        data-testid="vote-button"
         onClick={handleVote}
         disabled={isPending}
         className={`flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 hover:bg-muted/40 transition-colors ${
@@ -68,7 +69,10 @@ export function PostCard({
         } ${isPending ? 'opacity-70' : ''}`}
       >
         <ChevronUp className={`h-5 w-5 ${currentHasVoted ? 'fill-primary' : ''}`} />
-        <span className={`text-sm font-bold ${currentHasVoted ? '' : 'text-foreground'}`}>
+        <span
+          data-testid="vote-count"
+          className={`text-sm font-bold ${currentHasVoted ? '' : 'text-foreground'}`}
+        >
           {currentVoteCount}
         </span>
       </button>

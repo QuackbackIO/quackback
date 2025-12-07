@@ -31,6 +31,7 @@ export function VoteButton({
   return (
     <button
       type="button"
+      data-testid="vote-button"
       className={cn(
         'flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors',
         hasVoted ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
@@ -41,7 +42,10 @@ export function VoteButton({
       disabled={disabled || isPending}
     >
       <ChevronUp className={cn('h-6 w-6', hasVoted && 'fill-primary')} />
-      <span className={cn('text-lg font-bold', hasVoted ? 'text-primary' : 'text-foreground')}>
+      <span
+        data-testid="vote-count"
+        className={cn('text-lg font-bold', hasVoted ? 'text-primary' : 'text-foreground')}
+      >
         {voteCount}
       </span>
     </button>
