@@ -2,22 +2,25 @@
 export { db, type Database } from './src/tenant-context'
 export { withTenantContext, setTenantContext, clearTenantContext } from './src/tenant-context'
 
+// Unit of Work
+export { UnitOfWork, withUnitOfWork } from './src/unit-of-work'
+
+// Repositories
+export * from './src/repositories'
+
 // Schema
 export * from './src/schema'
 
 // Types
 export * from './src/types'
 
-// Queries
+// Queries (legacy - kept for backward compatibility)
 export * from './src/queries/boards'
-export * from './src/queries/roadmaps'
 export * from './src/queries/posts'
 export * from './src/queries/comments'
 export * from './src/queries/statuses'
-export * from './src/queries/integrations'
-export * from './src/queries/changelog'
-export * from './src/queries/public'
 export * from './src/queries/members'
+export * from './src/queries/public'
 
 // Re-export common drizzle-orm utilities
 export {
