@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server'
-import {
-  getStatusesByOrganization,
-  createStatus,
-  getStatusBySlug,
-  type StatusCategory,
-} from '@quackback/db'
 import { withApiHandler, validateBody, ApiError, successResponse } from '@/lib/api-handler'
 import { z } from 'zod'
+import { getStatusService } from '@/lib/services'
+import { buildServiceContext } from '@quackback/domain'
 
 const createStatusSchema = z.object({
   name: z.string().min(1).max(50),
@@ -27,8 +23,30 @@ const createStatusSchema = z.object({
  * List all statuses for an organization
  */
 export const GET = withApiHandler(async (_request, { validation }) => {
-  const statuses = await getStatusesByOrganization(validation.organization.id)
-  return NextResponse.json(statuses)
+  // Build service context from validation
+  const ctx = buildServiceContext(validation)
+
+  // Call StatusService to list statuses
+  const result = await getStatusService().listStatuses(ctx)
+
+  // Map Result to HTTP response
+  if (!result.success) {
+    const error = result.error
+
+    // Map domain errors to HTTP status codes
+    switch (error.code) {
+      case 'STATUS_NOT_FOUND':
+        throw new ApiError(error.message, 404)
+      case 'UNAUTHORIZED':
+        throw new ApiError(error.message, 403)
+      case 'VALIDATION_ERROR':
+        throw new ApiError(error.message, 400)
+      default:
+        throw new ApiError('Internal server error', 500)
+    }
+  }
+
+  return NextResponse.json(result.value)
 })
 
 /**
@@ -37,28 +55,36 @@ export const GET = withApiHandler(async (_request, { validation }) => {
  */
 export const POST = withApiHandler(async (request, { validation }) => {
   const body = await request.json()
-  const { name, slug, color, category, position, showOnRoadmap, isDefault } = validateBody(
-    createStatusSchema,
-    body
-  )
+  const input = validateBody(createStatusSchema, body)
 
-  // Check if slug already exists for this org
-  const existingStatus = await getStatusBySlug(validation.organization.id, slug)
-  if (existingStatus) {
-    throw new ApiError('A status with this slug already exists', 409)
+  // Build service context from validation
+  const ctx = buildServiceContext(validation)
+
+  // Call StatusService to create the status
+  const result = await getStatusService().createStatus(input, ctx)
+
+  // Map Result to HTTP response
+  if (!result.success) {
+    const error = result.error
+
+    // Map domain errors to HTTP status codes
+    switch (error.code) {
+      case 'STATUS_NOT_FOUND':
+        throw new ApiError(error.message, 404)
+      case 'DUPLICATE_SLUG':
+        throw new ApiError(error.message, 409)
+      case 'UNAUTHORIZED':
+        throw new ApiError(error.message, 403)
+      case 'VALIDATION_ERROR':
+        throw new ApiError(error.message, 400)
+      case 'CANNOT_DELETE_DEFAULT':
+        throw new ApiError(error.message, 400)
+      case 'CANNOT_DELETE_IN_USE':
+        throw new ApiError(error.message, 400)
+      default:
+        throw new ApiError('Internal server error', 500)
+    }
   }
 
-  // Create the status
-  const status = await createStatus({
-    organizationId: validation.organization.id,
-    name,
-    slug,
-    color,
-    category: category as StatusCategory,
-    position: position ?? 0,
-    showOnRoadmap: showOnRoadmap ?? false,
-    isDefault: isDefault ?? false,
-  })
-
-  return successResponse(status, 201)
+  return successResponse(result.value, 201)
 })

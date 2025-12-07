@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getInboxPostList, createPost, setPostTags, getBoardById } from '@quackback/db'
+import { getInboxPostList } from '@quackback/db'
 import { withApiHandler, validateBody, ApiError, successResponse } from '@/lib/api-handler'
 import { createPostSchema, type PostStatus } from '@/lib/schemas/posts'
+import { getPostService } from '@/lib/services'
+import { buildServiceContext } from '@quackback/domain'
 
 export const GET = withApiHandler(async (request, { validation }) => {
   const { searchParams } = new URL(request.url)
@@ -47,31 +49,34 @@ export const GET = withApiHandler(async (request, { validation }) => {
 
 export const POST = withApiHandler(async (request, { validation }) => {
   const body = await request.json()
-  const { title, content, boardId, status, tagIds } = validateBody(createPostSchema, body)
+  const input = validateBody(createPostSchema, body)
 
-  // Verify the board belongs to this organization
-  const board = await getBoardById(boardId)
-  if (!board || board.organizationId !== validation.organization.id) {
-    throw new ApiError('Board not found', 404)
+  // Build service context from validation
+  const ctx = buildServiceContext(validation)
+
+  // Call PostService to create the post
+  const result = await getPostService().createPost(input, ctx)
+
+  // Map Result to HTTP response
+  if (!result.success) {
+    const error = result.error
+
+    // Map domain errors to HTTP status codes
+    switch (error.code) {
+      case 'BOARD_NOT_FOUND':
+        throw new ApiError(error.message, 404)
+      case 'POST_NOT_FOUND':
+        throw new ApiError(error.message, 404)
+      case 'VALIDATION_ERROR':
+        throw new ApiError(error.message, 400)
+      case 'UNAUTHORIZED':
+        throw new ApiError(error.message, 403)
+      case 'INVALID_TAGS':
+        throw new ApiError(error.message, 400)
+      default:
+        throw new ApiError('Internal server error', 500)
+    }
   }
 
-  // Create the post with member-scoped identity
-  const post = await createPost({
-    boardId,
-    title,
-    content,
-    status: status || 'open',
-    // Member-scoped identity (Hub-and-Spoke model)
-    memberId: validation.member.id,
-    // Legacy fields for display compatibility
-    authorName: validation.user.name || 'Team',
-    authorEmail: validation.user.email,
-  })
-
-  // Add tags if provided
-  if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
-    await setPostTags(post.id, tagIds)
-  }
-
-  return successResponse(post, 201)
+  return successResponse(result.value, 201)
 })

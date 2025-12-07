@@ -1,5 +1,6 @@
-import { db, boards, eq } from '@quackback/db'
-import { withApiHandlerParams, verifyResourceOwnership, successResponse } from '@/lib/api-handler'
+import { withApiHandlerParams, ApiError, successResponse } from '@/lib/api-handler'
+import { getBoardService } from '@/lib/services'
+import { buildServiceContext } from '@quackback/domain'
 
 type RouteParams = { boardId: string }
 
@@ -8,49 +9,75 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
   const body = await request.json()
   const { name, description, isPublic, settings } = body
 
-  // Get and verify board ownership
-  const board = await db.query.boards.findFirst({
-    where: eq(boards.id, boardId),
-  })
-  verifyResourceOwnership(board, validation.organization.id, 'Board')
+  // Build service context from validation
+  const ctx = buildServiceContext(validation)
 
-  // Merge settings with existing settings if provided
-  let mergedSettings = board.settings
-  if (settings !== undefined) {
-    mergedSettings = {
-      ...((board.settings as object) || {}),
-      ...settings,
+  // Build update input
+  const input: {
+    name?: string
+    description?: string | null
+    isPublic?: boolean
+    settings?: Record<string, unknown>
+  } = {}
+
+  if (name !== undefined) input.name = name
+  if (description !== undefined) input.description = description
+  if (isPublic !== undefined) input.isPublic = isPublic
+  if (settings !== undefined) input.settings = settings
+
+  // Call BoardService to update the board
+  const result = await getBoardService().updateBoard(boardId, input, ctx)
+
+  // Map Result to HTTP response
+  if (!result.success) {
+    const error = result.error
+
+    // Map domain errors to HTTP status codes
+    switch (error.code) {
+      case 'BOARD_NOT_FOUND':
+        throw new ApiError(error.message, 404)
+      case 'DUPLICATE_SLUG':
+        throw new ApiError(error.message, 409)
+      case 'UNAUTHORIZED':
+        throw new ApiError(error.message, 403)
+      case 'VALIDATION_ERROR':
+        throw new ApiError(error.message, 400)
+      default:
+        throw new ApiError('Internal server error', 500)
     }
   }
 
-  // Update the board
-  const [updatedBoard] = await db
-    .update(boards)
-    .set({
-      ...(name !== undefined && { name }),
-      ...(description !== undefined && { description }),
-      ...(isPublic !== undefined && { isPublic }),
-      ...(settings !== undefined && { settings: mergedSettings }),
-      updatedAt: new Date(),
-    })
-    .where(eq(boards.id, boardId))
-    .returning()
-
-  return successResponse(updatedBoard)
+  return successResponse(result.value)
 })
 
 export const DELETE = withApiHandlerParams<RouteParams>(
   async (_request, { validation, params }) => {
     const { boardId } = params
 
-    // Get and verify board ownership
-    const board = await db.query.boards.findFirst({
-      where: eq(boards.id, boardId),
-    })
-    verifyResourceOwnership(board, validation.organization.id, 'Board')
+    // Build service context from validation
+    const ctx = buildServiceContext(validation)
 
-    // Delete the board
-    await db.delete(boards).where(eq(boards.id, boardId))
+    // Call BoardService to delete the board
+    const result = await getBoardService().deleteBoard(boardId, ctx)
+
+    // Map Result to HTTP response
+    if (!result.success) {
+      const error = result.error
+
+      // Map domain errors to HTTP status codes
+      switch (error.code) {
+        case 'BOARD_NOT_FOUND':
+          throw new ApiError(error.message, 404)
+        case 'DUPLICATE_SLUG':
+          throw new ApiError(error.message, 409)
+        case 'UNAUTHORIZED':
+          throw new ApiError(error.message, 403)
+        case 'VALIDATION_ERROR':
+          throw new ApiError(error.message, 400)
+        default:
+          throw new ApiError('Internal server error', 500)
+      }
+    }
 
     return successResponse({ success: true })
   }

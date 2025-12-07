@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPublicPostListAllBoards } from '@quackback/db/queries/public'
-import { db, organization, eq } from '@quackback/db'
+import { getPostService } from '@/lib/services'
+import type { PostError } from '@quackback/domain'
+
+/**
+ * Map PostError codes to HTTP status codes
+ */
+function getHttpStatusFromError(error: PostError): number {
+  switch (error.code) {
+    case 'POST_NOT_FOUND':
+    case 'BOARD_NOT_FOUND':
+      return 404
+    case 'UNAUTHORIZED':
+      return 403
+    case 'VALIDATION_ERROR':
+      return 400
+    default:
+      return 500
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,32 +28,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
 
-    // Validate organization exists
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
-    })
-
-    if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-    }
-
     // Parse filter params
-    const board = searchParams.get('board') || undefined
+    const boardSlug = searchParams.get('board') || undefined
     const search = searchParams.get('search') || undefined
     const sort = (searchParams.get('sort') as 'top' | 'new' | 'trending') || 'top'
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '20', 10)
 
-    const result = await getPublicPostListAllBoards({
+    // Call PostService to list public posts
+    const postService = getPostService()
+    const result = await postService.listPublicPosts({
       organizationId,
-      boardSlug: board,
+      boardSlug,
       search,
       sort,
       page,
       limit,
     })
 
-    return NextResponse.json(result)
+    // Map Result to HTTP response
+    if (!result.success) {
+      const status = getHttpStatusFromError(result.error)
+      return NextResponse.json({ error: result.error.message }, { status })
+    }
+
+    return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error fetching public posts:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

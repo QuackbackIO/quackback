@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPublicBoardById } from '@quackback/db/queries/public'
-import {
-  createPost,
-  getDefaultStatus,
-  getBoardSettings,
-  getMemberByUserAndOrg,
-} from '@quackback/db'
+import { getBoardSettings, getMemberByUserAndOrg } from '@quackback/db'
 import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
+import { getBoardService, getStatusService, getPostService } from '@/lib/services'
+import { buildServiceContext, type ServiceContext } from '@quackback/domain'
 
 interface RouteParams {
   params: Promise<{ boardId: string }>
@@ -24,10 +20,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { boardId } = await params
 
   // 1. Get board and verify it exists and is public
-  const board = await getPublicBoardById(boardId)
-  if (!board) {
+  const boardResult = await getBoardService().getPublicBoardById(boardId)
+  if (!boardResult.success) {
     return NextResponse.json({ error: 'Board not found' }, { status: 404 })
   }
+
+  const board = boardResult.value
 
   if (!board.isPublic) {
     return NextResponse.json({ error: 'Board not found' }, { status: 404 })
@@ -61,7 +59,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  // 5. Validate request body
+  // 5. Build service context for domain operations
+  const ctx: ServiceContext = buildServiceContext({
+    organization: { id: board.organizationId },
+    user: {
+      id: session.user.id,
+      name: session.user.name,
+      email: session.user.email,
+    },
+    member: {
+      id: memberRecord.id,
+      role: memberRecord.role,
+    },
+  })
+
+  // 6. Validate request body
   let body
   try {
     body = await request.json()
@@ -79,21 +91,45 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const { title, content, contentJson } = result.data
 
-  // 6. Get default status for this organization
-  const defaultStatus = await getDefaultStatus(board.organizationId)
+  // 7. Get default status for this organization
+  const defaultStatusResult = await getStatusService().getDefaultStatus(ctx)
+  if (!defaultStatusResult.success) {
+    return NextResponse.json({ error: 'Failed to retrieve default status' }, { status: 500 })
+  }
 
-  // 7. Create the post with the default status
-  const post = await createPost({
-    boardId,
-    title,
-    content,
-    contentJson,
-    // Use custom status ID if available, status defaults to 'open' in schema
-    statusId: defaultStatus?.id,
-    memberId: memberRecord.id,
-    authorName: session.user.name || 'User',
-    authorEmail: session.user.email,
-  })
+  // 8. Create the post via the PostService
+  const createResult = await getPostService().createPost(
+    {
+      boardId,
+      title,
+      content,
+      contentJson,
+      // The service uses the legacy 'status' field, not statusId
+      // We'll need to update the post with statusId after creation if a default status exists
+      status: 'open', // Use legacy default
+    },
+    ctx
+  )
+
+  if (!createResult.success) {
+    return NextResponse.json(
+      { error: createResult.error.message },
+      { status: createResult.error.code === 'VALIDATION_ERROR' ? 400 : 500 }
+    )
+  }
+
+  const post = createResult.value
+
+  // 9. Update post with custom statusId if a default status exists
+  // This is necessary because the PostService doesn't currently support statusId in CreatePostInput
+  const defaultStatus = defaultStatusResult.value
+  if (defaultStatus) {
+    const updateResult = await getPostService().changeStatus(post.id, defaultStatus.id, ctx)
+    if (!updateResult.success) {
+      // Log error but don't fail the request - post was created successfully
+      console.error('Failed to set default status on post:', updateResult.error)
+    }
+  }
 
   return NextResponse.json(post, { status: 201 })
 }

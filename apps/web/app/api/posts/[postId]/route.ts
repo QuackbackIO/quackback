@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getPostWithDetails,
-  getCommentsWithReplies,
-  updatePost,
-  getMemberByUserAndOrg,
-  type CommentWithRepliesAndReactions,
-} from '@quackback/db'
+import { getMemberByUserAndOrg } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
+import { getPostService } from '@/lib/services'
+import { buildServiceContext, type CommentNode, type PostError } from '@quackback/domain'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
  */
-function collectCommentMemberIds(comments: CommentWithRepliesAndReactions[]): string[] {
+function collectCommentMemberIds(comments: CommentNode[]): string[] {
   const memberIds: string[] = []
   for (const comment of comments) {
     if (comment.memberId) {
@@ -23,6 +19,24 @@ function collectCommentMemberIds(comments: CommentWithRepliesAndReactions[]): st
     }
   }
   return memberIds
+}
+
+/**
+ * Map PostError codes to HTTP status codes
+ */
+function getHttpStatusFromError(error: PostError): number {
+  switch (error.code) {
+    case 'POST_NOT_FOUND':
+      return 404
+    case 'BOARD_NOT_FOUND':
+      return 404
+    case 'UNAUTHORIZED':
+      return 403
+    case 'VALIDATION_ERROR':
+      return 400
+    default:
+      return 500
+  }
 }
 
 export async function GET(
@@ -40,23 +54,35 @@ export async function GET(
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
-    const post = await getPostWithDetails(postId)
+    // Build service context from validation
+    const ctx = buildServiceContext(validation)
 
-    if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    // Get post with details using PostService
+    const postResult = await getPostService().getPostWithDetails(postId, ctx)
+
+    // Handle Result type
+    if (!postResult.success) {
+      const status = getHttpStatusFromError(postResult.error)
+      return NextResponse.json({ error: postResult.error.message }, { status })
     }
 
-    // Verify the post belongs to a board in this organization
-    if (post.board.organizationId !== validation.organization.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const post = postResult.value
 
     // Get comments with reactions in nested format
     // Use member ID as identifier to track which reactions belong to current user
-    const commentsWithReplies = await getCommentsWithReplies(
+    const commentsResult = await getPostService().getCommentsWithReplies(
       postId,
-      `member:${validation.member.id}`
+      `member:${validation.member.id}`,
+      ctx
     )
+
+    // Handle Result type
+    if (!commentsResult.success) {
+      const status = getHttpStatusFromError(commentsResult.error)
+      return NextResponse.json({ error: commentsResult.error.message }, { status })
+    }
+
+    const commentsWithReplies = commentsResult.value
 
     // Collect member IDs from post author and all comments for avatar lookup
     const memberIds: string[] = []
@@ -66,10 +92,10 @@ export async function GET(
     // Fetch avatar URLs for all members
     const avatarMap = await getBulkMemberAvatarData(memberIds)
 
-    // Transform tags from junction table format and official response
+    // Transform tags and official response for response format
     const transformedPost = {
       ...post,
-      tags: post.tags.map((pt: { tag: { id: string; name: string; color: string } }) => pt.tag),
+      tags: post.tags,
       comments: commentsWithReplies,
       officialResponse: post.officialResponse
         ? {
@@ -104,36 +130,28 @@ export async function PATCH(
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
-    // Get the post to verify it belongs to this org
-    const existingPost = await getPostWithDetails(postId)
-    if (!existingPost) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
-    }
+    // Build service context from validation
+    const ctx = buildServiceContext(validation)
 
-    if (existingPost.board.organizationId !== validation.organization.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    // Build update data
-    const updateData: {
+    // Build update input
+    const updateInput: {
       status?: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
       ownerId?: string | null
       ownerMemberId?: string | null
       officialResponse?: string | null
-      officialResponseAuthorId?: string | null
       officialResponseMemberId?: string | null
       officialResponseAuthorName?: string | null
-      officialResponseAt?: Date | null
     } = {}
-    if (status !== undefined) updateData.status = status
+
+    if (status !== undefined) updateInput.status = status
     if (ownerId !== undefined) {
-      updateData.ownerId = ownerId
+      updateInput.ownerId = ownerId
       // Look up ownerMemberId from ownerId (user ID -> member ID for this org)
       if (ownerId) {
         const ownerMember = await getMemberByUserAndOrg(ownerId, validation.organization.id)
-        updateData.ownerMemberId = ownerMember?.id ?? null
+        updateInput.ownerMemberId = ownerMember?.id ?? null
       } else {
-        updateData.ownerMemberId = null
+        updateInput.ownerMemberId = null
       }
     }
 
@@ -141,24 +159,27 @@ export async function PATCH(
     if (body.officialResponse !== undefined) {
       if (body.officialResponse === null || body.officialResponse === '') {
         // Clear the official response
-        updateData.officialResponse = null
-        updateData.officialResponseAuthorId = null
-        updateData.officialResponseMemberId = null
-        updateData.officialResponseAuthorName = null
-        updateData.officialResponseAt = null
+        updateInput.officialResponse = null
+        updateInput.officialResponseMemberId = null
+        updateInput.officialResponseAuthorName = null
       } else {
         // Set or update official response with member-scoped identity
-        updateData.officialResponse = body.officialResponse
-        updateData.officialResponseAuthorId = validation.user.id
-        updateData.officialResponseMemberId = validation.member.id
-        updateData.officialResponseAuthorName = validation.user.name || validation.user.email
-        updateData.officialResponseAt = new Date()
+        updateInput.officialResponse = body.officialResponse
+        updateInput.officialResponseMemberId = validation.member.id
+        updateInput.officialResponseAuthorName = validation.user.name || validation.user.email
       }
     }
 
-    const updatedPost = await updatePost(postId, updateData)
+    // Update post using PostService
+    const result = await getPostService().updatePost(postId, updateInput, ctx)
 
-    return NextResponse.json(updatedPost)
+    // Handle Result type
+    if (!result.success) {
+      const status = getHttpStatusFromError(result.error)
+      return NextResponse.json({ error: result.error.message }, { status })
+    }
+
+    return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error updating post:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

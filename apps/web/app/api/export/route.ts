@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
-import { db, posts, boards, eq, and } from '@quackback/db'
+import { getPostService, getBoardService } from '@/lib/services'
+import { buildServiceContext } from '@quackback/domain'
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,35 +21,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Only admins can export data' }, { status: 403 })
     }
 
+    // Build service context
+    const ctx = buildServiceContext(validation)
+    const boardService = getBoardService()
+    const postService = getPostService()
+
     if (boardId) {
       // Verify board belongs to organization
-      const board = await db.query.boards.findFirst({
-        where: and(eq(boards.id, boardId), eq(boards.organizationId, validation.organization.id)),
-      })
-      if (!board) {
+      const boardResult = await boardService.validateBoardBelongsToOrg(
+        boardId,
+        validation.organization.id
+      )
+      if (!boardResult.success) {
         return NextResponse.json({ error: 'Board not found' }, { status: 400 })
       }
     }
 
-    // Get all posts with their tags and status
-    const allPosts = await db.query.posts.findMany({
-      where: boardId ? eq(posts.boardId, boardId) : undefined,
-      with: {
-        board: true,
-        postStatus: true,
-        tags: {
-          with: {
-            tag: true,
-          },
-        },
-      },
-      orderBy: (posts, { desc }) => [desc(posts.createdAt)],
-    })
+    // Get all posts for export
+    const postsResult = await postService.listPostsForExport(boardId || undefined, ctx)
+    if (!postsResult.success) {
+      return NextResponse.json({ error: postsResult.error.message }, { status: 500 })
+    }
 
-    // Filter to only posts from this organization (via board)
-    const orgPosts = allPosts.filter(
-      (post) => post.board?.organizationId === validation.organization.id
-    )
+    const orgPosts = postsResult.value
 
     // Build CSV content
     const headers = [
@@ -64,15 +59,15 @@ export async function GET(request: NextRequest) {
     ]
 
     const rows = orgPosts.map((post) => {
-      const tagNames = post.tags.map((pt) => pt.tag.name).join(',')
-      const statusSlug = post.postStatus?.slug || post.status || ''
+      const tagNames = post.tags.map((t) => t.name).join(',')
+      const statusSlug = post.statusDetails?.name || post.status || ''
 
       return [
         escapeCSV(post.title),
         escapeCSV(post.content),
         escapeCSV(statusSlug),
         escapeCSV(tagNames),
-        escapeCSV(post.board?.slug || ''),
+        escapeCSV(post.board.slug),
         escapeCSV(post.authorName || ''),
         escapeCSV(post.authorEmail || ''),
         String(post.voteCount),
