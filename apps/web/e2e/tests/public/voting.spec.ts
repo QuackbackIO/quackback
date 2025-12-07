@@ -9,15 +9,13 @@ test.describe('Public Voting', () => {
   })
 
   test('displays vote count on posts', async ({ page }) => {
-    // Look for vote buttons (buttons containing chevron up icon)
-    const voteButtons = page.locator('button').filter({
-      has: page.locator('svg.lucide-chevron-up'),
-    })
+    // Look for vote buttons using data-testid
+    const voteButtons = page.getByTestId('vote-button')
 
     await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
 
     // Vote count should be displayed as a number
-    const voteCount = voteButtons.first().locator('span')
+    const voteCount = voteButtons.first().getByTestId('vote-count')
     await expect(voteCount).toBeVisible()
     const countText = await voteCount.textContent()
     expect(countText).toMatch(/^\d+$/)
@@ -25,14 +23,12 @@ test.describe('Public Voting', () => {
 
   test('can upvote a post', async ({ page }) => {
     // Use 2nd post to avoid conflicts with other tests
-    const voteButtons = page.locator('button').filter({
-      has: page.locator('svg.lucide-chevron-up'),
-    })
+    const voteButtons = page.getByTestId('vote-button')
     const voteButton = voteButtons.nth(1)
     await expect(voteButton).toBeVisible({ timeout: 10000 })
 
     // Get the initial vote count
-    const voteCountSpan = voteButton.locator('span')
+    const voteCountSpan = voteButton.getByTestId('vote-count')
     const initialCountText = await voteCountSpan.textContent()
     const initialCount = parseInt(initialCountText || '0', 10)
 
@@ -45,13 +41,11 @@ test.describe('Public Voting', () => {
 
   test('can toggle vote off', async ({ page }) => {
     // Use 3rd post to avoid conflicts with other tests
-    const voteButtons = page.locator('button').filter({
-      has: page.locator('svg.lucide-chevron-up'),
-    })
+    const voteButtons = page.getByTestId('vote-button')
     const voteButton = voteButtons.nth(2)
     await expect(voteButton).toBeVisible({ timeout: 10000 })
 
-    const voteCountSpan = voteButton.locator('span')
+    const voteCountSpan = voteButton.getByTestId('vote-count')
     const initialCountText = await voteCountSpan.textContent()
     const initialCount = parseInt(initialCountText || '0', 10)
 
@@ -66,9 +60,7 @@ test.describe('Public Voting', () => {
 
   test('vote button shows active state when voted', async ({ page }) => {
     // Use 4th post to avoid conflicts with other tests
-    const voteButtons = page.locator('button').filter({
-      has: page.locator('svg.lucide-chevron-up'),
-    })
+    const voteButtons = page.getByTestId('vote-button')
     const voteButton = voteButtons.nth(3)
     await expect(voteButton).toBeVisible({ timeout: 10000 })
 
@@ -90,17 +82,15 @@ test.describe('Public Voting', () => {
     // Wait for detail page to load
     await page.waitForLoadState('networkidle')
 
-    // Find vote button on detail page
-    const voteButton = page.locator('button').filter({
-      has: page.locator('svg.lucide-chevron-up'),
-    })
+    // Find vote button on detail page using data-testid
+    const voteButton = page.getByTestId('vote-button')
 
     if ((await voteButton.count()) > 0) {
       const firstVoteButton = voteButton.first()
       await expect(firstVoteButton).toBeVisible()
 
       // Get initial count
-      const voteCountSpan = firstVoteButton.locator('span').first()
+      const voteCountSpan = firstVoteButton.getByTestId('vote-count')
       const initialCountText = await voteCountSpan.textContent()
       const initialCount = parseInt(initialCountText || '0', 10)
 

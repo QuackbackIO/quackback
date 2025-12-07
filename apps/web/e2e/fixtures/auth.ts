@@ -26,8 +26,10 @@ export const test = base.extend<{
   loginAsAdmin: async ({ page }, use) => {
     const login = async () => {
       await page.goto('/admin/login')
-      await page.getByLabel('Email').fill(TEST_ADMIN.email)
-      await page.getByLabel('Password').fill(TEST_ADMIN.password)
+      // Wait for form to load (wrapped in Suspense)
+      await page.waitForSelector('input[type="email"]', { timeout: 10000 })
+      await page.locator('input[type="email"]').fill(TEST_ADMIN.email)
+      await page.locator('input[type="password"]').fill(TEST_ADMIN.password)
       await page.getByRole('button', { name: /sign in/i }).click()
       await expect(page).toHaveURL(/\/admin/, { timeout: 10000 })
     }

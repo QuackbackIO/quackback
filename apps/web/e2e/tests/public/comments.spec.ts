@@ -6,172 +6,170 @@ test.describe('Public Comments', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Click on the first post to go to detail page
-    const postLinks = page.locator('a[href*="/posts/"]')
-    await expect(postLinks.first()).toBeVisible({ timeout: 10000 })
-    await postLinks.first().click()
+    // Click on the first post card to go to detail page
+    // Post cards are Link elements with an h3 heading inside
+    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    await expect(postCards.first()).toBeVisible({ timeout: 10000 })
+    await postCards.first().click()
 
     // Wait for detail page to load
     await page.waitForLoadState('networkidle')
   })
 
   test('displays comments section on post detail', async ({ page }) => {
-    // Should show comment form or comments area
+    // Should show comment form with placeholder "Write a comment..." or empty state
     const commentSection = page
-      .getByPlaceholder(/comment/i)
+      .getByPlaceholder('Write a comment...')
       .or(page.getByText(/no comments yet/i))
-      .or(page.locator('textarea'))
 
     await expect(commentSection.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('shows comment form with textarea', async ({ page }) => {
-    // Should have a textarea for writing comments
-    const commentTextarea = page.getByPlaceholder(/write a comment/i).or(page.locator('textarea'))
+    // Should have a textarea with placeholder "Write a comment..."
+    const commentTextarea = page.getByPlaceholder('Write a comment...')
 
-    await expect(commentTextarea.first()).toBeVisible({ timeout: 10000 })
+    await expect(commentTextarea).toBeVisible({ timeout: 10000 })
   })
 
   test('can write and submit a comment', async ({ page }) => {
-    // Find the comment textarea
-    const commentTextarea = page.getByPlaceholder(/write a comment/i).or(page.locator('textarea'))
+    // Find the comment textarea with exact placeholder
+    const commentTextarea = page.getByPlaceholder('Write a comment...')
 
-    if ((await commentTextarea.count()) > 0) {
-      // Write a comment
-      const testComment = `Test comment ${Date.now()}`
-      await commentTextarea.first().fill(testComment)
+    // Write a comment
+    const testComment = `Test comment ${Date.now()}`
+    await commentTextarea.fill(testComment)
 
-      // Find and click the submit button
-      const submitButton = page.getByRole('button', { name: /comment|post|submit/i })
-      if ((await submitButton.count()) > 0) {
-        await submitButton.first().click()
+    // Find and click the submit button - it's the button with type="submit" in the form
+    const submitButton = page.locator('form button[type="submit"]').first()
+    await submitButton.click()
 
-        // Wait for the page to refresh with new comment
-        await page.waitForLoadState('networkidle')
+    // Wait for the page to refresh with new comment
+    await page.waitForLoadState('networkidle')
 
-        // The new comment should appear
-        await expect(page.getByText(testComment)).toBeVisible({ timeout: 10000 })
-      }
-    }
+    // The new comment should appear
+    await expect(page.getByText(testComment)).toBeVisible({ timeout: 10000 })
   })
 
   test('displays existing comments or empty state', async ({ page }) => {
-    // Either show comments or "no comments yet" message
-    // Check for "no comments" message first (faster)
-    const noComments = page.getByText(/no comments yet/i)
+    // Either show "No comments yet" message or the comment form textarea
+    const noComments = page.getByText(/no comments yet.*be the first/i)
+    const commentTextarea = page.getByPlaceholder('Write a comment...')
 
-    // Or check for comment content (textarea with existing comments above it)
-    const commentArea = page.locator('textarea')
-
-    // One of these should be visible - the comment section exists
-    await expect(noComments.or(commentArea)).toBeVisible({ timeout: 10000 })
+    // One of these should be visible
+    await expect(noComments.or(commentTextarea)).toBeVisible({ timeout: 10000 })
   })
 
   test('shows reply button on comments', async ({ page }) => {
-    // Find reply buttons
-    const replyButtons = page
-      .getByRole('button', { name: /reply/i })
-      .or(page.locator('button').filter({ has: page.locator('svg.lucide-reply') }))
+    // First check if there are any comments (not just the empty state)
+    const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
-    // If there are comments with reply buttons
-    if ((await replyButtons.count()) > 0) {
-      await expect(replyButtons.first()).toBeVisible()
+    if (noComments === 0) {
+      // There are comments - look for reply buttons
+      // Reply buttons have the text "Reply" and a Reply icon (lucide-reply)
+      const replyButtons = page.getByRole('button', { name: /^Reply$/i })
+      await expect(replyButtons.first()).toBeVisible({ timeout: 5000 })
     }
   })
 
   test('can open reply form', async ({ page }) => {
-    // Find reply button
-    const replyButton = page
-      .getByRole('button', { name: /reply/i })
-      .or(page.locator('button').filter({ has: page.locator('svg.lucide-reply') }))
+    // First check if there are any comments
+    const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
-    if ((await replyButton.count()) > 0) {
+    if (noComments === 0) {
+      // There are comments - find and click reply button
+      const replyButton = page.getByRole('button', { name: /^Reply$/i })
       await replyButton.first().click()
 
-      // Reply form should appear with textarea
-      const replyTextarea = page.locator('textarea').nth(1).or(page.getByPlaceholder(/reply/i))
+      // Reply form should appear - there will now be 2 textareas on the page
+      // (the main comment form and the reply form)
+      const textareas = page.locator('textarea')
+      await expect(textareas).toHaveCount(2, { timeout: 5000 })
 
-      // A second textarea should now be visible (the reply form)
-      await expect(replyTextarea.or(page.locator('textarea').first())).toBeVisible()
+      // Both should have the same placeholder
+      await expect(textareas.nth(1)).toHaveAttribute('placeholder', 'Write a comment...')
     }
   })
 
   test('shows emoji reaction picker', async ({ page }) => {
-    // Find reaction button (smile plus icon)
-    const reactionButton = page.locator('button').filter({
-      has: page.locator('svg.lucide-smile-plus'),
-    })
+    // First check if there are any comments
+    const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
-    if ((await reactionButton.count()) > 0) {
+    if (noComments === 0) {
+      // There are comments - find reaction button with SmilePlus icon
+      const reactionButton = page.locator('button:has(svg.lucide-smile-plus)')
+      await expect(reactionButton.first()).toBeVisible({ timeout: 5000 })
       await reactionButton.first().click()
 
-      // Emoji picker popover should appear
-      const emojiPopover = page.locator('[data-radix-popover-content]').or(page.getByRole('dialog'))
+      // Emoji picker popover should appear (using data-slot attribute)
+      const emojiPopover = page.locator('[data-slot="popover-content"]')
+      await expect(emojiPopover).toBeVisible({ timeout: 5000 })
 
-      if ((await emojiPopover.count()) > 0) {
-        await expect(emojiPopover).toBeVisible()
+      // Should show emoji options as buttons
+      const emojiButtons = emojiPopover.locator('button')
+      await expect(emojiButtons.first()).toBeVisible()
 
-        // Should show emoji options
-        const emojiButtons = emojiPopover.locator('button')
-        await expect(emojiButtons.first()).toBeVisible()
-
-        // Close popover
-        await page.keyboard.press('Escape')
-      }
+      // Close popover
+      await page.keyboard.press('Escape')
     }
   })
 
   test('can add emoji reaction to comment', async ({ page }) => {
-    // Find reaction button
-    const reactionButton = page.locator('button').filter({
-      has: page.locator('svg.lucide-smile-plus'),
-    })
+    // First check if there are any comments
+    const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
-    if ((await reactionButton.count()) > 0) {
+    if (noComments === 0) {
+      // There are comments - find and click reaction button
+      const reactionButton = page.locator('button:has(svg.lucide-smile-plus)')
       await reactionButton.first().click()
 
-      // Find an emoji button in the popover
-      const emojiPopover = page.locator('[data-radix-popover-content]')
+      // Find an emoji button in the popover (using data-slot attribute)
+      const emojiPopover = page.locator('[data-slot="popover-content"]')
+      await expect(emojiPopover).toBeVisible({ timeout: 5000 })
 
-      if ((await emojiPopover.count()) > 0) {
-        const emojiButton = emojiPopover.locator('button').first()
-        if ((await emojiButton.count()) > 0) {
-          await emojiButton.click()
+      const emojiButton = emojiPopover.locator('button').first()
+      await emojiButton.click()
 
-          // Reaction should be added (popover closes and reaction appears)
-          await page.waitForTimeout(500)
-        }
-      }
+      // Reaction should be added - popover closes automatically
+      await expect(emojiPopover).not.toBeVisible({ timeout: 5000 })
+
+      // A reaction badge should now appear (button with emoji and count)
+      const reactionBadge = page.locator('button:has-text("1")')
+      await expect(reactionBadge.first()).toBeVisible({ timeout: 5000 })
     }
   })
 
   test('shows team member badge on admin comments', async ({ page }) => {
-    // Look for team member badge on comments
-    const teamBadge = page.getByText(/team/i).or(page.locator('svg.lucide-building-2'))
+    // First check if there are any comments
+    const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
-    // If there are team comments, badge should be visible
-    if ((await teamBadge.count()) > 0) {
-      await expect(teamBadge.first()).toBeVisible()
+    if (noComments === 0) {
+      // Look for team member badge with text "Team"
+      // Only check if it exists - not all comments may be from team members
+      const teamBadge = page.locator('span.bg-primary:has-text("Team")')
+      const teamBadgeCount = await teamBadge.count()
+
+      // If there are team member comments, the badge should be visible
+      if (teamBadgeCount > 0) {
+        await expect(teamBadge.first()).toBeVisible()
+      }
     }
   })
 
   test('comments show author name and timestamp', async ({ page }) => {
-    // Check for author names (could be "Anonymous" or actual names)
-    const authorNames = page.getByText(/anonymous/i).or(page.locator('[class*="author"]'))
+    // First check if there are any comments
+    const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
-    // Check for timestamps
-    const timestamps = page.locator('time').or(page.locator('[data-testid="time-ago"]'))
+    if (noComments === 0) {
+      // Has comments - check for author name and timestamp
+      // Author name is in a span with font-medium class next to the avatar
+      const authorName = page.locator('span.font-medium.text-sm')
+      await expect(authorName.first()).toBeVisible({ timeout: 5000 })
 
-    // If there are comments, they should have these elements
-    const noComments = page.getByText(/no comments yet/i)
-    if ((await noComments.count()) === 0) {
-      // Has comments - check for author/timestamp
-      if ((await authorNames.count()) > 0) {
-        await expect(authorNames.first()).toBeVisible()
-      }
-      if ((await timestamps.count()) > 0) {
-        await expect(timestamps.first()).toBeVisible()
-      }
+      // Timestamps are rendered using the TimeAgo component with text like "X days ago"
+      // Look for text that matches the timestamp pattern
+      const timestamp = page.getByText(/\d+ (second|minute|hour|day|week|month|year)s? ago/)
+      await expect(timestamp.first()).toBeVisible({ timeout: 5000 })
     }
   })
 })

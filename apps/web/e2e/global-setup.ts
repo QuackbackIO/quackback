@@ -11,9 +11,12 @@ setup('authenticate as admin', async ({ page }) => {
   // Navigate to admin login
   await page.goto('/admin/login')
 
+  // Wait for form to load (wrapped in Suspense)
+  await page.waitForSelector('input[type="email"]', { timeout: 10000 })
+
   // Fill login form
-  await page.getByLabel('Email').fill(ADMIN_EMAIL)
-  await page.getByLabel('Password').fill(ADMIN_PASSWORD)
+  await page.locator('input[type="email"]').fill(ADMIN_EMAIL)
+  await page.locator('input[type="password"]').fill(ADMIN_PASSWORD)
 
   // Submit form and wait for the auth API response
   const [response] = await Promise.all([

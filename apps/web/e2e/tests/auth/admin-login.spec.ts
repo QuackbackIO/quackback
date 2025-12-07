@@ -13,10 +13,16 @@ test.describe('Admin Login', () => {
     await page.waitForLoadState('networkidle')
 
     // Wait for page to settle - accept either admin or portal login page
-    const heading = page.getByRole('heading', { name: /team sign in|welcome back/i })
+    const heading = page.getByRole('heading', { name: /team sign in|welcome back/i, level: 1 })
     await expect(heading).toBeVisible({ timeout: 10000 })
-    await expect(page.getByLabel('Email')).toBeVisible()
-    await expect(page.getByLabel('Password')).toBeVisible()
+
+    // Wait for form to load (wrapped in Suspense)
+    await page.waitForSelector('input[type="email"]', { timeout: 10000 })
+
+    // Check for email and password fields using placeholder or type
+    await expect(page.locator('input[type="email"]')).toBeVisible()
+    await expect(page.locator('input[type="password"]')).toBeVisible()
+
     // Use exact match to avoid OAuth buttons (Sign in with Google, Sign in with GitHub)
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
   })
@@ -25,8 +31,11 @@ test.describe('Admin Login', () => {
     await page.goto('/admin/login')
     await page.waitForLoadState('networkidle')
 
-    await page.getByLabel('Email').fill(TEST_ADMIN.email)
-    await page.getByLabel('Password').fill(TEST_ADMIN.password)
+    // Wait for form to load
+    await page.waitForSelector('input[type="email"]', { timeout: 10000 })
+
+    await page.locator('input[type="email"]').fill(TEST_ADMIN.email)
+    await page.locator('input[type="password"]').fill(TEST_ADMIN.password)
 
     // Submit form and wait for auth API response
     const [response] = await Promise.all([
@@ -48,8 +57,11 @@ test.describe('Admin Login', () => {
     await page.goto('/admin/login')
     await page.waitForLoadState('networkidle')
 
-    await page.getByLabel('Email').fill('invalid@example.com')
-    await page.getByLabel('Password').fill('wrongpassword')
+    // Wait for form to load
+    await page.waitForSelector('input[type="email"]', { timeout: 10000 })
+
+    await page.locator('input[type="email"]').fill('invalid@example.com')
+    await page.locator('input[type="password"]').fill('wrongpassword')
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
     // Should show error message
@@ -64,8 +76,11 @@ test.describe('Admin Login', () => {
     await page.goto(`/admin/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
     await page.waitForLoadState('networkidle')
 
-    await page.getByLabel('Email').fill(TEST_ADMIN.email)
-    await page.getByLabel('Password').fill(TEST_ADMIN.password)
+    // Wait for form to load
+    await page.waitForSelector('input[type="email"]', { timeout: 10000 })
+
+    await page.locator('input[type="email"]').fill(TEST_ADMIN.email)
+    await page.locator('input[type="password"]').fill(TEST_ADMIN.password)
 
     // Submit form and wait for auth API response
     const [response] = await Promise.all([
