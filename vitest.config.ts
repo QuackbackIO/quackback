@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import path from 'path'
 
 export default defineConfig({
   test: {
@@ -6,5 +7,22 @@ export default defineConfig({
     environment: 'node',
     include: ['**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/.next/**'],
+    // Use ts-node or vite's transformation instead of stripping
+    typecheck: {
+      enabled: false,
+    },
+  },
+  esbuild: {
+    // Disable esbuild's strip-only mode to properly handle TypeScript features
+    tsconfigRaw: {
+      compilerOptions: {
+        useDefineForClassFields: false,
+      },
+    },
+  },
+  resolve: {
+    alias: {
+      '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),
+    },
   },
 })

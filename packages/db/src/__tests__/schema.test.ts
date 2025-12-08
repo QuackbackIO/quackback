@@ -1,14 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
-import {
-  posts,
-  votes,
-  comments,
-  postTags,
-  postRoadmaps,
-  commentReactions,
-  REACTION_EMOJIS,
-} from '../schema/posts'
+import { posts, votes, comments, postTags, postRoadmaps, commentReactions } from '../schema/posts'
+import { REACTION_EMOJIS } from '../types'
 import { boards, roadmaps, tags } from '../schema/boards'
 import { integrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'

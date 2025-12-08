@@ -62,20 +62,116 @@ test.describe('Public Post List', () => {
     }
   })
 
-  test('can sort posts by different criteria', async ({ page }) => {
-    // Look for sort buttons (top/new/trending)
-    const sortButtons = page.locator('button').filter({ hasText: /top|new|trending/i })
+  test('defaults to Top sort with visual indicator', async ({ page }) => {
+    // Navigate to page without sort param
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
-    if ((await sortButtons.count()) > 0) {
-      // Click "New" sort option
-      const newButton = page.getByRole('button', { name: /new/i })
-      if ((await newButton.count()) > 0) {
-        await newButton.click()
+    // "Top" button should be active (has font-medium class)
+    const topButton = page.getByRole('button', { name: /^Top$/i })
+    await expect(topButton).toHaveClass(/font-medium/)
 
-        // URL should update with sort parameter
-        await expect(page).toHaveURL(/[?&]sort=new/, { timeout: 5000 })
-      }
-    }
+    // Other sort buttons should not be active
+    const newButton = page.getByRole('button', { name: /^New$/i })
+    const trendingButton = page.getByRole('button', { name: /^Trending$/i })
+    await expect(newButton).not.toHaveClass(/font-medium/)
+    await expect(trendingButton).not.toHaveClass(/font-medium/)
+  })
+
+  test('can sort posts by clicking New', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    // Click "New" sort option
+    const newButton = page.getByRole('button', { name: /^New$/i })
+    await newButton.click()
+
+    // URL should update with sort parameter
+    await expect(page).toHaveURL(/[?&]sort=new/)
+
+    // "New" should now be active
+    await expect(newButton).toHaveClass(/font-medium/)
+
+    // "Top" should no longer be active
+    const topButton = page.getByRole('button', { name: /^Top$/i })
+    await expect(topButton).not.toHaveClass(/font-medium/)
+  })
+
+  test('can sort posts by clicking Trending', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    // Click "Trending" sort option
+    const trendingButton = page.getByRole('button', { name: /^Trending$/i })
+    await trendingButton.click()
+
+    // URL should update with sort parameter
+    await expect(page).toHaveURL(/[?&]sort=trending/)
+
+    // "Trending" should now be active
+    await expect(trendingButton).toHaveClass(/font-medium/)
+  })
+
+  test('navigating with sort param in URL shows correct active state', async ({ page }) => {
+    // Navigate directly with sort=new
+    await page.goto('/?sort=new')
+    await page.waitForLoadState('networkidle')
+
+    // "New" should be active
+    const newButton = page.getByRole('button', { name: /^New$/i })
+    await expect(newButton).toHaveClass(/font-medium/)
+
+    // "Top" should not be active
+    const topButton = page.getByRole('button', { name: /^Top$/i })
+    await expect(topButton).not.toHaveClass(/font-medium/)
+  })
+
+  test('can switch between all sort options', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const topButton = page.getByRole('button', { name: /^Top$/i })
+    const newButton = page.getByRole('button', { name: /^New$/i })
+    const trendingButton = page.getByRole('button', { name: /^Trending$/i })
+
+    // Start with Top active
+    await expect(topButton).toHaveClass(/font-medium/)
+
+    // Switch to New
+    await newButton.click()
+    await expect(page).toHaveURL(/[?&]sort=new/)
+    await expect(newButton).toHaveClass(/font-medium/)
+    await expect(topButton).not.toHaveClass(/font-medium/)
+
+    // Switch to Trending
+    await trendingButton.click()
+    await expect(page).toHaveURL(/[?&]sort=trending/)
+    await expect(trendingButton).toHaveClass(/font-medium/)
+    await expect(newButton).not.toHaveClass(/font-medium/)
+
+    // Switch back to Top
+    await topButton.click()
+    await expect(page).toHaveURL(/[?&]sort=top/)
+    await expect(topButton).toHaveClass(/font-medium/)
+    await expect(trendingButton).not.toHaveClass(/font-medium/)
+  })
+
+  test('sort persists with board filter', async ({ page }) => {
+    // Navigate with both board and sort params
+    await page.goto('/?board=features&sort=new')
+    await page.waitForLoadState('networkidle')
+
+    // Both filters should be active
+    await expect(page).toHaveURL(/board=features/)
+    await expect(page).toHaveURL(/sort=new/)
+
+    // Sort button should show correct state
+    const newButton = page.getByRole('button', { name: /^New$/i })
+    await expect(newButton).toHaveClass(/font-medium/)
+
+    // Board should be selected
+    const featureButton = page.getByRole('button', { name: /Feature Requests/i })
+    await expect(featureButton).toHaveClass(/font-medium/)
   })
 
   test('clicking post navigates to detail page', async ({ page }) => {
@@ -105,6 +201,102 @@ test.describe('Public Post List', () => {
     // At least one badge should be visible (either status or tag)
     if ((await statusBadges.count()) > 0) {
       await expect(statusBadges.first()).toBeVisible()
+    }
+  })
+
+  test('displays filtered posts when navigating with board param in URL', async ({ page }) => {
+    // Navigate directly to URL with board filter
+    await page.goto('/?board=features')
+
+    // Wait for posts to load
+    await page.waitForLoadState('networkidle')
+
+    // URL should contain the board parameter
+    await expect(page).toHaveURL(/[?&]board=features/)
+
+    // The "Feature Requests" board should be visually selected in the sidebar (has font-medium class)
+    const featureButton = page.getByRole('button', { name: /Feature Requests/i })
+    await expect(featureButton).toHaveClass(/font-medium/)
+
+    // "View all posts" should NOT be selected (no font-medium)
+    const viewAllButton = page.getByRole('button', { name: /View all posts/i })
+    await expect(viewAllButton).not.toHaveClass(/font-medium/)
+  })
+
+  test('can view all posts after filtering by board', async ({ page }) => {
+    // Start with a board filter applied
+    await page.goto('/?board=features')
+    await page.waitForLoadState('networkidle')
+
+    // Verify we're filtered
+    await expect(page).toHaveURL(/[?&]board=features/)
+
+    // Click "View all posts" button in sidebar
+    const viewAllButton = page.getByRole('button', { name: /View all posts/i })
+    await viewAllButton.click()
+
+    // URL should no longer have the board parameter
+    await expect(page).not.toHaveURL(/[?&]board=/)
+
+    // Navigate fresh to verify the state renders correctly
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    // "View all posts" should now be selected (has font-medium class when active)
+    const viewAllButtonFresh = page.getByRole('button', { name: /View all posts/i })
+    await expect(viewAllButtonFresh).toHaveClass(/font-medium/)
+  })
+
+  test('filtered board posts link to correct board routes', async ({ page }) => {
+    // Navigate to features board
+    await page.goto('/?board=features')
+    await page.waitForLoadState('networkidle')
+
+    // Get all post links
+    const postLinks = page.locator('a[href*="/posts/"]')
+    const linkCount = await postLinks.count()
+
+    if (linkCount > 0) {
+      // Check that all visible posts link to the features board
+      for (let i = 0; i < Math.min(linkCount, 5); i++) {
+        const href = await postLinks.nth(i).getAttribute('href')
+        // Posts should link to /features/posts/{id}
+        expect(href).toMatch(/^\/features\/posts\//)
+      }
+    }
+  })
+
+  test('switching boards updates displayed posts', async ({ page }) => {
+    // Start with features board
+    await page.goto('/?board=features')
+    await page.waitForLoadState('networkidle')
+
+    // Get initial post hrefs (all should be /features/posts/...)
+    const initialLinks = page.locator('a[href*="/posts/"]')
+    const initialCount = await initialLinks.count()
+
+    if (initialCount > 0) {
+      const firstInitialHref = await initialLinks.first().getAttribute('href')
+      expect(firstInitialHref).toMatch(/^\/features\/posts\//)
+    }
+
+    // Switch to bugs board via sidebar
+    const bugsButton = page.getByRole('button', { name: /Bug Reports/i })
+    if ((await bugsButton.count()) > 0) {
+      await bugsButton.click()
+      await page.waitForLoadState('networkidle')
+
+      // URL should update
+      await expect(page).toHaveURL(/[?&]board=bugs/)
+
+      // Posts should now link to /bugs/posts/...
+      const newLinks = page.locator('a[href*="/posts/"]')
+      const newCount = await newLinks.count()
+
+      if (newCount > 0) {
+        const firstNewHref = await newLinks.first().getAttribute('href')
+        expect(firstNewHref).toMatch(/^\/bugs\/posts\//)
+      }
     }
   })
 })
