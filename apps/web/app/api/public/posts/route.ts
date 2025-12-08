@@ -35,12 +35,18 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '20', 10)
 
+    // Parse array params (status and tagIds can have multiple values)
+    const status = searchParams.getAll('status').filter(Boolean)
+    const tagIds = searchParams.getAll('tagIds').filter(Boolean)
+
     // Call PostService to list public posts
     const postService = getPostService()
     const result = await postService.listPublicPosts({
       organizationId,
       boardSlug,
       search,
+      status: status.length > 0 ? status : undefined,
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
       sort,
       page,
       limit,

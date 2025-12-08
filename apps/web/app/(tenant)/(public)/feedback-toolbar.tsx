@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, Clock, Flame, Search, Filter, Plus } from 'lucide-react'
+import { TrendingUp, Clock, Flame, Search, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SubmitPostDialog } from '@/components/public/submit-post-dialog'
+import { FilterDropdown } from './filter-dropdown'
 import { cn } from '@/lib/utils'
+import type { PostStatusEntity, Tag } from '@quackback/db/types'
 
 interface BoardOption {
   id: string
@@ -21,6 +23,14 @@ interface FeedbackToolbarProps {
   onSearchChange: (search: string) => void
   boards: BoardOption[]
   defaultBoardId?: string
+  statuses: PostStatusEntity[]
+  tags: Tag[]
+  selectedStatuses: string[]
+  selectedTagIds: string[]
+  onStatusChange: (statuses: string[]) => void
+  onTagChange: (tagIds: string[]) => void
+  onClearFilters: () => void
+  activeFilterCount: number
 }
 
 const sortOptions = [
@@ -36,6 +46,14 @@ export function FeedbackToolbar({
   onSearchChange,
   boards,
   defaultBoardId,
+  statuses,
+  tags,
+  selectedStatuses,
+  selectedTagIds,
+  onStatusChange,
+  onTagChange,
+  onClearFilters,
+  activeFilterCount,
 }: FeedbackToolbarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
@@ -58,7 +76,7 @@ export function FeedbackToolbar({
               key={option.value}
               onClick={() => onSortChange(option.value)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
                 isActive
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -111,10 +129,17 @@ export function FeedbackToolbar({
           </PopoverContent>
         </Popover>
 
-        {/* Filter (placeholder for now) */}
-        <Button variant="outline" size="icon" className="h-9 w-9">
-          <Filter className="h-4 w-4" />
-        </Button>
+        {/* Filter Dropdown */}
+        <FilterDropdown
+          statuses={statuses}
+          tags={tags}
+          selectedStatuses={selectedStatuses}
+          selectedTagIds={selectedTagIds}
+          onStatusChange={onStatusChange}
+          onTagChange={onTagChange}
+          onClearFilters={onClearFilters}
+          activeCount={activeFilterCount}
+        />
 
         {/* Create Post */}
         {boards.length > 0 && (

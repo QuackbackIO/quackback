@@ -8,7 +8,7 @@ import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { getUserAvatarData, getBulkMemberAvatarData } from '@/lib/avatar'
 import { theme } from '@quackback/domain'
-import { getBoardService, getPostService, getStatusService } from '@/lib/services'
+import { getBoardService, getPostService, getStatusService, getTagService } from '@/lib/services'
 import { db, organization, workspaceDomain, eq, member, and } from '@quackback/db'
 import { PortalHeader } from '@/components/public/portal-header'
 import { FeedbackContainer } from '@/app/(tenant)/(public)/feedback-container'
@@ -100,7 +100,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   }
 
   // Fetch data in parallel using domain services
-  const [boardsResult, postsResult, statusesResult] = await Promise.all([
+  const [boardsResult, postsResult, statusesResult, tagsResult] = await Promise.all([
     getBoardService().listPublicBoardsWithStats(org.id),
     getPostService().listPublicPosts({
       organizationId: org.id,
@@ -111,6 +111,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
       limit: 20,
     }),
     getStatusService().listPublicStatuses(org.id),
+    getTagService().listPublicTags(org.id),
   ])
 
   const boards = boardsResult.success ? boardsResult.value : []
@@ -118,6 +119,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
     ? postsResult.value
     : { items: [], hasMore: false }
   const statuses = statusesResult.success ? statusesResult.value : []
+  const tags = tagsResult.success ? tagsResult.value : []
 
   // Get user's voted posts
   const postIds = posts.map((p) => p.id)
@@ -159,6 +161,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
           boards={boards}
           posts={posts}
           statuses={statuses}
+          tags={tags}
           hasMore={hasMore}
           votedPostIds={Array.from(votedPostIds)}
           postAvatarUrls={Object.fromEntries(postAvatarMap)}
