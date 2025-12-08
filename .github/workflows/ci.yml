@@ -246,7 +246,9 @@ jobs:
           name: db-dump
 
       - name: Restore database from dump
-        run: pg_restore -h localhost -U postgres -d quackback_test --no-owner --no-acl db-dump.pgdump
+        run: |
+          psql -h localhost -U postgres -d quackback_test -c "CREATE ROLE app_user;"
+          pg_restore -h localhost -U postgres -d quackback_test --no-owner --no-acl db-dump.pgdump
         env:
           PGPASSWORD: postgres
 
