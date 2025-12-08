@@ -5,8 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { SubmitPostDialog } from './submit-post-dialog'
 
+interface BoardOption {
+  id: string
+  name: string
+  slug: string
+}
+
 interface SubmitPostButtonProps {
-  boardId: string
+  boards: BoardOption[]
+  defaultBoardId?: string
   allowSubmissions: boolean
   isAuthenticated: boolean
 }
@@ -16,7 +23,8 @@ interface SubmitPostButtonProps {
  * Shows different UI based on auth state and board settings.
  */
 export function SubmitPostButton({
-  boardId,
+  boards,
+  defaultBoardId,
   allowSubmissions,
   isAuthenticated,
 }: SubmitPostButtonProps) {
@@ -38,5 +46,5 @@ export function SubmitPostButton({
   }
 
   // Show the full dialog for authenticated users
-  return <SubmitPostDialog boardId={boardId} />
+  return <SubmitPostDialog boards={boards} defaultBoardId={defaultBoardId} />
 }

@@ -7,11 +7,15 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Check, Loader2, RotateCcw } from 'lucide-react'
 import {
-  theme,
+  themePresets,
+  presetNames,
+  hexToOklch,
+  oklchToHex,
+  CORE_THEME_VARIABLES,
   type ThemeConfig,
   type ThemeVariables,
   type CoreThemeVariable,
-} from '@quackback/shared'
+} from '@quackback/domain/theme'
 
 interface ThemeCustomizerProps {
   organizationId: string
@@ -34,9 +38,9 @@ const coreVariableLabels: Record<CoreThemeVariable, string> = {
 }
 
 /** Get preset list for UI */
-const presetList = theme.presetNames.map((id) => ({
+const presetList = presetNames.map((id) => ({
   id,
-  ...theme.themePresets[id],
+  ...themePresets[id],
 }))
 
 export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCustomizerProps) {
@@ -61,7 +65,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   // Get current preset data
-  const currentPreset = theme.themePresets[selectedPreset] || theme.themePresets.default
+  const currentPreset = themePresets[selectedPreset] || themePresets.default
 
   // Compute effective colors for preview (preset + overrides)
   const effectiveLight = useMemo(() => {
@@ -80,7 +84,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
     variable: CoreThemeVariable,
     hexColor: string
   ) {
-    const oklchColor = theme.hexToOklch(hexColor)
+    const oklchColor = hexToOklch(hexColor)
     if (mode === 'light') {
       setLightOverrides((prev) => ({ ...prev, [variable]: oklchColor }))
     } else {
@@ -94,7 +98,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
     const oklch = vars[variable]
     if (!oklch) return '#000000'
     try {
-      return theme.oklchToHex(oklch)
+      return oklchToHex(oklch)
     } catch {
       return '#000000'
     }
@@ -246,7 +250,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
 
               <TabsContent value="light" className="mt-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {theme.CORE_THEME_VARIABLES.map((variable) => (
+                  {CORE_THEME_VARIABLES.map((variable) => (
                     <ColorPicker
                       key={variable}
                       label={coreVariableLabels[variable]}
@@ -261,7 +265,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
 
               <TabsContent value="dark" className="mt-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {theme.CORE_THEME_VARIABLES.map((variable) => (
+                  {CORE_THEME_VARIABLES.map((variable) => (
                     <ColorPicker
                       key={variable}
                       label={coreVariableLabels[variable]}
@@ -291,9 +295,9 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
             className="rounded-lg border p-4"
             style={
               {
-                backgroundColor: theme.oklchToHex(effectiveLight.background || ''),
-                borderColor: theme.oklchToHex(effectiveLight.border || ''),
-                color: theme.oklchToHex(effectiveLight.foreground || ''),
+                backgroundColor: oklchToHex(effectiveLight.background || ''),
+                borderColor: oklchToHex(effectiveLight.border || ''),
+                color: oklchToHex(effectiveLight.foreground || ''),
               } as React.CSSProperties
             }
           >
@@ -301,30 +305,30 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
             <div
               className="rounded-md border p-3 mb-3"
               style={{
-                backgroundColor: theme.oklchToHex(effectiveLight.card || ''),
-                borderColor: theme.oklchToHex(effectiveLight.border || ''),
+                backgroundColor: oklchToHex(effectiveLight.card || ''),
+                borderColor: oklchToHex(effectiveLight.border || ''),
               }}
             >
               <div className="flex items-center gap-2 mb-2">
                 <div
                   className="h-6 w-6 rounded"
                   style={{
-                    backgroundColor: theme.oklchToHex(effectiveLight.primary || ''),
+                    backgroundColor: oklchToHex(effectiveLight.primary || ''),
                   }}
                 />
                 <span className="text-sm font-medium">Demo Workspace</span>
               </div>
               <div
                 className="text-xs mb-2"
-                style={{ color: theme.oklchToHex(effectiveLight.mutedForeground || '') }}
+                style={{ color: oklchToHex(effectiveLight.mutedForeground || '') }}
               >
                 Sample muted text
               </div>
               <button
                 className="px-3 py-1.5 rounded text-xs font-medium"
                 style={{
-                  backgroundColor: theme.oklchToHex(effectiveLight.primary || ''),
-                  color: theme.oklchToHex(effectiveLight.primaryForeground || ''),
+                  backgroundColor: oklchToHex(effectiveLight.primary || ''),
+                  color: oklchToHex(effectiveLight.primaryForeground || ''),
                 }}
               >
                 Submit Feedback
@@ -337,45 +341,45 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
             className="rounded-lg border p-4"
             style={
               {
-                backgroundColor: theme.oklchToHex(effectiveDark.background || ''),
-                borderColor: theme.oklchToHex(effectiveDark.border || ''),
-                color: theme.oklchToHex(effectiveDark.foreground || ''),
+                backgroundColor: oklchToHex(effectiveDark.background || ''),
+                borderColor: oklchToHex(effectiveDark.border || ''),
+                color: oklchToHex(effectiveDark.foreground || ''),
               } as React.CSSProperties
             }
           >
             <div
               className="text-xs mb-2"
-              style={{ color: theme.oklchToHex(effectiveDark.mutedForeground || '') }}
+              style={{ color: oklchToHex(effectiveDark.mutedForeground || '') }}
             >
               Dark Mode
             </div>
             <div
               className="rounded-md border p-3 mb-3"
               style={{
-                backgroundColor: theme.oklchToHex(effectiveDark.card || ''),
-                borderColor: theme.oklchToHex(effectiveDark.border || ''),
+                backgroundColor: oklchToHex(effectiveDark.card || ''),
+                borderColor: oklchToHex(effectiveDark.border || ''),
               }}
             >
               <div className="flex items-center gap-2 mb-2">
                 <div
                   className="h-6 w-6 rounded"
                   style={{
-                    backgroundColor: theme.oklchToHex(effectiveDark.primary || ''),
+                    backgroundColor: oklchToHex(effectiveDark.primary || ''),
                   }}
                 />
                 <span className="text-sm font-medium">Demo Workspace</span>
               </div>
               <div
                 className="text-xs mb-2"
-                style={{ color: theme.oklchToHex(effectiveDark.mutedForeground || '') }}
+                style={{ color: oklchToHex(effectiveDark.mutedForeground || '') }}
               >
                 Sample muted text
               </div>
               <button
                 className="px-3 py-1.5 rounded text-xs font-medium"
                 style={{
-                  backgroundColor: theme.oklchToHex(effectiveDark.primary || ''),
-                  color: theme.oklchToHex(effectiveDark.primaryForeground || ''),
+                  backgroundColor: oklchToHex(effectiveDark.primary || ''),
+                  color: oklchToHex(effectiveDark.primaryForeground || ''),
                 }}
               >
                 Submit Feedback

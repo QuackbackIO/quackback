@@ -1,6 +1,5 @@
 import { getCurrentOrganization } from '@/lib/tenant'
-import { getRoadmapPosts } from '@quackback/db/queries/public'
-import { getStatusesByOrganization } from '@quackback/db'
+import { getPostService, getStatusService } from '@/lib/services'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 
 /**
@@ -14,12 +13,14 @@ export default async function RoadmapPage() {
   }
 
   // Get statuses marked for roadmap display
-  const allStatuses = await getStatusesByOrganization(org.id)
+  const statusesResult = await getStatusService().listPublicStatuses(org.id)
+  const allStatuses = statusesResult.success ? statusesResult.value : []
   const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
 
   // Get posts for the roadmap statuses
   const statusSlugs = roadmapStatuses.map((s) => s.slug)
-  const roadmapPosts = await getRoadmapPosts(org.id, statusSlugs)
+  const roadmapPostsResult = await getPostService().getRoadmapPosts(org.id, statusSlugs)
+  const roadmapPosts = roadmapPostsResult.success ? roadmapPostsResult.value : []
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

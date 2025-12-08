@@ -15,14 +15,8 @@ import type {
   Tag,
   InboxPostListResult,
   PostStatusEntity,
-} from '@quackback/db'
-
-interface TeamMember {
-  id: string
-  name: string
-  email: string
-  image?: string | null
-}
+} from '@quackback/db/types'
+import type { TeamMember } from '@quackback/domain'
 
 interface OfficialResponse {
   content: string

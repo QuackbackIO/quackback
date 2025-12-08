@@ -1,7 +1,7 @@
 import { requireTenant } from '@/lib/tenant'
 import { Palette } from 'lucide-react'
 import { ThemeCustomizer } from './theme-customizer'
-import { theme } from '@quackback/shared'
+import { theme } from '@quackback/domain'
 
 export default async function AppearancePage() {
   const tenant = await requireTenant()

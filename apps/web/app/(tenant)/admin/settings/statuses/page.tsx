@@ -1,12 +1,13 @@
-import { getStatusesByOrganization } from '@quackback/db'
 import { requireTenant } from '@/lib/tenant'
 import { Settings } from 'lucide-react'
 import { StatusList } from './status-list'
+import { getStatusService } from '@/lib/services'
 
 export default async function StatusesPage() {
   const { organization } = await requireTenant()
 
-  const statuses = await getStatusesByOrganization(organization.id)
+  const statusesResult = await getStatusService().listPublicStatuses(organization.id)
+  const statuses = statusesResult.success ? statusesResult.value : []
 
   return (
     <div className="space-y-6">

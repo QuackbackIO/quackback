@@ -7,21 +7,9 @@ import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { getUserAvatarData, getBulkMemberAvatarData } from '@/lib/avatar'
-import { theme } from '@quackback/shared'
-import {
-  getPublicBoardsWithStats,
-  getPublicPostListAllBoards,
-  getUserVotedPostIds,
-} from '@quackback/db/queries/public'
-import {
-  db,
-  organization,
-  workspaceDomain,
-  getStatusesByOrganization,
-  eq,
-  member,
-  and,
-} from '@quackback/db'
+import { theme } from '@quackback/domain'
+import { getBoardService, getPostService, getStatusService } from '@/lib/services'
+import { db, organization, workspaceDomain, eq, member, and } from '@quackback/db'
 import { PortalHeader } from '@/components/public/portal-header'
 import { FeedbackContainer } from '@/app/(tenant)/(public)/feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
@@ -111,10 +99,10 @@ export default async function RootPage({ searchParams }: RootPageProps) {
     }
   }
 
-  // Fetch data in parallel
-  const [boards, { items: posts, hasMore }, statuses] = await Promise.all([
-    getPublicBoardsWithStats(org.id),
-    getPublicPostListAllBoards({
+  // Fetch data in parallel using domain services
+  const [boardsResult, postsResult, statusesResult] = await Promise.all([
+    getBoardService().listPublicBoardsWithStats(org.id),
+    getPostService().listPublicPosts({
       organizationId: org.id,
       boardSlug: board,
       search,
@@ -122,12 +110,19 @@ export default async function RootPage({ searchParams }: RootPageProps) {
       page: 1,
       limit: 20,
     }),
-    getStatusesByOrganization(org.id),
+    getStatusService().listPublicStatuses(org.id),
   ])
+
+  const boards = boardsResult.success ? boardsResult.value : []
+  const { items: posts, hasMore } = postsResult.success
+    ? postsResult.value
+    : { items: [], hasMore: false }
+  const statuses = statusesResult.success ? statusesResult.value : []
 
   // Get user's voted posts
   const postIds = posts.map((p) => p.id)
-  const votedPostIds = await getUserVotedPostIds(postIds, userIdentifier)
+  const votedPostIdsResult = await getPostService().getUserVotedPostIds(postIds, userIdentifier)
+  const votedPostIds = votedPostIdsResult.success ? votedPostIdsResult.value : new Set<string>()
 
   // Get avatar URLs for post authors (base64 for SSR, no flicker)
   const postMemberIds = posts.map((p) => p.memberId)

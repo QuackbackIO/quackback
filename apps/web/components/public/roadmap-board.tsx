@@ -1,5 +1,5 @@
 import { RoadmapColumn } from './roadmap-column'
-import type { PostStatus, PostStatusEntity } from '@quackback/db'
+import type { PostStatus, PostStatusEntity } from '@quackback/db/types'
 
 interface RoadmapPost {
   id: string

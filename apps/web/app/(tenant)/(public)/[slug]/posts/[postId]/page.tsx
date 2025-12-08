@@ -2,13 +2,9 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentOrganization } from '@/lib/tenant'
-import {
-  getPublicBoardBySlug,
-  getPublicPostDetail,
-  hasUserVotedOnPost,
-  type PublicComment,
-} from '@quackback/db/queries/public'
-import { getStatusesByOrganization, db, member, eq, and } from '@quackback/db'
+import { getPostService, getBoardService, getStatusService } from '@/lib/services'
+import type { PublicComment } from '@quackback/domain'
+import { db, member, eq, and } from '@quackback/db'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
@@ -51,7 +47,8 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const { slug, postId } = await params
 
   // Verify the board exists and is public
-  const board = await getPublicBoardBySlug(org.id, slug)
+  const boardResult = await getBoardService().getPublicBoardBySlug(org.id, slug)
+  const board = boardResult.success ? boardResult.value : null
   if (!board) {
     notFound()
   }
@@ -71,17 +68,20 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   }
 
   // Get post detail with user's reaction state
-  const post = await getPublicPostDetail(postId, userIdentifier)
+  const postResult = await getPostService().getPublicPostDetail(postId, userIdentifier)
+  const post = postResult.success ? postResult.value : null
   if (!post || post.board.slug !== slug) {
     notFound()
   }
 
   // Get statuses for display
-  const statuses = await getStatusesByOrganization(org.id)
+  const statusesResult = await getStatusService().listPublicStatuses(org.id)
+  const statuses = statusesResult.success ? statusesResult.value : []
   const currentStatus = statuses.find((s) => s.slug === post.status)
 
   // Check if user has voted
-  const hasVoted = await hasUserVotedOnPost(postId, userIdentifier)
+  const hasVotedResult = await getPostService().hasUserVotedOnPost(postId, userIdentifier)
+  const hasVoted = hasVotedResult.success ? hasVotedResult.value : false
 
   // Fetch avatar URLs for all comment authors
   const commentMemberIds = collectCommentMemberIds(post.comments)

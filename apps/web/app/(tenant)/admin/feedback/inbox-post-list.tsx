@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { InboxPostCard } from './inbox-post-card'
 import { InboxEmptyState } from './inbox-empty-state'
-import type { PostListItem, PostStatusEntity } from '@quackback/db'
+import type { PostListItem, PostStatusEntity } from '@quackback/db/types'
 import type { InboxFilters } from './use-inbox-filters'
 
 interface InboxPostListProps {

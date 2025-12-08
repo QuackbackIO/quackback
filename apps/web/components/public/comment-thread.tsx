@@ -9,7 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CommentForm } from './comment-form'
 import { cn } from '@/lib/utils'
-import { getInitials, REACTION_EMOJIS } from '@quackback/shared'
+import { getInitials } from '@quackback/domain/utils'
+import { REACTION_EMOJIS } from '@quackback/db/types'
 
 interface CommentReaction {
   emoji: string

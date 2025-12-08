@@ -7,8 +7,8 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
-import { getInitials } from '@quackback/shared'
-import type { PostStatus, PostStatusEntity } from '@quackback/db'
+import { getInitials } from '@quackback/domain/utils'
+import type { PostStatus, PostStatusEntity } from '@quackback/db/types'
 
 interface PostCardProps {
   id: string

@@ -55,7 +55,7 @@ export function usePostVote({
           }
 
           const data = await response.json()
-          setVoteCount(data.newCount)
+          setVoteCount(data.voteCount)
           setHasVoted(data.voted)
         } catch {
           // Revert on error

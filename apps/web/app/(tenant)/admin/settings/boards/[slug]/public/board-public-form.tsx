@@ -7,7 +7,7 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { boardPublicSettingsSchema, type BoardPublicSettingsInput } from '@/lib/schemas/boards'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import type { Board, BoardSettings } from '@quackback/db'
+import type { Board, BoardSettings } from '@quackback/db/types'
 import { getBoardSettings } from '@quackback/db/types'
 import {
   Form,

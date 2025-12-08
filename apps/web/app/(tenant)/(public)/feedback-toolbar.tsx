@@ -8,12 +8,19 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SubmitPostDialog } from '@/components/public/submit-post-dialog'
 import { cn } from '@/lib/utils'
 
+interface BoardOption {
+  id: string
+  name: string
+  slug: string
+}
+
 interface FeedbackToolbarProps {
   currentSort: 'top' | 'new' | 'trending'
   currentSearch?: string
   onSortChange: (sort: 'top' | 'new' | 'trending') => void
   onSearchChange: (search: string) => void
-  boardId?: string
+  boards: BoardOption[]
+  defaultBoardId?: string
 }
 
 const sortOptions = [
@@ -27,7 +34,8 @@ export function FeedbackToolbar({
   currentSearch,
   onSortChange,
   onSearchChange,
-  boardId,
+  boards,
+  defaultBoardId,
 }: FeedbackToolbarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
@@ -109,9 +117,11 @@ export function FeedbackToolbar({
         </Button>
 
         {/* Create Post */}
-        {boardId && (
+        {boards.length > 0 && (
           <SubmitPostDialog
-            boardId={boardId}
+            key={defaultBoardId}
+            boards={boards}
+            defaultBoardId={defaultBoardId}
             trigger={
               <Button size="sm" className="gap-1.5">
                 <Plus className="h-4 w-4" />

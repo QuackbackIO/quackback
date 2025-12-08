@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { LayoutList, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { BoardWithStats } from '@quackback/db/queries/public'
+import type { BoardWithStats } from '@quackback/domain'
 
 interface FeedbackSidebarProps {
   boards: BoardWithStats[]

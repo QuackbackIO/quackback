@@ -7,8 +7,8 @@ import { FeedbackToolbar } from './feedback-toolbar'
 import { FeedbackSidebar } from './feedback-sidebar'
 import { PostCard } from '@/components/public/post-card'
 import { usePublicFilters } from './use-public-filters'
-import type { BoardWithStats, PublicPostListItem } from '@quackback/db/queries/public'
-import type { PostStatusEntity } from '@quackback/db'
+import type { BoardWithStats, PublicPostListItem } from '@quackback/domain'
+import type { PostStatusEntity } from '@quackback/db/types'
 
 interface PublicPostListResult {
   items: PublicPostListItem[]
@@ -195,7 +195,8 @@ export function FeedbackContainer({
             currentSearch={activeSearch}
             onSortChange={handleSortChange}
             onSearchChange={handleSearchChange}
-            boardId={boardIdForCreate}
+            boards={boards}
+            defaultBoardId={boardIdForCreate}
           />
 
           <div className="mt-3">

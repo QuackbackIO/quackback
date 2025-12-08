@@ -1,15 +1,12 @@
 import { redirect } from 'next/navigation'
-import { requireTenant } from '@/lib/tenant'
+import { requireAuthenticatedTenant } from '@/lib/tenant'
 import {
-  db,
-  boards,
-  member,
-  user,
-  eq,
-  getInboxPostList,
-  getTagsByOrganization,
-  getStatusesByOrganization,
-} from '@quackback/db'
+  getPostService,
+  getTagService,
+  getStatusService,
+  getBoardService,
+  getMemberService,
+} from '@/lib/services'
 import { InboxContainer } from './inbox-container'
 
 export default async function FeedbackInboxPage({
@@ -17,14 +14,12 @@ export default async function FeedbackInboxPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const { organization, user: currentUser } = await requireTenant()
+  const { organization, user: currentUser, serviceContext } = await requireAuthenticatedTenant()
   const params = await searchParams
 
   // Check if org has boards - if not, redirect to onboarding
-  const orgBoards = await db.query.boards.findMany({
-    where: eq(boards.organizationId, organization.id),
-    orderBy: (boards, { asc }) => [asc(boards.name)],
-  })
+  const boardsResult = await getBoardService().listBoards(serviceContext)
+  const orgBoards = boardsResult.success ? boardsResult.value : []
 
   if (orgBoards.length === 0) {
     redirect('/onboarding')
@@ -44,49 +39,49 @@ export default async function FeedbackInboxPage({
     return typeof value === 'string' ? value : undefined
   }
 
-  // Fetch initial posts with filters from URL
-  const initialPosts = await getInboxPostList({
-    organizationId: organization.id,
-    boardIds: getArrayParam('board').length > 0 ? getArrayParam('board') : undefined,
-    status:
-      getArrayParam('status').length > 0
-        ? (getArrayParam('status') as (
-            | 'open'
-            | 'under_review'
-            | 'planned'
-            | 'in_progress'
-            | 'complete'
-            | 'closed'
-          )[])
-        : undefined,
-    tagIds: getArrayParam('tags').length > 0 ? getArrayParam('tags') : undefined,
-    ownerId: getStringParam('owner') === 'unassigned' ? null : getStringParam('owner'),
-    search: getStringParam('search'),
-    dateFrom: getStringParam('dateFrom') ? new Date(getStringParam('dateFrom')!) : undefined,
-    dateTo: getStringParam('dateTo') ? new Date(getStringParam('dateTo')!) : undefined,
-    minVotes: getStringParam('minVotes') ? parseInt(getStringParam('minVotes')!, 10) : undefined,
-    sort: (getStringParam('sort') as 'newest' | 'oldest' | 'votes') || 'newest',
-    page: 1,
-    limit: 20,
-  })
+  // Fetch initial posts with filters from URL using PostService
+  const postsResult = await getPostService().listInboxPosts(
+    {
+      boardIds: getArrayParam('board').length > 0 ? getArrayParam('board') : undefined,
+      status:
+        getArrayParam('status').length > 0
+          ? (getArrayParam('status') as (
+              | 'open'
+              | 'under_review'
+              | 'planned'
+              | 'in_progress'
+              | 'complete'
+              | 'closed'
+            )[])
+          : undefined,
+      tagIds: getArrayParam('tags').length > 0 ? getArrayParam('tags') : undefined,
+      ownerId: getStringParam('owner') === 'unassigned' ? null : getStringParam('owner'),
+      search: getStringParam('search'),
+      dateFrom: getStringParam('dateFrom') ? new Date(getStringParam('dateFrom')!) : undefined,
+      dateTo: getStringParam('dateTo') ? new Date(getStringParam('dateTo')!) : undefined,
+      minVotes: getStringParam('minVotes') ? parseInt(getStringParam('minVotes')!, 10) : undefined,
+      sort: (getStringParam('sort') as 'newest' | 'oldest' | 'votes') || 'newest',
+      page: 1,
+      limit: 20,
+    },
+    serviceContext
+  )
 
-  // Fetch tags for this organization
-  const orgTags = await getTagsByOrganization(organization.id)
+  const initialPosts = postsResult.success
+    ? postsResult.value
+    : { items: [], total: 0, hasMore: false }
 
-  // Fetch statuses for this organization
-  const orgStatuses = await getStatusesByOrganization(organization.id)
+  // Fetch tags for this organization using TagService
+  const tagsResult = await getTagService().listTags(serviceContext)
+  const orgTags = tagsResult.success ? tagsResult.value : []
 
-  // Fetch team members
-  const teamMembers = await db
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      image: user.image,
-    })
-    .from(member)
-    .innerJoin(user, eq(member.userId, user.id))
-    .where(eq(member.organizationId, organization.id))
+  // Fetch statuses for this organization using StatusService
+  const statusesResult = await getStatusService().listStatuses(serviceContext)
+  const orgStatuses = statusesResult.success ? statusesResult.value : []
+
+  // Fetch team members using MemberService
+  const membersResult = await getMemberService().listTeamMembers(organization.id)
+  const teamMembers = membersResult.success ? membersResult.value : []
 
   return (
     <InboxContainer

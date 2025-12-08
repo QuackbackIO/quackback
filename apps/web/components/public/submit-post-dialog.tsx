@@ -1,27 +1,57 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Plus } from 'lucide-react'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
 
+interface BoardOption {
+  id: string
+  name: string
+  slug: string
+}
+
 interface SubmitPostDialogProps {
-  boardId: string
+  boards: BoardOption[]
+  defaultBoardId?: string
   onSuccess?: () => void
   trigger?: React.ReactNode
 }
 
-export function SubmitPostDialog({ boardId, onSuccess, trigger }: SubmitPostDialogProps) {
+export function SubmitPostDialog({
+  boards,
+  defaultBoardId,
+  onSuccess,
+  trigger,
+}: SubmitPostDialogProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Board selection - default to provided defaultBoardId or first board
+  const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || boards[0]?.id || '')
+
+  // Sync selectedBoardId when defaultBoardId prop changes (e.g., URL filter change)
+  useEffect(() => {
+    if (defaultBoardId) {
+      setSelectedBoardId(defaultBoardId)
+    }
+  }, [defaultBoardId])
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+
+  const selectedBoard = boards.find((b) => b.id === selectedBoardId)
 
   const handleContentChange = useCallback((json: JSONContent) => {
     setContentJson(json)
@@ -31,6 +61,11 @@ export function SubmitPostDialog({ boardId, onSuccess, trigger }: SubmitPostDial
     setError('')
 
     // Validation
+    if (!selectedBoardId) {
+      setError('Please select a board')
+      return
+    }
+
     if (!title.trim()) {
       setError('Please add a title')
       return
@@ -45,7 +80,7 @@ export function SubmitPostDialog({ boardId, onSuccess, trigger }: SubmitPostDial
     setIsSubmitting(true)
 
     try {
-      const response = await fetch(`/api/public/boards/${boardId}/posts`, {
+      const response = await fetch(`/api/public/boards/${selectedBoardId}/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,6 +107,7 @@ export function SubmitPostDialog({ boardId, onSuccess, trigger }: SubmitPostDial
   }
 
   function resetForm() {
+    setSelectedBoardId(defaultBoardId || boards[0]?.id || '')
     setTitle('')
     setContentJson(null)
     setError('')
@@ -107,7 +143,32 @@ export function SubmitPostDialog({ boardId, onSuccess, trigger }: SubmitPostDial
         onKeyDown={handleKeyDown}
       >
         <DialogTitle className="sr-only">Submit feedback</DialogTitle>
-        <div className="p-4 sm:p-6 space-y-2">
+
+        {/* Board selector header - aligned with close button */}
+        {boards.length > 0 && (
+          <div className="flex items-center pt-3 px-4 sm:px-6">
+            <span className="text-xs text-muted-foreground mr-1">Posting to</span>
+            <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
+              <SelectTrigger
+                size="xs"
+                className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
+              >
+                <SelectValue placeholder="Select board">
+                  {selectedBoard?.name || 'Select board'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start">
+                {boards.map((board) => (
+                  <SelectItem key={board.id} value={board.id} className="text-xs py-1">
+                    {board.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <div className="px-4 sm:px-6 py-4 space-y-2">
           {error && (
             <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive mb-4">
               {error}

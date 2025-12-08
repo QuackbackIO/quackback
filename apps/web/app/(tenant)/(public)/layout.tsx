@@ -4,7 +4,7 @@ import { PortalHeader } from '@/components/public/portal-header'
 import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { getUserAvatarData } from '@/lib/avatar'
 import { UserProfileProvider } from '@/components/providers/user-profile-provider'
-import { theme } from '@quackback/shared'
+import { theme } from '@quackback/domain'
 
 // Force dynamic rendering since we read session cookies
 export const dynamic = 'force-dynamic'

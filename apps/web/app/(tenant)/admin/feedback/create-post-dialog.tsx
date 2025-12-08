@@ -26,7 +26,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { PenSquare } from 'lucide-react'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import type { Board, Tag, PostStatusEntity } from '@quackback/db'
+import type { Board, Tag, PostStatusEntity } from '@quackback/db/types'
 import {
   Form,
   FormControl,

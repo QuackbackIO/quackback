@@ -12,14 +12,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { InboxFilters } from './use-inbox-filters'
-import type { PostStatus, Board, Tag, PostStatusEntity } from '@quackback/db'
-
-interface TeamMember {
-  id: string
-  name: string
-  email: string
-  image?: string | null
-}
+import type { PostStatus, Board, Tag, PostStatusEntity } from '@quackback/db/types'
+import type { TeamMember } from '@quackback/domain'
 
 interface InboxFiltersProps {
   filters: InboxFilters

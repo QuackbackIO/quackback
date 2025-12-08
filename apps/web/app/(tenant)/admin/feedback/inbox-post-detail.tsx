@@ -34,20 +34,15 @@ import { InboxEmptyState } from './inbox-empty-state'
 import { CommentForm } from '@/components/public/comment-form'
 import { PostContent } from '@/components/public/post-content'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { getInitials, REACTION_EMOJIS } from '@quackback/shared'
-import type { PostStatus, Tag, Board, Comment, PostStatusEntity } from '@quackback/db'
+import { getInitials } from '@quackback/domain/utils'
+import { REACTION_EMOJIS } from '@quackback/db/types'
+import type { PostStatus, Tag, Board, Comment, PostStatusEntity } from '@quackback/db/types'
+import type { TeamMember } from '@quackback/domain'
 
 interface CommentReaction {
   emoji: string
   count: number
   hasReacted: boolean
-}
-
-interface TeamMember {
-  id: string
-  name: string
-  email: string
-  image?: string | null
 }
 
 interface OfficialResponse {
