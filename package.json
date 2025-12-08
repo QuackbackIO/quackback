@@ -15,6 +15,7 @@
     "build": "bun run --filter @quackback/web build",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest",
+    "test:e2e": "bun run --filter @quackback/web test:e2e",
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
     "db:studio": "bun run --cwd packages/db db:studio",
