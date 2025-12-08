@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 interface StatusBadgeProps {
@@ -10,23 +9,15 @@ interface StatusBadgeProps {
 const DEFAULT_COLOR = '#6b7280'
 
 /**
- * Badge component for displaying post status with dynamic coloring.
- * Automatically generates background, text, and border colors from the status color.
+ * Status indicator component displaying a colored circle with text.
  */
 export function StatusBadge({ name, color, className }: StatusBadgeProps) {
   const statusColor = color || DEFAULT_COLOR
 
   return (
-    <Badge
-      variant="outline"
-      className={cn('text-[11px] font-medium', className)}
-      style={{
-        backgroundColor: `${statusColor}15`,
-        color: statusColor,
-        borderColor: `${statusColor}40`,
-      }}
-    >
-      {name}
-    </Badge>
+    <div className={cn('inline-flex items-center gap-1.5 text-xs font-medium', className)}>
+      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }} />
+      <span className="text-foreground">{name}</span>
+    </div>
   )
 }

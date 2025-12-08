@@ -13,6 +13,7 @@ import { CommentsSection } from '@/components/public/comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
 import { PostContent } from '@/components/public/post-content'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 
 /**
@@ -29,6 +30,20 @@ function collectCommentMemberIds(comments: PublicComment[]): string[] {
     }
   }
   return memberIds
+}
+
+/**
+ * Recursively count all comments including nested replies
+ */
+function countAllComments(comments: PublicComment[]): number {
+  let count = 0
+  for (const comment of comments) {
+    count += 1
+    if (comment.replies && comment.replies.length > 0) {
+      count += countAllComments(comment.replies)
+    }
+  }
+  return count
 }
 
 // Ensure page is not cached since it depends on user's cookie
@@ -114,18 +129,12 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
           {/* Content section */}
           <div className="flex-1 p-6">
-            {/* Status badge */}
-            <Badge
-              variant="outline"
-              className="text-[11px] font-medium mb-3"
-              style={{
-                backgroundColor: `${currentStatus?.color || '#6b7280'}15`,
-                color: currentStatus?.color || '#6b7280',
-                borderColor: `${currentStatus?.color || '#6b7280'}40`,
-              }}
-            >
-              {currentStatus?.name || post.status}
-            </Badge>
+            {/* Status */}
+            <StatusBadge
+              name={currentStatus?.name || post.status}
+              color={currentStatus?.color}
+              className="mb-3"
+            />
 
             {/* Title */}
             <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-2">{post.title}</h1>
@@ -143,16 +152,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
             {post.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-4">
                 {post.tags.map((tag) => (
-                  <Badge
-                    key={tag.id}
-                    variant="outline"
-                    className="text-[11px]"
-                    style={{
-                      backgroundColor: `${tag.color}15`,
-                      color: tag.color,
-                      borderColor: `${tag.color}40`,
-                    }}
-                  >
+                  <Badge key={tag.id} variant="secondary" className="text-[11px] font-normal">
                     {tag.name}
                   </Badge>
                 ))}
@@ -183,7 +183,8 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         {/* Comments section */}
         <div className="border-t border-border/30 p-6">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-            {post.comments.length} {post.comments.length === 1 ? 'Comment' : 'Comments'}
+            {countAllComments(post.comments)}{' '}
+            {countAllComments(post.comments) === 1 ? 'Comment' : 'Comments'}
           </h2>
 
           <CommentsSection
