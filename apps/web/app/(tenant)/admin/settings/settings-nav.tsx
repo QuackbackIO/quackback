@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Users, CreditCard, Layout, Shield, Lock, Palette } from 'lucide-react'
+import { Settings, Users, CreditCard, Layout, Shield, Lock, Brush } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navSections = [
@@ -18,7 +18,7 @@ const navSections = [
     label: 'Portal',
     items: [
       { label: 'Boards', href: '/admin/settings/boards', icon: Layout },
-      { label: 'Appearance', href: '/admin/settings/appearance', icon: Palette },
+      { label: 'Branding', href: '/admin/settings/branding', icon: Brush },
       { label: 'Public Statuses', href: '/admin/settings/statuses', icon: Settings },
       { label: 'Authentication', href: '/admin/settings/portal-auth', icon: Lock },
     ],

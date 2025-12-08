@@ -146,11 +146,20 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
         // For POST/PATCH/PUT, try to parse the body
         // Clone the request so we can read the body twice
         const clonedRequest = request.clone()
+        const contentType = request.headers.get('content-type') || ''
+
         try {
-          const body = await clonedRequest.json()
-          organizationId = body.organizationId ?? null
+          if (contentType.includes('multipart/form-data')) {
+            // Handle multipart/form-data (file uploads)
+            const formData = await clonedRequest.formData()
+            organizationId = formData.get('organizationId') as string | null
+          } else {
+            // Handle JSON body
+            const body = await clonedRequest.json()
+            organizationId = body.organizationId ?? null
+          }
         } catch {
-          // Body might not be JSON or might be empty
+          // Body might not be JSON/FormData or might be empty
         }
       }
 
@@ -241,11 +250,20 @@ export function withApiHandlerParams<P>(
       } else {
         // For POST/PATCH/PUT, try to parse the body
         const clonedRequest = request.clone()
+        const contentType = request.headers.get('content-type') || ''
+
         try {
-          const body = await clonedRequest.json()
-          organizationId = body.organizationId ?? null
+          if (contentType.includes('multipart/form-data')) {
+            // Handle multipart/form-data (file uploads)
+            const formData = await clonedRequest.formData()
+            organizationId = formData.get('organizationId') as string | null
+          } else {
+            // Handle JSON body
+            const body = await clonedRequest.json()
+            organizationId = body.organizationId ?? null
+          }
         } catch {
-          // Body might not be JSON or might be empty
+          // Body might not be JSON/FormData or might be empty
         }
       }
 

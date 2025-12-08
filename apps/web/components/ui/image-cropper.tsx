@@ -21,6 +21,8 @@ interface ImageCropperProps {
   onCropComplete: (blob: Blob) => void
   aspectRatio?: number
   maxOutputSize?: number
+  /** Dialog title (defaults to "Crop your image") */
+  title?: string
 }
 
 /**
@@ -88,6 +90,7 @@ export function ImageCropper({
   onCropComplete,
   aspectRatio = 1,
   maxOutputSize = 512,
+  title = 'Crop your image',
 }: ImageCropperProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
@@ -132,7 +135,7 @@ export function ImageCropper({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Crop your avatar</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="relative h-64 w-full bg-muted rounded-lg overflow-hidden">
