@@ -314,15 +314,18 @@ test.describe('Board Selector', () => {
   test('board selector defaults to filtered board when filter is active', async ({ page }) => {
     // Navigate with a board filter
     await page.goto('/?board=features')
-    await page.waitForLoadState('networkidle')
+
+    // Wait for posts to load first (indicates page is ready)
+    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Open the dialog
     await page.getByRole('button', { name: /create post/i }).click()
-    await expect(page.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await expect(page.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 10000 })
 
     // Board selector should show the filtered board (Feature Requests)
     const boardSelector = page.locator('[role="combobox"]')
-    await expect(boardSelector).toContainText(/feature/i)
+    await expect(boardSelector).toContainText(/feature/i, { timeout: 10000 })
   })
 
   test('can submit post to a different board than default', async ({ page }) => {

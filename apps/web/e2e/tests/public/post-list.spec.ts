@@ -159,35 +159,41 @@ test.describe('Public Post List', () => {
   test('sort persists with board filter', async ({ page }) => {
     // Navigate with both board and sort params
     await page.goto('/?board=features&sort=new')
-    await page.waitForLoadState('networkidle')
+
+    // Wait for posts to load first (indicates page is ready)
+    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Both filters should be active
     await expect(page).toHaveURL(/board=features/)
     await expect(page).toHaveURL(/sort=new/)
 
-    // Sort button should show correct state
+    // Sort button should show correct state (wait for it to have the class)
     const newButton = page.getByRole('button', { name: /^New$/i })
-    await expect(newButton).toHaveClass(/font-medium/)
+    await expect(newButton).toHaveClass(/font-medium/, { timeout: 10000 })
 
     // Board should be selected
     const featureButton = page.getByRole('button', { name: /Feature Requests/i })
-    await expect(featureButton).toHaveClass(/font-medium/)
+    await expect(featureButton).toHaveClass(/font-medium/, { timeout: 10000 })
   })
 
   test('clicking post navigates to detail page', async ({ page }) => {
     // Wait for posts to load
     const postCards = page.locator('a[href*="/posts/"]:has(h3)')
-    await expect(postCards.first()).toBeVisible({ timeout: 10000 })
+    await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Get the href of the first post
     const firstPostHref = await postCards.first().getAttribute('href')
 
-    // Click the first post
-    await postCards.first().click()
+    // Click the first post and wait for navigation
+    await Promise.all([page.waitForURL(/\/posts\//, { timeout: 15000 }), postCards.first().click()])
 
     // Should navigate to the post detail page
     if (firstPostHref) {
-      await expect(page).toHaveURL(new RegExp(firstPostHref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      await expect(page).toHaveURL(
+        new RegExp(firstPostHref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+        { timeout: 10000 }
+      )
     }
   })
 
@@ -208,15 +214,16 @@ test.describe('Public Post List', () => {
     // Navigate directly to URL with board filter
     await page.goto('/?board=features')
 
-    // Wait for posts to load
-    await page.waitForLoadState('networkidle')
+    // Wait for posts to load first (indicates page is ready)
+    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // URL should contain the board parameter
     await expect(page).toHaveURL(/[?&]board=features/)
 
     // The "Feature Requests" board should be visually selected in the sidebar (has font-medium class)
     const featureButton = page.getByRole('button', { name: /Feature Requests/i })
-    await expect(featureButton).toHaveClass(/font-medium/)
+    await expect(featureButton).toHaveClass(/font-medium/, { timeout: 10000 })
 
     // "View all posts" should NOT be selected (no font-medium)
     const viewAllButton = page.getByRole('button', { name: /View all posts/i })
