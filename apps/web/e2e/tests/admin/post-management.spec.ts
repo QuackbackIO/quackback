@@ -27,8 +27,8 @@ test.describe('Admin Post Management', () => {
       const dialog = page.getByRole('dialog')
       await expect(dialog).toBeVisible()
 
-      // Should have title input
-      await expect(page.getByLabel('Title')).toBeVisible()
+      // Should have title input (borderless style with placeholder)
+      await expect(page.getByPlaceholder("What's the feedback about?")).toBeVisible()
 
       // Close dialog
       await page.keyboard.press('Escape')
@@ -49,14 +49,13 @@ test.describe('Admin Post Management', () => {
 
       // Fill the form
       const testTitle = `Test Post ${Date.now()}`
-      await page.getByLabel('Title').fill(testTitle)
+      const titleInput = page.getByPlaceholder("What's the feedback about?")
+      await titleInput.fill(testTitle)
 
       // Fill description (rich text editor)
-      const editor = page.locator('.ProseMirror[contenteditable="true"]')
-      if ((await editor.count()) > 0) {
-        await editor.click()
-        await editor.fill('This is a test post description')
-      }
+      const editor = page.locator('.tiptap')
+      await editor.click()
+      await page.keyboard.type('This is a test post description')
 
       // Submit the form
       await page.getByRole('button', { name: /create post/i }).click()
@@ -66,6 +65,79 @@ test.describe('Admin Post Management', () => {
 
       // New post should appear in the list (page refreshes)
       await page.waitForLoadState('networkidle')
+    }
+  })
+
+  test('can submit post with Cmd+Enter keyboard shortcut', async ({ page }) => {
+    // Click the create post button
+    const createButton = page.locator('button').filter({
+      has: page.locator('svg.lucide-pen-square'),
+    })
+
+    if ((await createButton.count()) > 0) {
+      await createButton.first().click()
+
+      // Wait for dialog
+      await expect(page.getByRole('dialog')).toBeVisible()
+
+      // Fill the form
+      const testTitle = `Keyboard Submit Post ${Date.now()}`
+      const titleInput = page.getByPlaceholder("What's the feedback about?")
+      await titleInput.fill(testTitle)
+
+      // Fill description
+      const editor = page.locator('.tiptap')
+      await editor.click()
+      await page.keyboard.type('Submitted with keyboard shortcut')
+
+      // Submit with Cmd/Ctrl+Enter
+      await page.keyboard.press('Meta+Enter')
+
+      // Dialog should close
+      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10000 })
+    }
+  })
+
+  test('create dialog shows board and status selectors in header', async ({ page }) => {
+    // Click the create post button
+    const createButton = page.locator('button').filter({
+      has: page.locator('svg.lucide-pen-square'),
+    })
+
+    if ((await createButton.count()) > 0) {
+      await createButton.first().click()
+
+      // Wait for dialog
+      await expect(page.getByRole('dialog')).toBeVisible()
+
+      // Board selector should be visible with label
+      await expect(page.getByText('Board:')).toBeVisible()
+
+      // Status selector should be visible with label
+      await expect(page.getByText('Status:')).toBeVisible()
+
+      // Close dialog
+      await page.keyboard.press('Escape')
+    }
+  })
+
+  test('create dialog has keyboard shortcut hint in footer', async ({ page }) => {
+    // Click the create post button
+    const createButton = page.locator('button').filter({
+      has: page.locator('svg.lucide-pen-square'),
+    })
+
+    if ((await createButton.count()) > 0) {
+      await createButton.first().click()
+
+      // Wait for dialog
+      await expect(page.getByRole('dialog')).toBeVisible()
+
+      // Should show keyboard shortcut hint
+      await expect(page.getByText('to create')).toBeVisible()
+
+      // Close dialog
+      await page.keyboard.press('Escape')
     }
   })
 
@@ -146,6 +218,142 @@ test.describe('Admin Post Management', () => {
       if ((await sortOptions.count()) > 1) {
         await sortOptions.nth(1).click()
         await page.waitForLoadState('networkidle')
+      }
+    }
+  })
+
+  test('can vote on a post in detail view', async ({ page }) => {
+    // First, select a post to view details
+    const postCards = page.locator('[class*="cursor-pointer"]').filter({
+      has: page.locator('h3'),
+    })
+
+    if ((await postCards.count()) > 0) {
+      await postCards.first().click()
+
+      // Wait for detail panel to load
+      await page.waitForLoadState('networkidle')
+
+      // Look for the vote button in the detail panel
+      const voteButton = page.getByTestId('vote-button')
+
+      if ((await voteButton.count()) > 0) {
+        // Get initial vote count
+        const voteCount = page.getByTestId('vote-count')
+        const initialCount = await voteCount.textContent()
+
+        // Click to vote
+        await voteButton.click()
+
+        // Vote count should change
+        await page.waitForTimeout(500)
+        const newCount = await voteCount.textContent()
+        expect(newCount).not.toBe(initialCount)
+      }
+    }
+  })
+
+  test('can open edit dialog from post detail', async ({ page }) => {
+    // First, select a post to view details
+    const postCards = page.locator('[class*="cursor-pointer"]').filter({
+      has: page.locator('h3'),
+    })
+
+    if ((await postCards.count()) > 0) {
+      await postCards.first().click()
+
+      // Wait for detail panel to load
+      await page.waitForLoadState('networkidle')
+
+      // Look for the edit button (pencil icon in header)
+      const editButton = page.locator('button[title="Edit post"]')
+
+      if ((await editButton.count()) > 0) {
+        await editButton.click()
+
+        // Edit dialog should open
+        const dialog = page.getByRole('dialog')
+        await expect(dialog).toBeVisible()
+
+        // Should have title input pre-populated
+        const titleInput = page.getByPlaceholder("What's the feedback about?")
+        await expect(titleInput).toBeVisible()
+
+        // Title should not be empty (pre-populated)
+        const titleValue = await titleInput.inputValue()
+        expect(titleValue.length).toBeGreaterThan(0)
+
+        // Close dialog
+        await page.keyboard.press('Escape')
+      }
+    }
+  })
+
+  test('can edit a post title and content', async ({ page }) => {
+    // First, select a post to view details
+    const postCards = page.locator('[class*="cursor-pointer"]').filter({
+      has: page.locator('h3'),
+    })
+
+    if ((await postCards.count()) > 0) {
+      await postCards.first().click()
+
+      // Wait for detail panel to load
+      await page.waitForLoadState('networkidle')
+
+      // Open edit dialog
+      const editButton = page.locator('button[title="Edit post"]')
+
+      if ((await editButton.count()) > 0) {
+        await editButton.click()
+
+        // Wait for dialog
+        await expect(page.getByRole('dialog')).toBeVisible()
+
+        // Modify the title
+        const titleInput = page.getByPlaceholder("What's the feedback about?")
+        const originalTitle = await titleInput.inputValue()
+        const newTitle = `${originalTitle} (edited ${Date.now()})`
+        await titleInput.fill(newTitle)
+
+        // Submit the edit
+        await page.getByRole('button', { name: /save changes/i }).click()
+
+        // Dialog should close
+        await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10000 })
+
+        // Wait for update
+        await page.waitForLoadState('networkidle')
+      }
+    }
+  })
+
+  test('edit dialog has save keyboard shortcut hint', async ({ page }) => {
+    // First, select a post to view details
+    const postCards = page.locator('[class*="cursor-pointer"]').filter({
+      has: page.locator('h3'),
+    })
+
+    if ((await postCards.count()) > 0) {
+      await postCards.first().click()
+
+      // Wait for detail panel to load
+      await page.waitForLoadState('networkidle')
+
+      // Open edit dialog
+      const editButton = page.locator('button[title="Edit post"]')
+
+      if ((await editButton.count()) > 0) {
+        await editButton.click()
+
+        // Wait for dialog
+        await expect(page.getByRole('dialog')).toBeVisible()
+
+        // Should show keyboard shortcut hint for save
+        await expect(page.getByText('to save')).toBeVisible()
+
+        // Close dialog
+        await page.keyboard.press('Escape')
       }
     }
   })

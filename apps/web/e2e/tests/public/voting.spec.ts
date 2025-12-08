@@ -72,33 +72,29 @@ test.describe('Public Voting', () => {
   })
 
   test('can vote on post detail page', async ({ page }) => {
-    // Navigate to 2nd post detail page to avoid conflicts
+    // Navigate to 5th post detail page to avoid conflicts with other tests
     const postLinks = page.locator('a[href*="/posts/"]')
-    await expect(postLinks.nth(1)).toBeVisible({ timeout: 10000 })
+    await expect(postLinks.nth(4)).toBeVisible({ timeout: 10000 })
 
-    // Click the 2nd post link
-    await postLinks.nth(1).click()
+    // Click the 5th post link
+    await postLinks.nth(4).click()
 
-    // Wait for detail page to load
-    await page.waitForLoadState('networkidle')
+    // Wait for URL to change to post detail page
+    await page.waitForURL(/\/posts\//)
 
-    // Find vote button on detail page using data-testid
+    // Wait for detail page vote button specifically (has text-lg class, list view has text-sm)
+    const detailVoteCount = page.locator('[data-testid="vote-count"].text-lg')
+    await expect(detailVoteCount).toBeVisible({ timeout: 10000 })
+
+    // Get initial count from detail page
+    const initialCountText = await detailVoteCount.textContent()
+    const initialCount = parseInt(initialCountText || '0', 10)
+
+    // Find and click the vote button on detail page
     const voteButton = page.getByTestId('vote-button')
+    await voteButton.click()
 
-    if ((await voteButton.count()) > 0) {
-      const firstVoteButton = voteButton.first()
-      await expect(firstVoteButton).toBeVisible()
-
-      // Get initial count
-      const voteCountSpan = firstVoteButton.getByTestId('vote-count')
-      const initialCountText = await voteCountSpan.textContent()
-      const initialCount = parseInt(initialCountText || '0', 10)
-
-      // Vote
-      await firstVoteButton.click()
-
-      // Verify count increased
-      await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
-    }
+    // Verify count increased
+    await expect(detailVoteCount).toHaveText(String(initialCount + 1), { timeout: 5000 })
   })
 })
