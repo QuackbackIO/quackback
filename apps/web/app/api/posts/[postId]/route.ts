@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getMemberByUserAndOrg } from '@quackback/db'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
-import { getPostService } from '@/lib/services'
-import { buildServiceContext, type CommentNode, type PostError } from '@quackback/domain'
+import { getPostService, getMemberService } from '@/lib/services'
+import { buildServiceContext, type CommentTreeNode, type PostError } from '@quackback/domain'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
  */
-function collectCommentMemberIds(comments: CommentNode[]): string[] {
+function collectCommentMemberIds(comments: CommentTreeNode[]): string[] {
   const memberIds: string[] = []
   for (const comment of comments) {
     if (comment.memberId) {
@@ -148,7 +147,11 @@ export async function PATCH(
       updateInput.ownerId = ownerId
       // Look up ownerMemberId from ownerId (user ID -> member ID for this org)
       if (ownerId) {
-        const ownerMember = await getMemberByUserAndOrg(ownerId, validation.organization.id)
+        const ownerMemberResult = await getMemberService().getMemberByUserAndOrg(
+          ownerId,
+          validation.organization.id
+        )
+        const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
         updateInput.ownerMemberId = ownerMember?.id ?? null
       } else {
         updateInput.ownerMemberId = null

@@ -9,6 +9,10 @@ import {
   type StatusService,
   tagService,
   type TagService,
+  memberService,
+  type MemberService,
+  organizationService,
+  type OrganizationService,
 } from '@quackback/domain'
 
 /**
@@ -62,6 +66,20 @@ export function getTagService(): TagService {
 }
 
 /**
+ * Get the MemberService instance
+ */
+export function getMemberService(): MemberService {
+  return memberService
+}
+
+/**
+ * Get the OrganizationService instance
+ */
+export function getOrganizationService(): OrganizationService {
+  return organizationService
+}
+
+/**
  * Service container with convenient property access
  */
 export const services = {
@@ -79,5 +97,11 @@ export const services = {
   },
   get tags(): TagService {
     return getTagService()
+  },
+  get members(): MemberService {
+    return getMemberService()
+  },
+  get organizations(): OrganizationService {
+    return getOrganizationService()
   },
 }

@@ -22,6 +22,7 @@ import {
   type Database,
 } from '@quackback/db'
 import { getSession } from './auth/server'
+import type { ServiceContext } from '@quackback/domain'
 
 // =============================================================================
 // Domain Resolution
@@ -271,6 +272,7 @@ export async function withAuthenticatedTenant<T>(
 export async function requireAuthenticatedTenant(): Promise<
   Omit<AuthenticatedTenantContext, 'db'> & {
     withRLS: <T>(fn: (db: Database) => Promise<T>) => Promise<T>
+    serviceContext: ServiceContext
   }
 > {
   const result = await requireTenant() // This already redirects on failure
@@ -280,6 +282,14 @@ export async function requireAuthenticatedTenant(): Promise<
     member: result.member,
     user: result.user,
     withRLS: <T>(fn: (db: Database) => Promise<T>) => withTenantContext(result.organization.id, fn),
+    serviceContext: {
+      organizationId: result.organization.id,
+      userId: result.user.id,
+      memberId: result.member.id,
+      memberRole: result.member.role as 'owner' | 'admin' | 'member' | 'user',
+      userName: result.user.name || result.user.email,
+      userEmail: result.user.email,
+    },
   }
 }
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBoardSettings, getMemberByUserAndOrg } from '@quackback/db'
+import { getBoardSettings } from '@quackback/db'
 import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
-import { getBoardService, getStatusService, getPostService } from '@/lib/services'
+import { getBoardService, getStatusService, getPostService, getMemberService } from '@/lib/services'
 import { buildServiceContext, type ServiceContext } from '@quackback/domain'
 
 interface RouteParams {
@@ -50,7 +50,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // 4. Get member record for this organization
-  const memberRecord = await getMemberByUserAndOrg(session.user.id, board.organizationId)
+  const memberResult = await getMemberService().getMemberByUserAndOrg(
+    session.user.id,
+    board.organizationId
+  )
+  const memberRecord = memberResult.success ? memberResult.value : null
 
   if (!memberRecord) {
     return NextResponse.json(

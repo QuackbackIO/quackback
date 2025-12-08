@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server'
-import { getInboxPostList } from '@quackback/db'
 import { withApiHandler, validateBody, ApiError, successResponse } from '@/lib/api-handler'
 import { createPostSchema, type PostStatus } from '@/lib/schemas/posts'
 import { getPostService } from '@/lib/services'
@@ -29,22 +27,33 @@ export const GET = withApiHandler(async (request, { validation }) => {
     ownerId = ownerParam
   }
 
-  const result = await getInboxPostList({
-    organizationId: validation.organization.id,
-    boardIds: boardIds.length > 0 ? boardIds : undefined,
-    status: status.length > 0 ? status : undefined,
-    tagIds: tagIds.length > 0 ? tagIds : undefined,
-    ownerId,
-    search,
-    dateFrom: dateFrom ? new Date(dateFrom) : undefined,
-    dateTo: dateTo ? new Date(dateTo) : undefined,
-    minVotes: minVotes ? parseInt(minVotes, 10) : undefined,
-    sort,
-    page,
-    limit,
-  })
+  // Build service context from validation
+  const ctx = buildServiceContext(validation)
 
-  return NextResponse.json(result)
+  // Call PostService to list inbox posts
+  const result = await getPostService().listInboxPosts(
+    {
+      boardIds: boardIds.length > 0 ? boardIds : undefined,
+      status: status.length > 0 ? status : undefined,
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
+      ownerId,
+      search,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
+      minVotes: minVotes ? parseInt(minVotes, 10) : undefined,
+      sort,
+      page,
+      limit,
+    },
+    ctx
+  )
+
+  // Map Result to HTTP response
+  if (!result.success) {
+    throw new ApiError('Failed to fetch posts', 500)
+  }
+
+  return successResponse(result.value)
 })
 
 export const POST = withApiHandler(async (request, { validation }) => {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBoardByPostId } from '@quackback/db/queries/public'
 import { db, organization, eq, member, and } from '@quackback/db'
 import {
   getRawUserIdentifierFromRequest,
@@ -8,7 +7,7 @@ import {
 } from '@/lib/user-identifier'
 import { commentSchema } from '@/lib/schemas/comments'
 import { getSession } from '@/lib/auth/server'
-import { getCommentService } from '@/lib/services'
+import { getCommentService, getPostService } from '@/lib/services'
 import type { ServiceContext, CommentError } from '@quackback/domain'
 
 interface RouteParams {
@@ -40,7 +39,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { postId } = await params
 
     // Get the board to find organization
-    const board = await getBoardByPostId(postId)
+    const boardResult = await getPostService().getBoardByPostId(postId)
+    const board = boardResult.success ? boardResult.value : null
     if (!board || !board.isPublic) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }

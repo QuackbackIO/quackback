@@ -8,11 +8,11 @@ import {
   eq,
   sessionTransferToken,
   workspaceDomain,
-  seedDefaultStatuses,
 } from '@quackback/db'
 import { createWorkspaceSchema } from '@/lib/schemas/auth'
 import { getBaseDomain } from '@/lib/routing'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
+import { getStatusService } from '@/lib/services'
 import bcrypt from 'bcryptjs'
 
 /**
@@ -218,7 +218,11 @@ export async function POST(request: NextRequest) {
 
     // Seed default post statuses for the new organization
     // Done outside transaction as it uses the main db connection
-    await seedDefaultStatuses(orgId)
+    const seedResult = await getStatusService().seedDefaultStatuses(orgId)
+    if (!seedResult.success) {
+      console.error('Failed to seed default statuses:', seedResult.error)
+      // Continue even if seeding fails - workspace is still created
+    }
 
     // Redirect to subdomain with transfer token
     const redirectSubdomainUrl = buildSubdomainUrl(workspaceSlug, request)

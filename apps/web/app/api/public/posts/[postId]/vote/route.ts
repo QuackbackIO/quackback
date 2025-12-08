@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBoardByPostId } from '@quackback/db/queries/public'
 import { db, member, organization, eq, and } from '@quackback/db'
 import {
   getRawUserIdentifierFromRequest,
@@ -38,7 +37,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { postId } = await params
 
     // Get the board to find organization
-    const board = await getBoardByPostId(postId)
+    const boardResult = await getPostService().getBoardByPostId(postId)
+    const board = boardResult.success ? boardResult.value : null
     if (!board || !board.isPublic) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }

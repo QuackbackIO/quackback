@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
-import { theme } from '@quackback/shared'
+import { theme } from '@quackback/domain'
 
 // Re-export type for consumers
-export type { ThemeConfig } from '@quackback/shared/theme'
+export type { ThemeConfig } from '@quackback/domain/theme'
 
 /**
  * GET /api/organization/theme?organizationId={id}
