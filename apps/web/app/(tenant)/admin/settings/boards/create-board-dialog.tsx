@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createBoardSchema, type CreateBoardInput } from '@/lib/schemas/boards'
@@ -35,6 +36,7 @@ interface CreateBoardDialogProps {
 
 export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
   const [open, setOpen] = useState(false)
+  const router = useRouter()
   const mutation = useCreateBoard(organizationId)
 
   const form = useForm<CreateBoardInput>({
@@ -48,9 +50,13 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
 
   function onSubmit(data: CreateBoardInput) {
     mutation.mutate(data, {
-      onSuccess: () => {
+      onSuccess: (board) => {
         setOpen(false)
         form.reset()
+        // Navigate to the newly created board's settings page and refresh
+        // Using replace + refresh ensures the board list is updated
+        router.push(`/admin/settings/boards/${board.slug}`)
+        router.refresh()
       },
     })
   }

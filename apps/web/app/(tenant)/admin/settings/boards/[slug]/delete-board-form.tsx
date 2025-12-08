@@ -48,6 +48,7 @@ export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps)
     mutation.mutate(board.id, {
       onSuccess: () => {
         router.push('/admin/settings/boards')
+        router.refresh()
       },
     })
   }
