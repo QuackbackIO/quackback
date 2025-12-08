@@ -110,6 +110,8 @@ jobs:
   e2e-setup:
     name: E2E Setup (Seed DB)
     runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.db-cache.outputs.cache-hit }}
     services:
       postgres:
         image: postgres:16
@@ -128,11 +130,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache database dump
+        uses: actions/cache@v4
+        id: db-cache
+        with:
+          path: db-dump.pgdump
+          key: db-dump-${{ hashFiles('packages/db/drizzle/**', 'packages/db/src/seed.ts') }}
+
       - uses: oven-sh/setup-bun@v2
+        if: steps.db-cache.outputs.cache-hit != 'true'
         with:
           bun-version: latest
 
       - name: Cache bun dependencies
+        if: steps.db-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -141,15 +152,19 @@ jobs:
             bun-${{ runner.os }}-
 
       - name: Install dependencies
+        if: steps.db-cache.outputs.cache-hit != 'true'
         run: bun install --frozen-lockfile
 
       - name: Run database migrations
+        if: steps.db-cache.outputs.cache-hit != 'true'
         run: bun run db:migrate
 
       - name: Seed database
+        if: steps.db-cache.outputs.cache-hit != 'true'
         run: bun run db:seed
 
       - name: Export database dump
+        if: steps.db-cache.outputs.cache-hit != 'true'
         run: pg_dump -h localhost -U postgres -d quackback_test -Fc -f db-dump.pgdump
         env:
           PGPASSWORD: postgres
