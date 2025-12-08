@@ -11,7 +11,7 @@
   "dependencies": {
     "resend": "^6",
     "@react-email/components": "^1",
-    "react": "^19"
+    "react": "^19.2.1"
   },
   "devDependencies": {
     "@types/react": "^19"

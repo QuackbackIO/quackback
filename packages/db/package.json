@@ -20,14 +20,14 @@
     "db:reset": "bun src/reset.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.0",
     "postgres": "^3"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.1.0",
-    "@types/bcryptjs": "^2.4.6",
-    "bcryptjs": "^2.4.3",
+    "@types/bcryptjs": "^3.0.0",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
-    "drizzle-kit": "^0.30"
+    "drizzle-kit": "^0.31.8"
   }
 }
