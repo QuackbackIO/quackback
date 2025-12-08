@@ -21,21 +21,36 @@ import {
 } from 'drizzle-orm/pg-core'
 
 // Custom type for PostgreSQL bytea (binary data)
-const bytea = customType<{ data: Buffer; notNull: false; default: false }>({
+const bytea = customType<{ data: Buffer | null; notNull: false; default: false }>({
   dataType() {
     return 'bytea'
   },
-  toDriver(value: Buffer): Buffer {
+  toDriver(value: Buffer | null): Buffer | null {
     return value
   },
-  fromDriver(value: unknown): Buffer {
+  fromDriver(value: unknown): Buffer | null {
+    if (value === null || value === undefined) {
+      return null
+    }
     if (Buffer.isBuffer(value)) {
       return value
     }
     if (value instanceof Uint8Array) {
       return Buffer.from(value)
     }
-    throw new Error('Expected Buffer or Uint8Array from database')
+    // Handle hex string format from postgres.js (e.g., '\xDEADBEEF')
+    if (typeof value === 'string') {
+      if (value.startsWith('\\x')) {
+        return Buffer.from(value.slice(2), 'hex')
+      }
+      // Empty string means no data
+      if (value === '') {
+        return null
+      }
+    }
+    // For any other unexpected format, return null rather than crashing
+    console.warn('Unexpected bytea format from database:', typeof value)
+    return null
   },
 })
 
@@ -132,6 +147,9 @@ export const organization = pgTable('organization', {
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   logo: text('logo'),
+  // Logo stored as blob (alternative to URL in 'logo' field)
+  logoBlob: bytea('logo_blob'),
+  logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   // SSO Strict Mode - salts SSO user emails for additional isolation
