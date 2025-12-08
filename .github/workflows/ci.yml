@@ -267,6 +267,7 @@ jobs:
         run: |
           psql -h localhost -U postgres -d quackback_test -c "CREATE ROLE app_user;"
           pg_restore -h localhost -U postgres -d quackback_test --no-owner --no-acl db-dump.pgdump
+          psql -h localhost -U postgres -d quackback_test -c "GRANT USAGE ON SCHEMA public TO app_user; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;"
         env:
           PGPASSWORD: postgres
 
