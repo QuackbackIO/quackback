@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
+import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getPostService, getMemberService } from '@/lib/services'
 import { buildServiceContext, type CommentTreeNode, type PostError } from '@quackback/domain'
 
@@ -91,11 +92,17 @@ export async function GET(
     // Fetch avatar URLs for all members
     const avatarMap = await getBulkMemberAvatarData(memberIds)
 
+    // Check if current user has voted on this post
+    const userIdentifier = getMemberIdentifier(validation.member.id)
+    const hasVotedResult = await getPostService().hasUserVotedOnPost(postId, userIdentifier)
+    const hasVoted = hasVotedResult.success ? hasVotedResult.value : false
+
     // Transform tags and official response for response format
     const transformedPost = {
       ...post,
       tags: post.tags,
       comments: commentsWithReplies,
+      hasVoted,
       officialResponse: post.officialResponse
         ? {
             content: post.officialResponse,
@@ -121,7 +128,7 @@ export async function PATCH(
   try {
     const { postId } = await params
     const body = await request.json()
-    const { organizationId, status, ownerId } = body
+    const { organizationId, status, ownerId, title, content, contentJson } = body
 
     // Validate tenant access (handles auth + org membership check)
     const validation = await validateApiTenantAccess(organizationId)
@@ -134,6 +141,9 @@ export async function PATCH(
 
     // Build update input
     const updateInput: {
+      title?: string
+      content?: string
+      contentJson?: unknown
       status?: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
       ownerId?: string | null
       ownerMemberId?: string | null
@@ -141,6 +151,11 @@ export async function PATCH(
       officialResponseMemberId?: string | null
       officialResponseAuthorName?: string | null
     } = {}
+
+    // Handle title and content updates
+    if (title !== undefined) updateInput.title = title
+    if (content !== undefined) updateInput.content = content
+    if (contentJson !== undefined) updateInput.contentJson = contentJson
 
     if (status !== undefined) updateInput.status = status
     if (ownerId !== undefined) {

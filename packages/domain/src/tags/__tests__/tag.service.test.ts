@@ -46,6 +46,17 @@ vi.mock('@quackback/db', () => {
     ),
     TagRepository: MockTagRepository,
     BoardRepository: MockBoardRepository,
+    // For listPublicTags method which uses dynamic import
+    db: {
+      query: {
+        tags: {
+          findMany: vi.fn(),
+        },
+      },
+    },
+    tags: { organizationId: 'organizationId' },
+    asc: vi.fn((col: unknown) => col),
+    eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
   }
 })
 
@@ -573,6 +584,52 @@ describe('TagService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toHaveLength(0)
+      }
+    })
+  })
+
+  describe('listPublicTags', () => {
+    it('should return tags without authentication', async () => {
+      const mockTags = [
+        createMockTag({ id: 'tag-1', name: 'Bug', color: '#ff0000' }),
+        createMockTag({ id: 'tag-2', name: 'Feature', color: '#00ff00' }),
+      ]
+
+      const { db } = await import('@quackback/db')
+      vi.mocked(db.query.tags.findMany).mockResolvedValue(mockTags)
+
+      const result = await tagService.listPublicTags('org-123')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value).toHaveLength(2)
+        expect(result.value[0].name).toBe('Bug')
+        expect(result.value[1].name).toBe('Feature')
+      }
+    })
+
+    it('should return empty array when no tags exist', async () => {
+      const { db } = await import('@quackback/db')
+      vi.mocked(db.query.tags.findMany).mockResolvedValue([])
+
+      const result = await tagService.listPublicTags('org-123')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value).toHaveLength(0)
+      }
+    })
+
+    it('should return error on database failure', async () => {
+      const { db } = await import('@quackback/db')
+      vi.mocked(db.query.tags.findMany).mockRejectedValue(new Error('Database error'))
+
+      const result = await tagService.listPublicTags('org-123')
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.code).toBe('VALIDATION_ERROR')
+        expect(result.error.message).toContain('Failed to fetch tags')
       }
     })
   })

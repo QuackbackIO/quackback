@@ -255,6 +255,34 @@ export class TagService {
       return ok(tags)
     })
   }
+
+  /**
+   * List all tags for an organization (public, no authentication required)
+   *
+   * Returns tags ordered by name.
+   * This method is used for public endpoints like feedback portal filtering.
+   *
+   * @param organizationId - Organization ID
+   * @returns Result containing array of tags or an error
+   */
+  async listPublicTags(organizationId: string): Promise<Result<Tag[], TagError>> {
+    try {
+      const { db, tags, asc, eq } = await import('@quackback/db')
+
+      const tagList = await db.query.tags.findMany({
+        where: eq(tags.organizationId, organizationId),
+        orderBy: [asc(tags.name)],
+      })
+
+      return ok(tagList)
+    } catch (error) {
+      return err(
+        TagError.validationError(
+          `Failed to fetch tags: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
 }
 
 /**

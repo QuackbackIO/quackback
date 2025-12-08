@@ -159,3 +159,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Interactive elements cursor - prevent flickering */
+a,
+button,
+[role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+label[for],
+select,
+[tabindex]:not([tabindex="-1"]),
+[data-radix-collection-item],
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Ensure SVGs in buttons don't cause cursor flickering */
+button svg,
+a svg,
+[role="button"] svg {
+  pointer-events: none;
+}
+
+/* Radix ScrollArea styles - prevent dynamic style injection flickering */
+[data-radix-scroll-area-viewport] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  display: none;
+}

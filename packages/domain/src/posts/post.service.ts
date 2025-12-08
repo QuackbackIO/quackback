@@ -472,6 +472,7 @@ export class PostService {
     boardSlug?: string
     search?: string
     status?: string[]
+    tagIds?: string[]
     sort?: 'top' | 'new' | 'trending'
     page?: number
     limit?: number
@@ -479,7 +480,7 @@ export class PostService {
     // Note: This is a PUBLIC method, no auth context needed
     // We use organizationId directly in withUnitOfWork
     return withUnitOfWork(params.organizationId, async (uow: UnitOfWork) => {
-      const { boardSlug, search, status, sort = 'top', page = 1, limit = 20 } = params
+      const { boardSlug, search, status, tagIds, sort = 'top', page = 1, limit = 20 } = params
       const offset = (page - 1) * limit
 
       // Build where conditions - only include posts from public boards
@@ -494,6 +495,21 @@ export class PostService {
 
       if (status && status.length > 0) {
         conditions.push(inArray(posts.status, status as any))
+      }
+
+      // Tag filter - posts must have at least one of the selected tags
+      if (tagIds && tagIds.length > 0) {
+        const postsWithSelectedTags = await uow.db
+          .selectDistinct({ postId: postTags.postId })
+          .from(postTags)
+          .where(inArray(postTags.tagId, tagIds))
+
+        const postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
+
+        if (postIdsWithTags.length === 0) {
+          return ok({ items: [], total: 0, hasMore: false })
+        }
+        conditions.push(inArray(posts.id, postIdsWithTags))
       }
 
       if (search) {

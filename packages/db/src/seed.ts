@@ -389,6 +389,20 @@ function randomDate(daysAgo: number): Date {
   return date
 }
 
+/**
+ * Convert plain text to TipTap JSON format.
+ * This ensures both `content` and `contentJson` fields are properly populated.
+ */
+function textToTipTapJson(text: string): object {
+  return {
+    type: 'doc',
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      content: line ? [{ type: 'text', text: line }] : [],
+    })),
+  }
+}
+
 function weightedStatus(): PostStatus {
   const weights = {
     open: 30,
@@ -789,12 +803,14 @@ async function seed() {
 
       const hasOfficialResponse = status !== 'open' && faker.datatype.boolean({ probability: 0.7 })
       const responder = hasOfficialResponse ? pick(boardCtx.orgMembers) : null
+      const postContent = pick(feedbackContent)
 
       postInserts.push({
         id: postId,
         boardId: boardCtx.boardId,
         title: pick(feedbackTitles),
-        content: pick(feedbackContent),
+        content: postContent,
+        contentJson: textToTipTapJson(postContent),
         authorId: isAnonymous ? null : author.id,
         authorName: isAnonymous ? 'Anonymous' : author.name,
         authorEmail: isAnonymous ? null : author.email,

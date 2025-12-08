@@ -38,6 +38,7 @@ export function RichTextEditor({
         codeBlock: false,
         blockquote: false,
         horizontalRule: false,
+        link: false, // Disable built-in Link, we use our own configured version
       }),
       Placeholder.configure({
         placeholder,
@@ -69,8 +70,17 @@ export function RichTextEditor({
 
   // Sync external value changes
   useEffect(() => {
-    if (editor && value === '') {
+    if (!editor) return
+
+    if (value === '' || value === undefined) {
       editor.commands.clearContent()
+    } else if (typeof value === 'object') {
+      // Only update if the content is different (compare JSON)
+      const currentContent = JSON.stringify(editor.getJSON())
+      const newContent = JSON.stringify(value)
+      if (currentContent !== newContent) {
+        editor.commands.setContent(value)
+      }
     }
   }, [value, editor])
 
@@ -246,6 +256,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
         codeBlock: false,
         blockquote: false,
         horizontalRule: false,
+        link: false, // Disable built-in Link, we use our own configured version
       }),
       Link.configure({
         openOnClick: true,
@@ -262,6 +273,19 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
       },
     },
   })
+
+  // Update editor content when content prop changes
+  useEffect(() => {
+    if (editor && content) {
+      // Only update if content has actually changed
+      const currentContent = editor.getJSON()
+      const newContentStr = JSON.stringify(content)
+      const currentContentStr = JSON.stringify(currentContent)
+      if (newContentStr !== currentContentStr) {
+        editor.commands.setContent(content)
+      }
+    }
+  }, [editor, content])
 
   return <EditorContent editor={editor} />
 }

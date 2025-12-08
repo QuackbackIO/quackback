@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Plus } from 'lucide-react'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import { useCreatePublicPost } from '@/lib/hooks/use-public-posts-query'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {
@@ -34,10 +34,11 @@ export function SubmitPostDialog({
   onSuccess,
   trigger,
 }: SubmitPostDialogProps) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Use the mutation hook for optimistic updates
+  const createPost = useCreatePublicPost()
 
   // Board selection - default to provided defaultBoardId or first board
   const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || boards[0]?.id || '')
@@ -77,32 +78,19 @@ export function SubmitPostDialog({
       return
     }
 
-    setIsSubmitting(true)
-
     try {
-      const response = await fetch(`/api/public/boards/${selectedBoardId}/posts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          content: plainText,
-          contentJson,
-        }),
+      await createPost.mutateAsync({
+        boardId: selectedBoardId,
+        title: title.trim(),
+        content: plainText,
+        contentJson,
       })
-
-      if (!response.ok) {
-        const responseData = await response.json()
-        throw new Error(responseData.error || 'Failed to submit feedback')
-      }
 
       setOpen(false)
       resetForm()
-      router.refresh()
       onSuccess?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit feedback')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -209,12 +197,12 @@ export function SubmitPostDialog({
               variant="ghost"
               size="sm"
               onClick={() => setOpen(false)}
-              disabled={isSubmitting}
+              disabled={createPost.isPending}
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting...' : 'Submit'}
+            <Button size="sm" onClick={handleSubmit} disabled={createPost.isPending}>
+              {createPost.isPending ? 'Submitting...' : 'Submit'}
             </Button>
           </div>
         </div>
