@@ -1,7 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { boardPublicSettingsSchema, type BoardPublicSettingsInput } from '@/lib/schemas/boards'
@@ -17,6 +15,7 @@ import {
   FormItem,
   FormLabel,
 } from '@/components/ui/form'
+import { useUpdateBoard } from '@/lib/hooks/use-board-queries'
 
 interface BoardPublicFormProps {
   board: Board
@@ -24,9 +23,7 @@ interface BoardPublicFormProps {
 }
 
 export function BoardPublicForm({ board, organizationId }: BoardPublicFormProps) {
-  const router = useRouter()
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const mutation = useUpdateBoard(organizationId)
 
   const currentSettings = getBoardSettings(board)
 
@@ -38,40 +35,23 @@ export function BoardPublicForm({ board, organizationId }: BoardPublicFormProps)
   })
 
   async function onSubmit(data: BoardPublicSettingsInput) {
-    setError('')
-    setSuccess(false)
-
     const settings: BoardSettings = {
       allowUserSubmissions: data.allowUserSubmissions,
     }
 
-    try {
-      const response = await fetch(`/api/boards/${board.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings, organizationId }),
-      })
-
-      if (!response.ok) {
-        const responseData = await response.json()
-        throw new Error(responseData.error || 'Failed to update settings')
-      }
-
-      setSuccess(true)
-      router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update settings')
-    }
+    mutation.mutate({ boardId: board.id, settings })
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        {mutation.isError && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {mutation.error.message}
+          </div>
         )}
 
-        {success && (
+        {mutation.isSuccess && (
           <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
             Settings updated successfully
           </div>
@@ -97,8 +77,8 @@ export function BoardPublicForm({ board, organizationId }: BoardPublicFormProps)
         />
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Saving...' : 'Save changes'}
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </form>

@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createBoardSchema, type CreateBoardInput } from '@/lib/schemas/boards'
+import { useCreateBoard } from '@/lib/hooks/use-board-queries'
 import {
   Dialog,
   DialogContent,
@@ -34,9 +34,8 @@ interface CreateBoardDialogProps {
 }
 
 export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [error, setError] = useState('')
+  const mutation = useCreateBoard(organizationId)
 
   const form = useForm<CreateBoardInput>({
     resolver: standardSchemaResolver(createBoardSchema),
@@ -47,37 +46,20 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
     },
   })
 
-  async function onSubmit(data: CreateBoardInput) {
-    setError('')
-
-    try {
-      const response = await fetch('/api/boards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          organizationId,
-        }),
-      })
-
-      if (!response.ok) {
-        const responseData = await response.json()
-        throw new Error(responseData.error || 'Failed to create board')
-      }
-
-      setOpen(false)
-      form.reset()
-      router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create board')
-    }
+  function onSubmit(data: CreateBoardInput) {
+    mutation.mutate(data, {
+      onSuccess: () => {
+        setOpen(false)
+        form.reset()
+      },
+    })
   }
 
   function handleOpenChange(isOpen: boolean) {
     setOpen(isOpen)
     if (!isOpen) {
       form.reset()
-      setError('')
+      mutation.reset()
     }
   }
 
@@ -100,9 +82,9 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              {error && (
+              {mutation.isError && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {error}
+                  {mutation.error.message}
                 </div>
               )}
 
@@ -159,8 +141,8 @@ export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Creating...' : 'Create board'}
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? 'Creating...' : 'Create board'}
               </Button>
             </DialogFooter>
           </form>

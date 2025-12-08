@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/schemas/boards'
+import { useDeleteBoard } from '@/lib/hooks/use-board-queries'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
@@ -30,7 +30,7 @@ interface DeleteBoardFormProps {
 
 export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps) {
   const router = useRouter()
-  const [error, setError] = useState('')
+  const mutation = useDeleteBoard(organizationId)
 
   const form = useForm<DeleteBoardInput>({
     resolver: standardSchemaResolver(deleteBoardSchema),
@@ -42,26 +42,14 @@ export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps)
   const confirmName = form.watch('confirmName')
   const canDelete = confirmName === board.name
 
-  async function onSubmit() {
+  function onSubmit() {
     if (!canDelete) return
 
-    setError('')
-
-    try {
-      const response = await fetch(`/api/boards/${board.id}?organizationId=${organizationId}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete board')
-      }
-
-      router.push('/admin/settings/boards')
-      router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete board')
-    }
+    mutation.mutate(board.id, {
+      onSuccess: () => {
+        router.push('/admin/settings/boards')
+      },
+    })
   }
 
   return (
@@ -77,8 +65,10 @@ export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps)
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+      {mutation.isError && (
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          {mutation.error.message}
+        </div>
       )}
 
       <Form {...form}>
@@ -99,12 +89,8 @@ export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps)
             )}
           />
 
-          <Button
-            type="submit"
-            variant="destructive"
-            disabled={!canDelete || form.formState.isSubmitting}
-          >
-            {form.formState.isSubmitting ? 'Deleting...' : 'Delete board'}
+          <Button type="submit" variant="destructive" disabled={!canDelete || mutation.isPending}>
+            {mutation.isPending ? 'Deleting...' : 'Delete board'}
           </Button>
         </form>
       </Form>
