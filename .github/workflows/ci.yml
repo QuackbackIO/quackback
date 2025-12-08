@@ -110,6 +110,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Cache Vitest
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vitest
+          key: vitest-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            vitest-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-
+            vitest-${{ runner.os }}-
+
       - name: Run database migrations
         run: bun run db:migrate
 
