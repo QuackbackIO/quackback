@@ -26,6 +26,8 @@ interface PostCardProps {
   boardName?: string
   tags: { id: string; name: string; color: string }[]
   hasVoted?: boolean
+  /** Callback when vote state changes (postId, newVotedState) */
+  onVoteChange?: (postId: string, voted: boolean) => void
 }
 
 export function PostCard({
@@ -43,6 +45,7 @@ export function PostCard({
   boardName,
   tags,
   hasVoted = false,
+  onVoteChange,
 }: PostCardProps) {
   const currentStatus = statuses.find((s) => s.slug === status)
   const {
@@ -54,6 +57,7 @@ export function PostCard({
     postId: id,
     initialVoteCount: voteCount,
     initialHasVoted: hasVoted,
+    onVoteChange,
   })
 
   return (
@@ -96,16 +100,7 @@ export function PostCard({
         {tags.length > 0 && (
           <div className="flex gap-1.5 mb-3 flex-wrap">
             {tags.slice(0, 3).map((tag) => (
-              <Badge
-                key={tag.id}
-                variant="outline"
-                className="text-[11px]"
-                style={{
-                  backgroundColor: `${tag.color}15`,
-                  color: tag.color,
-                  borderColor: `${tag.color}40`,
-                }}
-              >
+              <Badge key={tag.id} variant="secondary" className="text-[11px] font-normal">
                 {tag.name}
               </Badge>
             ))}

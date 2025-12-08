@@ -33,7 +33,7 @@ export function VoteButton({
       type="button"
       data-testid="vote-button"
       className={cn(
-        'flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors',
+        'flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors cursor-pointer',
         hasVoted ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
         isPending && 'opacity-70',
         disabled && 'cursor-not-allowed opacity-50'
