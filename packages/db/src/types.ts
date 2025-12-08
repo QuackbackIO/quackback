@@ -56,6 +56,16 @@ export type Post = InferSelectModel<typeof posts>
 export type NewPost = InferInsertModel<typeof posts>
 export type PostStatus = Post['status']
 
+// Post status constants (matches enum in schema)
+export const POST_STATUSES = [
+  'open',
+  'under_review',
+  'planned',
+  'in_progress',
+  'complete',
+  'closed',
+] as const
+
 // Post tag types
 export type PostTag = InferSelectModel<typeof postTags>
 export type NewPostTag = InferInsertModel<typeof postTags>
@@ -75,7 +85,10 @@ export type NewComment = InferInsertModel<typeof comments>
 // Comment reaction types
 export type CommentReaction = InferSelectModel<typeof commentReactions>
 export type NewCommentReaction = InferInsertModel<typeof commentReactions>
-// ReactionEmoji and REACTION_EMOJIS are exported from schema/posts.ts
+
+// Reaction emoji constants (client-safe)
+export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 // Integration types
 export type Integration = InferSelectModel<typeof integrations>

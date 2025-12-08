@@ -14,14 +14,6 @@ export * from './src/schema'
 // Types
 export * from './src/types'
 
-// Queries (legacy - kept for backward compatibility)
-export * from './src/queries/boards'
-export * from './src/queries/posts'
-export * from './src/queries/comments'
-export * from './src/queries/statuses'
-export * from './src/queries/members'
-export * from './src/queries/public'
-
 // Re-export common drizzle-orm utilities
 export {
   eq,

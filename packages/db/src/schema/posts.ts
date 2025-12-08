@@ -190,8 +190,7 @@ export const comments = pgTable(
   ]
 ).enableRLS()
 
-export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
-export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
+// REACTION_EMOJIS and ReactionEmoji are exported from types.ts
 
 const commentReactionsOrgCheck = sql`comment_id IN (
   SELECT c.id FROM comments c

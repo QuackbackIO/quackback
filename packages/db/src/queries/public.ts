@@ -1,15 +1,8 @@
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
 import { db } from '../tenant-context'
 import { boards, tags } from '../schema/boards'
-import {
-  posts,
-  votes,
-  comments,
-  postTags,
-  commentReactions,
-  REACTION_EMOJIS,
-} from '../schema/posts'
-import type { Board, PostStatus } from '../types'
+import { posts, votes, comments, postTags, commentReactions } from '../schema/posts'
+import { REACTION_EMOJIS, type Board, type PostStatus } from '../types'
 import { buildCommentTree, aggregateReactions } from './comments'
 
 // Types for public queries
