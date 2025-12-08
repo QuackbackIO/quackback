@@ -1,12 +1,9 @@
 /**
- * Feature Flag System for Quackback
+ * Feature flags and pricing tier system
  *
- * Business Model: "We make money when you don't want to host it"
- * - Self-hosted: ALL features enabled (no restrictions)
- * - Managed Cloud: Features gated by subscription tier
- *
- * This follows the Sentry/PostHog model, not the GitLab model.
- * Self-hosters get everything free; cloud customers pay for convenience.
+ * Business model:
+ * - Self-hosted: All features enabled (no restrictions)
+ * - Managed cloud: Features gated by subscription tier
  */
 
 /**

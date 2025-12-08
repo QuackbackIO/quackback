@@ -1,5 +1,5 @@
 /**
- * String utilities - shared across UI components
+ * String utilities
  */
 
 /**

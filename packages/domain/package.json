@@ -12,10 +12,12 @@
     "./boards": "./src/boards/index.ts",
     "./comments": "./src/comments/index.ts",
     "./statuses": "./src/statuses/index.ts",
-    "./tags": "./src/tags/index.ts"
+    "./tags": "./src/tags/index.ts",
+    "./utils": "./src/utils/index.ts",
+    "./features": "./src/features/index.ts",
+    "./theme": "./src/theme/index.ts"
   },
   "dependencies": {
-    "@quackback/db": "workspace:*",
-    "@quackback/shared": "workspace:*"
+    "@quackback/db": "workspace:*"
   }
 }
