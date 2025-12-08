@@ -107,8 +107,63 @@ jobs:
       - name: Run unit tests
         run: bun run test --run
 
+  e2e-setup:
+    name: E2E Setup (Seed DB)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quackback_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run database migrations
+        run: bun run db:migrate
+
+      - name: Seed database
+        run: bun run db:seed
+
+      - name: Export database dump
+        run: pg_dump -h localhost -U postgres -d quackback_test -Fc -f db-dump.pgdump
+        env:
+          PGPASSWORD: postgres
+
+      - name: Upload database dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-dump
+          path: db-dump.pgdump
+          retention-days: 1
+
   e2e-tests:
     name: E2E Tests (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+    needs: [e2e-setup]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -170,11 +225,15 @@ jobs:
       - name: Add hosts entry for subdomain
         run: echo "127.0.0.1 acme.localhost" | sudo tee -a /etc/hosts
 
-      - name: Run database migrations
-        run: bun run db:migrate
+      - name: Download database dump
+        uses: actions/download-artifact@v4
+        with:
+          name: db-dump
 
-      - name: Seed database
-        run: bun run db:seed
+      - name: Restore database from dump
+        run: pg_restore -h localhost -U postgres -d quackback_test --no-owner --no-acl db-dump.pgdump
+        env:
+          PGPASSWORD: postgres
 
       - name: Run E2E tests
         run: bun run --filter @quackback/web test:e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
