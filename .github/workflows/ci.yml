@@ -38,8 +38,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Cache ESLint
+        uses: actions/cache@v4
+        with:
+          path: .eslintcache
+          key: eslint-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-
+            eslint-${{ runner.os }}-
+
       - name: Run ESLint
-        run: bun run lint
+        run: bun run lint --cache --cache-location .eslintcache
 
   typecheck:
     name: Type Check
