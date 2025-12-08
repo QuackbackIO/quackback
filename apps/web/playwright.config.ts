@@ -16,11 +16,13 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
 
-  /* Opt out of parallel tests on CI */
-  workers: process.env.CI ? 1 : undefined,
+  /* Use multiple workers in CI for faster execution within each shard */
+  workers: process.env.CI ? 4 : undefined,
 
-  /* Reporter to use */
-  reporter: [['html', { outputFolder: 'playwright-report' }], ['list']],
+  /* Reporter to use - blob for CI (enables sharding/merging), html for local */
+  reporter: process.env.CI
+    ? [['blob', { outputDir: 'blob-report' }], ['list']]
+    : [['html', { outputFolder: 'playwright-report' }], ['list']],
 
   /* Shared settings for all the projects below */
   use: {
