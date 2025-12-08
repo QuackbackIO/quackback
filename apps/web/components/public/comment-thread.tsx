@@ -193,6 +193,7 @@ function CommentItem({
             {reactions.map((reaction) => (
               <button
                 key={reaction.emoji}
+                data-testid="reaction-badge"
                 onClick={() => handleReaction(reaction.emoji)}
                 disabled={isPending}
                 className={cn(
@@ -216,15 +217,17 @@ function CommentItem({
                   size="sm"
                   className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                   disabled={isPending}
+                  data-testid="add-reaction-button"
                 >
                   <SmilePlus className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-2" align="start">
+              <PopoverContent className="w-auto p-2" align="start" data-testid="emoji-picker">
                 <div className="flex gap-1">
                   {REACTION_EMOJIS.map((emoji) => (
                     <button
                       key={emoji}
+                      data-testid="emoji-option"
                       onClick={() => handleReaction(emoji)}
                       className="h-8 w-8 flex items-center justify-center rounded hover:bg-muted text-lg transition-transform hover:scale-110"
                     >
@@ -242,6 +245,7 @@ function CommentItem({
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                 onClick={() => setShowReplyForm(!showReplyForm)}
+                data-testid="reply-button"
               >
                 <Reply className="h-3 w-3 mr-1" />
                 Reply

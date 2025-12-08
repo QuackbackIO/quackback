@@ -4,16 +4,18 @@ test.describe('Public Comments', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to a post detail page
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+
+    // Wait for posts to load
+    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Click on the first post card to go to detail page
-    // Post cards are Link elements with an h3 heading inside
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
-    await expect(postCards.first()).toBeVisible({ timeout: 10000 })
     await postCards.first().click()
 
-    // Wait for detail page to load
-    await page.waitForLoadState('networkidle')
+    // Wait for detail page to load by checking for comment section
+    await expect(
+      page.getByPlaceholder('Write a comment...').or(page.getByText(/no comments yet/i))
+    ).toBeVisible({ timeout: 10000 })
   })
 
   test('displays comments section on post detail', async ({ page }) => {
@@ -42,10 +44,12 @@ test.describe('Public Comments', () => {
 
     // Find and click the submit button - it's the button with type="submit" in the form
     const submitButton = page.locator('form button[type="submit"]').first()
-    await submitButton.click()
 
-    // Wait for the page to refresh with new comment
-    await page.waitForLoadState('networkidle')
+    // Click and wait for the response
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/comments')),
+      submitButton.click(),
+    ])
 
     // The new comment should appear
     await expect(page.getByText(testComment)).toBeVisible({ timeout: 10000 })
@@ -65,9 +69,8 @@ test.describe('Public Comments', () => {
     const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
     if (noComments === 0) {
-      // There are comments - look for reply buttons
-      // Reply buttons have the text "Reply" and a Reply icon (lucide-reply)
-      const replyButtons = page.getByRole('button', { name: /^Reply$/i })
+      // There are comments - look for reply buttons using data-testid
+      const replyButtons = page.getByTestId('reply-button')
       await expect(replyButtons.first()).toBeVisible({ timeout: 5000 })
     }
   })
@@ -77,8 +80,8 @@ test.describe('Public Comments', () => {
     const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
     if (noComments === 0) {
-      // There are comments - find and click reply button
-      const replyButton = page.getByRole('button', { name: /^Reply$/i })
+      // There are comments - find and click reply button using data-testid
+      const replyButton = page.getByTestId('reply-button')
       await replyButton.first().click()
 
       // Reply form should appear - there will now be 2 textareas on the page
@@ -96,17 +99,17 @@ test.describe('Public Comments', () => {
     const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
     if (noComments === 0) {
-      // There are comments - find reaction button with SmilePlus icon
-      const reactionButton = page.locator('button:has(svg.lucide-smile-plus)')
+      // There are comments - find reaction button using data-testid
+      const reactionButton = page.getByTestId('add-reaction-button')
       await expect(reactionButton.first()).toBeVisible({ timeout: 5000 })
       await reactionButton.first().click()
 
-      // Emoji picker popover should appear (using data-slot attribute)
-      const emojiPopover = page.locator('[data-slot="popover-content"]')
+      // Emoji picker popover should appear using data-testid
+      const emojiPopover = page.getByTestId('emoji-picker')
       await expect(emojiPopover).toBeVisible({ timeout: 5000 })
 
-      // Should show emoji options as buttons
-      const emojiButtons = emojiPopover.locator('button')
+      // Should show emoji options as buttons using data-testid
+      const emojiButtons = page.getByTestId('emoji-option')
       await expect(emojiButtons.first()).toBeVisible()
 
       // Close popover
@@ -119,22 +122,26 @@ test.describe('Public Comments', () => {
     const noComments = await page.getByText(/no comments yet.*be the first/i).count()
 
     if (noComments === 0) {
-      // There are comments - find and click reaction button
-      const reactionButton = page.locator('button:has(svg.lucide-smile-plus)')
+      // There are comments - find and click reaction button using data-testid
+      const reactionButton = page.getByTestId('add-reaction-button')
       await reactionButton.first().click()
 
-      // Find an emoji button in the popover (using data-slot attribute)
-      const emojiPopover = page.locator('[data-slot="popover-content"]')
+      // Find emoji picker using data-testid
+      const emojiPopover = page.getByTestId('emoji-picker')
       await expect(emojiPopover).toBeVisible({ timeout: 5000 })
 
-      const emojiButton = emojiPopover.locator('button').first()
-      await emojiButton.click()
+      // Click an emoji button and wait for the API response
+      const emojiButton = page.getByTestId('emoji-option').first()
+      await Promise.all([
+        page.waitForResponse((response) => response.url().includes('/reactions')),
+        emojiButton.click(),
+      ])
 
       // Reaction should be added - popover closes automatically
       await expect(emojiPopover).not.toBeVisible({ timeout: 5000 })
 
-      // A reaction badge should now appear (button with emoji and count)
-      const reactionBadge = page.locator('button:has-text("1")')
+      // A reaction badge should now appear using data-testid
+      const reactionBadge = page.getByTestId('reaction-badge')
       await expect(reactionBadge.first()).toBeVisible({ timeout: 5000 })
     }
   })

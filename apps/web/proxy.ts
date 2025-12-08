@@ -35,10 +35,10 @@ const tenantAuthRoutes = ['/login', '/signup', '/sso', '/admin/login', '/admin/s
 const tenantPublicRoutes = ['/', '/roadmap']
 
 /**
- * Check if pathname matches public post detail route pattern: /:boardSlug/posts/:postId
+ * Check if pathname matches public post detail route pattern: /b/:boardSlug/posts/:postId
  */
 function isPublicPostRoute(pathname: string): boolean {
-  return /^\/[^/]+\/posts\/[^/]+$/.test(pathname)
+  return /^\/b\/[^/]+\/posts\/[^/]+$/.test(pathname)
 }
 
 /**

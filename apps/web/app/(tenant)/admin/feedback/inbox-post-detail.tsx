@@ -379,7 +379,7 @@ export function InboxPostDetail({
           <h2 className="text-sm font-semibold text-foreground">Post Details</h2>
           <Button variant="ghost" size="sm" asChild className="h-7 px-2 text-muted-foreground">
             <a
-              href={`/${post.board.slug}/posts/${post.id}`}
+              href={`/b/${post.board.slug}/posts/${post.id}`}
               target="_blank"
               rel="noopener noreferrer"
             >

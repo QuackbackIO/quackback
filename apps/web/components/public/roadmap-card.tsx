@@ -15,7 +15,7 @@ interface RoadmapCardProps {
 export function RoadmapCard({ id, title, voteCount, board }: RoadmapCardProps) {
   return (
     <Link
-      href={`/${board.slug}/posts/${id}`}
+      href={`/b/${board.slug}/posts/${id}`}
       className="flex bg-card rounded-lg border border-border/50 shadow-sm hover:bg-muted/30 transition-colors"
     >
       {/* Vote section */}

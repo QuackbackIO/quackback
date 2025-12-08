@@ -61,7 +61,7 @@ export function PostCard({
   })
 
   return (
-    <Link href={`/${boardSlug}/posts/${id}`} className="flex transition-colors hover:bg-muted/30">
+    <Link href={`/b/${boardSlug}/posts/${id}`} className="flex transition-colors hover:bg-muted/30">
       {/* Vote section - left column */}
       <button
         type="button"
