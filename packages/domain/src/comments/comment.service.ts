@@ -14,6 +14,7 @@ import {
   CommentRepository,
   PostRepository,
   BoardRepository,
+  db,
   eq,
   and,
   asc,
@@ -21,8 +22,6 @@ import {
   commentReactions,
   type Comment,
   type UnitOfWork,
-  buildCommentTree,
-  aggregateReactions,
 } from '@quackback/db'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
@@ -32,7 +31,9 @@ import type {
   UpdateCommentInput,
   CommentThread,
   ReactionResult,
+  CommentContext,
 } from './comment.types'
+import { buildCommentTree, aggregateReactions } from '../shared/comment-tree'
 
 /**
  * Service class for comment domain operations
@@ -481,6 +482,155 @@ export class CommentService {
       )
 
       return ok({ added: false, reactions: aggregatedReactions })
+    })
+  }
+
+  /**
+   * Resolve organization context from a comment ID
+   *
+   * Traverses: Comment -> Post -> Board -> Organization
+   * Used by public API routes that need to check permissions without full auth context.
+   * This is a PUBLIC method - no authentication required.
+   *
+   * @param commentId - Comment ID to resolve context for
+   * @returns Result containing the full context or an error
+   */
+  async resolveCommentContext(commentId: string): Promise<Result<CommentContext, CommentError>> {
+    try {
+      // Fetch comment with its post and board in a single query
+      const comment = await db.query.comments.findFirst({
+        where: eq(comments.id, commentId),
+        with: {
+          post: {
+            with: {
+              board: true,
+            },
+          },
+        },
+      })
+
+      if (!comment) {
+        return err(CommentError.notFound(commentId))
+      }
+
+      if (!comment.post) {
+        return err(CommentError.postNotFound(comment.postId))
+      }
+
+      if (!comment.post.board) {
+        return err(CommentError.validationError('Board not found for post'))
+      }
+
+      return ok({
+        comment: {
+          id: comment.id,
+          postId: comment.postId,
+          content: comment.content,
+          parentId: comment.parentId,
+          memberId: comment.memberId,
+          authorName: comment.authorName,
+          createdAt: comment.createdAt,
+        },
+        post: {
+          id: comment.post.id,
+          boardId: comment.post.boardId,
+          title: comment.post.title,
+        },
+        board: {
+          id: comment.post.board.id,
+          organizationId: comment.post.board.organizationId,
+          name: comment.post.board.name,
+          slug: comment.post.board.slug,
+        },
+        organizationId: comment.post.board.organizationId,
+      })
+    } catch (error) {
+      return err(
+        CommentError.validationError(
+          `Failed to resolve comment context: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
+
+  /**
+   * Toggle reaction on a comment (add if not exists, remove if exists)
+   *
+   * Simplifies the API by combining add/remove logic.
+   *
+   * @param commentId - Comment ID to react to
+   * @param emoji - Emoji to toggle
+   * @param ctx - Service context with user/org information
+   * @returns Result containing reaction status or an error
+   */
+  async toggleReaction(
+    commentId: string,
+    emoji: string,
+    ctx: ServiceContext
+  ): Promise<Result<ReactionResult, CommentError>> {
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const commentRepo = new CommentRepository(uow.db)
+      const postRepo = new PostRepository(uow.db)
+      const boardRepo = new BoardRepository(uow.db)
+
+      // Verify comment exists
+      const comment = await commentRepo.findById(commentId)
+      if (!comment) {
+        return err(CommentError.notFound(commentId))
+      }
+
+      // Verify comment belongs to this organization (via its post's board)
+      const post = await postRepo.findById(comment.postId)
+      if (!post) {
+        return err(CommentError.postNotFound(comment.postId))
+      }
+
+      const board = await boardRepo.findById(post.boardId)
+      if (!board) {
+        return err(CommentError.postNotFound(comment.postId))
+      }
+
+      // Get user identifier for tracking
+      const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
+
+      // Check if reaction already exists
+      const existingReaction = await uow.db.query.commentReactions.findFirst({
+        where: and(
+          eq(commentReactions.commentId, commentId),
+          eq(commentReactions.userIdentifier, userIdentifier),
+          eq(commentReactions.emoji, emoji)
+        ),
+      })
+
+      let added: boolean
+      if (existingReaction) {
+        // Remove existing reaction
+        await uow.db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
+        added = false
+      } else {
+        // Add new reaction
+        await uow.db.insert(commentReactions).values({
+          commentId,
+          userIdentifier,
+          emoji,
+        })
+        added = true
+      }
+
+      // Fetch updated reactions
+      const reactions = await uow.db.query.commentReactions.findMany({
+        where: eq(commentReactions.commentId, commentId),
+      })
+
+      const aggregatedReactions = aggregateReactions(
+        reactions.map((r) => ({
+          emoji: r.emoji,
+          userIdentifier: r.userIdentifier,
+        })),
+        userIdentifier
+      )
+
+      return ok({ added, reactions: aggregatedReactions })
     })
   }
 }

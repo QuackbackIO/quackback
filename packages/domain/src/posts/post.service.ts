@@ -27,23 +27,25 @@ import {
   postTags,
   tags,
   comments,
-  buildCommentTree,
   type Post,
   type UnitOfWork,
 } from '@quackback/db'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'
+import { buildCommentTree, type CommentTreeNode } from '../shared/comment-tree'
 import type {
   CreatePostInput,
   UpdatePostInput,
   VoteResult,
   PostWithDetails,
-  CommentNode,
   PublicPostListResult,
   InboxPostListParams,
   InboxPostListResult,
   PostForExport,
+  RoadmapPost,
+  PublicPostDetail,
+  PublicComment,
 } from './post.types'
 
 /**
@@ -427,7 +429,7 @@ export class PostService {
     postId: string,
     userIdentifier: string,
     ctx: ServiceContext
-  ): Promise<Result<CommentNode[], PostError>> {
+  ): Promise<Result<CommentTreeNode[], PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -838,6 +840,217 @@ export class PostService {
 
       return ok(exportPosts)
     })
+  }
+
+  /**
+   * Get a single post with full details for public view
+   * No authentication required - only returns posts from public boards
+   *
+   * @param postId - Post ID to fetch
+   * @param userIdentifier - Optional user identifier for reaction tracking
+   * @returns Result containing post detail or null if not found/not public
+   */
+  async getPublicPostDetail(
+    postId: string,
+    userIdentifier?: string
+  ): Promise<Result<PublicPostDetail | null, PostError>> {
+    // Use db from tenant-context for public queries (no UnitOfWork needed - read-only)
+    const { db } = await import('@quackback/db')
+
+    const postResult = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: {
+        board: true,
+      },
+    })
+
+    if (!postResult || !postResult.board.isPublic) {
+      return ok(null)
+    }
+
+    // Get tags
+    const tagsResult = await db
+      .select({
+        id: tags.id,
+        name: tags.name,
+        color: tags.color,
+      })
+      .from(postTags)
+      .innerJoin(tags, eq(tags.id, postTags.tagId))
+      .where(eq(postTags.postId, postId))
+
+    // Get comments with reactions
+    const commentsResult = await db.query.comments.findMany({
+      where: eq(comments.postId, postId),
+      with: {
+        reactions: true,
+      },
+      orderBy: asc(comments.createdAt),
+    })
+
+    // Build nested comment tree
+    const commentTree = buildCommentTree(commentsResult, userIdentifier)
+
+    // Map to PublicComment format
+    const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => ({
+      id: node.id,
+      content: node.content,
+      authorName: node.authorName,
+      memberId: node.memberId,
+      createdAt: node.createdAt,
+      parentId: node.parentId,
+      isTeamMember: node.isTeamMember,
+      replies: node.replies.map(mapToPublicComment),
+      reactions: node.reactions,
+    })
+
+    const rootComments = commentTree.map(mapToPublicComment)
+
+    return ok({
+      id: postResult.id,
+      title: postResult.title,
+      content: postResult.content,
+      contentJson: postResult.contentJson,
+      status: postResult.status,
+      voteCount: postResult.voteCount,
+      authorName: postResult.authorName,
+      createdAt: postResult.createdAt,
+      board: {
+        id: postResult.board.id,
+        name: postResult.board.name,
+        slug: postResult.board.slug,
+      },
+      tags: tagsResult,
+      comments: rootComments,
+      officialResponse: postResult.officialResponse
+        ? {
+            content: postResult.officialResponse,
+            authorName: postResult.officialResponseAuthorName,
+            respondedAt: postResult.officialResponseAt!,
+          }
+        : null,
+    })
+  }
+
+  /**
+   * Get posts for roadmap view across all public boards
+   * No authentication required
+   *
+   * @param organizationId - Organization ID
+   * @param statusSlugs - Array of status slugs to filter by
+   * @returns Result containing roadmap posts
+   */
+  async getRoadmapPosts(
+    organizationId: string,
+    statusSlugs: string[]
+  ): Promise<Result<RoadmapPost[], PostError>> {
+    if (statusSlugs.length === 0) {
+      return ok([])
+    }
+
+    const { db } = await import('@quackback/db')
+
+    const result = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        status: posts.status,
+        voteCount: posts.voteCount,
+        boardId: boards.id,
+        boardName: boards.name,
+        boardSlug: boards.slug,
+      })
+      .from(posts)
+      .innerJoin(boards, eq(posts.boardId, boards.id))
+      .where(
+        and(
+          eq(boards.organizationId, organizationId),
+          eq(boards.isPublic, true),
+          inArray(posts.status, statusSlugs as any)
+        )
+      )
+      .orderBy(desc(posts.voteCount))
+
+    return ok(
+      result.map((row) => ({
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        voteCount: row.voteCount,
+        board: {
+          id: row.boardId,
+          name: row.boardName,
+          slug: row.boardSlug,
+        },
+      }))
+    )
+  }
+
+  /**
+   * Check if a user has voted on a post
+   * No authentication required
+   *
+   * @param postId - Post ID to check
+   * @param userIdentifier - User's identifier
+   * @returns Result containing boolean
+   */
+  async hasUserVotedOnPost(
+    postId: string,
+    userIdentifier: string
+  ): Promise<Result<boolean, PostError>> {
+    const { db } = await import('@quackback/db')
+
+    const vote = await db.query.votes.findFirst({
+      where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
+    })
+
+    return ok(!!vote)
+  }
+
+  /**
+   * Get which posts a user has voted on from a list
+   * No authentication required
+   *
+   * @param postIds - List of post IDs to check
+   * @param userIdentifier - User's identifier
+   * @returns Result containing Set of voted post IDs
+   */
+  async getUserVotedPostIds(
+    postIds: string[],
+    userIdentifier: string
+  ): Promise<Result<Set<string>, PostError>> {
+    if (postIds.length === 0) {
+      return ok(new Set())
+    }
+
+    const { db } = await import('@quackback/db')
+
+    const result = await db
+      .select({ postId: votes.postId })
+      .from(votes)
+      .where(and(inArray(votes.postId, postIds), eq(votes.userIdentifier, userIdentifier)))
+
+    return ok(new Set(result.map((r) => r.postId)))
+  }
+
+  /**
+   * Get board by post ID
+   * No authentication required
+   *
+   * @param postId - Post ID to lookup
+   * @returns Result containing Board or null
+   */
+  async getBoardByPostId(
+    postId: string
+  ): Promise<Result<import('@quackback/db').Board | null, PostError>> {
+    const { db } = await import('@quackback/db')
+
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { board: true },
+    })
+
+    return ok(post?.board || null)
   }
 }
 

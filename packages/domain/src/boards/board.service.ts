@@ -453,6 +453,38 @@ export class BoardService {
   }
 
   /**
+   * Get a public board by slug (no authentication required)
+   *
+   * Only returns boards where isPublic = true.
+   *
+   * @param organizationId - Organization ID
+   * @param slug - Board slug to fetch
+   * @returns Result containing the board or null if not found/not public
+   */
+  async getPublicBoardBySlug(
+    organizationId: string,
+    slug: string
+  ): Promise<Result<Board | null, BoardError>> {
+    try {
+      const board = await db.query.boards.findFirst({
+        where: and(
+          eq(boards.organizationId, organizationId),
+          eq(boards.slug, slug),
+          eq(boards.isPublic, true)
+        ),
+      })
+
+      return ok(board || null)
+    } catch (error) {
+      return err(
+        BoardError.validationError(
+          `Failed to fetch board: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
+
+  /**
    * Get a board by post ID
    *
    * Finds the post and returns its associated board.
@@ -483,6 +515,31 @@ export class BoardService {
 
       return ok(board)
     })
+  }
+
+  /**
+   * Count boards for an organization (no auth required)
+   *
+   * Used by onboarding/getting-started pages.
+   *
+   * @param organizationId - Organization ID
+   * @returns Result containing the board count
+   */
+  async countBoardsByOrg(organizationId: string): Promise<Result<number, BoardError>> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`count(*)`.as('count') })
+        .from(boards)
+        .where(eq(boards.organizationId, organizationId))
+
+      return ok(Number(result[0]?.count ?? 0))
+    } catch (error) {
+      return err(
+        BoardError.validationError(
+          `Failed to count boards: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
   }
 
   /**

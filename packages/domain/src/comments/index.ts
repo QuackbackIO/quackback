@@ -11,4 +11,5 @@ export type {
   CommentThread,
   CommentReactionCount,
   ReactionResult,
+  CommentContext,
 } from './comment.types'

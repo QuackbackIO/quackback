@@ -3,6 +3,7 @@
  */
 
 import type { Post, PostStatus, Board, Tag } from '@quackback/db/types'
+import type { CommentReactionCount } from '../comments/comment.types'
 
 /**
  * Input for creating a new post
@@ -69,28 +70,6 @@ export interface PostWithDetails extends Post {
 }
 
 /**
- * Comment node with nested replies and reactions
- */
-export interface CommentNode {
-  id: string
-  postId: string
-  parentId: string | null
-  memberId: string | null
-  authorId: string | null
-  authorName: string | null
-  authorEmail: string | null
-  content: string
-  isTeamMember: boolean
-  createdAt: Date
-  replies: CommentNode[]
-  reactions: Array<{
-    emoji: string
-    count: number
-    hasReacted: boolean
-  }>
-}
-
-/**
  * Public post list item for portal view
  */
 export interface PublicPostListItem {
@@ -118,9 +97,9 @@ export interface PublicPostListResult {
 
 /**
  * Parameters for inbox post list query
+ * Note: organizationId comes from ServiceContext, not these params
  */
 export interface InboxPostListParams {
-  organizationId: string
   boardIds?: string[]
   status?: PostStatus[]
   tagIds?: string[]
@@ -171,4 +150,57 @@ export interface PostForExport {
     name: string
     color: string
   }
+}
+
+/**
+ * Post for roadmap view
+ */
+export interface RoadmapPost {
+  id: string
+  title: string
+  status: PostStatus
+  voteCount: number
+  board: { id: string; name: string; slug: string }
+}
+
+/**
+ * Official response on a post
+ */
+export interface OfficialResponse {
+  content: string
+  authorName: string | null
+  respondedAt: Date
+}
+
+/**
+ * Public comment for portal view
+ */
+export interface PublicComment {
+  id: string
+  content: string
+  authorName: string | null
+  memberId: string | null
+  createdAt: Date
+  parentId: string | null
+  isTeamMember: boolean
+  replies: PublicComment[]
+  reactions: CommentReactionCount[]
+}
+
+/**
+ * Public post detail for portal view
+ */
+export interface PublicPostDetail {
+  id: string
+  title: string
+  content: string
+  contentJson: unknown
+  status: PostStatus
+  voteCount: number
+  authorName: string | null
+  createdAt: Date
+  board: { id: string; name: string; slug: string }
+  tags: Array<{ id: string; name: string; color: string }>
+  comments: PublicComment[]
+  officialResponse: OfficialResponse | null
 }

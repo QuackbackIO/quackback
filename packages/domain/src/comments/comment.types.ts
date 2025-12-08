@@ -56,3 +56,31 @@ export interface ReactionResult {
   /** Updated reaction counts */
   reactions: CommentReactionCount[]
 }
+
+/**
+ * Full context of a comment including its post, board, and organization
+ * Used by public API routes that need to check permissions
+ */
+export interface CommentContext {
+  comment: {
+    id: string
+    postId: string
+    content: string
+    parentId: string | null
+    memberId: string | null
+    authorName: string | null
+    createdAt: Date
+  }
+  post: {
+    id: string
+    boardId: string
+    title: string
+  }
+  board: {
+    id: string
+    organizationId: string
+    name: string
+    slug: string
+  }
+  organizationId: string
+}

@@ -368,6 +368,66 @@ export class StatusService {
       return ok(status)
     })
   }
+
+  /**
+   * Seed default statuses for a new organization
+   *
+   * This method is called during workspace creation to initialize
+   * the default set of statuses (Open, Under Review, Planned, In Progress, Complete, Closed).
+   * This is a public method that doesn't require ServiceContext since it's used
+   * during initial setup before the user has auth context for the new org.
+   *
+   * @param organizationId - Organization ID to seed statuses for
+   * @returns Result containing the created statuses or an error
+   */
+  async seedDefaultStatuses(organizationId: string): Promise<Result<Status[], StatusError>> {
+    try {
+      const { db, postStatuses, DEFAULT_STATUSES } = await import('@quackback/db')
+
+      const statusesToCreate = DEFAULT_STATUSES.map((status) => ({
+        ...status,
+        organizationId,
+      }))
+
+      const inserted = await db.insert(postStatuses).values(statusesToCreate).returning()
+
+      return ok(inserted)
+    } catch (error) {
+      return err(
+        StatusError.validationError(
+          `Failed to seed statuses: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
+
+  /**
+   * List all statuses for an organization (public, no authentication required)
+   *
+   * Returns statuses ordered by category (active, complete, closed) and position.
+   * This method is used for public endpoints like roadmap and post detail pages.
+   *
+   * @param organizationId - Organization ID
+   * @returns Result containing array of statuses or an error
+   */
+  async listPublicStatuses(organizationId: string): Promise<Result<Status[], StatusError>> {
+    try {
+      const { db, postStatuses, asc } = await import('@quackback/db')
+
+      const statuses = await db.query.postStatuses.findMany({
+        where: eq(postStatuses.organizationId, organizationId),
+        orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
+      })
+
+      return ok(statuses)
+    } catch (error) {
+      return err(
+        StatusError.validationError(
+          `Failed to fetch statuses: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
 }
 
 /**
