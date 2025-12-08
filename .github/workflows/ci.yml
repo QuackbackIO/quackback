@@ -10,7 +10,7 @@ env:
   # Database
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quackback_test
   # Auth
-  BETTER_AUTH_SECRET: test-secret-for-ci-only
+  BETTER_AUTH_SECRET: test-secret-for-ci-only-must-be-at-least-32-characters
   BETTER_AUTH_URL: http://localhost:3000
   # App
   NEXT_PUBLIC_APP_URL: http://localhost:3000
