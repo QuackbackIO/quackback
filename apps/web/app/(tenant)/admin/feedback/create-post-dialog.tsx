@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createPostSchema, type CreatePostInput, type PostStatus } from '@/lib/schemas/posts'
+import { useCreatePost } from '@/lib/hooks/use-inbox-queries'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,8 +39,8 @@ export function CreatePostDialog({
   // Find the default status for new posts
   const defaultStatus = statuses.find((s) => s.isDefault)?.slug || statuses[0]?.slug || 'open'
   const [open, setOpen] = useState(false)
-  const [error, setError] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+  const createPostMutation = useCreatePost(organizationId)
 
   const form = useForm<CreatePostInput>({
     resolver: standardSchemaResolver(createPostSchema),
@@ -61,31 +62,18 @@ export function CreatePostDialog({
     [form]
   )
 
-  async function onSubmit(data: CreatePostInput) {
-    setError('')
-
-    try {
-      const response = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          contentJson,
-          organizationId,
-        }),
-      })
-
-      if (!response.ok) {
-        const responseData = await response.json()
-        throw new Error(responseData.error || 'Failed to create post')
+  function onSubmit(data: CreatePostInput) {
+    createPostMutation.mutate(
+      { ...data, contentJson },
+      {
+        onSuccess: () => {
+          setOpen(false)
+          form.reset()
+          setContentJson(null)
+          onPostCreated?.()
+        },
       }
-
-      setOpen(false)
-      form.reset()
-      onPostCreated?.()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create post')
-    }
+    )
   }
 
   function handleOpenChange(isOpen: boolean) {
@@ -93,7 +81,7 @@ export function CreatePostDialog({
     if (!isOpen) {
       form.reset()
       setContentJson(null)
-      setError('')
+      createPostMutation.reset()
     }
   }
 
@@ -201,9 +189,9 @@ export function CreatePostDialog({
             </div>
 
             <div className="px-4 sm:px-6 py-4 space-y-2">
-              {error && (
+              {createPostMutation.isError && (
                 <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive mb-4">
-                  {error}
+                  {createPostMutation.error.message}
                 </div>
               )}
 
@@ -300,12 +288,12 @@ export function CreatePostDialog({
                   variant="ghost"
                   size="sm"
                   onClick={() => setOpen(false)}
-                  disabled={form.formState.isSubmitting}
+                  disabled={createPostMutation.isPending}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting ? 'Creating...' : 'Create post'}
+                <Button type="submit" size="sm" disabled={createPostMutation.isPending}>
+                  {createPostMutation.isPending ? 'Creating...' : 'Create post'}
                 </Button>
               </div>
             </div>

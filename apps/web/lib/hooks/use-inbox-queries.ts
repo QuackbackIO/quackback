@@ -873,6 +873,53 @@ export function useAddComment(organizationId: string) {
   })
 }
 
+// ============================================================================
+// Create Post Mutation (for admin create dialog)
+// ============================================================================
+
+interface CreatePostInput {
+  title: string
+  content: string
+  contentJson?: unknown
+  boardId: string
+  status: PostStatus
+  tagIds: string[]
+}
+
+interface CreatePostResponse {
+  id: string
+  title: string
+  content: string
+  contentJson: unknown
+  status: PostStatus
+  boardId: string
+}
+
+export function useCreatePost(organizationId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: CreatePostInput): Promise<CreatePostResponse> => {
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...input, organizationId }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to create post')
+      }
+
+      return response.json()
+    },
+    onSuccess: () => {
+      // Invalidate all inbox lists to show the new post
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+    },
+  })
+}
+
 // Helper to add a reply to a nested comment structure
 function addReplyToComment(
   comments: CommentWithReplies[],
