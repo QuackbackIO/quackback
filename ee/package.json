@@ -13,6 +13,6 @@
   },
   "dependencies": {
     "@quackback/db": "workspace:*",
-    "@quackback/shared": "workspace:*"
+    "@quackback/domain": "workspace:*"
   }
 }

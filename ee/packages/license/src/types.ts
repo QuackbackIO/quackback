@@ -2,7 +2,7 @@
  * License Types for Quackback Enterprise
  */
 
-import type { PricingTier } from '@quackback/shared'
+import type { PricingTier } from '@quackback/domain'
 
 /**
  * License status

@@ -14,7 +14,7 @@ import {
   isTierAtLeast,
   requiresEnterpriseCode,
   isSelfHosted,
-} from '@quackback/shared'
+} from '@quackback/domain'
 import type { License, LicenseValidationResult, LicenseCheckOptions } from './types'
 
 // Cache licenses to avoid repeated database lookups
