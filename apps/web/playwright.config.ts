@@ -16,8 +16,8 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
 
-  /* Use 2 workers in CI (4 was causing flaky tests due to resource contention) */
-  workers: process.env.CI ? 2 : undefined,
+  /* Use 1 worker per shard in CI (sharding provides parallelism, 1 worker reduces flakiness) */
+  workers: process.env.CI ? 1 : undefined,
 
   /* Reporter to use - blob for CI (enables sharding/merging), html for local */
   reporter: process.env.CI
