@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState } from 'react'
 import {
   X,
-  ChevronUp,
   MessageSquare,
   ExternalLink,
   Loader2,
@@ -14,13 +13,14 @@ import {
   Building2,
   Pencil,
   Trash2,
-  Settings2,
+  Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -28,75 +28,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxEmptyState } from './inbox-empty-state'
 import { CommentForm } from '@/components/public/comment-form'
 import { PostContent } from '@/components/public/post-content'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { ChevronUp } from 'lucide-react'
 import { getInitials } from '@quackback/domain/utils'
 import { REACTION_EMOJIS } from '@quackback/db/types'
-import type { PostStatus, Tag, Board, Comment, PostStatusEntity } from '@quackback/db/types'
-import type { TeamMember } from '@quackback/domain'
+import type { PostDetails, CommentWithReplies, CurrentUser } from './inbox-types'
+import type { PostStatus, Tag, PostStatusEntity } from '@quackback/db/types'
 
-interface CommentReaction {
-  emoji: string
-  count: number
-  hasReacted: boolean
-}
-
-interface OfficialResponse {
+interface SubmitCommentParams {
+  postId: string
   content: string
-  authorName: string | null
-  respondedAt: Date
-}
-
-interface PostDetails {
-  id: string
-  title: string
-  content: string
-  contentJson?: unknown
-  status: PostStatus
-  voteCount: number
-  // Member-scoped identity (Hub-and-Spoke model)
-  memberId: string | null
-  ownerMemberId: string | null
-  // Legacy/anonymous identity fields
-  authorName: string | null
-  authorEmail: string | null
-  ownerId: string | null
-  createdAt: Date
-  board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Pick<Tag, 'id' | 'name' | 'color'>[]
-  comments: CommentWithReplies[]
-  officialResponse: OfficialResponse | null
-}
-
-interface CommentWithReplies extends Comment {
-  replies: CommentWithReplies[]
-  reactions: CommentReaction[]
-}
-
-interface CurrentUser {
-  name: string
-  email: string
+  parentId?: string | null
+  authorName?: string | null
+  authorEmail?: string | null
 }
 
 interface InboxPostDetailProps {
   post: PostDetails | null
   isLoading: boolean
-  members: TeamMember[]
   allTags: Tag[]
   statuses: PostStatusEntity[]
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
   currentUser: CurrentUser
   onClose: () => void
+  onEdit: () => void
   onStatusChange: (status: PostStatus) => Promise<void>
-  onOwnerChange: (ownerId: string | null) => Promise<void>
   onTagsChange: (tagIds: string[]) => Promise<void>
   onOfficialResponseChange: (response: string | null) => Promise<void>
-  onCommentAdded?: () => void
+  submitComment: (params: SubmitCommentParams) => Promise<unknown>
+  isCommentPending: boolean
+  onReaction: (commentId: string, emoji: string) => void
+  isReactionPending: boolean
+  onVote: () => void
+  isVotePending: boolean
 }
 
 function formatDate(date: Date): string {
@@ -107,6 +76,20 @@ function formatDate(date: Date): string {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date)
+}
+
+/**
+ * Recursively count all comments including nested replies
+ */
+function countAllComments(comments: CommentWithReplies[]): number {
+  let count = 0
+  for (const comment of comments) {
+    count += 1 // Count this comment
+    if (comment.replies && comment.replies.length > 0) {
+      count += countAllComments(comment.replies) // Count nested replies
+    }
+  }
+  return count
 }
 
 function DetailSkeleton() {
@@ -132,7 +115,10 @@ interface CommentItemProps {
   comment: CommentWithReplies
   avatarUrls?: Record<string, string | null>
   currentUser: CurrentUser
-  onCommentAdded?: () => void
+  submitComment: (params: SubmitCommentParams) => Promise<unknown>
+  isCommentPending: boolean
+  onReaction: (commentId: string, emoji: string) => void
+  isReactionPending: boolean
   depth?: number
 }
 
@@ -141,44 +127,26 @@ function CommentItem({
   comment,
   avatarUrls,
   currentUser,
-  onCommentAdded,
+  submitComment,
+  isCommentPending,
+  onReaction,
+  isReactionPending,
   depth = 0,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [isPending, startTransition] = useTransition()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-
-  // Reactions are pre-aggregated from the server with hasReacted already computed
-  const [reactions, setReactions] = useState<CommentReaction[]>(comment.reactions || [])
-
-  // Sync reactions from props when they change (e.g., on data refresh)
-  useEffect(() => {
-    setReactions(comment.reactions || [])
-  }, [comment.reactions])
 
   const maxDepth = 5
   const canNest = depth < maxDepth
   const hasReplies = comment.replies && comment.replies.length > 0
 
-  const handleReaction = async (emoji: string) => {
-    setShowEmojiPicker(false)
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/public/comments/${comment.id}/reactions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ emoji }),
-        })
+  // Use reactions directly from props (managed by React Query cache)
+  const reactions = comment.reactions || []
 
-        if (response.ok) {
-          const data = await response.json()
-          setReactions(data.reactions)
-        }
-      } catch (error) {
-        console.error('Failed to toggle reaction:', error)
-      }
-    })
+  const handleReaction = (emoji: string) => {
+    setShowEmojiPicker(false)
+    onReaction(comment.id, emoji)
   }
 
   return (
@@ -188,29 +156,15 @@ function CommentItem({
         <div className="py-2">
           {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
-            <Avatar
-              className={cn(
-                'h-8 w-8 shrink-0',
-                comment.isTeamMember && 'ring-2 ring-primary ring-offset-2'
-              )}
-            >
+            <Avatar className={cn('h-8 w-8 shrink-0')}>
               {comment.memberId && avatarUrls?.[comment.memberId] && (
                 <AvatarImage
                   src={avatarUrls[comment.memberId]!}
                   alt={comment.authorName || 'Comment author'}
                 />
               )}
-              <AvatarFallback
-                className={cn(
-                  'text-xs',
-                  comment.isTeamMember ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                )}
-              >
-                {comment.isTeamMember ? (
-                  <Building2 className="h-4 w-4" />
-                ) : (
-                  getInitials(comment.authorName)
-                )}
+              <AvatarFallback className={cn('text-xs')}>
+                {getInitials(comment.authorName)}
               </AvatarFallback>
             </Avatar>
             <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
@@ -256,7 +210,7 @@ function CommentItem({
               <button
                 key={reaction.emoji}
                 onClick={() => handleReaction(reaction.emoji)}
-                disabled={isPending}
+                disabled={isReactionPending}
                 className={cn(
                   'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors',
                   'border hover:bg-muted',
@@ -277,7 +231,7 @@ function CommentItem({
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                  disabled={isPending}
+                  disabled={isReactionPending}
                 >
                   <SmilePlus className="h-3.5 w-3.5" />
                 </Button>
@@ -318,10 +272,9 @@ function CommentItem({
                 postId={postId}
                 parentId={comment.id}
                 user={currentUser}
-                onSuccess={() => {
-                  setShowReplyForm(false)
-                  onCommentAdded?.()
-                }}
+                submitComment={submitComment}
+                isSubmitting={isCommentPending}
+                onSuccess={() => setShowReplyForm(false)}
                 onCancel={() => setShowReplyForm(false)}
               />
             </div>
@@ -338,7 +291,10 @@ function CommentItem({
                 comment={reply}
                 avatarUrls={avatarUrls}
                 currentUser={currentUser}
-                onCommentAdded={onCommentAdded}
+                submitComment={submitComment}
+                isCommentPending={isCommentPending}
+                onReaction={onReaction}
+                isReactionPending={isReactionPending}
                 depth={depth + 1}
               />
             ))}
@@ -352,19 +308,24 @@ function CommentItem({
 export function InboxPostDetail({
   post,
   isLoading,
-  members,
   allTags,
   statuses,
   avatarUrls,
   currentUser,
   onClose,
+  onEdit,
   onStatusChange,
-  onOwnerChange,
   onTagsChange,
   onOfficialResponseChange,
-  onCommentAdded,
+  submitComment,
+  isCommentPending,
+  onReaction,
+  isReactionPending,
+  onVote,
+  isVotePending,
 }: InboxPostDetailProps) {
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false)
   const [isEditingResponse, setIsEditingResponse] = useState(false)
   const [responseText, setResponseText] = useState('')
 
@@ -390,15 +351,6 @@ export function InboxPostDetail({
     setIsUpdating(true)
     try {
       await onStatusChange(value as PostStatus)
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
-  const handleOwnerChange = async (value: string) => {
-    setIsUpdating(true)
-    try {
-      await onOwnerChange(value === 'unassigned' ? null : value)
     } finally {
       setIsUpdating(false)
     }
@@ -434,6 +386,10 @@ export function InboxPostDetail({
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
+          <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5 shrink-0" />
+            Edit post
+          </Button>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
           <X className="h-4 w-4" />
@@ -444,58 +400,71 @@ export function InboxPostDetail({
       <div className="flex border-b border-border/30">
         {/* Vote section - left column */}
         <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30">
-          <div className="flex flex-col items-center">
-            <ChevronUp className="h-6 w-6 text-muted-foreground" />
-            <span className="text-lg font-bold text-foreground">{post.voteCount}</span>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">votes</span>
-          </div>
+          <button
+            type="button"
+            onClick={onVote}
+            disabled={isVotePending}
+            className={cn(
+              'flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors cursor-pointer',
+              post.hasVoted
+                ? 'text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+              isVotePending && 'opacity-70'
+            )}
+          >
+            <ChevronUp className={cn('h-6 w-6', post.hasVoted && 'fill-primary')} />
+            <span
+              className={cn(
+                'text-lg font-bold',
+                post.hasVoted ? 'text-primary' : 'text-foreground'
+              )}
+            >
+              {post.voteCount}
+            </span>
+          </button>
         </div>
 
         {/* Content section */}
         <div className="flex-1 min-w-0 p-6">
-          {/* Status badge */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                disabled={isUpdating}
-                className="inline-flex items-center gap-1.5 mb-3 group"
+          {/* Status selector */}
+          <div className="flex items-center gap-1 mb-3">
+            <Select
+              value={post.status}
+              onValueChange={(value) => handleStatusChange(value)}
+              disabled={isUpdating}
+            >
+              <SelectTrigger
+                size="xs"
+                className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
               >
-                <Badge
-                  variant="outline"
-                  className="text-[11px] font-medium cursor-pointer group-hover:opacity-80 transition-opacity"
-                  style={{
-                    backgroundColor: `${currentStatus?.color || '#6b7280'}15`,
-                    color: currentStatus?.color || '#6b7280',
-                    borderColor: `${currentStatus?.color || '#6b7280'}40`,
-                  }}
-                >
-                  {currentStatus?.name || post.status}
-                </Badge>
-                <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                {isUpdating && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-48 p-1" align="start">
-              {statuses.map((status) => (
-                <button
-                  key={status.id}
-                  type="button"
-                  onClick={() => handleStatusChange(status.slug)}
-                  className={cn(
-                    'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors',
-                    post.status === status.slug ? 'bg-muted font-medium' : 'hover:bg-muted/50'
+                <SelectValue>
+                  {currentStatus && (
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: currentStatus.color }}
+                      />
+                      {currentStatus.name}
+                    </div>
                   )}
-                >
-                  <span
-                    className="h-2 w-2 rounded-full shrink-0"
-                    style={{ backgroundColor: status.color }}
-                  />
-                  {status.name}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start">
+                {statuses.map((status) => (
+                  <SelectItem key={status.id} value={status.slug} className="text-xs py-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: status.color }}
+                      />
+                      {status.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isUpdating && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </div>
 
           {/* Title */}
           <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-2">{post.title}</h1>
@@ -509,25 +478,58 @@ export function InboxPostDetail({
             <span className="text-foreground/70">{post.board.name}</span>
           </div>
 
-          {/* Tags */}
-          {post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {post.tags.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant="outline"
-                  className="text-[11px]"
-                  style={{
-                    backgroundColor: `${tag.color}15`,
-                    color: tag.color,
-                    borderColor: `${tag.color}40`,
-                  }}
-                >
-                  {tag.name}
-                </Badge>
-              ))}
-            </div>
-          )}
+          {/* Tags - inline editable */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            {post.tags.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => handleTagToggle(tag.id)}
+                disabled={isUpdating}
+                className="group inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-normal bg-muted text-muted-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+              >
+                {tag.name}
+                <X className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            ))}
+            {allTags.length > 0 && (
+              <Popover open={isTagPopoverOpen} onOpenChange={setIsTagPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add tag
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1" align="start">
+                  <div className="max-h-48 overflow-y-auto">
+                    {allTags
+                      .filter((tag) => !post.tags.some((t) => t.id === tag.id))
+                      .map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => {
+                            handleTagToggle(tag.id)
+                            setIsTagPopoverOpen(false)
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-muted/50 transition-colors text-left"
+                        >
+                          {tag.name}
+                        </button>
+                      ))}
+                    {allTags.filter((tag) => !post.tags.some((t) => t.id === tag.id)).length ===
+                      0 && (
+                      <p className="px-3 py-2 text-xs text-muted-foreground">All tags applied</p>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
 
           {/* Post content */}
           <PostContent
@@ -535,128 +537,97 @@ export function InboxPostDetail({
             contentJson={post.contentJson}
             className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/90"
           />
-        </div>
-      </div>
 
-      {/* Official response (if exists) */}
-      {post.officialResponse && (
-        <div className="border-b border-border/30 p-6">
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge className="text-[10px] px-1.5 py-0">Official Response</Badge>
-                {post.officialResponse.authorName && (
-                  <span className="text-xs text-muted-foreground">
-                    by {post.officialResponse.authorName}
-                  </span>
+          {/* Official response section - below description */}
+          <div className="mt-6 pt-6 border-t border-border/30">
+            {post.officialResponse ? (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className="text-[10px] px-1.5 py-0">Official Response</Badge>
+                    {post.officialResponse.authorName && (
+                      <span className="text-xs text-muted-foreground">
+                        by {post.officialResponse.authorName}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      · <TimeAgo date={post.officialResponse.respondedAt} />
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => {
+                        setResponseText(post.officialResponse?.content || '')
+                        setIsEditingResponse(true)
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={async () => {
+                        setIsUpdating(true)
+                        try {
+                          await onOfficialResponseChange(null)
+                        } finally {
+                          setIsUpdating(false)
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                {isEditingResponse ? (
+                  <div className="space-y-3">
+                    <Textarea
+                      value={responseText}
+                      onChange={(e) => setResponseText(e.target.value)}
+                      placeholder="Update your official response..."
+                      rows={3}
+                      className="resize-none text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={isUpdating || !responseText.trim()}
+                        onClick={async () => {
+                          setIsUpdating(true)
+                          try {
+                            await onOfficialResponseChange(responseText.trim())
+                            setIsEditingResponse(false)
+                          } finally {
+                            setIsUpdating(false)
+                          }
+                        }}
+                      >
+                        {isUpdating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Update
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditingResponse(false)
+                          setResponseText(post.officialResponse?.content || '')
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                    {post.officialResponse.content}
+                  </p>
                 )}
-                <span className="text-xs text-muted-foreground">
-                  · <TimeAgo date={post.officialResponse.respondedAt} />
-                </span>
               </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => {
-                    setResponseText(post.officialResponse?.content || '')
-                    setIsEditingResponse(true)
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
-                  onClick={async () => {
-                    setIsUpdating(true)
-                    try {
-                      await onOfficialResponseChange(null)
-                    } finally {
-                      setIsUpdating(false)
-                    }
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-            <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-              {post.officialResponse.content}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Actions Section */}
-      <div className="border-b border-border/30 p-6 bg-muted/30">
-        <div className="flex items-center gap-2 mb-4">
-          <Settings2 className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Manage Post
-          </h3>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Tags */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Tags</label>
-            <div className="flex flex-wrap gap-1.5">
-              {allTags.map((tag) => {
-                const isSelected = post.tags.some((t) => t.id === tag.id)
-                return (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => handleTagToggle(tag.id)}
-                    disabled={isUpdating}
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors disabled:opacity-50"
-                    style={{
-                      backgroundColor: isSelected ? tag.color : `${tag.color}15`,
-                      color: isSelected ? '#fff' : tag.color,
-                    }}
-                  >
-                    {tag.name}
-                  </button>
-                )
-              })}
-              {allTags.length === 0 && (
-                <span className="text-xs text-muted-foreground">No tags available</span>
-              )}
-            </div>
-          </div>
-
-          {/* Owner Assignment */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">
-              Assigned To
-            </label>
-            <Select
-              value={post.ownerId || 'unassigned'}
-              onValueChange={handleOwnerChange}
-              disabled={isUpdating}
-            >
-              <SelectTrigger className="h-8 text-sm border-border/50">
-                <SelectValue placeholder="Unassigned" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {members.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.name || member.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Official Response Editor */}
-        {!post.officialResponse && (
-          <div className="mt-4 pt-4 border-t border-border/30">
-            {isEditingResponse ? (
+            ) : isEditingResponse ? (
               <div className="space-y-3">
                 <Textarea
                   value={responseText}
@@ -664,6 +635,7 @@ export function InboxPostDetail({
                   placeholder="Write your official response to this feedback..."
                   rows={3}
                   className="resize-none text-sm"
+                  autoFocus
                 />
                 <div className="flex gap-2">
                   <Button
@@ -709,71 +681,50 @@ export function InboxPostDetail({
               </Button>
             )}
           </div>
-        )}
-
-        {/* Edit existing response */}
-        {post.officialResponse && isEditingResponse && (
-          <div className="mt-4 pt-4 border-t border-border/30 space-y-3">
-            <Textarea
-              value={responseText}
-              onChange={(e) => setResponseText(e.target.value)}
-              placeholder="Update your official response..."
-              rows={3}
-              className="resize-none text-sm"
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={isUpdating || !responseText.trim()}
-                onClick={async () => {
-                  setIsUpdating(true)
-                  try {
-                    await onOfficialResponseChange(responseText.trim())
-                    setIsEditingResponse(false)
-                  } finally {
-                    setIsUpdating(false)
-                  }
-                }}
-              >
-                {isUpdating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Update Response
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setIsEditingResponse(false)
-                  setResponseText(post.officialResponse?.content || '')
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Comments Section */}
       <div className="p-6">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
           <MessageSquare className="h-3.5 w-3.5" />
-          {post.comments.length} {post.comments.length === 1 ? 'Comment' : 'Comments'}
+          {countAllComments(post.comments)}{' '}
+          {countAllComments(post.comments) === 1 ? 'Comment' : 'Comments'}
         </h3>
+
+        {/* Add comment form */}
+        <div className="mb-6">
+          <CommentForm
+            postId={post.id}
+            user={currentUser}
+            submitComment={submitComment}
+            isSubmitting={isCommentPending}
+          />
+        </div>
+
+        {/* Comments list - sorted newest first */}
         {post.comments.length > 0 ? (
           <div className="space-y-0">
-            {post.comments.map((comment) => (
-              <CommentItem
-                key={comment.id}
-                postId={post.id}
-                comment={comment}
-                avatarUrls={avatarUrls}
-                currentUser={currentUser}
-                onCommentAdded={onCommentAdded}
-              />
-            ))}
+            {[...post.comments]
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              .map((comment) => (
+                <CommentItem
+                  key={comment.id}
+                  postId={post.id}
+                  comment={comment}
+                  avatarUrls={avatarUrls}
+                  currentUser={currentUser}
+                  submitComment={submitComment}
+                  isCommentPending={isCommentPending}
+                  onReaction={onReaction}
+                  isReactionPending={isReactionPending}
+                />
+              ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No comments yet</p>
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No comments yet. Be the first to share your thoughts!
+          </p>
         )}
       </div>
     </div>
