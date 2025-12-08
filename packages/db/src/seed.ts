@@ -21,6 +21,50 @@ const client = postgres(connectionString)
 const db = drizzle(client)
 
 /**
+ * Verify that migrations have been run and RLS is properly configured.
+ * This checks for the app_user role and app_org_id function.
+ */
+async function verifyMigrationsApplied() {
+  // Check if app_user role exists
+  const roleCheck = await client`
+    SELECT 1 FROM pg_roles WHERE rolname = 'app_user'
+  `
+  if (roleCheck.length === 0) {
+    throw new Error(
+      'Database migrations have not been applied.\n' +
+        'Please run: bun run db:migrate\n' +
+        'Then try seeding again.'
+    )
+  }
+
+  // Check if app_org_id function exists
+  const funcCheck = await client`
+    SELECT 1 FROM pg_proc WHERE proname = 'app_org_id'
+  `
+  if (funcCheck.length === 0) {
+    throw new Error(
+      'Database migrations have not been applied.\n' +
+        'Please run: bun run db:migrate\n' +
+        'Then try seeding again.'
+    )
+  }
+
+  // Check if RLS policies exist for key tables
+  const policyCheck = await client`
+    SELECT tablename, policyname FROM pg_policies
+    WHERE schemaname = 'public'
+    AND policyname IN ('boards_tenant_isolation', 'posts_tenant_isolation', 'comment_reactions_tenant_isolation')
+  `
+  if (policyCheck.length < 3) {
+    throw new Error(
+      'RLS policies are missing. Database migrations may not have been applied correctly.\n' +
+        'Please run: bun run db:migrate\n' +
+        'Then try seeding again.'
+    )
+  }
+}
+
+/**
  * Optimize database for bulk inserts.
  */
 async function optimizeForBulkInsert() {
@@ -34,79 +78,6 @@ async function optimizeForBulkInsert() {
 async function resetDatabaseSettings() {
   await client.unsafe(`SET synchronous_commit = on`)
   await client.unsafe(`RESET work_mem`)
-}
-
-/**
- * Apply RLS permissions for app_user role.
- * Idempotent - safe to run multiple times.
- */
-async function applyRLSPermissions() {
-  // Create app_user role if not exists
-  await client.unsafe(`
-    DO $$ BEGIN
-      CREATE ROLE "app_user";
-    EXCEPTION
-      WHEN duplicate_object THEN NULL;
-    END $$;
-  `)
-
-  // Create or replace helper function
-  await client.unsafe(`
-    CREATE OR REPLACE FUNCTION app_org_id() RETURNS text AS $$
-    BEGIN
-      RETURN NULLIF(current_setting('app.organization_id', true), '');
-    END;
-    $$ LANGUAGE plpgsql STABLE;
-  `)
-
-  // Grant permissions (idempotent - no error if already granted)
-  await client.unsafe(`GRANT EXECUTE ON FUNCTION app_org_id() TO app_user;`)
-  await client.unsafe(`GRANT USAGE ON SCHEMA public TO app_user;`)
-  await client.unsafe(
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;`
-  )
-  await client.unsafe(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;`)
-
-  // Set default privileges for future tables
-  await client.unsafe(
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;`
-  )
-  await client.unsafe(
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_user;`
-  )
-
-  // Recreate RLS policies with proper conditions (drizzle-kit push doesn't apply policy conditions)
-  // Boards - direct organization_id
-  await client.unsafe(`DROP POLICY IF EXISTS boards_tenant_isolation ON boards;`)
-  await client.unsafe(`
-    CREATE POLICY boards_tenant_isolation ON boards AS PERMISSIVE FOR ALL TO app_user
-      USING (organization_id = app_org_id())
-      WITH CHECK (organization_id = app_org_id());
-  `)
-
-  // Posts - through board_id -> boards.organization_id
-  await client.unsafe(`DROP POLICY IF EXISTS posts_tenant_isolation ON posts;`)
-  await client.unsafe(`
-    CREATE POLICY posts_tenant_isolation ON posts AS PERMISSIVE FOR ALL TO app_user
-      USING (board_id IN (SELECT id FROM boards WHERE organization_id = app_org_id()))
-      WITH CHECK (board_id IN (SELECT id FROM boards WHERE organization_id = app_org_id()));
-  `)
-
-  // Comments - through post_id -> posts -> boards
-  await client.unsafe(`DROP POLICY IF EXISTS comments_tenant_isolation ON comments;`)
-  await client.unsafe(`
-    CREATE POLICY comments_tenant_isolation ON comments AS PERMISSIVE FOR ALL TO app_user
-      USING (post_id IN (SELECT p.id FROM posts p JOIN boards b ON p.board_id = b.id WHERE b.organization_id = app_org_id()))
-      WITH CHECK (post_id IN (SELECT p.id FROM posts p JOIN boards b ON p.board_id = b.id WHERE b.organization_id = app_org_id()));
-  `)
-
-  // Votes - through post_id -> posts -> boards
-  await client.unsafe(`DROP POLICY IF EXISTS votes_tenant_isolation ON votes;`)
-  await client.unsafe(`
-    CREATE POLICY votes_tenant_isolation ON votes AS PERMISSIVE FOR ALL TO app_user
-      USING (post_id IN (SELECT p.id FROM posts p JOIN boards b ON p.board_id = b.id WHERE b.organization_id = app_org_id()))
-      WITH CHECK (post_id IN (SELECT p.id FROM posts p JOIN boards b ON p.board_id = b.id WHERE b.organization_id = app_org_id()));
-  `)
 }
 
 // Hash password using bcrypt (matches Better-Auth config)
@@ -1212,10 +1183,10 @@ function generateCommentCount(): number {
 async function seed() {
   console.log('🌱 Seeding database with faker data...\n')
 
-  // Apply RLS permissions (idempotent)
-  console.log('🔐 Applying RLS permissions...')
-  await applyRLSPermissions()
-  console.log('   Permissions applied')
+  // Verify migrations have been applied
+  console.log('🔐 Verifying migrations...')
+  await verifyMigrationsApplied()
+  console.log('   Migrations verified')
 
   // Optimize for bulk inserts
   console.log('⚡ Optimizing for bulk inserts...')

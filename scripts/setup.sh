@@ -80,10 +80,10 @@ bun install
 echo -e "${GREEN}Dependencies installed${NC}"
 echo ""
 
-# Push database schema
-echo "Setting up database schema..."
-bun run db:push
-echo -e "${GREEN}Database schema ready${NC}"
+# Run database migrations
+echo "Running database migrations..."
+bun run db:migrate
+echo -e "${GREEN}Database ready${NC}"
 echo ""
 
 # Done

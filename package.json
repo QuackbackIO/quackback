@@ -17,7 +17,6 @@
     "test": "vitest",
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
-    "db:push": "bun run --cwd packages/db db:push",
     "db:studio": "bun run --cwd packages/db db:studio",
     "db:seed": "bun packages/db/src/seed.ts",
     "db:reset": "bun packages/db/src/reset.ts",

@@ -65,8 +65,8 @@ async function reset() {
   console.log('\nReset complete!')
   console.log('')
   console.log('Next steps:')
-  console.log('  1. Push schema:  bun run db:push')
-  console.log('  2. Seed data:    bun run db:seed')
+  console.log('  1. Run migrations:  bun run db:migrate')
+  console.log('  2. Seed data:       bun run db:seed')
   console.log('')
 }
 

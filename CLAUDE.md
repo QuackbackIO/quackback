@@ -78,13 +78,11 @@ bun run test          # Run all Vitest tests
 bun run test <file>   # Run single test file (e.g., bun run test packages/db/src/foo.test.ts)
 
 # Database
-bun run db:push       # Push schema to database
-bun run db:generate   # Generate migrations
-bun run db:migrate    # Run migrations
+bun run db:generate   # Generate migrations from schema changes
+bun run db:migrate    # Run migrations (creates tables, RLS policies, permissions)
 bun run db:studio     # Open Drizzle Studio
-bun run db:seed       # Seed demo data
-bun run db:reset      # Reset database (destructive)
-bun run reset         # Reset + push + seed (full reset)
+bun run db:seed       # Seed demo data (requires migrations first)
+bun run db:reset      # Reset database (destructive, then run db:migrate + db:seed)
 ```
 
 ## Key Conventions
