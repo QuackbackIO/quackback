@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { getUserAvatarData, getBulkMemberAvatarData } from '@/lib/avatar'
+import { getOrganizationLogoData } from '@/lib/organization'
 import { theme } from '@quackback/domain'
 import { getBoardService, getPostService, getStatusService, getTagService } from '@/lib/services'
 import { db, organization, workspaceDomain, eq, member, and } from '@quackback/db'
@@ -131,9 +132,11 @@ export default async function RootPage({ searchParams }: RootPageProps) {
   const postAvatarMap = await getBulkMemberAvatarData(postMemberIds)
 
   // Get avatar URL with base64 data for SSR (no flicker)
-  const avatarData = session?.user
-    ? await getUserAvatarData(session.user.id, session.user.image)
-    : null
+  // Get logo URL from blob storage for SSR
+  const [avatarData, logoData] = await Promise.all([
+    session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
+    getOrganizationLogoData(org.id),
+  ])
 
   // Build initial user data for SSR (used by both header props and provider)
   const initialUserData = session?.user
@@ -149,7 +152,7 @@ export default async function RootPage({ searchParams }: RootPageProps) {
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
-        orgLogo={org.logo}
+        orgLogo={logoData.logoUrl}
         userRole={userRole}
         initialUserData={initialUserData}
       />

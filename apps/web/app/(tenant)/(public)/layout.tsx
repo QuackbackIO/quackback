@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { getUserAvatarData } from '@/lib/avatar'
+import { getOrganizationLogoData } from '@/lib/organization'
 import { UserProfileProvider } from '@/components/providers/user-profile-provider'
 import { theme } from '@quackback/domain'
 
@@ -26,9 +27,11 @@ export default async function PublicLayout({ children }: { children: React.React
   }
 
   // Get avatar URL with base64 data for SSR (no flicker)
-  const avatarData = session?.user
-    ? await getUserAvatarData(session.user.id, session.user.image)
-    : null
+  // Get logo URL from blob storage for SSR
+  const [avatarData, logoData] = await Promise.all([
+    session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
+    getOrganizationLogoData(org.id),
+  ])
 
   // Generate theme CSS from org config
   const themeConfig = theme.parseThemeConfig(org.themeConfig)
@@ -48,7 +51,7 @@ export default async function PublicLayout({ children }: { children: React.React
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
-        orgLogo={org.logo}
+        orgLogo={logoData.logoUrl}
         userRole={userRole}
         initialUserData={initialUserData}
       />
