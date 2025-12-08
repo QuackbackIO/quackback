@@ -77,8 +77,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Push database schema
-        run: bun run db:push
+      - name: Run database migrations
+        run: bun run db:migrate
 
       - name: Run unit tests
         run: bun run test --run
@@ -117,8 +117,8 @@ jobs:
       - name: Add hosts entry for subdomain
         run: echo "127.0.0.1 acme.localhost" | sudo tee -a /etc/hosts
 
-      - name: Push database schema
-        run: bun run db:push
+      - name: Run database migrations
+        run: bun run db:migrate
 
       - name: Seed database
         run: bun run db:seed
