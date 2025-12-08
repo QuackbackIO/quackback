@@ -1,21 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useCallback } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createPostSchema, type CreatePostInput, type PostStatus } from '@/lib/schemas/posts'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -25,16 +15,10 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { PenSquare } from 'lucide-react'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@quackback/db/types'
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 interface CreatePostDialogProps {
   organizationId: string
@@ -53,9 +37,9 @@ export function CreatePostDialog({
 }: CreatePostDialogProps) {
   // Find the default status for new posts
   const defaultStatus = statuses.find((s) => s.isDefault)?.slug || statuses[0]?.slug || 'open'
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
+  const [contentJson, setContentJson] = useState<JSONContent | null>(null)
 
   const form = useForm<CreatePostInput>({
     resolver: standardSchemaResolver(createPostSchema),
@@ -68,6 +52,15 @@ export function CreatePostDialog({
     },
   })
 
+  const handleContentChange = useCallback(
+    (json: JSONContent) => {
+      setContentJson(json)
+      const plainText = richTextToPlainText(json)
+      form.setValue('content', plainText, { shouldValidate: true })
+    },
+    [form]
+  )
+
   async function onSubmit(data: CreatePostInput) {
     setError('')
 
@@ -77,6 +70,7 @@ export function CreatePostDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
+          contentJson,
           organizationId,
         }),
       })
@@ -88,7 +82,6 @@ export function CreatePostDialog({
 
       setOpen(false)
       form.reset()
-      router.refresh()
       onPostCreated?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create post')
@@ -99,9 +92,21 @@ export function CreatePostDialog({
     setOpen(isOpen)
     if (!isOpen) {
       form.reset()
+      setContentJson(null)
       setError('')
     }
   }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Submit on Cmd/Ctrl + Enter
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault()
+      form.handleSubmit(onSubmit)()
+    }
+  }
+
+  const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
+  const selectedStatus = statuses.find((s) => s.slug === form.watch('status'))
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -110,32 +115,41 @@ export function CreatePostDialog({
           <PenSquare className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent
+        className="w-[95vw] max-w-3xl p-0 gap-0 overflow-hidden"
+        onKeyDown={handleKeyDown}
+      >
+        <DialogTitle className="sr-only">Create new post</DialogTitle>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <DialogHeader>
-              <DialogTitle>Create new post</DialogTitle>
-              <DialogDescription>
-                Create a new feedback post on behalf of your team or a user.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              {error && (
-                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
+            {/* Header row with board and status selectors */}
+            <div className="flex items-center gap-4 pt-3 px-4 sm:px-6">
               <FormField
                 control={form.control}
-                name="title"
+                name="boardId"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter a descriptive title" {...field} />
-                    </FormControl>
+                  <FormItem className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Board:</span>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger
+                          size="xs"
+                          className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
+                        >
+                          <SelectValue placeholder="Select board">
+                            {selectedBoard?.name || 'Select board'}
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent align="start">
+                        {boards.map((board) => (
+                          <SelectItem key={board.id} value={board.id} className="text-xs py-1">
+                            {board.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -143,15 +157,69 @@ export function CreatePostDialog({
 
               <FormField
                 control={form.control}
-                name="content"
+                name="status"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Status:</span>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger
+                          size="xs"
+                          className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
+                        >
+                          <SelectValue>
+                            {selectedStatus && (
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: selectedStatus.color }}
+                                />
+                                {selectedStatus.name}
+                              </div>
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent align="start">
+                        {statuses.map((status) => (
+                          <SelectItem key={status.id} value={status.slug} className="text-xs py-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: status.color }}
+                              />
+                              {status.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="px-4 sm:px-6 py-4 space-y-2">
+              {error && (
+                <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive mb-4">
+                  {error}
+                </div>
+              )}
+
+              {/* Title - large, borderless input */}
+              <FormField
+                control={form.control}
+                name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <RichTextEditor
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Describe the feedback in detail..."
+                      <input
+                        type="text"
+                        placeholder="What's the feedback about?"
+                        className="w-full text-lg sm:text-xl font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/50 focus:ring-0"
+                        autoFocus
+                        {...field}
                       />
                     </FormControl>
                     <FormMessage />
@@ -159,64 +227,28 @@ export function CreatePostDialog({
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="boardId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Board</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select board" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {boards.map((board) => (
-                            <SelectItem key={board.id} value={board.id}>
-                              {board.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              {/* Content - seamless rich text editor */}
+              <FormField
+                control={form.control}
+                name="content"
+                render={() => (
+                  <FormItem>
+                    <FormControl>
+                      <RichTextEditor
+                        value={contentJson || ''}
+                        onChange={handleContentChange}
+                        placeholder="Add more details..."
+                        minHeight="200px"
+                        borderless
+                        toolbarPosition="bottom"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {statuses.map((status) => (
-                            <SelectItem key={status.id} value={status.slug}>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="h-2 w-2 rounded-full"
-                                  style={{ backgroundColor: status.color }}
-                                />
-                                {status.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
+              {/* Tags */}
               {tags.length > 0 && (
                 <Controller
                   control={form.control}
@@ -224,49 +256,59 @@ export function CreatePostDialog({
                   render={({ field }) => {
                     const selectedIds = field.value ?? []
                     return (
-                      <FormItem>
-                        <FormLabel>Tags</FormLabel>
-                        <div className="flex flex-wrap gap-2">
-                          {tags.map((tag) => {
-                            const isSelected = selectedIds.includes(tag.id)
-                            return (
-                              <Badge
-                                key={tag.id}
-                                variant={isSelected ? 'default' : 'outline'}
-                                className="cursor-pointer"
-                                style={
-                                  isSelected
-                                    ? { backgroundColor: tag.color, borderColor: tag.color }
-                                    : { borderColor: tag.color, color: tag.color }
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {tags.map((tag) => {
+                          const isSelected = selectedIds.includes(tag.id)
+                          return (
+                            <Badge
+                              key={tag.id}
+                              variant="secondary"
+                              className={`cursor-pointer text-xs font-normal transition-colors ${
+                                isSelected
+                                  ? 'bg-foreground text-background hover:bg-foreground/90'
+                                  : 'hover:bg-muted/80'
+                              }`}
+                              onClick={() => {
+                                if (isSelected) {
+                                  field.onChange(selectedIds.filter((id) => id !== tag.id))
+                                } else {
+                                  field.onChange([...selectedIds, tag.id])
                                 }
-                                onClick={() => {
-                                  if (isSelected) {
-                                    field.onChange(selectedIds.filter((id) => id !== tag.id))
-                                  } else {
-                                    field.onChange([...selectedIds, tag.id])
-                                  }
-                                }}
-                              >
-                                {tag.name}
-                              </Badge>
-                            )
-                          })}
-                        </div>
-                      </FormItem>
+                              }}
+                            >
+                              {tag.name}
+                            </Badge>
+                          )
+                        })}
+                      </div>
                     )
                   }}
                 />
               )}
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Creating...' : 'Create post'}
-              </Button>
-            </DialogFooter>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30">
+              <p className="hidden sm:block text-xs text-muted-foreground">
+                <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">⌘</kbd>
+                <span className="mx-1">+</span>
+                <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Enter</kbd>
+                <span className="ml-2">to create</span>
+              </p>
+              <div className="flex items-center gap-2 sm:ml-0 ml-auto">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOpen(false)}
+                  disabled={form.formState.isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting ? 'Creating...' : 'Create post'}
+                </Button>
+              </div>
+            </div>
           </form>
         </Form>
       </DialogContent>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -58,38 +58,30 @@ export function InboxFiltersPanel({
   statuses,
   members,
 }: InboxFiltersProps) {
-  const handleStatusToggle = useCallback(
-    (status: PostStatus) => {
-      const currentStatuses = filters.status || []
-      const newStatuses = currentStatuses.includes(status)
-        ? currentStatuses.filter((s) => s !== status)
-        : [...currentStatuses, status]
-      onFiltersChange({ status: newStatuses.length > 0 ? newStatuses : undefined })
-    },
-    [filters.status, onFiltersChange]
-  )
+  // Simple toggle handlers - no useCallback needed for checkbox/button handlers
+  const handleStatusToggle = (status: PostStatus) => {
+    const currentStatuses = filters.status || []
+    const newStatuses = currentStatuses.includes(status)
+      ? currentStatuses.filter((s) => s !== status)
+      : [...currentStatuses, status]
+    onFiltersChange({ status: newStatuses.length > 0 ? newStatuses : undefined })
+  }
 
-  const handleBoardToggle = useCallback(
-    (boardId: string) => {
-      const currentBoards = filters.board || []
-      const newBoards = currentBoards.includes(boardId)
-        ? currentBoards.filter((b) => b !== boardId)
-        : [...currentBoards, boardId]
-      onFiltersChange({ board: newBoards.length > 0 ? newBoards : undefined })
-    },
-    [filters.board, onFiltersChange]
-  )
+  const handleBoardToggle = (boardId: string) => {
+    const currentBoards = filters.board || []
+    const newBoards = currentBoards.includes(boardId)
+      ? currentBoards.filter((b) => b !== boardId)
+      : [...currentBoards, boardId]
+    onFiltersChange({ board: newBoards.length > 0 ? newBoards : undefined })
+  }
 
-  const handleTagToggle = useCallback(
-    (tagId: string) => {
-      const currentTags = filters.tags || []
-      const newTags = currentTags.includes(tagId)
-        ? currentTags.filter((t) => t !== tagId)
-        : [...currentTags, tagId]
-      onFiltersChange({ tags: newTags.length > 0 ? newTags : undefined })
-    },
-    [filters.tags, onFiltersChange]
-  )
+  const handleTagToggle = (tagId: string) => {
+    const currentTags = filters.tags || []
+    const newTags = currentTags.includes(tagId)
+      ? currentTags.filter((t) => t !== tagId)
+      : [...currentTags, tagId]
+    onFiltersChange({ tags: newTags.length > 0 ? newTags : undefined })
+  }
 
   return (
     <div className="space-y-4">
@@ -151,11 +143,11 @@ export function InboxFiltersPanel({
                   key={tag.id}
                   type="button"
                   onClick={() => handleTagToggle(tag.id)}
-                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-                  style={{
-                    backgroundColor: isSelected ? tag.color : `${tag.color}15`,
-                    color: isSelected ? '#fff' : tag.color,
-                  }}
+                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    isSelected
+                      ? 'bg-foreground text-background'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
                 >
                   {tag.name}
                 </button>
@@ -222,9 +214,7 @@ export function InboxFiltersPanel({
           placeholder="0"
           value={filters.minVotes || ''}
           onChange={(e) =>
-            onFiltersChange({
-              minVotes: e.target.value ? parseInt(e.target.value, 10) : undefined,
-            })
+            onFiltersChange({ minVotes: e.target.value ? parseInt(e.target.value, 10) : undefined })
           }
           className="h-8 text-sm"
         />

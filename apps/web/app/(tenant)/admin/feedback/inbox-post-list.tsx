@@ -38,19 +38,33 @@ interface InboxPostListProps {
 
 function PostListSkeleton() {
   return (
-    <div className="space-y-3 p-4">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="rounded-lg border bg-card p-4">
-          <div className="flex items-start gap-3">
-            <Skeleton className="h-8 w-8 shrink-0" />
-            <div className="flex-1 space-y-2">
-              <div className="flex gap-2">
-                <Skeleton className="h-5 w-16" />
-                <Skeleton className="h-5 w-20" />
-              </div>
-              <Skeleton className="h-5 w-3/4" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
+    <div className="divide-y divide-border/50">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex">
+          {/* Vote section */}
+          <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/30 py-3">
+            <Skeleton className="h-4 w-4 mb-1" />
+            <Skeleton className="h-4 w-6" />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0 px-3 py-3">
+            {/* Status badge */}
+            <Skeleton className="h-5 w-16 rounded-full mb-1.5" />
+
+            {/* Title */}
+            <Skeleton className="h-5 w-4/5 mb-1" />
+
+            {/* Excerpt */}
+            <Skeleton className="h-4 w-full mt-1" />
+            <Skeleton className="h-4 w-3/4 mt-1" />
+
+            {/* Meta row */}
+            <div className="flex items-center gap-2.5 mt-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-16" />
+              <div className="flex-1" />
+              <Skeleton className="h-5 w-14 rounded-full" />
             </div>
           </div>
         </div>
@@ -79,25 +93,18 @@ export function InboxPostList({
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [searchValue, setSearchValue] = useState(search || '')
   const debouncedSearch = useDebounce(searchValue, 300)
-  const isInitialMount = useRef(true)
-  const lastSyncedSearch = useRef(search)
 
-  // Sync search input when URL changes externally (e.g., clear filters)
+  // Sync input when parent search changes (e.g., clear filters)
   useEffect(() => {
-    if (search !== lastSyncedSearch.current) {
-      setSearchValue(search || '')
-      lastSyncedSearch.current = search
-    }
+    setSearchValue(search || '')
   }, [search])
 
-  // Update filters when debounced search changes (skip initial mount)
+  // Update parent when debounced search changes
+  const prevDebouncedRef = useRef(debouncedSearch)
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false
-      return
-    }
-    if (debouncedSearch !== lastSyncedSearch.current) {
-      lastSyncedSearch.current = debouncedSearch || undefined
+    // Only notify parent if debounced value actually changed (not on initial mount or parent sync)
+    if (debouncedSearch !== prevDebouncedRef.current) {
+      prevDebouncedRef.current = debouncedSearch
       onSearchChange(debouncedSearch || undefined)
     }
   }, [debouncedSearch, onSearchChange])

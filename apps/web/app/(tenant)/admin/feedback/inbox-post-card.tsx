@@ -70,16 +70,7 @@ export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPost
         {post.tags.length > 0 && (
           <div className="flex gap-1.5 mt-2 flex-wrap">
             {post.tags.slice(0, 3).map((tag) => (
-              <Badge
-                key={tag.id}
-                variant="outline"
-                className="text-[11px]"
-                style={{
-                  backgroundColor: `${tag.color}15`,
-                  color: tag.color,
-                  borderColor: `${tag.color}40`,
-                }}
-              >
+              <Badge key={tag.id} variant="secondary" className="text-[11px] font-normal">
                 {tag.name}
               </Badge>
             ))}

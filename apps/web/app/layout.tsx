@@ -6,6 +6,7 @@ import './globals.css'
 import { cn } from '@/lib/utils'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
+import { QueryProvider } from '@/lib/query/query-provider'
 import { THEME_COOKIE_NAME, type Theme } from '@/lib/theme'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
@@ -26,11 +27,7 @@ const systemThemeScript = `
   })()
 `
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies()
   const themeCookie = cookieStore.get(THEME_COOKIE_NAME)?.value as Theme | undefined
   const theme = themeCookie || 'system'
@@ -43,21 +40,21 @@ export default async function RootLayout({
   return (
     <html lang="en" className={themeClass} suppressHydrationWarning>
       <head>
-        {theme === 'system' && (
-          <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
-        )}
+        {theme === 'system' && <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />}
       </head>
       <body className={cn('min-h-screen bg-background font-sans antialiased', inter.variable)}>
         <NuqsAdapter>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme={theme}
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster />
-          </ThemeProvider>
+          <QueryProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme={theme}
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+              <Toaster />
+            </ThemeProvider>
+          </QueryProvider>
         </NuqsAdapter>
       </body>
     </html>

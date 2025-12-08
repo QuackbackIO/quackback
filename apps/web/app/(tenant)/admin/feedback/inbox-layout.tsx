@@ -5,21 +5,15 @@ import { Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
+
 interface InboxLayoutProps {
   filters: React.ReactNode
   postList: React.ReactNode
   postDetail: React.ReactNode
   hasActiveFilters?: boolean
-  hasSelectedPost?: boolean
 }
 
-export function InboxLayout({
-  filters,
-  postList,
-  postDetail,
-  hasActiveFilters,
-  hasSelectedPost,
-}: InboxLayoutProps) {
+export function InboxLayout({ filters, postList, postDetail, hasActiveFilters }: InboxLayoutProps) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   return (
@@ -59,17 +53,10 @@ export function InboxLayout({
         <ScrollArea className="h-full">{postList}</ScrollArea>
       </main>
 
-      {/* Post Detail - Desktop (always visible, takes remaining space) */}
+      {/* Post Detail */}
       <aside className="hidden md:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
         <ScrollArea className="h-full">{postDetail}</ScrollArea>
       </aside>
-
-      {/* Post Detail - Mobile Sheet (only when post selected) */}
-      <Sheet open={hasSelectedPost && typeof window !== 'undefined' && window.innerWidth < 768}>
-        <SheetContent side="right" className="w-full sm:w-[400px] p-0">
-          <ScrollArea className="h-full">{postDetail}</ScrollArea>
-        </SheetContent>
-      </Sheet>
     </div>
   )
 }
