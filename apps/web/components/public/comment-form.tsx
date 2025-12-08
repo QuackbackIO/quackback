@@ -16,17 +16,40 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 
+interface SubmitCommentParams {
+  postId: string
+  content: string
+  parentId?: string | null
+  authorName?: string | null
+  authorEmail?: string | null
+}
+
 interface CommentFormProps {
   postId: string
   parentId?: string
   onSuccess?: () => void
   onCancel?: () => void
   user?: { name: string | null; email: string }
+  /** Optional custom submit handler (e.g., TanStack Query mutation) */
+  submitComment?: (params: SubmitCommentParams) => Promise<unknown>
+  /** External pending state (from mutation) */
+  isSubmitting?: boolean
 }
 
-export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: CommentFormProps) {
+export function CommentForm({
+  postId,
+  parentId,
+  onSuccess,
+  onCancel,
+  user,
+  submitComment,
+  isSubmitting: externalIsSubmitting,
+}: CommentFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // Use external pending state if provided, otherwise use local
+  const isSubmitting = externalIsSubmitting ?? isPending
 
   const form = useForm<CommentInput>({
     resolver: standardSchemaResolver(commentSchema),
@@ -41,16 +64,38 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
   function onSubmit(data: CommentInput) {
     setError(null)
 
+    const submitParams: SubmitCommentParams = {
+      postId,
+      content: data.content.trim(),
+      parentId: parentId || null,
+      authorName: data.authorName?.trim() || null,
+      authorEmail: data.authorEmail?.trim() || null,
+    }
+
+    // If custom submit handler provided, use it
+    if (submitComment) {
+      submitComment(submitParams)
+        .then(() => {
+          form.reset()
+          onSuccess?.()
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Failed to post comment')
+        })
+      return
+    }
+
+    // Otherwise, use default fetch behavior
     startTransition(async () => {
       try {
         const response = await fetch(`/api/public/posts/${postId}/comments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content: data.content.trim(),
-            authorName: data.authorName?.trim() || null,
-            authorEmail: data.authorEmail?.trim() || null,
-            parentId: parentId || null,
+            content: submitParams.content,
+            authorName: submitParams.authorName,
+            authorEmail: submitParams.authorEmail,
+            parentId: submitParams.parentId,
           }),
         })
 
@@ -80,7 +125,7 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
                 <Textarea
                   placeholder="Write a comment..."
                   rows={3}
-                  disabled={isPending}
+                  disabled={isSubmitting}
                   {...field}
                 />
               </FormControl>
@@ -100,7 +145,7 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
                   <FormControl>
                     <Input
                       placeholder="Your name"
-                      disabled={isPending}
+                      disabled={isSubmitting}
                       {...field}
                       value={field.value || ''}
                     />
@@ -122,7 +167,7 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
                     <Input
                       type="email"
                       placeholder="your@email.com"
-                      disabled={isPending}
+                      disabled={isSubmitting}
                       {...field}
                       value={field.value || ''}
                     />
@@ -144,12 +189,18 @@ export function CommentForm({ postId, parentId, onSuccess, onCancel, user }: Com
             </p>
           )}
           {onCancel && (
-            <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
           )}
-          <Button type="submit" size="sm" disabled={isPending}>
-            {isPending ? 'Posting...' : parentId ? 'Reply' : 'Comment'}
+          <Button type="submit" size="sm" disabled={isSubmitting}>
+            {isSubmitting ? 'Posting...' : parentId ? 'Reply' : 'Comment'}
           </Button>
         </div>
       </form>

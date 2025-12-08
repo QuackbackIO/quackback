@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useEffect } from 'react'
-import { Reply, ChevronDown, ChevronRight, SmilePlus, Building2 } from 'lucide-react'
+import { Reply, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -53,24 +53,26 @@ export function CommentThread({
       {/* Add comment form */}
       {allowCommenting && <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />}
 
-      {/* Comments list */}
+      {/* Comments list - sorted newest first */}
       {comments.length === 0 ? (
         <p className="text-muted-foreground text-center py-4">
           No comments yet. Be the first to share your thoughts!
         </p>
       ) : (
         <div className="space-y-0">
-          {comments.map((comment) => (
-            <CommentItem
-              key={comment.id}
-              postId={postId}
-              comment={comment}
-              allowCommenting={allowCommenting}
-              avatarUrls={avatarUrls}
-              onCommentAdded={onCommentAdded}
-              user={user}
-            />
-          ))}
+          {[...comments]
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .map((comment) => (
+              <CommentItem
+                key={comment.id}
+                postId={postId}
+                comment={comment}
+                allowCommenting={allowCommenting}
+                avatarUrls={avatarUrls}
+                onCommentAdded={onCommentAdded}
+                user={user}
+              />
+            ))}
         </div>
       )}
     </div>
@@ -140,29 +142,15 @@ function CommentItem({
         <div className="py-2">
           {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
-            <Avatar
-              className={cn(
-                'h-8 w-8 shrink-0',
-                comment.isTeamMember && 'ring-2 ring-primary ring-offset-2'
-              )}
-            >
+            <Avatar className={cn('h-8 w-8 shrink-0')}>
               {comment.memberId && avatarUrls?.[comment.memberId] && (
                 <AvatarImage
                   src={avatarUrls[comment.memberId]!}
                   alt={comment.authorName || 'Comment author'}
                 />
               )}
-              <AvatarFallback
-                className={cn(
-                  'text-xs',
-                  comment.isTeamMember ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                )}
-              >
-                {comment.isTeamMember ? (
-                  <Building2 className="h-4 w-4" />
-                ) : (
-                  getInitials(comment.authorName)
-                )}
+              <AvatarFallback className={cn('text-xs')}>
+                {getInitials(comment.authorName)}
               </AvatarFallback>
             </Avatar>
             <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
