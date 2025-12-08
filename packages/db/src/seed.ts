@@ -85,11 +85,11 @@ function hashPassword(password: string): string {
   return bcrypt.hashSync(password, 10)
 }
 
-// Configuration - simulating a large enterprise
+// Configuration - simulating a medium-sized enterprise
 const CONFIG = {
-  users: 500,
-  boardsPerOrg: 10,
-  totalPosts: 15000, // Total posts to generate (distributed across boards)
+  users: 250,
+  boardsPerOrg: 5,
+  totalPosts: 7500, // Total posts to generate (distributed across boards)
   batchSize: 1000, // Insert in batches (limited by PostgreSQL's 65535 param limit)
 }
 
