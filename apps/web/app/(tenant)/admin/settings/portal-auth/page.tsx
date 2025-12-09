@@ -1,8 +1,8 @@
 import { requireTenantRole } from '@/lib/tenant'
 import { Lock } from 'lucide-react'
 import { PortalAuthToggles } from './portal-auth-toggles'
-import { PortalRequireAuthToggle } from './portal-require-auth-toggle'
 import { PortalInteractionToggles } from './portal-interaction-toggles'
+import type { PermissionLevel } from '@quackback/db/types'
 
 // Check which OAuth providers are globally configured
 const googleAvailable = !!process.env.GOOGLE_CLIENT_ID
@@ -47,26 +47,16 @@ export default async function PortalAuthPage() {
 
       {/* Interaction Settings */}
       <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Public Interactions</h2>
+        <h2 className="font-medium mb-1">Portal Interactions</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Control what visitors can do without signing in
+          Control who can vote, comment, and submit feedback on your public portal. These settings
+          apply across all public boards unless overridden at the board level.
         </p>
         <PortalInteractionToggles
           organizationId={organization.id}
-          portalPublicVoting={organization.portalPublicVoting}
-          portalPublicCommenting={organization.portalPublicCommenting}
-        />
-      </div>
-
-      {/* Access Control */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Access Control</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Control anonymous access to your portal
-        </p>
-        <PortalRequireAuthToggle
-          organizationId={organization.id}
-          initialValue={organization.portalRequireAuth}
+          portalVoting={organization.portalVoting as PermissionLevel}
+          portalCommenting={organization.portalCommenting as PermissionLevel}
+          portalSubmissions={organization.portalSubmissions as PermissionLevel}
         />
       </div>
     </div>
