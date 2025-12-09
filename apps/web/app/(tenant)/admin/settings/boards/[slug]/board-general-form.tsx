@@ -6,11 +6,9 @@ import { updateBoardSchema, type UpdateBoardInput } from '@/lib/schemas/boards'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -23,7 +21,6 @@ interface Board {
   name: string
   slug: string
   description: string | null
-  isPublic: boolean
 }
 
 interface BoardGeneralFormProps {
@@ -39,7 +36,6 @@ export function BoardGeneralForm({ board, organizationId }: BoardGeneralFormProp
     defaultValues: {
       name: board.name,
       description: board.description || '',
-      isPublic: board.isPublic,
     },
   })
 
@@ -48,7 +44,6 @@ export function BoardGeneralForm({ board, organizationId }: BoardGeneralFormProp
       boardId: board.id,
       name: data.name,
       description: data.description,
-      isPublic: data.isPublic,
     })
   }
 
@@ -91,22 +86,6 @@ export function BoardGeneralForm({ board, organizationId }: BoardGeneralFormProp
                 <Textarea rows={3} {...field} />
               </FormControl>
               <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="isPublic"
-          render={({ field }) => (
-            <FormItem className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <FormLabel>Public board</FormLabel>
-                <FormDescription>Anyone can view and submit feedback</FormDescription>
-              </div>
-              <FormControl>
-                <Switch checked={field.value} onCheckedChange={field.onChange} />
-              </FormControl>
             </FormItem>
           )}
         />
