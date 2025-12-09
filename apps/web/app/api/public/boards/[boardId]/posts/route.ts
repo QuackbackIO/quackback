@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   // 2. Check if user submissions are enabled for this board
   const settings = getBoardSettings(board)
-  if (!settings.allowUserSubmissions) {
+  if (!settings.submissionsEnabled) {
     return NextResponse.json(
       { error: 'Post submissions are disabled for this board' },
       { status: 403 }

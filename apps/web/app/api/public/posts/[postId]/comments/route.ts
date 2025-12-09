@@ -123,12 +123,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // For non-team-members, check if public commenting is enabled
-    if (!org.portalPublicCommenting) {
+    if (org.portalCommenting === 'disabled') {
       return NextResponse.json({ error: 'Commenting is disabled' }, { status: 403 })
     }
 
     // Check if anonymous commenting is allowed
-    if (org.portalRequireAuth) {
+    if (org.portalCommenting === 'authenticated') {
       return NextResponse.json(
         { error: 'Authentication required to comment. Please sign in or create an account.' },
         { status: 401 }

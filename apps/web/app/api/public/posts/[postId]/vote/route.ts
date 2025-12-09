@@ -48,7 +48,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       where: eq(organization.id, board.organizationId),
     })
 
-    if (!org?.portalPublicVoting) {
+    if (org?.portalVoting === 'disabled') {
       return NextResponse.json({ error: 'Voting is disabled' }, { status: 403 })
     }
 
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Anonymous user - check if anonymous voting is allowed
-    if (org.portalRequireAuth) {
+    if (org.portalVoting === 'authenticated') {
       return NextResponse.json(
         { error: 'Authentication required to vote. Please sign in or create an account.' },
         { status: 401 }

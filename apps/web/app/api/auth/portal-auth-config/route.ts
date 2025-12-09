@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
         passwordEnabled: true,
         googleEnabled: true,
         githubEnabled: true,
-        requireAuth: false,
+        voting: 'anyone',
+        commenting: 'anyone',
+        submissions: 'authenticated',
       })
     }
 
@@ -43,7 +45,9 @@ export async function GET(request: NextRequest) {
       passwordEnabled: org.portalPasswordEnabled,
       googleEnabled: org.portalGoogleEnabled,
       githubEnabled: org.portalGithubEnabled,
-      requireAuth: org.portalRequireAuth,
+      voting: org.portalVoting,
+      commenting: org.portalCommenting,
+      submissions: org.portalSubmissions,
     })
   } catch (error) {
     console.error('Error fetching portal auth config:', error)

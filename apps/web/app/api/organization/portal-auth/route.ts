@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
 import { db, organization, eq } from '@quackback/db'
+import type { PermissionLevel } from '@quackback/db/types'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
+
+const PERMISSION_LEVELS = ['anyone', 'authenticated', 'disabled'] as const
+
+function isPermissionLevel(value: unknown): value is PermissionLevel {
+  return typeof value === 'string' && PERMISSION_LEVELS.includes(value as PermissionLevel)
+}
 
 /**
  * GET /api/organization/portal-auth?organizationId={id}
@@ -23,9 +30,9 @@ export const GET = withApiHandler(
       portalPasswordEnabled: org.portalPasswordEnabled,
       portalGoogleEnabled: org.portalGoogleEnabled,
       portalGithubEnabled: org.portalGithubEnabled,
-      portalRequireAuth: org.portalRequireAuth,
-      portalPublicVoting: org.portalPublicVoting,
-      portalPublicCommenting: org.portalPublicCommenting,
+      portalVoting: org.portalVoting,
+      portalCommenting: org.portalCommenting,
+      portalSubmissions: org.portalSubmissions,
     })
   },
   { roles: ['owner', 'admin'] }
@@ -43,9 +50,9 @@ export const GET = withApiHandler(
  *   portalPasswordEnabled?: boolean,
  *   portalGoogleEnabled?: boolean,
  *   portalGithubEnabled?: boolean,
- *   portalRequireAuth?: boolean,
- *   portalPublicVoting?: boolean,
- *   portalPublicCommenting?: boolean,
+ *   portalVoting?: 'anyone' | 'authenticated' | 'disabled',
+ *   portalCommenting?: 'anyone' | 'authenticated' | 'disabled',
+ *   portalSubmissions?: 'anyone' | 'authenticated' | 'disabled',
  * }
  */
 export const PATCH = withApiHandler(
@@ -56,9 +63,9 @@ export const PATCH = withApiHandler(
       portalPasswordEnabled,
       portalGoogleEnabled,
       portalGithubEnabled,
-      portalRequireAuth,
-      portalPublicVoting,
-      portalPublicCommenting,
+      portalVoting,
+      portalCommenting,
+      portalSubmissions,
     } = body
 
     // Build update object with only provided fields
@@ -67,9 +74,9 @@ export const PATCH = withApiHandler(
       portalPasswordEnabled: boolean
       portalGoogleEnabled: boolean
       portalGithubEnabled: boolean
-      portalRequireAuth: boolean
-      portalPublicVoting: boolean
-      portalPublicCommenting: boolean
+      portalVoting: PermissionLevel
+      portalCommenting: PermissionLevel
+      portalSubmissions: PermissionLevel
     }> = {}
 
     if (typeof portalAuthEnabled === 'boolean') {
@@ -84,14 +91,14 @@ export const PATCH = withApiHandler(
     if (typeof portalGithubEnabled === 'boolean') {
       updates.portalGithubEnabled = portalGithubEnabled
     }
-    if (typeof portalRequireAuth === 'boolean') {
-      updates.portalRequireAuth = portalRequireAuth
+    if (isPermissionLevel(portalVoting)) {
+      updates.portalVoting = portalVoting
     }
-    if (typeof portalPublicVoting === 'boolean') {
-      updates.portalPublicVoting = portalPublicVoting
+    if (isPermissionLevel(portalCommenting)) {
+      updates.portalCommenting = portalCommenting
     }
-    if (typeof portalPublicCommenting === 'boolean') {
-      updates.portalPublicCommenting = portalPublicCommenting
+    if (isPermissionLevel(portalSubmissions)) {
+      updates.portalSubmissions = portalSubmissions
     }
 
     if (Object.keys(updates).length === 0) {
@@ -111,9 +118,9 @@ export const PATCH = withApiHandler(
       portalPasswordEnabled: updated.portalPasswordEnabled,
       portalGoogleEnabled: updated.portalGoogleEnabled,
       portalGithubEnabled: updated.portalGithubEnabled,
-      portalRequireAuth: updated.portalRequireAuth,
-      portalPublicVoting: updated.portalPublicVoting,
-      portalPublicCommenting: updated.portalPublicCommenting,
+      portalVoting: updated.portalVoting,
+      portalCommenting: updated.portalCommenting,
+      portalSubmissions: updated.portalSubmissions,
     })
   },
   { roles: ['owner', 'admin'] }
