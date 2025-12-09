@@ -58,30 +58,41 @@ test.describe('Admin Board Management', () => {
     }
   })
 
-  test('can toggle board public visibility', async ({ page }) => {
-    // Find the Public board switch
-    const publicSwitch = page.getByRole('switch', { name: 'Public board' })
-    await expect(publicSwitch).toBeVisible({ timeout: 5000 })
+  test('can change board visibility on Access page', async ({ page }) => {
+    // Navigate to Access settings
+    const accessLink = page.getByRole('link', { name: 'Access' })
+    await accessLink.click()
+    await page.waitForURL(/\/access/)
+
+    // Find the visibility radio buttons
+    const publicRadio = page.getByRole('radio', { name: 'public' })
+    const privateRadio = page.getByRole('radio', { name: 'private' })
+    await expect(publicRadio).toBeVisible({ timeout: 5000 })
+    await expect(privateRadio).toBeVisible({ timeout: 5000 })
 
     // Get current state
-    const wasChecked = await publicSwitch.isChecked()
+    const wasPublic = await publicRadio.isChecked()
 
-    // Toggle the switch
-    await publicSwitch.click()
-
-    // Verify state changed
-    const isNowChecked = await publicSwitch.isChecked()
-    expect(isNowChecked).toBe(!wasChecked)
+    // Toggle visibility
+    if (wasPublic) {
+      await privateRadio.click()
+    } else {
+      await publicRadio.click()
+    }
 
     // Save the changes
     const saveButton = page.getByRole('button', { name: 'Save changes' })
     await saveButton.click()
 
     // Wait for success message
-    await expect(page.getByText('Board updated successfully')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Settings updated successfully')).toBeVisible({ timeout: 5000 })
 
     // Toggle back to original state
-    await publicSwitch.click()
+    if (wasPublic) {
+      await publicRadio.click()
+    } else {
+      await privateRadio.click()
+    }
     await saveButton.click()
     await page.waitForLoadState('networkidle')
   })
@@ -91,14 +102,14 @@ test.describe('Admin Board Management', () => {
     const dangerZone = page.getByText('Danger Zone')
     await expect(dangerZone).toBeVisible({ timeout: 10000 })
 
-    // Should have delete button
-    const deleteButton = page.getByRole('button', { name: /delete/i })
+    // Should have delete button - use exact match to avoid matching board switcher
+    const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
     await expect(deleteButton).toBeVisible()
   })
 
   test('delete button shows confirmation dialog', async ({ page }) => {
-    // Find delete button
-    const deleteButton = page.getByRole('button', { name: /delete/i })
+    // Find delete button - use exact match to avoid matching board switcher
+    const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
 
     // Check if button exists
     if ((await deleteButton.count()) > 0) {
@@ -122,7 +133,7 @@ test.describe('Admin Board Management', () => {
     }
   })
 
-  test('can navigate between boards', async ({ page }) => {
+  test('can navigate between settings tabs', async ({ page }) => {
     // Look for board navigation links in sidebar nav
     const boardNav = page.locator('nav ul')
 
@@ -130,50 +141,67 @@ test.describe('Admin Board Management', () => {
       // Should have settings navigation links
       const navLinks = boardNav.locator('a')
       if ((await navLinks.count()) > 1) {
-        // Click on Public Portal link
-        await navLinks.filter({ hasText: 'Public Portal' }).click()
+        // Click on Access link
+        await navLinks.filter({ hasText: 'Access' }).click()
 
-        // URL should change to include /public
-        await page.waitForURL(/\/public/)
+        // URL should change to include /access
+        await page.waitForURL(/\/access/)
       }
     }
   })
 
-  test('can access public visibility settings', async ({ page }) => {
-    // Navigate to public settings tab (label is "Public Portal")
-    const publicLink = page.getByRole('link', { name: 'Public Portal' })
+  test('can access board access settings', async ({ page }) => {
+    // Navigate to access settings tab
+    const accessLink = page.getByRole('link', { name: 'Access' })
 
-    if ((await publicLink.count()) > 0) {
-      await publicLink.click()
+    if ((await accessLink.count()) > 0) {
+      await accessLink.click()
 
-      // Should navigate to public settings page
-      await expect(page).toHaveURL(/\/public/, { timeout: 5000 })
+      // Should navigate to access settings page
+      await expect(page).toHaveURL(/\/access/, { timeout: 5000 })
     }
   })
 })
 
-test.describe('Board Public Portal Settings', () => {
+test.describe('Board Access Settings', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to board settings public portal page
+    // Navigate to board settings access page
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
 
-    // Navigate to Public Portal tab
-    const publicLink = page.getByRole('link', { name: 'Public Portal' })
-    if ((await publicLink.count()) > 0) {
-      await publicLink.click()
-      await page.waitForURL(/\/public/)
+    // Wait for the board settings page to fully load (redirects to first board)
+    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+
+    // Navigate to Access tab
+    const accessLink = page.getByRole('link', { name: 'Access' })
+    await expect(accessLink).toBeVisible({ timeout: 5000 })
+    await accessLink.click()
+    await page.waitForURL(/\/access/)
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('displays access settings', async ({ page }) => {
+    // Should show the board visibility options
+    await expect(page.getByText('Board Visibility')).toBeVisible({ timeout: 5000 })
+
+    // Should show the allow submissions switch (only visible when board is public)
+    const publicRadio = page.getByRole('radio', { name: 'public' })
+    if (await publicRadio.isChecked()) {
+      const submissionsSwitch = page.getByRole('switch', { name: 'Allow submissions' })
+      await expect(submissionsSwitch).toBeVisible({ timeout: 5000 })
     }
   })
 
-  test('displays public portal settings', async ({ page }) => {
-    // Should show the allow user submissions switch
-    const submissionsSwitch = page.getByRole('switch', { name: 'Allow user submissions' })
-    await expect(submissionsSwitch).toBeVisible({ timeout: 5000 })
-  })
+  test('can toggle allow submissions setting', async ({ page }) => {
+    // Ensure board is public first (submissions only shown for public boards)
+    const publicRadio = page.getByRole('radio', { name: 'public' })
+    if (!(await publicRadio.isChecked())) {
+      await publicRadio.click()
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      await page.waitForLoadState('networkidle')
+    }
 
-  test('can toggle allow user submissions setting', async ({ page }) => {
-    const submissionsSwitch = page.getByRole('switch', { name: 'Allow user submissions' })
+    const submissionsSwitch = page.getByRole('switch', { name: 'Allow submissions' })
     await expect(submissionsSwitch).toBeVisible({ timeout: 5000 })
 
     // Get current state
@@ -195,6 +223,41 @@ test.describe('Board Public Portal Settings', () => {
 
     // Toggle back to original state to restore
     await submissionsSwitch.click()
+    await saveButton.click()
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('can toggle anonymous submissions setting', async ({ page }) => {
+    // Ensure board is public first (submissions only shown for public boards)
+    const publicRadio = page.getByRole('radio', { name: 'public' })
+    if (!(await publicRadio.isChecked())) {
+      await publicRadio.click()
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      await page.waitForLoadState('networkidle')
+    }
+
+    const anonymousSwitch = page.getByRole('switch', { name: 'Anonymous submissions' })
+    await expect(anonymousSwitch).toBeVisible({ timeout: 5000 })
+
+    // Get current state
+    const wasChecked = await anonymousSwitch.isChecked()
+
+    // Toggle the switch
+    await anonymousSwitch.click()
+
+    // Verify state changed
+    const isNowChecked = await anonymousSwitch.isChecked()
+    expect(isNowChecked).toBe(!wasChecked)
+
+    // Save the changes
+    const saveButton = page.getByRole('button', { name: 'Save changes' })
+    await saveButton.click()
+
+    // Wait for success message
+    await expect(page.getByText('Settings updated successfully')).toBeVisible({ timeout: 5000 })
+
+    // Toggle back to original state to restore
+    await anonymousSwitch.click()
     await saveButton.click()
     await page.waitForLoadState('networkidle')
   })
@@ -230,23 +293,15 @@ test.describe('Board Deletion Flow', () => {
     await expect(dialog).toBeHidden({ timeout: 10000 })
     await page.waitForLoadState('networkidle')
 
-    // Navigate to the newly created board's settings
-    // Open the board switcher dropdown
-    const boardSwitcherButton = page
-      .locator('button')
-      .filter({ hasText: /Board|Settings/ })
-      .first()
-    await boardSwitcherButton.click()
+    // After creating a board, the page automatically navigates to the new board's settings
+    // Wait for the page to show the new board's settings
+    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
 
-    // Click on the new board in the dropdown
-    const boardMenuItem = page.getByRole('menuitem', { name: testBoardName })
-    await expect(boardMenuItem).toBeVisible({ timeout: 5000 })
-    await boardMenuItem.click()
-    await page.waitForLoadState('networkidle')
-
-    // Now we should be on the board's settings page
+    // Verify we're on the correct board's settings page (board switcher shows the board name)
+    await expect(page.getByTestId('board-switcher')).toContainText(testBoardName)
     // Find the delete button (should be disabled until we type confirmation)
-    const deleteButton = page.getByRole('button', { name: 'Delete board' })
+    // Use exact: true to avoid matching the board switcher that contains "Delete Board" in its name
+    const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
     await expect(deleteButton).toBeVisible({ timeout: 5000 })
     await expect(deleteButton).toBeDisabled()
 
@@ -412,20 +467,16 @@ test.describe('Create Board Dialog', () => {
     await page.waitForLoadState('networkidle')
 
     // Open the board switcher dropdown to verify the board exists
-    const boardSwitcherButton = page
-      .locator('button')
-      .filter({ hasText: /Board|Settings/ })
-      .first()
-    if ((await boardSwitcherButton.count()) > 0) {
-      await boardSwitcherButton.click()
+    const boardSwitcherButton = page.getByTestId('board-switcher')
+    await expect(boardSwitcherButton).toBeVisible({ timeout: 5000 })
+    await boardSwitcherButton.click()
 
-      // The new board should appear in the dropdown menu
-      const boardMenuItem = page.getByRole('menuitem', { name: testBoardName })
-      await expect(boardMenuItem).toBeVisible({ timeout: 5000 })
+    // The new board should appear in the dropdown menu
+    const boardMenuItem = page.getByRole('menuitem', { name: testBoardName })
+    await expect(boardMenuItem).toBeVisible({ timeout: 5000 })
 
-      // Close the dropdown
-      await page.keyboard.press('Escape')
-    }
+    // Close the dropdown
+    await page.keyboard.press('Escape')
   })
 
   test('can create a private board', async ({ page }) => {
@@ -461,9 +512,9 @@ test.describe('Create Board Dialog', () => {
     // Try to create without filling name
     await dialog.getByRole('button', { name: 'Create board' }).click()
 
-    // Should show validation error
-    await expect(dialog.getByText(/required/i).or(dialog.getByText(/name/i))).toBeVisible({
-      timeout: 3000,
+    // Should show validation error - look for the specific error text
+    await expect(dialog.getByText('Board name is required')).toBeVisible({
+      timeout: 5000,
     })
 
     // Dialog should still be open

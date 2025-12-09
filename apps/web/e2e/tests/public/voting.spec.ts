@@ -83,18 +83,21 @@ test.describe('Public Voting', () => {
     await page.waitForURL(/\/posts\//)
 
     // Wait for detail page vote button specifically (has text-lg class, list view has text-sm)
-    const detailVoteCount = page.locator('[data-testid="vote-count"].text-lg')
-    await expect(detailVoteCount).toBeVisible({ timeout: 10000 })
+    // Scope to the detail view vote button that contains the text-lg vote count
+    const detailVoteButton = page.getByTestId('vote-button').filter({
+      has: page.locator('[data-testid="vote-count"].text-lg'),
+    })
+    await expect(detailVoteButton).toBeVisible({ timeout: 10000 })
 
-    // Get initial count from detail page
-    const initialCountText = await detailVoteCount.textContent()
+    // Get initial count from the detail page vote button
+    const voteCountSpan = detailVoteButton.getByTestId('vote-count')
+    const initialCountText = await voteCountSpan.textContent()
     const initialCount = parseInt(initialCountText || '0', 10)
 
-    // Find and click the vote button on detail page
-    const voteButton = page.getByTestId('vote-button')
-    await voteButton.click()
+    // Click the detail page vote button
+    await detailVoteButton.click()
 
-    // Verify count increased
-    await expect(detailVoteCount).toHaveText(String(initialCount + 1), { timeout: 5000 })
+    // Verify count increased on the same element
+    await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
   })
 })

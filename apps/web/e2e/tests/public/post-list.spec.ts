@@ -267,8 +267,8 @@ test.describe('Public Post List', () => {
       // Check that all visible posts link to the features board
       for (let i = 0; i < Math.min(linkCount, 5); i++) {
         const href = await postLinks.nth(i).getAttribute('href')
-        // Posts should link to /features/posts/{id}
-        expect(href).toMatch(/^\/features\/posts\//)
+        // Posts should link to /b/features/posts/{id}
+        expect(href).toMatch(/^\/b\/features\/posts\//)
       }
     }
   })
@@ -284,7 +284,7 @@ test.describe('Public Post List', () => {
 
     if (initialCount > 0) {
       const firstInitialHref = await initialLinks.first().getAttribute('href')
-      expect(firstInitialHref).toMatch(/^\/features\/posts\//)
+      expect(firstInitialHref).toMatch(/^\/b\/features\/posts\//)
     }
 
     // Switch to bugs board via sidebar
@@ -302,7 +302,7 @@ test.describe('Public Post List', () => {
 
       if (newCount > 0) {
         const firstNewHref = await newLinks.first().getAttribute('href')
-        expect(firstNewHref).toMatch(/^\/bugs\/posts\//)
+        expect(firstNewHref).toMatch(/^\/b\/bugs\/posts\//)
       }
     }
   })
