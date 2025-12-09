@@ -59,9 +59,9 @@ CREATE TABLE "organization" (
 	"portal_password_enabled" boolean DEFAULT true NOT NULL,
 	"portal_google_enabled" boolean DEFAULT true NOT NULL,
 	"portal_github_enabled" boolean DEFAULT true NOT NULL,
-	"portal_require_auth" boolean DEFAULT false NOT NULL,
-	"portal_public_voting" boolean DEFAULT true NOT NULL,
-	"portal_public_commenting" boolean DEFAULT true NOT NULL,
+	"portal_voting" text DEFAULT 'anyone' NOT NULL,
+	"portal_commenting" text DEFAULT 'anyone' NOT NULL,
+	"portal_submissions" text DEFAULT 'authenticated' NOT NULL,
 	"theme_config" text,
 	CONSTRAINT "organization_slug_unique" UNIQUE("slug")
 );

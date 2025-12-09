@@ -166,10 +166,11 @@ export const organization = pgTable('organization', {
   portalPasswordEnabled: boolean('portal_password_enabled').default(true).notNull(),
   portalGoogleEnabled: boolean('portal_google_enabled').default(true).notNull(),
   portalGithubEnabled: boolean('portal_github_enabled').default(true).notNull(),
-  portalRequireAuth: boolean('portal_require_auth').default(false).notNull(),
   // Portal interaction settings (org-wide defaults)
-  portalPublicVoting: boolean('portal_public_voting').default(true).notNull(),
-  portalPublicCommenting: boolean('portal_public_commenting').default(true).notNull(),
+  // Values: 'anyone' | 'authenticated' | 'disabled'
+  portalVoting: text('portal_voting').default('anyone').notNull(),
+  portalCommenting: text('portal_commenting').default('anyone').notNull(),
+  portalSubmissions: text('portal_submissions').default('authenticated').notNull(),
   // Theme customization for the public portal
   themeConfig: text('theme_config'), // JSON: { preset?: string, primary?: string, ... }
 })

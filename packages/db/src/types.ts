@@ -1,6 +1,6 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import type { boards, roadmaps, tags } from './schema/boards'
-import type { postStatuses, STATUS_CATEGORIES, StatusCategory } from './schema/statuses'
+import type { postStatuses } from './schema/statuses'
 import type {
   posts,
   postTags,
@@ -13,30 +13,43 @@ import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
 import type { member } from './schema/auth'
 
-// Re-export status types
-export type { StatusCategory }
-export { STATUS_CATEGORIES }
+// Status categories (defined here to avoid circular imports in tests)
+export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
+export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
 
 // Board types
 export type Board = InferSelectModel<typeof boards>
 export type NewBoard = InferInsertModel<typeof boards>
 
+// Permission level enum for voting, commenting, submissions
+export type PermissionLevel = 'anyone' | 'authenticated' | 'disabled'
+
 // Board settings (stored in boards.settings JSONB column)
-// Note: publicVoting and publicCommenting have been moved to organization-level settings
+// When undefined, inherits from organization settings
 export interface BoardSettings {
   roadmapStatuses?: PostStatus[] // default: ['planned', 'in_progress', 'complete']
-  allowAnonymousPosts?: boolean // default: false
-  allowUserSubmissions?: boolean // default: true - allow authenticated users (role='user') to submit posts
+  voting?: PermissionLevel // default: inherit from org
+  commenting?: PermissionLevel // default: inherit from org
+  submissions?: PermissionLevel // default: inherit from org
 }
 
-// Helper to get typed board settings with defaults
-export function getBoardSettings(board: Board): Required<BoardSettings> {
+// Helper to get typed board settings (undefined means inherit from org)
+export function getBoardSettings(board: Board): BoardSettings {
   const settings = (board.settings || {}) as BoardSettings
   return {
     roadmapStatuses: settings.roadmapStatuses ?? ['planned', 'in_progress', 'complete'],
-    allowAnonymousPosts: settings.allowAnonymousPosts ?? false,
-    allowUserSubmissions: settings.allowUserSubmissions ?? true,
+    voting: settings.voting, // undefined = inherit from org
+    commenting: settings.commenting, // undefined = inherit from org
+    submissions: settings.submissions, // undefined = inherit from org
   }
+}
+
+// Helper to resolve effective permission (board overrides org when set)
+export function resolvePermission(
+  orgLevel: PermissionLevel,
+  boardLevel: PermissionLevel | undefined
+): PermissionLevel {
+  return boardLevel ?? orgLevel
 }
 
 // Roadmap types (filtered views of posts within a board)
