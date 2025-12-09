@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { signIn } from '@/lib/auth/client'
+import { signIn, signOut, getSession } from '@/lib/auth/client'
 import { loginSchema, type LoginInput } from '@/lib/schemas/auth'
 import { OAuthButtons } from './oauth-buttons'
 import { SsoLoginButton } from './sso-login-button'
@@ -85,6 +85,34 @@ export function LoginForm({ orgSlug }: LoginFormProps) {
 
     fetchAuthConfig()
   }, [orgSlug])
+
+  // Clear stale session cookies on mount
+  // This handles the case where a cookie exists but the session is invalid/expired in the DB
+  // Better Auth's sign-in endpoint returns "already authenticated" if any cookie exists,
+  // even if the session is invalid, so we proactively clear stale cookies here
+  useEffect(() => {
+    async function clearStaleSession() {
+      try {
+        // Check if session cookie exists (client-side check)
+        const hasSessionCookie =
+          document.cookie.includes('better-auth.session_token') ||
+          document.cookie.includes('better-auth.session_data')
+        if (!hasSessionCookie) return
+
+        // Verify if the session is actually valid by calling getSession
+        const session = await getSession()
+        if (!session?.data?.user) {
+          // Cookie exists but session is invalid - clear it
+          await signOut()
+        }
+      } catch {
+        // If getSession fails, the session is likely invalid - clear it
+        await signOut()
+      }
+    }
+
+    clearStaleSession()
+  }, [])
 
   // Check if email domain has SSO configured
   const checkSsoForEmail = useCallback(async (email: string) => {

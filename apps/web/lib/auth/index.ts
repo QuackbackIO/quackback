@@ -117,10 +117,12 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // Update session every 24 hours
-    // Disable cookie caching to allow manual session creation
-    // Cookie cache stores encrypted session data which we can't manually create
+    // Enable cookie caching with JWT encoding for stateless session validation
+    // This allows the proxy to validate sessions without DB queries
     cookieCache: {
-      enabled: false,
+      enabled: true,
+      maxAge: 60 * 5, // 5 minutes - re-validate from DB periodically
+      encoding: 'jwt', // JWT encoding allows signature verification without DB
     },
   },
 

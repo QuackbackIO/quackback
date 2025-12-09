@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { db, workspaceDomain, eq } from '@quackback/db'
+import { auth } from '@/lib/auth/index'
 
 /**
  * Multi-Tenant Routing Proxy (Next.js 16)
@@ -8,6 +9,11 @@ import { db, workspaceDomain, eq } from '@quackback/db'
  * Simple domain routing:
  * - Main domain (APP_DOMAIN): Landing page, workspace creation
  * - Tenant domains (anything else): Looked up in workspace_domain table
+ *
+ * Note: Per Next.js 16 best practices, the proxy should only do optimistic checks.
+ * Full session validation should happen in Server Components/Route Handlers.
+ * We use Better Auth's API to validate sessions here since it's fast (no extra DB query
+ * when cookie cache is disabled - it just verifies the cookie signature).
  */
 
 const APP_DOMAIN = process.env.APP_DOMAIN
@@ -55,6 +61,22 @@ function getProtocol(request: NextRequest): string {
   return request.headers.get('x-forwarded-proto') || 'http'
 }
 
+/**
+ * Validate session using Better Auth's API
+ * Returns true if the session is valid, false otherwise
+ */
+async function isSessionValid(request: NextRequest): Promise<boolean> {
+  try {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    })
+    return !!session?.user
+  } catch {
+    // Session validation failed - treat as invalid
+    return false
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const host = request.headers.get('host')
@@ -62,7 +84,10 @@ export async function proxy(request: NextRequest) {
     return new NextResponse('Bad Request: Missing Host header', { status: 400 })
   }
   const protocol = getProtocol(request)
-  const sessionCookie = request.cookies.get('better-auth.session_token')
+  // Check for both session cookies (session_data is the JWT cache, session_token is the DB fallback)
+  const sessionTokenCookie = request.cookies.get('better-auth.session_token')
+  const sessionDataCookie = request.cookies.get('better-auth.session_data')
+  const hasSessionCookie = !!sessionTokenCookie || !!sessionDataCookie
 
   // === MAIN DOMAIN ===
   if (isMainDomain(host)) {
@@ -90,11 +115,22 @@ export async function proxy(request: NextRequest) {
 
   // Auth routes (login, signup, sso)
   if (tenantAuthRoutes.some((route) => pathname.startsWith(route))) {
-    // If logged in and no error, redirect to portal home
-    // (Portal users go to /, team members can navigate to /admin from there)
     const hasError = request.nextUrl.searchParams.has('error')
-    if (sessionCookie && !hasError) {
-      return NextResponse.redirect(new URL(`${protocol}://${host}/`))
+
+    // If cookie exists and no error, validate session before redirecting
+    if (hasSessionCookie && !hasError) {
+      const isValid = await isSessionValid(request)
+
+      if (isValid) {
+        // Valid session - redirect away from login
+        return NextResponse.redirect(new URL(`${protocol}://${host}/`))
+      } else {
+        // Stale cookie - clear both cookies and let user access login page
+        const response = NextResponse.next()
+        response.cookies.delete('better-auth.session_token')
+        response.cookies.delete('better-auth.session_data')
+        return response
+      }
     }
     return NextResponse.next()
   }
@@ -108,7 +144,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Protected routes require authentication
-  if (!sessionCookie) {
+  if (!hasSessionCookie) {
     const loginUrl = new URL(`${protocol}://${host}/login`)
     loginUrl.searchParams.set(
       'callbackUrl',
@@ -117,7 +153,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Authenticated - allow access
+  // Validate the session is actually valid
+  const isValid = await isSessionValid(request)
+
+  if (!isValid) {
+    // Stale cookie - clear both cookies and redirect to login
+    const loginUrl = new URL(`${protocol}://${host}/login`)
+    loginUrl.searchParams.set(
+      'callbackUrl',
+      `${protocol}://${host}${pathname}${request.nextUrl.search}`
+    )
+    const response = NextResponse.redirect(loginUrl)
+    response.cookies.delete('better-auth.session_token')
+    response.cookies.delete('better-auth.session_data')
+    return response
+  }
+
+  // Authenticated with valid session - allow access
   return NextResponse.next()
 }
 

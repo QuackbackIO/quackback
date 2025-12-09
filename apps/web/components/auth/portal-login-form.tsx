@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { signIn } from '@/lib/auth/client'
+import { signIn, signOut, getSession } from '@/lib/auth/client'
 import { loginSchema, type LoginInput } from '@/lib/schemas/auth'
 import { OAuthButtons } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
@@ -76,6 +76,28 @@ export function PortalLoginForm({ orgSlug }: PortalLoginFormProps) {
 
     fetchAuthConfig()
   }, [orgSlug])
+
+  // Clear stale session cookies on mount
+  // This handles the case where a cookie exists but the session is invalid/expired in the DB
+  useEffect(() => {
+    async function clearStaleSession() {
+      try {
+        const hasSessionCookie =
+          document.cookie.includes('better-auth.session_token') ||
+          document.cookie.includes('better-auth.session_data')
+        if (!hasSessionCookie) return
+
+        const session = await getSession()
+        if (!session?.data?.user) {
+          await signOut()
+        }
+      } catch {
+        await signOut()
+      }
+    }
+
+    clearStaleSession()
+  }, [])
 
   async function onSubmit(data: LoginInput) {
     setError('')
