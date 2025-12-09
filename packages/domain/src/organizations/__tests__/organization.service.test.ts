@@ -256,9 +256,9 @@ describe('OrganizationService', () => {
         portalPasswordEnabled: true,
         portalGoogleEnabled: false,
         portalGithubEnabled: false,
-        portalRequireAuth: false,
-        portalPublicVoting: true,
-        portalPublicCommenting: true,
+        portalVoting: 'anyone',
+        portalCommenting: 'anyone',
+        portalSubmissions: 'authenticated',
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
@@ -268,7 +268,7 @@ describe('OrganizationService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value.portalAuthEnabled).toBe(true)
-        expect(result.value.portalPublicVoting).toBe(true)
+        expect(result.value.portalVoting).toBe('anyone')
       }
     })
 
@@ -288,7 +288,7 @@ describe('OrganizationService', () => {
     it('should update portal auth settings successfully', async () => {
       const input: UpdatePortalAuthInput = {
         portalAuthEnabled: true,
-        portalPublicVoting: false,
+        portalVoting: 'authenticated',
       }
 
       const mockUpdated = {
@@ -297,9 +297,9 @@ describe('OrganizationService', () => {
         portalPasswordEnabled: true,
         portalGoogleEnabled: false,
         portalGithubEnabled: false,
-        portalRequireAuth: false,
-        portalPublicVoting: false,
-        portalPublicCommenting: true,
+        portalVoting: 'authenticated',
+        portalCommenting: 'anyone',
+        portalSubmissions: 'authenticated',
       }
 
       const mockUpdateChain = {
@@ -315,7 +315,7 @@ describe('OrganizationService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value.portalAuthEnabled).toBe(true)
-        expect(result.value.portalPublicVoting).toBe(false)
+        expect(result.value.portalVoting).toBe('authenticated')
       }
     })
 
@@ -1122,7 +1122,9 @@ describe('OrganizationService', () => {
         portalPasswordEnabled: true,
         portalGoogleEnabled: false,
         portalGithubEnabled: true,
-        portalRequireAuth: false,
+        portalVoting: 'anyone',
+        portalCommenting: 'authenticated',
+        portalSubmissions: 'disabled',
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
@@ -1134,7 +1136,9 @@ describe('OrganizationService', () => {
         expect(result.value.portalAuthEnabled).toBe(true)
         expect(result.value.passwordEnabled).toBe(true)
         expect(result.value.githubEnabled).toBe(true)
-        expect(result.value.requireAuth).toBe(false)
+        expect(result.value.voting).toBe('anyone')
+        expect(result.value.commenting).toBe('authenticated')
+        expect(result.value.submissions).toBe('disabled')
       }
     })
 
@@ -1200,30 +1204,70 @@ describe('OrganizationService', () => {
     })
   })
 
-  describe('checkPublicVotingPermission', () => {
-    it('should allow voting when portalPublicVoting is enabled', async () => {
+  describe('checkInteractionPermission', () => {
+    it('should return anyone permission for voting', async () => {
       const mockOrg = {
         id: 'org-123',
-        portalPublicVoting: true,
-        portalRequireAuth: false,
+        portalVoting: 'anyone',
+        portalCommenting: 'authenticated',
+        portalSubmissions: 'disabled',
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.checkPublicVotingPermission('org-123')
+      const result = await orgService.checkInteractionPermission('org-123', 'voting')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.allowVoting).toBe(true)
+        expect(result.value.permission).toBe('anyone')
         expect(result.value.isMember).toBe(false)
       }
     })
 
-    it('should allow voting when user is member', async () => {
+    it('should return authenticated permission for commenting', async () => {
       const mockOrg = {
         id: 'org-123',
-        portalPublicVoting: false,
-        portalRequireAuth: false,
+        portalVoting: 'anyone',
+        portalCommenting: 'authenticated',
+        portalSubmissions: 'disabled',
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const result = await orgService.checkInteractionPermission('org-123', 'commenting')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value.permission).toBe('authenticated')
+        expect(result.value.isMember).toBe(false)
+      }
+    })
+
+    it('should return disabled permission for submissions', async () => {
+      const mockOrg = {
+        id: 'org-123',
+        portalVoting: 'anyone',
+        portalCommenting: 'authenticated',
+        portalSubmissions: 'disabled',
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const result = await orgService.checkInteractionPermission('org-123', 'submissions')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value.permission).toBe('disabled')
+        expect(result.value.isMember).toBe(false)
+      }
+    })
+
+    it('should identify user as member when they have membership', async () => {
+      const mockOrg = {
+        id: 'org-123',
+        portalVoting: 'disabled',
+        portalCommenting: 'disabled',
+        portalSubmissions: 'disabled',
       }
 
       const mockMember = {
@@ -1234,114 +1278,41 @@ describe('OrganizationService', () => {
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
       mockDb.query.member.findFirst.mockResolvedValue(mockMember)
 
-      const result = await orgService.checkPublicVotingPermission('org-123', 'user-123')
+      const result = await orgService.checkInteractionPermission('org-123', 'voting', 'user-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.allowVoting).toBe(true)
+        expect(result.value.permission).toBe('disabled')
         expect(result.value.isMember).toBe(true)
         expect(result.value.member?.role).toBe('admin')
       }
     })
 
-    it('should deny voting when neither public voting nor membership', async () => {
+    it('should not identify user as member when they have no membership', async () => {
       const mockOrg = {
         id: 'org-123',
-        portalPublicVoting: false,
-        portalRequireAuth: true,
+        portalVoting: 'authenticated',
+        portalCommenting: 'authenticated',
+        portalSubmissions: 'authenticated',
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
       mockDb.query.member.findFirst.mockResolvedValue(undefined)
 
-      const result = await orgService.checkPublicVotingPermission('org-123', 'user-123')
+      const result = await orgService.checkInteractionPermission('org-123', 'voting', 'user-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.allowVoting).toBe(false)
+        expect(result.value.permission).toBe('authenticated')
         expect(result.value.isMember).toBe(false)
+        expect(result.value.member).toBeUndefined()
       }
     })
 
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.checkPublicVotingPermission('org-nonexistent')
-
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.code).toBe('ORGANIZATION_NOT_FOUND')
-      }
-    })
-  })
-
-  describe('checkPublicCommentingPermission', () => {
-    it('should allow commenting when portalPublicCommenting is enabled', async () => {
-      const mockOrg = {
-        id: 'org-123',
-        portalPublicCommenting: true,
-        portalRequireAuth: false,
-      }
-
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
-
-      const result = await orgService.checkPublicCommentingPermission('org-123')
-
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.value.allowCommenting).toBe(true)
-        expect(result.value.isMember).toBe(false)
-      }
-    })
-
-    it('should allow commenting when user is member', async () => {
-      const mockOrg = {
-        id: 'org-123',
-        portalPublicCommenting: false,
-        portalRequireAuth: false,
-      }
-
-      const mockMember = {
-        id: 'member-123',
-        role: 'member',
-      }
-
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
-      mockDb.query.member.findFirst.mockResolvedValue(mockMember)
-
-      const result = await orgService.checkPublicCommentingPermission('org-123', 'user-123')
-
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.value.allowCommenting).toBe(true)
-        expect(result.value.isMember).toBe(true)
-        expect(result.value.member?.role).toBe('member')
-      }
-    })
-
-    it('should deny commenting when neither public commenting nor membership', async () => {
-      const mockOrg = {
-        id: 'org-123',
-        portalPublicCommenting: false,
-        portalRequireAuth: true,
-      }
-
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
-      mockDb.query.member.findFirst.mockResolvedValue(undefined)
-
-      const result = await orgService.checkPublicCommentingPermission('org-123', 'user-123')
-
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.value.allowCommenting).toBe(false)
-        expect(result.value.isMember).toBe(false)
-      }
-    })
-
-    it('should return error when organization not found', async () => {
-      mockDb.query.organization.findFirst.mockResolvedValue(null)
-
-      const result = await orgService.checkPublicCommentingPermission('org-nonexistent')
+      const result = await orgService.checkInteractionPermission('org-nonexistent', 'voting')
 
       expect(result.success).toBe(false)
       if (!result.success) {

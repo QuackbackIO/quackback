@@ -443,8 +443,8 @@ describe('BoardService', () => {
 
     it('should handle custom settings', async () => {
       const settings: BoardSettings = {
-        allowAnonymousPosts: false,
-        allowUserSubmissions: true,
+        anonymousSubmissions: false,
+        submissionsEnabled: true,
       }
 
       const input: CreateBoardInput = {
@@ -1021,7 +1021,7 @@ describe('BoardService', () => {
       description: null,
       isPublic: true,
       settings: {
-        allowAnonymousPosts: true,
+        anonymousSubmissions: true,
       },
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -1029,14 +1029,14 @@ describe('BoardService', () => {
 
     it('should merge new settings with existing settings', async () => {
       const newSettings: BoardSettings = {
-        allowUserSubmissions: false,
+        submissionsEnabled: false,
       }
 
       const updatedBoard: Board = {
         ...existingBoard,
         settings: {
-          allowAnonymousPosts: true,
-          allowUserSubmissions: false,
+          anonymousSubmissions: true,
+          submissionsEnabled: false,
         },
       }
 
@@ -1048,8 +1048,8 @@ describe('BoardService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value.settings).toEqual({
-          allowAnonymousPosts: true,
-          allowUserSubmissions: false,
+          anonymousSubmissions: true,
+          submissionsEnabled: false,
         })
       }
     })
@@ -1085,7 +1085,7 @@ describe('BoardService', () => {
       }
 
       const newSettings: BoardSettings = {
-        allowAnonymousPosts: false,
+        anonymousSubmissions: false,
       }
 
       const updatedBoard: Board = {
