@@ -48,8 +48,8 @@ export function InboxLayout({ filters, postList, postDetail, hasActiveFilters }:
         </Sheet>
       </div>
 
-      {/* Post List - narrow column */}
-      <main className="w-[300px] lg:w-[360px] shrink-0 flex flex-col border-r border-border/50 bg-card overflow-hidden">
+      {/* Post List */}
+      <main className="w-[420px] lg:w-[540px] shrink-0 flex flex-col border-r border-border/50 bg-card overflow-hidden">
         <ScrollArea className="h-full">{postList}</ScrollArea>
       </main>
 
