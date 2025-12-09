@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBoardSettings } from '@quackback/db'
+import { db, organization, eq } from '@quackback/db'
+import type { PermissionLevel } from '@quackback/db/types'
 import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
-import { getBoardService, getStatusService, getPostService, getMemberService } from '@/lib/services'
+import {
+  getBoardService,
+  getStatusService,
+  getPostService,
+  getMemberService,
+  getPermissionService,
+} from '@/lib/services'
 import { buildServiceContext, type ServiceContext } from '@quackback/domain'
 
 interface RouteParams {
@@ -31,16 +38,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Board not found' }, { status: 404 })
   }
 
-  // 2. Check if user submissions are enabled for this board
-  const settings = getBoardSettings(board)
-  if (!settings.submissionsEnabled) {
-    return NextResponse.json(
-      { error: 'Post submissions are disabled for this board' },
-      { status: 403 }
-    )
-  }
-
-  // 3. Require authentication
+  // 2. Check authentication first (needed for permission check)
   const session = await getSession()
   if (!session?.user) {
     return NextResponse.json(
@@ -49,7 +47,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  // 4. Get member record for this organization
+  // 3. Get member record for this organization
   const memberResult = await getMemberService().getMemberByUserAndOrg(
     session.user.id,
     board.organizationId
@@ -59,6 +57,45 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!memberRecord) {
     return NextResponse.json(
       { error: 'You must be a member of this organization to submit feedback' },
+      { status: 403 }
+    )
+  }
+
+  // 4. Get organization and check submission permissions
+  const org = await db.query.organization.findFirst({
+    where: eq(organization.id, board.organizationId),
+  })
+  if (!org) {
+    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+  }
+
+  const permissionService = getPermissionService()
+  const orgPermissions = {
+    voting: org.portalVoting as PermissionLevel,
+    commenting: org.portalCommenting as PermissionLevel,
+    submissions: org.portalSubmissions as PermissionLevel,
+  }
+  const userContext = {
+    isAuthenticated: true,
+    isTeamMember: ['owner', 'admin', 'member'].includes(memberRecord.role),
+  }
+
+  const submissionsResult = permissionService.checkInteraction(
+    'submissions',
+    orgPermissions,
+    userContext,
+    board
+  )
+
+  if (!submissionsResult.success || !submissionsResult.value.allowed) {
+    const reason = submissionsResult.success ? submissionsResult.value.reason : 'unknown'
+    return NextResponse.json(
+      {
+        error:
+          reason === 'disabled'
+            ? 'Post submissions are disabled for this board'
+            : 'You do not have permission to submit posts',
+      },
       { status: 403 }
     )
   }

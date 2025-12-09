@@ -48,7 +48,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       where: eq(organization.id, board.organizationId),
     })
 
-    if (org?.portalVoting === 'disabled') {
+    if (!org) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    }
+
+    if (org.portalVoting === 'disabled') {
       return NextResponse.json({ error: 'Voting is disabled' }, { status: 403 })
     }
 

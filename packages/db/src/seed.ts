@@ -1247,7 +1247,15 @@ async function seed() {
   console.log('👤 Creating users...')
 
   const demoUserId = uuid()
-  const userRecords: Array<{ id: string; name: string; email: string; orgId: string }> = []
+  const demoMemberId = uuid()
+  const userRecords: Array<{
+    id: string
+    memberId: string
+    name: string
+    email: string
+    orgId: string
+    role: string
+  }> = []
 
   // Create demo user in demo org (fixed credentials)
   await db.insert(user).values({
@@ -1272,7 +1280,7 @@ async function seed() {
 
   // Also create member record for demo user
   await db.insert(member).values({
-    id: uuid(),
+    id: demoMemberId,
     organizationId: demoOrgId,
     userId: demoUserId,
     role: 'owner',
@@ -1281,14 +1289,17 @@ async function seed() {
 
   userRecords.push({
     id: demoUserId,
+    memberId: demoMemberId,
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     orgId: demoOrgId,
+    role: 'owner',
   })
 
   // Create users for the demo organization
   for (let i = 0; i < CONFIG.users; i++) {
     const userId = uuid()
+    const memberId = uuid()
     let firstName: string
     let lastName: string
 
@@ -1317,10 +1328,10 @@ async function seed() {
 
     // Also create member record
     await db.insert(member).values({
-      id: uuid(),
+      id: memberId,
       organizationId: demoOrgId,
       userId: userId,
-      role: pick(['admin', 'member', 'member', 'member']),
+      role: 'user',
       createdAt: randomDate(90),
     })
 
@@ -1337,7 +1348,7 @@ async function seed() {
       })
     }
 
-    userRecords.push({ id: userId, name, email, orgId: demoOrgId })
+    userRecords.push({ id: userId, memberId, name, email, orgId: demoOrgId, role: 'user' })
   }
 
   console.log(`   Created ${userRecords.length} users`)
@@ -1495,11 +1506,21 @@ async function seed() {
       const commentCount = generateCommentCount()
 
       const hasOfficialResponse = status !== 'open' && faker.datatype.boolean({ probability: 0.7 })
-      const responder = hasOfficialResponse ? pick(boardCtx.orgMembers) : null
 
       // Get category-aware title and content with templates filled
       const category = getRandomCategory()
       const { title: postTitle, content: postContent } = getCategorizedPostContent(category)
+
+      // For official response, pick a team member (owner/admin/member role)
+      const teamMembers = boardCtx.orgMembers.filter((m) => m.role !== 'user')
+      const responderMember =
+        hasOfficialResponse && teamMembers.length > 0 ? pick(teamMembers) : null
+
+      // Pick an owner from team members
+      const ownerMember =
+        faker.datatype.boolean({ probability: 0.3 }) && teamMembers.length > 0
+          ? pick(teamMembers)
+          : null
 
       postInserts.push({
         id: postId,
@@ -1507,18 +1528,23 @@ async function seed() {
         title: postTitle,
         content: postContent,
         contentJson: textToTipTapJson(postContent),
+        // Member-scoped identity (Hub-and-Spoke model)
+        memberId: isAnonymous ? null : author.memberId,
+        // Legacy fields (kept for compatibility)
         authorId: isAnonymous ? null : author.id,
         authorName: isAnonymous ? 'Anonymous' : author.name,
         authorEmail: isAnonymous ? null : author.email,
         status,
         voteCount,
-        ownerId: faker.datatype.boolean({ probability: 0.3 }) ? pick(boardCtx.orgMembers).id : null,
+        ownerMemberId: ownerMember?.memberId ?? null,
+        ownerId: ownerMember?.id ?? null,
         estimated: faker.datatype.boolean({ probability: 0.2 })
           ? pick(['small', 'medium', 'large'])
           : null,
         officialResponse: hasOfficialResponse ? pick(officialResponses) : null,
-        officialResponseAuthorId: responder?.id ?? null,
-        officialResponseAuthorName: responder?.name ?? null,
+        officialResponseMemberId: responderMember?.memberId ?? null,
+        officialResponseAuthorId: responderMember?.id ?? null,
+        officialResponseAuthorName: responderMember?.name ?? null,
         officialResponseAt: hasOfficialResponse ? randomDate(30) : null,
         createdAt,
         updatedAt: new Date(),
@@ -1579,6 +1605,7 @@ async function seed() {
   // Use strings for all types to avoid postgres.js array serialization issues
   const commentIds: string[] = []
   const commentPostIds: string[] = []
+  const commentMemberIds: (string | null)[] = [] // Hub-and-Spoke identity
   const commentAuthorIds: (string | null)[] = []
   const commentAuthorNames: string[] = []
   const commentAuthorEmails: (string | null)[] = []
@@ -1591,13 +1618,14 @@ async function seed() {
     for (let i = 0; i < post.commentCount; i++) {
       const author = pick(userRecords)
       const isAnonymous = faker.datatype.boolean({ probability: 0.2 })
-      const isTeamMember = faker.datatype.boolean({ probability: 0.15 })
+      const isTeamMember = author.role !== 'user' || faker.datatype.boolean({ probability: 0.15 })
 
       const rawContent = isTeamMember ? pick(teamCommentContent) : pick(commentContent)
       const filledContent = fillTemplate(rawContent)
 
       commentIds.push(uuid())
       commentPostIds.push(post.id)
+      commentMemberIds.push(isAnonymous ? null : author.memberId)
       commentAuthorIds.push(isAnonymous ? null : author.id)
       commentAuthorNames.push(isAnonymous ? faker.person.fullName() : author.name)
       commentAuthorEmails.push(isAnonymous ? faker.internet.email().toLowerCase() : author.email)
@@ -1621,12 +1649,13 @@ async function seed() {
     const end = Math.min(i + COMMENT_BATCH_SIZE, commentIds.length)
     await client.unsafe(
       `
-      INSERT INTO comments (id, post_id, author_id, author_name, author_email, content, is_team_member, created_at)
-      SELECT * FROM unnest($1::text[]::uuid[], $2::text[]::uuid[], $3::text[]::uuid[], $4::text[], $5::text[], $6::text[], $7::text[]::boolean[], $8::text[]::timestamptz[])
+      INSERT INTO comments (id, post_id, member_id, author_id, author_name, author_email, content, is_team_member, created_at)
+      SELECT * FROM unnest($1::text[]::uuid[], $2::text[]::uuid[], $3::text[], $4::text[]::uuid[], $5::text[], $6::text[], $7::text[], $8::text[]::boolean[], $9::text[]::timestamptz[])
     `,
       [
         commentIds.slice(i, end),
         commentPostIds.slice(i, end),
+        commentMemberIds.slice(i, end),
         commentAuthorIds.slice(i, end),
         commentAuthorNames.slice(i, end),
         commentAuthorEmails.slice(i, end),
@@ -1662,9 +1691,11 @@ async function seed() {
       let userIdentifier: string
 
       if (v < shuffledUsers.length && faker.datatype.boolean({ probability: 0.7 })) {
-        userIdentifier = shuffledUsers[v].id
+        // Use member:${memberId} format for authenticated user votes
+        userIdentifier = `member:${shuffledUsers[v].memberId}`
       } else {
-        userIdentifier = `anon_${post.id.slice(0, 8)}_${v}`
+        // Anonymous votes use anon: prefix
+        userIdentifier = `anon:${uuid()}`
       }
 
       voteIds.push(uuid())

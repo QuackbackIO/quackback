@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { MessageSquare, Map, LogOut, Settings } from 'lucide-react'
+import { MessageSquare, Map, Users, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -35,6 +35,11 @@ const navItems = [
     label: 'Roadmap',
     href: '/admin/roadmap',
     icon: Map,
+  },
+  {
+    label: 'Users',
+    href: '/admin/users',
+    icon: Users,
   },
   {
     label: 'Settings',

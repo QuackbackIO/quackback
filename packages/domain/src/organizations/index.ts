@@ -21,6 +21,5 @@ export type {
   PublicAuthConfig,
   PortalPublicAuthConfig,
   SsoCheckResult,
-  VotingPermission,
-  CommentingPermission,
+  InteractionPermission,
 } from './organization.types'

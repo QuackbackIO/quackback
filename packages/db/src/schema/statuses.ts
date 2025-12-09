@@ -11,9 +11,10 @@ import {
 import { sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
 import { appUser } from './rls'
+import { STATUS_CATEGORIES, type StatusCategory } from '../types'
 
-export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
-export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
+// Re-export for convenience (canonical source is ../types.ts)
+export { STATUS_CATEGORIES, type StatusCategory }
 
 export const postStatuses = pgTable(
   'post_statuses',
