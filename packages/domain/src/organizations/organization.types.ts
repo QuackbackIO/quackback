@@ -2,6 +2,8 @@
  * Input/Output types for OrganizationService operations
  */
 
+import type { PermissionLevel } from '@quackback/db/types'
+
 /**
  * Security settings for organization authentication
  */
@@ -32,9 +34,9 @@ export interface PortalAuthSettings {
   portalPasswordEnabled: boolean
   portalGoogleEnabled: boolean
   portalGithubEnabled: boolean
-  portalRequireAuth: boolean
-  portalPublicVoting: boolean
-  portalPublicCommenting: boolean
+  portalVoting: PermissionLevel
+  portalCommenting: PermissionLevel
+  portalSubmissions: PermissionLevel
 }
 
 /**
@@ -45,9 +47,9 @@ export interface UpdatePortalAuthInput {
   portalPasswordEnabled?: boolean
   portalGoogleEnabled?: boolean
   portalGithubEnabled?: boolean
-  portalRequireAuth?: boolean
-  portalPublicVoting?: boolean
-  portalPublicCommenting?: boolean
+  portalVoting?: PermissionLevel
+  portalCommenting?: PermissionLevel
+  portalSubmissions?: PermissionLevel
 }
 
 /**
@@ -181,7 +183,9 @@ export interface PortalPublicAuthConfig {
   passwordEnabled: boolean
   googleEnabled: boolean
   githubEnabled: boolean
-  requireAuth: boolean
+  voting: PermissionLevel
+  commenting: PermissionLevel
+  submissions: PermissionLevel
 }
 
 /**
@@ -195,21 +199,10 @@ export interface SsoCheckResult {
 }
 
 /**
- * Public permission check result for voting
+ * Public permission check result for voting/commenting/submissions
  */
-export interface VotingPermission {
-  allowVoting: boolean
-  requireAuth: boolean
-  isMember: boolean
-  member?: { id: string; role: string }
-}
-
-/**
- * Public permission check result for commenting
- */
-export interface CommentingPermission {
-  allowCommenting: boolean
-  requireAuth: boolean
+export interface InteractionPermission {
+  permission: PermissionLevel
   isMember: boolean
   member?: { id: string; role: string }
 }
