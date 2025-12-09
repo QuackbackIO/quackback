@@ -142,11 +142,18 @@ export const votes = pgTable(
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     userIdentifier: text('user_identifier').notNull(),
+    // Member reference for FK integrity (nullable for anonymous votes)
+    memberId: text('member_id').references(() => member.id, { onDelete: 'cascade' }),
+    // Hashed IP for abuse detection (privacy-preserving)
+    ipHash: text('ip_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Track when vote was last toggled
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('votes_post_id_idx').on(table.postId),
     uniqueIndex('votes_unique_idx').on(table.postId, table.userIdentifier),
+    index('votes_member_id_idx').on(table.memberId),
     pgPolicy('votes_tenant_isolation', {
       for: 'all',
       to: appUser,

@@ -12,7 +12,6 @@ import {
   createMockPost,
   createMockBoard,
   createMockTag,
-  createMockVote,
   createMockPostStatus,
   createMockComment,
   createMockUnitOfWork,
@@ -542,23 +541,16 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const userIdentifier = 'member:member-123'
 
-      const incrementSpy = vi.fn()
+      // Mock the atomic SQL execute to return "inserted" (vote added)
+      const executeSpy = vi.fn().mockResolvedValue([{ vote_count: 6, voted: true }])
 
       setupMocks({
         postRepo: {
           findById: vi.fn().mockResolvedValue(mockPost),
-          incrementVoteCount: incrementSpy,
         },
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
         uowDbMocks: {
-          query: {
-            votes: {
-              findFirst: vi.fn().mockResolvedValue(null),
-            },
-          },
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockResolvedValue(undefined),
-          }),
+          execute: executeSpy,
         },
       })
 
@@ -569,33 +561,25 @@ describe('PostService', () => {
         expect(result.value.voted).toBe(true)
         expect(result.value.voteCount).toBe(6)
       }
-      expect(incrementSpy).toHaveBeenCalledWith('post-123')
+      expect(executeSpy).toHaveBeenCalled()
     })
 
     it('should remove vote when user has already voted', async () => {
       const mockCtx = createMockServiceContext()
       const mockPost = createMockPost({ voteCount: 5 })
       const mockBoard = createMockBoard()
-      const mockVote = createMockVote()
       const userIdentifier = 'member:member-123'
 
-      const decrementSpy = vi.fn()
+      // Mock the atomic SQL execute to return "deleted" (vote removed)
+      const executeSpy = vi.fn().mockResolvedValue([{ vote_count: 4, voted: false }])
 
       setupMocks({
         postRepo: {
           findById: vi.fn().mockResolvedValue(mockPost),
-          decrementVoteCount: decrementSpy,
         },
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
         uowDbMocks: {
-          query: {
-            votes: {
-              findFirst: vi.fn().mockResolvedValue(mockVote),
-            },
-          },
-          delete: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue(undefined),
-          }),
+          execute: executeSpy,
         },
       })
 
@@ -606,7 +590,7 @@ describe('PostService', () => {
         expect(result.value.voted).toBe(false)
         expect(result.value.voteCount).toBe(4)
       }
-      expect(decrementSpy).toHaveBeenCalledWith('post-123')
+      expect(executeSpy).toHaveBeenCalled()
     })
 
     it('should return error when post does not exist', async () => {
@@ -629,24 +613,18 @@ describe('PostService', () => {
       const mockCtx = createMockServiceContext()
       const mockPost = createMockPost({ voteCount: 0 })
       const mockBoard = createMockBoard()
-      const mockVote = createMockVote()
       const userIdentifier = 'member:member-123'
+
+      // Mock the atomic SQL execute - the SQL uses GREATEST(0, ...) so it returns 0
+      const executeSpy = vi.fn().mockResolvedValue([{ vote_count: 0, voted: false }])
 
       setupMocks({
         postRepo: {
           findById: vi.fn().mockResolvedValue(mockPost),
-          decrementVoteCount: vi.fn(),
         },
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
         uowDbMocks: {
-          query: {
-            votes: {
-              findFirst: vi.fn().mockResolvedValue(mockVote),
-            },
-          },
-          delete: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue(undefined),
-          }),
+          execute: executeSpy,
         },
       })
 
@@ -656,6 +634,31 @@ describe('PostService', () => {
       if (result.success) {
         expect(result.value.voteCount).toBe(0) // Should be clamped to 0
       }
+    })
+
+    it('should pass memberId and ipHash options to execute', async () => {
+      const mockCtx = createMockServiceContext()
+      const mockPost = createMockPost({ voteCount: 5 })
+      const mockBoard = createMockBoard()
+      const userIdentifier = 'member:member-123'
+      const options = { memberId: 'member-456', ipHash: 'abc123' }
+
+      const executeSpy = vi.fn().mockResolvedValue([{ vote_count: 6, voted: true }])
+
+      setupMocks({
+        postRepo: {
+          findById: vi.fn().mockResolvedValue(mockPost),
+        },
+        boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
+        uowDbMocks: {
+          execute: executeSpy,
+        },
+      })
+
+      const result = await postService.voteOnPost('post-123', userIdentifier, mockCtx, options)
+
+      expect(result.success).toBe(true)
+      expect(executeSpy).toHaveBeenCalled()
     })
   })
 

@@ -216,15 +216,19 @@ export class PostService {
    * If the user has already voted, removes the vote.
    * If the user hasn't voted, adds a vote.
    *
+   * Uses atomic SQL to prevent race conditions and ensure vote count integrity.
+   *
    * @param postId - Post ID to vote on
    * @param userIdentifier - Unique identifier for the voter (member:id or anon:uuid)
    * @param ctx - Service context with user/org information
+   * @param options - Optional audit data (memberId, ipHash)
    * @returns Result containing vote status and new count, or an error
    */
   async voteOnPost(
     postId: string,
     userIdentifier: string,
-    ctx: ServiceContext
+    ctx: ServiceContext,
+    options?: { memberId?: string; ipHash?: string }
   ): Promise<Result<VoteResult, PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
@@ -242,32 +246,46 @@ export class PostService {
         return err(PostError.boardNotFound(post.boardId))
       }
 
-      // Check if user has already voted
-      const existingVote = await uow.db.query.votes.findFirst({
-        where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
+      // Single atomic operation: check existing vote, then insert or delete + update count
+      // Uses existing unique index on (post_id, user_identifier)
+      const result = await uow.db.execute<{ vote_count: number; voted: boolean }>(sql`
+        WITH existing_vote AS (
+          SELECT id FROM votes
+          WHERE post_id = ${postId} AND user_identifier = ${userIdentifier}
+          FOR UPDATE
+        ),
+        vote_action AS (
+          -- Delete if vote exists, insert if it doesn't
+          DELETE FROM votes
+          WHERE id = (SELECT id FROM existing_vote)
+          RETURNING id, false AS is_new_vote
+        ),
+        insert_vote AS (
+          -- Only insert if no existing vote was found (and thus not deleted)
+          INSERT INTO votes (post_id, user_identifier, member_id, ip_hash, updated_at)
+          SELECT ${postId}, ${userIdentifier}, ${options?.memberId ?? null}, ${options?.ipHash ?? null}, NOW()
+          WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
+          RETURNING id, true AS is_new_vote
+        ),
+        combined AS (
+          SELECT is_new_vote FROM vote_action
+          UNION ALL
+          SELECT is_new_vote FROM insert_vote
+        )
+        UPDATE posts
+        SET vote_count = GREATEST(0, vote_count + CASE
+          WHEN (SELECT is_new_vote FROM combined LIMIT 1) THEN 1
+          ELSE -1
+        END)
+        WHERE id = ${postId}
+        RETURNING vote_count, (SELECT is_new_vote FROM combined LIMIT 1) AS voted
+      `)
+
+      const row = result[0]
+      return ok({
+        voted: row?.voted ?? false,
+        voteCount: row?.vote_count ?? post.voteCount,
       })
-
-      let voted: boolean
-      let newVoteCount: number
-
-      if (existingVote) {
-        // Remove vote
-        await uow.db.delete(votes).where(eq(votes.id, existingVote.id))
-        await postRepo.decrementVoteCount(postId)
-        voted = false
-        newVoteCount = post.voteCount - 1
-      } else {
-        // Add vote
-        await uow.db.insert(votes).values({
-          postId,
-          userIdentifier,
-        })
-        await postRepo.incrementVoteCount(postId)
-        voted = true
-        newVoteCount = post.voteCount + 1
-      }
-
-      return ok({ voted, voteCount: Math.max(0, newVoteCount) })
     })
   }
 
@@ -1067,6 +1085,37 @@ export class PostService {
     })
 
     return ok(post?.board || null)
+  }
+
+  /**
+   * Reconcile vote counts for all posts in an organization
+   * Fixes any drift between actual vote count and stored vote_count
+   *
+   * @param ctx - Service context with organization info
+   * @returns Result with number of posts fixed
+   */
+  async reconcileVoteCounts(ctx: ServiceContext): Promise<Result<{ fixed: number }, PostError>> {
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      // Find and fix posts with mismatched counts in a single query
+      const result = await uow.db.execute<{ id: string }>(sql`
+        WITH mismatched AS (
+          SELECT p.id, p.vote_count as stored, COUNT(v.id)::int as actual
+          FROM posts p
+          INNER JOIN boards b ON p.board_id = b.id
+          LEFT JOIN votes v ON v.post_id = p.id
+          WHERE b.organization_id = ${ctx.organizationId}
+          GROUP BY p.id
+          HAVING p.vote_count != COUNT(v.id)
+        )
+        UPDATE posts p
+        SET vote_count = m.actual
+        FROM mismatched m
+        WHERE p.id = m.id
+        RETURNING p.id
+      `)
+
+      return ok({ fixed: result.length })
+    })
   }
 }
 

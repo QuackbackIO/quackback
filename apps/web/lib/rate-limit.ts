@@ -1,23 +1,56 @@
 /**
- * Simple in-memory rate limiter for authentication endpoints
- *
- * This provides basic protection against brute force attacks.
- * For production at scale, consider using Redis-based rate limiting
- * (e.g., @upstash/ratelimit) for distributed rate limiting.
+ * Rate limiter with Redis support for distributed environments
  *
  * Features:
  * - Sliding window rate limiting
- * - Automatic cleanup of old entries
+ * - Redis-backed for distributed rate limiting (via Dragonfly)
+ * - Automatic fallback to in-memory when Redis unavailable
  * - IP-based and identifier-based limits
  */
+
+import { Redis } from 'ioredis'
 
 interface RateLimitEntry {
   count: number
   resetAt: number
 }
 
-// In-memory store (process-local, cleared on restart)
+// In-memory store (process-local, cleared on restart) - used as fallback
 const rateLimitStore = new Map<string, RateLimitEntry>()
+
+// Redis client (lazy-initialized)
+let redis: Redis | null = null
+let redisInitAttempted = false
+
+function getRedis(): Redis | null {
+  if (redis) return redis
+  if (redisInitAttempted) return null
+
+  redisInitAttempted = true
+  const url = process.env.REDIS_URL
+  if (!url) return null
+
+  try {
+    const parsed = new URL(url)
+    redis = new Redis({
+      host: parsed.hostname,
+      port: parseInt(parsed.port || '6379', 10),
+      password: parsed.password || undefined,
+      maxRetriesPerRequest: 1,
+      lazyConnect: true,
+      enableReadyCheck: false,
+    })
+
+    // Handle connection errors silently (fallback to in-memory)
+    redis.on('error', () => {
+      redis = null
+    })
+
+    return redis
+  } catch {
+    return null
+  }
+}
 
 // Cleanup interval (every 5 minutes)
 let cleanupInterval: ReturnType<typeof setInterval> | null = null
@@ -116,7 +149,66 @@ export const rateLimits = {
 
   /** API general: 100 per minute per IP */
   apiGeneral: { limit: 100, windowMs: 60 * 1000 },
+
+  /** Vote attempts (anonymous): 20 per minute per IP */
+  voteGlobalAnonymous: { limit: 20, windowMs: 60 * 1000 },
+
+  /** Vote attempts per post (anonymous): 5 per minute */
+  votePerPostAnonymous: { limit: 5, windowMs: 60 * 1000 },
+
+  /** Vote attempts (authenticated): 60 per minute per user */
+  voteGlobalAuthenticated: { limit: 60, windowMs: 60 * 1000 },
+
+  /** Vote attempts per post (authenticated): 10 per minute */
+  votePerPostAuthenticated: { limit: 10, windowMs: 60 * 1000 },
 } as const
+
+/**
+ * Check rate limit using Redis (distributed) with in-memory fallback
+ *
+ * Uses Redis sorted sets for accurate sliding window rate limiting.
+ * Falls back to in-memory rate limiting if Redis is unavailable.
+ *
+ * @param identifier - Unique identifier (e.g., IP address, user ID)
+ * @param config - Rate limit configuration
+ * @returns Rate limit result (async)
+ */
+export async function checkRateLimitRedis(
+  identifier: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const client = getRedis()
+
+  // Fallback to in-memory if Redis unavailable
+  if (!client) {
+    return checkRateLimit(identifier, config)
+  }
+
+  const key = `ratelimit:${identifier}`
+  const now = Date.now()
+  const windowStart = now - config.windowMs
+
+  try {
+    // Use Redis sorted set for sliding window
+    const multi = client.multi()
+    multi.zremrangebyscore(key, 0, windowStart) // Remove old entries
+    multi.zadd(key, now, `${now}:${Math.random()}`) // Add current request with unique member
+    multi.zcard(key) // Count requests in window
+    multi.pexpire(key, config.windowMs) // Set expiry
+
+    const results = await multi.exec()
+    const count = (results?.[2]?.[1] as number) || 0
+
+    return {
+      success: count <= config.limit,
+      remaining: Math.max(0, config.limit - count),
+      resetAt: now + config.windowMs,
+    }
+  } catch {
+    // Fallback to in-memory on error
+    return checkRateLimit(identifier, config)
+  }
+}
 
 /**
  * Get client IP from request headers

@@ -8,6 +8,13 @@ import {
 } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getPostService } from '@/lib/services'
+import {
+  checkRateLimitRedis,
+  rateLimits,
+  getClientIp,
+  createRateLimitHeaders,
+} from '@/lib/rate-limit'
+import { hashIP } from '@/lib/utils/ip-hash'
 import type { ServiceContext } from '@quackback/domain'
 import type { PostError } from '@quackback/domain'
 
@@ -35,6 +42,40 @@ function getHttpStatusFromError(error: PostError): number {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { postId } = await params
+    const clientIp = getClientIp(request.headers)
+
+    // Check for authenticated user early (session check is cheap)
+    const session = await getSession()
+    const isAuthenticated = !!session?.user
+
+    // Rate limit check - more generous limits for authenticated users
+    // Use user ID for authenticated users (more accurate), IP for anonymous
+    const rateLimitKey = isAuthenticated ? `vote:user:${session.user.id}` : `vote:ip:${clientIp}`
+    const globalLimits = isAuthenticated
+      ? rateLimits.voteGlobalAuthenticated
+      : rateLimits.voteGlobalAnonymous
+    const perPostLimits = isAuthenticated
+      ? rateLimits.votePerPostAuthenticated
+      : rateLimits.votePerPostAnonymous
+
+    const globalLimit = await checkRateLimitRedis(rateLimitKey, globalLimits)
+    if (!globalLimit.success) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(globalLimit) }
+      )
+    }
+
+    const postLimit = await checkRateLimitRedis(`${rateLimitKey}:${postId}`, perPostLimits)
+    if (!postLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many votes on this post. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(postLimit) }
+      )
+    }
+
+    // Hash IP for privacy-preserving storage
+    const ipHash = hashIP(clientIp, process.env.BETTER_AUTH_SECRET || 'default-salt')
 
     // Get the board to find organization
     const boardResult = await getPostService().getBoardByPostId(postId)
@@ -56,8 +97,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Voting is disabled' }, { status: 403 })
     }
 
-    // Check for authenticated user
-    const session = await getSession()
     let userIdentifier: string
     let ctx: ServiceContext
     let responseHeaders: Headers | undefined
@@ -85,9 +124,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           userEmail: session.user.email,
         }
 
-        // Call PostService to toggle vote
+        // Call PostService to toggle vote with audit data
         const postService = getPostService()
-        const result = await postService.voteOnPost(postId, userIdentifier, ctx)
+        const result = await postService.voteOnPost(postId, userIdentifier, ctx, {
+          memberId: memberRecord.id,
+          ipHash,
+        })
 
         // Map Result to HTTP response
         if (!result.success) {
@@ -125,9 +167,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       userEmail: '',
     }
 
-    // Call PostService to toggle vote
+    // Call PostService to toggle vote with audit data (anonymous - no memberId)
     const postService = getPostService()
-    const result = await postService.voteOnPost(postId, userIdentifier, ctx)
+    const result = await postService.voteOnPost(postId, userIdentifier, ctx, {
+      ipHash,
+    })
 
     // Map Result to HTTP response
     if (!result.success) {
