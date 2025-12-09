@@ -13,6 +13,8 @@ import {
   type MemberService,
   organizationService,
   type OrganizationService,
+  permissionService,
+  type PermissionService,
 } from '@quackback/domain'
 
 /**
@@ -80,6 +82,13 @@ export function getOrganizationService(): OrganizationService {
 }
 
 /**
+ * Get the PermissionService instance
+ */
+export function getPermissionService(): PermissionService {
+  return permissionService
+}
+
+/**
  * Service container with convenient property access
  */
 export const services = {
@@ -103,5 +112,8 @@ export const services = {
   },
   get organizations(): OrganizationService {
     return getOrganizationService()
+  },
+  get permissions(): PermissionService {
+    return getPermissionService()
   },
 }

@@ -2,9 +2,15 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getCurrentOrganization } from '@/lib/tenant'
-import { getPostService, getBoardService, getStatusService } from '@/lib/services'
+import {
+  getPostService,
+  getBoardService,
+  getStatusService,
+  getPermissionService,
+} from '@/lib/services'
 import type { PublicComment } from '@quackback/domain'
 import { db, member, eq, and } from '@quackback/db'
+import type { PermissionLevel } from '@quackback/db/types'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
@@ -71,16 +77,47 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   // Get session for authenticated commenting
   const session = await getSession()
 
-  // Get user identifier - use member ID for authenticated users, anonymous cookie for others
+  // Get user identifier and check team membership
   let userIdentifier = await getUserIdentifier()
+  let isTeamMember = false
   if (session?.user) {
     const memberRecord = await db.query.member.findFirst({
       where: and(eq(member.userId, session.user.id), eq(member.organizationId, org.id)),
     })
     if (memberRecord) {
       userIdentifier = getMemberIdentifier(memberRecord.id)
+      // Team members have roles other than 'user' (portal users)
+      isTeamMember = memberRecord.role !== 'user'
     }
   }
+
+  // Use PermissionService to check interaction permissions
+  const permissionService = getPermissionService()
+  const orgPermissions = {
+    voting: org.portalVoting as PermissionLevel,
+    commenting: org.portalCommenting as PermissionLevel,
+    submissions: org.portalSubmissions as PermissionLevel,
+  }
+  const userContext = {
+    isAuthenticated: !!session?.user,
+    isTeamMember,
+  }
+
+  const votingResult = permissionService.checkInteraction(
+    'voting',
+    orgPermissions,
+    userContext,
+    board
+  )
+  const canVote = votingResult.success && votingResult.value.allowed
+
+  const commentingResult = permissionService.checkInteraction(
+    'commenting',
+    orgPermissions,
+    userContext,
+    board
+  )
+  const canComment = commentingResult.success && commentingResult.value.allowed
 
   // Get post detail with user's reaction state
   const postResult = await getPostService().getPublicPostDetail(postId, userIdentifier)
@@ -123,7 +160,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
               postId={post.id}
               initialVoteCount={post.voteCount}
               initialHasVoted={hasVoted}
-              disabled={!org.portalPublicVoting}
+              disabled={!canVote}
             />
           </div>
 
@@ -190,7 +227,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
           <CommentsSection
             postId={post.id}
             comments={post.comments}
-            allowCommenting={org.portalPublicCommenting}
+            allowCommenting={canComment}
             avatarUrls={Object.fromEntries(commentAvatarMap)}
             user={
               session?.user ? { name: session.user.name, email: session.user.email } : undefined
