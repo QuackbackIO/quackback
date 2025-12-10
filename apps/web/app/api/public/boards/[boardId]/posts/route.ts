@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
-import type { PermissionLevel } from '@quackback/db/types'
 import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
-import {
-  getBoardService,
-  getStatusService,
-  getPostService,
-  getMemberService,
-  getPermissionService,
-} from '@/lib/services'
+import { getBoardService, getStatusService, getPostService, getMemberService } from '@/lib/services'
 import { buildServiceContext, type ServiceContext } from '@quackback/domain'
 
 interface RouteParams {
@@ -20,7 +12,7 @@ interface RouteParams {
  * POST /api/public/boards/[boardId]/posts
  *
  * Create a new post on a public board.
- * Requires authentication (portal user or team member).
+ * Requires authentication (member of the organization).
  * Posts are auto-published with the default status.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -38,7 +30,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Board not found' }, { status: 404 })
   }
 
-  // 2. Check authentication first (needed for permission check)
+  // 2. Check authentication
   const session = await getSession()
   if (!session?.user) {
     return NextResponse.json(
@@ -56,51 +48,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (!memberRecord) {
     return NextResponse.json(
-      { error: 'You must be a member of this organization to submit feedback' },
+      { error: 'You must be a member of this workspace to submit feedback.' },
       { status: 403 }
     )
   }
 
-  // 4. Get organization and check submission permissions
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, board.organizationId),
-  })
-  if (!org) {
-    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-  }
-
-  const permissionService = getPermissionService()
-  const orgPermissions = {
-    voting: org.portalVoting as PermissionLevel,
-    commenting: org.portalCommenting as PermissionLevel,
-    submissions: org.portalSubmissions as PermissionLevel,
-  }
-  const userContext = {
-    isAuthenticated: true,
-    isTeamMember: ['owner', 'admin', 'member'].includes(memberRecord.role),
-  }
-
-  const submissionsResult = permissionService.checkInteraction(
-    'submissions',
-    orgPermissions,
-    userContext,
-    board
-  )
-
-  if (!submissionsResult.success || !submissionsResult.value.allowed) {
-    const reason = submissionsResult.success ? submissionsResult.value.reason : 'unknown'
-    return NextResponse.json(
-      {
-        error:
-          reason === 'disabled'
-            ? 'Post submissions are disabled for this board'
-            : 'You do not have permission to submit posts',
-      },
-      { status: 403 }
-    )
-  }
-
-  // 5. Build service context for domain operations
+  // 4. Build service context for domain operations
   const ctx: ServiceContext = buildServiceContext({
     organization: { id: board.organizationId },
     user: {
@@ -114,7 +67,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     },
   })
 
-  // 6. Validate request body
+  // 5. Validate request body
   let body
   try {
     body = await request.json()
@@ -132,21 +85,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const { title, content, contentJson } = result.data
 
-  // 7. Get default status for this organization
+  // 6. Get default status for this organization
   const defaultStatusResult = await getStatusService().getDefaultStatus(ctx)
   if (!defaultStatusResult.success) {
     return NextResponse.json({ error: 'Failed to retrieve default status' }, { status: 500 })
   }
 
-  // 8. Create the post via the PostService
+  // 7. Create the post via the PostService
   const createResult = await getPostService().createPost(
     {
       boardId,
       title,
       content,
       contentJson,
-      // The service uses the legacy 'status' field, not statusId
-      // We'll need to update the post with statusId after creation if a default status exists
       status: 'open', // Use legacy default
     },
     ctx
@@ -161,8 +112,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const post = createResult.value
 
-  // 9. Update post with custom statusId if a default status exists
-  // This is necessary because the PostService doesn't currently support statusId in CreatePostInput
+  // 8. Update post with custom statusId if a default status exists
   const defaultStatus = defaultStatusResult.value
   if (defaultStatus) {
     const updateResult = await getPostService().changeStatus(post.id, defaultStatus.id, ctx)

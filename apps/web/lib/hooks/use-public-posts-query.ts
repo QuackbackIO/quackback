@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type { PublicFeedbackFilters } from '@/app/(tenant)/(public)/use-public-filters'
+import type { PublicFeedbackFilters } from '@/app/s/[orgSlug]/(portal)/use-public-filters'
 import type { PublicPostListItem } from '@quackback/domain'
 
 // ============================================================================
