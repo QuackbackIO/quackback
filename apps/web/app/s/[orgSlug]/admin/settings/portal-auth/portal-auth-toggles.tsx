@@ -8,26 +8,31 @@ import { InfoIcon } from 'lucide-react'
 
 interface PortalAuthTogglesProps {
   organizationId: string
-  portalGoogleEnabled: boolean
-  portalGithubEnabled: boolean
+  oauth: {
+    google: boolean
+    github: boolean
+  }
   googleAvailable: boolean
   githubAvailable: boolean
 }
 
 export function PortalAuthToggles({
   organizationId,
-  portalGoogleEnabled: initialGoogleEnabled,
-  portalGithubEnabled: initialGithubEnabled,
+  oauth: initialOAuth,
   googleAvailable,
   githubAvailable,
 }: PortalAuthTogglesProps) {
-  const [googleEnabled, setGoogleEnabled] = useState(initialGoogleEnabled)
-  const [githubEnabled, setGithubEnabled] = useState(initialGithubEnabled)
+  const [oauth, setOAuth] = useState(initialOAuth)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  const handleToggle = (field: string, checked: boolean, setEnabled: (value: boolean) => void) => {
+  const handleToggle = (provider: 'google' | 'github', checked: boolean) => {
     setError(null)
+    const previousValue = oauth[provider]
+
+    // Optimistic update
+    setOAuth((prev) => ({ ...prev, [provider]: checked }))
+
     startTransition(async () => {
       try {
         const response = await fetch('/api/organization/portal-auth', {
@@ -35,7 +40,7 @@ export function PortalAuthToggles({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             organizationId,
-            [field]: checked,
+            oauth: { [provider]: checked },
           }),
         })
 
@@ -43,11 +48,10 @@ export function PortalAuthToggles({
           const data = await response.json()
           throw new Error(data.error || 'Failed to update setting')
         }
-
-        setEnabled(checked)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to update setting')
-        setEnabled(!checked)
+        // Revert on error
+        setOAuth((prev) => ({ ...prev, [provider]: previousValue }))
       }
     })
   }
@@ -70,10 +74,8 @@ export function PortalAuthToggles({
             </div>
             <Switch
               id="portal-google"
-              checked={googleEnabled}
-              onCheckedChange={(checked) =>
-                handleToggle('portalGoogleEnabled', checked, setGoogleEnabled)
-              }
+              checked={oauth.google}
+              onCheckedChange={(checked) => handleToggle('google', checked)}
               disabled={isPending}
             />
           </div>
@@ -91,10 +93,8 @@ export function PortalAuthToggles({
             </div>
             <Switch
               id="portal-github"
-              checked={githubEnabled}
-              onCheckedChange={(checked) =>
-                handleToggle('portalGithubEnabled', checked, setGithubEnabled)
-              }
+              checked={oauth.github}
+              onCheckedChange={(checked) => handleToggle('github', checked)}
               disabled={isPending}
             />
           </div>

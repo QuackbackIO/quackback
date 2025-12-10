@@ -1,4 +1,5 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
+import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { Lock } from 'lucide-react'
 import { PortalAuthToggles } from './portal-auth-toggles'
 
@@ -10,6 +11,10 @@ export default async function PortalAuthPage({ params }: { params: Promise<{ org
   const { orgSlug } = await params
   // Only owners and admins can access portal auth settings
   const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+
+  // Fetch portal config from service
+  const portalConfigResult = await organizationService.getPortalConfig(organization.id)
+  const portalConfig = portalConfigResult.success ? portalConfigResult.value : DEFAULT_PORTAL_CONFIG
 
   return (
     <div className="space-y-6">
@@ -35,8 +40,7 @@ export default async function PortalAuthPage({ params }: { params: Promise<{ org
         </p>
         <PortalAuthToggles
           organizationId={organization.id}
-          portalGoogleEnabled={organization.portalGoogleEnabled}
-          portalGithubEnabled={organization.portalGithubEnabled}
+          oauth={portalConfig.oauth}
           googleAvailable={googleAvailable}
           githubAvailable={githubAvailable}
         />

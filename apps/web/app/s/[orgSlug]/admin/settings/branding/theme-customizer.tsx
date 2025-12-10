@@ -157,7 +157,7 @@ export function ThemeCustomizer({ organizationId, initialThemeConfig }: ThemeCus
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationId,
-          themeConfig,
+          brandingConfig: themeConfig,
         }),
       })
 

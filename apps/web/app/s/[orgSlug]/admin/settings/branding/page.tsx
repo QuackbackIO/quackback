@@ -2,15 +2,16 @@ import { requireTenantBySlug } from '@/lib/tenant'
 import { Brush } from 'lucide-react'
 import { ThemeCustomizer } from './theme-customizer'
 import { LogoUploader } from './logo-uploader'
-import { theme } from '@quackback/domain'
+import { organizationService } from '@quackback/domain'
 import { getOrganizationLogoData } from '@/lib/organization'
 
 export default async function BrandingPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   const { organization } = await requireTenantBySlug(orgSlug)
 
-  // Parse theme config from organization
-  const themeConfig = theme.parseThemeConfig(organization.themeConfig) || {}
+  // Fetch branding config from service
+  const brandingConfigResult = await organizationService.getBrandingConfig(organization.id)
+  const brandingConfig = brandingConfigResult.success ? brandingConfigResult.value : {}
 
   // Get logo data for SSR
   const logoData = await getOrganizationLogoData(organization.id)
@@ -36,7 +37,7 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
       />
 
       {/* Theme Customizer */}
-      <ThemeCustomizer organizationId={organization.id} initialThemeConfig={themeConfig} />
+      <ThemeCustomizer organizationId={organization.id} initialThemeConfig={brandingConfig} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
 interface AdminSignupPageProps {
@@ -23,19 +23,22 @@ export default async function AdminSignupPage({ params, searchParams }: AdminSig
     redirect('/admin/login')
   }
 
-  // Fetch org auth config server-side
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, orgSlug),
-  })
+  // Fetch auth config using the service
+  const result = await organizationService.getPublicAuthConfig(orgSlug)
 
-  const authConfig = org
+  const authConfig = result.success
     ? {
         found: true,
-        googleEnabled: org.googleOAuthEnabled,
-        githubEnabled: org.githubOAuthEnabled,
-        microsoftEnabled: org.microsoftOAuthEnabled,
+        oauth: result.value.oauth,
+        openSignup: result.value.openSignup,
+        ssoProviders: result.value.ssoProviders,
       }
-    : null
+    : {
+        found: false,
+        oauth: DEFAULT_AUTH_CONFIG.oauth,
+        openSignup: DEFAULT_AUTH_CONFIG.openSignup,
+        ssoProviders: [],
+      }
 
   return (
     <div className="flex min-h-screen items-center justify-center">

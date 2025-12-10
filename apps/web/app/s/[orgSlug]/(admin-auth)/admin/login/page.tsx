@@ -1,46 +1,31 @@
-import { db, organization, ssoProvider, eq } from '@quackback/db'
+import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
 /**
  * Admin Login Page
  *
  * For team members (owner, admin, member) to sign in to the admin dashboard using magic OTP codes.
- * Uses the organization's team auth settings (googleEnabled, etc.)
+ * Uses the organization's team auth settings.
  */
 export default async function AdminLoginPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
 
-  // Fetch org auth config server-side
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, orgSlug),
-  })
+  // Fetch org auth config using the service
+  const result = await organizationService.getPublicAuthConfig(orgSlug)
 
-  // Get SSO providers for this org
-  const ssoProviders = org
-    ? await db.query.ssoProvider.findMany({
-        where: eq(ssoProvider.organizationId, org.id),
-        columns: {
-          providerId: true,
-          issuer: true,
-          domain: true,
-        },
-      })
-    : []
-
-  const authConfig = org
+  const authConfig = result.success
     ? {
         found: true,
-        googleEnabled: org.googleOAuthEnabled,
-        githubEnabled: org.githubOAuthEnabled,
-        microsoftEnabled: org.microsoftOAuthEnabled,
-        openSignupEnabled: org.openSignupEnabled,
-        ssoProviders: ssoProviders.map((p) => ({
-          providerId: p.providerId,
-          issuer: p.issuer,
-          domain: p.domain,
-        })),
+        oauth: result.value.oauth,
+        openSignup: result.value.openSignup,
+        ssoProviders: result.value.ssoProviders,
       }
-    : null
+    : {
+        found: false,
+        oauth: DEFAULT_AUTH_CONFIG.oauth,
+        openSignup: DEFAULT_AUTH_CONFIG.openSignup,
+        ssoProviders: [],
+      }
 
   return (
     <div className="flex min-h-screen items-center justify-center">

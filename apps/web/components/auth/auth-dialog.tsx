@@ -19,10 +19,12 @@ interface SsoProviderInfo {
 
 interface OrgAuthConfig {
   found: boolean
-  googleEnabled: boolean
-  githubEnabled: boolean
-  microsoftEnabled?: boolean
-  openSignupEnabled?: boolean
+  oauth: {
+    google: boolean
+    github: boolean
+    microsoft?: boolean
+  }
+  openSignup?: boolean
   ssoProviders?: SsoProviderInfo[]
 }
 

@@ -1,4 +1,5 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
+import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { Shield } from 'lucide-react'
 import { SsoProviderList } from './sso-provider-list'
 import { OAuthProviderToggles } from './oauth-provider-toggles'
@@ -12,6 +13,10 @@ export default async function SecurityPage({ params }: { params: Promise<{ orgSl
   const { orgSlug } = await params
   // Only owners and admins can access security settings
   const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+
+  // Fetch auth config from service
+  const authConfigResult = await organizationService.getAuthConfig(organization.id)
+  const authConfig = authConfigResult.success ? authConfigResult.value : DEFAULT_AUTH_CONFIG
 
   return (
     <div className="space-y-6">
@@ -36,9 +41,7 @@ export default async function SecurityPage({ params }: { params: Promise<{ orgSl
         </p>
         <OAuthProviderToggles
           organizationId={organization.id}
-          googleEnabled={organization.googleOAuthEnabled}
-          githubEnabled={organization.githubOAuthEnabled}
-          microsoftEnabled={organization.microsoftOAuthEnabled}
+          oauth={authConfig.oauth}
           googleAvailable={googleAvailable}
           githubAvailable={githubAvailable}
           microsoftAvailable={microsoftAvailable}

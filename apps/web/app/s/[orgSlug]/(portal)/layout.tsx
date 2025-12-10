@@ -7,6 +7,7 @@ import { getOrganizationLogoData } from '@/lib/organization'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { SessionProvider } from '@/components/providers/session-provider'
+import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { theme } from '@quackback/domain'
 
 // Force dynamic rendering since we read session cookies
@@ -38,14 +39,20 @@ export default async function PublicLayout({
 
   // Get avatar URL with base64 data for SSR (no flicker)
   // Get logo URL from blob storage for SSR
-  const [avatarData, logoData] = await Promise.all([
+  // Get portal config for branding and auth
+  const [avatarData, logoData, brandingResult, portalResult] = await Promise.all([
     session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
     getOrganizationLogoData(org.id),
+    organizationService.getBrandingConfig(org.id),
+    organizationService.getPublicPortalConfig(orgSlug),
   ])
 
   // Generate theme CSS from org config
-  const themeConfig = theme.parseThemeConfig(org.themeConfig)
-  const themeStyles = themeConfig ? theme.generateThemeCSS(themeConfig) : ''
+  const brandingConfig = brandingResult.success ? brandingResult.value : {}
+  const themeStyles =
+    brandingConfig.preset || brandingConfig.light || brandingConfig.dark
+      ? theme.generateThemeCSS(brandingConfig)
+      : ''
 
   // Build initial user data for SSR (used by both header props and provider)
   const initialUserData = session?.user
@@ -57,11 +64,10 @@ export default async function PublicLayout({
     : undefined
 
   // Build auth config for the auth dialog
+  const portalConfig = portalResult.success ? portalResult.value : DEFAULT_PORTAL_CONFIG
   const authConfig = {
     found: true,
-    googleEnabled: org.portalGoogleEnabled,
-    githubEnabled: org.portalGithubEnabled,
-    microsoftEnabled: false, // Not supported for portal users
+    oauth: portalConfig.oauth,
   }
 
   const content = (

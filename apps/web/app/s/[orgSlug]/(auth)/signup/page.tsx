@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
 interface SignupPageProps {
@@ -16,18 +16,18 @@ interface SignupPageProps {
 export default async function SignupPage({ params }: SignupPageProps) {
   const { orgSlug } = await params
 
-  // Fetch org auth config server-side
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, orgSlug),
-  })
+  // Fetch portal config using the service
+  const result = await organizationService.getPublicPortalConfig(orgSlug)
 
-  const authConfig = org
+  const authConfig = result.success
     ? {
         found: true,
-        googleEnabled: org.portalGoogleEnabled,
-        githubEnabled: org.portalGithubEnabled,
+        oauth: result.value.oauth,
       }
-    : null
+    : {
+        found: false,
+        oauth: DEFAULT_PORTAL_CONFIG.oauth,
+      }
 
   return (
     <div className="flex min-h-screen items-center justify-center">

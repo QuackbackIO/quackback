@@ -16,10 +16,12 @@ interface SsoProviderInfo {
 
 interface OrgAuthConfig {
   found: boolean
-  googleEnabled: boolean
-  githubEnabled: boolean
-  microsoftEnabled?: boolean
-  openSignupEnabled?: boolean
+  oauth: {
+    google: boolean
+    github: boolean
+    microsoft?: boolean
+  }
+  openSignup?: boolean
   ssoProviders?: SsoProviderInfo[]
 }
 
@@ -226,9 +228,9 @@ export function OTPAuthForm({
   }
 
   // Determine which OAuth methods to show
-  const showGoogle = authConfig?.googleEnabled ?? true
-  const showGithub = authConfig?.githubEnabled ?? true
-  const showMicrosoft = authConfig?.microsoftEnabled ?? false
+  const showGoogle = authConfig?.oauth?.google ?? true
+  const showGithub = authConfig?.oauth?.github ?? true
+  const showMicrosoft = authConfig?.oauth?.microsoft ?? false
   const showOAuth = showGoogle || showGithub || showMicrosoft
   const ssoProviders = authConfig?.ssoProviders ?? []
   const showSso = ssoProviders.length > 0
@@ -257,7 +259,7 @@ export function OTPAuthForm({
     mode === 'signup' &&
     context === 'team' &&
     authConfig &&
-    !authConfig.openSignupEnabled &&
+    !authConfig.openSignup &&
     !invitation
   ) {
     return (

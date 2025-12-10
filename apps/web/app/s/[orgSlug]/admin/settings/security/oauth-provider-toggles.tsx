@@ -8,9 +8,11 @@ import { InfoIcon } from 'lucide-react'
 
 interface OAuthProviderTogglesProps {
   organizationId: string
-  googleEnabled: boolean
-  githubEnabled: boolean
-  microsoftEnabled: boolean
+  oauth: {
+    google: boolean
+    github: boolean
+    microsoft: boolean
+  }
   googleAvailable: boolean
   githubAvailable: boolean
   microsoftAvailable: boolean
@@ -18,26 +20,22 @@ interface OAuthProviderTogglesProps {
 
 export function OAuthProviderToggles({
   organizationId,
-  googleEnabled: initialGoogleEnabled,
-  githubEnabled: initialGithubEnabled,
-  microsoftEnabled: initialMicrosoftEnabled,
+  oauth: initialOAuth,
   googleAvailable,
   githubAvailable,
   microsoftAvailable,
 }: OAuthProviderTogglesProps) {
-  const [googleEnabled, setGoogleEnabled] = useState(initialGoogleEnabled)
-  const [githubEnabled, setGithubEnabled] = useState(initialGithubEnabled)
-  const [microsoftEnabled, setMicrosoftEnabled] = useState(initialMicrosoftEnabled)
+  const [oauth, setOAuth] = useState(initialOAuth)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  const handleToggle = (
-    provider: 'google' | 'github' | 'microsoft',
-    checked: boolean,
-    setEnabled: (value: boolean) => void,
-    apiField: string
-  ) => {
+  const handleToggle = (provider: 'google' | 'github' | 'microsoft', checked: boolean) => {
     setError(null)
+    const previousValue = oauth[provider]
+
+    // Optimistic update
+    setOAuth((prev) => ({ ...prev, [provider]: checked }))
+
     startTransition(async () => {
       try {
         const response = await fetch('/api/organization/security', {
@@ -45,7 +43,7 @@ export function OAuthProviderToggles({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             organizationId,
-            [apiField]: checked,
+            oauth: { [provider]: checked },
           }),
         })
 
@@ -53,11 +51,10 @@ export function OAuthProviderToggles({
           const data = await response.json()
           throw new Error(data.error || 'Failed to update setting')
         }
-
-        setEnabled(checked)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to update setting')
-        setEnabled(!checked)
+        // Revert on error
+        setOAuth((prev) => ({ ...prev, [provider]: previousValue }))
       }
     })
   }
@@ -88,10 +85,8 @@ export function OAuthProviderToggles({
           </div>
           <Switch
             id="google-oauth"
-            checked={googleEnabled}
-            onCheckedChange={(checked) =>
-              handleToggle('google', checked, setGoogleEnabled, 'googleOAuthEnabled')
-            }
+            checked={oauth.google}
+            onCheckedChange={(checked) => handleToggle('google', checked)}
             disabled={isPending}
           />
         </div>
@@ -109,10 +104,8 @@ export function OAuthProviderToggles({
           </div>
           <Switch
             id="microsoft-oauth"
-            checked={microsoftEnabled}
-            onCheckedChange={(checked) =>
-              handleToggle('microsoft', checked, setMicrosoftEnabled, 'microsoftOAuthEnabled')
-            }
+            checked={oauth.microsoft}
+            onCheckedChange={(checked) => handleToggle('microsoft', checked)}
             disabled={isPending}
           />
         </div>
@@ -128,10 +121,8 @@ export function OAuthProviderToggles({
           </div>
           <Switch
             id="github-oauth"
-            checked={githubEnabled}
-            onCheckedChange={(checked) =>
-              handleToggle('github', checked, setGithubEnabled, 'githubOAuthEnabled')
-            }
+            checked={oauth.github}
+            onCheckedChange={(checked) => handleToggle('github', checked)}
             disabled={isPending}
           />
         </div>
