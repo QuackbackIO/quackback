@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, randomBytes } from 'crypto'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService, DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 
 /**
  * Generate HMAC signature for OAuth state
@@ -10,27 +10,22 @@ function signState(data: string, secret: string): string {
 }
 
 /**
- * Check if an OAuth provider is enabled for the given organization and context.
+ * Check if an OAuth provider is enabled for the given auth config and context.
  */
 function isProviderEnabled(
-  org: {
-    googleOAuthEnabled: boolean
-    githubOAuthEnabled: boolean
-    microsoftOAuthEnabled: boolean
-    portalGoogleEnabled: boolean
-    portalGithubEnabled: boolean
-  },
+  authConfig: { oauth: { google: boolean; github: boolean; microsoft?: boolean } },
+  portalConfig: { oauth: { google: boolean; github: boolean } },
   provider: string,
   context: 'team' | 'portal'
 ): boolean {
   if (context === 'team') {
     switch (provider) {
       case 'google':
-        return org.googleOAuthEnabled
+        return authConfig.oauth.google
       case 'github':
-        return org.githubOAuthEnabled
+        return authConfig.oauth.github
       case 'microsoft':
-        return org.microsoftOAuthEnabled
+        return authConfig.oauth.microsoft ?? false
       default:
         return false
     }
@@ -38,9 +33,9 @@ function isProviderEnabled(
     // Portal context
     switch (provider) {
       case 'google':
-        return org.portalGoogleEnabled
+        return portalConfig.oauth.google
       case 'github':
-        return org.portalGithubEnabled
+        return portalConfig.oauth.github
       case 'microsoft':
         return false // Microsoft not supported for portal users
       default:
@@ -95,25 +90,23 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid OAuth provider' }, { status: 400 })
   }
 
-  // Fetch organization and validate provider is enabled
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, subdomain),
-    columns: {
-      id: true,
-      googleOAuthEnabled: true,
-      githubOAuthEnabled: true,
-      microsoftOAuthEnabled: true,
-      portalGoogleEnabled: true,
-      portalGithubEnabled: true,
-    },
-  })
+  // Fetch auth and portal configs using the service
+  const [authResult, portalResult] = await Promise.all([
+    organizationService.getPublicAuthConfig(subdomain),
+    organizationService.getPublicPortalConfig(subdomain),
+  ])
 
-  if (!org) {
+  if (!authResult.success && !portalResult.success) {
     return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
   }
 
+  const authConfig = authResult.success ? authResult.value : { oauth: DEFAULT_AUTH_CONFIG.oauth }
+  const portalConfig = portalResult.success
+    ? portalResult.value
+    : { oauth: DEFAULT_PORTAL_CONFIG.oauth }
+
   // Check if this OAuth provider is enabled for the organization
-  if (!isProviderEnabled(org, provider, context)) {
+  if (!isProviderEnabled(authConfig, portalConfig, provider, context)) {
     return NextResponse.json(
       { error: 'This authentication method is not enabled for this organization' },
       { status: 403 }

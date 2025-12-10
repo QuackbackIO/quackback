@@ -12,6 +12,7 @@ import {
   and,
   gt,
 } from '@quackback/db'
+import { organizationService } from '@quackback/domain'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 
 /**
@@ -222,12 +223,16 @@ export async function POST(request: NextRequest) {
       }
 
       validInvitation = inv
-    } else if (context === 'team' && !org.openSignupEnabled) {
-      // Team signup without invitation requires openSignupEnabled
-      return NextResponse.json(
-        { error: 'Signup is not enabled for this organization. Contact your administrator.' },
-        { status: 403 }
-      )
+    } else if (context === 'team') {
+      // Team signup without invitation requires openSignup to be enabled
+      const authConfigResult = await organizationService.getAuthConfig(org.id)
+      const openSignup = authConfigResult.success ? authConfigResult.value.openSignup : false
+      if (!openSignup) {
+        return NextResponse.json(
+          { error: 'Signup is not enabled for this organization. Contact your administrator.' },
+          { status: 403 }
+        )
+      }
     }
 
     // Determine role

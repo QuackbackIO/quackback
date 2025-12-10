@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 
 /**
  * GET /api/auth/portal-auth-config?slug={orgSlug}
@@ -8,8 +8,6 @@ import { db, organization, eq } from '@quackback/db'
  * This is used by the portal login form to know which auth methods to display.
  *
  * No authentication required - this is public information needed before login.
- *
- * Note: Password authentication has been removed in favor of magic OTP codes.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,26 +18,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'slug is required' }, { status: 400 })
     }
 
-    // Find organization by slug
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.slug, slug),
-    })
+    const result = await organizationService.getPublicPortalConfig(slug)
 
-    if (!org) {
+    if (!result.success) {
       // Return default config if org not found
       return NextResponse.json({
         found: false,
-        googleEnabled: true,
-        githubEnabled: true,
+        oauth: DEFAULT_PORTAL_CONFIG.oauth,
+        features: DEFAULT_PORTAL_CONFIG.features,
       })
     }
 
     return NextResponse.json({
       found: true,
-      organizationId: org.id,
-      organizationName: org.name,
-      googleEnabled: org.portalGoogleEnabled,
-      githubEnabled: org.portalGithubEnabled,
+      oauth: result.value.oauth,
+      features: result.value.features,
     })
   } catch (error) {
     console.error('Error fetching portal auth config:', error)

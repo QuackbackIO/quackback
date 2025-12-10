@@ -1,26 +1,24 @@
 import { NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 /**
  * GET /api/organization/portal-auth?organizationId={id}
  *
- * Get portal authentication settings for an organization.
+ * Get portal configuration for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, validation.organization.id),
-    })
+    const result = await organizationService.getPortalConfig(validation.organization.id)
 
-    if (!org) {
-      throw new ApiError('Organization not found', 404)
+    if (!result.success) {
+      throw new ApiError(result.error.message, 404)
     }
 
     return NextResponse.json({
-      portalGoogleEnabled: org.portalGoogleEnabled,
-      portalGithubEnabled: org.portalGithubEnabled,
+      oauth: result.value.oauth,
+      features: result.value.features,
     })
   },
   { roles: ['owner', 'admin'] }
@@ -29,48 +27,66 @@ export const GET = withApiHandler(
 /**
  * PATCH /api/organization/portal-auth
  *
- * Update portal authentication settings for an organization.
+ * Update portal configuration for an organization.
  * Requires owner or admin role.
  *
  * Body: {
  *   organizationId: string,
- *   portalGoogleEnabled?: boolean,
- *   portalGithubEnabled?: boolean,
+ *   oauth?: { google?: boolean, github?: boolean },
+ *   features?: { publicView?: boolean, submissions?: boolean, comments?: boolean, voting?: boolean },
  * }
  */
 export const PATCH = withApiHandler(
   async (request, { validation }) => {
     const body = await request.json()
-    const { portalGoogleEnabled, portalGithubEnabled } = body
+    const { oauth, features } = body
 
-    // Build update object with only provided fields
-    const updates: Partial<{
-      portalGoogleEnabled: boolean
-      portalGithubEnabled: boolean
-    }> = {}
+    // Build update input with only provided fields
+    const input: {
+      oauth?: { google?: boolean; github?: boolean }
+      features?: {
+        publicView?: boolean
+        submissions?: boolean
+        comments?: boolean
+        voting?: boolean
+      }
+    } = {}
 
-    if (typeof portalGoogleEnabled === 'boolean') {
-      updates.portalGoogleEnabled = portalGoogleEnabled
+    if (oauth && typeof oauth === 'object') {
+      input.oauth = {}
+      if (typeof oauth.google === 'boolean') input.oauth.google = oauth.google
+      if (typeof oauth.github === 'boolean') input.oauth.github = oauth.github
     }
-    if (typeof portalGithubEnabled === 'boolean') {
-      updates.portalGithubEnabled = portalGithubEnabled
+    if (features && typeof features === 'object') {
+      input.features = {}
+      if (typeof features.publicView === 'boolean') input.features.publicView = features.publicView
+      if (typeof features.submissions === 'boolean')
+        input.features.submissions = features.submissions
+      if (typeof features.comments === 'boolean') input.features.comments = features.comments
+      if (typeof features.voting === 'boolean') input.features.voting = features.voting
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(input).length === 0) {
       throw new ApiError('At least one setting must be provided', 400)
     }
 
-    // Update the organization
-    const [updated] = await db
-      .update(organization)
-      .set(updates)
-      .where(eq(organization.id, validation.organization.id))
-      .returning()
+    const result = await organizationService.updatePortalConfig(input, {
+      userId: validation.user.id,
+      organizationId: validation.organization.id,
+      memberId: validation.member.id,
+      memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
+      userName: validation.user.name ?? '',
+      userEmail: validation.user.email,
+    })
+
+    if (!result.success) {
+      throw new ApiError(result.error.message, 400)
+    }
 
     return successResponse({
       success: true,
-      portalGoogleEnabled: updated.portalGoogleEnabled,
-      portalGithubEnabled: updated.portalGithubEnabled,
+      oauth: result.value.oauth,
+      features: result.value.features,
     })
   },
   { roles: ['owner', 'admin'] }

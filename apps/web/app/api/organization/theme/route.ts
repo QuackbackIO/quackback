@@ -1,29 +1,25 @@
 import { NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService, type BrandingConfig } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
-import { theme } from '@quackback/domain'
 
 // Re-export type for consumers
-export type { ThemeConfig } from '@quackback/domain/theme'
+export type { BrandingConfig } from '@quackback/domain'
 
 /**
  * GET /api/organization/theme?organizationId={id}
  *
- * Get theme configuration for an organization.
+ * Get branding/theme configuration for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, validation.organization.id),
-    })
+    const result = await organizationService.getBrandingConfig(validation.organization.id)
 
-    if (!org) {
-      throw new ApiError('Organization not found', 404)
+    if (!result.success) {
+      throw new ApiError(result.error.message, 404)
     }
 
-    const themeConfig = theme.parseThemeConfig(org.themeConfig) || {}
-    return NextResponse.json({ themeConfig })
+    return NextResponse.json({ brandingConfig: result.value })
   },
   { roles: ['owner', 'admin'] }
 )
@@ -31,34 +27,43 @@ export const GET = withApiHandler(
 /**
  * PATCH /api/organization/theme
  *
- * Update theme configuration for an organization.
+ * Update branding/theme configuration for an organization.
  * Requires owner or admin role.
  *
  * Body: {
  *   organizationId: string,
- *   themeConfig: ThemeConfig
+ *   brandingConfig: BrandingConfig
  * }
  */
 export const PATCH = withApiHandler(
   async (request, { validation }) => {
     const body = await request.json()
-    const { themeConfig } = body
+    const { brandingConfig } = body
 
-    // Validate themeConfig structure
-    if (themeConfig && typeof themeConfig !== 'object') {
-      throw new ApiError('Invalid themeConfig structure', 400)
+    // Validate brandingConfig structure
+    if (brandingConfig && typeof brandingConfig !== 'object') {
+      throw new ApiError('Invalid brandingConfig structure', 400)
     }
 
-    // Update the organization
-    const [updated] = await db
-      .update(organization)
-      .set({ themeConfig: themeConfig ? theme.serializeThemeConfig(themeConfig) : null })
-      .where(eq(organization.id, validation.organization.id))
-      .returning()
+    const result = await organizationService.updateBrandingConfig(
+      (brandingConfig || {}) as BrandingConfig,
+      {
+        userId: validation.user.id,
+        organizationId: validation.organization.id,
+        memberId: validation.member.id,
+        memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
+        userName: validation.user.name ?? '',
+        userEmail: validation.user.email,
+      }
+    )
+
+    if (!result.success) {
+      throw new ApiError(result.error.message, 400)
+    }
 
     return successResponse({
       success: true,
-      themeConfig: theme.parseThemeConfig(updated.themeConfig) || {},
+      brandingConfig: result.value,
     })
   },
   { roles: ['owner', 'admin'] }

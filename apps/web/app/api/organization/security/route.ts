@@ -1,27 +1,25 @@
 import { NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
+import { organizationService } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 /**
  * GET /api/organization/security?organizationId={id}
  *
- * Get security and authentication settings for an organization.
+ * Get authentication settings for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, validation.organization.id),
-    })
+    const result = await organizationService.getAuthConfig(validation.organization.id)
 
-    if (!org) {
-      throw new ApiError('Organization not found', 404)
+    if (!result.success) {
+      throw new ApiError(result.error.message, 404)
     }
 
     return NextResponse.json({
-      googleOAuthEnabled: org.googleOAuthEnabled,
-      githubOAuthEnabled: org.githubOAuthEnabled,
-      microsoftOAuthEnabled: org.microsoftOAuthEnabled,
+      oauth: result.value.oauth,
+      ssoRequired: result.value.ssoRequired,
+      openSignup: result.value.openSignup,
     })
   },
   { roles: ['owner', 'admin'] }
@@ -30,54 +28,63 @@ export const GET = withApiHandler(
 /**
  * PATCH /api/organization/security
  *
- * Update security and authentication settings for an organization.
+ * Update authentication settings for an organization.
  * Requires owner or admin role.
  *
  * Body: {
  *   organizationId: string,
- *   googleOAuthEnabled?: boolean,
- *   githubOAuthEnabled?: boolean,
- *   microsoftOAuthEnabled?: boolean,
+ *   oauth?: { google?: boolean, github?: boolean, microsoft?: boolean },
+ *   ssoRequired?: boolean,
+ *   openSignup?: boolean,
  * }
  */
 export const PATCH = withApiHandler(
   async (request, { validation }) => {
     const body = await request.json()
-    const { googleOAuthEnabled, githubOAuthEnabled, microsoftOAuthEnabled } = body
+    const { oauth, ssoRequired, openSignup } = body
 
-    // Build update object with only provided fields
-    const updates: Partial<{
-      googleOAuthEnabled: boolean
-      githubOAuthEnabled: boolean
-      microsoftOAuthEnabled: boolean
-    }> = {}
+    // Build update input with only provided fields
+    const input: {
+      oauth?: { google?: boolean; github?: boolean; microsoft?: boolean }
+      ssoRequired?: boolean
+      openSignup?: boolean
+    } = {}
 
-    if (typeof googleOAuthEnabled === 'boolean') {
-      updates.googleOAuthEnabled = googleOAuthEnabled
+    if (oauth && typeof oauth === 'object') {
+      input.oauth = {}
+      if (typeof oauth.google === 'boolean') input.oauth.google = oauth.google
+      if (typeof oauth.github === 'boolean') input.oauth.github = oauth.github
+      if (typeof oauth.microsoft === 'boolean') input.oauth.microsoft = oauth.microsoft
     }
-    if (typeof githubOAuthEnabled === 'boolean') {
-      updates.githubOAuthEnabled = githubOAuthEnabled
+    if (typeof ssoRequired === 'boolean') {
+      input.ssoRequired = ssoRequired
     }
-    if (typeof microsoftOAuthEnabled === 'boolean') {
-      updates.microsoftOAuthEnabled = microsoftOAuthEnabled
+    if (typeof openSignup === 'boolean') {
+      input.openSignup = openSignup
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(input).length === 0) {
       throw new ApiError('At least one setting must be provided', 400)
     }
 
-    // Update the organization
-    const [updated] = await db
-      .update(organization)
-      .set(updates)
-      .where(eq(organization.id, validation.organization.id))
-      .returning()
+    const result = await organizationService.updateAuthConfig(input, {
+      userId: validation.user.id,
+      organizationId: validation.organization.id,
+      memberId: validation.member.id,
+      memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
+      userName: validation.user.name ?? '',
+      userEmail: validation.user.email,
+    })
+
+    if (!result.success) {
+      throw new ApiError(result.error.message, 400)
+    }
 
     return successResponse({
       success: true,
-      googleOAuthEnabled: updated.googleOAuthEnabled,
-      githubOAuthEnabled: updated.githubOAuthEnabled,
-      microsoftOAuthEnabled: updated.microsoftOAuthEnabled,
+      oauth: result.value.oauth,
+      ssoRequired: result.value.ssoRequired,
+      openSignup: result.value.openSignup,
     })
   },
   { roles: ['owner', 'admin'] }
