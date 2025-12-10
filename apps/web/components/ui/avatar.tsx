@@ -71,13 +71,34 @@ function Avatar({
   const initials = fallback ?? getInitials(name)
   const altText = name || 'Avatar'
 
+  // If no src provided, render fallback directly (no Radix image loading state)
+  if (!src) {
+    return (
+      <AvatarPrimitive.Root
+        data-slot="avatar"
+        className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}
+        {...props}
+      >
+        <div
+          data-slot="avatar-fallback"
+          className={cn(
+            'bg-muted flex size-full items-center justify-center rounded-full',
+            fallbackClassName
+          )}
+        >
+          {initials}
+        </div>
+      </AvatarPrimitive.Root>
+    )
+  }
+
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
       className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}
       {...props}
     >
-      {src && <AvatarImage src={src} alt={altText} />}
+      <AvatarImage src={src} alt={altText} />
       <AvatarFallback className={fallbackClassName}>{initials}</AvatarFallback>
     </AvatarPrimitive.Root>
   )

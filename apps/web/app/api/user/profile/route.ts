@@ -109,6 +109,7 @@ export async function PATCH(request: NextRequest) {
     // Build update object
     const updates: {
       name?: string
+      image?: string
       imageBlob?: Buffer
       imageType?: string
     } = {}
@@ -120,6 +121,8 @@ export async function PATCH(request: NextRequest) {
     if (avatarBuffer && avatarType) {
       updates.imageBlob = avatarBuffer
       updates.imageType = avatarType
+      // Set image field to avatar endpoint URL so useSession returns correct avatar
+      updates.image = `/api/user/avatar/${session.user.id}`
     }
 
     if (Object.keys(updates).length === 0) {
@@ -167,6 +170,7 @@ export async function DELETE() {
     const [updated] = await db
       .update(user)
       .set({
+        image: null, // Clear the avatar URL
         imageBlob: null,
         imageType: null,
       })

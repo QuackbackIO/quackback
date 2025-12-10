@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
-import { useUserProfileStore } from '@/lib/stores/user-profile'
+import { useSession, authClient } from '@/lib/auth/client'
 
 interface ProfileFormProps {
   user: {
@@ -36,12 +36,9 @@ export function ProfileForm({
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
-  // Zustand store for syncing avatar across the app
-  const {
-    setAvatarUrl: setGlobalAvatarUrl,
-    setName: setGlobalName,
-    clearAvatar: clearGlobalAvatar,
-  } = useUserProfileStore()
+  // Session for syncing profile changes across the app
+  const session = useSession()
+  const refetchSession = session?.refetch
 
   const initials = name
     .split(' ')
@@ -114,8 +111,20 @@ export function ProfileForm({
       // Update to local preview URL (already loaded, no flicker)
       setAvatarUrl(localPreviewUrl)
       setHasCustomAvatar(true)
-      // Sync with global store so header updates instantly
-      setGlobalAvatarUrl(localPreviewUrl, true)
+
+      // Update better-auth session with the avatar URL
+      // This ensures useSession() returns the correct image field
+      // Add cache-busting query param to force browser to fetch new avatar
+      const avatarEndpointUrl = `/api/user/avatar/${user.id}?v=${Date.now()}`
+      await authClient.updateUser(
+        { image: avatarEndpointUrl },
+        {
+          onSuccess: () => {
+            // Refetch session to update all components using useSession
+            refetchSession?.()
+          },
+        }
+      )
       toast.success('Avatar updated')
     } catch (error) {
       // Revoke the object URL on error
@@ -149,8 +158,16 @@ export function ProfileForm({
 
       setHasCustomAvatar(false)
       setAvatarUrl(null) // Clear avatar, will show fallback initials
-      // Sync with global store so header updates instantly
-      clearGlobalAvatar()
+
+      // Update better-auth session to clear the image
+      await authClient.updateUser(
+        { image: '' },
+        {
+          onSuccess: () => {
+            refetchSession?.()
+          },
+        }
+      )
       toast.success('Avatar removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')
@@ -188,8 +205,15 @@ export function ProfileForm({
         throw new Error(data.error || 'Failed to update profile')
       }
 
-      // Sync with global store so header updates instantly
-      setGlobalName(name.trim())
+      // Update better-auth session with new name
+      await authClient.updateUser(
+        { name: name.trim() },
+        {
+          onSuccess: () => {
+            refetchSession?.()
+          },
+        }
+      )
       toast.success('Profile updated')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update profile')

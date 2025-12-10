@@ -27,18 +27,21 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // If user has a blob avatar, serve it
+    // If user has a blob avatar, serve it (this takes priority)
     if (userRecord.imageBlob && userRecord.imageType) {
       return new NextResponse(new Uint8Array(userRecord.imageBlob), {
         headers: {
           'Content-Type': userRecord.imageType,
-          'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
+          // Short cache with must-revalidate to allow quick updates
+          // Browser will revalidate after 60 seconds
+          'Cache-Control': 'public, max-age=60, must-revalidate',
         },
       })
     }
 
-    // If user has a URL-based image (from OAuth), redirect to it
-    if (userRecord.image) {
+    // If user has an external URL-based image (from OAuth), redirect to it
+    // Skip redirect if it's a local avatar endpoint URL (would cause infinite loop)
+    if (userRecord.image && !userRecord.image.startsWith('/api/user/avatar/')) {
       return NextResponse.redirect(userRecord.image)
     }
 
