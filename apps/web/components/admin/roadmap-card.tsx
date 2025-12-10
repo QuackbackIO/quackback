@@ -1,23 +1,16 @@
 'use client'
 
-import { ChevronUp } from 'lucide-react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
+import { ChevronUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import type { RoadmapPostEntry } from '@quackback/domain'
 
 interface AdminRoadmapCardProps {
-  id: string
-  title: string
-  voteCount: number
+  post: RoadmapPostEntry
   statusId: string
-  board: {
-    slug: string
-    name: string
-  }
 }
 
-export function AdminRoadmapCard({ id, title, voteCount, statusId, board }: AdminRoadmapCardProps) {
-  // Make the card draggable
+export function AdminRoadmapCard({ post, statusId }: AdminRoadmapCardProps) {
   const {
     attributes,
     listeners,
@@ -25,20 +18,20 @@ export function AdminRoadmapCard({ id, title, voteCount, statusId, board }: Admi
     transform,
     isDragging,
   } = useDraggable({
-    id,
+    id: post.id,
     data: {
       type: 'post',
-      postId: id,
+      postId: post.id,
       statusId,
+      post,
     },
   })
 
-  // Also make it a drop target so other cards can be dropped on it
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: `droppable-${id}`,
+    id: `droppable-${post.id}`,
     data: {
       type: 'post',
-      postId: id,
+      postId: post.id,
       statusId,
     },
   })
@@ -49,10 +42,11 @@ export function AdminRoadmapCard({ id, title, voteCount, statusId, board }: Admi
     setDroppableRef(node)
   }
 
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
-  }
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined
 
   return (
     <div
@@ -60,21 +54,22 @@ export function AdminRoadmapCard({ id, title, voteCount, statusId, board }: Admi
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex bg-card rounded-lg border shadow-sm hover:bg-muted/30 hover:border-border transition-colors cursor-grab active:cursor-grabbing touch-none ${
-        isOver ? 'border-primary ring-1 ring-primary' : 'border-border/50'
+      className={`flex bg-card rounded-lg border cursor-grab active:cursor-grabbing transition-all ${
+        isDragging
+          ? 'opacity-50 border-primary shadow-lg scale-[1.02]'
+          : isOver
+            ? 'border-primary bg-primary/5'
+            : 'border-border hover:border-border/80 hover:shadow-sm'
       }`}
     >
-      {/* Vote section */}
       <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">
         <ChevronUp className="h-4 w-4" />
-        <span className="text-sm font-bold text-foreground">{voteCount}</span>
+        <span className="text-sm font-bold text-foreground">{post.voteCount}</span>
       </div>
-
-      {/* Content */}
       <div className="flex-1 min-w-0 p-3">
-        <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>
+        <p className="text-sm font-medium text-foreground line-clamp-2">{post.title}</p>
         <Badge variant="secondary" className="mt-2 text-[11px]">
-          {board.name}
+          {post.board.name}
         </Badge>
       </div>
     </div>

@@ -7,50 +7,49 @@ import { AdminRoadmapCard } from './roadmap-card'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { useRoadmapPosts, flattenRoadmapPosts } from '@/lib/hooks/use-roadmap-posts-query'
-import type { RoadmapPostListResult } from '@quackback/domain'
+import {
+  useRoadmapPostsByRoadmap,
+  flattenRoadmapPostEntries,
+} from '@/lib/hooks/use-roadmap-posts-query'
 
 interface AdminRoadmapColumnProps {
   organizationId: string
+  roadmapId: string
   statusId: string
-  statusSlug: string
   title: string
   color: string
-  initialData?: RoadmapPostListResult
   isOver?: boolean
 }
 
 export function AdminRoadmapColumn({
   organizationId,
+  roadmapId,
   statusId,
-  statusSlug,
   title,
   color,
-  initialData,
   isOver: isOverFromParent,
 }: AdminRoadmapColumnProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // Make the column itself droppable
+  // Make the column droppable
   const { setNodeRef, isOver: isOverColumn } = useDroppable({
     id: statusId,
     data: {
       type: 'column',
       statusId,
-      statusSlug,
     },
   })
 
-  const { data, isFetchingNextPage, hasNextPage, fetchNextPage } = useRoadmapPosts({
-    organizationId,
-    statusSlug,
-    initialData,
-  })
+  const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } =
+    useRoadmapPostsByRoadmap({
+      organizationId,
+      roadmapId,
+      statusId,
+    })
 
-  const posts = flattenRoadmapPosts(data)
-  const total = data?.pages[0]?.total ?? initialData?.total ?? 0
+  const posts = flattenRoadmapPostEntries(data)
+  const total = data?.pages[0]?.total ?? 0
 
-  // Use either the parent's isOver state or the local one
   const isOver = isOverFromParent ?? isOverColumn
 
   // Intersection observer for infinite scroll
@@ -91,24 +90,20 @@ export function AdminRoadmapColumn({
       </CardHeader>
       <CardContent className="flex-1 min-h-0 p-0">
         <ScrollArea className="h-full px-6 pb-6">
-          {posts.length === 0 ? (
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : posts.length === 0 ? (
             <div className="h-full flex items-center justify-center py-8">
               <p className="text-sm text-muted-foreground">No items yet</p>
             </div>
           ) : (
             <div className="space-y-2">
               {posts.map((post) => (
-                <AdminRoadmapCard
-                  key={post.id}
-                  id={post.id}
-                  title={post.title}
-                  voteCount={post.voteCount}
-                  statusId={statusId}
-                  board={post.board}
-                />
+                <AdminRoadmapCard key={post.id} post={post} statusId={statusId} />
               ))}
 
-              {/* Sentinel element for intersection observer */}
               {hasNextPage && (
                 <div ref={sentinelRef} className="py-2 flex justify-center">
                   {isFetchingNextPage && (
