@@ -6,9 +6,15 @@ import { auth } from '@/lib/auth/index'
 /**
  * Multi-Tenant Routing Proxy (Next.js 16)
  *
- * Simple domain routing:
+ * Domain routing with path-based rewrites (Vercel Platforms pattern):
  * - Main domain (APP_DOMAIN): Landing page, workspace creation
- * - Tenant domains (anything else): Looked up in workspace_domain table
+ * - Tenant domains: Looked up in workspace_domain table, then REWRITTEN to /s/[orgSlug]/...
+ *
+ * The rewrite approach provides:
+ * - Single tenant resolution (proxy only, not duplicated in pages)
+ * - Tenant available via params.orgSlug in server components
+ * - Better ISR/caching compatibility
+ * - External URLs unchanged (still subdomain-based)
  *
  * Note: Per Next.js 16 best practices, the proxy should only do optimistic checks.
  * Full session validation should happen in Server Components/Route Handlers.
@@ -38,7 +44,7 @@ const tenantAuthRoutes = ['/login', '/signup', '/sso', '/admin/login', '/admin/s
 /**
  * Public routes on tenant domains (no auth required)
  */
-const tenantPublicRoutes = ['/', '/roadmap']
+const tenantPublicRoutes = ['/', '/roadmap', '/accept-invitation']
 
 /**
  * Check if pathname matches public post detail route pattern: /b/:boardSlug/posts/:postId
@@ -100,12 +106,13 @@ export async function proxy(request: NextRequest) {
   }
 
   // === TENANT DOMAIN ===
-  // Validate workspace exists before processing tenant routes
+  // Validate workspace exists and get organization slug for rewriting
   const domainRecord = await db.query.workspaceDomain.findFirst({
     where: eq(workspaceDomain.domain, host),
+    with: { organization: true },
   })
 
-  if (!domainRecord) {
+  if (!domainRecord?.organization) {
     // Workspace not found - rewrite to workspace-not-found page
     // This preserves the URL while showing the 404 content
     const url = request.nextUrl.clone()
@@ -113,9 +120,25 @@ export async function proxy(request: NextRequest) {
     return NextResponse.rewrite(url)
   }
 
-  // Auth routes (login, signup, sso)
+  const orgSlug = domainRecord.organization.slug
+
+  // Helper to create rewrite response to /s/[orgSlug]/...
+  const rewriteToSlug = (path: string = pathname) => {
+    const url = request.nextUrl.clone()
+    url.pathname = `/s/${orgSlug}${path}`
+    return NextResponse.rewrite(url)
+  }
+
+  // Auth routes (login, signup, sso) - special session handling before rewrite
   if (tenantAuthRoutes.some((route) => pathname.startsWith(route))) {
     const hasError = request.nextUrl.searchParams.has('error')
+    const hasInvitation = request.nextUrl.searchParams.has('invitation')
+
+    // If user has an invitation, always allow access to signup page
+    // (they may need to create a new account for this org even if logged in elsewhere)
+    if (hasInvitation) {
+      return rewriteToSlug()
+    }
 
     // If cookie exists and no error, validate session before redirecting
     if (hasSessionCookie && !hasError) {
@@ -125,22 +148,22 @@ export async function proxy(request: NextRequest) {
         // Valid session - redirect away from login
         return NextResponse.redirect(new URL(`${protocol}://${host}/`))
       } else {
-        // Stale cookie - clear both cookies and let user access login page
-        const response = NextResponse.next()
+        // Stale cookie - clear both cookies and rewrite to login page
+        const response = rewriteToSlug()
         response.cookies.delete('better-auth.session_token')
         response.cookies.delete('better-auth.session_data')
         return response
       }
     }
-    return NextResponse.next()
+    return rewriteToSlug()
   }
 
-  // Public routes (/, /roadmap, /:boardSlug/posts/:postId)
+  // Public routes (/, /roadmap, /:boardSlug/posts/:postId) - no auth, just rewrite
   if (
     tenantPublicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
     isPublicPostRoute(pathname)
   ) {
-    return NextResponse.next()
+    return rewriteToSlug()
   }
 
   // Protected routes require authentication
@@ -169,8 +192,8 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  // Authenticated with valid session - allow access
-  return NextResponse.next()
+  // Authenticated with valid session - rewrite to slug-based route
+  return rewriteToSlug()
 }
 
 export const config = {

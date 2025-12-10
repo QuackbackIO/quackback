@@ -1242,7 +1242,7 @@ async function seed() {
   console.log(`   Created ${DEFAULT_STATUSES.length} statuses per organization`)
 
   // =========================================================================
-  // Create Users (with organizationId - tenant isolation)
+  // Create Users (global identities - no organizationId)
   // =========================================================================
   console.log('👤 Creating users...')
 
@@ -1250,20 +1250,20 @@ async function seed() {
   const demoMemberId = uuid()
   const userRecords: Array<{
     id: string
-    memberId: string
+    memberId: string // All users have member records in unified model
     name: string
     email: string
     orgId: string
-    role: string
+    isTeamMember: boolean
   }> = []
 
-  // Create demo user in demo org (fixed credentials)
+  // Create demo user in demo org (org-scoped identity)
   await db.insert(user).values({
     id: demoUserId,
+    organizationId: demoOrgId,
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     emailVerified: true,
-    organizationId: demoOrgId,
     createdAt: new Date(),
     updatedAt: new Date(),
   })
@@ -1278,7 +1278,7 @@ async function seed() {
     updatedAt: new Date(),
   })
 
-  // Also create member record for demo user
+  // Create member record for demo user with owner role
   await db.insert(member).values({
     id: demoMemberId,
     organizationId: demoOrgId,
@@ -1293,13 +1293,14 @@ async function seed() {
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     orgId: demoOrgId,
-    role: 'owner',
+    isTeamMember: true,
   })
 
   // Create users for the demo organization
+  // All users are org-scoped with member records
+  // Unified roles: owner/admin/member (team) or 'user' (portal)
   for (let i = 0; i < CONFIG.users; i++) {
     const userId = uuid()
-    const memberId = uuid()
     let firstName: string
     let lastName: string
 
@@ -1315,25 +1316,59 @@ async function seed() {
     const name = `${firstName} ${lastName}`
     const email = faker.internet.email({ firstName, lastName }).toLowerCase()
 
+    // Org-scoped user identity
     await db.insert(user).values({
       id: userId,
+      organizationId: demoOrgId,
       name,
       email,
       emailVerified: faker.datatype.boolean({ probability: 0.8 }),
       image: faker.datatype.boolean({ probability: 0.6 }) ? faker.image.avatar() : null,
-      organizationId: demoOrgId,
       createdAt: randomDate(180),
       updatedAt: new Date(),
     })
 
-    // Also create member record
-    await db.insert(member).values({
-      id: memberId,
-      organizationId: demoOrgId,
-      userId: userId,
-      role: 'user',
-      createdAt: randomDate(90),
-    })
+    // 10% chance of being a team member (admin or member role)
+    // 90% are portal users (role='user')
+    const isTeamMember = faker.datatype.boolean({ probability: 0.1 })
+    const memberId = uuid()
+
+    if (isTeamMember) {
+      // Team member - create member record with admin/member role
+      const role = faker.datatype.boolean({ probability: 0.3 }) ? 'admin' : 'member'
+      await db.insert(member).values({
+        id: memberId,
+        organizationId: demoOrgId,
+        userId: userId,
+        role,
+        createdAt: randomDate(90),
+      })
+      userRecords.push({
+        id: userId,
+        memberId,
+        name,
+        email,
+        orgId: demoOrgId,
+        isTeamMember: true,
+      })
+    } else {
+      // Portal user - create member record with role='user'
+      await db.insert(member).values({
+        id: memberId,
+        organizationId: demoOrgId,
+        userId: userId,
+        role: 'user',
+        createdAt: randomDate(90),
+      })
+      userRecords.push({
+        id: userId,
+        memberId,
+        name,
+        email,
+        orgId: demoOrgId,
+        isTeamMember: false,
+      })
+    }
 
     // Some users have password accounts
     if (faker.datatype.boolean({ probability: 0.7 })) {
@@ -1347,8 +1382,6 @@ async function seed() {
         updatedAt: new Date(),
       })
     }
-
-    userRecords.push({ id: userId, memberId, name, email, orgId: demoOrgId, role: 'user' })
   }
 
   console.log(`   Created ${userRecords.length} users`)
@@ -1449,7 +1482,14 @@ async function seed() {
     boardId: string
     orgId: string
     orgTags: Array<{ id: string; name: string; color: string }>
-    orgMembers: Array<{ id: string; name: string; email: string; orgId: string }>
+    orgMembers: Array<{
+      id: string
+      memberId: string
+      name: string
+      email: string
+      orgId: string
+      isTeamMember: boolean
+    }>
     roadmapId?: string
   }> = []
 
@@ -1512,7 +1552,7 @@ async function seed() {
       const { title: postTitle, content: postContent } = getCategorizedPostContent(category)
 
       // For official response, pick a team member (owner/admin/member role)
-      const teamMembers = boardCtx.orgMembers.filter((m) => m.role !== 'user')
+      const teamMembers = boardCtx.orgMembers.filter((m) => m.isTeamMember)
       const responderMember =
         hasOfficialResponse && teamMembers.length > 0 ? pick(teamMembers) : null
 
@@ -1618,7 +1658,7 @@ async function seed() {
     for (let i = 0; i < post.commentCount; i++) {
       const author = pick(userRecords)
       const isAnonymous = faker.datatype.boolean({ probability: 0.2 })
-      const isTeamMember = author.role !== 'user' || faker.datatype.boolean({ probability: 0.15 })
+      const isTeamMember = author.isTeamMember || faker.datatype.boolean({ probability: 0.15 })
 
       const rawContent = isTeamMember ? pick(teamCommentContent) : pick(commentContent)
       const filledContent = fillTemplate(rawContent)
@@ -1691,8 +1731,14 @@ async function seed() {
       let userIdentifier: string
 
       if (v < shuffledUsers.length && faker.datatype.boolean({ probability: 0.7 })) {
-        // Use member:${memberId} format for authenticated user votes
-        userIdentifier = `member:${shuffledUsers[v].memberId}`
+        const voter = shuffledUsers[v]
+        if (voter.isTeamMember && voter.memberId) {
+          // Team members use member:${memberId} format
+          userIdentifier = `member:${voter.memberId}`
+        } else {
+          // Portal users use user:${userId} format
+          userIdentifier = `user:${voter.id}`
+        }
       } else {
         // Anonymous votes use anon: prefix
         userIdentifier = `anon:${uuid()}`

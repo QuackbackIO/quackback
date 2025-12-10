@@ -19,6 +19,17 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
       }
 
       try {
+        // Check if user is a portal user (portal users can't accept team invitations)
+        const profileRes = await fetch('/api/user/profile')
+        if (profileRes.ok) {
+          const profile = await profileRes.json()
+          if (profile.userType === 'portal') {
+            throw new Error(
+              'Portal users cannot accept team invitations. Please contact your administrator to be invited as a team member.'
+            )
+          }
+        }
+
         const { error: acceptError } = await acceptInvitation({
           invitationId: id,
         })
