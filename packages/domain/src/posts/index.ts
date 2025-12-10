@@ -12,6 +12,7 @@ export type {
   ChangeStatusInput,
   PostWithDetails,
   RoadmapPost,
+  RoadmapPostListResult,
   PublicPostDetail,
   PublicComment,
   OfficialResponse,

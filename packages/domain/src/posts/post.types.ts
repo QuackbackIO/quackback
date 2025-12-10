@@ -164,6 +164,15 @@ export interface RoadmapPost {
 }
 
 /**
+ * Paginated result for roadmap posts
+ */
+export interface RoadmapPostListResult {
+  items: RoadmapPost[]
+  total: number
+  hasMore: boolean
+}
+
+/**
  * Official response on a post
  */
 export interface OfficialResponse {

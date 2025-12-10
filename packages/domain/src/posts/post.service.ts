@@ -44,6 +44,7 @@ import type {
   InboxPostListResult,
   PostForExport,
   RoadmapPost,
+  RoadmapPostListResult,
   PublicPostDetail,
   PublicComment,
 } from './post.types'
@@ -1018,6 +1019,82 @@ export class PostService {
         },
       }))
     )
+  }
+
+  /**
+   * Get paginated posts for roadmap view filtered by a single status
+   * No authentication required
+   *
+   * @param params - Query parameters
+   * @returns Result containing paginated roadmap posts
+   */
+  async getRoadmapPostsPaginated(params: {
+    organizationId: string
+    statusSlug: string
+    page?: number
+    limit?: number
+  }): Promise<Result<RoadmapPostListResult, PostError>> {
+    const { organizationId, statusSlug, page = 1, limit = 10 } = params
+    const offset = (page - 1) * limit
+
+    const { db } = await import('@quackback/db')
+
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(posts)
+      .innerJoin(boards, eq(posts.boardId, boards.id))
+      .where(
+        and(
+          eq(boards.organizationId, organizationId),
+          eq(boards.isPublic, true),
+          eq(posts.status, statusSlug as any)
+        )
+      )
+
+    const total = countResult[0]?.count ?? 0
+
+    // Get paginated items
+    const result = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        status: posts.status,
+        voteCount: posts.voteCount,
+        boardId: boards.id,
+        boardName: boards.name,
+        boardSlug: boards.slug,
+      })
+      .from(posts)
+      .innerJoin(boards, eq(posts.boardId, boards.id))
+      .where(
+        and(
+          eq(boards.organizationId, organizationId),
+          eq(boards.isPublic, true),
+          eq(posts.status, statusSlug as any)
+        )
+      )
+      .orderBy(desc(posts.voteCount))
+      .limit(limit)
+      .offset(offset)
+
+    const items = result.map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      voteCount: row.voteCount,
+      board: {
+        id: row.boardId,
+        name: row.boardName,
+        slug: row.boardSlug,
+      },
+    }))
+
+    return ok({
+      items,
+      total,
+      hasMore: offset + items.length < total,
+    })
   }
 
   /**
