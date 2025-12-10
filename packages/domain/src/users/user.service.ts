@@ -49,7 +49,8 @@ export class UserService {
    * List portal users for an organization with activity counts
    *
    * Queries member table for role='user'.
-   * Activity is tracked via memberId in posts/comments and userIdentifier in votes.
+   * Activity counts are computed via efficient LEFT JOINs with pre-aggregated subqueries,
+   * using the indexed member_id columns on posts, comments, and votes tables.
    */
   async listPortalUsers(
     organizationId: string,
@@ -58,75 +59,94 @@ export class UserService {
     try {
       const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20 } = params
 
-      // Build conditions array - filter for role='user' (portal users only)
-      const conditions = [eq(member.organizationId, organizationId), eq(member.role, 'user')]
-
-      // Search filter (name or email)
-      if (search) {
-        conditions.push(or(ilike(user.name, `%${search}%`), ilike(user.email, `%${search}%`))!)
-      }
-
-      // Verified filter
-      if (verified !== undefined) {
-        conditions.push(eq(user.emailVerified, verified))
-      }
-
-      // Date range filters (on member.createdAt = join date)
-      if (dateFrom) {
-        conditions.push(sql`${member.createdAt} >= ${dateFrom}`)
-      }
-      if (dateTo) {
-        conditions.push(sql`${member.createdAt} <= ${dateTo}`)
-      }
-
-      const whereClause = and(...conditions)
-
-      // Activity count subqueries
-      // Portal users' posts are linked via memberId
-      const postCountSql = sql<number>`(
-        SELECT COALESCE(count(*)::int, 0) FROM posts
-        WHERE member_id = ${member.id}
-      )`.as('post_count')
-
-      const commentCountSql = sql<number>`(
-        SELECT COALESCE(count(*)::int, 0) FROM comments
-        WHERE member_id = ${member.id}
-      )`.as('comment_count')
-
-      // Portal users' votes use 'member:memberId' format
-      const voteCountSql = sql<number>`(
-        SELECT COALESCE(count(*)::int, 0) FROM votes
-        WHERE user_identifier = 'member:' || ${member.id}
-      )`.as('vote_count')
-
-      // Build sort order
-      let orderBy
-      switch (sort) {
-        case 'oldest':
-          orderBy = asc(member.createdAt)
-          break
-        case 'most_active':
-          // Sort by total activity (posts + comments + votes)
-          orderBy = desc(
-            sql`(
-              SELECT COALESCE(count(*)::int, 0) FROM posts WHERE member_id = ${member.id}
-            ) + (
-              SELECT COALESCE(count(*)::int, 0) FROM comments WHERE member_id = ${member.id}
-            ) + (
-              SELECT COALESCE(count(*)::int, 0) FROM votes WHERE user_identifier = 'member:' || ${member.id}
-            )`
-          )
-          break
-        case 'name':
-          orderBy = asc(user.name)
-          break
-        case 'newest':
-        default:
-          orderBy = desc(member.createdAt)
-      }
-
-      // Use withTenantContext because subqueries access RLS-protected tables (posts, comments, votes)
+      // Use withTenantContext for RLS-protected tables (posts, comments, votes)
       const { rawUsers, total } = await withTenantContext(organizationId, async (tx: Database) => {
+        // Pre-aggregate activity counts in subqueries (executed once, not per-row)
+        // These use the indexed member_id columns for efficient lookups
+        // Note: We join with boards to satisfy RLS policy (posts are filtered by board's org)
+        // Each count column has a unique name to avoid ambiguity in the final SELECT
+        const postCounts = tx
+          .select({
+            memberId: posts.memberId,
+            postCount: sql<number>`count(*)::int`.as('post_count'),
+          })
+          .from(posts)
+          .innerJoin(boards, eq(posts.boardId, boards.id))
+          .where(eq(boards.organizationId, organizationId))
+          .groupBy(posts.memberId)
+          .as('post_counts')
+
+        // Comments are linked to posts, which are linked to boards
+        const commentCounts = tx
+          .select({
+            memberId: comments.memberId,
+            commentCount: sql<number>`count(*)::int`.as('comment_count'),
+          })
+          .from(comments)
+          .innerJoin(posts, eq(comments.postId, posts.id))
+          .innerJoin(boards, eq(posts.boardId, boards.id))
+          .where(eq(boards.organizationId, organizationId))
+          .groupBy(comments.memberId)
+          .as('comment_counts')
+
+        // Votes are linked to posts, which are linked to boards
+        // Use votes.member_id (indexed) instead of string concatenation on user_identifier
+        const voteCounts = tx
+          .select({
+            memberId: votes.memberId,
+            voteCount: sql<number>`count(*)::int`.as('vote_count'),
+          })
+          .from(votes)
+          .innerJoin(posts, eq(votes.postId, posts.id))
+          .innerJoin(boards, eq(posts.boardId, boards.id))
+          .where(eq(boards.organizationId, organizationId))
+          .groupBy(votes.memberId)
+          .as('vote_counts')
+
+        // Build conditions array - filter for role='user' (portal users only)
+        const conditions = [eq(member.organizationId, organizationId), eq(member.role, 'user')]
+
+        // Search filter (name or email)
+        if (search) {
+          conditions.push(or(ilike(user.name, `%${search}%`), ilike(user.email, `%${search}%`))!)
+        }
+
+        // Verified filter
+        if (verified !== undefined) {
+          conditions.push(eq(user.emailVerified, verified))
+        }
+
+        // Date range filters (on member.createdAt = join date)
+        if (dateFrom) {
+          conditions.push(sql`${member.createdAt} >= ${dateFrom}`)
+        }
+        if (dateTo) {
+          conditions.push(sql`${member.createdAt} <= ${dateTo}`)
+        }
+
+        const whereClause = and(...conditions)
+
+        // Build sort order - now references the joined count columns
+        let orderBy
+        switch (sort) {
+          case 'oldest':
+            orderBy = asc(member.createdAt)
+            break
+          case 'most_active':
+            // Sort by total activity using the pre-joined counts
+            orderBy = desc(
+              sql`COALESCE(${postCounts.postCount}, 0) + COALESCE(${commentCounts.commentCount}, 0) + COALESCE(${voteCounts.voteCount}, 0)`
+            )
+            break
+          case 'name':
+            orderBy = asc(user.name)
+            break
+          case 'newest':
+          default:
+            orderBy = desc(member.createdAt)
+        }
+
+        // Main query with LEFT JOINs to pre-aggregated counts
         const [usersResult, countResult] = await Promise.all([
           tx
             .select({
@@ -137,12 +157,15 @@ export class UserService {
               image: user.image,
               emailVerified: user.emailVerified,
               joinedAt: member.createdAt,
-              postCount: postCountSql,
-              commentCount: commentCountSql,
-              voteCount: voteCountSql,
+              postCount: sql<number>`COALESCE(${postCounts.postCount}, 0)`,
+              commentCount: sql<number>`COALESCE(${commentCounts.commentCount}, 0)`,
+              voteCount: sql<number>`COALESCE(${voteCounts.voteCount}, 0)`,
             })
             .from(member)
             .innerJoin(user, eq(member.userId, user.id))
+            .leftJoin(postCounts, eq(postCounts.memberId, member.id))
+            .leftJoin(commentCounts, eq(commentCounts.memberId, member.id))
+            .leftJoin(voteCounts, eq(voteCounts.memberId, member.id))
             .where(whereClause)
             .orderBy(orderBy)
             .limit(limit)
@@ -222,58 +245,60 @@ export class UserService {
       }
 
       const memberData = memberResult[0]
-      const userIdentifier = `member:${memberData.memberId}`
 
       // Use withTenantContext for RLS-protected queries (posts, comments, votes)
       const engagementData = await withTenantContext(organizationId, async (tx: Database) => {
-        // Get posts authored by this user (via memberId)
-        const authoredPosts = await tx
-          .select({
-            id: posts.id,
-            title: posts.title,
-            content: posts.content,
-            status: posts.status,
-            voteCount: posts.voteCount,
-            createdAt: posts.createdAt,
-            authorName: posts.authorName,
-            boardSlug: boards.slug,
-            boardName: boards.name,
-            statusColor: postStatuses.color,
-          })
-          .from(posts)
-          .innerJoin(boards, eq(posts.boardId, boards.id))
-          .leftJoin(
-            postStatuses,
-            and(
-              eq(postStatuses.slug, posts.status),
-              eq(postStatuses.organizationId, organizationId)
+        // Run independent queries in parallel for better performance
+        const [authoredPosts, commentedPostIds, votedPostIds] = await Promise.all([
+          // Get posts authored by this user (via memberId)
+          tx
+            .select({
+              id: posts.id,
+              title: posts.title,
+              content: posts.content,
+              status: posts.status,
+              voteCount: posts.voteCount,
+              createdAt: posts.createdAt,
+              authorName: posts.authorName,
+              boardSlug: boards.slug,
+              boardName: boards.name,
+              statusColor: postStatuses.color,
+            })
+            .from(posts)
+            .innerJoin(boards, eq(posts.boardId, boards.id))
+            .leftJoin(
+              postStatuses,
+              and(
+                eq(postStatuses.slug, posts.status),
+                eq(postStatuses.organizationId, organizationId)
+              )
             )
-          )
-          .where(eq(posts.memberId, memberData.memberId))
-          .orderBy(desc(posts.createdAt))
-          .limit(100)
+            .where(eq(posts.memberId, memberData.memberId))
+            .orderBy(desc(posts.createdAt))
+            .limit(100),
 
-        // Get post IDs the user has commented on (via memberId)
-        const commentedPostIds = await tx
-          .select({
-            postId: comments.postId,
-            latestCommentAt: sql<Date>`max(${comments.createdAt})`.as('latest_comment_at'),
-          })
-          .from(comments)
-          .where(eq(comments.memberId, memberData.memberId))
-          .groupBy(comments.postId)
-          .limit(100)
+          // Get post IDs the user has commented on (via memberId)
+          tx
+            .select({
+              postId: comments.postId,
+              latestCommentAt: sql<Date>`max(${comments.createdAt})`.as('latest_comment_at'),
+            })
+            .from(comments)
+            .where(eq(comments.memberId, memberData.memberId))
+            .groupBy(comments.postId)
+            .limit(100),
 
-        // Get post IDs the user has voted on (via userIdentifier = 'member:memberId')
-        const votedPostIds = await tx
-          .select({
-            postId: votes.postId,
-            votedAt: votes.createdAt,
-          })
-          .from(votes)
-          .where(eq(votes.userIdentifier, userIdentifier))
-          .orderBy(desc(votes.createdAt))
-          .limit(100)
+          // Get post IDs the user has voted on (via indexed memberId column)
+          tx
+            .select({
+              postId: votes.postId,
+              votedAt: votes.createdAt,
+            })
+            .from(votes)
+            .where(eq(votes.memberId, memberData.memberId))
+            .orderBy(desc(votes.createdAt))
+            .limit(100),
+        ])
 
         // Collect all unique post IDs that aren't authored by user (for fetching additional posts)
         const authoredIds = new Set(authoredPosts.map((p) => p.id))
@@ -284,10 +309,11 @@ export class UserService {
           ]),
         ]
 
-        // Fetch posts the user engaged with but didn't author
-        const otherPosts =
+        // Run the dependent queries in parallel where possible
+        const [otherPosts, commentCounts] = await Promise.all([
+          // Fetch posts the user engaged with but didn't author
           otherPostIds.length > 0
-            ? await tx
+            ? tx
                 .select({
                   id: posts.id,
                   title: posts.title,
@@ -310,19 +336,41 @@ export class UserService {
                   )
                 )
                 .where(inArray(posts.id, otherPostIds))
-            : []
+            : Promise.resolve([]),
 
-        // Get comment counts for all relevant posts
-        const allPostIds = [...authoredPosts.map((p) => p.id), ...otherPosts.map((p) => p.id)]
-        const commentCounts =
-          allPostIds.length > 0
+          // Get comment counts for authored posts (we'll add otherPosts counts after)
+          authoredPosts.length > 0
+            ? tx
+                .select({
+                  postId: comments.postId,
+                  count: sql<number>`count(*)::int`.as('count'),
+                })
+                .from(comments)
+                .where(
+                  inArray(
+                    comments.postId,
+                    authoredPosts.map((p) => p.id)
+                  )
+                )
+                .groupBy(comments.postId)
+            : Promise.resolve([]),
+        ])
+
+        // Get comment counts for other posts if we have any
+        const otherPostCommentCounts =
+          otherPosts.length > 0
             ? await tx
                 .select({
                   postId: comments.postId,
                   count: sql<number>`count(*)::int`.as('count'),
                 })
                 .from(comments)
-                .where(inArray(comments.postId, allPostIds))
+                .where(
+                  inArray(
+                    comments.postId,
+                    otherPosts.map((p) => p.id)
+                  )
+                )
                 .groupBy(comments.postId)
             : []
 
@@ -331,7 +379,7 @@ export class UserService {
           commentedPostIds,
           votedPostIds,
           otherPosts,
-          commentCounts,
+          commentCounts: [...commentCounts, ...otherPostCommentCounts],
         }
       })
 
