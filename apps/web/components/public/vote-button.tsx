@@ -46,7 +46,7 @@ export function VoteButton({
         disabled && 'cursor-not-allowed opacity-50'
       )}
       onClick={onClick}
-      disabled={disabled || isPending}
+      disabled={isPending}
     >
       <ChevronUp className={cn('h-6 w-6', hasVoted && 'fill-primary')} />
       <span
