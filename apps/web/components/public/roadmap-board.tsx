@@ -1,43 +1,41 @@
 import { RoadmapColumn } from './roadmap-column'
-import type { PostStatus, PostStatusEntity } from '@quackback/db/types'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import type { PostStatusEntity } from '@quackback/db/types'
+import type { RoadmapPostListResult } from '@quackback/domain'
 
-interface RoadmapPost {
-  id: string
-  title: string
-  status: PostStatus
-  voteCount: number
-  board: {
-    id: string
-    name: string
-    slug: string
-  }
+interface StatusInitialData {
+  statusSlug: string
+  data: RoadmapPostListResult
 }
 
 interface RoadmapBoardProps {
-  posts: RoadmapPost[]
+  organizationId: string
   statuses: PostStatusEntity[]
+  initialDataByStatus: StatusInitialData[]
 }
 
-export function RoadmapBoard({ posts, statuses }: RoadmapBoardProps) {
-  // Group posts by status slug
-  const postsByStatus = statuses.reduce(
-    (acc, status) => {
-      acc[status.slug] = posts.filter((post) => post.status === status.slug)
-      return acc
-    },
-    {} as Record<string, RoadmapPost[]>
-  )
+export function RoadmapBoard({ organizationId, statuses, initialDataByStatus }: RoadmapBoardProps) {
+  // Create lookup map for initial data
+  const dataByStatus = Object.fromEntries(initialDataByStatus.map((d) => [d.statusSlug, d.data]))
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
-      {statuses.map((status) => (
-        <RoadmapColumn
-          key={status.id}
-          title={status.name}
-          posts={postsByStatus[status.slug] || []}
-          color={status.color}
-        />
-      ))}
-    </div>
+    <ScrollArea
+      className="w-full"
+      style={{ height: 'calc(100dvh - 3.5rem - 2rem - 4.5rem - 1rem)' }}
+    >
+      <div className="flex gap-4 pb-4 h-full">
+        {statuses.map((status) => (
+          <RoadmapColumn
+            key={status.id}
+            organizationId={organizationId}
+            statusSlug={status.slug}
+            title={status.name}
+            color={status.color}
+            initialData={dataByStatus[status.slug]}
+          />
+        ))}
+      </div>
+      <ScrollBar orientation="horizontal" />
+    </ScrollArea>
   )
 }

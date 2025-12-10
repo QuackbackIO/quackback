@@ -22,10 +22,22 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
   const allStatuses = statusesResult.success ? statusesResult.value : []
   const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
 
-  // Get posts for the roadmap statuses
-  const statusSlugs = roadmapStatuses.map((s) => s.slug)
-  const roadmapPostsResult = await getPostService().getRoadmapPosts(org.id, statusSlugs)
-  const roadmapPosts = roadmapPostsResult.success ? roadmapPostsResult.value : []
+  // Fetch first page (10 posts) for each status in parallel
+  const postService = getPostService()
+  const initialDataPromises = roadmapStatuses.map(async (status) => {
+    const result = await postService.getRoadmapPostsPaginated({
+      organizationId: org.id,
+      statusSlug: status.slug,
+      page: 1,
+      limit: 10,
+    })
+    return {
+      statusSlug: status.slug,
+      data: result.success ? result.value : { items: [], total: 0, hasMore: false },
+    }
+  })
+
+  const initialDataByStatus = await Promise.all(initialDataPromises)
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -34,7 +46,11 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
         <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
       </div>
 
-      <RoadmapBoard posts={roadmapPosts} statuses={roadmapStatuses} />
+      <RoadmapBoard
+        organizationId={org.id}
+        statuses={roadmapStatuses}
+        initialDataByStatus={initialDataByStatus}
+      />
     </div>
   )
 }
