@@ -15,6 +15,8 @@ import {
   type OrganizationService,
   userService,
   type UserService,
+  roadmapService,
+  type RoadmapService,
 } from '@quackback/domain'
 
 /**
@@ -89,6 +91,13 @@ export function getUserService(): UserService {
 }
 
 /**
+ * Get the RoadmapService instance
+ */
+export function getRoadmapService(): RoadmapService {
+  return roadmapService
+}
+
+/**
  * Service container with convenient property access
  */
 export const services = {
@@ -115,5 +124,8 @@ export const services = {
   },
   get users(): UserService {
     return getUserService()
+  },
+  get roadmaps(): RoadmapService {
+    return getRoadmapService()
   },
 }
