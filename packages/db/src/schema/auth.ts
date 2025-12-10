@@ -54,12 +54,25 @@ const bytea = customType<{ data: Buffer | null; notNull: false; default: false }
   },
 })
 
+/**
+ * User table - Organization-scoped user identities
+ *
+ * Each user belongs to exactly one organization. The same email can exist
+ * in multiple organizations as separate user records with separate credentials.
+ *
+ * This enables true multi-tenant isolation where each organization has
+ * completely independent authentication.
+ */
 export const user = pgTable(
   'user',
   {
     id: text('id').primaryKey(),
+    // Organization this user belongs to - enables org-scoped email uniqueness
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    email: text('email').notNull(), // Unique per organization, not globally
+    email: text('email').notNull(),
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
     // Profile image stored as blob (alternative to URL in 'image' field)
@@ -70,15 +83,13 @@ export const user = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
-    // Tenant isolation: users belong to exactly one organization
-    organizationId: text('organization_id').notNull(),
-    // SSO isolation metadata (stores realEmail for SSO users with salted emails)
+    // General user metadata (JSON)
     metadata: text('metadata'),
   },
   (table) => [
-    // Email is unique within an organization, not globally
-    uniqueIndex('user_email_org_unique_idx').on(table.email, table.organizationId),
-    index('user_organization_id_idx').on(table.organizationId),
+    // Email is unique per organization (not globally)
+    uniqueIndex('user_email_org_idx').on(table.organizationId, table.email),
+    index('user_org_id_idx').on(table.organizationId),
   ]
 )
 
@@ -152,8 +163,6 @@ export const organization = pgTable('organization', {
   logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
-  // SSO Strict Mode - salts SSO user emails for additional isolation
-  strictSsoMode: boolean('strict_sso_mode').default(false).notNull(),
   // Per-organization authentication method settings
   passwordAuthEnabled: boolean('password_auth_enabled').default(true).notNull(),
   googleOAuthEnabled: boolean('google_oauth_enabled').default(true).notNull(),
@@ -175,6 +184,18 @@ export const organization = pgTable('organization', {
   themeConfig: text('theme_config'), // JSON: { preset?: string, primary?: string, ... }
 })
 
+/**
+ * Member table - Unified membership for all user types
+ *
+ * All users (team members and portal users) have a member record with a role:
+ * - 'owner': Full administrative access, can manage billing and delete org
+ * - 'admin': Administrative access, can manage team and settings
+ * - 'member': Team member access, can manage feedback
+ * - 'user': Portal user access only, can vote/comment on public portal
+ *
+ * The role determines access level: owner/admin/member can access /admin dashboard,
+ * while 'user' role can only interact with the public portal.
+ */
 export const member = pgTable(
   'member',
   {
@@ -185,12 +206,16 @@ export const member = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    // Unified roles: 'owner' | 'admin' | 'member' | 'user'
+    // 'user' role = portal users (public portal access only, no admin dashboard)
     role: text('role').default('member').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   },
   (table) => [
     index('member_organizationId_idx').on(table.organizationId),
     index('member_userId_idx').on(table.userId),
+    // Ensure one member record per user per org
+    uniqueIndex('member_user_org_idx').on(table.userId, table.organizationId),
   ]
 )
 
@@ -338,7 +363,7 @@ export const sessionTransferToken = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     targetDomain: text('target_domain').notNull(),
     callbackUrl: text('callback_url').notNull(),
-    /** 'team' for admin access, 'portal' for portal users (role='user') */
+    /** Context for post-login redirect: 'team' -> /admin, 'portal' -> / */
     context: text('context').default('team').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
