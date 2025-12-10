@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import { InvitationEmail } from './templates/invitation'
 import { WelcomeEmail } from './templates/welcome'
+import { SigninCodeEmail } from './templates/signin-code'
 
 // Lazy initialization to avoid build errors when API key is not set
 let resend: Resend | null = null
@@ -17,6 +18,10 @@ function getResend(): Resend {
 }
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'Quackback <noreply@quackback.io>'
+
+// ============================================================================
+// Invitation Email
+// ============================================================================
 
 interface SendInvitationParams {
   to: string
@@ -40,23 +45,52 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
   })
 }
 
+// ============================================================================
+// Welcome Email
+// ============================================================================
+
 interface SendWelcomeParams {
   to: string
   name: string
+  workspaceName: string
+  dashboardUrl: string
 }
 
 export async function sendWelcomeEmail(params: SendWelcomeParams) {
-  const { to, name } = params
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.quackback.io'
+  const { to, name, workspaceName, dashboardUrl } = params
 
   await getResend().emails.send({
     from: FROM_EMAIL,
     to,
-    subject: 'Welcome to Quackback!',
-    react: WelcomeEmail({ name, appUrl }),
+    subject: `Welcome to ${workspaceName} on Quackback!`,
+    react: WelcomeEmail({ name, workspaceName, dashboardUrl }),
   })
 }
 
+// ============================================================================
+// Sign-in Code Email
+// ============================================================================
+
+interface SendSigninCodeParams {
+  to: string
+  code: string
+}
+
+export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
+  const { to, code } = params
+
+  await getResend().emails.send({
+    from: FROM_EMAIL,
+    to,
+    subject: `Your Quackback sign-in code is ${code}`,
+    react: SigninCodeEmail({ code }),
+  })
+}
+
+// ============================================================================
+// Exports
+// ============================================================================
+
 export { InvitationEmail } from './templates/invitation'
 export { WelcomeEmail } from './templates/welcome'
+export { SigninCodeEmail } from './templates/signin-code'

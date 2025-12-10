@@ -5,41 +5,65 @@ import {
   Head,
   Heading,
   Html,
+  Img,
   Preview,
   Section,
   Text,
 } from '@react-email/components'
+import { layout, typography, button, branding, colors } from './shared-styles'
 
 interface WelcomeEmailProps {
   name: string
-  appUrl?: string
+  workspaceName: string
+  dashboardUrl: string
 }
 
-export function WelcomeEmail({ name, appUrl = 'https://app.quackback.io' }: WelcomeEmailProps) {
+const LOGO_URL = 'https://quackback.io/logo.png'
+
+export function WelcomeEmail({ name, workspaceName, dashboardUrl }: WelcomeEmailProps) {
   return (
     <Html>
       <Head />
-      <Preview>Welcome to Quackback</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          <Heading style={h1}>Welcome to Quackback!</Heading>
-          <Text style={text}>
-            Hi {name}, thanks for signing up! You&apos;re all set to start collecting
-            and managing customer feedback.
+      <Preview>Welcome to {workspaceName} on Quackback</Preview>
+      <Body style={layout.main}>
+        <Container style={layout.container}>
+          {/* Logo */}
+          <Section style={branding.logoContainer}>
+            <Img src={LOGO_URL} alt="Quackback" style={branding.logo} />
+          </Section>
+
+          {/* Content */}
+          <Heading style={typography.h1}>Welcome to Quackback!</Heading>
+          <Text style={typography.text}>
+            Hi {name}, your workspace <strong>{workspaceName}</strong> is ready. Start collecting
+            and managing customer feedback today.
           </Text>
-          <Text style={text}>Here&apos;s what you can do next:</Text>
-          <ul style={list}>
-            <li>Create your first feedback board</li>
-            <li>Invite your team members</li>
-            <li>Set up integrations with GitHub, Slack, or Discord</li>
-            <li>Share your public roadmap with customers</li>
-          </ul>
-          <Section style={buttonContainer}>
-            <Button style={button} href={`${appUrl}/admin`}>
+
+          {/* Features List */}
+          <Section style={featureList}>
+            <Text style={featureItem}>
+              <span style={featureIcon}>&#10003;</span> Create feedback boards
+            </Text>
+            <Text style={featureItem}>
+              <span style={featureIcon}>&#10003;</span> Invite your team
+            </Text>
+            <Text style={featureItem}>
+              <span style={featureIcon}>&#10003;</span> Share your public roadmap
+            </Text>
+            <Text style={featureItem}>
+              <span style={featureIcon}>&#10003;</span> Connect GitHub, Slack & Discord
+            </Text>
+          </Section>
+
+          {/* CTA Button */}
+          <Section style={{ textAlign: 'center', margin: '32px 0' }}>
+            <Button style={button.primary} href={dashboardUrl}>
               Go to Dashboard
             </Button>
           </Section>
-          <Text style={footer}>
+
+          {/* Footer */}
+          <Text style={typography.footer}>
             Happy collecting!
             <br />
             The Quackback Team
@@ -50,56 +74,21 @@ export function WelcomeEmail({ name, appUrl = 'https://app.quackback.io' }: Welc
   )
 }
 
-const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+const featureList = {
+  margin: '24px 0',
+  padding: '0',
 }
 
-const container = {
-  backgroundColor: '#ffffff',
-  margin: '0 auto',
-  padding: '40px 20px',
-  maxWidth: '560px',
-}
-
-const h1 = {
-  color: '#1f2937',
-  fontSize: '24px',
-  fontWeight: '600',
-  margin: '0 0 20px',
-}
-
-const text = {
-  color: '#4b5563',
-  fontSize: '16px',
-  lineHeight: '24px',
-  margin: '0 0 20px',
-}
-
-const list = {
-  color: '#4b5563',
-  fontSize: '16px',
+const featureItem = {
+  color: colors.text,
+  fontSize: '15px',
   lineHeight: '28px',
-  margin: '0 0 20px',
-  paddingLeft: '20px',
+  margin: '0',
+  paddingLeft: '8px',
 }
 
-const buttonContainer = {
-  margin: '30px 0',
-}
-
-const button = {
-  backgroundColor: '#000000',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: '600',
-  padding: '12px 24px',
-  textDecoration: 'none',
-}
-
-const footer = {
-  color: '#9ca3af',
-  fontSize: '14px',
-  margin: '40px 0 0',
+const featureIcon = {
+  color: colors.primary,
+  fontWeight: '700',
+  marginRight: '12px',
 }

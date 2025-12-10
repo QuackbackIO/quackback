@@ -5,17 +5,21 @@ import {
   Head,
   Heading,
   Html,
+  Img,
   Link,
   Preview,
   Section,
   Text,
 } from '@react-email/components'
+import { layout, typography, button, utils, branding } from './shared-styles'
 
 interface InvitationEmailProps {
   invitedByEmail: string
   organizationName: string
   inviteLink: string
 }
+
+const LOGO_URL = 'https://quackback.io/logo.png'
 
 export function InvitationEmail({
   invitedByEmail,
@@ -26,79 +30,41 @@ export function InvitationEmail({
     <Html>
       <Head />
       <Preview>Join {organizationName} on Quackback</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          <Heading style={h1}>You&apos;re invited!</Heading>
-          <Text style={text}>
+      <Body style={layout.main}>
+        <Container style={layout.container}>
+          {/* Logo */}
+          <Section style={branding.logoContainer}>
+            <Img src={LOGO_URL} alt="Quackback" style={branding.logo} />
+          </Section>
+
+          {/* Content */}
+          <Heading style={typography.h1}>You&apos;re invited!</Heading>
+          <Text style={typography.text}>
             <strong>{invitedByEmail}</strong> has invited you to join{' '}
             <strong>{organizationName}</strong> on Quackback.
           </Text>
-          <Section style={buttonContainer}>
-            <Button style={button} href={inviteLink}>
+
+          {/* CTA Button */}
+          <Section style={{ textAlign: 'center', margin: '32px 0' }}>
+            <Button style={button.primary} href={inviteLink}>
               Accept Invitation
             </Button>
           </Section>
-          <Text style={text}>
-            Or copy and paste this URL into your browser:{' '}
-            <Link href={inviteLink} style={link}>
+
+          {/* Fallback Link */}
+          <Text style={typography.textSmall}>
+            Or copy and paste this link into your browser:{' '}
+            <Link href={inviteLink} style={utils.link}>
               {inviteLink}
             </Link>
           </Text>
-          <Text style={footer}>
+
+          {/* Footer */}
+          <Text style={typography.footer}>
             If you weren&apos;t expecting this invitation, you can ignore this email.
           </Text>
         </Container>
       </Body>
     </Html>
   )
-}
-
-const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-}
-
-const container = {
-  backgroundColor: '#ffffff',
-  margin: '0 auto',
-  padding: '40px 20px',
-  maxWidth: '560px',
-}
-
-const h1 = {
-  color: '#1f2937',
-  fontSize: '24px',
-  fontWeight: '600',
-  margin: '0 0 20px',
-}
-
-const text = {
-  color: '#4b5563',
-  fontSize: '16px',
-  lineHeight: '24px',
-  margin: '0 0 20px',
-}
-
-const buttonContainer = {
-  margin: '30px 0',
-}
-
-const button = {
-  backgroundColor: '#000000',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '16px',
-  fontWeight: '600',
-  padding: '12px 24px',
-  textDecoration: 'none',
-}
-
-const link = {
-  color: '#2563eb',
-}
-
-const footer = {
-  color: '#9ca3af',
-  fontSize: '14px',
-  margin: '40px 0 0',
 }
