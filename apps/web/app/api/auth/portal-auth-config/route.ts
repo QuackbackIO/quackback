@@ -8,6 +8,8 @@ import { db, organization, eq } from '@quackback/db'
  * This is used by the portal login form to know which auth methods to display.
  *
  * No authentication required - this is public information needed before login.
+ *
+ * Note: Password authentication has been removed in favor of magic OTP codes.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -28,12 +30,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         found: false,
         portalAuthEnabled: true,
-        passwordEnabled: true,
         googleEnabled: true,
         githubEnabled: true,
-        voting: 'anyone',
-        commenting: 'anyone',
-        submissions: 'authenticated',
       })
     }
 
@@ -42,12 +40,8 @@ export async function GET(request: NextRequest) {
       organizationId: org.id,
       organizationName: org.name,
       portalAuthEnabled: org.portalAuthEnabled,
-      passwordEnabled: org.portalPasswordEnabled,
       googleEnabled: org.portalGoogleEnabled,
       githubEnabled: org.portalGithubEnabled,
-      voting: org.portalVoting,
-      commenting: org.portalCommenting,
-      submissions: org.portalSubmissions,
     })
   } catch (error) {
     console.error('Error fetching portal auth config:', error)

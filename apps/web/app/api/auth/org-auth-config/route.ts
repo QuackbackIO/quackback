@@ -8,6 +8,8 @@ import { db, organization, ssoProvider, eq } from '@quackback/db'
  * This is used by the login form to know which auth methods to display.
  *
  * No authentication required - this is public information needed before login.
+ *
+ * Note: Password authentication has been removed in favor of magic OTP codes.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +29,6 @@ export async function GET(request: NextRequest) {
       // Return default config if org not found (allows login to proceed with defaults)
       return NextResponse.json({
         found: false,
-        passwordEnabled: true,
         googleEnabled: true,
         githubEnabled: true,
         microsoftEnabled: true,
@@ -50,7 +51,6 @@ export async function GET(request: NextRequest) {
       found: true,
       organizationId: org.id,
       organizationName: org.name,
-      passwordEnabled: org.passwordAuthEnabled,
       googleEnabled: org.googleOAuthEnabled,
       githubEnabled: org.githubOAuthEnabled,
       microsoftEnabled: org.microsoftOAuthEnabled,

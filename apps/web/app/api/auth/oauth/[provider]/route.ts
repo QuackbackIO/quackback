@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, randomBytes } from 'crypto'
+import { db, organization, eq } from '@quackback/db'
 
 /**
  * Generate HMAC signature for OAuth state
@@ -9,17 +10,59 @@ function signState(data: string, secret: string): string {
 }
 
 /**
+ * Check if an OAuth provider is enabled for the given organization and context.
+ */
+function isProviderEnabled(
+  org: {
+    googleOAuthEnabled: boolean
+    githubOAuthEnabled: boolean
+    microsoftOAuthEnabled: boolean
+    portalGoogleEnabled: boolean
+    portalGithubEnabled: boolean
+  },
+  provider: string,
+  context: 'team' | 'portal'
+): boolean {
+  if (context === 'team') {
+    switch (provider) {
+      case 'google':
+        return org.googleOAuthEnabled
+      case 'github':
+        return org.githubOAuthEnabled
+      case 'microsoft':
+        return org.microsoftOAuthEnabled
+      default:
+        return false
+    }
+  } else {
+    // Portal context
+    switch (provider) {
+      case 'google':
+        return org.portalGoogleEnabled
+      case 'github':
+        return org.portalGithubEnabled
+      case 'microsoft':
+        return false // Microsoft not supported for portal users
+      default:
+        return false
+    }
+  }
+}
+
+/**
  * OAuth Initiation Handler for Tenant Isolation
  *
  * This endpoint is called from tenant subdomains to initiate OAuth on the main domain.
  * It stores the target subdomain in a cookie so the callback knows where to redirect.
  *
- * Security: Uses HMAC-signed state parameter to prevent CSRF attacks on OAuth flow.
+ * Security:
+ * - Validates that the OAuth provider is enabled for the organization
+ * - Uses HMAC-signed state parameter to prevent CSRF attacks on OAuth flow
  *
  * Flow:
  * 1. User on acme.localhost/login clicks "Sign in with Google"
  * 2. Redirects to localhost/api/auth/oauth/google?subdomain=acme&callback=/admin
- * 3. This handler stores subdomain + nonce in signed cookie and initiates OAuth
+ * 3. This handler validates org settings, stores subdomain + nonce in signed cookie
  * 4. After OAuth, callback handler verifies signature and redirects to subdomain
  */
 export async function GET(
@@ -29,7 +72,7 @@ export async function GET(
   const { provider } = await params
   const { searchParams } = new URL(request.url)
   const subdomain = searchParams.get('subdomain')
-  const context = searchParams.get('context') || 'team' // 'team' or 'portal'
+  const context = (searchParams.get('context') || 'team') as 'team' | 'portal'
 
   if (!subdomain) {
     return NextResponse.json({ error: 'subdomain parameter is required' }, { status: 400 })
@@ -51,6 +94,31 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid OAuth provider' }, { status: 400 })
   }
 
+  // Fetch organization and validate provider is enabled
+  const org = await db.query.organization.findFirst({
+    where: eq(organization.slug, subdomain),
+    columns: {
+      id: true,
+      googleOAuthEnabled: true,
+      githubOAuthEnabled: true,
+      microsoftOAuthEnabled: true,
+      portalGoogleEnabled: true,
+      portalGithubEnabled: true,
+    },
+  })
+
+  if (!org) {
+    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+  }
+
+  // Check if this OAuth provider is enabled for the organization
+  if (!isProviderEnabled(org, provider, context)) {
+    return NextResponse.json(
+      { error: 'This authentication method is not enabled for this organization' },
+      { status: 403 }
+    )
+  }
+
   // Get auth secret for HMAC signing
   const secret = process.env.BETTER_AUTH_SECRET
   if (!secret) {
@@ -61,8 +129,8 @@ export async function GET(
   const nonce = randomBytes(16).toString('hex')
   const timestamp = Date.now()
 
-  // Create state payload and sign it (includes context for role assignment)
-  const statePayload = JSON.stringify({ subdomain, context, nonce, timestamp })
+  // Create state payload and sign it (includes context for role assignment and provider)
+  const statePayload = JSON.stringify({ subdomain, context, provider, nonce, timestamp })
   const signature = signState(statePayload, secret)
 
   // Store signed state in cookie

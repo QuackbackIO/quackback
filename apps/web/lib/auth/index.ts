@@ -2,58 +2,9 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
-import { db, organization as orgTable, user as userTable, eq } from '@quackback/db'
+import { db } from '@quackback/db'
 import bcrypt from 'bcryptjs'
 import { trustLogin } from './plugins/trust-login'
-
-/**
- * User metadata structure for SSO-isolated users
- */
-interface SsoUserMetadata {
-  realEmail: string
-  ssoIsolated: true
-  organizationId: string
-}
-
-/**
- * Check if a user has SSO isolation metadata
- */
-function parseSsoMetadata(metadata: string | null): SsoUserMetadata | null {
-  if (!metadata) return null
-  try {
-    const parsed = JSON.parse(metadata)
-    if (parsed.ssoIsolated === true) {
-      return parsed as SsoUserMetadata
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-/**
- * Get the real email for a user (handles SSO-isolated users)
- */
-export function getRealEmail(user: { email: string; metadata?: string | null }): string {
-  const ssoMeta = parseSsoMetadata(user.metadata ?? null)
-  return ssoMeta?.realEmail ?? user.email
-}
-
-/**
- * Check if user email is already salted (SSO-isolated)
- */
-function isEmailSalted(email: string): boolean {
-  return email.includes('+sso-')
-}
-
-/**
- * Generate a salted email for SSO isolation
- * Format: original@domain.com+sso-{orgId}@isolated.local
- */
-function generateSaltedEmail(email: string, organizationId: string): string {
-  // Create a unique, deterministic email that won't conflict
-  return `${email}+sso-${organizationId}@isolated.local`
-}
 
 /**
  * Build trusted origins list for CSRF protection
@@ -141,17 +92,6 @@ export const auth = betterAuth({
     },
   },
 
-  // Database hooks for tenant isolation
-  databaseHooks: {
-    user: {
-      create: {
-        before: async (user) => {
-          return { data: user }
-        },
-      },
-    },
-  },
-
   plugins: [
     // Trust login plugin for cross-domain session transfer
     trustLogin(),
@@ -180,56 +120,14 @@ export const auth = betterAuth({
     }),
 
     // SSO plugin for enterprise SAML/OIDC authentication
-    // Implements "Fork, Don't Merge" for organizations with strictSsoMode enabled
+    // Uses automatic email-based account linking (no email salting)
     sso({
-      // Disable implicit signup - require explicit approval
       disableImplicitSignUp: false,
 
-      // Organization provisioning configuration
+      // Organization provisioning: automatically add SSO users to the org
       organizationProvisioning: {
         disabled: false,
         defaultRole: 'member',
-      },
-
-      // provisionUser hook implements Fork-Don't-Merge logic
-      // This is called AFTER user creation, so we update the user if strict mode is enabled
-      provisionUser: async ({ user, userInfo: _userInfo, provider }) => {
-        // Skip if user email is already salted (re-login of isolated user)
-        if (isEmailSalted(user.email)) {
-          return
-        }
-
-        // Check if this SSO provider is linked to an organization
-        const orgId = provider.organizationId
-        if (!orgId) {
-          return
-        }
-
-        // Check if the organization has strict SSO mode enabled
-        const org = await db.query.organization.findFirst({
-          where: eq(orgTable.id, orgId),
-        })
-
-        if (!org?.strictSsoMode) {
-          return
-        }
-
-        // Fork-Don't-Merge: Salt the email and store real email in metadata
-        const saltedEmail = generateSaltedEmail(user.email, orgId)
-        const ssoMetadata: SsoUserMetadata = {
-          realEmail: user.email,
-          ssoIsolated: true,
-          organizationId: orgId,
-        }
-
-        // Update the user with salted email and metadata
-        await db
-          .update(userTable)
-          .set({
-            email: saltedEmail,
-            metadata: JSON.stringify(ssoMetadata),
-          })
-          .where(eq(userTable.id, user.id))
       },
     }),
   ],

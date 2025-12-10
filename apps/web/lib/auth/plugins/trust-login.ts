@@ -6,9 +6,12 @@
  *
  * It exposes a `/trust-login` endpoint that:
  * 1. Validates a one-time transfer token from the database
- * 2. Creates a proper session using Better-Auth's internal adapter
- * 3. Sets the session cookie correctly
- * 4. Redirects to the callback URL
+ * 2. Validates target domain matches current host (prevents token theft)
+ * 3. Deletes token (one-time use)
+ * 4. For portal OAuth, creates member record with role='user' if needed
+ * 5. Creates a proper session using Better-Auth's internal adapter
+ * 6. Sets the session cookie correctly
+ * 7. Redirects to the callback URL
  *
  * This approach ensures sessions are created in the exact format Better-Auth expects,
  * avoiding issues with manual session insertion.
@@ -57,28 +60,39 @@ export const trustLogin = () => {
           // 3. Delete token (one-time use)
           await db.delete(sessionTransferToken).where(eq(sessionTransferToken.id, transfer.id))
 
-          // 4. If portal context, ensure member has role='user' (portal-only access)
+          // 4. For portal context, ensure member record with role='user' exists
+          // (OAuth signup creates user but member may not exist)
           if (transfer.context === 'portal') {
-            // Look up organization by domain
-            const domain = await db.query.workspaceDomain.findFirst({
-              where: eq(workspaceDomain.domain, currentHost),
+            // Look up organization from target domain
+            const domainRecord = await db.query.workspaceDomain.findFirst({
+              where: eq(workspaceDomain.domain, transfer.targetDomain),
+              columns: { organizationId: true },
             })
 
-            if (domain?.organizationId) {
-              // Update member role to 'user' for portal-only access
-              await db
-                .update(member)
-                .set({ role: 'user' })
-                .where(
-                  and(
-                    eq(member.userId, transfer.userId),
-                    eq(member.organizationId, domain.organizationId)
-                  )
-                )
+            if (domainRecord) {
+              // Check if member record already exists
+              const existingMember = await db.query.member.findFirst({
+                where: and(
+                  eq(member.userId, transfer.userId),
+                  eq(member.organizationId, domainRecord.organizationId)
+                ),
+              })
+
+              // Create member record with role='user' if it doesn't exist
+              if (!existingMember) {
+                await db.insert(member).values({
+                  id: crypto.randomUUID(),
+                  userId: transfer.userId,
+                  organizationId: domainRecord.organizationId,
+                  role: 'user',
+                  createdAt: new Date(),
+                })
+              }
             }
           }
 
           // 5. Create session using Better-Auth's internal adapter
+          // All users (team + portal) have member records with unified roles
           const session = await ctx.context.internalAdapter.createSession(
             transfer.userId,
             false // dontRememberMe

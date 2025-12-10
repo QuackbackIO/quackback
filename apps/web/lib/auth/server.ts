@@ -1,10 +1,14 @@
 import { headers } from 'next/headers'
 import { auth } from './index'
 import { cache } from 'react'
-import { db, user as userTable, eq } from '@quackback/db'
 
 /**
- * Extended session user type with organizationId for tenant isolation
+ * Session user type aligned with Better-Auth
+ *
+ * Users are scoped to organizations. Each user belongs to exactly one org.
+ * Organization access is determined by member table with unified roles:
+ * - owner/admin/member: Team members with admin dashboard access
+ * - user: Portal users with public portal access only
  */
 export interface SessionUser {
   id: string
@@ -12,7 +16,6 @@ export interface SessionUser {
   email: string
   emailVerified: boolean
   image?: string | null
-  organizationId: string
   createdAt: Date
   updatedAt: Date
 }
@@ -30,10 +33,10 @@ export interface Session {
 }
 
 /**
- * Get the current session with user including organizationId.
+ * Get the current session with user.
  *
- * Full Tenant Isolation: Users have organizationId directly on the user record.
- * This function extends Better-Auth's session with our custom user fields.
+ * Users are scoped to organizations. To check organization access:
+ * - Query member table for the user's role (owner/admin/member/user)
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   const session = await auth.api.getSession({
@@ -44,26 +47,16 @@ export const getSession = cache(async (): Promise<Session | null> => {
     return null
   }
 
-  // Fetch user with organizationId from our database
-  const user = await db.query.user.findFirst({
-    where: eq(userTable.id, session.user.id),
-  })
-
-  if (!user) {
-    return null
-  }
-
   return {
     session: session.session,
     user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      emailVerified: user.emailVerified,
-      image: user.image,
-      organizationId: user.organizationId,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
+      id: session.user.id,
+      name: session.user.name,
+      email: session.user.email,
+      emailVerified: session.user.emailVerified,
+      image: session.user.image,
+      createdAt: session.user.createdAt,
+      updatedAt: session.user.updatedAt,
     },
   }
 })

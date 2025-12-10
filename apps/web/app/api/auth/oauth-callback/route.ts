@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
 import { auth } from '@/lib/auth'
-import { db, sessionTransferToken } from '@quackback/db'
+import {
+  db,
+  sessionTransferToken,
+  user,
+  account,
+  member,
+  organization,
+  eq,
+  and,
+} from '@quackback/db'
 import { getBaseDomain } from '@/lib/routing'
 
 /**
@@ -18,15 +27,24 @@ function verifyState(payload: string, signature: string, secret: string): boolea
 }
 
 /**
- * OAuth Callback Handler for Tenant Isolation
+ * OAuth Callback Handler for Tenant Isolation with Org-Scoped Users
  *
  * This endpoint is called after Better-Auth completes OAuth authentication.
- * It validates the signed state, creates a one-time transfer token, and redirects to the target subdomain.
+ * It creates org-scoped user records (bypassing Better-Auth's global user model).
+ *
+ * Flow:
+ * 1. Verify signed state from oauth_target cookie
+ * 2. Get user info from Better-Auth's session (email, name, image from OAuth provider)
+ * 3. Get organization by subdomain slug
+ * 4. Find or create org-scoped user (email unique per org, not globally)
+ * 5. Create member record with appropriate role (user for portal, member for team)
+ * 6. Create transfer token and redirect to subdomain
  *
  * Security:
  * - Verifies HMAC signature on oauth_target cookie (prevents tampering)
  * - Checks timestamp to prevent replay attacks
  * - Validates subdomain format
+ * - Clears Better-Auth's global session (we create per-org sessions)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -61,7 +79,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse the verified payload
-    const { subdomain, context, timestamp } = JSON.parse(payload)
+    const { subdomain, context, timestamp, provider } = JSON.parse(payload)
 
     // Check timestamp (5 minute window to prevent replay)
     const maxAge = 5 * 60 * 1000
@@ -74,7 +92,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=oauth_invalid_subdomain', request.url))
     }
 
-    // Get the current session from Better-Auth
+    // Get the current session from Better-Auth (contains OAuth user info)
     const session = await auth.api.getSession({
       headers: request.headers,
     })
@@ -83,7 +101,72 @@ export async function GET(request: NextRequest) {
       return redirectToSubdomainError(subdomain, 'oauth_failed', request)
     }
 
-    // Create a one-time transfer token
+    // Get organization by subdomain slug
+    const org = await db.query.organization.findFirst({
+      where: eq(organization.slug, subdomain),
+    })
+
+    if (!org) {
+      return redirectToSubdomainError(subdomain, 'org_not_found', request)
+    }
+
+    // Extract user info from Better-Auth's OAuth session
+    const { email, name, image } = session.user
+    if (!email) {
+      return redirectToSubdomainError(subdomain, 'oauth_no_email', request)
+    }
+
+    // Find or create org-scoped user
+    let orgUserId: string
+    const existingOrgUser = await db.query.user.findFirst({
+      where: and(eq(user.email, email), eq(user.organizationId, org.id)),
+    })
+
+    if (existingOrgUser) {
+      // User exists in this org - use their ID
+      orgUserId = existingOrgUser.id
+    } else {
+      // Create new org-scoped user
+      orgUserId = crypto.randomUUID()
+      const memberId = crypto.randomUUID()
+      const accountId = crypto.randomUUID()
+      const role = context === 'portal' ? 'user' : 'member'
+
+      await db.transaction(async (tx) => {
+        // Create org-scoped user
+        await tx.insert(user).values({
+          id: orgUserId,
+          organizationId: org.id,
+          email,
+          name: name || email,
+          emailVerified: true, // OAuth emails are verified
+          image,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+
+        // Create OAuth account record
+        await tx.insert(account).values({
+          id: accountId,
+          userId: orgUserId,
+          accountId: email, // Use email as OAuth account identifier
+          providerId: provider || 'oauth',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+
+        // Create member with appropriate role
+        await tx.insert(member).values({
+          id: memberId,
+          userId: orgUserId,
+          organizationId: org.id,
+          role,
+          createdAt: new Date(),
+        })
+      })
+    }
+
+    // Create a one-time transfer token for the org-scoped user
     const token = generateSecureToken()
     const tokenId = crypto.randomUUID()
 
@@ -94,7 +177,7 @@ export async function GET(request: NextRequest) {
     await db.insert(sessionTransferToken).values({
       id: tokenId,
       token,
-      userId: session.user.id,
+      userId: orgUserId, // Use org-scoped user ID, not Better-Auth's global user
       targetDomain,
       callbackUrl: context === 'portal' ? '/' : '/admin',
       context: context || 'team',
@@ -102,13 +185,15 @@ export async function GET(request: NextRequest) {
     })
     subdomainUrl.searchParams.set('token', token)
 
-    // Create response that clears cookies and redirects
+    // Create response that clears Better-Auth cookies and redirects
+    // We don't want the global Better-Auth session, only per-org sessions
     const response = NextResponse.redirect(subdomainUrl)
     response.cookies.delete('oauth_target')
     response.cookies.delete('better-auth.session_token')
 
     return response
-  } catch {
+  } catch (error) {
+    console.error('[OAuth Callback] Error:', error)
     return NextResponse.redirect(new URL('/?error=oauth_error', request.url))
   }
 }
