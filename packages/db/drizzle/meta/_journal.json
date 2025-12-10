@@ -8,27 +8,6 @@
       "when": 1733641200000,
       "tag": "0000_initial_schema",
       "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1733737200000,
-      "tag": "0001_votes_audit_columns",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1765359119176,
-      "tag": "0002_fair_doctor_faustus",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1765360266517,
-      "tag": "0003_pale_miek",
-      "breakpoints": true
     }
   ]
 }

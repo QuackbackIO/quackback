@@ -1,5 +1,5 @@
 {
-  "id": "8f3c19f1-16a9-4ad2-b280-097ec13bdcd6",
+  "id": "2eea4152-ea26-4e3a-a1a9-4161062a964f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -301,6 +301,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "member_user_org_idx": {
+          "name": "member_user_org_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -381,99 +402,20 @@
           "primaryKey": false,
           "notNull": false
         },
-        "strict_sso_mode": {
-          "name": "strict_sso_mode",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "password_auth_enabled": {
-          "name": "password_auth_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "google_oauth_enabled": {
-          "name": "google_oauth_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "github_oauth_enabled": {
-          "name": "github_oauth_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "microsoft_oauth_enabled": {
-          "name": "microsoft_oauth_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "open_signup_enabled": {
-          "name": "open_signup_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "portal_auth_enabled": {
-          "name": "portal_auth_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "portal_password_enabled": {
-          "name": "portal_password_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "portal_google_enabled": {
-          "name": "portal_google_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "portal_github_enabled": {
-          "name": "portal_github_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "portal_voting": {
-          "name": "portal_voting",
+        "auth_config": {
+          "name": "auth_config",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'anyone'"
+          "notNull": false
         },
-        "portal_commenting": {
-          "name": "portal_commenting",
+        "portal_config": {
+          "name": "portal_config",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'anyone'"
+          "notNull": false
         },
-        "portal_submissions": {
-          "name": "portal_submissions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'authenticated'"
-        },
-        "theme_config": {
-          "name": "theme_config",
+        "branding_config": {
+          "name": "branding_config",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -765,9 +707,15 @@
           "method": "btree",
           "with": {}
         },
-        "sso_provider_domain_idx": {
-          "name": "sso_provider_domain_idx",
+        "sso_provider_org_domain_idx": {
+          "name": "sso_provider_org_domain_idx",
           "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "domain",
               "isExpression": false,
@@ -812,6 +760,12 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
         },
         "name": {
@@ -865,12 +819,6 @@
           "notNull": true,
           "default": "now()"
         },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "metadata": {
           "name": "metadata",
           "type": "text",
@@ -879,17 +827,17 @@
         }
       },
       "indexes": {
-        "user_email_org_unique_idx": {
-          "name": "user_email_org_unique_idx",
+        "user_email_org_idx": {
+          "name": "user_email_org_idx",
           "columns": [
             {
-              "expression": "email",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "organization_id",
+              "expression": "email",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -900,8 +848,8 @@
           "method": "btree",
           "with": {}
         },
-        "user_organization_id_idx": {
-          "name": "user_organization_id_idx",
+        "user_org_id_idx": {
+          "name": "user_org_id_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -916,7 +864,17 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "user_organization_id_organization_id_fk": {
+          "name": "user_organization_id_organization_id_fk",
+          "tableFrom": "user",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -49,20 +49,9 @@ CREATE TABLE "organization" (
 	"logo_type" text,
 	"created_at" timestamp with time zone NOT NULL,
 	"metadata" text,
-	"strict_sso_mode" boolean DEFAULT false NOT NULL,
-	"password_auth_enabled" boolean DEFAULT true NOT NULL,
-	"google_oauth_enabled" boolean DEFAULT true NOT NULL,
-	"github_oauth_enabled" boolean DEFAULT true NOT NULL,
-	"microsoft_oauth_enabled" boolean DEFAULT true NOT NULL,
-	"open_signup_enabled" boolean DEFAULT false NOT NULL,
-	"portal_auth_enabled" boolean DEFAULT true NOT NULL,
-	"portal_password_enabled" boolean DEFAULT true NOT NULL,
-	"portal_google_enabled" boolean DEFAULT true NOT NULL,
-	"portal_github_enabled" boolean DEFAULT true NOT NULL,
-	"portal_voting" text DEFAULT 'anyone' NOT NULL,
-	"portal_commenting" text DEFAULT 'anyone' NOT NULL,
-	"portal_submissions" text DEFAULT 'authenticated' NOT NULL,
-	"theme_config" text,
+	"auth_config" text,
+	"portal_config" text,
+	"branding_config" text,
 	CONSTRAINT "organization_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
@@ -106,6 +95,7 @@ CREATE TABLE "sso_provider" (
 --> statement-breakpoint
 CREATE TABLE "user" (
 	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
 	"email_verified" boolean DEFAULT false NOT NULL,
@@ -114,7 +104,6 @@ CREATE TABLE "user" (
 	"image_type" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"organization_id" text NOT NULL,
 	"metadata" text
 );
 --> statement-breakpoint
@@ -252,7 +241,10 @@ CREATE TABLE "votes" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"post_id" uuid NOT NULL,
 	"user_identifier" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"member_id" text,
+	"ip_hash" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "votes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -288,6 +280,7 @@ ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("us
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session_transfer_token" ADD CONSTRAINT "session_transfer_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sso_provider" ADD CONSTRAINT "sso_provider_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user" ADD CONSTRAINT "user_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_domain" ADD CONSTRAINT "workspace_domain_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "roadmaps" ADD CONSTRAINT "roadmaps_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_reactions" ADD CONSTRAINT "comment_reactions_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -303,6 +296,7 @@ ALTER TABLE "posts" ADD CONSTRAINT "posts_status_id_post_statuses_id_fk" FOREIGN
 ALTER TABLE "posts" ADD CONSTRAINT "posts_owner_member_id_member_id_fk" FOREIGN KEY ("owner_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_official_response_member_id_member_id_fk" FOREIGN KEY ("official_response_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "votes" ADD CONSTRAINT "votes_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "votes" ADD CONSTRAINT "votes_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integrations" ADD CONSTRAINT "integrations_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "changelog_entries" ADD CONSTRAINT "changelog_entries_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
@@ -310,12 +304,13 @@ CREATE INDEX "invitation_organizationId_idx" ON "invitation" USING btree ("organ
 CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "member_organizationId_idx" ON "member" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "member_userId_idx" ON "member" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "member_user_org_idx" ON "member" USING btree ("user_id","organization_id");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_transfer_token_token_idx" ON "session_transfer_token" USING btree ("token");--> statement-breakpoint
 CREATE INDEX "sso_provider_org_id_idx" ON "sso_provider" USING btree ("organization_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "sso_provider_domain_idx" ON "sso_provider" USING btree ("domain");--> statement-breakpoint
-CREATE UNIQUE INDEX "user_email_org_unique_idx" ON "user" USING btree ("email","organization_id");--> statement-breakpoint
-CREATE INDEX "user_organization_id_idx" ON "user" USING btree ("organization_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "sso_provider_org_domain_idx" ON "sso_provider" USING btree ("organization_id","domain");--> statement-breakpoint
+CREATE UNIQUE INDEX "user_email_org_idx" ON "user" USING btree ("organization_id","email");--> statement-breakpoint
+CREATE INDEX "user_org_id_idx" ON "user" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint
 CREATE INDEX "workspace_domain_org_id_idx" ON "workspace_domain" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "boards_org_slug_idx" ON "boards" USING btree ("organization_id","slug");--> statement-breakpoint
@@ -349,6 +344,7 @@ CREATE INDEX "posts_created_at_idx" ON "posts" USING btree ("created_at");--> st
 CREATE INDEX "posts_vote_count_idx" ON "posts" USING btree ("vote_count");--> statement-breakpoint
 CREATE INDEX "votes_post_id_idx" ON "votes" USING btree ("post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "votes_unique_idx" ON "votes" USING btree ("post_id","user_identifier");--> statement-breakpoint
+CREATE INDEX "votes_member_id_idx" ON "votes" USING btree ("member_id");--> statement-breakpoint
 CREATE INDEX "integrations_org_id_idx" ON "integrations" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "integrations_type_idx" ON "integrations" USING btree ("type");--> statement-breakpoint
 CREATE INDEX "integrations_board_id_idx" ON "integrations" USING btree ("board_id");--> statement-breakpoint
