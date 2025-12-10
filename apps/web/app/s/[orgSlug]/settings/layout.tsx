@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { SettingsNav } from './settings-nav'
 import { getUserAvatarData } from '@/lib/avatar'
+import { getOrganizationLogoData } from '@/lib/organization'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { SessionProvider } from '@/components/providers/session-provider'
 
@@ -27,7 +28,11 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
   }
 
   // Get avatar URL with base64 data for SSR (no flicker)
-  const avatarData = await getUserAvatarData(user.id, user.image)
+  // Get logo URL from blob storage for SSR
+  const [avatarData, logoData] = await Promise.all([
+    getUserAvatarData(user.id, user.image),
+    getOrganizationLogoData(org.id),
+  ])
 
   const initialUserData = {
     name: user.name,
@@ -41,7 +46,7 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
         <div className="min-h-screen bg-background flex flex-col">
           <PortalHeader
             orgName={org.name}
-            orgLogo={org.logo}
+            orgLogo={logoData.logoUrl}
             userRole={userRole}
             initialUserData={initialUserData}
           />

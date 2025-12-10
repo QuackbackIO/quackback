@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { PortalHeader } from '@/components/public/portal-header'
 import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
+import { getOrganizationLogoData } from '@/lib/organization'
 import { BackButton } from '@/app/back-button'
 
 /**
@@ -16,10 +17,13 @@ export default async function NotFound() {
     getCurrentUserRole().catch(() => null),
   ])
 
+  // Get logo URL from blob storage for SSR
+  const logoData = org ? await getOrganizationLogoData(org.id) : null
+
   return (
     <div className="min-h-screen bg-background">
       {/* Show portal header if on a valid workspace */}
-      {org && <PortalHeader orgName={org.name} orgLogo={org.logo} userRole={userRole} />}
+      {org && <PortalHeader orgName={org.name} orgLogo={logoData?.logoUrl} userRole={userRole} />}
 
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
         <div className="w-full max-w-lg space-y-8 text-center">
