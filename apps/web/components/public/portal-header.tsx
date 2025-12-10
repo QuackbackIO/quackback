@@ -1,10 +1,11 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { signOut } from '@/lib/auth/client'
+import { signOut, useSession } from '@/lib/auth/client'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +16,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar } from '@/components/ui/avatar'
 import { LogOut, Settings, Shield } from 'lucide-react'
-import { useUserProfileStore } from '@/lib/stores/user-profile'
+import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 
 interface PortalHeaderProps {
   orgName: string
@@ -37,24 +39,56 @@ const navItems = [
 
 export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {
   const pathname = usePathname()
-  const storeData = useUserProfileStore()
+  const { openAuthPopover } = useAuthPopover()
 
-  // Use store values if hydrated, fall back to initial props for SSR
-  const name = storeData.name ?? initialUserData?.name ?? null
-  const email = storeData.email ?? initialUserData?.email ?? null
-  const avatarUrl = storeData.avatarUrl ?? initialUserData?.avatarUrl ?? null
+  // Track if we've completed initial hydration to prevent SSR/client mismatch
+  const [isHydrated, setIsHydrated] = useState(false)
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
-  // Use userRole from server as source of truth for auth state (prevents flicker)
-  // userRole is null for anonymous users, set for logged-in users
-  const isLoggedIn = userRole !== null && userRole !== undefined
+  // Client-side session state - updates without page reload
+  const { data: sessionData, isPending, refetch: refetchSession } = useSession()
+
+  // Listen for auth success to refetch session
+  useAuthBroadcast({
+    onSuccess: () => {
+      refetchSession()
+    },
+  })
+
+  // Derive effective auth state from client session when available
+  // During initial hydration (!isHydrated), ALWAYS use server props to match SSR output
+  // After hydration, use client session once loaded
+  const clientUser = sessionData?.user
+  const isSessionLoaded = isHydrated && !isPending
+
+  // Auth state: during hydration use server props, after use client session
+  const isLoggedIn = isSessionLoaded ? !!clientUser : userRole !== null && userRole !== undefined
+
+  // Use client session for name/email once loaded, otherwise fall back to server data
+  const name =
+    isSessionLoaded && clientUser ? (clientUser.name ?? null) : (initialUserData?.name ?? null)
+  const email =
+    isSessionLoaded && clientUser ? (clientUser.email ?? null) : (initialUserData?.email ?? null)
+
+  // For avatar: use session image URL once loaded, fall back to SSR data
+  // During hydration, MUST use SSR data to prevent hydration mismatch
+  // After hydration, use session image (which may be /api/user/avatar/... URL)
+  // Important: if session is loaded but image is empty/null, show no avatar (not SSR fallback)
+  const avatarUrl = isSessionLoaded
+    ? clientUser?.image || null // Use session image or null (for initials fallback)
+    : (initialUserData?.avatarUrl ?? null) // During hydration, use SSR data
+
   // Team members (owner, admin, member) can access admin dashboard
+  // For now, we can't determine role from client session, so use server prop
   const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(userRole || '')
 
   const handleSignOut = () => {
     signOut({
       fetchOptions: {
         onSuccess: () => {
-          window.location.href = '/'
+          refetchSession()
         },
       },
     })
@@ -143,11 +177,11 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
         ) : (
           // Anonymous user - show login/signup buttons
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/login">Log in</Link>
+            <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>
+              Log in
             </Button>
-            <Button size="sm" asChild>
-              <Link href="/signup">Sign up</Link>
+            <Button size="sm" onClick={() => openAuthPopover({ mode: 'signup' })}>
+              Sign up
             </Button>
           </div>
         )}

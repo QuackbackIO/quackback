@@ -1,8 +1,10 @@
 import { requireTenantBySlug, getOrganizationBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
+import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { SettingsNav } from './settings-nav'
 import { getUserAvatarData } from '@/lib/avatar'
-import { UserProfileProvider } from '@/components/providers/user-profile-provider'
+import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
+import { SessionProvider } from '@/components/providers/session-provider'
 
 interface SettingsLayoutProps {
   children: React.ReactNode
@@ -14,9 +16,10 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
 
   // Allow ALL authenticated users (team members and portal users)
   const { user } = await requireTenantBySlug(orgSlug)
-  const [org, userRole] = await Promise.all([
+  const [org, userRole, session] = await Promise.all([
     getOrganizationBySlug(orgSlug),
     getCurrentUserRoleBySlug(orgSlug),
+    getSession(),
   ])
 
   if (!org) {
@@ -33,24 +36,21 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
   }
 
   return (
-    <UserProfileProvider
-      initialData={{
-        ...initialUserData,
-        hasCustomAvatar: avatarData.hasCustomAvatar,
-      }}
-    >
-      <div className="min-h-screen bg-background flex flex-col">
-        <PortalHeader
-          orgName={org.name}
-          orgLogo={org.logo}
-          userRole={userRole}
-          initialUserData={initialUserData}
-        />
-        <div className="flex gap-8 px-6 py-8 max-w-5xl mx-auto w-full flex-1">
-          <SettingsNav />
-          <main className="min-w-0 flex-1">{children}</main>
+    <SessionProvider initialSession={session}>
+      <AuthPopoverProvider>
+        <div className="min-h-screen bg-background flex flex-col">
+          <PortalHeader
+            orgName={org.name}
+            orgLogo={org.logo}
+            userRole={userRole}
+            initialUserData={initialUserData}
+          />
+          <div className="flex gap-8 px-6 py-8 max-w-5xl mx-auto w-full flex-1">
+            <SettingsNav />
+            <main className="min-w-0 flex-1">{children}</main>
+          </div>
         </div>
-      </div>
-    </UserProfileProvider>
+      </AuthPopoverProvider>
+    </SessionProvider>
   )
 }

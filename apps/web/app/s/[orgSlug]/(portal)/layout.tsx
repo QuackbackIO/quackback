@@ -4,7 +4,9 @@ import { PortalHeader } from '@/components/public/portal-header'
 import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { getUserAvatarData } from '@/lib/avatar'
 import { getOrganizationLogoData } from '@/lib/organization'
-import { UserProfileProvider } from '@/components/providers/user-profile-provider'
+import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
+import { AuthDialog } from '@/components/auth/auth-dialog'
+import { SessionProvider } from '@/components/providers/session-provider'
 import { theme } from '@quackback/domain'
 
 // Force dynamic rendering since we read session cookies
@@ -54,6 +56,15 @@ export default async function PublicLayout({
       }
     : undefined
 
+  // Build auth config for the auth dialog
+  const authConfig = {
+    found: true,
+    portalAuthEnabled: org.portalAuthEnabled,
+    googleEnabled: org.portalGoogleEnabled,
+    githubEnabled: org.portalGithubEnabled,
+    microsoftEnabled: false, // Not supported for portal users
+  }
+
   const content = (
     <div className="min-h-screen bg-background flex flex-col">
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -65,22 +76,17 @@ export default async function PublicLayout({
       />
       <main className="mx-auto max-w-5xl w-full flex-1">{children}</main>
       <PoweredByFooter />
+      {/* Auth dialog for inline authentication */}
+      <AuthDialog authConfig={authConfig} />
     </div>
   )
 
-  // Only wrap with provider if user is logged in
-  if (session?.user && initialUserData) {
-    return (
-      <UserProfileProvider
-        initialData={{
-          ...initialUserData,
-          hasCustomAvatar: avatarData?.hasCustomAvatar ?? false,
-        }}
-      >
-        {content}
-      </UserProfileProvider>
-    )
-  }
-
-  return content
+  // Wrap with providers:
+  // - SessionProvider hydrates better-auth session from SSR data (prevents flash)
+  // - AuthPopoverProvider manages auth dialog state
+  return (
+    <SessionProvider initialSession={session}>
+      <AuthPopoverProvider>{content}</AuthPopoverProvider>
+    </SessionProvider>
+  )
 }

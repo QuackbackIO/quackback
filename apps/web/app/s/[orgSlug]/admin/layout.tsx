@@ -1,7 +1,8 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
+import { getSession } from '@/lib/auth/server'
 import { AdminNav } from './admin-nav'
 import { getUserAvatarData } from '@/lib/avatar'
-import { UserProfileProvider } from '@/components/providers/user-profile-provider'
+import { SessionProvider } from '@/components/providers/session-provider'
 
 export default async function AdminLayout({
   children,
@@ -13,7 +14,10 @@ export default async function AdminLayout({
   // Only team members (owner, admin, member roles) can access admin dashboard
   // Portal users don't have member records, so they can't access this
   const { orgSlug } = await params
-  const { user } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin', 'member'])
+  const [{ user }, session] = await Promise.all([
+    requireTenantRoleBySlug(orgSlug, ['owner', 'admin', 'member']),
+    getSession(),
+  ])
 
   // Get avatar URL with base64 data for SSR (no flicker)
   const avatarData = await getUserAvatarData(user.id, user.image)
@@ -25,16 +29,11 @@ export default async function AdminLayout({
   }
 
   return (
-    <UserProfileProvider
-      initialData={{
-        ...initialUserData,
-        hasCustomAvatar: avatarData.hasCustomAvatar,
-      }}
-    >
+    <SessionProvider initialSession={session}>
       <div className="min-h-screen bg-background">
         <AdminNav initialUserData={initialUserData} />
         {children}
       </div>
-    </UserProfileProvider>
+    </SessionProvider>
   )
 }

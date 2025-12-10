@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { MessageSquare, Map, Users, LogOut, Settings } from 'lucide-react'
@@ -14,8 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { signOut } from '@/lib/auth/client'
-import { useUserProfileStore } from '@/lib/stores/user-profile'
+import { signOut, useSession } from '@/lib/auth/client'
 
 interface AdminNavProps {
   /** Initial user data for SSR (store values override these after hydration) */
@@ -52,12 +52,32 @@ const navItems = [
 export function AdminNav({ initialUserData }: AdminNavProps) {
   const rawPathname = usePathname()
   const pathname = toExternalPath(rawPathname)
-  const storeData = useUserProfileStore()
 
-  // Use store values if hydrated, fall back to initial props for SSR
-  const name = storeData.name ?? initialUserData?.name ?? null
-  const email = storeData.email ?? initialUserData?.email ?? null
-  const avatarUrl = storeData.avatarUrl ?? initialUserData?.avatarUrl ?? null
+  // Track if we've completed initial hydration to prevent SSR/client mismatch
+  const [isHydrated, setIsHydrated] = useState(false)
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
+
+  // Client-side session state - updates without page reload
+  const { data: sessionData, isPending, refetch: refetchSession } = useSession()
+
+  // Derive user data from client session when available
+  // During initial hydration (!isHydrated), ALWAYS use server props to match SSR output
+  const clientUser = sessionData?.user
+  const isSessionLoaded = isHydrated && !isPending
+
+  // Use client session once loaded, otherwise fall back to server-provided data
+  const name =
+    isSessionLoaded && clientUser ? (clientUser.name ?? null) : (initialUserData?.name ?? null)
+  const email =
+    isSessionLoaded && clientUser ? (clientUser.email ?? null) : (initialUserData?.email ?? null)
+  // For avatar: use session image URL once loaded, fall back to SSR data
+  // During hydration, MUST use SSR data to prevent hydration mismatch
+  // Important: if session is loaded but image is empty/null, show no avatar (not SSR fallback)
+  const avatarUrl = isSessionLoaded
+    ? clientUser?.image || null // Use session image or null (for initials fallback)
+    : (initialUserData?.avatarUrl ?? null) // During hydration, use SSR data
 
   return (
     <header className="border-b border-border bg-card">
@@ -113,6 +133,8 @@ export function AdminNav({ initialUserData }: AdminNavProps) {
                 signOut({
                   fetchOptions: {
                     onSuccess: () => {
+                      // Refetch to clear session, then redirect
+                      refetchSession()
                       window.location.href = '/'
                     },
                   },
