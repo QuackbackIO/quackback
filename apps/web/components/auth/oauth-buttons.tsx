@@ -10,7 +10,7 @@ interface OAuthButtonsProps {
   showGithub?: boolean
   showMicrosoft?: boolean
   callbackUrl?: string
-  /** 'team' for admin access, 'portal' for portal users (role='user') */
+  /** 'team' for team members with admin access, 'portal' for portal users */
   context?: 'team' | 'portal'
 }
 
