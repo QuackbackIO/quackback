@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse the verified payload
-    const { subdomain, context, timestamp, provider } = JSON.parse(payload)
+    const { subdomain, context, timestamp, provider, popup } = JSON.parse(payload)
 
     // Check timestamp (5 minute window to prevent replay)
     const maxAge = 5 * 60 * 1000
@@ -184,6 +184,11 @@ export async function GET(request: NextRequest) {
       expiresAt: new Date(Date.now() + 30000), // 30 seconds
     })
     subdomainUrl.searchParams.set('token', token)
+
+    // Pass popup flag through to trust-login so it knows to redirect to auth-complete
+    if (popup) {
+      subdomainUrl.searchParams.set('popup', 'true')
+    }
 
     // Create response that clears Better-Auth cookies and redirects
     // We don't want the global Better-Auth session, only per-org sessions

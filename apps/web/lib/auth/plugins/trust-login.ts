@@ -110,7 +110,17 @@ export const trustLogin = () => {
             ctx.context.authCookies.sessionToken.options
           )
 
-          // 7. Redirect based on context (hardcoded paths to prevent open redirect)
+          // 7. Redirect based on context and popup mode
+          // Check if this is a popup window that should redirect to auth-complete
+          const requestUrl = new URL(ctx.request?.url || 'http://localhost')
+          const isPopup = requestUrl.searchParams.get('popup') === 'true'
+
+          if (isPopup) {
+            // Popup mode: redirect to auth-complete page which broadcasts success
+            return ctx.redirect('/auth-complete')
+          }
+
+          // Normal mode: redirect based on context (hardcoded paths to prevent open redirect)
           const redirectUrl = transfer.context === 'portal' ? '/' : '/admin'
           return ctx.redirect(redirectUrl)
         }

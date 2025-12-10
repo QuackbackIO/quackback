@@ -73,6 +73,7 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const subdomain = searchParams.get('subdomain')
   const context = (searchParams.get('context') || 'team') as 'team' | 'portal'
+  const popup = searchParams.get('popup') === 'true'
 
   if (!subdomain) {
     return NextResponse.json({ error: 'subdomain parameter is required' }, { status: 400 })
@@ -129,8 +130,8 @@ export async function GET(
   const nonce = randomBytes(16).toString('hex')
   const timestamp = Date.now()
 
-  // Create state payload and sign it (includes context for role assignment and provider)
-  const statePayload = JSON.stringify({ subdomain, context, provider, nonce, timestamp })
+  // Create state payload and sign it (includes context for role assignment, provider, and popup mode)
+  const statePayload = JSON.stringify({ subdomain, context, provider, popup, nonce, timestamp })
   const signature = signState(statePayload, secret)
 
   // Store signed state in cookie

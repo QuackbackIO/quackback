@@ -80,7 +80,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, code, name, invitationId, context = 'portal', callbackUrl = '/' } = body
+    const {
+      email,
+      code,
+      name,
+      invitationId,
+      context = 'portal',
+      callbackUrl = '/',
+      popup = false,
+    } = body
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
@@ -108,9 +116,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid code' }, { status: 400 })
     }
 
-    // Code is valid - delete it (one-time use)
-    await db.delete(verification).where(eq(verification.id, verificationRecord.id))
-
     // Check if user already exists in this org
     const existingUser = await db.query.user.findFirst({
       where: and(eq(user.email, normalizedEmail), eq(user.organizationId, org.id)),
@@ -118,6 +123,9 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       // LOGIN FLOW - user exists
+      // Delete the code (one-time use)
+      await db.delete(verification).where(eq(verification.id, verificationRecord.id))
+
       const transferTokenId = crypto.randomUUID()
       const transferToken = generateSecureToken()
 
@@ -133,7 +141,12 @@ export async function POST(request: NextRequest) {
       })
 
       const protocol = request.headers.get('x-forwarded-proto') || 'http'
-      const redirectUrl = `${protocol}://${host}/api/auth/trust-login?token=${transferToken}`
+      let redirectUrl = `${protocol}://${host}/api/auth/trust-login?token=${transferToken}`
+
+      // Append popup flag if set
+      if (popup) {
+        redirectUrl += '&popup=true'
+      }
 
       return NextResponse.json({
         success: true,
@@ -146,6 +159,8 @@ export async function POST(request: NextRequest) {
 
     // Check if portal auth is enabled (unless this is team context or invitation)
     if (context === 'portal' && !org.portalAuthEnabled && !invitationId) {
+      // Delete the code since we're rejecting the request
+      await db.delete(verification).where(eq(verification.id, verificationRecord.id))
       return NextResponse.json(
         { error: 'Portal signup is not enabled for this organization.' },
         { status: 403 }
@@ -153,13 +168,23 @@ export async function POST(request: NextRequest) {
     }
 
     // If no name provided, tell frontend to collect it
+    // Keep the verification code alive for the name submission step (extend expiry by 5 minutes from current expiry)
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      const newExpiry = new Date(verificationRecord.expiresAt.getTime() + 5 * 60 * 1000)
+      await db
+        .update(verification)
+        .set({ expiresAt: newExpiry })
+        .where(eq(verification.id, verificationRecord.id))
+
       return NextResponse.json({
         success: true,
         action: 'needsSignup',
         email: normalizedEmail,
       })
     }
+
+    // Name provided - delete the code now (one-time use)
+    await db.delete(verification).where(eq(verification.id, verificationRecord.id))
 
     // Validate invitation if provided
     let validInvitation: {
@@ -278,7 +303,12 @@ export async function POST(request: NextRequest) {
     })
 
     const protocol = request.headers.get('x-forwarded-proto') || 'http'
-    const redirectUrl = `${protocol}://${host}/api/auth/trust-login?token=${transferToken}`
+    let redirectUrl = `${protocol}://${host}/api/auth/trust-login?token=${transferToken}`
+
+    // Append popup flag if set
+    if (popup) {
+      redirectUrl += '&popup=true'
+    }
 
     return NextResponse.json({
       success: true,
