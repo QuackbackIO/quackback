@@ -8,8 +8,6 @@ import { InfoIcon } from 'lucide-react'
 
 interface PortalAuthTogglesProps {
   organizationId: string
-  portalAuthEnabled: boolean
-  portalPasswordEnabled: boolean
   portalGoogleEnabled: boolean
   portalGithubEnabled: boolean
   googleAvailable: boolean
@@ -18,15 +16,11 @@ interface PortalAuthTogglesProps {
 
 export function PortalAuthToggles({
   organizationId,
-  portalAuthEnabled: initialPortalAuthEnabled,
-  portalPasswordEnabled: initialPasswordEnabled,
   portalGoogleEnabled: initialGoogleEnabled,
   portalGithubEnabled: initialGithubEnabled,
   googleAvailable,
   githubAvailable,
 }: PortalAuthTogglesProps) {
-  const [portalAuthEnabled, setPortalAuthEnabled] = useState(initialPortalAuthEnabled)
-  const [passwordEnabled, setPasswordEnabled] = useState(initialPasswordEnabled)
   const [googleEnabled, setGoogleEnabled] = useState(initialGoogleEnabled)
   const [githubEnabled, setGithubEnabled] = useState(initialGithubEnabled)
   const [isPending, startTransition] = useTransition()
@@ -60,103 +54,62 @@ export function PortalAuthToggles({
 
   return (
     <div className="space-y-6">
-      {/* Master toggle */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Label htmlFor="portal-auth-enabled" className="text-base font-medium">
-            Enable Portal Authentication
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            Allow visitors to create accounts and sign in on your public portal
-          </p>
-        </div>
-        <Switch
-          id="portal-auth-enabled"
-          checked={portalAuthEnabled}
-          onCheckedChange={(checked) =>
-            handleToggle('portalAuthEnabled', checked, setPortalAuthEnabled)
-          }
-          disabled={isPending}
-        />
-      </div>
+      {/* Auth methods */}
+      <div className="space-y-4">
+        <p className="text-sm font-medium text-muted-foreground">OAuth Providers</p>
 
-      {/* Auth methods - only shown when portal auth is enabled */}
-      {portalAuthEnabled && (
-        <div className="space-y-4 pl-4 border-l-2 border-muted">
-          <p className="text-sm font-medium text-muted-foreground">Authentication Methods</p>
-
+        {googleAvailable && (
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <Label htmlFor="portal-password" className="text-base font-medium">
-                Email & Password
+              <Label htmlFor="portal-google" className="text-base font-medium">
+                Google
               </Label>
               <p className="text-sm text-muted-foreground">
-                Allow portal users to sign up with email and password
+                Allow portal users to sign in with Google
               </p>
             </div>
             <Switch
-              id="portal-password"
-              checked={passwordEnabled}
+              id="portal-google"
+              checked={googleEnabled}
               onCheckedChange={(checked) =>
-                handleToggle('portalPasswordEnabled', checked, setPasswordEnabled)
+                handleToggle('portalGoogleEnabled', checked, setGoogleEnabled)
               }
               disabled={isPending}
             />
           </div>
+        )}
 
-          {googleAvailable && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <Label htmlFor="portal-google" className="text-base font-medium">
-                  Google
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Allow portal users to sign in with Google
-                </p>
-              </div>
-              <Switch
-                id="portal-google"
-                checked={googleEnabled}
-                onCheckedChange={(checked) =>
-                  handleToggle('portalGoogleEnabled', checked, setGoogleEnabled)
-                }
-                disabled={isPending}
-              />
+        {githubAvailable && (
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="portal-github" className="text-base font-medium">
+                GitHub
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Allow portal users to sign in with GitHub
+              </p>
             </div>
-          )}
+            <Switch
+              id="portal-github"
+              checked={githubEnabled}
+              onCheckedChange={(checked) =>
+                handleToggle('portalGithubEnabled', checked, setGithubEnabled)
+              }
+              disabled={isPending}
+            />
+          </div>
+        )}
 
-          {githubAvailable && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <Label htmlFor="portal-github" className="text-base font-medium">
-                  GitHub
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Allow portal users to sign in with GitHub
-                </p>
-              </div>
-              <Switch
-                id="portal-github"
-                checked={githubEnabled}
-                onCheckedChange={(checked) =>
-                  handleToggle('portalGithubEnabled', checked, setGithubEnabled)
-                }
-                disabled={isPending}
-              />
-            </div>
-          )}
-
-          {!googleAvailable && !githubAvailable && (
-            <Alert>
-              <InfoIcon className="h-4 w-4" />
-              <AlertDescription>
-                Social login providers are not configured. Contact your system administrator to
-                enable Google or GitHub login.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-      )}
+        {!googleAvailable && !githubAvailable && (
+          <Alert>
+            <InfoIcon className="h-4 w-4" />
+            <AlertDescription>
+              Social login providers are not configured. Contact your system administrator to enable
+              Google or GitHub login.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
 
       {error && (
         <Alert variant="destructive">

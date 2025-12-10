@@ -3,7 +3,6 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
 import { db } from '@quackback/db'
-import bcrypt from 'bcryptjs'
 import { trustLogin } from './plugins/trust-login'
 
 /**
@@ -33,15 +32,9 @@ export const auth = betterAuth({
     provider: 'pg',
   }),
 
+  // Password auth disabled - users sign in via OTP email codes or OAuth
   emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-    // Use bcrypt for password hashing (compatible with bcryptjs and Bun.password)
-    password: {
-      hash: async (password: string) => bcrypt.hash(password, 10),
-      verify: async ({ password, hash }: { password: string; hash: string }) =>
-        bcrypt.compare(password, hash),
-    },
+    enabled: false,
   },
 
   socialProviders: {

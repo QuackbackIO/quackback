@@ -23,7 +23,6 @@ export default async function LoginPage({ params }: LoginPageProps) {
   const authConfig = org
     ? {
         found: true,
-        portalAuthEnabled: org.portalAuthEnabled,
         googleEnabled: org.portalGoogleEnabled,
         githubEnabled: org.portalGithubEnabled,
       }

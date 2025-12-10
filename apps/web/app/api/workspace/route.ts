@@ -4,7 +4,6 @@ import {
   organization,
   user,
   member,
-  account,
   eq,
   sessionTransferToken,
   workspaceDomain,
@@ -13,15 +12,6 @@ import { createWorkspaceSchema } from '@/lib/schemas/auth'
 import { getBaseDomain } from '@/lib/routing'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { getStatusService } from '@/lib/services'
-import bcrypt from 'bcryptjs'
-
-/**
- * Hash password using bcryptjs
- * Compatible with Better-Auth's custom bcrypt verification
- */
-async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10)
-}
 
 /**
  * Generate a secure token
@@ -76,18 +66,17 @@ function buildSubdomainUrl(slug: string, request: NextRequest): string {
  * Creates a new organization and owner user in a single transaction.
  * This is the entry point for self-service tenant provisioning.
  *
- * Users are global identities. Workspace owners get a member record with role='owner'.
+ * Users are org-scoped identities. Workspace owners get a member record with role='owner'.
+ * No password is stored - authentication is via email OTP codes.
  *
  * Flow:
  * 1. Validate input
  * 2. Check slug availability
- * 3. Check if email exists (must login first if so)
- * 4. Create organization
- * 5. Create user (global identity)
- * 6. Create account (password)
- * 7. Create member (owner role)
- * 8. Create one-time transfer token
- * 9. Return redirect URL to subdomain /api/auth/trust-login with token
+ * 3. Create organization
+ * 4. Create user (org-scoped identity)
+ * 5. Create member (owner role)
+ * 6. Create one-time transfer token
+ * 7. Return redirect URL to subdomain /api/auth/trust-login with token
  */
 export async function POST(request: NextRequest) {
   // Rate limit by IP
@@ -116,7 +105,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { workspaceName, workspaceSlug, name, email, password } = parsed.data
+    const { workspaceName, workspaceSlug, name, email } = parsed.data
 
     // Check if slug is already taken
     const existingOrg = await db.query.organization.findFirst({
@@ -134,12 +123,8 @@ export async function POST(request: NextRequest) {
     const orgId = crypto.randomUUID()
     const userId = crypto.randomUUID()
     const memberId = crypto.randomUUID()
-    const accountId = crypto.randomUUID()
     const domainId = crypto.randomUUID()
     const tokenId = crypto.randomUUID()
-
-    // Hash password
-    const hashedPassword = await hashPassword(password)
 
     // Generate transfer token
     const transferToken = generateSecureToken()
@@ -157,7 +142,7 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
       })
 
-      // 2. Create user (org-scoped identity)
+      // 2. Create user (org-scoped identity, no password)
       // Users are scoped to a single organization
       await tx.insert(user).values({
         id: userId,
@@ -169,18 +154,7 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       })
 
-      // 3. Create account (password credential)
-      await tx.insert(account).values({
-        id: accountId,
-        userId,
-        accountId: userId, // For credential accounts, accountId = userId
-        providerId: 'credential',
-        password: hashedPassword,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-
-      // 4. Create member with owner role
+      // 3. Create member with owner role
       await tx.insert(member).values({
         id: memberId,
         userId,
@@ -189,7 +163,7 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
       })
 
-      // 5. Create workspace domain record for subdomain
+      // 4. Create workspace domain record for subdomain
       await tx.insert(workspaceDomain).values({
         id: domainId,
         organizationId: orgId,
@@ -199,7 +173,7 @@ export async function POST(request: NextRequest) {
         verified: true,
       })
 
-      // 6. Create one-time transfer token
+      // 5. Create one-time transfer token
       // Compute target domain before inserting (matches workspace_domain table)
       const subdomainUrl = buildSubdomainUrl(workspaceSlug, request)
       const targetDomain = new URL(subdomainUrl).host

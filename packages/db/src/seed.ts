@@ -10,8 +10,7 @@ config({ path: '../../.env', quiet: true })
 import { faker } from '@faker-js/faker'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import bcrypt from 'bcryptjs'
-import { user, organization, member, account, workspaceDomain } from './schema/auth'
+import { user, organization, member, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
@@ -80,11 +79,6 @@ async function resetDatabaseSettings() {
   await client.unsafe(`RESET work_mem`)
 }
 
-// Hash password using bcrypt (matches Better-Auth config)
-function hashPassword(password: string): string {
-  return bcrypt.hashSync(password, 10)
-}
-
 // Configuration - simulating a medium-sized enterprise
 const CONFIG = {
   users: 250,
@@ -93,10 +87,9 @@ const CONFIG = {
   batchSize: 1000, // Insert in batches (limited by PostgreSQL's 65535 param limit)
 }
 
-// Fixed demo credentials
+// Fixed demo credentials (passwordless - use OTP sign-in)
 const DEMO_USER = {
   email: 'demo@example.com',
-  password: 'demo1234',
   name: 'Demo User',
 }
 
@@ -1193,9 +1186,6 @@ async function seed() {
   await optimizeForBulkInsert()
   console.log('   Database optimized\n')
 
-  // Pre-hash the demo password (used for all seeded accounts)
-  const hashedPassword = hashPassword(DEMO_USER.password)
-
   // =========================================================================
   // Create Organizations FIRST (users now require organizationId)
   // =========================================================================
@@ -1264,16 +1254,6 @@ async function seed() {
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     emailVerified: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })
-
-  await db.insert(account).values({
-    id: uuid(),
-    accountId: demoUserId,
-    providerId: 'credential',
-    userId: demoUserId,
-    password: hashedPassword,
     createdAt: new Date(),
     updatedAt: new Date(),
   })
@@ -1367,19 +1347,6 @@ async function seed() {
         email,
         orgId: demoOrgId,
         isTeamMember: false,
-      })
-    }
-
-    // Some users have password accounts
-    if (faker.datatype.boolean({ probability: 0.7 })) {
-      await db.insert(account).values({
-        id: uuid(),
-        accountId: userId,
-        providerId: 'credential',
-        userId: userId,
-        password: hashedPassword,
-        createdAt: randomDate(180),
-        updatedAt: new Date(),
       })
     }
   }
@@ -1788,9 +1755,9 @@ async function seed() {
   // =========================================================================
   console.log('\n✅ Seed complete!\n')
   console.log('━'.repeat(50))
-  console.log('Demo credentials:')
-  console.log(`  Email:    ${DEMO_USER.email}`)
-  console.log('  Password: demo1234')
+  console.log('Demo account:')
+  console.log(`  Email: ${DEMO_USER.email}`)
+  console.log('  Sign in with OTP code (check your email)')
   console.log('')
   console.log('Organizations:')
   for (const org of orgRecords) {

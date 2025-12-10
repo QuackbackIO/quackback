@@ -59,7 +59,6 @@ export default async function PublicLayout({
   // Build auth config for the auth dialog
   const authConfig = {
     found: true,
-    portalAuthEnabled: org.portalAuthEnabled,
     googleEnabled: org.portalGoogleEnabled,
     githubEnabled: org.portalGithubEnabled,
     microsoftEnabled: false, // Not supported for portal users

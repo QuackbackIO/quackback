@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
       // Return default config if org not found
       return NextResponse.json({
         found: false,
-        portalAuthEnabled: true,
         googleEnabled: true,
         githubEnabled: true,
       })
@@ -39,7 +38,6 @@ export async function GET(request: NextRequest) {
       found: true,
       organizationId: org.id,
       organizationName: org.name,
-      portalAuthEnabled: org.portalAuthEnabled,
       googleEnabled: org.portalGoogleEnabled,
       githubEnabled: org.portalGithubEnabled,
     })

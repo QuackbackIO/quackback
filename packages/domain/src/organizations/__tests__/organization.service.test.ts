@@ -71,7 +71,6 @@ describe('OrganizationService', () => {
     it('should return security settings when organization exists', async () => {
       const mockOrg = {
         id: 'org-123',
-        passwordAuthEnabled: true,
         googleOAuthEnabled: true,
         githubOAuthEnabled: false,
         microsoftOAuthEnabled: false,
@@ -84,7 +83,6 @@ describe('OrganizationService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toEqual({
-          passwordAuthEnabled: true,
           googleOAuthEnabled: true,
           githubOAuthEnabled: false,
           microsoftOAuthEnabled: false,
@@ -119,13 +117,12 @@ describe('OrganizationService', () => {
   describe('updateSecuritySettings', () => {
     it('should update security settings successfully', async () => {
       const input: UpdateSecurityInput = {
-        passwordAuthEnabled: false,
+        googleOAuthEnabled: false,
       }
 
       const mockUpdated = {
         id: 'org-123',
-        passwordAuthEnabled: false,
-        googleOAuthEnabled: true,
+        googleOAuthEnabled: false,
         githubOAuthEnabled: false,
         microsoftOAuthEnabled: false,
       }
@@ -142,7 +139,7 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.passwordAuthEnabled).toBe(false)
+        expect(result.value.googleOAuthEnabled).toBe(false)
       }
     })
 
@@ -153,7 +150,7 @@ describe('OrganizationService', () => {
       }
 
       const input: UpdateSecurityInput = {
-        passwordAuthEnabled: false,
+        googleOAuthEnabled: false,
       }
 
       const result = await orgService.updateSecuritySettings(input, memberContext)
@@ -171,13 +168,12 @@ describe('OrganizationService', () => {
       }
 
       const input: UpdateSecurityInput = {
-        passwordAuthEnabled: false,
+        googleOAuthEnabled: false,
       }
 
       const mockUpdated = {
         id: 'org-123',
-        passwordAuthEnabled: false,
-        googleOAuthEnabled: true,
+        googleOAuthEnabled: false,
         githubOAuthEnabled: false,
         microsoftOAuthEnabled: false,
       }
@@ -216,7 +212,6 @@ describe('OrganizationService', () => {
 
       const mockUpdated = {
         id: 'org-123',
-        passwordAuthEnabled: true,
         googleOAuthEnabled: true,
         githubOAuthEnabled: true,
         microsoftOAuthEnabled: true,
@@ -245,8 +240,6 @@ describe('OrganizationService', () => {
     it('should return portal auth settings when organization exists', async () => {
       const mockOrg = {
         id: 'org-123',
-        portalAuthEnabled: true,
-        portalPasswordEnabled: true,
         portalGoogleEnabled: false,
         portalGithubEnabled: false,
       }
@@ -257,8 +250,7 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.portalAuthEnabled).toBe(true)
-        expect(result.value.portalPasswordEnabled).toBe(true)
+        expect(result.value.portalGoogleEnabled).toBe(false)
       }
     })
 
@@ -277,14 +269,11 @@ describe('OrganizationService', () => {
   describe('updatePortalAuthSettings', () => {
     it('should update portal auth settings successfully', async () => {
       const input: UpdatePortalAuthInput = {
-        portalAuthEnabled: true,
         portalGoogleEnabled: true,
       }
 
       const mockUpdated = {
         id: 'org-123',
-        portalAuthEnabled: true,
-        portalPasswordEnabled: true,
         portalGoogleEnabled: true,
         portalGithubEnabled: false,
       }
@@ -301,7 +290,6 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.portalAuthEnabled).toBe(true)
         expect(result.value.portalGoogleEnabled).toBe(true)
       }
     })
@@ -313,7 +301,7 @@ describe('OrganizationService', () => {
       }
 
       const input: UpdatePortalAuthInput = {
-        portalAuthEnabled: true,
+        portalGoogleEnabled: true,
       }
 
       const result = await orgService.updatePortalAuthSettings(input, memberContext)
@@ -1058,7 +1046,6 @@ describe('OrganizationService', () => {
       const mockOrg = {
         id: 'org-123',
         slug: 'acme',
-        passwordAuthEnabled: true,
         googleOAuthEnabled: true,
         githubOAuthEnabled: false,
         microsoftOAuthEnabled: false,
@@ -1080,7 +1067,6 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.passwordEnabled).toBe(true)
         expect(result.value.googleEnabled).toBe(true)
         expect(result.value.openSignupEnabled).toBe(true)
         expect(result.value.ssoProviders).toHaveLength(1)
@@ -1105,8 +1091,6 @@ describe('OrganizationService', () => {
       const mockOrg = {
         id: 'org-123',
         slug: 'acme',
-        portalAuthEnabled: true,
-        portalPasswordEnabled: true,
         portalGoogleEnabled: false,
         portalGithubEnabled: true,
       }
@@ -1117,8 +1101,7 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.portalAuthEnabled).toBe(true)
-        expect(result.value.passwordEnabled).toBe(true)
+        expect(result.value.googleEnabled).toBe(false)
         expect(result.value.githubEnabled).toBe(true)
       }
     })

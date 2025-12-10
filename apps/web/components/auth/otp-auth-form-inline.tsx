@@ -16,7 +16,6 @@ interface SsoProviderInfo {
 
 interface OrgAuthConfig {
   found: boolean
-  portalAuthEnabled?: boolean
   googleEnabled: boolean
   githubEnabled: boolean
   microsoftEnabled?: boolean
@@ -341,18 +340,6 @@ export function OTPAuthFormInline({
       <Alert variant="destructive">
         <InfoIcon className="h-4 w-4" />
         <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    )
-  }
-
-  // Portal auth not enabled (without invitation)
-  if (authConfig && !authConfig.portalAuthEnabled && !invitation) {
-    return (
-      <Alert>
-        <InfoIcon className="h-4 w-4" />
-        <AlertDescription>
-          User accounts are not enabled for this portal. You can still interact anonymously.
-        </AlertDescription>
       </Alert>
     )
   }

@@ -30,7 +30,6 @@ const APP_DOMAIN = process.env.APP_DOMAIN
 const mainDomainPublicRoutes = [
   '/', // Landing page
   '/create-workspace', // Tenant provisioning flow
-  '/forgot-password', // Password reset
   '/accept-invitation', // Invitation acceptance
   '/api/auth', // Auth API routes
   '/api/workspace', // Workspace creation API

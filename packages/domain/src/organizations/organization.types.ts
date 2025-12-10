@@ -3,10 +3,9 @@
  */
 
 /**
- * Security settings for organization authentication
+ * Security settings for organization authentication (OAuth providers)
  */
 export interface SecuritySettings {
-  passwordAuthEnabled: boolean
   googleOAuthEnabled: boolean
   githubOAuthEnabled: boolean
   microsoftOAuthEnabled: boolean
@@ -16,18 +15,15 @@ export interface SecuritySettings {
  * Input for updating security settings
  */
 export interface UpdateSecurityInput {
-  passwordAuthEnabled?: boolean
   googleOAuthEnabled?: boolean
   githubOAuthEnabled?: boolean
   microsoftOAuthEnabled?: boolean
 }
 
 /**
- * Portal authentication settings
+ * Portal authentication settings (OAuth providers)
  */
 export interface PortalAuthSettings {
-  portalAuthEnabled: boolean
-  portalPasswordEnabled: boolean
   portalGoogleEnabled: boolean
   portalGithubEnabled: boolean
 }
@@ -36,8 +32,6 @@ export interface PortalAuthSettings {
  * Input for updating portal auth settings
  */
 export interface UpdatePortalAuthInput {
-  portalAuthEnabled?: boolean
-  portalPasswordEnabled?: boolean
   portalGoogleEnabled?: boolean
   portalGithubEnabled?: boolean
 }
@@ -157,7 +151,6 @@ export interface UpdateSsoProviderInput {
  * Public auth config for login forms (no secrets)
  */
 export interface PublicAuthConfig {
-  passwordEnabled: boolean
   googleEnabled: boolean
   githubEnabled: boolean
   microsoftEnabled: boolean
@@ -169,8 +162,6 @@ export interface PublicAuthConfig {
  * Portal public auth config (no secrets)
  */
 export interface PortalPublicAuthConfig {
-  portalAuthEnabled: boolean
-  passwordEnabled: boolean
   googleEnabled: boolean
   githubEnabled: boolean
 }

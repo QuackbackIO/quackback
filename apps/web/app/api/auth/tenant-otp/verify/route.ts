@@ -157,16 +157,6 @@ export async function POST(request: NextRequest) {
 
     // SIGNUP FLOW - user doesn't exist
 
-    // Check if portal auth is enabled (unless this is team context or invitation)
-    if (context === 'portal' && !org.portalAuthEnabled && !invitationId) {
-      // Delete the code since we're rejecting the request
-      await db.delete(verification).where(eq(verification.id, verificationRecord.id))
-      return NextResponse.json(
-        { error: 'Portal signup is not enabled for this organization.' },
-        { status: 403 }
-      )
-    }
-
     // If no name provided, tell frontend to collect it
     // Keep the verification code alive for the name submission step (extend expiry by 5 minutes from current expiry)
     if (!name || typeof name !== 'string' || name.trim().length === 0) {

@@ -19,7 +19,6 @@ interface SsoProviderInfo {
 
 interface OrgAuthConfig {
   found: boolean
-  portalAuthEnabled?: boolean
   googleEnabled: boolean
   githubEnabled: boolean
   microsoftEnabled?: boolean

@@ -84,7 +84,6 @@ export class OrganizationService {
       }
 
       return ok({
-        passwordAuthEnabled: org.passwordAuthEnabled,
         googleOAuthEnabled: org.googleOAuthEnabled,
         githubOAuthEnabled: org.githubOAuthEnabled,
         microsoftOAuthEnabled: org.microsoftOAuthEnabled,
@@ -114,8 +113,6 @@ export class OrganizationService {
     try {
       // Build update object with only provided fields
       const updates: Partial<typeof organization.$inferInsert> = {}
-      if (input.passwordAuthEnabled !== undefined)
-        updates.passwordAuthEnabled = input.passwordAuthEnabled
       if (input.googleOAuthEnabled !== undefined)
         updates.googleOAuthEnabled = input.googleOAuthEnabled
       if (input.githubOAuthEnabled !== undefined)
@@ -138,7 +135,6 @@ export class OrganizationService {
       }
 
       return ok({
-        passwordAuthEnabled: updated.passwordAuthEnabled,
         googleOAuthEnabled: updated.googleOAuthEnabled,
         githubOAuthEnabled: updated.githubOAuthEnabled,
         microsoftOAuthEnabled: updated.microsoftOAuthEnabled,
@@ -173,8 +169,6 @@ export class OrganizationService {
       }
 
       return ok({
-        portalAuthEnabled: org.portalAuthEnabled,
-        portalPasswordEnabled: org.portalPasswordEnabled,
         portalGoogleEnabled: org.portalGoogleEnabled,
         portalGithubEnabled: org.portalGithubEnabled,
       })
@@ -203,9 +197,6 @@ export class OrganizationService {
     try {
       // Build update object with only provided fields
       const updates: Partial<typeof organization.$inferInsert> = {}
-      if (input.portalAuthEnabled !== undefined) updates.portalAuthEnabled = input.portalAuthEnabled
-      if (input.portalPasswordEnabled !== undefined)
-        updates.portalPasswordEnabled = input.portalPasswordEnabled
       if (input.portalGoogleEnabled !== undefined)
         updates.portalGoogleEnabled = input.portalGoogleEnabled
       if (input.portalGithubEnabled !== undefined)
@@ -226,8 +217,6 @@ export class OrganizationService {
       }
 
       return ok({
-        portalAuthEnabled: updated.portalAuthEnabled,
-        portalPasswordEnabled: updated.portalPasswordEnabled,
         portalGoogleEnabled: updated.portalGoogleEnabled,
         portalGithubEnabled: updated.portalGithubEnabled,
       })
@@ -412,9 +401,12 @@ export class OrganizationService {
     }
 
     try {
-      // Check for duplicate domain
+      // Check for duplicate domain within this organization
       const existingDomain = await db.query.ssoProvider.findFirst({
-        where: eq(ssoProvider.domain, input.domain.toLowerCase()),
+        where: and(
+          eq(ssoProvider.organizationId, ctx.organizationId),
+          eq(ssoProvider.domain, input.domain.toLowerCase())
+        ),
       })
 
       if (existingDomain) {
@@ -484,7 +476,7 @@ export class OrganizationService {
         return err(OrgError.ssoProviderNotFound(providerId))
       }
 
-      // Check domain uniqueness if changing
+      // Check domain uniqueness within org if changing
       if (input.domain && input.domain.toLowerCase() !== existing.domain) {
         const domainRegex = /^[a-z0-9]+([-.][a-z0-9]+)*\.[a-z]{2,}$/
         if (!domainRegex.test(input.domain.toLowerCase())) {
@@ -492,7 +484,10 @@ export class OrganizationService {
         }
 
         const existingDomain = await db.query.ssoProvider.findFirst({
-          where: eq(ssoProvider.domain, input.domain.toLowerCase()),
+          where: and(
+            eq(ssoProvider.organizationId, ctx.organizationId),
+            eq(ssoProvider.domain, input.domain.toLowerCase())
+          ),
         })
 
         if (existingDomain) {
@@ -615,7 +610,6 @@ export class OrganizationService {
       })
 
       return ok({
-        passwordEnabled: org.passwordAuthEnabled,
         googleEnabled: org.googleOAuthEnabled,
         githubEnabled: org.githubOAuthEnabled,
         microsoftEnabled: org.microsoftOAuthEnabled,
@@ -652,8 +646,6 @@ export class OrganizationService {
       }
 
       return ok({
-        portalAuthEnabled: org.portalAuthEnabled,
-        passwordEnabled: org.portalPasswordEnabled,
         googleEnabled: org.portalGoogleEnabled,
         githubEnabled: org.portalGithubEnabled,
       })

@@ -163,16 +163,13 @@ export const organization = pgTable('organization', {
   logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
-  // Per-organization authentication method settings
-  passwordAuthEnabled: boolean('password_auth_enabled').default(true).notNull(),
+  // Per-organization OAuth provider settings (team sign-in)
   googleOAuthEnabled: boolean('google_oauth_enabled').default(true).notNull(),
   githubOAuthEnabled: boolean('github_oauth_enabled').default(true).notNull(),
   microsoftOAuthEnabled: boolean('microsoft_oauth_enabled').default(true).notNull(),
   // Allow public signup on tenant subdomain (vs invitation-only)
   openSignupEnabled: boolean('open_signup_enabled').default(false).notNull(),
-  // Portal authentication settings (separate from team auth above)
-  portalAuthEnabled: boolean('portal_auth_enabled').default(true).notNull(),
-  portalPasswordEnabled: boolean('portal_password_enabled').default(true).notNull(),
+  // Portal OAuth settings (separate from team auth above)
   portalGoogleEnabled: boolean('portal_google_enabled').default(true).notNull(),
   portalGithubEnabled: boolean('portal_github_enabled').default(true).notNull(),
   // Theme customization for the public portal
@@ -269,7 +266,8 @@ export const ssoProvider = pgTable(
   },
   (table) => [
     index('sso_provider_org_id_idx').on(table.organizationId),
-    uniqueIndex('sso_provider_domain_idx').on(table.domain),
+    // Domain is unique per organization (not globally) - same domain can be used by different orgs
+    uniqueIndex('sso_provider_org_domain_idx').on(table.organizationId, table.domain),
   ]
 )
 

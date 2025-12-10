@@ -23,6 +23,7 @@ import {
  *
  * Used on the main domain to create a new tenant (org + user).
  * After creation, redirects to the subdomain with a session cookie.
+ * Note: No password - uses email OTP for subsequent authentication.
  */
 export function CreateWorkspaceForm() {
   const [error, setError] = useState('')
@@ -39,7 +40,6 @@ export function CreateWorkspaceForm() {
       workspaceSlug: '',
       name: '',
       email: '',
-      password: '',
     },
   })
 
@@ -159,20 +159,9 @@ export function CreateWorkspaceForm() {
                 <FormControl>
                   <Input type="email" placeholder="you@example.com" {...field} />
                 </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <Input type="password" placeholder="Min. 8 characters" {...field} />
-                </FormControl>
+                <FormDescription>
+                  You&apos;ll sign in using a code sent to this email
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

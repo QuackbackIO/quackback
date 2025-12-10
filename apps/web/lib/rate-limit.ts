@@ -141,8 +141,8 @@ export const rateLimits = {
   /** Signup attempts: 3 per minute per IP */
   signup: { limit: 3, windowMs: 60 * 1000 },
 
-  /** Password reset: 3 per 15 minutes per email */
-  passwordReset: { limit: 3, windowMs: 15 * 60 * 1000 },
+  /** OTP code requests: 3 per 15 minutes per email */
+  otpRequest: { limit: 3, windowMs: 15 * 60 * 1000 },
 
   /** Workspace creation: 3 per hour per IP */
   workspaceCreation: { limit: 3, windowMs: 60 * 60 * 1000 },

@@ -35,8 +35,6 @@ export default async function PortalAuthPage({ params }: { params: Promise<{ org
         </p>
         <PortalAuthToggles
           organizationId={organization.id}
-          portalAuthEnabled={organization.portalAuthEnabled}
-          portalPasswordEnabled={organization.portalPasswordEnabled}
           portalGoogleEnabled={organization.portalGoogleEnabled}
           portalGithubEnabled={organization.portalGithubEnabled}
           googleAvailable={googleAvailable}

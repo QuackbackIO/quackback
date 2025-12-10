@@ -1,7 +1,6 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
 import { Shield } from 'lucide-react'
 import { SsoProviderList } from './sso-provider-list'
-import { PasswordAuthToggle } from './password-auth-toggle'
 import { OAuthProviderToggles } from './oauth-provider-toggles'
 
 // Check which OAuth providers are globally configured
@@ -27,18 +26,6 @@ export default async function SecurityPage({ params }: { params: Promise<{ orgSl
             Manage authentication methods for {organization.name}
           </p>
         </div>
-      </div>
-
-      {/* Password Authentication */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Password Authentication</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Allow users to sign in with email and password
-        </p>
-        <PasswordAuthToggle
-          organizationId={organization.id}
-          initialValue={organization.passwordAuthEnabled}
-        />
       </div>
 
       {/* Social Login */}

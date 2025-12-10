@@ -24,7 +24,6 @@ export default async function SignupPage({ params }: SignupPageProps) {
   const authConfig = org
     ? {
         found: true,
-        portalAuthEnabled: org.portalAuthEnabled,
         googleEnabled: org.portalGoogleEnabled,
         githubEnabled: org.portalGithubEnabled,
       }

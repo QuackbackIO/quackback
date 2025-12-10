@@ -19,7 +19,6 @@ export const GET = withApiHandler(
     }
 
     return NextResponse.json({
-      passwordAuthEnabled: org.passwordAuthEnabled,
       googleOAuthEnabled: org.googleOAuthEnabled,
       githubOAuthEnabled: org.githubOAuthEnabled,
       microsoftOAuthEnabled: org.microsoftOAuthEnabled,
@@ -36,7 +35,6 @@ export const GET = withApiHandler(
  *
  * Body: {
  *   organizationId: string,
- *   passwordAuthEnabled?: boolean,
  *   googleOAuthEnabled?: boolean,
  *   githubOAuthEnabled?: boolean,
  *   microsoftOAuthEnabled?: boolean,
@@ -45,20 +43,15 @@ export const GET = withApiHandler(
 export const PATCH = withApiHandler(
   async (request, { validation }) => {
     const body = await request.json()
-    const { passwordAuthEnabled, googleOAuthEnabled, githubOAuthEnabled, microsoftOAuthEnabled } =
-      body
+    const { googleOAuthEnabled, githubOAuthEnabled, microsoftOAuthEnabled } = body
 
     // Build update object with only provided fields
     const updates: Partial<{
-      passwordAuthEnabled: boolean
       googleOAuthEnabled: boolean
       githubOAuthEnabled: boolean
       microsoftOAuthEnabled: boolean
     }> = {}
 
-    if (typeof passwordAuthEnabled === 'boolean') {
-      updates.passwordAuthEnabled = passwordAuthEnabled
-    }
     if (typeof googleOAuthEnabled === 'boolean') {
       updates.googleOAuthEnabled = googleOAuthEnabled
     }
@@ -82,7 +75,6 @@ export const PATCH = withApiHandler(
 
     return successResponse({
       success: true,
-      passwordAuthEnabled: updated.passwordAuthEnabled,
       googleOAuthEnabled: updated.googleOAuthEnabled,
       githubOAuthEnabled: updated.githubOAuthEnabled,
       microsoftOAuthEnabled: updated.microsoftOAuthEnabled,

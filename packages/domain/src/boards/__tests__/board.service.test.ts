@@ -443,8 +443,7 @@ describe('BoardService', () => {
 
     it('should handle custom settings', async () => {
       const settings: BoardSettings = {
-        anonymousSubmissions: false,
-        submissionsEnabled: true,
+        roadmapStatuses: ['planned', 'in_progress'],
       }
 
       const input: CreateBoardInput = {
@@ -1021,7 +1020,7 @@ describe('BoardService', () => {
       description: null,
       isPublic: true,
       settings: {
-        anonymousSubmissions: true,
+        roadmapStatuses: ['planned', 'in_progress', 'complete'],
       },
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -1029,14 +1028,13 @@ describe('BoardService', () => {
 
     it('should merge new settings with existing settings', async () => {
       const newSettings: BoardSettings = {
-        submissionsEnabled: false,
+        roadmapStatuses: ['planned', 'in_progress'],
       }
 
       const updatedBoard: Board = {
         ...existingBoard,
         settings: {
-          anonymousSubmissions: true,
-          submissionsEnabled: false,
+          roadmapStatuses: ['planned', 'in_progress'],
         },
       }
 
@@ -1048,8 +1046,7 @@ describe('BoardService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value.settings).toEqual({
-          anonymousSubmissions: true,
-          submissionsEnabled: false,
+          roadmapStatuses: ['planned', 'in_progress'],
         })
       }
     })
@@ -1085,7 +1082,7 @@ describe('BoardService', () => {
       }
 
       const newSettings: BoardSettings = {
-        anonymousSubmissions: false,
+        roadmapStatuses: ['planned'],
       }
 
       const updatedBoard: Board = {

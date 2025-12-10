@@ -19,8 +19,6 @@ export const GET = withApiHandler(
     }
 
     return NextResponse.json({
-      portalAuthEnabled: org.portalAuthEnabled,
-      portalPasswordEnabled: org.portalPasswordEnabled,
       portalGoogleEnabled: org.portalGoogleEnabled,
       portalGithubEnabled: org.portalGithubEnabled,
     })
@@ -36,8 +34,6 @@ export const GET = withApiHandler(
  *
  * Body: {
  *   organizationId: string,
- *   portalAuthEnabled?: boolean,
- *   portalPasswordEnabled?: boolean,
  *   portalGoogleEnabled?: boolean,
  *   portalGithubEnabled?: boolean,
  * }
@@ -45,23 +41,14 @@ export const GET = withApiHandler(
 export const PATCH = withApiHandler(
   async (request, { validation }) => {
     const body = await request.json()
-    const { portalAuthEnabled, portalPasswordEnabled, portalGoogleEnabled, portalGithubEnabled } =
-      body
+    const { portalGoogleEnabled, portalGithubEnabled } = body
 
     // Build update object with only provided fields
     const updates: Partial<{
-      portalAuthEnabled: boolean
-      portalPasswordEnabled: boolean
       portalGoogleEnabled: boolean
       portalGithubEnabled: boolean
     }> = {}
 
-    if (typeof portalAuthEnabled === 'boolean') {
-      updates.portalAuthEnabled = portalAuthEnabled
-    }
-    if (typeof portalPasswordEnabled === 'boolean') {
-      updates.portalPasswordEnabled = portalPasswordEnabled
-    }
     if (typeof portalGoogleEnabled === 'boolean') {
       updates.portalGoogleEnabled = portalGoogleEnabled
     }
@@ -82,8 +69,6 @@ export const PATCH = withApiHandler(
 
     return successResponse({
       success: true,
-      portalAuthEnabled: updated.portalAuthEnabled,
-      portalPasswordEnabled: updated.portalPasswordEnabled,
       portalGoogleEnabled: updated.portalGoogleEnabled,
       portalGithubEnabled: updated.portalGithubEnabled,
     })
