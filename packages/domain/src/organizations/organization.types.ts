@@ -2,8 +2,6 @@
  * Input/Output types for OrganizationService operations
  */
 
-import type { PermissionLevel } from '@quackback/db/types'
-
 /**
  * Security settings for organization authentication
  */
@@ -32,9 +30,6 @@ export interface PortalAuthSettings {
   portalPasswordEnabled: boolean
   portalGoogleEnabled: boolean
   portalGithubEnabled: boolean
-  portalVoting: PermissionLevel
-  portalCommenting: PermissionLevel
-  portalSubmissions: PermissionLevel
 }
 
 /**
@@ -45,9 +40,6 @@ export interface UpdatePortalAuthInput {
   portalPasswordEnabled?: boolean
   portalGoogleEnabled?: boolean
   portalGithubEnabled?: boolean
-  portalVoting?: PermissionLevel
-  portalCommenting?: PermissionLevel
-  portalSubmissions?: PermissionLevel
 }
 
 /**
@@ -181,9 +173,6 @@ export interface PortalPublicAuthConfig {
   passwordEnabled: boolean
   googleEnabled: boolean
   githubEnabled: boolean
-  voting: PermissionLevel
-  commenting: PermissionLevel
-  submissions: PermissionLevel
 }
 
 /**
@@ -194,13 +183,4 @@ export interface SsoCheckResult {
   providerId: string
   issuer: string
   domain: string
-}
-
-/**
- * Public permission check result for voting/commenting/submissions
- */
-export interface InteractionPermission {
-  permission: PermissionLevel
-  isMember: boolean
-  member?: { id: string; role: string }
 }

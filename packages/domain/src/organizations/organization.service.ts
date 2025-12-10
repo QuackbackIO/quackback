@@ -9,8 +9,7 @@
  * - Public permission checking
  */
 
-import { db, eq, and, desc, organization, ssoProvider, member } from '@quackback/db'
-import type { PermissionLevel } from '@quackback/db/types'
+import { db, eq, and, desc, organization, ssoProvider } from '@quackback/db'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { OrgError } from './organization.errors'
@@ -26,7 +25,6 @@ import type {
   PublicAuthConfig,
   PortalPublicAuthConfig,
   SsoCheckResult,
-  InteractionPermission,
   OidcConfig,
   SamlConfig,
 } from './organization.types'
@@ -179,9 +177,6 @@ export class OrganizationService {
         portalPasswordEnabled: org.portalPasswordEnabled,
         portalGoogleEnabled: org.portalGoogleEnabled,
         portalGithubEnabled: org.portalGithubEnabled,
-        portalVoting: org.portalVoting as PermissionLevel,
-        portalCommenting: org.portalCommenting as PermissionLevel,
-        portalSubmissions: org.portalSubmissions as PermissionLevel,
       })
     } catch (error) {
       return err(
@@ -215,9 +210,6 @@ export class OrganizationService {
         updates.portalGoogleEnabled = input.portalGoogleEnabled
       if (input.portalGithubEnabled !== undefined)
         updates.portalGithubEnabled = input.portalGithubEnabled
-      if (input.portalVoting !== undefined) updates.portalVoting = input.portalVoting
-      if (input.portalCommenting !== undefined) updates.portalCommenting = input.portalCommenting
-      if (input.portalSubmissions !== undefined) updates.portalSubmissions = input.portalSubmissions
 
       if (Object.keys(updates).length === 0) {
         return err(OrgError.validationError('No fields provided to update'))
@@ -238,9 +230,6 @@ export class OrganizationService {
         portalPasswordEnabled: updated.portalPasswordEnabled,
         portalGoogleEnabled: updated.portalGoogleEnabled,
         portalGithubEnabled: updated.portalGithubEnabled,
-        portalVoting: updated.portalVoting as PermissionLevel,
-        portalCommenting: updated.portalCommenting as PermissionLevel,
-        portalSubmissions: updated.portalSubmissions as PermissionLevel,
       })
     } catch (error) {
       return err(
@@ -667,9 +656,6 @@ export class OrganizationService {
         passwordEnabled: org.portalPasswordEnabled,
         googleEnabled: org.portalGoogleEnabled,
         githubEnabled: org.portalGithubEnabled,
-        voting: org.portalVoting as PermissionLevel,
-        commenting: org.portalCommenting as PermissionLevel,
-        submissions: org.portalSubmissions as PermissionLevel,
       })
     } catch (error) {
       return err(
@@ -711,64 +697,6 @@ export class OrganizationService {
       return err(
         OrgError.validationError(
           `Failed to check SSO: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
-  }
-
-  // ============================================
-  // PUBLIC PERMISSION CHECKING
-  // ============================================
-
-  /**
-   * Check interaction permission for an organization
-   * Used by public vote/comment/submit API routes
-   */
-  async checkInteractionPermission(
-    organizationId: string,
-    interaction: 'voting' | 'commenting' | 'submissions',
-    userId?: string
-  ): Promise<Result<InteractionPermission, OrgError>> {
-    try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
-      })
-
-      if (!org) {
-        return err(OrgError.notFound(organizationId))
-      }
-
-      // Check if user is a member
-      let isMember = false
-      let memberRecord: { id: string; role: string } | undefined
-
-      if (userId) {
-        const foundMember = await db.query.member.findFirst({
-          where: and(eq(member.userId, userId), eq(member.organizationId, organizationId)),
-        })
-
-        if (foundMember) {
-          isMember = true
-          memberRecord = { id: foundMember.id, role: foundMember.role }
-        }
-      }
-
-      // Get the permission level for the requested interaction
-      const permissionMap = {
-        voting: org.portalVoting,
-        commenting: org.portalCommenting,
-        submissions: org.portalSubmissions,
-      }
-
-      return ok({
-        permission: permissionMap[interaction] as PermissionLevel,
-        isMember,
-        member: memberRecord,
-      })
-    } catch (error) {
-      return err(
-        OrgError.validationError(
-          `Failed to check ${interaction} permission: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }

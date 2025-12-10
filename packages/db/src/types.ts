@@ -21,35 +21,17 @@ export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
 export type Board = InferSelectModel<typeof boards>
 export type NewBoard = InferInsertModel<typeof boards>
 
-// Permission level enum for voting, commenting, submissions
-export type PermissionLevel = 'anyone' | 'authenticated' | 'disabled'
-
 // Board settings (stored in boards.settings JSONB column)
-// When undefined, inherits from organization settings
 export interface BoardSettings {
   roadmapStatuses?: PostStatus[] // default: ['planned', 'in_progress', 'complete']
-  voting?: PermissionLevel // default: inherit from org
-  commenting?: PermissionLevel // default: inherit from org
-  submissions?: PermissionLevel // default: inherit from org
 }
 
-// Helper to get typed board settings (undefined means inherit from org)
+// Helper to get typed board settings
 export function getBoardSettings(board: Board): BoardSettings {
   const settings = (board.settings || {}) as BoardSettings
   return {
     roadmapStatuses: settings.roadmapStatuses ?? ['planned', 'in_progress', 'complete'],
-    voting: settings.voting, // undefined = inherit from org
-    commenting: settings.commenting, // undefined = inherit from org
-    submissions: settings.submissions, // undefined = inherit from org
   }
-}
-
-// Helper to resolve effective permission (board overrides org when set)
-export function resolvePermission(
-  orgLevel: PermissionLevel,
-  boardLevel: PermissionLevel | undefined
-): PermissionLevel {
-  return boardLevel ?? orgLevel
 }
 
 // Roadmap types (filtered views of posts within a board)
