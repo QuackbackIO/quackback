@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
+import { db, member, eq, and } from '@quackback/db'
 import { getImportJobStatus } from '@quackback/jobs'
 
 // UUID regex for validation
@@ -34,8 +35,12 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
-    // Verify user belongs to this organization
-    if (session.user.organizationId !== orgIdFromJob) {
+    // Verify user belongs to this organization via member table
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, orgIdFromJob)),
+    })
+
+    if (!memberRecord) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

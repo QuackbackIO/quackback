@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { ZodSchema } from 'zod'
 import { validateApiTenantAccess, type ApiTenantResult } from '@/lib/tenant'
 
-type Role = 'owner' | 'admin' | 'member'
+/**
+ * Unified role type for all users (team + portal)
+ * - owner: Full administrative access
+ * - admin: Administrative access
+ * - member: Team member access
+ * - user: Portal user access (public portal only, no admin dashboard)
+ */
+type Role = 'owner' | 'admin' | 'member' | 'user'
 
 /**
  * Custom error class for API errors that should be returned to the client.
@@ -58,11 +65,13 @@ export function validateBody<T>(schema: ZodSchema<T>, body: unknown): T {
 /**
  * Role hierarchy for permission checks.
  * Higher number = more permissions.
+ * 'user' role (portal users) has lowest level - public portal access only.
  */
 const roleHierarchy: Record<Role, number> = {
-  owner: 3,
-  admin: 2,
-  member: 1,
+  owner: 4,
+  admin: 3,
+  member: 2,
+  user: 1,
 }
 
 /**

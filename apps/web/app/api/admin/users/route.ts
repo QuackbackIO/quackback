@@ -4,7 +4,8 @@ import { getUserService } from '@/lib/services'
 /**
  * GET /api/admin/users
  *
- * List portal users (members with role='user') for the organization.
+ * List portal users for the organization.
+ * Portal users have role='user' in the member table.
  * Supports filtering by search, verified status, date range, and sorting.
  */
 export const GET = withApiHandler(

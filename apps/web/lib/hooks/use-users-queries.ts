@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type { UsersFilters } from '@/app/(tenant)/admin/users/use-users-filters'
+import type { UsersFilters } from '@/app/s/[orgSlug]/admin/users/use-users-filters'
 import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@quackback/domain'
 
 // ============================================================================
@@ -110,90 +110,11 @@ export function useUserDetail({ memberId, organizationId, enabled = true }: UseU
 // Mutation Hooks
 // ============================================================================
 
-interface UpdateRoleInput {
-  memberId: string
-  role: string
-}
-
-export function useUpdateMemberRole(organizationId: string) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({ memberId, role }: UpdateRoleInput) => {
-      const response = await fetch(`/api/admin/users/${memberId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, organizationId }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update role')
-      }
-      return response.json()
-    },
-    onMutate: async ({ memberId, role }) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: usersKeys.detail(memberId, organizationId) })
-      await queryClient.cancelQueries({ queryKey: usersKeys.lists() })
-
-      // Snapshot previous state
-      const previousDetail = queryClient.getQueryData<PortalUserDetail>(
-        usersKeys.detail(memberId, organizationId)
-      )
-      const previousLists = queryClient.getQueriesData<InfiniteData<PortalUserListResult>>({
-        queryKey: usersKeys.lists(),
-      })
-
-      // Optimistically update detail
-      if (previousDetail) {
-        queryClient.setQueryData<PortalUserDetail>(usersKeys.detail(memberId, organizationId), {
-          ...previousDetail,
-          role,
-        })
-      }
-
-      // Optimistically update list caches
-      queryClient.setQueriesData<InfiniteData<PortalUserListResult>>(
-        { queryKey: usersKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((user) =>
-                user.memberId === memberId ? { ...user, role } : user
-              ),
-            })),
-          }
-        }
-      )
-
-      return { previousDetail, previousLists }
-    },
-    onError: (_err, { memberId }, context) => {
-      // Rollback on error
-      if (context?.previousDetail) {
-        queryClient.setQueryData(usersKeys.detail(memberId, organizationId), context.previousDetail)
-      }
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
-    },
-    onSettled: (_data, _error, { memberId }) => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: usersKeys.detail(memberId, organizationId) })
-      // If role changed from 'user', they should disappear from portal users list
-      queryClient.invalidateQueries({ queryKey: usersKeys.lists() })
-    },
-  })
-}
-
-export function useRemoveMember(organizationId: string) {
+/**
+ * Hook to remove a portal user from an organization.
+ * This deletes their member record and org-scoped user account.
+ */
+export function useRemovePortalUser(organizationId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -204,7 +125,7 @@ export function useRemoveMember(organizationId: string) {
       )
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.error || 'Failed to remove member')
+        throw new Error(data.error || 'Failed to remove portal user')
       }
       return response.json()
     },

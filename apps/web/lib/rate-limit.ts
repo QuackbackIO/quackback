@@ -161,6 +161,12 @@ export const rateLimits = {
 
   /** Vote attempts per post (authenticated): 10 per minute */
   votePerPostAuthenticated: { limit: 10, windowMs: 60 * 1000 },
+
+  /** Signin code requests: 5 per 15 minutes per IP */
+  signinCode: { limit: 5, windowMs: 15 * 60 * 1000 },
+
+  /** Signin code verification: 10 per 15 minutes per IP */
+  signinCodeVerify: { limit: 10, windowMs: 15 * 60 * 1000 },
 } as const
 
 /**

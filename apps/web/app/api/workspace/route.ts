@@ -76,15 +76,18 @@ function buildSubdomainUrl(slug: string, request: NextRequest): string {
  * Creates a new organization and owner user in a single transaction.
  * This is the entry point for self-service tenant provisioning.
  *
+ * Users are global identities. Workspace owners get a member record with role='owner'.
+ *
  * Flow:
  * 1. Validate input
  * 2. Check slug availability
- * 3. Create organization
- * 4. Create user with organizationId
- * 5. Create account (password)
- * 6. Create member (owner role)
- * 7. Create one-time transfer token
- * 8. Return redirect URL to subdomain /api/auth/complete with token
+ * 3. Check if email exists (must login first if so)
+ * 4. Create organization
+ * 5. Create user (global identity)
+ * 6. Create account (password)
+ * 7. Create member (owner role)
+ * 8. Create one-time transfer token
+ * 9. Return redirect URL to subdomain /api/auth/trust-login with token
  */
 export async function POST(request: NextRequest) {
   // Rate limit by IP
@@ -124,14 +127,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This workspace URL is already taken' }, { status: 409 })
     }
 
-    // Check if email is already registered
-    const existingUser = await db.query.user.findFirst({
-      where: eq(user.email, email),
-    })
-
-    if (existingUser) {
-      return NextResponse.json({ error: 'This email is already registered' }, { status: 409 })
-    }
+    // Note: In the unified org-scoped model, the same email can be used across different orgs.
+    // No need to check for existing users globally since each org has isolated user identities.
 
     // Generate IDs
     const orgId = crypto.randomUUID()
@@ -160,13 +157,14 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
       })
 
-      // 2. Create user with organizationId
+      // 2. Create user (org-scoped identity)
+      // Users are scoped to a single organization
       await tx.insert(user).values({
         id: userId,
+        organizationId: orgId,
         name,
         email,
         emailVerified: false,
-        organizationId: orgId,
         createdAt: new Date(),
         updatedAt: new Date(),
       })

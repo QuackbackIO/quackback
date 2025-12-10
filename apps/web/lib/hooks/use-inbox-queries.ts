@@ -7,12 +7,12 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type { InboxFilters } from '@/app/(tenant)/admin/feedback/use-inbox-filters'
+import type { InboxFilters } from '@/app/s/[orgSlug]/admin/feedback/use-inbox-filters'
 import type {
   PostDetails,
   CommentReaction,
   CommentWithReplies,
-} from '@/app/(tenant)/admin/feedback/inbox-types'
+} from '@/app/s/[orgSlug]/admin/feedback/inbox-types'
 import type { PostListItem, PostStatus, InboxPostListResult, Tag } from '@quackback/db/types'
 
 // ============================================================================

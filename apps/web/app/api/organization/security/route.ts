@@ -19,7 +19,6 @@ export const GET = withApiHandler(
     }
 
     return NextResponse.json({
-      strictSsoMode: org.strictSsoMode,
       passwordAuthEnabled: org.passwordAuthEnabled,
       googleOAuthEnabled: org.googleOAuthEnabled,
       githubOAuthEnabled: org.githubOAuthEnabled,
@@ -37,7 +36,6 @@ export const GET = withApiHandler(
  *
  * Body: {
  *   organizationId: string,
- *   strictSsoMode?: boolean,
  *   passwordAuthEnabled?: boolean,
  *   googleOAuthEnabled?: boolean,
  *   githubOAuthEnabled?: boolean,
@@ -47,26 +45,17 @@ export const GET = withApiHandler(
 export const PATCH = withApiHandler(
   async (request, { validation }) => {
     const body = await request.json()
-    const {
-      strictSsoMode,
-      passwordAuthEnabled,
-      googleOAuthEnabled,
-      githubOAuthEnabled,
-      microsoftOAuthEnabled,
-    } = body
+    const { passwordAuthEnabled, googleOAuthEnabled, githubOAuthEnabled, microsoftOAuthEnabled } =
+      body
 
     // Build update object with only provided fields
     const updates: Partial<{
-      strictSsoMode: boolean
       passwordAuthEnabled: boolean
       googleOAuthEnabled: boolean
       githubOAuthEnabled: boolean
       microsoftOAuthEnabled: boolean
     }> = {}
 
-    if (typeof strictSsoMode === 'boolean') {
-      updates.strictSsoMode = strictSsoMode
-    }
     if (typeof passwordAuthEnabled === 'boolean') {
       updates.passwordAuthEnabled = passwordAuthEnabled
     }
@@ -93,7 +82,6 @@ export const PATCH = withApiHandler(
 
     return successResponse({
       success: true,
-      strictSsoMode: updated.strictSsoMode,
       passwordAuthEnabled: updated.passwordAuthEnabled,
       googleOAuthEnabled: updated.googleOAuthEnabled,
       githubOAuthEnabled: updated.githubOAuthEnabled,
