@@ -1,7 +1,6 @@
 import { getOrganizationBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
-import { PoweredByFooter } from '@/components/public/powered-by-footer'
 import { getUserAvatarData } from '@/lib/avatar'
 import { getOrganizationLogoData } from '@/lib/organization'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -80,7 +79,6 @@ export default async function PublicLayout({
         initialUserData={initialUserData}
       />
       <main className="mx-auto max-w-5xl w-full flex-1">{children}</main>
-      <PoweredByFooter />
       {/* Auth dialog for inline authentication */}
       <AuthDialog authConfig={authConfig} />
     </div>

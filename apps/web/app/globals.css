@@ -192,3 +192,62 @@ a svg,
 [data-radix-scroll-area-viewport]::-webkit-scrollbar {
   display: none;
 }
+
+/* Custom scrollbar styling */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Hide scrollbar until hover for cleaner look */
+.custom-scrollbar-hover {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.custom-scrollbar-hover:hover {
+  scrollbar-color: var(--border) transparent;
+}
+
+.custom-scrollbar-hover::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar-hover::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar-hover:hover::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+.custom-scrollbar-hover:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
