@@ -38,6 +38,8 @@ interface CommentThreadProps {
   avatarUrls?: Record<string, string | null>
   onCommentAdded?: () => void
   user?: { name: string | null; email: string }
+  /** Called when unauthenticated user tries to comment */
+  onAuthRequired?: () => void
 }
 
 export function CommentThread({
@@ -47,11 +49,21 @@ export function CommentThread({
   avatarUrls,
   onCommentAdded,
   user,
+  onAuthRequired,
 }: CommentThreadProps) {
   return (
     <div className="space-y-6">
-      {/* Add comment form */}
-      {allowCommenting && <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />}
+      {/* Add comment form or sign in prompt */}
+      {allowCommenting ? (
+        <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />
+      ) : (
+        <div className="flex items-center justify-center py-4 px-4 bg-muted/30 rounded-lg border border-border/30">
+          <p className="text-sm text-muted-foreground mr-3">Sign in to comment</p>
+          <Button variant="outline" size="sm" onClick={onAuthRequired}>
+            Sign in
+          </Button>
+        </div>
+      )}
 
       {/* Comments list - sorted newest first */}
       {comments.length === 0 ? (

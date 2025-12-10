@@ -31,6 +31,8 @@ interface FeedbackToolbarProps {
   onTagChange: (tagIds: string[]) => void
   onClearFilters: () => void
   activeFilterCount: number
+  /** User info if authenticated */
+  user?: { name: string | null; email: string } | null
 }
 
 const sortOptions = [
@@ -54,6 +56,7 @@ export function FeedbackToolbar({
   onTagChange,
   onClearFilters,
   activeFilterCount,
+  user,
 }: FeedbackToolbarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
@@ -147,6 +150,7 @@ export function FeedbackToolbar({
             key={defaultBoardId}
             boards={boards}
             defaultBoardId={defaultBoardId}
+            user={user}
             trigger={
               <Button size="sm" className="gap-1.5">
                 <Plus className="h-4 w-4" />

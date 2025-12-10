@@ -29,6 +29,8 @@ interface FeedbackContainerProps {
   currentSearch?: string
   currentSort?: 'top' | 'new' | 'trending'
   defaultBoardId?: string
+  /** User info if authenticated */
+  user?: { name: string | null; email: string } | null
 }
 
 export function FeedbackContainer({
@@ -45,6 +47,7 @@ export function FeedbackContainer({
   currentSearch,
   currentSort = 'top',
   defaultBoardId,
+  user,
 }: FeedbackContainerProps) {
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
 
@@ -192,6 +195,7 @@ export function FeedbackContainer({
             onTagChange={handleTagChange}
             onClearFilters={handleClearFilters}
             activeFilterCount={activeFilterCount}
+            user={user}
           />
 
           <div className="mt-3">

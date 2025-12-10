@@ -15,6 +15,9 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { useSession, signOut } from '@/lib/auth/client'
+import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 
 interface SubmitCommentParams {
   postId: string
@@ -50,6 +53,25 @@ export function CommentForm({
 
   // Use external pending state if provided, otherwise use local
   const isSubmitting = externalIsSubmitting ?? isPending
+
+  // Client-side session state - updates without page reload
+  const { data: sessionData, refetch: refetchSession } = useSession()
+  const authPopover = useAuthPopoverSafe()
+
+  // Derive effective user: prefer fresh client session over stale server prop
+  const effectiveUser =
+    sessionData === undefined
+      ? user
+      : sessionData?.user
+        ? { name: sessionData.user.name, email: sessionData.user.email }
+        : null
+
+  // Listen for auth success to refetch session (no page reload)
+  useAuthBroadcast({
+    onSuccess: () => {
+      refetchSession()
+    },
+  })
 
   const form = useForm<CommentInput>({
     resolver: standardSchemaResolver(commentSchema),
@@ -134,7 +156,7 @@ export function CommentForm({
           )}
         />
 
-        {!user && (
+        {!effectiveUser && (
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
@@ -182,12 +204,39 @@ export function CommentForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex items-center justify-end gap-2">
-          {user && (
+          {effectiveUser ? (
             <p className="text-xs text-muted-foreground mr-auto">
               Posting as{' '}
-              <span className="font-medium text-foreground">{user.name || user.email}</span>
+              <span className="font-medium text-foreground">
+                {effectiveUser.name || effectiveUser.email}
+              </span>
+              {' ('}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onClick={() => {
+                  signOut({
+                    fetchOptions: {
+                      onSuccess: () => {
+                        refetchSession()
+                      },
+                    },
+                  })
+                }}
+              >
+                sign out
+              </button>
+              {')'}
             </p>
-          )}
+          ) : authPopover ? (
+            <button
+              type="button"
+              onClick={() => authPopover.openAuthPopover({ mode: 'login' })}
+              className="text-xs text-primary hover:underline font-medium mr-auto"
+            >
+              Sign in to comment
+            </button>
+          ) : null}
           {onCancel && (
             <Button
               type="button"

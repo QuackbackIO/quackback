@@ -89,6 +89,7 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
         currentSearch={search}
         currentSort={sort}
         defaultBoardId={boards[0]?.id}
+        user={session?.user ? { name: session.user.name, email: session.user.email } : null}
       />
     </main>
   )

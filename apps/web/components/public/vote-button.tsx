@@ -9,6 +9,8 @@ interface VoteButtonProps {
   initialVoteCount: number
   initialHasVoted: boolean
   disabled?: boolean
+  /** Called when user tries to vote but isn't authenticated */
+  onAuthRequired?: () => void
 }
 
 export function VoteButton({
@@ -16,6 +18,7 @@ export function VoteButton({
   initialVoteCount,
   initialHasVoted,
   disabled = false,
+  onAuthRequired,
 }: VoteButtonProps) {
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
@@ -24,6 +27,10 @@ export function VoteButton({
   })
 
   const onClick = () => {
+    if (disabled && onAuthRequired) {
+      onAuthRequired()
+      return
+    }
     if (disabled) return
     handleVote()
   }

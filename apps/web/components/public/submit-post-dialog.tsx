@@ -13,6 +13,9 @@ import {
 import { Plus } from 'lucide-react'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { useCreatePublicPost } from '@/lib/hooks/use-public-posts-query'
+import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { useSession, signOut } from '@/lib/auth/client'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {
@@ -26,6 +29,8 @@ interface SubmitPostDialogProps {
   defaultBoardId?: string
   onSuccess?: () => void
   trigger?: React.ReactNode
+  /** User info if authenticated */
+  user?: { name: string | null; email: string } | null
 }
 
 export function SubmitPostDialog({
@@ -33,12 +38,34 @@ export function SubmitPostDialog({
   defaultBoardId,
   onSuccess,
   trigger,
+  user,
 }: SubmitPostDialogProps) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
+  const { openAuthPopover } = useAuthPopover()
 
   // Use the mutation hook for optimistic updates
   const createPost = useCreatePublicPost()
+
+  // Client-side session state - updates without page reload
+  const { data: sessionData, refetch: refetchSession } = useSession()
+
+  // Derive effective user: prefer fresh client session over stale server prop
+  // When sessionData is undefined (loading), fall back to server prop
+  const effectiveUser =
+    sessionData === undefined
+      ? user
+      : sessionData?.user
+        ? { name: sessionData.user.name, email: sessionData.user.email }
+        : null
+
+  // Listen for auth success to refetch session (no page reload)
+  useAuthBroadcast({
+    onSuccess: () => {
+      refetchSession()
+    },
+    enabled: open, // Only listen when dialog is open
+  })
 
   // Board selection - default to provided defaultBoardId or first board
   const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || boards[0]?.id || '')
@@ -185,13 +212,40 @@ export function SubmitPostDialog({
         </div>
 
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30">
-          <p className="hidden sm:block text-xs text-muted-foreground">
-            <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">⌘</kbd>
-            <span className="mx-1">+</span>
-            <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Enter</kbd>
-            <span className="ml-2">to submit</span>
-          </p>
-          <div className="flex items-center gap-2 sm:ml-0 ml-auto">
+          {effectiveUser ? (
+            <p className="text-xs text-muted-foreground">
+              Posting as{' '}
+              <span className="font-medium text-foreground">
+                {effectiveUser.name || effectiveUser.email}
+              </span>
+              {' ('}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onClick={() => {
+                  signOut({
+                    fetchOptions: {
+                      onSuccess: () => {
+                        refetchSession()
+                      },
+                    },
+                  })
+                }}
+              >
+                sign out
+              </button>
+              {')'}
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openAuthPopover({ mode: 'login' })}
+              className="text-xs text-primary hover:underline font-medium"
+            >
+              Sign in to post
+            </button>
+          )}
+          <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="ghost"
@@ -201,7 +255,12 @@ export function SubmitPostDialog({
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSubmit} disabled={createPost.isPending}>
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={createPost.isPending || !effectiveUser}
+              title={!effectiveUser ? 'Please sign in to submit feedback' : undefined}
+            >
               {createPost.isPending ? 'Submitting...' : 'Submit'}
             </Button>
           </div>

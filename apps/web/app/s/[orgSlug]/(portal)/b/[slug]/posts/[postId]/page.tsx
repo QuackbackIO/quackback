@@ -8,8 +8,8 @@ import { db, member, eq, and } from '@quackback/db'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
-import { VoteButton } from '@/components/public/vote-button'
-import { CommentsSection } from '@/components/public/comments-section'
+import { AuthVoteButton } from '@/components/public/auth-vote-button'
+import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
 import { PostContent } from '@/components/public/post-content'
 import { Badge } from '@/components/ui/badge'
@@ -128,7 +128,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         <div className="flex">
           {/* Vote section - left column */}
           <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30">
-            <VoteButton
+            <AuthVoteButton
               postId={post.id}
               initialVoteCount={post.voteCount}
               initialHasVoted={hasVoted}
@@ -196,7 +196,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
             {countAllComments(post.comments) === 1 ? 'Comment' : 'Comments'}
           </h2>
 
-          <CommentsSection
+          <AuthCommentsSection
             postId={post.id}
             comments={post.comments}
             allowCommenting={canComment}

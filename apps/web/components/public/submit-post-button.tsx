@@ -1,8 +1,5 @@
 'use client'
 
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
 import { SubmitPostDialog } from './submit-post-dialog'
 
 interface BoardOption {
@@ -15,36 +12,25 @@ interface SubmitPostButtonProps {
   boards: BoardOption[]
   defaultBoardId?: string
   allowSubmissions: boolean
-  isAuthenticated: boolean
+  /** User info if authenticated */
+  user?: { name: string | null; email: string } | null
 }
 
 /**
- * Conditional submit feedback button for public board pages.
- * Shows different UI based on auth state and board settings.
+ * Submit feedback button for public board pages.
+ * Shows the submit dialog which handles both authenticated and unauthenticated states.
  */
 export function SubmitPostButton({
   boards,
   defaultBoardId,
   allowSubmissions,
-  isAuthenticated,
+  user,
 }: SubmitPostButtonProps) {
   // Don't show anything if submissions are disabled
   if (!allowSubmissions) {
     return null
   }
 
-  // Show login prompt if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <Button asChild>
-        <Link href="/login?callbackUrl=">
-          <Plus className="h-4 w-4 mr-2" />
-          Sign in to Submit
-        </Link>
-      </Button>
-    )
-  }
-
-  // Show the full dialog for authenticated users
-  return <SubmitPostDialog boards={boards} defaultBoardId={defaultBoardId} />
+  // Show the dialog - it handles auth state internally
+  return <SubmitPostDialog boards={boards} defaultBoardId={defaultBoardId} user={user} />
 }
