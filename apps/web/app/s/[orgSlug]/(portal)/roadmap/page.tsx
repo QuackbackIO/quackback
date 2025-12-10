@@ -1,5 +1,5 @@
 import { getOrganizationBySlug } from '@/lib/tenant'
-import { getPostService, getStatusService } from '@/lib/services'
+import { getRoadmapService, getStatusService } from '@/lib/services'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 
 interface RoadmapPageProps {
@@ -17,27 +17,15 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
     return null
   }
 
-  // Get statuses marked for roadmap display
-  const statusesResult = await getStatusService().listPublicStatuses(org.id)
+  // Get statuses marked for roadmap display and public roadmaps in parallel
+  const [statusesResult, roadmapsResult] = await Promise.all([
+    getStatusService().listPublicStatuses(org.id),
+    getRoadmapService().listPublicRoadmaps(org.id),
+  ])
+
   const allStatuses = statusesResult.success ? statusesResult.value : []
   const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
-
-  // Fetch first page (10 posts) for each status in parallel
-  const postService = getPostService()
-  const initialDataPromises = roadmapStatuses.map(async (status) => {
-    const result = await postService.getRoadmapPostsPaginated({
-      organizationId: org.id,
-      statusSlug: status.slug,
-      page: 1,
-      limit: 10,
-    })
-    return {
-      statusSlug: status.slug,
-      data: result.success ? result.value : { items: [], total: 0, hasMore: false },
-    }
-  })
-
-  const initialDataByStatus = await Promise.all(initialDataPromises)
+  const publicRoadmaps = roadmapsResult.success ? roadmapsResult.value : []
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -49,7 +37,7 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
       <RoadmapBoard
         organizationId={org.id}
         statuses={roadmapStatuses}
-        initialDataByStatus={initialDataByStatus}
+        initialRoadmaps={publicRoadmaps}
       />
     </div>
   )

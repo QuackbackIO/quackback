@@ -6,34 +6,38 @@ import { RoadmapCard } from './roadmap-card'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { useRoadmapPosts, flattenRoadmapPosts } from '@/lib/hooks/use-roadmap-posts-query'
-import type { RoadmapPostListResult } from '@quackback/domain'
+import {
+  usePublicRoadmapPosts,
+  flattenRoadmapPostEntries,
+} from '@/lib/hooks/use-roadmap-posts-query'
 
 interface RoadmapColumnProps {
   organizationId: string
-  statusSlug: string
+  roadmapId: string
+  statusId: string
   title: string
   color: string
-  initialData?: RoadmapPostListResult
 }
 
 export function RoadmapColumn({
   organizationId,
-  statusSlug,
+  roadmapId,
+  statusId,
   title,
   color,
-  initialData,
 }: RoadmapColumnProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const { data, isFetchingNextPage, hasNextPage, fetchNextPage } = useRoadmapPosts({
-    organizationId,
-    statusSlug,
-    initialData,
-  })
+  const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
+    {
+      organizationId,
+      roadmapId,
+      statusId,
+    }
+  )
 
-  const posts = flattenRoadmapPosts(data)
-  const total = data?.pages[0]?.total ?? initialData?.total ?? 0
+  const posts = flattenRoadmapPostEntries(data)
+  const total = data?.pages[0]?.total ?? 0
 
   // Intersection observer for infinite scroll
   useEffect(() => {
@@ -68,14 +72,24 @@ export function RoadmapColumn({
       </CardHeader>
       <CardContent className="flex-1 min-h-0 p-0">
         <ScrollArea className="h-full px-6 pb-6">
-          {posts.length === 0 ? (
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : posts.length === 0 ? (
             <div className="h-full flex items-center justify-center py-8">
               <p className="text-sm text-muted-foreground">No items yet</p>
             </div>
           ) : (
             <div className="space-y-2">
               {posts.map((post) => (
-                <RoadmapCard key={post.id} {...post} />
+                <RoadmapCard
+                  key={post.id}
+                  id={post.id}
+                  title={post.title}
+                  voteCount={post.voteCount}
+                  board={{ slug: post.board.slug, name: post.board.name }}
+                />
               ))}
 
               {/* Sentinel element for intersection observer */}
