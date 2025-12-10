@@ -39,6 +39,8 @@ export interface PostDetails {
   officialResponse: OfficialResponse | null
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
+  /** IDs of roadmaps this post belongs to */
+  roadmapIds?: string[]
 }
 
 export interface CurrentUser {

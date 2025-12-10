@@ -33,6 +33,7 @@ import { InboxEmptyState } from './inbox-empty-state'
 import { CommentForm } from '@/components/public/comment-form'
 import { PostContent } from '@/components/public/post-content'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { AddToRoadmapDropdown } from '@/components/admin/add-to-roadmap-dropdown'
 import { ChevronUp } from 'lucide-react'
 import { getInitials } from '@quackback/domain/utils'
 import { REACTION_EMOJIS } from '@quackback/db/types'
@@ -48,6 +49,7 @@ interface SubmitCommentParams {
 }
 
 interface InboxPostDetailProps {
+  organizationId: string
   post: PostDetails | null
   isLoading: boolean
   allTags: Tag[]
@@ -60,6 +62,7 @@ interface InboxPostDetailProps {
   onStatusChange: (status: PostStatus) => Promise<void>
   onTagsChange: (tagIds: string[]) => Promise<void>
   onOfficialResponseChange: (response: string | null) => Promise<void>
+  onRoadmapChange?: () => void
   submitComment: (params: SubmitCommentParams) => Promise<unknown>
   isCommentPending: boolean
   onReaction: (commentId: string, emoji: string) => void
@@ -306,6 +309,7 @@ function CommentItem({
 }
 
 export function InboxPostDetail({
+  organizationId,
   post,
   isLoading,
   allTags,
@@ -317,6 +321,7 @@ export function InboxPostDetail({
   onStatusChange,
   onTagsChange,
   onOfficialResponseChange,
+  onRoadmapChange,
   submitComment,
   isCommentPending,
   onReaction,
@@ -390,6 +395,14 @@ export function InboxPostDetail({
             <Pencil className="h-3.5 w-3.5 shrink-0" />
             Edit post
           </Button>
+          <AddToRoadmapDropdown
+            organizationId={organizationId}
+            postId={post.id}
+            currentStatusId={statuses.find((s) => s.slug === post.status)?.id ?? ''}
+            currentRoadmapIds={post.roadmapIds}
+            statuses={statuses}
+            onSuccess={onRoadmapChange}
+          />
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
           <X className="h-4 w-4" />

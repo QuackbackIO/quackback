@@ -208,6 +208,7 @@ export function InboxContainer({
         }
         postDetail={
           <InboxPostDetail
+            organizationId={organizationId}
             post={selectedPost ?? null}
             isLoading={isLoadingPost}
             allTags={tags}
@@ -219,6 +220,13 @@ export function InboxContainer({
             onStatusChange={handleStatusChange}
             onTagsChange={handleTagsChange}
             onOfficialResponseChange={handleOfficialResponseChange}
+            onRoadmapChange={() => {
+              if (selectedPostId) {
+                queryClient.invalidateQueries({
+                  queryKey: inboxKeys.detail(selectedPostId, organizationId),
+                })
+              }
+            }}
             submitComment={addComment.mutateAsync}
             isCommentPending={addComment.isPending}
             onReaction={handleReaction}

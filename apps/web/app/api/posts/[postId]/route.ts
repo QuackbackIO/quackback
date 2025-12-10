@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
-import { getPostService, getMemberService } from '@/lib/services'
+import { getPostService, getMemberService, getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type CommentTreeNode, type PostError } from '@quackback/domain'
 
 /**
@@ -97,12 +97,17 @@ export async function GET(
     const hasVotedResult = await getPostService().hasUserVotedOnPost(postId, userIdentifier)
     const hasVoted = hasVotedResult.success ? hasVotedResult.value : false
 
+    // Get roadmap IDs this post belongs to
+    const roadmapsResult = await getRoadmapService().getPostRoadmaps(postId, ctx)
+    const roadmapIds = roadmapsResult.success ? roadmapsResult.value.map((r) => r.id) : []
+
     // Transform tags and official response for response format
     const transformedPost = {
       ...post,
       tags: post.tags,
       comments: commentsWithReplies,
       hasVoted,
+      roadmapIds,
       officialResponse: post.officialResponse
         ? {
             content: post.officialResponse,
