@@ -44,7 +44,7 @@ export interface ThemeVariables {
 }
 
 /**
- * Theme configuration stored in organization.themeConfig
+ * Theme configuration stored in organization.brandingConfig
  */
 export interface ThemeConfig {
   /** Preset name for quick selection (indigo, emerald, rose, amber, violet, cyan) */

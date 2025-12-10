@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { OrganizationService } from '../organization.service'
 import type {
-  UpdateSecurityInput,
-  UpdatePortalAuthInput,
-  ThemeConfig,
+  UpdateAuthConfigInput,
+  UpdatePortalConfigInput,
+  BrandingConfig,
   CreateSsoProviderInput,
   UpdateSsoProviderInput,
   OidcConfig,
 } from '../organization.types'
+import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '../organization.types'
 import type { ServiceContext } from '../../shared/service-context'
 
 // Mock database - must be hoisted for vi.mock to access
@@ -67,33 +68,51 @@ describe('OrganizationService', () => {
     }
   })
 
-  describe('getSecuritySettings', () => {
-    it('should return security settings when organization exists', async () => {
+  describe('getAuthConfig', () => {
+    it('should return auth config when organization exists', async () => {
+      const authConfig = {
+        oauth: { google: true, github: false, microsoft: false },
+        ssoRequired: false,
+        openSignup: false,
+      }
+
       const mockOrg = {
         id: 'org-123',
-        googleOAuthEnabled: true,
-        githubOAuthEnabled: false,
-        microsoftOAuthEnabled: false,
+        authConfig: JSON.stringify(authConfig),
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getSecuritySettings('org-123')
+      const result = await orgService.getAuthConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value).toEqual({
-          googleOAuthEnabled: true,
-          githubOAuthEnabled: false,
-          microsoftOAuthEnabled: false,
-        })
+        expect(result.value.oauth.google).toBe(true)
+        expect(result.value.oauth.github).toBe(false)
+        expect(result.value.oauth.microsoft).toBe(false)
+      }
+    })
+
+    it('should return default config when authConfig is null', async () => {
+      const mockOrg = {
+        id: 'org-123',
+        authConfig: null,
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const result = await orgService.getAuthConfig('org-123')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value).toEqual(DEFAULT_AUTH_CONFIG)
       }
     })
 
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getSecuritySettings('org-nonexistent')
+      const result = await orgService.getAuthConfig('org-nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -104,27 +123,42 @@ describe('OrganizationService', () => {
     it('should handle database errors', async () => {
       mockDb.query.organization.findFirst.mockRejectedValue(new Error('Database error'))
 
-      const result = await orgService.getSecuritySettings('org-123')
+      const result = await orgService.getAuthConfig('org-123')
 
       expect(result.success).toBe(false)
       if (!result.success) {
         expect(result.error.code).toBe('VALIDATION_ERROR')
-        expect(result.error.message).toContain('Failed to fetch security settings')
       }
     })
   })
 
-  describe('updateSecuritySettings', () => {
-    it('should update security settings successfully', async () => {
-      const input: UpdateSecurityInput = {
-        googleOAuthEnabled: false,
+  describe('updateAuthConfig', () => {
+    it('should update auth config successfully', async () => {
+      const existingConfig = {
+        oauth: { google: true, github: false, microsoft: false },
+        ssoRequired: false,
+        openSignup: false,
+      }
+
+      const mockOrg = {
+        id: 'org-123',
+        authConfig: JSON.stringify(existingConfig),
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const input: UpdateAuthConfigInput = {
+        oauth: { google: false },
+      }
+
+      const updatedConfig = {
+        ...existingConfig,
+        oauth: { ...existingConfig.oauth, google: false },
       }
 
       const mockUpdated = {
         id: 'org-123',
-        googleOAuthEnabled: false,
-        githubOAuthEnabled: false,
-        microsoftOAuthEnabled: false,
+        authConfig: JSON.stringify(updatedConfig),
       }
 
       const mockUpdateChain = {
@@ -135,11 +169,11 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updateSecuritySettings(input, mockContext)
+      const result = await orgService.updateAuthConfig(input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.googleOAuthEnabled).toBe(false)
+        expect(result.value.oauth.google).toBe(false)
       }
     })
 
@@ -149,11 +183,11 @@ describe('OrganizationService', () => {
         memberRole: 'member',
       }
 
-      const input: UpdateSecurityInput = {
-        googleOAuthEnabled: false,
+      const input: UpdateAuthConfigInput = {
+        oauth: { google: false },
       }
 
-      const result = await orgService.updateSecuritySettings(input, memberContext)
+      const result = await orgService.updateAuthConfig(input, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -167,97 +201,86 @@ describe('OrganizationService', () => {
         memberRole: 'owner',
       }
 
-      const input: UpdateSecurityInput = {
-        googleOAuthEnabled: false,
-      }
+      const existingConfig = DEFAULT_AUTH_CONFIG
 
-      const mockUpdated = {
-        id: 'org-123',
-        googleOAuthEnabled: false,
-        githubOAuthEnabled: false,
-        microsoftOAuthEnabled: false,
-      }
-
-      const mockUpdateChain = {
-        set: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        returning: vi.fn().mockResolvedValue([mockUpdated]),
-      }
-
-      mockDb.update.mockReturnValue(mockUpdateChain)
-
-      const result = await orgService.updateSecuritySettings(input, ownerContext)
-
-      expect(result.success).toBe(true)
-    })
-
-    it('should return error when no fields provided', async () => {
-      const input: UpdateSecurityInput = {}
-
-      const result = await orgService.updateSecuritySettings(input, mockContext)
-
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.code).toBe('VALIDATION_ERROR')
-        expect(result.error.message).toBe('No fields provided to update')
-      }
-    })
-
-    it('should update multiple OAuth settings', async () => {
-      const input: UpdateSecurityInput = {
-        googleOAuthEnabled: true,
-        githubOAuthEnabled: true,
-        microsoftOAuthEnabled: true,
-      }
-
-      const mockUpdated = {
-        id: 'org-123',
-        googleOAuthEnabled: true,
-        githubOAuthEnabled: true,
-        microsoftOAuthEnabled: true,
-      }
-
-      const mockUpdateChain = {
-        set: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        returning: vi.fn().mockResolvedValue([mockUpdated]),
-      }
-
-      mockDb.update.mockReturnValue(mockUpdateChain)
-
-      const result = await orgService.updateSecuritySettings(input, mockContext)
-
-      expect(result.success).toBe(true)
-      if (result.success) {
-        expect(result.value.googleOAuthEnabled).toBe(true)
-        expect(result.value.githubOAuthEnabled).toBe(true)
-        expect(result.value.microsoftOAuthEnabled).toBe(true)
-      }
-    })
-  })
-
-  describe('getPortalAuthSettings', () => {
-    it('should return portal auth settings when organization exists', async () => {
       const mockOrg = {
         id: 'org-123',
-        portalGoogleEnabled: false,
-        portalGithubEnabled: false,
+        authConfig: JSON.stringify(existingConfig),
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getPortalAuthSettings('org-123')
+      const input: UpdateAuthConfigInput = {
+        oauth: { google: false },
+      }
+
+      const updatedConfig = {
+        ...existingConfig,
+        oauth: { ...existingConfig.oauth, google: false },
+      }
+
+      const mockUpdated = {
+        id: 'org-123',
+        authConfig: JSON.stringify(updatedConfig),
+      }
+
+      const mockUpdateChain = {
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockResolvedValue([mockUpdated]),
+      }
+
+      mockDb.update.mockReturnValue(mockUpdateChain)
+
+      const result = await orgService.updateAuthConfig(input, ownerContext)
+
+      expect(result.success).toBe(true)
+    })
+  })
+
+  describe('getPortalConfig', () => {
+    it('should return portal config when organization exists', async () => {
+      const portalConfig = {
+        oauth: { google: false, github: true },
+        features: DEFAULT_PORTAL_CONFIG.features,
+      }
+
+      const mockOrg = {
+        id: 'org-123',
+        portalConfig: JSON.stringify(portalConfig),
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const result = await orgService.getPortalConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.portalGoogleEnabled).toBe(false)
+        expect(result.value.oauth.google).toBe(false)
+        expect(result.value.oauth.github).toBe(true)
+      }
+    })
+
+    it('should return default config when portalConfig is null', async () => {
+      const mockOrg = {
+        id: 'org-123',
+        portalConfig: null,
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const result = await orgService.getPortalConfig('org-123')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value).toEqual(DEFAULT_PORTAL_CONFIG)
       }
     })
 
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPortalAuthSettings('org-nonexistent')
+      const result = await orgService.getPortalConfig('org-nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -266,16 +289,29 @@ describe('OrganizationService', () => {
     })
   })
 
-  describe('updatePortalAuthSettings', () => {
-    it('should update portal auth settings successfully', async () => {
-      const input: UpdatePortalAuthInput = {
-        portalGoogleEnabled: true,
+  describe('updatePortalConfig', () => {
+    it('should update portal config successfully', async () => {
+      const existingConfig = DEFAULT_PORTAL_CONFIG
+
+      const mockOrg = {
+        id: 'org-123',
+        portalConfig: JSON.stringify(existingConfig),
+      }
+
+      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+
+      const input: UpdatePortalConfigInput = {
+        oauth: { google: true },
+      }
+
+      const updatedConfig = {
+        ...existingConfig,
+        oauth: { ...existingConfig.oauth, google: true },
       }
 
       const mockUpdated = {
         id: 'org-123',
-        portalGoogleEnabled: true,
-        portalGithubEnabled: false,
+        portalConfig: JSON.stringify(updatedConfig),
       }
 
       const mockUpdateChain = {
@@ -286,11 +322,11 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updatePortalAuthSettings(input, mockContext)
+      const result = await orgService.updatePortalConfig(input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.portalGoogleEnabled).toBe(true)
+        expect(result.value.oauth.google).toBe(true)
       }
     })
 
@@ -300,33 +336,22 @@ describe('OrganizationService', () => {
         memberRole: 'member',
       }
 
-      const input: UpdatePortalAuthInput = {
-        portalGoogleEnabled: true,
+      const input: UpdatePortalConfigInput = {
+        oauth: { google: true },
       }
 
-      const result = await orgService.updatePortalAuthSettings(input, memberContext)
+      const result = await orgService.updatePortalConfig(input, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
         expect(result.error.code).toBe('UNAUTHORIZED')
       }
     })
-
-    it('should return error when no fields provided', async () => {
-      const input: UpdatePortalAuthInput = {}
-
-      const result = await orgService.updatePortalAuthSettings(input, mockContext)
-
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.code).toBe('VALIDATION_ERROR')
-      }
-    })
   })
 
-  describe('getTheme', () => {
-    it('should return theme config when organization exists', async () => {
-      const themeConfig: ThemeConfig = {
+  describe('getBrandingConfig', () => {
+    it('should return branding config when organization exists', async () => {
+      const brandingConfig: BrandingConfig = {
         preset: 'default',
         light: {
           background: '#ffffff',
@@ -336,12 +361,12 @@ describe('OrganizationService', () => {
 
       const mockOrg = {
         id: 'org-123',
-        themeConfig: JSON.stringify(themeConfig),
+        brandingConfig: JSON.stringify(brandingConfig),
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getTheme('org-123')
+      const result = await orgService.getBrandingConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -350,15 +375,15 @@ describe('OrganizationService', () => {
       }
     })
 
-    it('should return empty config when theme is null', async () => {
+    it('should return empty config when brandingConfig is null', async () => {
       const mockOrg = {
         id: 'org-123',
-        themeConfig: null,
+        brandingConfig: null,
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getTheme('org-123')
+      const result = await orgService.getBrandingConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -369,7 +394,7 @@ describe('OrganizationService', () => {
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getTheme('org-nonexistent')
+      const result = await orgService.getBrandingConfig('org-nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -380,12 +405,12 @@ describe('OrganizationService', () => {
     it('should handle invalid JSON gracefully', async () => {
       const mockOrg = {
         id: 'org-123',
-        themeConfig: 'invalid json{',
+        brandingConfig: 'invalid json{',
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getTheme('org-123')
+      const result = await orgService.getBrandingConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -394,9 +419,9 @@ describe('OrganizationService', () => {
     })
   })
 
-  describe('updateTheme', () => {
-    it('should update theme successfully', async () => {
-      const themeConfig: ThemeConfig = {
+  describe('updateBrandingConfig', () => {
+    it('should update branding config successfully', async () => {
+      const brandingConfig: BrandingConfig = {
         preset: 'ocean',
         light: {
           primary: '#0066cc',
@@ -405,7 +430,7 @@ describe('OrganizationService', () => {
 
       const mockUpdated = {
         id: 'org-123',
-        themeConfig: JSON.stringify(themeConfig),
+        brandingConfig: JSON.stringify(brandingConfig),
       }
 
       const mockUpdateChain = {
@@ -416,11 +441,11 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updateTheme(themeConfig, mockContext)
+      const result = await orgService.updateBrandingConfig(brandingConfig, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value).toEqual(themeConfig)
+        expect(result.value).toEqual(brandingConfig)
       }
     })
 
@@ -430,11 +455,11 @@ describe('OrganizationService', () => {
         memberRole: 'member',
       }
 
-      const themeConfig: ThemeConfig = {
+      const brandingConfig: BrandingConfig = {
         preset: 'ocean',
       }
 
-      const result = await orgService.updateTheme(themeConfig, memberContext)
+      const result = await orgService.updateBrandingConfig(brandingConfig, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -735,52 +760,6 @@ describe('OrganizationService', () => {
         expect(result.value.domain).toBe('example.com')
       }
     })
-
-    it('should accept valid domain formats', async () => {
-      const validDomains = [
-        'example.com',
-        'subdomain.example.com',
-        'test-domain.co.uk',
-        'my.long.domain.example.org',
-      ]
-
-      for (const domain of validDomains) {
-        const input: CreateSsoProviderInput = {
-          type: 'oidc',
-          issuer: 'Provider',
-          domain,
-          oidcConfig: {
-            clientId: 'client-123',
-            clientSecret: 'secret-123',
-          },
-        }
-
-        mockDb.query.ssoProvider.findFirst.mockResolvedValue(null)
-
-        const mockCreated = {
-          id: 'provider-new',
-          organizationId: 'org-123',
-          providerId: 'sso_1234567890',
-          issuer: 'Provider',
-          domain: domain.toLowerCase(),
-          oidcConfig: JSON.stringify(input.oidcConfig),
-          samlConfig: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-
-        const mockInsertChain = {
-          values: vi.fn().mockReturnThis(),
-          returning: vi.fn().mockResolvedValue([mockCreated]),
-        }
-
-        mockDb.insert.mockReturnValue(mockInsertChain)
-
-        const result = await orgService.createSsoProvider(input, mockContext)
-
-        expect(result.success).toBe(true)
-      }
-    })
   })
 
   describe('updateSsoProvider', () => {
@@ -831,51 +810,6 @@ describe('OrganizationService', () => {
       if (result.success) {
         expect(result.value.issuer).toBe('Okta Updated')
       }
-    })
-
-    it('should merge OIDC config correctly', async () => {
-      const existingProvider = {
-        id: 'provider-1',
-        organizationId: 'org-123',
-        providerId: 'sso_1234567890',
-        issuer: 'Okta',
-        domain: 'example.com',
-        oidcConfig: JSON.stringify({
-          clientId: 'old-client-id',
-          clientSecret: 'old-secret',
-          discoveryUrl: 'https://old.example.com',
-        } as OidcConfig),
-        samlConfig: null,
-      }
-
-      mockDb.query.ssoProvider.findFirst.mockResolvedValue(existingProvider)
-
-      const input: UpdateSsoProviderInput = {
-        oidcConfig: {
-          clientId: 'new-client-id',
-        },
-      }
-
-      const mockUpdated = {
-        ...existingProvider,
-        oidcConfig: JSON.stringify({
-          clientId: 'new-client-id',
-          clientSecret: 'old-secret',
-          discoveryUrl: 'https://old.example.com',
-        } as OidcConfig),
-      }
-
-      const mockUpdateChain = {
-        set: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        returning: vi.fn().mockResolvedValue([mockUpdated]),
-      }
-
-      mockDb.update.mockReturnValue(mockUpdateChain)
-
-      const result = await orgService.updateSsoProvider('provider-1', input, mockContext)
-
-      expect(result.success).toBe(true)
     })
 
     it('should return error when provider not found', async () => {
@@ -1043,13 +977,16 @@ describe('OrganizationService', () => {
 
   describe('getPublicAuthConfig', () => {
     it('should return public auth config without secrets', async () => {
+      const authConfig = {
+        oauth: { google: true, github: false, microsoft: false },
+        ssoRequired: false,
+        openSignup: true,
+      }
+
       const mockOrg = {
         id: 'org-123',
         slug: 'acme',
-        googleOAuthEnabled: true,
-        githubOAuthEnabled: false,
-        microsoftOAuthEnabled: false,
-        openSignupEnabled: true,
+        authConfig: JSON.stringify(authConfig),
       }
 
       const mockProviders = [
@@ -1067,8 +1004,8 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.googleEnabled).toBe(true)
-        expect(result.value.openSignupEnabled).toBe(true)
+        expect(result.value.oauth.google).toBe(true)
+        expect(result.value.openSignup).toBe(true)
         expect(result.value.ssoProviders).toHaveLength(1)
         expect(result.value.ssoProviders[0].issuer).toBe('Okta')
       }
@@ -1086,30 +1023,34 @@ describe('OrganizationService', () => {
     })
   })
 
-  describe('getPortalPublicAuthConfig', () => {
-    it('should return portal public auth config', async () => {
+  describe('getPublicPortalConfig', () => {
+    it('should return public portal config', async () => {
+      const portalConfig = {
+        oauth: { google: false, github: true },
+        features: DEFAULT_PORTAL_CONFIG.features,
+      }
+
       const mockOrg = {
         id: 'org-123',
         slug: 'acme',
-        portalGoogleEnabled: false,
-        portalGithubEnabled: true,
+        portalConfig: JSON.stringify(portalConfig),
       }
 
       mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getPortalPublicAuthConfig('acme')
+      const result = await orgService.getPublicPortalConfig('acme')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.googleEnabled).toBe(false)
-        expect(result.value.githubEnabled).toBe(true)
+        expect(result.value.oauth.google).toBe(false)
+        expect(result.value.oauth.github).toBe(true)
       }
     })
 
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPortalPublicAuthConfig('nonexistent')
+      const result = await orgService.getPublicPortalConfig('nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {

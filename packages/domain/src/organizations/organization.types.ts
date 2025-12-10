@@ -1,54 +1,110 @@
 /**
- * Input/Output types for OrganizationService operations
+ * Organization configuration types
+ *
+ * Configuration is stored as JSON in the database for flexibility.
+ * This allows adding new settings without migrations.
  */
 
+// =============================================================================
+// Auth Configuration (Team sign-in settings)
+// =============================================================================
+
 /**
- * Security settings for organization authentication (OAuth providers)
+ * OAuth provider settings
  */
-export interface SecuritySettings {
-  googleOAuthEnabled: boolean
-  githubOAuthEnabled: boolean
-  microsoftOAuthEnabled: boolean
+export interface OAuthProviders {
+  google: boolean
+  github: boolean
+  microsoft: boolean
 }
 
 /**
- * Input for updating security settings
+ * Team authentication configuration
+ * Controls how team members (owner/admin/member roles) can sign in
  */
-export interface UpdateSecurityInput {
-  googleOAuthEnabled?: boolean
-  githubOAuthEnabled?: boolean
-  microsoftOAuthEnabled?: boolean
+export interface AuthConfig {
+  /** Which OAuth providers are enabled for team sign-in */
+  oauth: OAuthProviders
+  /** Whether SSO is required (disables other auth methods) */
+  ssoRequired: boolean
+  /** Allow public signup vs invitation-only */
+  openSignup: boolean
 }
 
 /**
- * Portal authentication settings (OAuth providers)
+ * Default auth config for new organizations
  */
-export interface PortalAuthSettings {
-  portalGoogleEnabled: boolean
-  portalGithubEnabled: boolean
+export const DEFAULT_AUTH_CONFIG: AuthConfig = {
+  oauth: {
+    google: true,
+    github: true,
+    microsoft: true,
+  },
+  ssoRequired: false,
+  openSignup: false,
+}
+
+// =============================================================================
+// Portal Configuration (Public feedback portal settings)
+// =============================================================================
+
+/**
+ * Portal OAuth settings (subset of providers available to portal users)
+ */
+export interface PortalOAuthProviders {
+  google: boolean
+  github: boolean
 }
 
 /**
- * Input for updating portal auth settings
+ * Portal feature toggles
  */
-export interface UpdatePortalAuthInput {
-  portalGoogleEnabled?: boolean
-  portalGithubEnabled?: boolean
+export interface PortalFeatures {
+  /** Whether unauthenticated users can view the portal */
+  publicView: boolean
+  /** Whether portal users can submit new posts */
+  submissions: boolean
+  /** Whether portal users can comment on posts */
+  comments: boolean
+  /** Whether portal users can vote on posts */
+  voting: boolean
 }
 
 /**
- * Theme configuration for organization
+ * Portal configuration
+ * Controls the public feedback portal behavior
  */
-export interface ThemeConfig {
-  preset?: string
-  light?: ThemeVariables
-  dark?: ThemeVariables
+export interface PortalConfig {
+  /** OAuth providers for portal user sign-in */
+  oauth: PortalOAuthProviders
+  /** Feature toggles */
+  features: PortalFeatures
 }
+
+/**
+ * Default portal config for new organizations
+ */
+export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
+  oauth: {
+    google: true,
+    github: true,
+  },
+  features: {
+    publicView: true,
+    submissions: true,
+    comments: true,
+    voting: true,
+  },
+}
+
+// =============================================================================
+// Branding Configuration (Theme and visual customization)
+// =============================================================================
 
 /**
  * Theme color variables
  */
-export interface ThemeVariables {
+export interface ThemeColors {
   background?: string
   foreground?: string
   card?: string
@@ -82,6 +138,43 @@ export interface ThemeVariables {
   chart4?: string
   chart5?: string
 }
+
+/**
+ * Branding/theme configuration
+ */
+export interface BrandingConfig {
+  /** Theme preset name */
+  preset?: string
+  /** Light mode color overrides */
+  light?: ThemeColors
+  /** Dark mode color overrides */
+  dark?: ThemeColors
+}
+
+// =============================================================================
+// Update Input Types
+// =============================================================================
+
+/**
+ * Input for updating auth config (partial update)
+ */
+export interface UpdateAuthConfigInput {
+  oauth?: Partial<OAuthProviders>
+  ssoRequired?: boolean
+  openSignup?: boolean
+}
+
+/**
+ * Input for updating portal config (partial update)
+ */
+export interface UpdatePortalConfigInput {
+  oauth?: Partial<PortalOAuthProviders>
+  features?: Partial<PortalFeatures>
+}
+
+// =============================================================================
+// SSO Provider Types
+// =============================================================================
 
 /**
  * OIDC provider configuration
@@ -147,23 +240,25 @@ export interface UpdateSsoProviderInput {
   samlConfig?: Partial<SamlConfig>
 }
 
+// =============================================================================
+// Public API Response Types (no secrets)
+// =============================================================================
+
 /**
- * Public auth config for login forms (no secrets)
+ * Public auth config for team login forms
  */
 export interface PublicAuthConfig {
-  googleEnabled: boolean
-  githubEnabled: boolean
-  microsoftEnabled: boolean
-  openSignupEnabled: boolean
+  oauth: OAuthProviders
+  openSignup: boolean
   ssoProviders: Array<{ providerId: string; issuer: string; domain: string }>
 }
 
 /**
- * Portal public auth config (no secrets)
+ * Public portal config for portal login forms
  */
-export interface PortalPublicAuthConfig {
-  googleEnabled: boolean
-  githubEnabled: boolean
+export interface PublicPortalConfig {
+  oauth: PortalOAuthProviders
+  features: PortalFeatures
 }
 
 /**

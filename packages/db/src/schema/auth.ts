@@ -163,17 +163,24 @@ export const organization = pgTable('organization', {
   logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
-  // Per-organization OAuth provider settings (team sign-in)
-  googleOAuthEnabled: boolean('google_oauth_enabled').default(true).notNull(),
-  githubOAuthEnabled: boolean('github_oauth_enabled').default(true).notNull(),
-  microsoftOAuthEnabled: boolean('microsoft_oauth_enabled').default(true).notNull(),
-  // Allow public signup on tenant subdomain (vs invitation-only)
-  openSignupEnabled: boolean('open_signup_enabled').default(false).notNull(),
-  // Portal OAuth settings (separate from team auth above)
-  portalGoogleEnabled: boolean('portal_google_enabled').default(true).notNull(),
-  portalGithubEnabled: boolean('portal_github_enabled').default(true).notNull(),
-  // Theme customization for the public portal
-  themeConfig: text('theme_config'), // JSON: { preset?: string, primary?: string, ... }
+  /**
+   * Team authentication configuration (JSON)
+   * @see AuthConfig in organization.types.ts
+   * Structure: { oauth: { google, github, microsoft }, ssoRequired, openSignup }
+   */
+  authConfig: text('auth_config'),
+  /**
+   * Portal configuration (JSON)
+   * @see PortalConfig in organization.types.ts
+   * Structure: { oauth: { google, github }, features: { publicView, submissions, comments, voting } }
+   */
+  portalConfig: text('portal_config'),
+  /**
+   * Branding/theme configuration (JSON)
+   * @see BrandingConfig in organization.types.ts
+   * Structure: { preset?, light?: ThemeColors, dark?: ThemeColors }
+   */
+  brandingConfig: text('branding_config'),
 })
 
 /**

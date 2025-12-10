@@ -2,11 +2,10 @@
  * OrganizationService - Business logic for organization settings
  *
  * This service handles all organization-related business logic including:
- * - Security settings (auth methods, SSO mode)
- * - Portal authentication settings
- * - Theme configuration
+ * - Auth configuration (team sign-in settings)
+ * - Portal configuration (public portal settings)
+ * - Branding configuration (theme/colors)
  * - SSO provider management
- * - Public permission checking
  */
 
 import { db, eq, and, desc, organization, ssoProvider } from '@quackback/db'
@@ -14,20 +13,21 @@ import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { OrgError } from './organization.errors'
 import type {
-  SecuritySettings,
-  UpdateSecurityInput,
-  PortalAuthSettings,
-  UpdatePortalAuthInput,
-  ThemeConfig,
+  AuthConfig,
+  UpdateAuthConfigInput,
+  PortalConfig,
+  UpdatePortalConfigInput,
+  BrandingConfig,
   SsoProviderResponse,
   CreateSsoProviderInput,
   UpdateSsoProviderInput,
   PublicAuthConfig,
-  PortalPublicAuthConfig,
+  PublicPortalConfig,
   SsoCheckResult,
   OidcConfig,
   SamlConfig,
 } from './organization.types'
+import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './organization.types'
 
 /**
  * Generate a unique provider ID for SSO providers
@@ -50,9 +50,21 @@ function maskOidcConfig(
 }
 
 /**
- * Parse JSON config from database string
+ * Parse JSON config from database string with default fallback
  */
-function parseJsonConfig<T>(json: string | null): T | null {
+function parseJsonConfig<T>(json: string | null, defaultValue: T): T {
+  if (!json) return defaultValue
+  try {
+    return { ...defaultValue, ...JSON.parse(json) } as T
+  } catch {
+    return defaultValue
+  }
+}
+
+/**
+ * Parse JSON config from database string (nullable)
+ */
+function parseJsonConfigNullable<T>(json: string | null): T | null {
   if (!json) return null
   try {
     return JSON.parse(json) as T
@@ -62,18 +74,44 @@ function parseJsonConfig<T>(json: string | null): T | null {
 }
 
 /**
+ * Deep merge two objects (for partial config updates)
+ */
+function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  const result = { ...target }
+  for (const key in source) {
+    if (source[key] !== undefined) {
+      if (
+        typeof source[key] === 'object' &&
+        source[key] !== null &&
+        !Array.isArray(source[key]) &&
+        typeof result[key] === 'object' &&
+        result[key] !== null
+      ) {
+        result[key] = deepMerge(
+          result[key] as Record<string, unknown>,
+          source[key] as Record<string, unknown>
+        ) as T[typeof key]
+      } else {
+        result[key] = source[key] as T[typeof key]
+      }
+    }
+  }
+  return result
+}
+
+/**
  * Service class for organization domain operations
  */
 export class OrganizationService {
   // ============================================
-  // SECURITY SETTINGS
+  // AUTH CONFIGURATION (Team sign-in)
   // ============================================
 
   /**
-   * Get security settings for an organization
+   * Get auth configuration for an organization
    * Public method - no auth required
    */
-  async getSecuritySettings(organizationId: string): Promise<Result<SecuritySettings, OrgError>> {
+  async getAuthConfig(organizationId: string): Promise<Result<AuthConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -83,82 +121,74 @@ export class OrganizationService {
         return err(OrgError.notFound(organizationId))
       }
 
-      return ok({
-        googleOAuthEnabled: org.googleOAuthEnabled,
-        githubOAuthEnabled: org.githubOAuthEnabled,
-        microsoftOAuthEnabled: org.microsoftOAuthEnabled,
-      })
+      const config = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
+      return ok(config)
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to fetch security settings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to fetch auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
   }
 
   /**
-   * Update security settings for an organization
+   * Update auth configuration for an organization
    * Requires owner or admin role
    */
-  async updateSecuritySettings(
-    input: UpdateSecurityInput,
+  async updateAuthConfig(
+    input: UpdateAuthConfigInput,
     ctx: ServiceContext
-  ): Promise<Result<SecuritySettings, OrgError>> {
+  ): Promise<Result<AuthConfig, OrgError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update security settings'))
+      return err(OrgError.unauthorized('update auth config'))
     }
 
     try {
-      // Build update object with only provided fields
-      const updates: Partial<typeof organization.$inferInsert> = {}
-      if (input.googleOAuthEnabled !== undefined)
-        updates.googleOAuthEnabled = input.googleOAuthEnabled
-      if (input.githubOAuthEnabled !== undefined)
-        updates.githubOAuthEnabled = input.githubOAuthEnabled
-      if (input.microsoftOAuthEnabled !== undefined)
-        updates.microsoftOAuthEnabled = input.microsoftOAuthEnabled
+      // Get existing config
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, ctx.organizationId),
+      })
 
-      if (Object.keys(updates).length === 0) {
-        return err(OrgError.validationError('No fields provided to update'))
-      }
-
-      const [updated] = await db
-        .update(organization)
-        .set(updates)
-        .where(eq(organization.id, ctx.organizationId))
-        .returning()
-
-      if (!updated) {
+      if (!org) {
         return err(OrgError.notFound(ctx.organizationId))
       }
 
-      return ok({
-        googleOAuthEnabled: updated.googleOAuthEnabled,
-        githubOAuthEnabled: updated.githubOAuthEnabled,
-        microsoftOAuthEnabled: updated.microsoftOAuthEnabled,
-      })
+      const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
+
+      // Deep merge the updates
+      const updated = deepMerge(existing, input as Partial<AuthConfig>)
+
+      const [result] = await db
+        .update(organization)
+        .set({ authConfig: JSON.stringify(updated) })
+        .where(eq(organization.id, ctx.organizationId))
+        .returning()
+
+      if (!result) {
+        return err(OrgError.notFound(ctx.organizationId))
+      }
+
+      return ok(updated)
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to update security settings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to update auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
   }
 
   // ============================================
-  // PORTAL AUTH SETTINGS
+  // PORTAL CONFIGURATION
   // ============================================
 
   /**
-   * Get portal authentication settings for an organization
+   * Get portal configuration for an organization
    * Public method - no auth required
    */
-  async getPortalAuthSettings(
-    organizationId: string
-  ): Promise<Result<PortalAuthSettings, OrgError>> {
+  async getPortalConfig(organizationId: string): Promise<Result<PortalConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -168,76 +198,74 @@ export class OrganizationService {
         return err(OrgError.notFound(organizationId))
       }
 
-      return ok({
-        portalGoogleEnabled: org.portalGoogleEnabled,
-        portalGithubEnabled: org.portalGithubEnabled,
-      })
+      const config = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+      return ok(config)
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to fetch portal auth settings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
   }
 
   /**
-   * Update portal authentication settings for an organization
+   * Update portal configuration for an organization
    * Requires owner or admin role
    */
-  async updatePortalAuthSettings(
-    input: UpdatePortalAuthInput,
+  async updatePortalConfig(
+    input: UpdatePortalConfigInput,
     ctx: ServiceContext
-  ): Promise<Result<PortalAuthSettings, OrgError>> {
+  ): Promise<Result<PortalConfig, OrgError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update portal auth settings'))
+      return err(OrgError.unauthorized('update portal config'))
     }
 
     try {
-      // Build update object with only provided fields
-      const updates: Partial<typeof organization.$inferInsert> = {}
-      if (input.portalGoogleEnabled !== undefined)
-        updates.portalGoogleEnabled = input.portalGoogleEnabled
-      if (input.portalGithubEnabled !== undefined)
-        updates.portalGithubEnabled = input.portalGithubEnabled
+      // Get existing config
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, ctx.organizationId),
+      })
 
-      if (Object.keys(updates).length === 0) {
-        return err(OrgError.validationError('No fields provided to update'))
-      }
-
-      const [updated] = await db
-        .update(organization)
-        .set(updates)
-        .where(eq(organization.id, ctx.organizationId))
-        .returning()
-
-      if (!updated) {
+      if (!org) {
         return err(OrgError.notFound(ctx.organizationId))
       }
 
-      return ok({
-        portalGoogleEnabled: updated.portalGoogleEnabled,
-        portalGithubEnabled: updated.portalGithubEnabled,
-      })
+      const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+
+      // Deep merge the updates
+      const updated = deepMerge(existing, input as Partial<PortalConfig>)
+
+      const [result] = await db
+        .update(organization)
+        .set({ portalConfig: JSON.stringify(updated) })
+        .where(eq(organization.id, ctx.organizationId))
+        .returning()
+
+      if (!result) {
+        return err(OrgError.notFound(ctx.organizationId))
+      }
+
+      return ok(updated)
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to update portal auth settings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to update portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
   }
 
   // ============================================
-  // THEME SETTINGS
+  // BRANDING CONFIGURATION
   // ============================================
 
   /**
-   * Get theme configuration for an organization
+   * Get branding configuration for an organization
    * Public method - no auth required
    */
-  async getTheme(organizationId: string): Promise<Result<ThemeConfig, OrgError>> {
+  async getBrandingConfig(organizationId: string): Promise<Result<BrandingConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -247,36 +275,34 @@ export class OrganizationService {
         return err(OrgError.notFound(organizationId))
       }
 
-      const themeConfig = parseJsonConfig<ThemeConfig>(org.themeConfig) || {}
-      return ok(themeConfig)
+      const config = parseJsonConfigNullable<BrandingConfig>(org.brandingConfig) || {}
+      return ok(config)
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to fetch theme: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to fetch branding config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
   }
 
   /**
-   * Update theme configuration for an organization
+   * Update branding configuration for an organization
    * Requires owner or admin role
    */
-  async updateTheme(
-    themeConfig: ThemeConfig,
+  async updateBrandingConfig(
+    config: BrandingConfig,
     ctx: ServiceContext
-  ): Promise<Result<ThemeConfig, OrgError>> {
+  ): Promise<Result<BrandingConfig, OrgError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update theme'))
+      return err(OrgError.unauthorized('update branding config'))
     }
 
     try {
-      const serialized = JSON.stringify(themeConfig)
-
       const [updated] = await db
         .update(organization)
-        .set({ themeConfig: serialized })
+        .set({ brandingConfig: JSON.stringify(config) })
         .where(eq(organization.id, ctx.organizationId))
         .returning()
 
@@ -284,11 +310,11 @@ export class OrganizationService {
         return err(OrgError.notFound(ctx.organizationId))
       }
 
-      return ok(themeConfig)
+      return ok(config)
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to update theme: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to update branding config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
@@ -320,8 +346,8 @@ export class OrganizationService {
         providerId: p.providerId,
         issuer: p.issuer,
         domain: p.domain,
-        oidcConfig: maskOidcConfig(parseJsonConfig<OidcConfig>(p.oidcConfig)),
-        samlConfig: parseJsonConfig<SamlConfig>(p.samlConfig),
+        oidcConfig: maskOidcConfig(parseJsonConfigNullable<OidcConfig>(p.oidcConfig)),
+        samlConfig: parseJsonConfigNullable<SamlConfig>(p.samlConfig),
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
       }))
@@ -367,8 +393,8 @@ export class OrganizationService {
         providerId: provider.providerId,
         issuer: provider.issuer,
         domain: provider.domain,
-        oidcConfig: maskOidcConfig(parseJsonConfig<OidcConfig>(provider.oidcConfig)),
-        samlConfig: parseJsonConfig<SamlConfig>(provider.samlConfig),
+        oidcConfig: maskOidcConfig(parseJsonConfigNullable<OidcConfig>(provider.oidcConfig)),
+        samlConfig: parseJsonConfigNullable<SamlConfig>(provider.samlConfig),
         createdAt: provider.createdAt,
         updatedAt: provider.updatedAt,
       })
@@ -435,8 +461,8 @@ export class OrganizationService {
         providerId: created.providerId,
         issuer: created.issuer,
         domain: created.domain,
-        oidcConfig: maskOidcConfig(parseJsonConfig<OidcConfig>(created.oidcConfig)),
-        samlConfig: parseJsonConfig<SamlConfig>(created.samlConfig),
+        oidcConfig: maskOidcConfig(parseJsonConfigNullable<OidcConfig>(created.oidcConfig)),
+        samlConfig: parseJsonConfigNullable<SamlConfig>(created.samlConfig),
         createdAt: created.createdAt,
         updatedAt: created.updatedAt,
       })
@@ -502,7 +528,7 @@ export class OrganizationService {
 
       // Merge OIDC config
       if (input.oidcConfig !== undefined) {
-        const existingOidc = parseJsonConfig<OidcConfig>(existing.oidcConfig)
+        const existingOidc = parseJsonConfigNullable<OidcConfig>(existing.oidcConfig)
         const mergedOidc = existingOidc
           ? { ...existingOidc, ...input.oidcConfig }
           : input.oidcConfig
@@ -511,7 +537,7 @@ export class OrganizationService {
 
       // Merge SAML config
       if (input.samlConfig !== undefined) {
-        const existingSaml = parseJsonConfig<SamlConfig>(existing.samlConfig)
+        const existingSaml = parseJsonConfigNullable<SamlConfig>(existing.samlConfig)
         const mergedSaml = existingSaml
           ? { ...existingSaml, ...input.samlConfig }
           : input.samlConfig
@@ -534,8 +560,8 @@ export class OrganizationService {
         providerId: updated.providerId,
         issuer: updated.issuer,
         domain: updated.domain,
-        oidcConfig: maskOidcConfig(parseJsonConfig<OidcConfig>(updated.oidcConfig)),
-        samlConfig: parseJsonConfig<SamlConfig>(updated.samlConfig),
+        oidcConfig: maskOidcConfig(parseJsonConfigNullable<OidcConfig>(updated.oidcConfig)),
+        samlConfig: parseJsonConfigNullable<SamlConfig>(updated.samlConfig),
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt,
       })
@@ -587,7 +613,7 @@ export class OrganizationService {
   }
 
   // ============================================
-  // PUBLIC AUTH CONFIG (NO AUTH REQUIRED)
+  // PUBLIC CONFIG (NO AUTH REQUIRED)
   // ============================================
 
   /**
@@ -604,16 +630,16 @@ export class OrganizationService {
         return err(OrgError.notFound())
       }
 
+      const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
+
       // Get SSO providers (without secrets)
       const providers = await db.query.ssoProvider.findMany({
         where: eq(ssoProvider.organizationId, org.id),
       })
 
       return ok({
-        googleEnabled: org.googleOAuthEnabled,
-        githubEnabled: org.githubOAuthEnabled,
-        microsoftEnabled: org.microsoftOAuthEnabled,
-        openSignupEnabled: org.openSignupEnabled,
+        oauth: authConfig.oauth,
+        openSignup: authConfig.openSignup,
         ssoProviders: providers.map((p) => ({
           providerId: p.providerId,
           issuer: p.issuer,
@@ -630,12 +656,12 @@ export class OrganizationService {
   }
 
   /**
-   * Get portal public auth configuration
+   * Get public portal configuration
    * No authentication required - returns only non-sensitive information
    */
-  async getPortalPublicAuthConfig(
+  async getPublicPortalConfig(
     organizationSlug: string
-  ): Promise<Result<PortalPublicAuthConfig, OrgError>> {
+  ): Promise<Result<PublicPortalConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.slug, organizationSlug),
@@ -645,14 +671,16 @@ export class OrganizationService {
         return err(OrgError.notFound())
       }
 
+      const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+
       return ok({
-        googleEnabled: org.portalGoogleEnabled,
-        githubEnabled: org.portalGithubEnabled,
+        oauth: portalConfig.oauth,
+        features: portalConfig.features,
       })
     } catch (error) {
       return err(
         OrgError.validationError(
-          `Failed to fetch portal auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
     }
