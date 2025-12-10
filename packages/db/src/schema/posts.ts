@@ -120,11 +120,14 @@ export const postRoadmaps = pgTable(
     roadmapId: uuid('roadmap_id')
       .notNull()
       .references(() => roadmaps.id, { onDelete: 'cascade' }),
+    statusId: uuid('status_id').references(() => postStatuses.id, { onDelete: 'set null' }),
+    position: integer('position').notNull().default(0),
   },
   (table) => [
     uniqueIndex('post_roadmaps_pk').on(table.postId, table.roadmapId),
     index('post_roadmaps_post_id_idx').on(table.postId),
     index('post_roadmaps_roadmap_id_idx').on(table.roadmapId),
+    index('post_roadmaps_position_idx').on(table.roadmapId, table.statusId, table.position),
     pgPolicy('post_roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
@@ -276,6 +279,10 @@ export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
   roadmap: one(roadmaps, {
     fields: [postRoadmaps.roadmapId],
     references: [roadmaps.id],
+  }),
+  status: one(postStatuses, {
+    fields: [postRoadmaps.statusId],
+    references: [postStatuses.id],
   }),
 }))
 

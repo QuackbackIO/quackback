@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   jsonb,
+  integer,
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core'
@@ -41,24 +42,24 @@ export const roadmaps = pgTable(
   'roadmaps',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    boardId: uuid('board_id')
-      .notNull()
-      .references(() => boards.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     isPublic: boolean('is_public').default(true).notNull(),
+    position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('roadmaps_board_slug_idx').on(table.boardId, table.slug),
-    index('roadmaps_board_id_idx').on(table.boardId),
+    uniqueIndex('roadmaps_org_slug_idx').on(table.organizationId, table.slug),
+    index('roadmaps_org_id_idx').on(table.organizationId),
+    index('roadmaps_position_idx').on(table.organizationId, table.position),
     pgPolicy('roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`board_id IN (SELECT id FROM boards WHERE organization_id = current_setting('app.organization_id', true))`,
-      withCheck: sql`board_id IN (SELECT id FROM boards WHERE organization_id = current_setting('app.organization_id', true))`,
+      using: sql`organization_id = current_setting('app.organization_id', true)`,
+      withCheck: sql`organization_id = current_setting('app.organization_id', true)`,
     }),
   ]
 ).enableRLS()
@@ -90,15 +91,10 @@ import { changelogEntries } from './changelog'
 
 export const boardsRelations = relations(boards, ({ many }) => ({
   posts: many(posts),
-  roadmaps: many(roadmaps),
   changelogEntries: many(changelogEntries),
 }))
 
-export const roadmapsRelations = relations(roadmaps, ({ one, many }) => ({
-  board: one(boards, {
-    fields: [roadmaps.boardId],
-    references: [boards.id],
-  }),
+export const roadmapsRelations = relations(roadmaps, ({ many }) => ({
   postRoadmaps: many(postRoadmaps),
 }))
 

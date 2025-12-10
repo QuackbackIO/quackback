@@ -69,14 +69,15 @@ describe('Type definitions', () => {
   describe('Roadmap types', () => {
     it('Roadmap has correct shape', () => {
       expectTypeOf<Roadmap>().toHaveProperty('id')
-      expectTypeOf<Roadmap>().toHaveProperty('boardId')
+      expectTypeOf<Roadmap>().toHaveProperty('organizationId')
       expectTypeOf<Roadmap>().toHaveProperty('slug')
       expectTypeOf<Roadmap>().toHaveProperty('name')
       expectTypeOf<Roadmap>().toHaveProperty('isPublic')
+      expectTypeOf<Roadmap>().toHaveProperty('position')
     })
 
     it('NewRoadmap has required fields', () => {
-      expectTypeOf<NewRoadmap>().toHaveProperty('boardId')
+      expectTypeOf<NewRoadmap>().toHaveProperty('organizationId')
       expectTypeOf<NewRoadmap>().toHaveProperty('slug')
       expectTypeOf<NewRoadmap>().toHaveProperty('name')
     })
@@ -274,7 +275,7 @@ describe('Type definitions', () => {
 
     it('RoadmapWithPosts extends Roadmap with posts array', () => {
       expectTypeOf<RoadmapWithPosts>().toHaveProperty('id')
-      expectTypeOf<RoadmapWithPosts>().toHaveProperty('boardId')
+      expectTypeOf<RoadmapWithPosts>().toHaveProperty('organizationId')
       expectTypeOf<RoadmapWithPosts>().toHaveProperty('posts')
       expectTypeOf<RoadmapWithPosts['posts']>().toEqualTypeOf<Post[]>()
     })

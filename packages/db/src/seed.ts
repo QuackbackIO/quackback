@@ -1411,33 +1411,42 @@ async function seed() {
   console.log(`   Created ${CONFIG.boardsPerOrg} boards per organization`)
 
   // =========================================================================
-  // Create Roadmaps (per board)
+  // Create Roadmaps (per organization, not per board)
   // =========================================================================
   console.log('🗺️  Creating roadmaps...')
 
-  const roadmapRecords: Map<string, { id: string; name: string }> = new Map()
+  const roadmapRecords: Map<string, Array<{ id: string; name: string }>> = new Map()
 
   for (const org of orgRecords) {
-    const orgBoards = boardRecords.get(org.id) || []
-    for (const board of orgBoards) {
-      // 70% chance of having a roadmap
-      if (faker.datatype.boolean({ probability: 0.7 })) {
-        const roadmapId = uuid()
-        await db.insert(roadmaps).values({
-          id: roadmapId,
-          boardId: board.id,
-          slug: 'roadmap',
-          name: `${board.name} Roadmap`,
-          description: `Public roadmap for ${board.name.toLowerCase()}`,
-          isPublic: true,
-          createdAt: randomDate(60),
-        })
-        roadmapRecords.set(board.id, { id: roadmapId, name: `${board.name} Roadmap` })
-      }
+    const orgRoadmaps: Array<{ id: string; name: string }> = []
+    const roadmapNames = ['Product Roadmap', 'Q1 2025', 'Mobile App', 'Enterprise Features']
+
+    // Create 1-3 roadmaps per organization
+    const numRoadmaps = faker.number.int({ min: 1, max: 3 })
+    for (let i = 0; i < numRoadmaps; i++) {
+      const roadmapId = uuid()
+      const name = roadmapNames[i]
+      const slug = name.toLowerCase().replace(/\s+/g, '-')
+      await db.insert(roadmaps).values({
+        id: roadmapId,
+        organizationId: org.id,
+        slug,
+        name,
+        description: `${name} for ${org.name}`,
+        isPublic: true,
+        position: i,
+        createdAt: randomDate(60),
+      })
+      orgRoadmaps.push({ id: roadmapId, name })
     }
+    roadmapRecords.set(org.id, orgRoadmaps)
   }
 
-  console.log(`   Created ${roadmapRecords.size} roadmaps`)
+  const totalRoadmaps = Array.from(roadmapRecords.values()).reduce(
+    (sum, arr) => sum + arr.length,
+    0
+  )
+  console.log(`   Created ${totalRoadmaps} roadmaps`)
 
   // =========================================================================
   // Create Posts (batch insert with power-law distributions)
@@ -1457,22 +1466,22 @@ async function seed() {
       orgId: string
       isTeamMember: boolean
     }>
-    roadmapId?: string
+    orgRoadmaps: Array<{ id: string; name: string }>
   }> = []
 
   for (const org of orgRecords) {
     const orgBoards = boardRecords.get(org.id) || []
     const orgTags = tagRecords.get(org.id) || []
     const orgMembers = userRecords.filter((u) => u.orgId === org.id)
+    const orgRoadmaps = roadmapRecords.get(org.id) || []
 
     for (const board of orgBoards) {
-      const roadmap = roadmapRecords.get(board.id)
       allBoards.push({
         boardId: board.id,
         orgId: org.id,
         orgTags,
         orgMembers,
-        roadmapId: roadmap?.id,
+        orgRoadmaps,
       })
     }
   }
@@ -1577,13 +1586,21 @@ async function seed() {
         }
       }
 
-      // Add to roadmap if applicable
+      // Add to roadmap if applicable (posts with roadmap statuses get added to a random org roadmap)
       if (
-        boardCtx.roadmapId &&
+        boardCtx.orgRoadmaps.length > 0 &&
         ['planned', 'in_progress', 'complete'].includes(status) &&
         faker.datatype.boolean({ probability: 0.7 })
       ) {
-        postRoadmapInserts.push({ postId, roadmapId: boardCtx.roadmapId })
+        // Pick a random roadmap from the org
+        const randomRoadmap = faker.helpers.arrayElement(boardCtx.orgRoadmaps)
+        // Get the status ID for this post's status (we'll look it up from stored statuses)
+        // For now, we just use the postId and roadmapId - statusId will be set later in migration
+        postRoadmapInserts.push({
+          postId,
+          roadmapId: randomRoadmap.id,
+          position: postRoadmapInserts.filter((p) => p.roadmapId === randomRoadmap.id).length,
+        })
       }
 
       totalPosts++
