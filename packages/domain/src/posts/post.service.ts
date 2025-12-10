@@ -146,8 +146,8 @@ export class PostService {
       }
 
       // Authorization check - only team members (owner, admin, member) can update posts
-      // Portal users (role='user') cannot update posts
-      if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      // Portal users don't have member records, so memberRole would be undefined
+      if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(PostError.unauthorized('update this post'))
       }
 

@@ -422,12 +422,12 @@ describe('MemberService', () => {
       }
     })
 
-    it('should handle portal user role correctly', async () => {
+    it('should handle team member role correctly', async () => {
       const mockMember: Member = {
         id: 'member-999',
         userId: 'user-999',
         organizationId: 'org-999',
-        role: 'user',
+        role: 'member',
         createdAt: new Date(),
       }
 
@@ -438,7 +438,20 @@ describe('MemberService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value.isMember).toBe(true)
-        expect(result.value.member?.role).toBe('user')
+        expect(result.value.member?.role).toBe('member')
+      }
+    })
+
+    it('should return isMember=false for users without member record', async () => {
+      // Users without a member record (e.g., unauthenticated visitors)
+      mockDb.query.member.findFirst.mockResolvedValue(null)
+
+      const result = await memberService.checkMembership('user-999', 'org-999')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.value.isMember).toBe(false)
+        expect(result.value.member).toBeFalsy() // undefined or null
       }
     })
   })

@@ -71,7 +71,6 @@ describe('OrganizationService', () => {
     it('should return security settings when organization exists', async () => {
       const mockOrg = {
         id: 'org-123',
-        strictSsoMode: false,
         passwordAuthEnabled: true,
         googleOAuthEnabled: true,
         githubOAuthEnabled: false,
@@ -85,7 +84,6 @@ describe('OrganizationService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toEqual({
-          strictSsoMode: false,
           passwordAuthEnabled: true,
           googleOAuthEnabled: true,
           githubOAuthEnabled: false,
@@ -121,13 +119,11 @@ describe('OrganizationService', () => {
   describe('updateSecuritySettings', () => {
     it('should update security settings successfully', async () => {
       const input: UpdateSecurityInput = {
-        strictSsoMode: true,
         passwordAuthEnabled: false,
       }
 
       const mockUpdated = {
         id: 'org-123',
-        strictSsoMode: true,
         passwordAuthEnabled: false,
         googleOAuthEnabled: true,
         githubOAuthEnabled: false,
@@ -146,7 +142,6 @@ describe('OrganizationService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.strictSsoMode).toBe(true)
         expect(result.value.passwordAuthEnabled).toBe(false)
       }
     })
@@ -158,7 +153,7 @@ describe('OrganizationService', () => {
       }
 
       const input: UpdateSecurityInput = {
-        strictSsoMode: true,
+        passwordAuthEnabled: false,
       }
 
       const result = await orgService.updateSecuritySettings(input, memberContext)
@@ -176,13 +171,12 @@ describe('OrganizationService', () => {
       }
 
       const input: UpdateSecurityInput = {
-        strictSsoMode: true,
+        passwordAuthEnabled: false,
       }
 
       const mockUpdated = {
         id: 'org-123',
-        strictSsoMode: true,
-        passwordAuthEnabled: true,
+        passwordAuthEnabled: false,
         googleOAuthEnabled: true,
         githubOAuthEnabled: false,
         microsoftOAuthEnabled: false,
@@ -222,7 +216,6 @@ describe('OrganizationService', () => {
 
       const mockUpdated = {
         id: 'org-123',
-        strictSsoMode: false,
         passwordAuthEnabled: true,
         googleOAuthEnabled: true,
         githubOAuthEnabled: true,

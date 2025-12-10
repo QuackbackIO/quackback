@@ -8,7 +8,6 @@ import type { PermissionLevel } from '@quackback/db/types'
  * Security settings for organization authentication
  */
 export interface SecuritySettings {
-  strictSsoMode: boolean
   passwordAuthEnabled: boolean
   googleOAuthEnabled: boolean
   githubOAuthEnabled: boolean
@@ -19,7 +18,6 @@ export interface SecuritySettings {
  * Input for updating security settings
  */
 export interface UpdateSecurityInput {
-  strictSsoMode?: boolean
   passwordAuthEnabled?: boolean
   googleOAuthEnabled?: boolean
   githubOAuthEnabled?: boolean

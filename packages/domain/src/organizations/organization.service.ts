@@ -86,7 +86,6 @@ export class OrganizationService {
       }
 
       return ok({
-        strictSsoMode: org.strictSsoMode,
         passwordAuthEnabled: org.passwordAuthEnabled,
         googleOAuthEnabled: org.googleOAuthEnabled,
         githubOAuthEnabled: org.githubOAuthEnabled,
@@ -117,7 +116,6 @@ export class OrganizationService {
     try {
       // Build update object with only provided fields
       const updates: Partial<typeof organization.$inferInsert> = {}
-      if (input.strictSsoMode !== undefined) updates.strictSsoMode = input.strictSsoMode
       if (input.passwordAuthEnabled !== undefined)
         updates.passwordAuthEnabled = input.passwordAuthEnabled
       if (input.googleOAuthEnabled !== undefined)
@@ -142,7 +140,6 @@ export class OrganizationService {
       }
 
       return ok({
-        strictSsoMode: updated.strictSsoMode,
         passwordAuthEnabled: updated.passwordAuthEnabled,
         googleOAuthEnabled: updated.googleOAuthEnabled,
         githubOAuthEnabled: updated.githubOAuthEnabled,

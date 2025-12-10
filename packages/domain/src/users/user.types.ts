@@ -6,6 +6,9 @@
 
 /**
  * Portal user list item with activity counts
+ *
+ * Portal users have role='user' in the member table (unified model).
+ * They can vote/comment on portal but don't have admin access.
  */
 export interface PortalUserListItem {
   memberId: string
@@ -15,7 +18,6 @@ export interface PortalUserListItem {
   image: string | null
   emailVerified: boolean
   joinedAt: Date
-  role: string
   postCount: number
   commentCount: number
   voteCount: number

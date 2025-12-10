@@ -1,13 +1,17 @@
 /**
  * UserService - Business logic for portal user management
  *
- * Provides operations for listing and managing portal users (members with role='user').
- * This service handles user listing, detail retrieval, role changes, and removal.
+ * Provides operations for listing and managing portal users (role='user' in member table).
+ * Portal users are authenticated users who can vote/comment on the public portal
+ * but don't have admin access (unlike owner/admin/member roles).
+ *
+ * All users (team + portal) are unified in the member table with roles:
+ * - owner/admin/member: Team members with admin dashboard access
+ * - user: Portal users with public portal access only
  */
 
 import {
   db,
-  withUnitOfWork,
   withTenantContext,
   eq,
   and,
@@ -24,7 +28,6 @@ import {
   votes,
   boards,
   postStatuses,
-  type UnitOfWork,
   type Database,
 } from '@quackback/db'
 import { ok, err, type Result } from '../shared/result'
@@ -45,8 +48,8 @@ export class UserService {
   /**
    * List portal users for an organization with activity counts
    *
-   * Only returns members with role='user' (portal users).
-   * Includes post count, comment count, and vote count for each user.
+   * Queries member table for role='user'.
+   * Activity is tracked via memberId in posts/comments and userIdentifier in votes.
    */
   async listPortalUsers(
     organizationId: string,
@@ -55,11 +58,8 @@ export class UserService {
     try {
       const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20 } = params
 
-      // Build conditions array
-      const conditions = [
-        eq(member.organizationId, organizationId),
-        eq(member.role, 'user'), // Only portal users
-      ]
+      // Build conditions array - filter for role='user' (portal users only)
+      const conditions = [eq(member.organizationId, organizationId), eq(member.role, 'user')]
 
       // Search filter (name or email)
       if (search) {
@@ -81,7 +81,8 @@ export class UserService {
 
       const whereClause = and(...conditions)
 
-      // Activity count subqueries - these query RLS-protected tables
+      // Activity count subqueries
+      // Portal users' posts are linked via memberId
       const postCountSql = sql<number>`(
         SELECT COALESCE(count(*)::int, 0) FROM posts
         WHERE member_id = ${member.id}
@@ -92,6 +93,7 @@ export class UserService {
         WHERE member_id = ${member.id}
       )`.as('comment_count')
 
+      // Portal users' votes use 'member:memberId' format
       const voteCountSql = sql<number>`(
         SELECT COALESCE(count(*)::int, 0) FROM votes
         WHERE user_identifier = 'member:' || ${member.id}
@@ -135,7 +137,6 @@ export class UserService {
               image: user.image,
               emailVerified: user.emailVerified,
               joinedAt: member.createdAt,
-              role: member.role,
               postCount: postCountSql,
               commentCount: commentCountSql,
               voteCount: voteCountSql,
@@ -167,7 +168,6 @@ export class UserService {
         image: row.image,
         emailVerified: row.emailVerified,
         joinedAt: row.joinedAt,
-        role: row.role,
         postCount: Number(row.postCount),
         commentCount: Number(row.commentCount),
         voteCount: Number(row.voteCount),
@@ -194,7 +194,7 @@ export class UserService {
     organizationId: string
   ): Promise<Result<PortalUserDetail | null, UserError>> {
     try {
-      // Get member with user details (no RLS needed for member/user tables)
+      // Get member with user details (filter for role='user')
       const memberResult = await db
         .select({
           memberId: member.id,
@@ -205,11 +205,16 @@ export class UserService {
           emailVerified: user.emailVerified,
           joinedAt: member.createdAt,
           createdAt: user.createdAt,
-          role: member.role,
         })
         .from(member)
         .innerJoin(user, eq(member.userId, user.id))
-        .where(and(eq(member.id, memberId), eq(member.organizationId, organizationId)))
+        .where(
+          and(
+            eq(member.id, memberId),
+            eq(member.organizationId, organizationId),
+            eq(member.role, 'user')
+          )
+        )
         .limit(1)
 
       if (memberResult.length === 0) {
@@ -217,11 +222,11 @@ export class UserService {
       }
 
       const memberData = memberResult[0]
-      const userIdentifier = `member:${memberId}`
+      const userIdentifier = `member:${memberData.memberId}`
 
       // Use withTenantContext for RLS-protected queries (posts, comments, votes)
       const engagementData = await withTenantContext(organizationId, async (tx: Database) => {
-        // Get posts authored by this user
+        // Get posts authored by this user (via memberId)
         const authoredPosts = await tx
           .select({
             id: posts.id,
@@ -244,22 +249,22 @@ export class UserService {
               eq(postStatuses.organizationId, organizationId)
             )
           )
-          .where(eq(posts.memberId, memberId))
+          .where(eq(posts.memberId, memberData.memberId))
           .orderBy(desc(posts.createdAt))
           .limit(100)
 
-        // Get post IDs the user has commented on (excluding their own posts)
+        // Get post IDs the user has commented on (via memberId)
         const commentedPostIds = await tx
           .select({
             postId: comments.postId,
             latestCommentAt: sql<Date>`max(${comments.createdAt})`.as('latest_comment_at'),
           })
           .from(comments)
-          .where(eq(comments.memberId, memberId))
+          .where(eq(comments.memberId, memberData.memberId))
           .groupBy(comments.postId)
           .limit(100)
 
-        // Get post IDs the user has voted on
+        // Get post IDs the user has voted on (via userIdentifier = 'member:memberId')
         const votedPostIds = await tx
           .select({
             postId: votes.postId,
@@ -410,7 +415,6 @@ export class UserService {
         emailVerified: memberData.emailVerified,
         joinedAt: memberData.joinedAt,
         createdAt: memberData.createdAt,
-        role: memberData.role,
         postCount,
         commentCount,
         voteCount,
@@ -423,106 +427,37 @@ export class UserService {
   }
 
   /**
-   * Update a member's role
+   * Remove a portal user from an organization
    *
-   * Only owners and admins can change roles.
-   * Cannot change your own role.
-   * Cannot change owner's role (unless you are the owner transferring ownership).
+   * Deletes the member record with role='user'.
+   * Since users are org-scoped, this also deletes the user record (CASCADE).
    */
-  async updateMemberRole(
+  async removePortalUser(
     memberId: string,
-    newRole: string,
-    organizationId: string,
-    actorMemberId: string
-  ): Promise<Result<{ memberId: string; role: string }, UserError>> {
-    return withUnitOfWork(organizationId, async (uow: UnitOfWork) => {
-      // Validate role
-      const validRoles = ['user', 'member', 'admin', 'owner']
-      if (!validRoles.includes(newRole)) {
-        return err(UserError.invalidRole(newRole))
-      }
-
-      // Get target member
-      const targetMember = await uow.db.query.member.findFirst({
-        where: and(eq(member.id, memberId), eq(member.organizationId, organizationId)),
-      })
-
-      if (!targetMember) {
-        return err(UserError.memberNotFound(memberId))
-      }
-
-      // Cannot change your own role
-      if (memberId === actorMemberId) {
-        return err(UserError.cannotChangeOwnRole())
-      }
-
-      // Get actor's role to check permissions
-      const actorMember = await uow.db.query.member.findFirst({
-        where: and(eq(member.id, actorMemberId), eq(member.organizationId, organizationId)),
-      })
-
-      if (!actorMember || !['owner', 'admin'].includes(actorMember.role)) {
-        return err(UserError.unauthorized('change member roles'))
-      }
-
-      // Only owner can promote to owner or change another owner's role
-      if ((newRole === 'owner' || targetMember.role === 'owner') && actorMember.role !== 'owner') {
-        return err(UserError.unauthorized('change owner roles'))
-      }
-
-      // Update role
-      await uow.db.update(member).set({ role: newRole }).where(eq(member.id, memberId))
-
-      return ok({ memberId, role: newRole })
-    })
-  }
-
-  /**
-   * Remove a member from an organization
-   *
-   * Only owners and admins can remove members.
-   * Cannot remove the owner.
-   * Cannot remove yourself.
-   */
-  async removeMember(
-    memberId: string,
-    organizationId: string,
-    actorMemberId: string
+    organizationId: string
   ): Promise<Result<void, UserError>> {
-    return withUnitOfWork(organizationId, async (uow: UnitOfWork) => {
-      // Get target member
-      const targetMember = await uow.db.query.member.findFirst({
-        where: and(eq(member.id, memberId), eq(member.organizationId, organizationId)),
+    try {
+      // Verify member exists, belongs to this org, and has role='user'
+      const existingMember = await db.query.member.findFirst({
+        where: and(
+          eq(member.id, memberId),
+          eq(member.organizationId, organizationId),
+          eq(member.role, 'user')
+        ),
       })
 
-      if (!targetMember) {
+      if (!existingMember) {
         return err(UserError.memberNotFound(memberId))
       }
 
-      // Cannot remove owner
-      if (targetMember.role === 'owner') {
-        return err(UserError.cannotRemoveOwner())
-      }
-
-      // Cannot remove yourself
-      if (memberId === actorMemberId) {
-        return err(UserError.unauthorized('remove yourself'))
-      }
-
-      // Get actor's role to check permissions
-      const actorMember = await uow.db.query.member.findFirst({
-        where: and(eq(member.id, actorMemberId), eq(member.organizationId, organizationId)),
-      })
-
-      if (!actorMember || !['owner', 'admin'].includes(actorMember.role)) {
-        return err(UserError.unauthorized('remove members'))
-      }
-
-      // Delete member record (cascades to delete user since user is org-scoped)
-      await uow.db.delete(member).where(eq(member.id, memberId))
+      // Delete member record (user record will be deleted via CASCADE since user is org-scoped)
+      await db.delete(member).where(eq(member.id, memberId))
 
       return ok(undefined)
-    })
+    } catch (error) {
+      console.error('Error removing portal user:', error)
+      return err(UserError.databaseError('Failed to remove portal user'))
+    }
   }
 }
 

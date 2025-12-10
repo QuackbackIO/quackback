@@ -9,27 +9,33 @@
 /**
  * Execution context for service layer operations.
  * Contains authenticated user and organization information.
+ *
+ * All authenticated users have member records with unified roles:
+ * - owner/admin/member: Team members with admin dashboard access
+ * - user: Portal users with public portal access only
  */
 export interface ServiceContext {
   /** Organization ID for multi-tenant isolation */
   organizationId: string
   /** User ID of the authenticated user */
   userId: string
-  /** Member ID (join table between user and organization) */
+  /** Member ID - all authenticated users have member records now */
   memberId: string
-  /** Member's role in the organization */
+  /** Member's role in the organization (unified: owner/admin/member/user) */
   memberRole: 'owner' | 'admin' | 'member' | 'user'
   /** User's display name */
   userName: string
   /** User's email address */
   userEmail: string
-  /** Optional identifier for anonymous/portal users */
+  /** Optional identifier for anonymous users (unauthenticated) */
   userIdentifier?: string
 }
 
 /**
  * Auth validation result structure used to build ServiceContext.
  * This matches the shape returned by auth validation helpers.
+ *
+ * All authenticated users have member records in the unified model.
  */
 export interface AuthValidation {
   organization: {

@@ -39,8 +39,8 @@ export class TagService {
   async createTag(input: CreateTagInput, ctx: ServiceContext): Promise<Result<Tag, TagError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       // Authorization check - only team members (owner, admin, member) can create tags
-      // Portal users (role='user') cannot create tags
-      if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      // Portal users don't have member records, so memberRole would be undefined
+      if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(TagError.unauthorized('create tags'))
       }
 

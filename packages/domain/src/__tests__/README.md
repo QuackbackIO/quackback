@@ -200,16 +200,20 @@ it('should return validation error when title is empty', async () => {
 
 ### 3. Authorization Tests
 
-Test role-based access control for all user roles:
+Test role-based access control for unified member roles:
 
 - `owner` - Full access
 - `admin` - Administrative access
 - `member` - Team member access
-- `user` - Portal user (limited access)
+- `user` - Portal user access (can vote/comment but not access admin)
+
+All authenticated users have member records with one of these roles.
+When `memberRole` is undefined, it indicates an unauthenticated user.
 
 ```typescript
-it('should return forbidden error when user is not admin', async () => {
-  const ctx = createMockServiceContext({ user: { role: 'user' } })
+it('should return forbidden error when user is not a team member', async () => {
+  // Unauthenticated users don't have memberRole - it would be undefined
+  const ctx = createMockServiceContext({ user: { memberRole: undefined } })
 
   const result = await service.delete('123', ctx)
 
@@ -404,7 +408,8 @@ describe('PostService', () => {
     })
 
     it('should return forbidden error when user lacks permission', async () => {
-      const ctx = createMockServiceContext({ user: { role: 'user' } })
+      // Portal users don't have memberRole - it would be undefined
+      const ctx = createMockServiceContext({ user: { memberRole: undefined } })
 
       const result = await service.create(
         { title: 'New Post', boardId: 'board-123', description: 'Description' },
