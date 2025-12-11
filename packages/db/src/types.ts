@@ -9,7 +9,7 @@ import type {
   comments,
   commentReactions,
 } from './schema/posts'
-import type { integrations } from './schema/integrations'
+import type { organizationIntegrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
 import type { member } from './schema/auth'
 
@@ -86,10 +86,16 @@ export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 // Integration types
-export type Integration = InferSelectModel<typeof integrations>
-export type NewIntegration = InferInsertModel<typeof integrations>
-export type IntegrationType = 'github' | 'slack' | 'discord'
-export type IntegrationStatus = Integration['status']
+export type OrganizationIntegration = InferSelectModel<typeof organizationIntegrations>
+export type NewOrganizationIntegration = InferInsertModel<typeof organizationIntegrations>
+export type IntegrationType = 'slack' | 'discord' | 'linear' | 'jira' | 'github'
+export type IntegrationStatus = OrganizationIntegration['status']
+
+// Deprecated aliases for backwards compatibility
+/** @deprecated Use OrganizationIntegration instead */
+export type Integration = OrganizationIntegration
+/** @deprecated Use NewOrganizationIntegration instead */
+export type NewIntegration = NewOrganizationIntegration
 
 // Changelog types
 export type ChangelogEntry = InferSelectModel<typeof changelogEntries>

@@ -4,10 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./base": "./src/base/index.ts",
+    "./slack": "./src/slack/index.ts"
   },
   "dependencies": {
     "@quackback/db": "workspace:*",
-    "@quackback/domain": "workspace:*"
+    "@quackback/jobs": "workspace:*",
+    "@slack/web-api": "^7.8.0",
+    "ioredis": "^5.4.2"
   }
 }

@@ -5,6 +5,9 @@ export { withTenantContext, setTenantContext, clearTenantContext } from './src/t
 // Unit of Work
 export { UnitOfWork, withUnitOfWork } from './src/unit-of-work'
 
+// Crypto utilities for integration tokens
+export { encryptToken, decryptToken } from './src/crypto'
+
 // Repositories
 export * from './src/repositories'
 
