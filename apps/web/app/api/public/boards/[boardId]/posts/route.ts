@@ -91,14 +91,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Failed to retrieve default status' }, { status: 500 })
   }
 
-  // 7. Create the post via the PostService
+  // 7. Create the post
+  const defaultStatus = defaultStatusResult.value
   const createResult = await getPostService().createPost(
     {
       boardId,
       title,
       content,
       contentJson,
-      status: 'open', // Use legacy default
+      statusId: defaultStatus?.id,
     },
     ctx
   )
@@ -110,17 +111,5 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  const post = createResult.value
-
-  // 8. Update post with custom statusId if a default status exists
-  const defaultStatus = defaultStatusResult.value
-  if (defaultStatus) {
-    const updateResult = await getPostService().changeStatus(post.id, defaultStatus.id, ctx)
-    if (!updateResult.success) {
-      // Log error but don't fail the request - post was created successfully
-      console.error('Failed to set default status on post:', updateResult.error)
-    }
-  }
-
-  return NextResponse.json(post, { status: 201 })
+  return NextResponse.json(createResult.value, { status: 201 })
 }
