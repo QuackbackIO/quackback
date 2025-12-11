@@ -430,7 +430,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
           insert: vi.fn((_table) => ({
-            values: vi.fn((_vals) => {
+            values: vi.fn((vals) => {
               // Capture first insert (user)
               if (!capturedUserValues) {
                 capturedUserValues = vals
@@ -469,7 +469,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
           insert: vi.fn((_table) => ({
-            values: vi.fn((_vals) => {
+            values: vi.fn((vals) => {
               insertCount++
               // Capture second insert (account)
               if (insertCount === 2) {
@@ -504,7 +504,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
           insert: vi.fn((_table) => ({
-            values: vi.fn((_vals) => {
+            values: vi.fn((vals) => {
               insertCount++
               // Capture third insert (member)
               if (insertCount === 3) {
@@ -559,7 +559,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
           insert: vi.fn((_table) => ({
-            values: vi.fn((_vals) => {
+            values: vi.fn((vals) => {
               insertCount++
               // Capture third insert (member)
               if (insertCount === 3) {
@@ -606,7 +606,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
           insert: vi.fn((_table) => ({
-            values: vi.fn((_vals) => {
+            values: vi.fn((vals) => {
               if (!capturedUserValues) {
                 capturedUserValues = vals
               }
@@ -754,7 +754,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
           insert: vi.fn((_table) => ({
-            values: vi.fn((_vals) => {
+            values: vi.fn((vals) => {
               insertCount++
               // Capture third insert (member)
               if (insertCount === 3) {
