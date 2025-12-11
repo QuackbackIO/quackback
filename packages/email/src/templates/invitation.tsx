@@ -14,7 +14,8 @@ import {
 import { layout, typography, button, utils, branding } from './shared-styles'
 
 interface InvitationEmailProps {
-  invitedByEmail: string
+  invitedByName: string
+  inviteeName?: string
   organizationName: string
   inviteLink: string
 }
@@ -22,7 +23,8 @@ interface InvitationEmailProps {
 const LOGO_URL = 'https://quackback.io/logo.png'
 
 export function InvitationEmail({
-  invitedByEmail,
+  invitedByName,
+  inviteeName,
   organizationName,
   inviteLink,
 }: InvitationEmailProps) {
@@ -38,9 +40,11 @@ export function InvitationEmail({
           </Section>
 
           {/* Content */}
-          <Heading style={typography.h1}>You&apos;re invited!</Heading>
+          <Heading style={typography.h1}>
+            {inviteeName ? `Hi ${inviteeName}, you're invited!` : "You're invited!"}
+          </Heading>
           <Text style={typography.text}>
-            <strong>{invitedByEmail}</strong> has invited you to join{' '}
+            <strong>{invitedByName}</strong> has invited you to join{' '}
             <strong>{organizationName}</strong> on Quackback.
           </Text>
 

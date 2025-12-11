@@ -1,9 +1,10 @@
 import { requireTenantBySlug } from '@/lib/tenant'
-import { db, member, user, eq, and, ne } from '@quackback/db'
+import { db, member, user, invitation, eq, and, ne } from '@quackback/db'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { getBulkUserAvatarData } from '@/lib/avatar'
 import { TeamHeader } from './team-header'
+import { PendingInvitations } from './pending-invitations'
 
 export default async function TeamPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
@@ -22,13 +23,33 @@ export default async function TeamPage({ params }: { params: Promise<{ orgSlug: 
     .innerJoin(user, eq(member.userId, user.id))
     .where(and(eq(member.organizationId, organization.id), ne(member.role, 'user')))
 
+  // Fetch pending invitations
+  const pendingInvitations = await db.query.invitation.findMany({
+    where: and(eq(invitation.organizationId, organization.id), eq(invitation.status, 'pending')),
+    orderBy: (invitation, { desc }) => [desc(invitation.createdAt)],
+  })
+
   // Get avatar URLs for all team members (base64 for SSR)
   const userIds = members.map((m) => m.userId)
   const avatarMap = await getBulkUserAvatarData(userIds)
 
+  // Format invitations for client component
+  const formattedInvitations = pendingInvitations.map((inv) => ({
+    id: inv.id,
+    email: inv.email,
+    name: inv.name,
+    role: inv.role,
+    createdAt: inv.createdAt.toISOString(),
+    lastSentAt: inv.lastSentAt?.toISOString() || null,
+    expiresAt: inv.expiresAt.toISOString(),
+  }))
+
   return (
     <div className="space-y-6">
       <TeamHeader organizationId={organization.id} organizationName={organization.name} />
+
+      {/* Pending Invitations */}
+      <PendingInvitations invitations={formattedInvitations} organizationId={organization.id} />
 
       {/* Members List */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">

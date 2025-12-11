@@ -226,10 +226,12 @@ export const invitation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
+    name: text('name'),
     role: text('role'),
     status: text('status').default('pending').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
     inviterId: text('inviter_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

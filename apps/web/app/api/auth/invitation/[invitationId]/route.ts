@@ -74,6 +74,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       id: inv.id,
       email: inv.email,
+      name: inv.name || null,
       role: inv.role,
       organizationName: inv.organization.name,
       inviterName: inv.inviter?.name || null,

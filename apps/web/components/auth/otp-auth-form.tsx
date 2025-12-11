@@ -28,6 +28,7 @@ interface OrgAuthConfig {
 interface InvitationInfo {
   id: string
   email: string
+  name: string | null
   role: string | null
   organizationName: string
   inviterName: string | null
@@ -88,6 +89,9 @@ export function OTPAuthForm({
           const data = await response.json()
           setInvitation(data)
           setEmail(data.email) // Pre-fill email from invitation
+          if (data.name) {
+            setName(data.name) // Pre-fill name from invitation
+          }
         } else {
           const data = await response.json()
           setError(data.error || 'Invalid or expired invitation')

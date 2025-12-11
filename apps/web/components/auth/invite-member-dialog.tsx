@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { inviteMember } from '@/lib/auth/client'
+import { CheckCircle2 } from 'lucide-react'
 import { inviteSchema, type InviteInput } from '@/lib/schemas/auth'
 import {
   Dialog,
@@ -44,6 +44,7 @@ export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemb
     resolver: standardSchemaResolver(inviteSchema),
     defaultValues: {
       email: '',
+      name: '',
       role: 'member',
     },
   })
@@ -52,14 +53,20 @@ export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemb
     setError('')
 
     try {
-      const { error: inviteError } = await inviteMember({
-        organizationId,
-        email: data.email,
-        role: data.role,
+      const response = await fetch('/api/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId,
+          email: data.email,
+          name: data.name || undefined,
+          role: data.role,
+        }),
       })
 
-      if (inviteError) {
-        throw new Error(inviteError.message)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to send invitation')
       }
 
       setSuccess(true)
@@ -90,9 +97,12 @@ export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemb
         </DialogHeader>
 
         {success ? (
-          <div className="py-8 text-center">
-            <div className="text-primary text-lg font-medium">Invitation sent!</div>
-            <p className="mt-2 text-muted-foreground">
+          <div className="py-8 flex flex-col items-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
+              <CheckCircle2 className="h-6 w-6 text-primary" />
+            </div>
+            <div className="text-lg font-semibold text-foreground">Invitation sent!</div>
+            <p className="mt-2 text-sm text-muted-foreground text-center">
               {form.getValues('email')} will receive an email with instructions to join.
             </p>
           </div>
@@ -104,6 +114,25 @@ export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemb
                   {error}
                 </div>
               )}
+
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="text"
+                        placeholder="John Doe"
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

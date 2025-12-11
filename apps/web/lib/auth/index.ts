@@ -22,8 +22,9 @@ function buildTrustedOrigins(): string[] {
     return ['http://localhost:3000', 'http://*.localhost:3000']
   }
 
-  // Use https in production, http for localhost
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
+  // Use https in production or for ngrok domains, http for localhost
+  const isLocalhost = domain.includes('localhost')
+  const protocol = isLocalhost ? 'http' : 'https'
   return [`${protocol}://${domain}`, `${protocol}://*.${domain}`]
 }
 
@@ -81,7 +82,8 @@ export const auth = betterAuth({
     },
     defaultCookieAttributes: {
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      // Secure cookies for HTTPS (production or ngrok)
+      secure: !process.env.APP_DOMAIN?.includes('localhost'),
     },
   },
 
@@ -101,11 +103,12 @@ export const auth = betterAuth({
         if (!domain) {
           throw new Error('APP_DOMAIN environment variable is required')
         }
-        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
+        const isLocalhost = domain.includes('localhost')
+        const protocol = isLocalhost ? 'http' : 'https'
         const inviteLink = `${protocol}://${organization.slug}.${domain}/accept-invitation/${invitation.id}`
         await sendInvitationEmail({
           to: email,
-          invitedByEmail: inviter.user.email,
+          invitedByName: inviter.user.name,
           organizationName: organization.name,
           inviteLink,
         })
