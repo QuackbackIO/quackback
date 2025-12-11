@@ -14,6 +14,7 @@ export interface CreatePostInput {
   content: string
   contentJson?: unknown // TipTap JSON
   status?: PostStatus
+  statusId?: string
   tagIds?: string[]
 }
 

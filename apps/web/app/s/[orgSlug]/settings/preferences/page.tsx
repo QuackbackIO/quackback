@@ -1,6 +1,7 @@
 import { requireTenantBySlug } from '@/lib/tenant'
 import { Settings } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
+import { NotificationPreferencesForm } from '@/components/settings/notification-preferences-form'
 
 interface PreferencesPageProps {
   params: Promise<{ orgSlug: string }>
@@ -8,7 +9,7 @@ interface PreferencesPageProps {
 
 export default async function PreferencesPage({ params }: PreferencesPageProps) {
   const { orgSlug } = await params
-  await requireTenantBySlug(orgSlug)
+  const { organization } = await requireTenantBySlug(orgSlug)
 
   return (
     <div className="space-y-6">
@@ -35,11 +36,11 @@ export default async function PreferencesPage({ params }: PreferencesPageProps) 
 
       {/* Notifications */}
       <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Notifications</h2>
-        <p className="text-sm text-muted-foreground mb-4">Manage your notification preferences</p>
-        <div className="rounded-lg bg-muted/30 p-4">
-          <p className="text-sm text-muted-foreground">Notification settings coming soon</p>
-        </div>
+        <h2 className="font-medium mb-1">Email Notifications</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Manage email notifications for posts you&apos;re subscribed to
+        </p>
+        <NotificationPreferencesForm organizationId={organization.id} />
       </div>
     </div>
   )

@@ -9,12 +9,15 @@ import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
+import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { OfficialResponse } from '@/components/public/official-response'
 import { PostContent } from '@/components/public/post-content'
+import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { SubscriptionService } from '@quackback/domain/subscriptions'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
@@ -107,12 +110,35 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     hasVoted = voteResult.success ? voteResult.value : false
   }
 
+  // Check subscription status
+  let subscriptionStatus: { subscribed: boolean; muted: boolean; reason: string | null } = {
+    subscribed: false,
+    muted: false,
+    reason: null,
+  }
+  if (isMember) {
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session!.user.id), eq(member.organizationId, org.id)),
+    })
+    if (memberRecord) {
+      const subscriptionService = new SubscriptionService()
+      subscriptionStatus = await subscriptionService.getSubscriptionStatus(
+        memberRecord.id,
+        postId,
+        org.id
+      )
+    }
+  }
+
   // Fetch avatar URLs for all comment authors
   const commentMemberIds = collectCommentMemberIds(post.comments)
   const commentAvatarMap = await getBulkMemberAvatarData(commentMemberIds)
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6">
+      {/* Unsubscribe confirmation banner */}
+      <UnsubscribeBanner postId={post.id} />
+
       {/* Back link */}
       <Link
         href={`/?board=${slug}`}
@@ -126,13 +152,18 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
       <div className="bg-card border border-border/50 rounded-lg shadow-sm overflow-hidden">
         {/* Post header */}
         <div className="flex">
-          {/* Vote section - left column */}
-          <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30">
+          {/* Vote & Subscribe section - left column */}
+          <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 gap-4">
             <AuthVoteButton
               postId={post.id}
               initialVoteCount={post.voteCount}
               initialHasVoted={hasVoted}
               disabled={!canVote}
+            />
+            <AuthSubscriptionBell
+              postId={post.id}
+              initialStatus={subscriptionStatus}
+              disabled={!isMember}
             />
           </div>
 

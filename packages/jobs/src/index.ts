@@ -2,7 +2,15 @@
 export { getConnection, getConnectionOptions, createRedisClient } from './connection'
 
 // Queue utilities
-export { QueueNames, getImportQueue, addImportJob, getImportJobStatus, closeQueues } from './queues'
+export {
+  QueueNames,
+  getImportQueue,
+  addImportJob,
+  getImportJobStatus,
+  getIntegrationsQueue,
+  addIntegrationJob,
+  closeQueues,
+} from './queues'
 
 // Types
 export {
@@ -13,4 +21,7 @@ export {
   type ImportRowError,
   type ImportJobResult,
   type ImportJobStatus,
+  type DomainEventPayload,
+  type IntegrationJobData,
+  type IntegrationJobResult,
 } from './types'

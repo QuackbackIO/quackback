@@ -1,0 +1,229 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@/lib/auth/server'
+import { db, member, posts, eq, and } from '@quackback/db'
+import { SubscriptionService } from '@quackback/domain/subscriptions'
+
+interface RouteParams {
+  params: Promise<{ postId: string }>
+}
+
+/**
+ * GET /api/posts/[postId]/subscription
+ *
+ * Get the current user's subscription status for a post.
+ */
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { postId } = await params
+
+    const session = await getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Get post to find organization
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { board: { columns: { organizationId: true } } },
+    })
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    const organizationId = post.board.organizationId
+
+    // Get member record
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+    })
+
+    if (!memberRecord) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const subscriptionService = new SubscriptionService()
+    const status = await subscriptionService.getSubscriptionStatus(
+      memberRecord.id,
+      postId,
+      organizationId
+    )
+
+    return NextResponse.json(status)
+  } catch (error) {
+    console.error('Error fetching subscription status:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/posts/[postId]/subscription
+ *
+ * Subscribe to a post.
+ * Body (JSON):
+ *   - reason: Optional. 'manual' (default) | 'author' | 'vote' | 'comment'
+ */
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { postId } = await params
+
+    const session = await getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Get post to find organization
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { board: { columns: { organizationId: true } } },
+    })
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    const organizationId = post.board.organizationId
+
+    // Get member record
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+    })
+
+    if (!memberRecord) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const reason = body.reason || 'manual'
+
+    const subscriptionService = new SubscriptionService()
+    await subscriptionService.subscribeToPost(memberRecord.id, postId, reason, organizationId)
+
+    return NextResponse.json({
+      success: true,
+      subscribed: true,
+      muted: false,
+      reason,
+    })
+  } catch (error) {
+    console.error('Error subscribing to post:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/posts/[postId]/subscription
+ *
+ * Unsubscribe from a post.
+ */
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { postId } = await params
+
+    const session = await getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Get post to find organization
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { board: { columns: { organizationId: true } } },
+    })
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    const organizationId = post.board.organizationId
+
+    // Get member record
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+    })
+
+    if (!memberRecord) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const subscriptionService = new SubscriptionService()
+    await subscriptionService.unsubscribeFromPost(memberRecord.id, postId, organizationId)
+
+    return NextResponse.json({
+      success: true,
+      subscribed: false,
+      muted: false,
+      reason: null,
+    })
+  } catch (error) {
+    console.error('Error unsubscribing from post:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/posts/[postId]/subscription
+ *
+ * Update subscription settings (mute/unmute).
+ * Body (JSON):
+ *   - muted: boolean
+ */
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { postId } = await params
+
+    const session = await getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    if (typeof body.muted !== 'boolean') {
+      return NextResponse.json({ error: 'muted field is required' }, { status: 400 })
+    }
+
+    // Get post to find organization
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { board: { columns: { organizationId: true } } },
+    })
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    const organizationId = post.board.organizationId
+
+    // Get member record
+    const memberRecord = await db.query.member.findFirst({
+      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+    })
+
+    if (!memberRecord) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const subscriptionService = new SubscriptionService()
+    await subscriptionService.setSubscriptionMuted(
+      memberRecord.id,
+      postId,
+      body.muted,
+      organizationId
+    )
+
+    // Get updated status
+    const status = await subscriptionService.getSubscriptionStatus(
+      memberRecord.id,
+      postId,
+      organizationId
+    )
+
+    return NextResponse.json({
+      success: true,
+      ...status,
+    })
+  } catch (error) {
+    console.error('Error updating subscription:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

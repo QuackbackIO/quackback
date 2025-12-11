@@ -26,6 +26,9 @@ import {
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { CommentError } from './comment.errors'
+import { emitEvent } from '../events/emit'
+import type { CommentCreatedData } from '../events/types'
+import { SubscriptionService } from '../subscriptions'
 import type {
   CreateCommentInput,
   UpdateCommentInput,
@@ -107,6 +110,31 @@ export class CommentService {
         authorEmail: input.authorEmail || ctx.userEmail,
         isTeamMember,
       })
+
+      // Auto-subscribe commenter to the post
+      if (ctx.memberId) {
+        const subscriptionService = new SubscriptionService()
+        subscriptionService
+          .subscribeToPost(ctx.memberId, input.postId, 'comment', ctx.organizationId)
+          .catch((err) => console.error('[Subscriptions] Failed to auto-subscribe commenter:', err))
+      }
+
+      // Emit comment.created event for integrations
+      emitEvent<CommentCreatedData>(
+        'comment.created',
+        {
+          comment: {
+            id: comment.id,
+            content: comment.content,
+            authorEmail: ctx.userEmail,
+          },
+          post: {
+            id: post.id,
+            title: post.title,
+          },
+        },
+        ctx
+      )
 
       return ok(comment)
     })

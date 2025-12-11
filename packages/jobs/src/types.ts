@@ -3,6 +3,7 @@
  */
 export const JobTypes = {
   IMPORT_POSTS: 'import-posts',
+  INTEGRATION: 'integration',
 } as const
 
 export type JobType = (typeof JobTypes)[keyof typeof JobTypes]
@@ -73,4 +74,84 @@ export interface ImportJobStatus {
   result?: ImportJobResult
   /** Error message (if failed) */
   error?: string
+}
+
+// ============================================================================
+// Integration Job Types
+// ============================================================================
+
+/**
+ * Domain event structure passed to integration jobs
+ */
+export interface DomainEventPayload {
+  id: string
+  type: string
+  organizationId: string
+  timestamp: string
+  actor: { type: 'user' | 'system'; userId?: string; email?: string; service?: string }
+  data: unknown
+}
+
+/**
+ * Integration job data - sent when a domain event triggers an integration
+ */
+export interface IntegrationJobData {
+  /** Organization ID for tenant isolation */
+  organizationId: string
+  /** Integration configuration ID */
+  integrationId: string
+  /** Integration type (slack, discord, linear, etc.) */
+  integrationType: string
+  /** Event mapping ID */
+  mappingId: string
+  /** The domain event that triggered this job */
+  event: DomainEventPayload
+}
+
+/**
+ * Integration job result - returned when job completes
+ */
+export interface IntegrationJobResult {
+  /** Whether the integration action succeeded */
+  success: boolean
+  /** External entity ID (e.g., Slack message ts, Linear issue ID) */
+  externalEntityId?: string
+  /** Error message if failed */
+  error?: string
+  /** Processing duration in milliseconds */
+  durationMs: number
+}
+
+// ============================================================================
+// User Notification Job Types
+// ============================================================================
+
+/**
+ * User notification job data - sent when a domain event should notify subscribers
+ */
+export interface UserNotificationJobData {
+  /** Event ID for idempotency */
+  eventId: string
+  /** Event type (post.status_changed, comment.created) */
+  eventType: string
+  /** Organization ID for tenant isolation */
+  organizationId: string
+  /** Event timestamp */
+  timestamp: string
+  /** Actor who triggered the event (excluded from notifications) */
+  actor: { type: 'user' | 'system'; userId?: string; email?: string }
+  /** Event-specific data */
+  data: unknown
+}
+
+/**
+ * User notification job result - returned when job completes
+ */
+export interface UserNotificationJobResult {
+  /** Number of emails sent */
+  emailsSent: number
+  /** Number of subscribers skipped (due to preferences or being the actor) */
+  skipped: number
+  /** Errors encountered */
+  errors: string[]
 }

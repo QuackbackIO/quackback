@@ -33,6 +33,9 @@ import {
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'
+import { emitEvent } from '../events/emit'
+import type { PostCreatedData, PostStatusChangedData } from '../events/types'
+import { SubscriptionService } from '../subscriptions'
 import { buildCommentTree, type CommentTreeNode } from '../shared/comment-tree'
 import type {
   CreatePostInput,
@@ -97,6 +100,7 @@ export class PostService {
         content: input.content.trim(),
         contentJson: input.contentJson,
         status: input.status || 'open',
+        statusId: input.statusId,
         memberId: ctx.memberId,
         // Legacy fields for display compatibility
         authorName: ctx.userName,
@@ -107,6 +111,31 @@ export class PostService {
       if (input.tagIds && input.tagIds.length > 0) {
         await postRepo.setTags(post.id, input.tagIds)
       }
+
+      // Auto-subscribe the author to their own post
+      if (ctx.memberId) {
+        const subscriptionService = new SubscriptionService()
+        subscriptionService
+          .subscribeToPost(ctx.memberId, post.id, 'author', ctx.organizationId)
+          .catch((err) => console.error('[Subscriptions] Failed to auto-subscribe author:', err))
+      }
+
+      // Emit post.created event for integrations
+      emitEvent<PostCreatedData>(
+        'post.created',
+        {
+          post: {
+            id: post.id,
+            title: post.title,
+            content: post.content,
+            boardId: board.id,
+            boardSlug: board.slug,
+            authorEmail: ctx.userEmail,
+            voteCount: post.voteCount,
+          },
+        },
+        ctx
+      )
 
       return ok(post)
     })
@@ -283,8 +312,18 @@ export class PostService {
       `)
 
       const row = result[0]
+      const voted = row?.voted ?? false
+
+      // Auto-subscribe voter when they upvote (not when they remove vote)
+      if (voted && options?.memberId) {
+        const subscriptionService = new SubscriptionService()
+        subscriptionService
+          .subscribeToPost(options.memberId, postId, 'vote', ctx.organizationId)
+          .catch((err) => console.error('[Subscriptions] Failed to auto-subscribe voter:', err))
+      }
+
       return ok({
-        voted: row?.voted ?? false,
+        voted,
         voteCount: row?.vote_count ?? post.voteCount,
       })
     })
@@ -337,11 +376,29 @@ export class PostService {
         return err(PostError.statusNotFound(statusId))
       }
 
+      // Capture previous status for event
+      const previousStatus = existingPost.status
+
       // Update the post status
       const updatedPost = await postRepo.update(postId, { statusId })
       if (!updatedPost) {
         return err(PostError.notFound(postId))
       }
+
+      // Emit post.status_changed event for integrations
+      emitEvent<PostStatusChangedData>(
+        'post.status_changed',
+        {
+          post: {
+            id: updatedPost.id,
+            title: updatedPost.title,
+            boardSlug: board.slug,
+          },
+          previousStatus: previousStatus || 'open',
+          newStatus: status.name,
+        },
+        ctx
+      )
 
       return ok(updatedPost)
     })
