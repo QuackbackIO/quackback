@@ -1,16 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, Map } from 'lucide-react'
+import { Map } from 'lucide-react'
 import { RoadmapColumn } from './roadmap-column'
+import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePublicRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import type { PostStatusEntity, Roadmap } from '@quackback/db/types'
 
@@ -57,29 +52,22 @@ export function RoadmapBoard({ organizationId, statuses, initialRoadmaps }: Road
     <div className="space-y-4">
       {/* Roadmap selector - only show if multiple roadmaps */}
       {availableRoadmaps.length > 1 && (
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Map className="h-4 w-4" />
-                {selectedRoadmap?.name ?? 'Select roadmap'}
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+        <div className="space-y-2">
+          <Tabs value={selectedRoadmapId ?? undefined} onValueChange={setSelectedRoadmapId}>
+            <TabsList>
               {availableRoadmaps.map((roadmap) => (
-                <DropdownMenuItem
-                  key={roadmap.id}
-                  onClick={() => setSelectedRoadmapId(roadmap.id)}
-                  className={selectedRoadmapId === roadmap.id ? 'bg-accent' : ''}
-                >
+                <TabsTrigger key={roadmap.id} value={roadmap.id}>
                   {roadmap.name}
-                </DropdownMenuItem>
+                </TabsTrigger>
               ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </TabsList>
+          </Tabs>
           {selectedRoadmap?.description && (
-            <p className="text-sm text-muted-foreground">{selectedRoadmap.description}</p>
+            <Card className="bg-muted/50 border-none shadow-none">
+              <CardContent className="py-3 px-4">
+                <p className="text-sm text-muted-foreground">{selectedRoadmap.description}</p>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}

@@ -137,6 +137,16 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
         {/* Spacer */}
         <div className="flex-1" />
 
+        {/* Admin Button (visible for team members) */}
+        {canAccessAdmin && (
+          <Button variant="outline" size="sm" asChild className="mr-2">
+            <Link href="/admin">
+              <Shield className="mr-2 h-4 w-4" />
+              Admin
+            </Link>
+          </Button>
+        )}
+
         {/* Auth Buttons */}
         {isLoggedIn ? (
           // Logged-in user - show user dropdown

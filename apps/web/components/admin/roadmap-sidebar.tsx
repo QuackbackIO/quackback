@@ -105,7 +105,7 @@ export function RoadmapSidebar({
         roadmapId: editingRoadmap.id,
         input: {
           name,
-          description: description || undefined,
+          description,
           isPublic,
         },
       })
