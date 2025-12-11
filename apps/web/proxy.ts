@@ -90,8 +90,11 @@ export async function proxy(request: NextRequest) {
   }
   const protocol = getProtocol(request)
   // Check for both session cookies (session_data is the JWT cache, session_token is the DB fallback)
-  const sessionTokenCookie = request.cookies.get('better-auth.session_token')
-  const sessionDataCookie = request.cookies.get('better-auth.session_data')
+  // Cookie names are prefixed with __Secure- when using HTTPS with secure cookies
+  const isSecure = !APP_DOMAIN?.includes('localhost')
+  const cookiePrefix = isSecure ? '__Secure-' : ''
+  const sessionTokenCookie = request.cookies.get(`${cookiePrefix}better-auth.session_token`)
+  const sessionDataCookie = request.cookies.get(`${cookiePrefix}better-auth.session_data`)
   const hasSessionCookie = !!sessionTokenCookie || !!sessionDataCookie
 
   // === MAIN DOMAIN ===
@@ -149,8 +152,8 @@ export async function proxy(request: NextRequest) {
       } else {
         // Stale cookie - clear both cookies and rewrite to login page
         const response = rewriteToSlug()
-        response.cookies.delete('better-auth.session_token')
-        response.cookies.delete('better-auth.session_data')
+        response.cookies.delete(`${cookiePrefix}better-auth.session_token`)
+        response.cookies.delete(`${cookiePrefix}better-auth.session_data`)
         return response
       }
     }
@@ -186,8 +189,8 @@ export async function proxy(request: NextRequest) {
       `${protocol}://${host}${pathname}${request.nextUrl.search}`
     )
     const response = NextResponse.redirect(loginUrl)
-    response.cookies.delete('better-auth.session_token')
-    response.cookies.delete('better-auth.session_data')
+    response.cookies.delete(`${cookiePrefix}better-auth.session_token`)
+    response.cookies.delete(`${cookiePrefix}better-auth.session_data`)
     return response
   }
 
