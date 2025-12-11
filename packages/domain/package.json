@@ -15,9 +15,12 @@
     "./tags": "./src/tags/index.ts",
     "./utils": "./src/utils/index.ts",
     "./features": "./src/features/index.ts",
-    "./theme": "./src/theme/index.ts"
+    "./theme": "./src/theme/index.ts",
+    "./events": "./src/events/index.ts",
+    "./subscriptions": "./src/subscriptions/index.ts"
   },
   "dependencies": {
-    "@quackback/db": "workspace:*"
+    "@quackback/db": "workspace:*",
+    "@quackback/jobs": "workspace:*"
   }
 }
