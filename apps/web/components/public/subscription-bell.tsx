@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { Bell, BellOff, BellRing, Check, Loader2 } from 'lucide-react'
+import { Bell, BellRing, Check, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -58,60 +58,8 @@ export function SubscriptionBell({
     }
   }
 
-  const handleSubscribe = useCallback(async () => {
-    if (disabled && onAuthRequired) {
-      onAuthRequired()
-      setOpen(false)
-      return
-    }
-
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/posts/${postId}/subscription`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'manual' }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStatus(data)
-      }
-    } catch (error) {
-      console.error('Failed to subscribe:', error)
-    } finally {
-      setLoading(false)
-      setOpen(false)
-    }
-  }, [postId, disabled, onAuthRequired])
-
-  const handleUnsubscribe = useCallback(async () => {
-    if (disabled && onAuthRequired) {
-      onAuthRequired()
-      setOpen(false)
-      return
-    }
-
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/posts/${postId}/subscription`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStatus(data)
-      }
-    } catch (error) {
-      console.error('Failed to unsubscribe:', error)
-    } finally {
-      setLoading(false)
-      setOpen(false)
-    }
-  }, [postId, disabled, onAuthRequired])
-
-  const handleMute = useCallback(
-    async (muted: boolean) => {
+  const updateSubscription = useCallback(
+    async (level: SubscriptionLevel) => {
       if (disabled && onAuthRequired) {
         onAuthRequired()
         setOpen(false)
@@ -120,14 +68,49 @@ export function SubscriptionBell({
 
       setLoading(true)
       try {
-        const response = await fetch(`/api/posts/${postId}/subscription`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ muted }),
-        })
+        let response: Response
 
-        if (response.ok) {
-          const data = await response.json()
+        if (level === 'none') {
+          // Unsubscribe
+          response = await fetch(`/api/posts/${postId}/subscription`, {
+            method: 'DELETE',
+          })
+        } else if (level === 'all') {
+          // Subscribe to all (unmuted)
+          if (!status.subscribed) {
+            response = await fetch(`/api/posts/${postId}/subscription`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: 'manual' }),
+            })
+          } else {
+            // Already subscribed, just unmute
+            response = await fetch(`/api/posts/${postId}/subscription`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ muted: false }),
+            })
+          }
+        } else {
+          // Subscribe to status only (muted)
+          if (!status.subscribed) {
+            // Subscribe first
+            await fetch(`/api/posts/${postId}/subscription`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: 'manual' }),
+            })
+          }
+          // Then mute
+          response = await fetch(`/api/posts/${postId}/subscription`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ muted: true }),
+          })
+        }
+
+        if (response!.ok) {
+          const data = await response!.json()
           setStatus(data)
         }
       } catch (error) {
@@ -137,7 +120,7 @@ export function SubscriptionBell({
         setOpen(false)
       }
     },
-    [postId, disabled, onAuthRequired]
+    [postId, disabled, onAuthRequired, status.subscribed]
   )
 
   // Determine current subscription level
@@ -149,8 +132,9 @@ export function SubscriptionBell({
 
   const level = getLevel()
 
-  // Get appropriate icon
-  const BellIcon = level === 'none' ? Bell : level === 'status_only' ? BellOff : BellRing
+  // Icon: Bell when not subscribed, BellRing when subscribed (any level)
+  const isSubscribed = status.subscribed
+  const BellIcon = isSubscribed ? BellRing : Bell
 
   // Button click handler for non-dropdown scenarios
   const handleButtonClick = () => {
@@ -168,17 +152,17 @@ export function SubscriptionBell({
           disabled={loading}
           className={cn(
             'flex items-center justify-center rounded-md p-2 transition-colors',
-            level === 'none'
+            !isSubscribed
               ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
               : 'text-primary bg-primary/10 hover:bg-primary/20',
             loading && 'opacity-50 cursor-wait'
           )}
           title={
-            level === 'none'
+            !isSubscribed
               ? 'Get notified about updates'
               : level === 'status_only'
-                ? 'Notifications muted (status only)'
-                : 'Receiving all notifications'
+                ? 'Subscribed to status changes'
+                : 'Subscribed to all activity'
           }
         >
           {loading ? (
@@ -191,14 +175,14 @@ export function SubscriptionBell({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <p className="text-sm font-medium">Notifications</p>
-          <p className="text-xs text-muted-foreground">Get updates on this post</p>
+          <p className="text-xs text-muted-foreground">Choose what to subscribe to</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {/* All notifications */}
+        {/* All activity */}
         <DropdownMenuItem
-          onClick={() => (status.subscribed && !status.muted ? null : handleSubscribe())}
-          className="flex items-center justify-between"
+          onClick={() => level !== 'all' && updateSubscription('all')}
+          className="flex items-center justify-between cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <BellRing className="h-4 w-4" />
@@ -210,23 +194,16 @@ export function SubscriptionBell({
           {level === 'all' && <Check className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
 
-        {/* Status only (muted comments) */}
+        {/* Status changes only */}
         <DropdownMenuItem
-          onClick={() => {
-            if (!status.subscribed) {
-              // Subscribe first, then mute
-              handleSubscribe().then(() => handleMute(true))
-            } else if (!status.muted) {
-              handleMute(true)
-            }
-          }}
-          className="flex items-center justify-between"
+          onClick={() => level !== 'status_only' && updateSubscription('status_only')}
+          className="flex items-center justify-between cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <BellOff className="h-4 w-4" />
+            <Bell className="h-4 w-4" />
             <div>
-              <p className="text-sm">Status only</p>
-              <p className="text-xs text-muted-foreground">No comment notifications</p>
+              <p className="text-sm">Status changes</p>
+              <p className="text-xs text-muted-foreground">When status is updated</p>
             </div>
           </div>
           {level === 'status_only' && <Check className="h-4 w-4 text-primary" />}
@@ -236,16 +213,13 @@ export function SubscriptionBell({
 
         {/* Unsubscribe */}
         <DropdownMenuItem
-          onClick={() => (status.subscribed ? handleUnsubscribe() : null)}
+          onClick={() => level !== 'none' && updateSubscription('none')}
           disabled={!status.subscribed}
-          className="flex items-center justify-between"
+          className="flex items-center justify-between cursor-pointer"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-muted-foreground">
             <Bell className="h-4 w-4" />
-            <div>
-              <p className="text-sm">Off</p>
-              <p className="text-xs text-muted-foreground">No notifications</p>
-            </div>
+            <p className="text-sm">Unsubscribe</p>
           </div>
           {level === 'none' && <Check className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>

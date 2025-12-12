@@ -26,12 +26,19 @@
     {
       "idx": 3,
       "version": "7",
+      "when": 1733961500000,
+      "tag": "0003_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
       "when": 1733961600000,
       "tag": "0004_invitation_name",
       "breakpoints": true
     },
     {
-      "idx": 4,
+      "idx": 5,
       "version": "7",
       "when": 1733961700000,
       "tag": "0005_invitation_last_sent",

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createWorkspaceSchema, type CreateWorkspaceInput } from '@/lib/schemas/auth'
-import { getBaseDomain } from '@/lib/routing'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Loader2, Building2, User } from 'lucide-react'
@@ -30,7 +29,7 @@ export function CreateWorkspaceForm() {
   const [baseDomain, setBaseDomain] = useState('')
 
   useEffect(() => {
-    setBaseDomain(getBaseDomain(window.location.host))
+    setBaseDomain(window.location.host)
   }, [])
 
   const form = useForm<CreateWorkspaceInput>({

@@ -9,7 +9,6 @@ import {
   workspaceDomain,
 } from '@quackback/db'
 import { createWorkspaceSchema } from '@/lib/schemas/auth'
-import { getBaseDomain } from '@/lib/routing'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { getStatusService } from '@/lib/services'
 
@@ -25,39 +24,23 @@ function generateSecureToken(): string {
 }
 
 /**
- * Get host from request, throwing if missing
- */
-function getHostFromRequest(request: NextRequest): string {
-  const host = request.headers.get('host')
-  if (!host) {
-    throw new Error('Missing host header')
-  }
-  return host
-}
-
-/**
  * Build domain host string for workspace_domain table
  *
- * example.com -> acme.example.com
+ * Uses the request host as the base domain directly.
+ * quackback.ngrok.app -> acme.quackback.ngrok.app
  * localhost:3000 -> acme.localhost:3000
  */
-function buildDomainHost(slug: string, request: NextRequest): string {
-  const host = getHostFromRequest(request)
-  const baseDomain = getBaseDomain(host)
-  return `${slug}.${baseDomain}`
+function buildDomainHost(slug: string, host: string): string {
+  return `${slug}.${host}`
 }
 
 /**
  * Build subdomain URL for redirect
- *
- * example.com -> acme.example.com
- * localhost:3000 -> acme.localhost:3000
  */
 function buildSubdomainUrl(slug: string, request: NextRequest): string {
-  const host = getHostFromRequest(request)
-  const baseDomain = getBaseDomain(host)
+  const host = request.headers.get('host') || 'localhost:3000'
   const protocol = request.headers.get('x-forwarded-proto') || 'http'
-  return `${protocol}://${slug}.${baseDomain}`
+  return `${protocol}://${slug}.${host}`
 }
 
 /**
@@ -129,8 +112,9 @@ export async function POST(request: NextRequest) {
     // Generate transfer token
     const transferToken = generateSecureToken()
 
-    // Build domain host
-    const domainHost = buildDomainHost(workspaceSlug, request)
+    // Build domain host from request
+    const host = request.headers.get('host') || 'localhost:3000'
+    const domainHost = buildDomainHost(workspaceSlug, host)
 
     // Create everything in a transaction (atomic operation)
     await db.transaction(async (tx) => {
