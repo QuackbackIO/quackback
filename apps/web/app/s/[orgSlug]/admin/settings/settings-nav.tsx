@@ -2,7 +2,17 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Users, CreditCard, Layout, Shield, Lock, Brush, Plug2 } from 'lucide-react'
+import {
+  Settings,
+  Users,
+  CreditCard,
+  Layout,
+  Shield,
+  Lock,
+  Brush,
+  Plug2,
+  Globe,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toExternalPath } from '@/lib/tenant-paths'
 
@@ -13,6 +23,7 @@ const navSections = [
       { label: 'Team Members', href: '/admin/settings/team', icon: Users },
       { label: 'Integrations', href: '/admin/settings/integrations', icon: Plug2 },
       { label: 'Security', href: '/admin/settings/security', icon: Shield },
+      { label: 'Domains', href: '/admin/settings/domains', icon: Globe },
       { label: 'Billing', href: '/admin/settings/billing', icon: CreditCard },
     ],
   },
