@@ -3,7 +3,7 @@ import { getTableName, getTableColumns } from 'drizzle-orm'
 import { posts, votes, comments, postTags, postRoadmaps, commentReactions } from '../schema/posts'
 import { REACTION_EMOJIS } from '../types'
 import { boards, roadmaps, tags } from '../schema/boards'
-import { integrations } from '../schema/integrations'
+import { organizationIntegrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'
 import { user, session, organization, member, invitation } from '../schema/auth'
 
@@ -40,7 +40,7 @@ describe('Schema definitions', () => {
     it('has required columns', () => {
       const columns = Object.keys(getTableColumns(roadmaps))
       expect(columns).toContain('id')
-      expect(columns).toContain('boardId')
+      expect(columns).toContain('organizationId')
       expect(columns).toContain('slug')
       expect(columns).toContain('name')
       expect(columns).toContain('description')
@@ -115,7 +115,9 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(postRoadmaps))
       expect(columns).toContain('postId')
       expect(columns).toContain('roadmapId')
-      expect(columns.length).toBe(2)
+      expect(columns).toContain('statusId')
+      expect(columns).toContain('position')
+      expect(columns.length).toBe(4)
     })
   })
 
@@ -195,16 +197,16 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('integrations schema', () => {
+  describe('organizationIntegrations schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(integrations)).toBe('integrations')
+      expect(getTableName(organizationIntegrations)).toBe('organization_integrations')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(integrations))
+      const columns = Object.keys(getTableColumns(organizationIntegrations))
       expect(columns).toContain('id')
       expect(columns).toContain('organizationId')
-      expect(columns).toContain('type')
+      expect(columns).toContain('integrationType')
       expect(columns).toContain('status')
       expect(columns).toContain('config')
       expect(columns).toContain('createdAt')
