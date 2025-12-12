@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { signOut, useSession } from '@/lib/auth/client'
@@ -39,6 +39,7 @@ const navItems = [
 
 export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { openAuthPopover } = useAuthPopover()
 
   // Track if we've completed initial hydration to prevent SSR/client mismatch
@@ -50,10 +51,28 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
   // Client-side session state - updates without page reload
   const { data: sessionData, isPending, refetch: refetchSession } = useSession()
 
-  // Listen for auth success to refetch session
+  // Client-side role state - fetched when session changes
+  const [clientRole, setClientRole] = useState<'owner' | 'admin' | 'member' | 'user' | null>(null)
+  const [isRoleFetched, setIsRoleFetched] = useState(false)
+
+  // Fetch role when session changes
+  const fetchRole = async () => {
+    try {
+      const res = await fetch('/api/user/role')
+      const data = await res.json()
+      setClientRole(data.role)
+      setIsRoleFetched(true)
+    } catch {
+      setClientRole(null)
+      setIsRoleFetched(true)
+    }
+  }
+
+  // Listen for auth success to refetch session and role
   useAuthBroadcast({
     onSuccess: () => {
       refetchSession()
+      fetchRole()
     },
   })
 
@@ -81,13 +100,17 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
     : (initialUserData?.avatarUrl ?? null) // During hydration, use SSR data
 
   // Team members (owner, admin, member) can access admin dashboard
-  // For now, we can't determine role from client session, so use server prop
-  const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(userRole || '')
+  // Use client role if fetched, otherwise fall back to server prop
+  const effectiveRole = isRoleFetched ? clientRole : userRole
+  const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(effectiveRole || '')
 
   const handleSignOut = () => {
     signOut({
       fetchOptions: {
         onSuccess: () => {
+          setClientRole(null)
+          setIsRoleFetched(true)
+          router.push('/')
           refetchSession()
         },
       },
@@ -170,14 +193,6 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
                   Settings
                 </Link>
               </DropdownMenuItem>
-              {canAccessAdmin && (
-                <DropdownMenuItem asChild>
-                  <Link href="/admin">
-                    <Shield className="mr-2 h-4 w-4" />
-                    Admin
-                  </Link>
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out

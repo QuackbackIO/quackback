@@ -2,31 +2,56 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
-import { db } from '@quackback/db'
+import { db, workspaceDomain, eq, and } from '@quackback/db'
 import { trustLogin } from './plugins/trust-login'
 
 /**
- * Build trusted origins list for CSRF protection
+ * Build trusted origins dynamically for CSRF protection.
  *
- * Note: Custom domains are secured through:
- * 1. Proxy validates domain exists in workspace_domain table
- * 2. Trust-login validates token matches current domain
- * 3. OAuth callback validates return domain is allowed
+ * Trusted origins include:
+ * 1. Main app domain and all subdomains (e.g., *.quackback.io)
+ * 2. Verified custom domains from the workspace_domain table
  *
- * The wildcard pattern covers all subdomains.
+ * Returns the origin if trusted, empty array if not.
  */
-function buildTrustedOrigins(): string[] {
-  const domain = process.env.APP_DOMAIN
+async function getTrustedOrigins(request: Request): Promise<string[]> {
+  const origin = request.headers.get('origin')
+  if (!origin) return []
 
-  if (!domain) {
-    return ['http://localhost:3000', 'http://*.localhost:3000']
+  // Parse the origin to extract the hostname
+  let originHost: string
+  try {
+    originHost = new URL(origin).hostname
+  } catch {
+    return []
   }
 
-  const isLocalhost = domain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
+  const appDomain = process.env.APP_DOMAIN
 
-  // Main domain and all subdomains via wildcard
-  return [`${protocol}://${domain}`, `${protocol}://*.${domain}`]
+  // Development fallback
+  if (!appDomain) {
+    if (originHost === 'localhost' || originHost.endsWith('.localhost')) {
+      return [origin]
+    }
+    return []
+  }
+
+  // Check if origin matches main domain or any subdomain
+  if (originHost === appDomain || originHost.endsWith(`.${appDomain}`)) {
+    return [origin]
+  }
+
+  // Check if origin is a verified custom domain
+  const customDomain = await db.query.workspaceDomain.findFirst({
+    where: and(
+      eq(workspaceDomain.domain, originHost),
+      eq(workspaceDomain.domainType, 'custom'),
+      eq(workspaceDomain.verified, true)
+    ),
+    columns: { id: true },
+  })
+
+  return customDomain ? [origin] : []
 }
 
 /**
@@ -67,8 +92,9 @@ export const auth = betterAuth({
     },
   },
 
-  // Trusted origins for CSRF protection (include subdomains)
-  trustedOrigins: buildTrustedOrigins(),
+  // Trusted origins for CSRF protection
+  // Dynamically checks main domain, subdomains, and verified custom domains
+  trustedOrigins: getTrustedOrigins,
 
   advanced: {
     // Disable cross-subdomain cookies for tenant isolation
