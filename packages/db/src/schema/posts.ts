@@ -78,6 +78,8 @@ export const posts = pgTable(
     index('posts_board_created_at_idx').on(table.boardId, table.createdAt),
     // Composite index for admin inbox filtering by status
     index('posts_board_status_idx').on(table.boardId, table.status),
+    // Composite index for user activity pages (posts by author)
+    index('posts_member_created_at_idx').on(table.memberId, table.createdAt),
     pgPolicy('posts_tenant_isolation', {
       for: 'all',
       to: appUser,
@@ -162,6 +164,8 @@ export const votes = pgTable(
     index('votes_post_id_idx').on(table.postId),
     uniqueIndex('votes_unique_idx').on(table.postId, table.userIdentifier),
     index('votes_member_id_idx').on(table.memberId),
+    // Composite index for user activity pages (votes by member)
+    index('votes_member_created_at_idx').on(table.memberId, table.createdAt),
     pgPolicy('votes_tenant_isolation', {
       for: 'all',
       to: appUser,

@@ -54,6 +54,10 @@ export const postSubscriptions = pgTable(
     uniqueIndex('post_subscriptions_unique').on(table.postId, table.memberId),
     index('post_subscriptions_member_idx').on(table.memberId),
     index('post_subscriptions_post_idx').on(table.postId),
+    // Partial index for active (non-muted) subscriber lookups
+    index('post_subscriptions_post_active_idx')
+      .on(table.postId)
+      .where(sql`muted = false`),
     pgPolicy('post_subscriptions_tenant_isolation', {
       for: 'all',
       to: appUser,

@@ -241,6 +241,8 @@ export const invitation = pgTable(
   (table) => [
     index('invitation_organizationId_idx').on(table.organizationId),
     index('invitation_email_idx').on(table.email),
+    // Composite index for duplicate invitation checks
+    index('invitation_org_email_status_idx').on(table.organizationId, table.email, table.status),
   ]
 )
 
