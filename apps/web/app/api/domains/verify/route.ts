@@ -1,69 +1,198 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, workspaceDomain, eq } from '@quackback/db'
 import { auth } from '@/lib/auth'
-import { Resolver } from 'dns/promises'
 
 /**
  * Domain Verification API
  *
- * Verifies custom domain ownership via CNAME record.
+ * Verifies custom domain ownership via HTTP check.
  * Users must create a CNAME pointing their domain to APP_DOMAIN.
- * This proves ownership AND sets up routing in one step.
+ * We then fetch /.well-known/domain-verification from their domain
+ * to confirm routing works and the token matches.
+ *
+ * This approach works even with Cloudflare and other proxies.
  */
 
-const resolver = new Resolver()
-// Use public DNS servers for consistent results
-resolver.setServers(['8.8.8.8', '1.1.1.1'])
-
-function getCnameTarget(): string {
-  const appDomain = process.env.APP_DOMAIN
-  if (!appDomain) {
-    throw new Error('APP_DOMAIN is required')
-  }
-  return appDomain
-}
-
-interface DnsCheckResult {
+interface HttpCheckResult {
   verified: boolean
-  currentValue: string | null
+  reachable: boolean
+  tokenMatch: boolean | null
   error: string | null
 }
 
-async function checkCnameVerification(domain: string): Promise<DnsCheckResult> {
-  const expectedTarget = getCnameTarget().toLowerCase()
+const MAX_REDIRECTS = 5
+
+async function checkHttpVerification(
+  domain: string,
+  expectedToken: string
+): Promise<HttpCheckResult> {
+  let url = `https://${domain}/.well-known/domain-verification`
+  const visitedUrls = new Set<string>()
 
   try {
-    const records = await resolver.resolveCname(domain)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
 
-    if (records.length === 0) {
-      return { verified: false, currentValue: null, error: 'No CNAME record found' }
+    let response: Response
+    let redirectCount = 0
+
+    // Manually follow redirects with loop detection and limit
+    while (true) {
+      // Check for redirect loop
+      if (visitedUrls.has(url)) {
+        clearTimeout(timeoutId)
+        return {
+          verified: false,
+          reachable: true,
+          tokenMatch: null,
+          error: 'Redirect loop detected.',
+        }
+      }
+      visitedUrls.add(url)
+
+      // Check redirect limit
+      if (redirectCount >= MAX_REDIRECTS) {
+        clearTimeout(timeoutId)
+        return {
+          verified: false,
+          reachable: true,
+          tokenMatch: null,
+          error: 'Too many redirects.',
+        }
+      }
+
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Quackback-Domain-Verification/1.0',
+        },
+        redirect: 'manual',
+      })
+
+      // Check if redirect
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location')
+        if (!location) {
+          clearTimeout(timeoutId)
+          return {
+            verified: false,
+            reachable: true,
+            tokenMatch: null,
+            error: `Redirect without location header (status ${response.status})`,
+          }
+        }
+
+        // Resolve relative URLs
+        url = new URL(location, url).href
+        redirectCount++
+
+        // Ensure we stay on the same domain
+        const redirectHost = new URL(url).hostname.toLowerCase()
+        if (redirectHost !== domain.toLowerCase()) {
+          clearTimeout(timeoutId)
+          return {
+            verified: false,
+            reachable: true,
+            tokenMatch: null,
+            error: `Domain redirected to ${redirectHost}. CNAME may be misconfigured.`,
+          }
+        }
+
+        continue
+      }
+
+      // Not a redirect, we have our final response
+      break
     }
 
-    // Check if any CNAME record points to our domain
-    for (const record of records) {
-      // CNAME records may have trailing dot, normalize both
-      const normalizedRecord = record.toLowerCase().replace(/\.$/, '')
-      if (normalizedRecord === expectedTarget) {
-        return { verified: true, currentValue: normalizedRecord, error: null }
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return {
+          verified: false,
+          reachable: true,
+          tokenMatch: null,
+          error: 'Verification endpoint not found. Make sure your CNAME is set up correctly.',
+        }
+      }
+      return {
+        verified: false,
+        reachable: true,
+        tokenMatch: null,
+        error: `Endpoint returned status ${response.status}`,
       }
     }
 
-    // CNAME exists but points elsewhere
-    const currentValue = records[0].toLowerCase().replace(/\.$/, '')
-    return { verified: false, currentValue, error: null }
-  } catch (error) {
-    // DNS lookup failed (NXDOMAIN, no CNAME, timeout, etc.)
-    const errorCode = (error as NodeJS.ErrnoException).code
-    if (errorCode === 'ENODATA' || errorCode === 'ENOTFOUND') {
-      return { verified: false, currentValue: null, error: 'No DNS record found' }
+    const token = await response.text()
+    const tokenMatches = token.trim() === expectedToken
+
+    if (!tokenMatches) {
+      // Log for debugging
+      const debugDomain = response.headers.get('x-verified-domain')
+      const debugDomainId = response.headers.get('x-domain-id')
+      console.error('Domain verification token mismatch:', {
+        requestedDomain: new URL(url).hostname,
+        resolvedDomain: debugDomain,
+        resolvedDomainId: debugDomainId,
+        expectedTokenPrefix: expectedToken.substring(0, 10) + '...',
+        receivedTokenPrefix: token.trim().substring(0, 10) + '...',
+      })
     }
-    console.error(`CNAME verification failed for ${domain}:`, error)
-    return { verified: false, currentValue: null, error: 'DNS lookup failed' }
+
+    return {
+      verified: tokenMatches,
+      reachable: true,
+      tokenMatch: tokenMatches,
+      error: tokenMatches ? null : 'Token mismatch - domain may be pointing to wrong organization',
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+    // Check for specific error types
+    if (errorMessage.includes('abort') || errorMessage.includes('timeout')) {
+      return {
+        verified: false,
+        reachable: false,
+        tokenMatch: null,
+        error: 'Connection timed out. Check your DNS settings.',
+      }
+    }
+
+    if (
+      errorMessage.includes('ENOTFOUND') ||
+      errorMessage.includes('getaddrinfo') ||
+      errorMessage.includes('DNS')
+    ) {
+      return {
+        verified: false,
+        reachable: false,
+        tokenMatch: null,
+        error: 'Domain not found. Create a CNAME record pointing to our servers.',
+      }
+    }
+
+    if (errorMessage.includes('certificate') || errorMessage.includes('SSL')) {
+      return {
+        verified: false,
+        reachable: false,
+        tokenMatch: null,
+        error: 'SSL certificate error. This may resolve automatically after DNS propagates.',
+      }
+    }
+
+    console.error(`HTTP verification failed for ${domain}:`, error)
+    return {
+      verified: false,
+      reachable: false,
+      tokenMatch: null,
+      error: 'Could not reach domain. Check your CNAME configuration.',
+    }
   }
 }
 
 /**
- * POST /api/domains/verify - Verify a custom domain via DNS
+ * POST /api/domains/verify - Verify a custom domain via HTTP check
  */
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -107,12 +236,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Domain is already verified' })
   }
 
-  // Check CNAME record
-  const result = await checkCnameVerification(domain.domain)
-  const cnameTarget = getCnameTarget()
+  // Need verification token for HTTP check
+  if (!domain.verificationToken) {
+    return NextResponse.json({ error: 'Domain has no verification token' }, { status: 400 })
+  }
+
+  // Check via HTTP
+  const result = await checkHttpVerification(domain.domain, domain.verificationToken)
 
   if (result.verified) {
-    // Mark as verified
+    // Mark as verified and clear the token
     await db
       .update(workspaceDomain)
       .set({ verified: true, verificationToken: null })
@@ -127,16 +260,10 @@ export async function POST(request: NextRequest) {
   // Return diagnostic info for troubleshooting
   return NextResponse.json({
     verified: false,
-    dns: {
-      found: result.currentValue !== null,
-      currentValue: result.currentValue,
-      expectedValue: cnameTarget,
+    check: {
+      reachable: result.reachable,
+      tokenMatch: result.tokenMatch,
       error: result.error,
-    },
-    expectedRecord: {
-      type: 'CNAME',
-      name: domain.domain,
-      value: cnameTarget,
     },
   })
 }

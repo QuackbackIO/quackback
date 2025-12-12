@@ -122,6 +122,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.rewrite(url)
   }
 
+  // Auto-verify custom domains: if traffic is reaching us, the CNAME is working
+  if (domainRecord.domainType === 'custom' && !domainRecord.verified) {
+    // Fire and forget - don't block the request
+    db.update(workspaceDomain)
+      .set({ verified: true, verificationToken: null })
+      .where(eq(workspaceDomain.id, domainRecord.id))
+      .catch((err) => console.error('Auto-verify failed:', err))
+  }
+
   const orgSlug = domainRecord.organization.slug
 
   // Helper to create rewrite response to /s/[orgSlug]/...
@@ -158,6 +167,11 @@ export async function proxy(request: NextRequest) {
       }
     }
     return rewriteToSlug()
+  }
+
+  // .well-known routes - serve from root, don't rewrite (used for domain verification, etc.)
+  if (pathname.startsWith('/.well-known')) {
+    return NextResponse.next()
   }
 
   // Public routes (/, /roadmap, /:boardSlug/posts/:postId) - no auth, just rewrite

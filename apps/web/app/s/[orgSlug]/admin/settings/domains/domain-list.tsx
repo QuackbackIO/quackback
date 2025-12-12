@@ -15,6 +15,7 @@ import {
   ExternalLink,
   AlertCircle,
   Clock,
+  Star,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -48,10 +49,9 @@ interface WorkspaceDomain {
 
 interface DomainVerificationStatus {
   checking: boolean
-  dns?: {
-    found: boolean
-    currentValue: string | null
-    expectedValue: string
+  check?: {
+    reachable: boolean
+    tokenMatch: boolean | null
     error: string | null
   }
 }
@@ -76,6 +76,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
   const [verificationStatus, setVerificationStatus] = useState<
     Record<string, DomainVerificationStatus>
   >({})
+  const [settingPrimary, setSettingPrimary] = useState<string | null>(null)
 
   const fetchDomains = useCallback(async () => {
     try {
@@ -133,7 +134,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
         } else {
           setVerificationStatus((prev) => ({
             ...prev,
-            [domain.id]: { checking: false, dns: data.dns },
+            [domain.id]: { checking: false, check: data.check },
           }))
         }
       } catch {
@@ -213,6 +214,33 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
     }
   }
 
+  async function handleSetPrimary(domainId: string) {
+    try {
+      setSettingPrimary(domainId)
+      const response = await fetch('/api/domains', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domainId, isPrimary: true }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to set primary domain')
+      }
+      // Update local state
+      setDomains((prev) =>
+        prev.map((d) => ({
+          ...d,
+          isPrimary: d.id === domainId,
+        }))
+      )
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set primary domain')
+    } finally {
+      setSettingPrimary(null)
+    }
+  }
+
   function copyToClipboard(text: string, domainId: string) {
     navigator.clipboard.writeText(text)
     setCopiedId(domainId)
@@ -235,46 +263,14 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
     )
   }
 
-  const subdomainEntry = domains.find((d) => d.domainType === 'subdomain')
-  const customDomains = domains.filter((d) => d.domainType === 'custom')
-
   return (
     <>
-      {/* Primary Subdomain */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Primary Domain</CardTitle>
-          <CardDescription>Your default portal subdomain</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {subdomainEntry && (
-            <div className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-sm">{subdomainEntry.domain}</span>
-                <Badge variant="secondary">Primary</Badge>
-              </div>
-              <Button variant="ghost" size="sm" asChild>
-                <a
-                  href={`https://${subdomainEntry.domain}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Custom Domains */}
+      {/* All Domains */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Custom Domains</CardTitle>
-            <CardDescription>
-              Add your own domain to white-label your feedback portal
-            </CardDescription>
+            <CardTitle>Domains</CardTitle>
+            <CardDescription>Manage domains for your feedback portal</CardDescription>
           </div>
           <Button size="sm" onClick={() => setShowAddDialog(true)}>
             <Plus className="h-4 w-4" />
@@ -291,27 +287,29 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
             </div>
           )}
 
-          {customDomains.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">
-              <p>No custom domains configured</p>
-              <p className="mt-1 text-sm">Add a custom domain to use your own branding</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {customDomains.map((domain) => {
-                const status = verificationStatus[domain.id]
-                const isChecking = status?.checking
+          <div className="space-y-4">
+            {domains.map((domain) => {
+              const status = verificationStatus[domain.id]
+              const isChecking = status?.checking
+              const isSubdomain = domain.domainType === 'subdomain'
 
-                return (
-                  <div key={domain.id} className="rounded-lg border p-4 space-y-3">
-                    {/* Domain header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-sm font-medium">{domain.domain}</span>
-                        {domain.verified ? (
-                          <Badge variant="default" className="bg-green-600">
+              return (
+                <div key={domain.id} className="rounded-lg border p-4 space-y-3">
+                  {/* Domain header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-sm font-medium">{domain.domain}</span>
+                      {domain.isPrimary && (
+                        <Badge variant="secondary">
+                          <Star className="mr-1 h-3 w-3 fill-current" />
+                          Primary
+                        </Badge>
+                      )}
+                      {!isSubdomain &&
+                        (domain.verified ? (
+                          <Badge variant="outline" className="text-green-600 border-green-600/50">
                             <CheckCircle2 className="mr-1 h-3 w-3" />
-                            Connected
+                            Verified
                           </Badge>
                         ) : isChecking ? (
                           <Badge variant="outline" className="text-blue-600 border-blue-600">
@@ -323,20 +321,34 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
                             <Clock className="mr-1 h-3 w-3" />
                             Pending
                           </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {domain.verified && (
-                          <Button variant="ghost" size="sm" asChild>
-                            <a
-                              href={`https://${domain.domain}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                        )}
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {(domain.verified || isSubdomain) && !domain.isPrimary && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSetPrimary(domain.id)}
+                          disabled={settingPrimary === domain.id}
+                          title="Set as primary domain"
+                        >
+                          {settingPrimary === domain.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Star className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" asChild>
+                        <a
+                          href={`https://${domain.domain}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                      {!isSubdomain && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -346,76 +358,73 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      </div>
+                      )}
                     </div>
-
-                    {/* DNS Instructions for pending domains */}
-                    {!domain.verified && (
-                      <div className="rounded-md bg-muted/50 p-3 space-y-2">
-                        <p className="text-sm font-medium">Configure your DNS</p>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground w-16">Type:</span>
-                          <code className="rounded bg-background px-2 py-0.5">CNAME</code>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground w-16">Name:</span>
-                          <code className="rounded bg-background px-2 py-0.5">{domain.domain}</code>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground w-16">Target:</span>
-                          <code className="rounded bg-background px-2 py-0.5 flex-1">
-                            {cnameTarget}
-                          </code>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() => copyToClipboard(cnameTarget, domain.id)}
-                          >
-                            {copiedId === domain.id ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                        </div>
-
-                        {/* DNS Status feedback */}
-                        {status?.dns && !isChecking && (
-                          <div className="mt-2 pt-2 border-t border-border">
-                            {status.dns.currentValue ? (
-                              <div className="flex items-start gap-2 text-sm text-amber-600">
-                                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                                <div>
-                                  <p>
-                                    CNAME points to{' '}
-                                    <code className="bg-background px-1 rounded">
-                                      {status.dns.currentValue}
-                                    </code>
-                                  </p>
-                                  <p className="text-muted-foreground">
-                                    Update it to point to{' '}
-                                    <code className="bg-background px-1 rounded">
-                                      {status.dns.expectedValue}
-                                    </code>
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Clock className="h-4 w-4" />
-                                Waiting for DNS record... (checking every 30s)
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
-                )
-              })}
-            </div>
-          )}
+
+                  {/* DNS Instructions for pending custom domains */}
+                  {!isSubdomain && !domain.verified && (
+                    <div className="rounded-md bg-muted/50 p-3 space-y-2">
+                      <p className="text-sm font-medium">Configure your DNS</p>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground w-16">Type:</span>
+                        <code className="rounded bg-background px-2 py-0.5">CNAME</code>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground w-16">Name:</span>
+                        <code className="rounded bg-background px-2 py-0.5">{domain.domain}</code>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground w-16">Target:</span>
+                        <code className="rounded bg-background px-2 py-0.5 flex-1">
+                          {cnameTarget}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => copyToClipboard(cnameTarget, domain.id)}
+                        >
+                          {copiedId === domain.id ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </div>
+
+                      {/* Verification status feedback */}
+                      {status?.check && !isChecking && (
+                        <div className="mt-2 pt-2 border-t border-border">
+                          {status.check.error ? (
+                            <div className="flex items-start gap-2 text-sm text-amber-600">
+                              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                              <div>
+                                <p>{status.check.error}</p>
+                                {!status.check.reachable && (
+                                  <p className="text-muted-foreground mt-1">
+                                    Make sure your CNAME record points to{' '}
+                                    <code className="bg-background px-1 rounded">
+                                      {cnameTarget}
+                                    </code>
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="h-4 w-4" />
+                              Waiting for DNS propagation... (checking every 30s)
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </CardContent>
       </Card>
 

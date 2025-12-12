@@ -62,10 +62,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Get all domains for this org
+  // Get all domains for this org, ordered by creation date (oldest first)
   const domains = await db.query.workspaceDomain.findMany({
     where: eq(workspaceDomain.organizationId, organizationId),
-    orderBy: (wd, { desc }) => [desc(wd.isPrimary), desc(wd.createdAt)],
+    orderBy: (wd, { asc }) => [asc(wd.createdAt)],
   })
 
   return NextResponse.json({ domains })
@@ -117,8 +117,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Domain is already in use' }, { status: 409 })
   }
 
-  // Create domain (no verification token needed - we verify via CNAME)
+  // Create domain with verification token for HTTP verification
   const domainId = crypto.randomUUID()
+  const verificationToken = `qb_${crypto.randomUUID().replace(/-/g, '')}`
 
   await db.insert(workspaceDomain).values({
     id: domainId,
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
     domainType: 'custom',
     isPrimary: false,
     verified: false,
-    verificationToken: null,
+    verificationToken,
     createdAt: new Date(),
   })
 
@@ -144,6 +145,74 @@ export async function POST(request: NextRequest) {
       value: cnameTarget,
     },
   })
+}
+
+/**
+ * PATCH /api/domains - Update a domain (e.g., set as primary)
+ */
+export async function PATCH(request: NextRequest) {
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await request.json()
+  const { domainId, isPrimary } = body
+
+  if (!domainId || typeof domainId !== 'string') {
+    return NextResponse.json({ error: 'domainId is required' }, { status: 400 })
+  }
+
+  // Get the domain with org membership check
+  const domain = await db.query.workspaceDomain.findFirst({
+    where: eq(workspaceDomain.id, domainId),
+    with: {
+      organization: {
+        with: {
+          members: {
+            where: (members, { eq }) => eq(members.userId, session.user.id),
+          },
+        },
+      },
+    },
+  })
+
+  if (!domain) {
+    return NextResponse.json({ error: 'Domain not found' }, { status: 404 })
+  }
+
+  // Verify user is admin/owner
+  const member = domain.organization.members[0]
+  if (!member || !['owner', 'admin'].includes(member.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Only verified domains can be set as primary
+  if (isPrimary && !domain.verified) {
+    return NextResponse.json(
+      { error: 'Domain must be verified before setting as primary' },
+      { status: 400 }
+    )
+  }
+
+  // If setting as primary, unset all other domains first
+  if (isPrimary) {
+    await db
+      .update(workspaceDomain)
+      .set({ isPrimary: false })
+      .where(eq(workspaceDomain.organizationId, domain.organizationId))
+
+    await db
+      .update(workspaceDomain)
+      .set({ isPrimary: true })
+      .where(eq(workspaceDomain.id, domainId))
+  }
+
+  const updatedDomain = await db.query.workspaceDomain.findFirst({
+    where: eq(workspaceDomain.id, domainId),
+  })
+
+  return NextResponse.json({ domain: updatedDomain })
 }
 
 /**
