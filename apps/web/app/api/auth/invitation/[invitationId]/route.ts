@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, invitation, workspaceDomain, eq } from '@quackback/db'
+import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 
 interface RouteParams {
   params: Promise<{ invitationId: string }>
@@ -15,6 +16,20 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { invitationId } = await params
+
+    // Rate limit by IP to prevent invitation enumeration
+    const clientIp = getClientIp(request.headers)
+    const rateLimitResult = checkRateLimit(`invitation:${clientIp}`, rateLimits.apiGeneral)
+
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        {
+          status: 429,
+          headers: createRateLimitHeaders(rateLimitResult),
+        }
+      )
+    }
 
     // Get organization from host header
     const host = request.headers.get('host')

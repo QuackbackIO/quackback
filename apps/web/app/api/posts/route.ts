@@ -16,8 +16,8 @@ export const GET = withApiHandler(async (request, { validation }) => {
   const dateTo = searchParams.get('dateTo')
   const minVotes = searchParams.get('minVotes')
   const sort = (searchParams.get('sort') as 'newest' | 'oldest' | 'votes') || 'newest'
-  const page = parseInt(searchParams.get('page') || '1', 10)
-  const limit = parseInt(searchParams.get('limit') || '20', 10)
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
 
   // Handle owner filter - 'unassigned' means null
   let ownerId: string | null | undefined

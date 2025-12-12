@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, ssoProvider, eq } from '@quackback/db'
+import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 
 /**
  * POST /api/auth/sso-check
@@ -8,6 +9,20 @@ import { db, ssoProvider, eq } from '@quackback/db'
  * This is used by the login form to detect if a user should use SSO.
  */
 export async function POST(request: NextRequest) {
+  // Rate limit by IP to prevent SSO enumeration
+  const clientIp = getClientIp(request.headers)
+  const rateLimitResult = checkRateLimit(`sso-check:${clientIp}`, rateLimits.apiGeneral)
+
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.' },
+      {
+        status: 429,
+        headers: createRateLimitHeaders(rateLimitResult),
+      }
+    )
+  }
+
   try {
     const body = await request.json()
     const { email } = body

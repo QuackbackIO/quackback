@@ -100,7 +100,14 @@ export const DELETE = withApiHandlerParams<RouteParams>(
     }
 
     // Delete the provider
-    await db.delete(ssoProvider).where(eq(ssoProvider.id, providerId))
+    await db
+      .delete(ssoProvider)
+      .where(
+        and(
+          eq(ssoProvider.id, providerId),
+          eq(ssoProvider.organizationId, validation.organization.id)
+        )
+      )
 
     return successResponse({ success: true })
   },

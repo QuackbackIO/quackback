@@ -45,8 +45,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'statusSlug is required' }, { status: 400 })
     }
 
-    const page = parseInt(searchParams.get('page') || '1', 10)
-    const limit = parseInt(searchParams.get('limit') || '10', 10)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)))
 
     const postService = getPostService()
     const result = await postService.getRoadmapPostsPaginated({

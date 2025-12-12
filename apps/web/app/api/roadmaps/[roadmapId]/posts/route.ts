@@ -45,7 +45,7 @@ export const GET = withApiHandlerParams<RouteParams>(async (request, { validatio
   const { roadmapId } = params
   const { searchParams } = new URL(request.url)
   const statusId = searchParams.get('statusId') || undefined
-  const limit = parseInt(searchParams.get('limit') || '20', 10)
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
   const offset = parseInt(searchParams.get('offset') || '0', 10)
 
   const ctx = buildServiceContext(validation)

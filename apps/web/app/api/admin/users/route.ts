@@ -20,8 +20,8 @@ export const GET = withApiHandler(
     const dateTo = searchParams.get('dateTo')
     const sort =
       (searchParams.get('sort') as 'newest' | 'oldest' | 'most_active' | 'name') || 'newest'
-    const page = parseInt(searchParams.get('page') || '1', 10)
-    const limit = parseInt(searchParams.get('limit') || '20', 10)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
 
     const result = await getUserService().listPortalUsers(validation.organization.id, {
       search,

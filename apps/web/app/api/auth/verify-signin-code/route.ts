@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 import {
   db,
   verification,
@@ -72,8 +73,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Code expired or not found' }, { status: 400 })
     }
 
-    // Verify the code (constant-time comparison would be better, but for 6 digits it's fine)
-    if (verificationRecord.value !== normalizedCode) {
+    // Verify the code using constant-time comparison to prevent timing attacks
+    const recordBuffer = Buffer.from(verificationRecord.value, 'utf8')
+    const codeBuffer = Buffer.from(normalizedCode, 'utf8')
+    if (recordBuffer.length !== codeBuffer.length || !timingSafeEqual(recordBuffer, codeBuffer)) {
       return NextResponse.json({ error: 'Invalid code' }, { status: 400 })
     }
 
