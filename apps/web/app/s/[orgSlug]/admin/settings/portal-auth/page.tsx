@@ -1,20 +1,10 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
-import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
-import { Lock } from 'lucide-react'
-import { PortalAuthToggles } from './portal-auth-toggles'
-
-// Check which OAuth providers are globally configured
-const googleAvailable = !!process.env.GOOGLE_CLIENT_ID
-const githubAvailable = !!process.env.GITHUB_CLIENT_ID
+import { Lock, Mail } from 'lucide-react'
 
 export default async function PortalAuthPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   // Only owners and admins can access portal auth settings
   const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
-
-  // Fetch portal config from service
-  const portalConfigResult = await organizationService.getPortalConfig(organization.id)
-  const portalConfig = portalConfigResult.success ? portalConfigResult.value : DEFAULT_PORTAL_CONFIG
 
   return (
     <div className="space-y-6">
@@ -35,15 +25,12 @@ export default async function PortalAuthPage({ params }: { params: Promise<{ org
       <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
         <h2 className="font-medium mb-1">Portal User Accounts</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Configure how users can sign in to your public portal. Users must be signed in to vote,
-          comment, or submit feedback.
+          Users sign in to {organization.name}&apos;s portal using magic email codes.
         </p>
-        <PortalAuthToggles
-          organizationId={organization.id}
-          oauth={portalConfig.oauth}
-          googleAvailable={googleAvailable}
-          githubAvailable={githubAvailable}
-        />
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <Mail className="h-4 w-4" />
+          <span>Email authentication is enabled for all portal users</span>
+        </div>
       </div>
     </div>
   )
