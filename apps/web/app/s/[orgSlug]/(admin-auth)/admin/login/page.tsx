@@ -1,6 +1,8 @@
 import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
+const APP_DOMAIN = process.env.APP_DOMAIN
+
 /**
  * Admin Login Page
  *
@@ -16,13 +18,11 @@ export default async function AdminLoginPage({ params }: { params: Promise<{ org
   const authConfig = result.success
     ? {
         found: true,
-        oauth: result.value.oauth,
         openSignup: result.value.openSignup,
         ssoProviders: result.value.ssoProviders,
       }
     : {
         found: false,
-        oauth: DEFAULT_AUTH_CONFIG.oauth,
         openSignup: DEFAULT_AUTH_CONFIG.openSignup,
         ssoProviders: [],
       }
@@ -34,7 +34,15 @@ export default async function AdminLoginPage({ params }: { params: Promise<{ org
           <h1 className="text-2xl font-bold">Team Sign In</h1>
           <p className="mt-2 text-muted-foreground">Sign in to access the admin dashboard</p>
         </div>
-        <OTPAuthForm mode="login" authConfig={authConfig} callbackUrl="/admin" context="team" />
+        <OTPAuthForm
+          mode="login"
+          authConfig={authConfig}
+          callbackUrl="/admin"
+          context="team"
+          orgSlug={orgSlug}
+          appDomain={APP_DOMAIN}
+          showOAuth
+        />
       </div>
     </div>
   )

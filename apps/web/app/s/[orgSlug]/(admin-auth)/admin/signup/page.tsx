@@ -8,6 +8,8 @@ interface AdminSignupPageProps {
   searchParams: Promise<{ invitation?: string }>
 }
 
+const APP_DOMAIN = process.env.APP_DOMAIN
+
 /**
  * Admin Signup Page
  *
@@ -29,13 +31,11 @@ export default async function AdminSignupPage({ params, searchParams }: AdminSig
   const authConfig = result.success
     ? {
         found: true,
-        oauth: result.value.oauth,
         openSignup: result.value.openSignup,
         ssoProviders: result.value.ssoProviders,
       }
     : {
         found: false,
-        oauth: DEFAULT_AUTH_CONFIG.oauth,
         openSignup: DEFAULT_AUTH_CONFIG.openSignup,
         ssoProviders: [],
       }
@@ -55,6 +55,9 @@ export default async function AdminSignupPage({ params, searchParams }: AdminSig
           invitationId={invitationId}
           callbackUrl="/admin"
           context="team"
+          orgSlug={orgSlug}
+          appDomain={APP_DOMAIN}
+          showOAuth
         />
         <p className="text-center text-sm text-muted-foreground">
           Already have a team account?{' '}
