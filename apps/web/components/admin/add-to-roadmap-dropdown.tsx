@@ -7,8 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
@@ -81,7 +79,7 @@ export function AddToRoadmapDropdown({
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
           <Map className="h-3.5 w-3.5" />
-          Roadmap
+          Add to roadmap
           {roadmapCount > 0 && (
             <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
               {roadmapCount}
@@ -90,8 +88,6 @@ export function AddToRoadmapDropdown({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="text-xs">Add to roadmap</DropdownMenuLabel>
-        <DropdownMenuSeparator />
         {isLoadingRoadmaps ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
