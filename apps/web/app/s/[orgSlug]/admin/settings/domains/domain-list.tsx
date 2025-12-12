@@ -103,11 +103,15 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
     const pendingDomains = domains.filter((d) => d.domainType === 'custom' && !d.verified)
     if (pendingDomains.length === 0) return
 
-    const checkVerification = async (domain: WorkspaceDomain) => {
-      setVerificationStatus((prev) => ({
-        ...prev,
-        [domain.id]: { ...prev[domain.id], checking: true },
-      }))
+    let isMounted = true
+
+    const checkVerification = async (domain: WorkspaceDomain, showChecking = false) => {
+      if (showChecking) {
+        setVerificationStatus((prev) => ({
+          ...prev,
+          [domain.id]: { ...prev[domain.id], checking: true },
+        }))
+      }
 
       try {
         const response = await fetch('/api/domains/verify', {
@@ -117,8 +121,9 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
         })
         const data = await response.json()
 
+        if (!isMounted) return
+
         if (data.verified) {
-          // Domain verified - update local state
           setDomains((prev) => prev.map((d) => (d.id === domain.id ? { ...d, verified: true } : d)))
           setVerificationStatus((prev) => ({
             ...prev,
@@ -132,6 +137,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
           }))
         }
       } catch {
+        if (!isMounted) return
         setVerificationStatus((prev) => ({
           ...prev,
           [domain.id]: { checking: false },
@@ -139,24 +145,24 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
       }
     }
 
-    // Check each pending domain immediately
+    // Check each pending domain once on mount (with loading indicator)
     pendingDomains.forEach((domain) => {
-      if (!verificationStatus[domain.id]?.checking) {
-        checkVerification(domain)
-      }
+      checkVerification(domain, true)
     })
 
-    // Then poll every 30 seconds
+    // Then poll silently every 30 seconds
     const interval = setInterval(() => {
-      pendingDomains.forEach((domain) => {
-        if (!verificationStatus[domain.id]?.checking) {
-          checkVerification(domain)
-        }
+      const stillPending = domains.filter((d) => d.domainType === 'custom' && !d.verified)
+      stillPending.forEach((domain) => {
+        checkVerification(domain, false)
       })
     }, 30000)
 
-    return () => clearInterval(interval)
-  }, [domains, router, verificationStatus])
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [domains, router])
 
   async function handleAddDomain() {
     if (!newDomain.trim()) return
