@@ -22,6 +22,10 @@ import type { BetterAuthPlugin } from 'better-auth'
 import { z } from 'zod'
 import { db, sessionTransferToken, member, workspaceDomain, eq, and, gt } from '@quackback/db'
 
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase()
+}
+
 export const trustLogin = () => {
   return {
     id: 'trust-login',
@@ -37,28 +41,34 @@ export const trustLogin = () => {
         async (ctx) => {
           const { token } = ctx.query
 
-          // 1. Find and validate transfer token
-          const transfer = await db.query.sessionTransferToken.findFirst({
-            where: and(
-              eq(sessionTransferToken.token, token),
-              gt(sessionTransferToken.expiresAt, new Date())
-            ),
+          const currentHost = normalizeHost(ctx.request?.headers?.get('host') || '')
+          if (!currentHost) {
+            return ctx.redirect('/login?error=invalid_domain')
+          }
+
+          // 1-3. Atomically consume transfer token (one-time use)
+          // Prevents race conditions where multiple requests could redeem the same token.
+          const transfer = await db.transaction(async (tx) => {
+            const [consumed] = await tx
+              .delete(sessionTransferToken)
+              .where(
+                and(
+                  eq(sessionTransferToken.token, token),
+                  gt(sessionTransferToken.expiresAt, new Date())
+                )
+              )
+              .returning()
+            return consumed
           })
 
+          // 2. Validate target domain matches current host (prevents token theft)
           if (!transfer) {
             return ctx.redirect('/login?error=invalid_token')
           }
 
-          // 2. Validate target domain matches current host (prevents token theft)
-          const currentHost = ctx.request?.headers?.get('host') || ''
-          if (currentHost !== transfer.targetDomain) {
-            // Token was issued for a different domain - reject
-            await db.delete(sessionTransferToken).where(eq(sessionTransferToken.id, transfer.id))
+          if (currentHost !== normalizeHost(transfer.targetDomain)) {
             return ctx.redirect('/login?error=invalid_domain')
           }
-
-          // 3. Delete token (one-time use)
-          await db.delete(sessionTransferToken).where(eq(sessionTransferToken.id, transfer.id))
 
           // 4. For portal context, ensure member record with role='user' exists
           // (OAuth signup creates user but member may not exist)

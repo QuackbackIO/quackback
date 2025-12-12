@@ -7,25 +7,39 @@ import { trustLogin } from './plugins/trust-login'
 
 /**
  * Build trusted origins list for CSRF protection
- * Supports wildcards for subdomains
  *
- * Uses APP_DOMAIN env var (e.g., "quackback.io" or "localhost:3000")
+ * Note: Custom domains are secured through:
+ * 1. Proxy validates domain exists in workspace_domain table
+ * 2. Trust-login validates token matches current domain
+ * 3. OAuth callback validates return domain is allowed
+ *
+ * The wildcard pattern covers all subdomains.
  */
 function buildTrustedOrigins(): string[] {
   const domain = process.env.APP_DOMAIN
 
-  // During build time, APP_DOMAIN may not be set - use a placeholder
-  // that will be replaced at runtime
   if (!domain) {
-    // Allow build to proceed but require APP_DOMAIN at runtime
-    // This is safe because trustedOrigins is checked per-request
     return ['http://localhost:3000', 'http://*.localhost:3000']
   }
 
-  // Use https in production or for ngrok domains, http for localhost
   const isLocalhost = domain.includes('localhost')
   const protocol = isLocalhost ? 'http' : 'https'
+
+  // Main domain and all subdomains via wildcard
   return [`${protocol}://${domain}`, `${protocol}://*.${domain}`]
+}
+
+/**
+ * Build the base URL for Better-Auth
+ * Uses APP_DOMAIN env var with appropriate protocol
+ */
+function buildBaseURL(): string | undefined {
+  const domain = process.env.APP_DOMAIN
+  if (!domain) return undefined
+
+  const isLocalhost = domain.includes('localhost')
+  const protocol = isLocalhost ? 'http' : 'https'
+  return `${protocol}://${domain}`
 }
 
 export const auth = betterAuth({
@@ -33,30 +47,12 @@ export const auth = betterAuth({
     provider: 'pg',
   }),
 
-  // Password auth disabled - users sign in via OTP email codes or OAuth
+  // Base URL for OAuth callbacks when running behind a proxy (e.g., ngrok)
+  baseURL: buildBaseURL(),
+
+  // Password auth disabled - users sign in via OTP email codes
   emailAndPassword: {
     enabled: false,
-  },
-
-  socialProviders: {
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      enabled: !!process.env.GITHUB_CLIENT_ID,
-    },
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      enabled: !!process.env.GOOGLE_CLIENT_ID,
-    },
-    microsoft: {
-      clientId: process.env.MICROSOFT_CLIENT_ID!,
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-      enabled: !!process.env.MICROSOFT_CLIENT_ID,
-      // Use 'common' tenant for multi-tenant apps (personal + work/school accounts)
-      // Change to 'organizations' for work/school only, or specific tenant ID
-      tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
-    },
   },
 
   session: {
