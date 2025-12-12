@@ -18,6 +18,7 @@ import {
   unsubscribeTokens,
   posts,
   member,
+  user,
 } from '@quackback/db'
 import { randomUUID } from 'crypto'
 
@@ -134,40 +135,27 @@ export class SubscriptionService {
    */
   async getActiveSubscribers(postId: string, organizationId: string): Promise<Subscriber[]> {
     return await withTenantContext(organizationId, async (txDb) => {
+      // Single query with 3-way JOIN to avoid N+1 problem
       const rows = await txDb
         .select({
           memberId: postSubscriptions.memberId,
           reason: postSubscriptions.reason,
           userId: member.userId,
+          email: user.email,
+          name: user.name,
         })
         .from(postSubscriptions)
         .innerJoin(member, eq(postSubscriptions.memberId, member.id))
+        .innerJoin(user, eq(member.userId, user.id))
         .where(and(eq(postSubscriptions.postId, postId), eq(postSubscriptions.muted, false)))
 
-      // Need to get user details - query user table
-      // For now, we'll need to join with user table to get email/name
-      // The member table has userId which links to user
-      const result: Subscriber[] = []
-
-      for (const row of rows) {
-        // Query user details
-        const userResult = await txDb.query.user.findFirst({
-          where: (user, { eq }) => eq(user.id, row.userId),
-          columns: { email: true, name: true },
-        })
-
-        if (userResult) {
-          result.push({
-            memberId: row.memberId,
-            userId: row.userId,
-            email: userResult.email,
-            name: userResult.name,
-            reason: row.reason as SubscriptionReason,
-          })
-        }
-      }
-
-      return result
+      return rows.map((row) => ({
+        memberId: row.memberId,
+        userId: row.userId,
+        email: row.email,
+        name: row.name,
+        reason: row.reason as SubscriptionReason,
+      }))
     })
   }
 

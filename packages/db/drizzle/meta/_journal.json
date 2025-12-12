@@ -43,6 +43,13 @@
       "when": 1733961700000,
       "tag": "0005_invitation_last_sent",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1765561608445,
+      "tag": "0006_add_missing_indexes",
+      "breakpoints": true
     }
   ]
 }

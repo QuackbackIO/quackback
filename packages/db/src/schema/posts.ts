@@ -73,6 +73,11 @@ export const posts = pgTable(
     index('posts_owner_id_idx').on(table.ownerId), // Legacy index
     index('posts_created_at_idx').on(table.createdAt),
     index('posts_vote_count_idx').on(table.voteCount),
+    // Composite indexes for public post listings sorted by "top" and "new"
+    index('posts_board_vote_count_idx').on(table.boardId, table.voteCount),
+    index('posts_board_created_at_idx').on(table.boardId, table.createdAt),
+    // Composite index for admin inbox filtering by status
+    index('posts_board_status_idx').on(table.boardId, table.status),
     pgPolicy('posts_tenant_isolation', {
       for: 'all',
       to: appUser,
@@ -191,6 +196,8 @@ export const comments = pgTable(
     index('comments_parent_id_idx').on(table.parentId),
     index('comments_member_id_idx').on(table.memberId),
     index('comments_created_at_idx').on(table.createdAt),
+    // Composite index for comment threads ordered chronologically
+    index('comments_post_created_at_idx').on(table.postId, table.createdAt),
     pgPolicy('comments_tenant_isolation', {
       for: 'all',
       to: appUser,

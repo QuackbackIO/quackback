@@ -215,6 +215,8 @@ export const member = pgTable(
     index('member_userId_idx').on(table.userId),
     // Ensure one member record per user per org
     uniqueIndex('member_user_org_idx').on(table.userId, table.organizationId),
+    // Composite index for portal user listings filtered by role
+    index('member_org_role_idx').on(table.organizationId, table.role),
   ]
 )
 
@@ -277,6 +279,8 @@ export const ssoProvider = pgTable(
     index('sso_provider_org_id_idx').on(table.organizationId),
     // Domain is unique per organization (not globally) - same domain can be used by different orgs
     uniqueIndex('sso_provider_org_domain_idx').on(table.organizationId, table.domain),
+    // Index for SSO detection by email domain
+    index('sso_provider_domain_idx').on(table.domain),
   ]
 )
 
@@ -403,7 +407,11 @@ export const workspaceDomain = pgTable(
     verificationToken: text('verification_token'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index('workspace_domain_org_id_idx').on(table.organizationId)]
+  (table) => [
+    index('workspace_domain_org_id_idx').on(table.organizationId),
+    // Index for tenant resolution by domain (critical path for every request)
+    index('workspace_domain_domain_idx').on(table.domain),
+  ]
 )
 
 export const workspaceDomainRelations = relations(workspaceDomain, ({ one }) => ({
