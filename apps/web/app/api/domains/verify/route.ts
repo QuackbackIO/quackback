@@ -23,26 +23,42 @@ function getCnameTarget(): string {
   return appDomain
 }
 
-async function checkCnameVerification(domain: string): Promise<boolean> {
+interface DnsCheckResult {
+  verified: boolean
+  currentValue: string | null
+  error: string | null
+}
+
+async function checkCnameVerification(domain: string): Promise<DnsCheckResult> {
   const expectedTarget = getCnameTarget().toLowerCase()
 
   try {
     const records = await resolver.resolveCname(domain)
+
+    if (records.length === 0) {
+      return { verified: false, currentValue: null, error: 'No CNAME record found' }
+    }
 
     // Check if any CNAME record points to our domain
     for (const record of records) {
       // CNAME records may have trailing dot, normalize both
       const normalizedRecord = record.toLowerCase().replace(/\.$/, '')
       if (normalizedRecord === expectedTarget) {
-        return true
+        return { verified: true, currentValue: normalizedRecord, error: null }
       }
     }
 
-    return false
+    // CNAME exists but points elsewhere
+    const currentValue = records[0].toLowerCase().replace(/\.$/, '')
+    return { verified: false, currentValue, error: null }
   } catch (error) {
     // DNS lookup failed (NXDOMAIN, no CNAME, timeout, etc.)
+    const errorCode = (error as NodeJS.ErrnoException).code
+    if (errorCode === 'ENODATA' || errorCode === 'ENOTFOUND') {
+      return { verified: false, currentValue: null, error: 'No DNS record found' }
+    }
     console.error(`CNAME verification failed for ${domain}:`, error)
-    return false
+    return { verified: false, currentValue: null, error: 'DNS lookup failed' }
   }
 }
 
@@ -92,23 +108,31 @@ export async function POST(request: NextRequest) {
   }
 
   // Check CNAME record
-  const isVerified = await checkCnameVerification(domain.domain)
+  const result = await checkCnameVerification(domain.domain)
+  const cnameTarget = getCnameTarget()
 
-  if (isVerified) {
+  if (result.verified) {
     // Mark as verified
     await db
       .update(workspaceDomain)
       .set({ verified: true, verificationToken: null })
       .where(eq(workspaceDomain.id, domainId))
 
-    return NextResponse.json({ verified: true, message: 'Domain verified successfully' })
+    return NextResponse.json({
+      verified: true,
+      message: 'Domain verified successfully',
+    })
   }
 
-  const cnameTarget = getCnameTarget()
+  // Return diagnostic info for troubleshooting
   return NextResponse.json({
     verified: false,
-    message:
-      'CNAME record not found. Please ensure you have added the CNAME record and wait for DNS propagation.',
+    dns: {
+      found: result.currentValue !== null,
+      currentValue: result.currentValue,
+      expectedValue: cnameTarget,
+      error: result.error,
+    },
     expectedRecord: {
       type: 'CNAME',
       name: domain.domain,

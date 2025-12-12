@@ -10,11 +10,11 @@ import {
   Trash2,
   Loader2,
   Plus,
-  RefreshCw,
   Copy,
   CheckCircle2,
-  XCircle,
   ExternalLink,
+  AlertCircle,
+  Clock,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -46,28 +46,36 @@ interface WorkspaceDomain {
   createdAt: string
 }
 
-interface DomainListProps {
-  organizationId: string
-  orgSlug: string
+interface DomainVerificationStatus {
+  checking: boolean
+  dns?: {
+    found: boolean
+    currentValue: string | null
+    expectedValue: string
+    error: string | null
+  }
 }
 
-export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProps) {
+interface DomainListProps {
+  organizationId: string
+  cnameTarget: string
+}
+
+export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
   const router = useRouter()
   const [domains, setDomains] = useState<WorkspaceDomain[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newDomain, setNewDomain] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
-  const [verificationInfo, setVerificationInfo] = useState<{
-    domain: string
-    record: { type: string; name: string; value: string }
-  } | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [verificationStatus, setVerificationStatus] = useState<
+    Record<string, DomainVerificationStatus>
+  >({})
 
   const fetchDomains = useCallback(async () => {
     try {
@@ -90,6 +98,66 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
     fetchDomains()
   }, [fetchDomains])
 
+  // Auto-poll verification for pending domains
+  useEffect(() => {
+    const pendingDomains = domains.filter((d) => d.domainType === 'custom' && !d.verified)
+    if (pendingDomains.length === 0) return
+
+    const checkVerification = async (domain: WorkspaceDomain) => {
+      setVerificationStatus((prev) => ({
+        ...prev,
+        [domain.id]: { ...prev[domain.id], checking: true },
+      }))
+
+      try {
+        const response = await fetch('/api/domains/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domainId: domain.id }),
+        })
+        const data = await response.json()
+
+        if (data.verified) {
+          // Domain verified - update local state
+          setDomains((prev) => prev.map((d) => (d.id === domain.id ? { ...d, verified: true } : d)))
+          setVerificationStatus((prev) => ({
+            ...prev,
+            [domain.id]: { checking: false },
+          }))
+          router.refresh()
+        } else {
+          setVerificationStatus((prev) => ({
+            ...prev,
+            [domain.id]: { checking: false, dns: data.dns },
+          }))
+        }
+      } catch {
+        setVerificationStatus((prev) => ({
+          ...prev,
+          [domain.id]: { checking: false },
+        }))
+      }
+    }
+
+    // Check each pending domain immediately
+    pendingDomains.forEach((domain) => {
+      if (!verificationStatus[domain.id]?.checking) {
+        checkVerification(domain)
+      }
+    })
+
+    // Then poll every 30 seconds
+    const interval = setInterval(() => {
+      pendingDomains.forEach((domain) => {
+        if (!verificationStatus[domain.id]?.checking) {
+          checkVerification(domain)
+        }
+      })
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [domains, router, verificationStatus])
+
   async function handleAddDomain() {
     if (!newDomain.trim()) return
 
@@ -109,10 +177,6 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
       }
 
       setDomains((prev) => [...prev, data.domain])
-      setVerificationInfo({
-        domain: data.domain.domain,
-        record: data.verificationRecord,
-      })
       setNewDomain('')
       setShowAddDialog(false)
       router.refresh()
@@ -120,42 +184,6 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
       setAddError(err instanceof Error ? err.message : 'Failed to add domain')
     } finally {
       setAdding(false)
-    }
-  }
-
-  async function handleVerify(domainId: string) {
-    try {
-      setVerifyingId(domainId)
-      const response = await fetch('/api/domains/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domainId }),
-      })
-
-      const data = await response.json()
-
-      if (data.verified) {
-        setDomains((prev) =>
-          prev.map((d) =>
-            d.id === domainId ? { ...d, verified: true, verificationToken: null } : d
-          )
-        )
-        router.refresh()
-      } else {
-        // Show verification instructions
-        const domain = domains.find((d) => d.id === domainId)
-        if (domain && data.expectedRecord) {
-          setVerificationInfo({
-            domain: domain.domain,
-            record: data.expectedRecord,
-          })
-        }
-        setError(data.message || 'Verification failed')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed')
-    } finally {
-      setVerifyingId(null)
     }
   }
 
@@ -179,10 +207,10 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
     }
   }
 
-  function copyToClipboard(text: string) {
+  function copyToClipboard(text: string, domainId: string) {
     navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopiedId(domainId)
+    setTimeout(() => setCopiedId(null), 2000)
   }
 
   if (loading) {
@@ -263,62 +291,124 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
               <p className="mt-1 text-sm">Add a custom domain to use your own branding</p>
             </div>
           ) : (
-            <ul className="divide-y divide-border">
-              {customDomains.map((domain) => (
-                <li
-                  key={domain.id}
-                  className="flex items-center justify-between py-4 first:pt-0 last:pb-0"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">{domain.domain}</span>
-                      {domain.verified ? (
-                        <Badge variant="default" className="bg-green-600">
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          Verified
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-amber-600 border-amber-600">
-                          <XCircle className="mr-1 h-3 w-3" />
-                          Pending
-                        </Badge>
-                      )}
-                    </div>
-                    {!domain.verified && (
-                      <p className="text-xs text-muted-foreground">
-                        Add CNAME record to connect domain
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!domain.verified && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleVerify(domain.id)}
-                        disabled={verifyingId === domain.id}
-                      >
-                        {verifyingId === domain.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+            <div className="space-y-4">
+              {customDomains.map((domain) => {
+                const status = verificationStatus[domain.id]
+                const isChecking = status?.checking
+
+                return (
+                  <div key={domain.id} className="rounded-lg border p-4 space-y-3">
+                    {/* Domain header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-sm font-medium">{domain.domain}</span>
+                        {domain.verified ? (
+                          <Badge variant="default" className="bg-green-600">
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Connected
+                          </Badge>
+                        ) : isChecking ? (
+                          <Badge variant="outline" className="text-blue-600 border-blue-600">
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            Checking...
+                          </Badge>
                         ) : (
-                          <RefreshCw className="h-4 w-4" />
+                          <Badge variant="outline" className="text-amber-600 border-amber-600">
+                            <Clock className="mr-1 h-3 w-3" />
+                            Pending
+                          </Badge>
                         )}
-                        Verify
-                      </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {domain.verified && (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a
+                              href={`https://${domain.domain}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteId(domain.id)}
+                          className="text-destructive hover:text-destructive"
+                          title="Delete domain"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* DNS Instructions for pending domains */}
+                    {!domain.verified && (
+                      <div className="rounded-md bg-muted/50 p-3 space-y-2">
+                        <p className="text-sm font-medium">Configure your DNS</p>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground w-16">Type:</span>
+                          <code className="rounded bg-background px-2 py-0.5">CNAME</code>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground w-16">Name:</span>
+                          <code className="rounded bg-background px-2 py-0.5">{domain.domain}</code>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground w-16">Target:</span>
+                          <code className="rounded bg-background px-2 py-0.5 flex-1">
+                            {cnameTarget}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => copyToClipboard(cnameTarget, domain.id)}
+                          >
+                            {copiedId === domain.id ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+
+                        {/* DNS Status feedback */}
+                        {status?.dns && !isChecking && (
+                          <div className="mt-2 pt-2 border-t border-border">
+                            {status.dns.currentValue ? (
+                              <div className="flex items-start gap-2 text-sm text-amber-600">
+                                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                <div>
+                                  <p>
+                                    CNAME points to{' '}
+                                    <code className="bg-background px-1 rounded">
+                                      {status.dns.currentValue}
+                                    </code>
+                                  </p>
+                                  <p className="text-muted-foreground">
+                                    Update it to point to{' '}
+                                    <code className="bg-background px-1 rounded">
+                                      {status.dns.expectedValue}
+                                    </code>
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="h-4 w-4" />
+                                Waiting for DNS record... (checking every 30s)
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeleteId(domain.id)}
-                      className="text-destructive hover:text-destructive"
-                      title="Delete domain"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
-                </li>
-              ))}
-            </ul>
+                )
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -329,8 +419,7 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
           <DialogHeader>
             <DialogTitle>Add Custom Domain</DialogTitle>
             <DialogDescription>
-              Enter the domain you want to use for your feedback portal. You&apos;ll need to
-              configure DNS records to verify ownership.
+              Enter the domain you want to use for your feedback portal.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -369,71 +458,6 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
                 'Add Domain'
               )}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Verification Instructions Dialog */}
-      <Dialog open={!!verificationInfo} onOpenChange={(open) => !open && setVerificationInfo(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Configure DNS</DialogTitle>
-            <DialogDescription>
-              Add a CNAME record to point {verificationInfo?.domain} to your portal
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Record Type</p>
-                <p className="font-mono text-sm">{verificationInfo?.record.type}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Name / Host</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-background px-2 py-1 font-mono text-sm">
-                    {verificationInfo?.record.name}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => copyToClipboard(verificationInfo?.record.name || '')}
-                  >
-                    {copied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Target / Points to</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-background px-2 py-1 font-mono text-sm break-all">
-                    {verificationInfo?.record.value}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => copyToClipboard(verificationInfo?.record.value || '')}
-                  >
-                    {copied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              After adding the CNAME record, click &quot;Verify&quot; on the domain. DNS changes can
-              take up to 48 hours to propagate, but usually complete within a few minutes.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setVerificationInfo(null)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
