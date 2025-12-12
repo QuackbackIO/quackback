@@ -1,8 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { BoardService } from '../board.service'
 import type { CreateBoardInput, UpdateBoardInput } from '../board.types'
 import type { ServiceContext } from '../../shared/service-context'
-import type { Board, BoardSettings } from '@quackback/db/types'
+import type { Board, BoardSettings, NewBoard } from '@quackback/db/types'
+import type { UnitOfWork } from '@quackback/db'
+
+/** Mocked BoardRepository interface with the methods used in tests */
+interface MockBoardRepository {
+  findById: Mock<(id: string) => Promise<Board | null>>
+  findBySlug: Mock<(slug: string) => Promise<Board | null>>
+  findAll: Mock<(options?: { limit?: number; offset?: number }) => Promise<Board[]>>
+  create: Mock<(data: NewBoard) => Promise<Board>>
+  update: Mock<(id: string, data: Partial<Board>) => Promise<Board | null>>
+  delete: Mock<(id: string) => Promise<boolean>>
+  findWithPostCount: Mock<() => Promise<(Board & { postCount: number })[]>>
+}
 
 // Create hoisted mock functions for the db.select chain and sql template
 const { mockGroupBy, _mockWhere, _mockFrom, mockSelect, mockSql } = vi.hoisted(() => {
@@ -44,8 +56,8 @@ vi.mock('@quackback/db', () => ({
 describe('BoardService', () => {
   let boardService: BoardService
   let mockContext: ServiceContext
-  let mockBoardRepo: any
-  let mockUnitOfWork: any
+  let mockBoardRepo: MockBoardRepository
+  let mockUnitOfWork: Pick<UnitOfWork, 'db'>
 
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -83,8 +95,8 @@ describe('BoardService', () => {
 
     // Mock withUnitOfWork to execute callback immediately
     vi.mocked(dbModule.withUnitOfWork).mockImplementation(
-      async (_orgId: string, callback: (uow: any) => Promise<any>) => {
-        return callback(mockUnitOfWork)
+      async <T>(_orgId: string, callback: (uow: UnitOfWork) => Promise<T>) => {
+        return callback(mockUnitOfWork as UnitOfWork)
       }
     )
 

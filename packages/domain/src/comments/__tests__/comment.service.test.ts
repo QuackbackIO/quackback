@@ -71,15 +71,18 @@ vi.mock('@quackback/db', () => ({
 
 // Mock comment tree utilities
 vi.mock('../../shared/comment-tree', () => ({
-  buildCommentTree: vi.fn((comments) =>
-    comments.map((c: any) => ({
-      ...c,
-      replies: [],
-      reactions: c.reactions || [],
-    }))
+  buildCommentTree: vi.fn(
+    (
+      comments: Array<{ id: string; reactions?: Array<{ emoji: string; userIdentifier: string }> }>
+    ) =>
+      comments.map((c) => ({
+        ...c,
+        replies: [],
+        reactions: c.reactions || [],
+      }))
   ),
-  aggregateReactions: vi.fn((reactions) =>
-    reactions.map((r: any) => ({
+  aggregateReactions: vi.fn((reactions: Array<{ emoji: string; userIdentifier: string }>) =>
+    reactions.map((r) => ({
       emoji: r.emoji,
       count: 1,
       hasReacted: false,

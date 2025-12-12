@@ -425,7 +425,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     })
 
     it('should create user with correct fields', async () => {
-      let capturedUserValues: any
+      let capturedUserValues: Record<string, unknown> | undefined
 
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
@@ -463,7 +463,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     })
 
     it('should create account with providerId "otp"', async () => {
-      let capturedAccountValues: any
+      let capturedAccountValues: Record<string, unknown> | undefined
       let insertCount = 0
 
       mockDb.transaction.mockImplementation(async (callback) => {
@@ -498,7 +498,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     })
 
     it('should create member with role "user" for portal context', async () => {
-      let capturedMemberValues: any
+      let capturedMemberValues: Record<string, unknown> | undefined
       let insertCount = 0
 
       mockDb.transaction.mockImplementation(async (callback) => {
@@ -553,7 +553,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
         },
       })
 
-      let capturedMemberValues: any
+      let capturedMemberValues: Record<string, unknown> | undefined
       let insertCount = 0
 
       mockDb.transaction.mockImplementation(async (callback) => {
@@ -601,7 +601,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     })
 
     it('should trim name before saving', async () => {
-      let capturedUserValues: any
+      let capturedUserValues: Record<string, unknown> | undefined
 
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {
@@ -748,7 +748,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       })
 
-      let capturedMemberValues: any
+      let capturedMemberValues: Record<string, unknown> | undefined
       let insertCount = 0
 
       mockDb.transaction.mockImplementation(async (callback) => {
@@ -793,7 +793,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       })
 
-      let capturedUpdateValues: any
+      let capturedUpdateValues: Record<string, unknown> | undefined
 
       mockDb.transaction.mockImplementation(async (callback) => {
         const mockTx = {

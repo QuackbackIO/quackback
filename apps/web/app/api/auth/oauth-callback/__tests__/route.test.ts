@@ -3,6 +3,58 @@ import { NextRequest } from 'next/server'
 import { GET } from '../route'
 import { createHmac } from 'crypto'
 
+// Type definitions for mocks
+interface MockOrganization {
+  id: string
+  slug: string
+  name: string
+  logo: null
+  logoBlob: null
+  logoType: null
+  createdAt: Date
+  metadata: null
+}
+
+interface MockUser {
+  id: string
+  email: string
+  organizationId: string
+  name: string
+  emailVerified: boolean
+  image: null
+  imageBlob: null
+  imageType: null
+  createdAt: Date
+  updatedAt: Date
+  metadata: null
+}
+
+interface MockBetterAuthSession {
+  session: {
+    id: string
+    createdAt: Date
+    updatedAt: Date
+    userId: string
+    expiresAt: Date
+    token: string
+    ipAddress: null
+    userAgent: null
+  }
+  user: {
+    id: string
+    email?: string
+    name?: string
+    image?: string
+    createdAt: Date
+    updatedAt: Date
+    emailVerified: boolean
+  }
+}
+
+interface MockTransactionContext {
+  insert: ReturnType<typeof vi.fn>
+}
+
 // Mock modules
 vi.mock('@/lib/auth', () => ({
   auth: {
@@ -53,7 +105,11 @@ import { auth } from '@/lib/auth'
 import { db } from '@quackback/db'
 
 // Mock factory functions for consistent test data
-function createMockOrganization(data: { id: string; slug: string; name: string }): any {
+function createMockOrganization(data: {
+  id: string
+  slug: string
+  name: string
+}): MockOrganization {
   return {
     ...data,
     logo: null,
@@ -61,7 +117,7 @@ function createMockOrganization(data: { id: string; slug: string; name: string }
     logoType: null,
     createdAt: new Date(),
     metadata: null,
-  } as any
+  }
 }
 
 function createMockUser(data: {
@@ -69,7 +125,7 @@ function createMockUser(data: {
   email: string
   organizationId: string
   name: string
-}): any {
+}): MockUser {
   return {
     ...data,
     emailVerified: false,
@@ -79,18 +135,23 @@ function createMockUser(data: {
     createdAt: new Date(),
     updatedAt: new Date(),
     metadata: null,
-  } as any
+  }
 }
 
 function createMockBetterAuthSession(data: {
   session: { id: string }
   user: { id: string; email?: string; name?: string; image?: string }
-}): any {
-  const userMock: any = {
-    ...data.user,
+}): MockBetterAuthSession {
+  const userMock: MockBetterAuthSession['user'] = {
+    id: data.user.id,
     createdAt: new Date(),
     updatedAt: new Date(),
     emailVerified: true,
+  }
+
+  // Only set email if provided
+  if (data.user.email !== undefined) {
+    userMock.email = data.user.email
   }
 
   // Only set image if provided (don't default to null)
@@ -105,7 +166,7 @@ function createMockBetterAuthSession(data: {
 
   return {
     session: {
-      ...data.session,
+      id: data.session.id,
       createdAt: new Date(),
       updatedAt: new Date(),
       userId: data.user.id,
@@ -115,7 +176,7 @@ function createMockBetterAuthSession(data: {
       userAgent: null,
     },
     user: userMock,
-  } as any
+  }
 }
 
 // Helper to create signed OAuth state
@@ -226,7 +287,7 @@ describe('OAuth Callback Handler', () => {
 
       // Mock transaction
       vi.mocked(db.transaction).mockImplementation(async (cb) => {
-        return await cb(db as any)
+        return await cb(db as unknown as MockTransactionContext)
       })
 
       const response = await GET(request)
@@ -327,7 +388,7 @@ describe('OAuth Callback Handler', () => {
       vi.mocked(db.query.user.findFirst).mockResolvedValue(undefined)
 
       vi.mocked(db.transaction).mockImplementation(async (cb) => {
-        return await cb(db as any)
+        return await cb(db as unknown as MockTransactionContext)
       })
 
       const response = await GET(request)
@@ -416,7 +477,7 @@ describe('OAuth Callback Handler', () => {
         vi.mocked(db.query.user.findFirst).mockResolvedValue(undefined)
 
         vi.mocked(db.transaction).mockImplementation(async (cb) => {
-          return await cb(db as any)
+          return await cb(db as unknown as MockTransactionContext)
         })
 
         const response = await GET(request)
@@ -615,9 +676,9 @@ describe('OAuth Callback Handler', () => {
       // Mock no existing user
       vi.mocked(db.query.user.findFirst).mockResolvedValue(undefined)
 
-      let capturedUserData: any
-      let capturedAccountData: any
-      let capturedMemberData: any
+      let capturedUserData: Record<string, unknown> | undefined
+      let capturedAccountData: Record<string, unknown> | undefined
+      let capturedMemberData: Record<string, unknown> | undefined
 
       vi.mocked(db.transaction).mockImplementation(async (cb) => {
         const mockTx = {
@@ -629,7 +690,7 @@ describe('OAuth Callback Handler', () => {
             }),
           })),
         }
-        return await cb(mockTx as any)
+        return await cb(mockTx as MockTransactionContext)
       })
 
       await GET(request)
@@ -688,7 +749,7 @@ describe('OAuth Callback Handler', () => {
 
       vi.mocked(db.query.user.findFirst).mockResolvedValue(undefined)
 
-      let capturedMemberData: any
+      let capturedMemberData: Record<string, unknown> | undefined
 
       vi.mocked(db.transaction).mockImplementation(async (cb) => {
         const mockTx = {
@@ -698,7 +759,7 @@ describe('OAuth Callback Handler', () => {
             }),
           })),
         }
-        return await cb(mockTx as any)
+        return await cb(mockTx as MockTransactionContext)
       })
 
       await GET(request)
@@ -742,7 +803,7 @@ describe('OAuth Callback Handler', () => {
 
       vi.mocked(db.query.user.findFirst).mockResolvedValue(undefined)
 
-      let capturedUserData: any
+      let capturedUserData: Record<string, unknown> | undefined
 
       vi.mocked(db.transaction).mockImplementation(async (cb) => {
         const mockTx = {
@@ -752,7 +813,7 @@ describe('OAuth Callback Handler', () => {
             }),
           })),
         }
-        return await cb(mockTx as any)
+        return await cb(mockTx as MockTransactionContext)
       })
 
       await GET(request)
@@ -1352,7 +1413,7 @@ describe('OAuth Callback Handler', () => {
         { host: 'localhost:3000' }
       )
 
-      vi.mocked(auth.api.getSession).mockResolvedValue(undefined as any)
+      vi.mocked(auth.api.getSession).mockResolvedValue(null)
 
       const response = await GET(request)
 

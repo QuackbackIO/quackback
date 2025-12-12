@@ -28,6 +28,7 @@ import {
   tags,
   comments,
   type Post,
+  type PostStatus,
   type UnitOfWork,
 } from '@quackback/db'
 import type { ServiceContext } from '../shared/service-context'
@@ -570,7 +571,7 @@ export class PostService {
       }
 
       if (status && status.length > 0) {
-        conditions.push(inArray(posts.status, status as any))
+        conditions.push(inArray(posts.status, status as PostStatus[]))
       }
 
       // Tag filter - posts must have at least one of the selected tags
@@ -731,7 +732,7 @@ export class PostService {
 
       // Status filter (multiple statuses = OR)
       if (status && status.length > 0) {
-        conditions.push(inArray(posts.status, status as any))
+        conditions.push(inArray(posts.status, status as PostStatus[]))
       }
 
       // Owner filter
@@ -1058,7 +1059,7 @@ export class PostService {
         and(
           eq(boards.organizationId, organizationId),
           eq(boards.isPublic, true),
-          inArray(posts.status, statusSlugs as any)
+          inArray(posts.status, statusSlugs as PostStatus[])
         )
       )
       .orderBy(desc(posts.voteCount))
@@ -1105,7 +1106,7 @@ export class PostService {
         and(
           eq(boards.organizationId, organizationId),
           eq(boards.isPublic, true),
-          eq(posts.status, statusSlug as any)
+          eq(posts.status, statusSlug as PostStatus)
         )
       )
 
@@ -1128,7 +1129,7 @@ export class PostService {
         and(
           eq(boards.organizationId, organizationId),
           eq(boards.isPublic, true),
-          eq(posts.status, statusSlug as any)
+          eq(posts.status, statusSlug as PostStatus)
         )
       )
       .orderBy(desc(posts.voteCount))
