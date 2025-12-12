@@ -286,7 +286,7 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
                     </div>
                     {!domain.verified && (
                       <p className="text-xs text-muted-foreground">
-                        Add DNS record to verify ownership
+                        Add CNAME record to connect domain
                       </p>
                     )}
                   </div>
@@ -377,9 +377,9 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
       <Dialog open={!!verificationInfo} onOpenChange={(open) => !open && setVerificationInfo(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Verify Domain Ownership</DialogTitle>
+            <DialogTitle>Configure DNS</DialogTitle>
             <DialogDescription>
-              Add the following DNS TXT record to verify ownership of {verificationInfo?.domain}
+              Add a CNAME record to point {verificationInfo?.domain} to your portal
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -408,7 +408,7 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
                 </div>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Value</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Target / Points to</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 rounded bg-background px-2 py-1 font-mono text-sm break-all">
                     {verificationInfo?.record.value}
@@ -428,7 +428,7 @@ export function DomainList({ organizationId, orgSlug: _orgSlug }: DomainListProp
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              After adding the DNS record, click &quot;Verify&quot; on the domain. DNS changes can
+              After adding the CNAME record, click &quot;Verify&quot; on the domain. DNS changes can
               take up to 48 hours to propagate, but usually complete within a few minutes.
             </p>
           </div>

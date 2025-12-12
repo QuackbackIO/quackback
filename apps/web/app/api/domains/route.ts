@@ -21,12 +21,12 @@ const addDomainSchema = z.object({
   organizationId: z.string().uuid(),
 })
 
-function generateVerificationToken(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+function getCnameTarget(): string {
+  const appDomain = process.env.APP_DOMAIN
+  if (!appDomain) {
+    throw new Error('APP_DOMAIN is required')
+  }
+  return appDomain
 }
 
 /**
@@ -117,8 +117,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Domain is already in use' }, { status: 409 })
   }
 
-  // Create domain with verification token
-  const verificationToken = generateVerificationToken()
+  // Create domain (no verification token needed - we verify via CNAME)
   const domainId = crypto.randomUUID()
 
   await db.insert(workspaceDomain).values({
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest) {
     domainType: 'custom',
     isPrimary: false,
     verified: false,
-    verificationToken,
+    verificationToken: null,
     createdAt: new Date(),
   })
 
@@ -136,12 +135,13 @@ export async function POST(request: NextRequest) {
     where: eq(workspaceDomain.id, domainId),
   })
 
+  const cnameTarget = getCnameTarget()
   return NextResponse.json({
     domain: newDomain,
     verificationRecord: {
-      type: 'TXT',
-      name: `_quackback.${domain}`,
-      value: `quackback-verify=${verificationToken}`,
+      type: 'CNAME',
+      name: domain,
+      value: cnameTarget,
     },
   })
 }

@@ -6,32 +6,42 @@ import { Resolver } from 'dns/promises'
 /**
  * Domain Verification API
  *
- * Verifies custom domain ownership via DNS TXT record.
- * Users must add a TXT record: _quackback.{domain} = quackback-verify={token}
+ * Verifies custom domain ownership via CNAME record.
+ * Users must create a CNAME pointing their domain to APP_DOMAIN.
+ * This proves ownership AND sets up routing in one step.
  */
 
 const resolver = new Resolver()
 // Use public DNS servers for consistent results
 resolver.setServers(['8.8.8.8', '1.1.1.1'])
 
-async function checkDnsVerification(domain: string, expectedToken: string): Promise<boolean> {
-  const txtHost = `_quackback.${domain}`
+function getCnameTarget(): string {
+  const appDomain = process.env.APP_DOMAIN
+  if (!appDomain) {
+    throw new Error('APP_DOMAIN is required')
+  }
+  return appDomain
+}
+
+async function checkCnameVerification(domain: string): Promise<boolean> {
+  const expectedTarget = getCnameTarget().toLowerCase()
 
   try {
-    const records = await resolver.resolveTxt(txtHost)
+    const records = await resolver.resolveCname(domain)
 
-    // records is array of arrays (each TXT record can have multiple strings)
+    // Check if any CNAME record points to our domain
     for (const record of records) {
-      const txtValue = record.join('')
-      if (txtValue === `quackback-verify=${expectedToken}`) {
+      // CNAME records may have trailing dot, normalize both
+      const normalizedRecord = record.toLowerCase().replace(/\.$/, '')
+      if (normalizedRecord === expectedTarget) {
         return true
       }
     }
 
     return false
   } catch (error) {
-    // DNS lookup failed (NXDOMAIN, timeout, etc.)
-    console.error(`DNS verification failed for ${domain}:`, error)
+    // DNS lookup failed (NXDOMAIN, no CNAME, timeout, etc.)
+    console.error(`CNAME verification failed for ${domain}:`, error)
     return false
   }
 }
@@ -81,16 +91,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Domain is already verified' })
   }
 
-  // Must have a verification token
-  if (!domain.verificationToken) {
-    return NextResponse.json({ error: 'Domain has no verification token' }, { status: 400 })
-  }
-
-  // Check DNS
-  const isVerified = await checkDnsVerification(domain.domain, domain.verificationToken)
+  // Check CNAME record
+  const isVerified = await checkCnameVerification(domain.domain)
 
   if (isVerified) {
-    // Mark as verified and clear token
+    // Mark as verified
     await db
       .update(workspaceDomain)
       .set({ verified: true, verificationToken: null })
@@ -99,14 +104,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Domain verified successfully' })
   }
 
+  const cnameTarget = getCnameTarget()
   return NextResponse.json({
     verified: false,
     message:
-      'DNS record not found. Please ensure you have added the TXT record and wait for DNS propagation.',
+      'CNAME record not found. Please ensure you have added the CNAME record and wait for DNS propagation.',
     expectedRecord: {
-      type: 'TXT',
-      name: `_quackback.${domain.domain}`,
-      value: `quackback-verify=${domain.verificationToken}`,
+      type: 'CNAME',
+      name: domain.domain,
+      value: cnameTarget,
     },
   })
 }
