@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { OAuthButtons } from './oauth-buttons'
 import { SsoLoginButton } from './sso-login-button'
+import { OAuthButtons } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -16,11 +16,6 @@ interface SsoProviderInfo {
 
 interface OrgAuthConfig {
   found: boolean
-  oauth: {
-    google: boolean
-    github: boolean
-    microsoft?: boolean
-  }
   openSignup?: boolean
   ssoProviders?: SsoProviderInfo[]
 }
@@ -41,6 +36,12 @@ interface OTPAuthFormProps {
   callbackUrl?: string
   /** 'team' for team members with admin access, 'portal' for portal users */
   context?: 'team' | 'portal'
+  /** Organization slug for OAuth flows */
+  orgSlug?: string
+  /** App domain for OAuth flows (passed from server) */
+  appDomain?: string
+  /** Whether to show OAuth buttons (GitHub, Google) */
+  showOAuth?: boolean
 }
 
 type Step = 'email' | 'code' | 'name'
@@ -60,6 +61,9 @@ export function OTPAuthForm({
   invitationId,
   callbackUrl = '/',
   context = 'portal',
+  orgSlug,
+  appDomain,
+  showOAuth = false,
 }: OTPAuthFormProps) {
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
@@ -231,11 +235,7 @@ export function OTPAuthForm({
     }
   }
 
-  // Determine which OAuth methods to show
-  const showGoogle = authConfig?.oauth?.google ?? true
-  const showGithub = authConfig?.oauth?.github ?? true
-  const showMicrosoft = authConfig?.oauth?.microsoft ?? false
-  const showOAuth = showGoogle || showGithub || showMicrosoft
+  // Determine which SSO providers to show
   const ssoProviders = authConfig?.ssoProviders ?? []
   const showSso = ssoProviders.length > 0
 
@@ -296,40 +296,12 @@ export function OTPAuthForm({
         </div>
       )}
 
-      {/* SSO Providers - only show on initial email step for non-invitation flow */}
-      {showSso && step === 'email' && !invitation && (
-        <>
-          <div className="space-y-3">
-            {ssoProviders.map((provider) => (
-              <SsoLoginButton
-                key={provider.providerId}
-                providerId={provider.providerId}
-                issuer={provider.issuer}
-                callbackUrl={callbackUrl}
-              />
-            ))}
-          </div>
-          {showOAuth && (
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* OAuth Buttons - only show on initial email step for non-invitation flow */}
-      {showOAuth && step === 'email' && !invitation && (
+      {/* OAuth Providers (GitHub, Google) - show on initial email step for non-invitation flow */}
+      {showOAuth && orgSlug && appDomain && step === 'email' && !invitation && (
         <>
           <OAuthButtons
-            mode={mode === 'login' ? 'signin' : 'signup'}
-            showGoogle={showGoogle}
-            showGithub={showGithub}
-            showMicrosoft={showMicrosoft}
+            orgSlug={orgSlug}
+            appDomain={appDomain}
             callbackUrl={callbackUrl}
             context={context}
           />
@@ -343,6 +315,34 @@ export function OTPAuthForm({
               </span>
             </div>
           </div>
+        </>
+      )}
+
+      {/* SSO Providers (Enterprise SAML/OIDC) - only show on initial email step for non-invitation flow */}
+      {showSso && step === 'email' && !invitation && (
+        <>
+          <div className="space-y-3">
+            {ssoProviders.map((provider) => (
+              <SsoLoginButton
+                key={provider.providerId}
+                providerId={provider.providerId}
+                issuer={provider.issuer}
+                callbackUrl={callbackUrl}
+              />
+            ))}
+          </div>
+          {!showOAuth && (
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with email
+                </span>
+              </div>
+            </div>
+          )}
         </>
       )}
 

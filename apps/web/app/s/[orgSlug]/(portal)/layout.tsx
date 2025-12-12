@@ -69,6 +69,9 @@ export default async function PublicLayout({
     oauth: portalConfig.oauth,
   }
 
+  // Get APP_DOMAIN for OAuth URLs (passed to client components)
+  const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
+
   const content = (
     <div className="min-h-screen bg-background flex flex-col">
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -80,7 +83,7 @@ export default async function PublicLayout({
       />
       <main className="mx-auto max-w-5xl w-full flex-1">{children}</main>
       {/* Auth dialog for inline authentication */}
-      <AuthDialog authConfig={authConfig} />
+      <AuthDialog authConfig={authConfig} appDomain={appDomain} orgSlug={orgSlug} />
     </div>
   )
 

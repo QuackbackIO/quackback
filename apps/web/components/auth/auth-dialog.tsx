@@ -30,6 +30,8 @@ interface OrgAuthConfig {
 
 interface AuthDialogProps {
   authConfig?: OrgAuthConfig | null
+  appDomain: string
+  orgSlug: string
 }
 
 /**
@@ -39,7 +41,7 @@ interface AuthDialogProps {
  * Opens when triggered via useAuthPopover context.
  * Listens for auth success via BroadcastChannel.
  */
-export function AuthDialog({ authConfig }: AuthDialogProps) {
+export function AuthDialog({ authConfig, appDomain, orgSlug }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
 
   // Listen for auth success broadcasts from popup windows
@@ -65,7 +67,13 @@ export function AuthDialog({ authConfig }: AuthDialogProps) {
               : 'Sign up to vote and comment on feedback'}
           </DialogDescription>
         </DialogHeader>
-        <OTPAuthFormInline mode={mode} authConfig={authConfig} onModeSwitch={handleModeSwitch} />
+        <OTPAuthFormInline
+          mode={mode}
+          authConfig={authConfig}
+          appDomain={appDomain}
+          orgSlug={orgSlug}
+          onModeSwitch={handleModeSwitch}
+        />
       </DialogContent>
     </Dialog>
   )

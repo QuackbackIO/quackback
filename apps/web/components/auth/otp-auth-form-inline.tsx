@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, InfoIcon, Mail, ArrowLeft, Github, KeyRound } from 'lucide-react'
-import { buildMainDomainUrl, parseSubdomain } from '@/lib/routing'
 import { openAuthPopup, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
 
 interface SsoProviderInfo {
@@ -37,6 +36,10 @@ interface OTPAuthFormInlineProps {
   mode: 'login' | 'signup'
   authConfig?: OrgAuthConfig | null
   invitationId?: string | null
+  /** APP_DOMAIN from server for building OAuth URLs */
+  appDomain: string
+  /** Organization slug for OAuth */
+  orgSlug: string
   /** Called when auth completes (popup broadcasts success) - handled by parent via BroadcastChannel */
   _onSuccess?: () => void
   /** Called to switch between login/signup modes */
@@ -57,6 +60,8 @@ export function OTPAuthFormInline({
   mode,
   authConfig,
   invitationId,
+  appDomain,
+  orgSlug,
   onModeSwitch,
 }: OTPAuthFormInlineProps) {
   const [step, setStep] = useState<Step>('email')
@@ -264,16 +269,16 @@ export function OTPAuthFormInline({
       return
     }
 
-    const subdomain = parseSubdomain(window.location.host)
-    if (!subdomain) {
-      setError('OAuth can only be initiated from a subdomain')
-      return
-    }
+    // Build OAuth URL using server-provided appDomain
+    const isLocalhost = appDomain.includes('localhost')
+    const protocol = isLocalhost ? 'http' : 'https'
+    const returnDomain = window.location.host
 
-    const mainDomain = buildMainDomainUrl()
-    const oauthUrl = new URL(`${mainDomain}/api/auth/oauth/${provider}`)
-    oauthUrl.searchParams.set('subdomain', subdomain)
+    const oauthUrl = new URL(`${protocol}://${appDomain}/api/auth/oauth/${provider}`)
+    oauthUrl.searchParams.set('org', orgSlug)
+    oauthUrl.searchParams.set('returnDomain', returnDomain)
     oauthUrl.searchParams.set('context', 'portal')
+    oauthUrl.searchParams.set('callbackUrl', '/')
     oauthUrl.searchParams.set('popup', 'true')
 
     setError('')
