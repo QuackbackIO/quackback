@@ -204,8 +204,9 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
         const data = await response.json()
         throw new Error(data.error || 'Failed to delete domain')
       }
-      setDomains((prev) => prev.filter((d) => d.id !== deleteId))
       setDeleteId(null)
+      // Refetch domains to get updated primary status (subdomain may have been auto-promoted)
+      await fetchDomains()
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete domain')

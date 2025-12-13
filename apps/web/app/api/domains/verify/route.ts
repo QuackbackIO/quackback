@@ -22,10 +22,7 @@ interface HttpCheckResult {
 
 const MAX_REDIRECTS = 5
 
-async function checkHttpVerification(
-  domain: string,
-  expectedToken: string
-): Promise<HttpCheckResult> {
+async function checkHttpVerification(domain: string): Promise<HttpCheckResult> {
   let url = `https://${domain}/.well-known/domain-verification`
   const visitedUrls = new Set<string>()
 
@@ -124,27 +121,17 @@ async function checkHttpVerification(
       }
     }
 
-    const token = await response.text()
-    const tokenMatches = token.trim() === expectedToken
+    const responseText = (await response.text()).trim()
 
-    if (!tokenMatches) {
-      // Log for debugging
-      const debugDomain = response.headers.get('x-verified-domain')
-      const debugDomainId = response.headers.get('x-domain-id')
-      console.error('Domain verification token mismatch:', {
-        requestedDomain: new URL(url).hostname,
-        resolvedDomain: debugDomain,
-        resolvedDomainId: debugDomainId,
-        expectedTokenPrefix: expectedToken.substring(0, 10) + '...',
-        receivedTokenPrefix: token.trim().substring(0, 10) + '...',
-      })
-    }
+    // The .well-known endpoint returns "VERIFIED" if the domain is valid
+    // This is idempotent - it auto-verifies on first request and confirms on subsequent ones
+    const isVerified = responseText === 'VERIFIED'
 
     return {
-      verified: tokenMatches,
+      verified: isVerified,
       reachable: true,
-      tokenMatch: tokenMatches,
-      error: tokenMatches ? null : 'Token mismatch - domain may be pointing to wrong organization',
+      tokenMatch: isVerified,
+      error: isVerified ? null : `Unexpected response: ${responseText.substring(0, 50)}`,
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -236,13 +223,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Domain is already verified' })
   }
 
-  // Need verification token for HTTP check
-  if (!domain.verificationToken) {
-    return NextResponse.json({ error: 'Domain has no verification token' }, { status: 400 })
-  }
-
-  // Check via HTTP
-  const result = await checkHttpVerification(domain.domain, domain.verificationToken)
+  // Check via HTTP - the .well-known endpoint will auto-verify if reachable
+  const result = await checkHttpVerification(domain.domain)
 
   if (result.verified) {
     // Mark as verified and clear the token

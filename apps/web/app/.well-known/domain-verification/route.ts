@@ -40,30 +40,23 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ error: 'Domain not found' }, { status: 404 })
   }
 
-  // Only serve token for unverified custom domains
+  // Only verify custom domains
   if (domainRecord.domainType !== 'custom') {
-    return NextResponse.json({ error: 'Not a custom domain' }, { status: 400 })
+    return new NextResponse('NOT_CUSTOM_DOMAIN', { status: 400 })
   }
 
-  if (domainRecord.verified) {
-    return NextResponse.json({ verified: true, message: 'Domain is already verified' })
+  // If not already verified, mark as verified now
+  // The fact that this request reached us via the custom domain proves CNAME is correct
+  if (!domainRecord.verified) {
+    await db
+      .update(workspaceDomain)
+      .set({ verified: true, verificationToken: null })
+      .where(eq(workspaceDomain.id, domainRecord.id))
   }
 
-  if (!domainRecord.verificationToken) {
-    return NextResponse.json({ error: 'No verification token' }, { status: 400 })
-  }
-
-  // Auto-verify: if traffic is reaching this endpoint via the custom domain,
-  // the CNAME is correctly configured. Mark as verified.
-  await db
-    .update(workspaceDomain)
-    .set({ verified: true, verificationToken: null })
-    .where(eq(workspaceDomain.id, domainRecord.id))
-
-  // Return success - domain is now verified
-  return NextResponse.json({
-    verified: true,
-    message: 'Domain automatically verified',
-    domain: domain,
+  // Return simple "VERIFIED" response - idempotent
+  return new NextResponse('VERIFIED', {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain' },
   })
 }

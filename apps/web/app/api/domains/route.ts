@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, workspaceDomain, organization, eq } from '@quackback/db'
+import { db, workspaceDomain, organization, eq, and } from '@quackback/db'
 import { auth } from '@/lib/auth'
 import { z } from 'zod'
 
@@ -256,6 +256,20 @@ export async function DELETE(request: NextRequest) {
   const member = domain.organization.members[0]
   if (!member || !['owner', 'admin'].includes(member.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // If deleting a primary custom domain, auto-promote subdomain to primary
+  // This ensures the organization always has a reachable primary domain
+  if (domain.isPrimary) {
+    await db
+      .update(workspaceDomain)
+      .set({ isPrimary: true })
+      .where(
+        and(
+          eq(workspaceDomain.organizationId, domain.organizationId),
+          eq(workspaceDomain.domainType, 'subdomain')
+        )
+      )
   }
 
   await db.delete(workspaceDomain).where(eq(workspaceDomain.id, domainId))
