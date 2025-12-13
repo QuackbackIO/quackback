@@ -69,7 +69,10 @@ export function OTPAuthFormInline({
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  // Track which specific action is loading (null = not loading)
+  const [loadingAction, setLoadingAction] = useState<
+    'email' | 'code' | 'name' | 'google' | 'github' | 'microsoft' | `sso:${string}` | null
+  >(null)
   const [_codeSent, setCodeSent] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
@@ -83,7 +86,7 @@ export function OTPAuthFormInline({
   const { trackPopup, clearPopup, hasPopup, focusPopup } = usePopupTracker({
     onPopupClosed: () => {
       // User closed popup without completing auth
-      setLoading(false)
+      setLoadingAction(null)
       setPopupBlocked(false)
     },
   })
@@ -143,7 +146,7 @@ export function OTPAuthFormInline({
 
   const sendCode = async () => {
     setError('')
-    setLoading(true)
+    setLoadingAction('email')
 
     try {
       const response = await fetch('/api/auth/tenant-otp/send', {
@@ -163,13 +166,14 @@ export function OTPAuthFormInline({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send code')
     } finally {
-      setLoading(false)
+      setLoadingAction(null)
     }
   }
 
   const verifyCode = async (providedName?: string) => {
     setError('')
-    setLoading(true)
+    // Use 'name' action if we're on the name step, otherwise 'code'
+    setLoadingAction(step === 'name' ? 'name' : 'code')
 
     try {
       const response = await fetch('/api/auth/tenant-otp/verify', {
@@ -194,7 +198,7 @@ export function OTPAuthFormInline({
       if (data.action === 'needsSignup') {
         // User doesn't exist, need to collect name
         setStep('name')
-        setLoading(false)
+        setLoadingAction(null)
       } else if (data.redirectUrl) {
         // Success - call trust-login to establish session (same origin, no popup needed)
         try {
@@ -208,12 +212,12 @@ export function OTPAuthFormInline({
           // Loading will be cleared when parent handles the broadcast
         } catch {
           setError('Failed to complete sign in')
-          setLoading(false)
+          setLoadingAction(null)
         }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify code')
-      setLoading(false)
+      setLoadingAction(null)
     }
   }
 
@@ -282,13 +286,13 @@ export function OTPAuthFormInline({
     oauthUrl.searchParams.set('popup', 'true')
 
     setError('')
-    setLoading(true)
+    setLoadingAction(provider)
     setPopupBlocked(false)
 
     const popup = openAuthPopup(oauthUrl.toString())
     if (!popup) {
       setPopupBlocked(true)
-      setLoading(false)
+      setLoadingAction(null)
       return
     }
 
@@ -311,13 +315,13 @@ export function OTPAuthFormInline({
     // For now, this may not fully work - SSO might need additional backend changes
 
     setError('')
-    setLoading(true)
+    setLoadingAction(`sso:${providerId}`)
     setPopupBlocked(false)
 
     const popup = openAuthPopup(ssoUrl.toString())
     if (!popup) {
       setPopupBlocked(true)
-      setLoading(false)
+      setLoadingAction(null)
       return
     }
 
@@ -391,22 +395,25 @@ export function OTPAuthFormInline({
       {showSso && step === 'email' && !invitation && (
         <>
           <div className="space-y-3">
-            {ssoProviders.map((provider) => (
-              <Button
-                key={provider.providerId}
-                onClick={() => initiateSsoPopup(provider.providerId)}
-                variant="outline"
-                className="w-full"
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <KeyRound className="h-4 w-4" />
-                )}
-                Sign in with {provider.issuer}
-              </Button>
-            ))}
+            {ssoProviders.map((provider) => {
+              const isLoading = loadingAction === `sso:${provider.providerId}`
+              return (
+                <Button
+                  key={provider.providerId}
+                  onClick={() => initiateSsoPopup(provider.providerId)}
+                  variant="outline"
+                  className="w-full"
+                  disabled={loadingAction !== null}
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-4 w-4" />
+                  )}
+                  Sign in with {provider.issuer}
+                </Button>
+              )
+            })}
           </div>
           {showOAuth && (
             <div className="relative">
@@ -431,9 +438,9 @@ export function OTPAuthFormInline({
                 variant="outline"
                 onClick={() => initiateOAuthPopup('google')}
                 className="w-full"
-                disabled={loading}
+                disabled={loadingAction !== null}
               >
-                {loading ? (
+                {loadingAction === 'google' ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -464,9 +471,9 @@ export function OTPAuthFormInline({
                 variant="outline"
                 onClick={() => initiateOAuthPopup('microsoft')}
                 className="w-full"
-                disabled={loading}
+                disabled={loadingAction !== null}
               >
-                {loading ? (
+                {loadingAction === 'microsoft' ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -485,9 +492,9 @@ export function OTPAuthFormInline({
                 variant="outline"
                 onClick={() => initiateOAuthPopup('github')}
                 className="w-full"
-                disabled={loading}
+                disabled={loadingAction !== null}
               >
-                {loading ? (
+                {loadingAction === 'github' ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <Github className="h-5 w-5" />
@@ -526,7 +533,7 @@ export function OTPAuthFormInline({
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={!!invitation || loading}
+              disabled={!!invitation || loadingAction !== null}
               className={invitation ? 'bg-muted' : ''}
               autoComplete="email"
             />
@@ -535,8 +542,8 @@ export function OTPAuthFormInline({
             )}
           </div>
 
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? (
+          <Button type="submit" disabled={loadingAction !== null} className="w-full">
+            {loadingAction === 'email' ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Sending code...
@@ -613,14 +620,18 @@ export function OTPAuthFormInline({
               placeholder="000000"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              disabled={loading}
+              disabled={loadingAction !== null}
               className="text-center text-2xl tracking-widest"
               autoComplete="one-time-code"
             />
           </div>
 
-          <Button type="submit" disabled={loading || code.length !== 6} className="w-full">
-            {loading ? (
+          <Button
+            type="submit"
+            disabled={loadingAction !== null || code.length !== 6}
+            className="w-full"
+          >
+            {loadingAction === 'code' ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Verifying...
@@ -634,7 +645,7 @@ export function OTPAuthFormInline({
             <button
               type="button"
               onClick={handleResend}
-              disabled={resendCooldown > 0 || loading}
+              disabled={resendCooldown > 0 || loadingAction !== null}
               className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {resendCooldown > 0
@@ -676,13 +687,17 @@ export function OTPAuthFormInline({
               placeholder="John Doe"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              disabled={loading}
+              disabled={loadingAction !== null}
               autoComplete="name"
             />
           </div>
 
-          <Button type="submit" disabled={loading || !name.trim()} className="w-full">
-            {loading ? (
+          <Button
+            type="submit"
+            disabled={loadingAction !== null || !name.trim()}
+            className="w-full"
+          >
+            {loadingAction === 'name' ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Creating account...
