@@ -67,18 +67,18 @@ function getProtocol(request: NextRequest): string {
 }
 
 /**
- * Validate session using Better Auth's API
- * Returns true if the session is valid, false otherwise
+ * Get valid session using Better Auth's API
+ * Returns the session if valid, null otherwise
  */
-async function isSessionValid(request: NextRequest): Promise<boolean> {
+async function getValidSession(request: NextRequest) {
   try {
     const session = await auth.api.getSession({
       headers: request.headers,
     })
-    return !!session?.user
+    return session?.user ? session : null
   } catch {
     // Session validation failed - treat as invalid
-    return false
+    return null
   }
 }
 
@@ -153,9 +153,9 @@ export async function proxy(request: NextRequest) {
 
     // If cookie exists and no error, validate session before redirecting
     if (hasSessionCookie && !hasError) {
-      const isValid = await isSessionValid(request)
+      const session = await getValidSession(request)
 
-      if (isValid) {
+      if (session) {
         // Valid session - redirect away from login
         return NextResponse.redirect(new URL(`${protocol}://${host}/`))
       } else {
@@ -193,9 +193,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Validate the session is actually valid
-  const isValid = await isSessionValid(request)
+  const session = await getValidSession(request)
 
-  if (!isValid) {
+  if (!session) {
     // Stale cookie - clear both cookies and redirect to login
     const loginUrl = new URL(`${protocol}://${host}/login`)
     loginUrl.searchParams.set(
@@ -208,7 +208,18 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  // Authenticated with valid session - rewrite to slug-based route
+  // Validate user's organizationId matches domain's organization (defense-in-depth)
+  // This prevents a session from one tenant being used on another tenant's domain
+  if (session.user.organizationId !== domainRecord.organization.id) {
+    const loginUrl = new URL(`${protocol}://${host}/login`)
+    loginUrl.searchParams.set('error', 'wrong_organization')
+    const response = NextResponse.redirect(loginUrl)
+    response.cookies.delete(`${cookiePrefix}better-auth.session_token`)
+    response.cookies.delete(`${cookiePrefix}better-auth.session_data`)
+    return response
+  }
+
+  // Authenticated with valid session for this tenant - rewrite to slug-based route
   return rewriteToSlug()
 }
 

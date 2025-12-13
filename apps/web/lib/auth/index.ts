@@ -80,6 +80,17 @@ export const auth = betterAuth({
     enabled: false,
   },
 
+  // Include organizationId in user object for tenant validation
+  // This enables the proxy to verify the session belongs to the correct tenant
+  user: {
+    additionalFields: {
+      organizationId: {
+        type: 'string',
+        required: true,
+      },
+    },
+  },
+
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // Update session every 24 hours

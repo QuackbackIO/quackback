@@ -267,11 +267,6 @@ describe('Auth schema definitions', () => {
       expect(columns).toContain('token')
       expect(columns).toContain('expiresAt')
     })
-
-    it('has activeOrganizationId for org plugin', () => {
-      const columns = Object.keys(getTableColumns(session))
-      expect(columns).toContain('activeOrganizationId')
-    })
   })
 
   describe('organization schema', () => {

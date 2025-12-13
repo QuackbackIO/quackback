@@ -16,6 +16,7 @@ export interface SessionUser {
   email: string
   emailVerified: boolean
   image?: string | null
+  organizationId: string
   createdAt: Date
   updatedAt: Date
 }
@@ -55,17 +56,11 @@ export const getSession = cache(async (): Promise<Session | null> => {
       email: session.user.email,
       emailVerified: session.user.emailVerified,
       image: session.user.image,
+      organizationId: session.user.organizationId,
       createdAt: session.user.createdAt,
       updatedAt: session.user.updatedAt,
     },
   }
-})
-
-export const getActiveOrganization = cache(async () => {
-  const org = await auth.api.getFullOrganization({
-    headers: await headers(),
-  })
-  return org
 })
 
 export async function requireAuth() {
@@ -74,27 +69,4 @@ export async function requireAuth() {
     throw new Error('Unauthorized')
   }
   return session
-}
-
-export async function requireOrganization() {
-  const session = await requireAuth()
-  const org = await getActiveOrganization()
-
-  if (!org) {
-    throw new Error('No active organization')
-  }
-
-  return { session, organization: org }
-}
-
-export async function requireRole(allowedRoles: string[]) {
-  const { session, organization } = await requireOrganization()
-
-  const member = organization.members.find((m) => m.userId === session.user.id)
-
-  if (!member || !allowedRoles.includes(member.role)) {
-    throw new Error('Forbidden')
-  }
-
-  return { session, organization, member }
 }

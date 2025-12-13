@@ -8,19 +8,6 @@ export const authClient = createAuthClient({
   plugins: [organizationClient(), ssoClient()],
 })
 
-export const { signIn, signUp, signOut, useSession, getSession } = authClient
+export const { signIn, signOut, useSession } = authClient
 
-export const {
-  create: createOrganization,
-  setActive: setActiveOrganization,
-  list: listOrganizations,
-  getFullOrganization,
-  inviteMember,
-  removeMember,
-  updateMemberRole,
-  acceptInvitation,
-  rejectInvitation,
-} = authClient.organization
-
-// SSO client methods for enterprise authentication
-export const sso = authClient.sso
+export const { acceptInvitation } = authClient.organization
