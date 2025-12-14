@@ -321,6 +321,81 @@ export class OrganizationService {
   }
 
   // ============================================
+  // CUSTOM CSS
+  // ============================================
+
+  /**
+   * Get custom CSS for an organization
+   * Public method - no auth required
+   */
+  async getCustomCss(organizationId: string): Promise<Result<string | null, OrgError>> {
+    try {
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, organizationId),
+        columns: { customCss: true },
+      })
+
+      if (!org) {
+        return err(OrgError.notFound(organizationId))
+      }
+
+      return ok(org.customCss)
+    } catch (error) {
+      return err(
+        OrgError.validationError(
+          `Failed to fetch custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
+
+  /**
+   * Update custom CSS for an organization
+   * Requires owner or admin role
+   */
+  async updateCustomCss(
+    css: string | null,
+    ctx: ServiceContext
+  ): Promise<Result<string | null, OrgError>> {
+    // Authorization check
+    if (!['owner', 'admin'].includes(ctx.memberRole)) {
+      return err(OrgError.unauthorized('update custom CSS'))
+    }
+
+    try {
+      // Basic sanitization - strip script tags and javascript: URLs
+      let sanitized = css
+      if (sanitized) {
+        sanitized =
+          sanitized
+            .replace(/<script\b[^>]*>/gi, '')
+            .replace(/<\/script>/gi, '')
+            .replace(/javascript:/gi, '')
+            .replace(/expression\s*\(/gi, '')
+            .trim() || null
+      }
+
+      const [updated] = await db
+        .update(organization)
+        .set({ customCss: sanitized })
+        .where(eq(organization.id, ctx.organizationId))
+        .returning({ customCss: organization.customCss })
+
+      if (!updated) {
+        return err(OrgError.notFound(ctx.organizationId))
+      }
+
+      return ok(updated.customCss)
+    } catch (error) {
+      return err(
+        OrgError.validationError(
+          `Failed to update custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      )
+    }
+  }
+
+  // ============================================
   // SSO PROVIDER MANAGEMENT
   // ============================================
 

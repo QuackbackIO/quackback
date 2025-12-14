@@ -3,6 +3,7 @@ import { Brush } from 'lucide-react'
 import { ThemeCustomizer } from './theme-customizer'
 import { LogoUploader } from './logo-uploader'
 import { HeaderBranding } from './header-branding'
+import { CustomCssEditor } from './custom-css-editor'
 import { organizationService } from '@quackback/domain'
 import { getOrganizationLogoData, getOrganizationHeaderLogoData } from '@/lib/organization'
 
@@ -14,11 +15,13 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
   const brandingConfigResult = await organizationService.getBrandingConfig(organization.id)
   const brandingConfig = brandingConfigResult.success ? brandingConfigResult.value : {}
 
-  // Get logo and header branding data for SSR
-  const [logoData, headerData] = await Promise.all([
+  // Get logo, header branding data, and custom CSS for SSR
+  const [logoData, headerData, customCssResult] = await Promise.all([
     getOrganizationLogoData(organization.id),
     getOrganizationHeaderLogoData(organization.id),
+    organizationService.getCustomCss(organization.id),
   ])
+  const customCss = customCssResult.success ? customCssResult.value : null
 
   return (
     <div className="space-y-6">
@@ -88,6 +91,19 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
           headerLogoUrl={headerData.headerLogoUrl}
           headerDisplayMode={headerData.headerDisplayMode}
         />
+      </div>
+
+      {/* Custom CSS Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <div className="space-y-1">
+          <h2 className="font-semibold">Custom CSS</h2>
+          <p className="text-sm text-muted-foreground">
+            Advanced styling with component-level CSS variables and BEM classes
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6">
+          <CustomCssEditor organizationId={organization.id} initialCustomCss={customCss} />
+        </div>
       </div>
     </div>
   )

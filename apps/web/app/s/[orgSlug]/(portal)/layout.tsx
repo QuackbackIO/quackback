@@ -70,12 +70,15 @@ export default async function PublicLayout({
   // Get avatar URL with base64 data for SSR (no flicker)
   // Get branding data (logo) from blob storage for SSR
   // Get portal config for branding and auth
-  const [avatarData, brandingData, brandingResult, portalResult] = await Promise.all([
-    session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
-    getOrganizationBrandingData(org.id),
-    organizationService.getBrandingConfig(org.id),
-    organizationService.getPublicPortalConfig(orgSlug),
-  ])
+  // Get custom CSS for portal customization
+  const [avatarData, brandingData, brandingResult, portalResult, customCssResult] =
+    await Promise.all([
+      session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
+      getOrganizationBrandingData(org.id),
+      organizationService.getBrandingConfig(org.id),
+      organizationService.getPublicPortalConfig(orgSlug),
+      organizationService.getCustomCss(org.id),
+    ])
 
   // Generate theme CSS from org config
   const brandingConfig = brandingResult.success ? brandingResult.value : {}
@@ -86,6 +89,9 @@ export default async function PublicLayout({
 
   // Get Google Fonts URL if using a custom font
   const googleFontsUrl = theme.getGoogleFontsUrl(brandingConfig)
+
+  // Get custom CSS for additional portal styling
+  const customCss = customCssResult.success ? customCssResult.value : null
 
   // Build initial user data for SSR (used by both header props and provider)
   const initialUserData = session?.user
@@ -112,6 +118,8 @@ export default async function PublicLayout({
       {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
       {/* Theme CSS variables */}
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+      {/* Custom CSS - injected after theme for override capability */}
+      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
       <PortalHeader
         orgName={org.name}
         orgLogo={brandingData.logoUrl}

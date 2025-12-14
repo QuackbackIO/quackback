@@ -141,7 +141,7 @@ export function PortalHeader({
 
   // Navigation component (reused in both layouts)
   const Navigation = () => (
-    <nav className="flex items-center gap-1">
+    <nav className="portal-nav flex items-center gap-1">
       {navItems.map((item) => {
         const isActive =
           item.href === '/'
@@ -153,10 +153,10 @@ export function PortalHeader({
             key={item.href}
             href={item.href}
             className={cn(
-              'px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
+              'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
               isActive
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
+                : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
             )}
           >
             {item.label}
@@ -225,12 +225,12 @@ export function PortalHeader({
   // Two-row layout for custom header logo
   if (useTwoRowLayout) {
     return (
-      <div className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="portal-header portal-header--two-row sticky top-0 z-50 w-full bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
         {/* Main header with logo */}
-        <header className="border-b">
+        <header className="portal-header__main border-b border-[var(--header-border)]">
           <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
             <div className="flex h-14 items-center justify-between">
-              <Link href="/" className="flex items-center">
+              <Link href="/" className="portal-header__logo flex items-center">
                 <img src={headerLogo} alt={orgName} className="h-10 max-w-[240px] object-contain" />
               </Link>
               <AuthButtons />
@@ -238,7 +238,7 @@ export function PortalHeader({
           </div>
         </header>
         {/* Navigation below header */}
-        <nav>
+        <nav className="portal-header__nav-row">
           <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
             <div className="flex items-center py-2">
               <Navigation />
@@ -251,10 +251,10 @@ export function PortalHeader({
 
   // Single-row layout for logo_and_name or logo_only
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="portal-header sticky top-0 z-50 w-full border-b border-[var(--header-border)] bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
       <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex h-14 items-center">
         {/* Logo / Org Name */}
-        <Link href="/" className="flex items-center gap-2 mr-6">
+        <Link href="/" className="portal-header__logo flex items-center gap-2 mr-6">
           {orgLogo ? (
             <img
               src={orgLogo}
@@ -267,7 +267,7 @@ export function PortalHeader({
             </div>
           )}
           {(headerDisplayMode === 'logo_and_name' || headerDisplayMode === 'custom_logo') && (
-            <span className="font-semibold hidden sm:block max-w-[18ch] line-clamp-2">
+            <span className="portal-header__name font-semibold hidden sm:block max-w-[18ch] line-clamp-2 text-[var(--header-foreground)]">
               {displayName}
             </span>
           )}

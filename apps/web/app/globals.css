@@ -63,6 +63,18 @@
     --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1);
     --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.25);
+    /* Portal component variables (fallback to global values) */
+    --header-background: var(--background);
+    --header-foreground: var(--foreground);
+    --header-border: var(--border);
+    --post-card-background: var(--card);
+    --post-card-border: var(--border);
+    --post-card-voted-color: var(--primary);
+    --nav-active-background: var(--muted);
+    --nav-active-foreground: var(--foreground);
+    --nav-inactive-color: var(--muted-foreground);
+    --portal-button-background: var(--primary);
+    --portal-button-foreground: var(--primary-foreground);
   }
 
   .dark {
@@ -110,8 +122,20 @@
     --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.25);
     --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.25);
     --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.5);
+    /* Portal component variables (fallback to global values) */
+    --header-background: var(--background);
+    --header-foreground: var(--foreground);
+    --header-border: var(--border);
+    --post-card-background: var(--card);
+    --post-card-border: var(--border);
+    --post-card-voted-color: var(--primary);
+    --nav-active-background: var(--muted);
+    --nav-active-foreground: var(--foreground);
+    --nav-inactive-color: var(--muted-foreground);
+    --portal-button-background: var(--primary);
+    --portal-button-foreground: var(--primary-foreground);
   }
-  
+
   @theme inline {
     /* Colors */
     --color-background: var(--background);

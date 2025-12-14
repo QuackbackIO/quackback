@@ -152,7 +152,10 @@ export function FeedbackToolbar({
             defaultBoardId={defaultBoardId}
             user={user}
             trigger={
-              <Button size="sm" className="gap-1.5">
+              <Button
+                size="sm"
+                className="portal-submit-button gap-1.5 bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"
+              >
                 <Plus className="h-4 w-4" />
                 Create post
               </Button>

@@ -63,6 +63,25 @@ const variableMap: Record<keyof ThemeVariables, string> = {
   shadowLg: '--shadow-lg',
   shadowXl: '--shadow-xl',
   shadow2xl: '--shadow-2xl',
+
+  // Portal Header component
+  headerBackground: '--header-background',
+  headerForeground: '--header-foreground',
+  headerBorder: '--header-border',
+
+  // Post Card component
+  postCardBackground: '--post-card-background',
+  postCardBorder: '--post-card-border',
+  postCardVotedColor: '--post-card-voted-color',
+
+  // Navigation component
+  navActiveBackground: '--nav-active-background',
+  navActiveForeground: '--nav-active-foreground',
+  navInactiveColor: '--nav-inactive-color',
+
+  // Portal Button component
+  portalButtonBackground: '--portal-button-background',
+  portalButtonForeground: '--portal-button-foreground',
 }
 
 /**

@@ -66,7 +66,10 @@ export function PostCard({
   })
 
   return (
-    <Link href={`/b/${boardSlug}/posts/${id}`} className="flex transition-colors hover:bg-muted/30">
+    <Link
+      href={`/b/${boardSlug}/posts/${id}`}
+      className="post-card flex transition-colors bg-[var(--post-card-background)] hover:bg-[var(--post-card-background)]/80"
+    >
       {/* Vote section - left column */}
       <button
         type="button"
@@ -87,11 +90,15 @@ export function PostCard({
           handleVote(e)
         }}
         disabled={isPending}
-        className={`flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 hover:bg-muted/40 transition-colors ${
-          currentHasVoted ? 'text-primary' : 'text-muted-foreground'
+        className={`post-card__vote flex flex-col items-center justify-center w-16 shrink-0 border-r border-[var(--post-card-border)]/30 hover:bg-muted/40 transition-colors ${
+          currentHasVoted
+            ? 'post-card__vote--voted text-[var(--post-card-voted-color)]'
+            : 'text-muted-foreground'
         } ${isPending ? 'opacity-70' : ''}`}
       >
-        <ChevronUp className={`h-5 w-5 ${currentHasVoted ? 'fill-primary' : ''}`} />
+        <ChevronUp
+          className={`h-5 w-5 ${currentHasVoted ? 'fill-[var(--post-card-voted-color)]' : ''}`}
+        />
         <span
           data-testid="vote-count"
           className={`text-sm font-bold ${currentHasVoted ? '' : 'text-foreground'}`}
@@ -101,7 +108,7 @@ export function PostCard({
       </button>
 
       {/* Content section */}
-      <div className="flex-1 min-w-0 px-4 py-3">
+      <div className="post-card__content flex-1 min-w-0 px-4 py-3">
         {/* Status badge */}
         <StatusBadge
           name={currentStatus?.name || status}

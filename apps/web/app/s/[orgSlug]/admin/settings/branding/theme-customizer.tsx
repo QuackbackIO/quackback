@@ -328,6 +328,37 @@ const COLOR_GROUPS = [
       { key: 'sidebarRing', label: 'Sidebar Ring' },
     ],
   },
+  {
+    name: 'Portal Header',
+    variables: [
+      { key: 'headerBackground', label: 'Header BG' },
+      { key: 'headerForeground', label: 'Header Text' },
+      { key: 'headerBorder', label: 'Header Border' },
+    ],
+  },
+  {
+    name: 'Post Cards',
+    variables: [
+      { key: 'postCardBackground', label: 'Card BG' },
+      { key: 'postCardBorder', label: 'Card Border' },
+      { key: 'postCardVotedColor', label: 'Voted Color' },
+    ],
+  },
+  {
+    name: 'Portal Navigation',
+    variables: [
+      { key: 'navActiveBackground', label: 'Active Tab BG' },
+      { key: 'navActiveForeground', label: 'Active Tab Text' },
+      { key: 'navInactiveColor', label: 'Inactive Tab' },
+    ],
+  },
+  {
+    name: 'Portal Button',
+    variables: [
+      { key: 'portalButtonBackground', label: 'Button BG' },
+      { key: 'portalButtonForeground', label: 'Button Text' },
+    ],
+  },
 ] as const
 
 /** Flat list of all color variables for type safety */

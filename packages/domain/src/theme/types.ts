@@ -65,6 +65,25 @@ export interface ThemeVariables {
   shadowLg?: string
   shadowXl?: string
   shadow2xl?: string
+
+  // Portal Header component
+  headerBackground?: string
+  headerForeground?: string
+  headerBorder?: string
+
+  // Post Card component
+  postCardBackground?: string
+  postCardBorder?: string
+  postCardVotedColor?: string
+
+  // Navigation component
+  navActiveBackground?: string
+  navActiveForeground?: string
+  navInactiveColor?: string
+
+  // Portal Button component
+  portalButtonBackground?: string
+  portalButtonForeground?: string
 }
 
 /**
