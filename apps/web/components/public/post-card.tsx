@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
+import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { getInitials } from '@quackback/domain/utils'
 import type { PostStatus, PostStatusEntity } from '@quackback/db/types'
 
@@ -28,6 +29,8 @@ interface PostCardProps {
   hasVoted?: boolean
   /** Callback when vote state changes (postId, newVotedState) */
   onVoteChange?: (postId: string, voted: boolean) => void
+  /** Whether the user is authenticated (shows login dialog on vote if false) */
+  isAuthenticated?: boolean
 }
 
 export function PostCard({
@@ -46,7 +49,9 @@ export function PostCard({
   tags,
   hasVoted = false,
   onVoteChange,
+  isAuthenticated = true,
 }: PostCardProps) {
+  const { openAuthPopover } = useAuthPopover()
   const currentStatus = statuses.find((s) => s.slug === status)
   const {
     voteCount: currentVoteCount,
@@ -72,7 +77,15 @@ export function PostCard({
             : `Vote for this post (${currentVoteCount} votes)`
         }
         aria-pressed={currentHasVoted}
-        onClick={handleVote}
+        onClick={(e) => {
+          if (!isAuthenticated) {
+            e.preventDefault()
+            e.stopPropagation()
+            openAuthPopover({ mode: 'login' })
+            return
+          }
+          handleVote(e)
+        }}
         disabled={isPending}
         className={`flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 hover:bg-muted/40 transition-colors ${
           currentHasVoted ? 'text-primary' : 'text-muted-foreground'

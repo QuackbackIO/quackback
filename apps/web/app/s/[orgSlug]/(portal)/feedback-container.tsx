@@ -12,6 +12,8 @@ import {
   flattenPublicPosts,
   useVotedPosts,
 } from '@/lib/hooks/use-public-posts-query'
+import { useSession } from '@/lib/auth/client'
+import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import type { BoardWithStats, PublicPostListItem } from '@quackback/domain'
 import type { PostStatusEntity, Tag } from '@quackback/db/types'
 
@@ -50,6 +52,24 @@ export function FeedbackContainer({
   user,
 }: FeedbackContainerProps) {
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
+
+  // Client-side session state - updates without page reload
+  const { data: sessionData, refetch: refetchSession } = useSession()
+
+  // Derive effective user: prefer fresh client session over stale server prop
+  const effectiveUser =
+    sessionData === undefined
+      ? user
+      : sessionData?.user
+        ? { name: sessionData.user.name, email: sessionData.user.email }
+        : null
+
+  // Listen for auth success to refetch session (no page reload)
+  useAuthBroadcast({
+    onSuccess: () => {
+      refetchSession()
+    },
+  })
 
   // Refs for intersection observer
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -195,7 +215,7 @@ export function FeedbackContainer({
             onTagChange={handleTagChange}
             onClearFilters={handleClearFilters}
             activeFilterCount={activeFilterCount}
-            user={user}
+            user={effectiveUser}
           />
 
           <div className="mt-3">
@@ -226,6 +246,7 @@ export function FeedbackContainer({
                       tags={post.tags}
                       hasVoted={hasVoted(post.id)}
                       onVoteChange={toggleVote}
+                      isAuthenticated={!!effectiveUser}
                     />
                   ))}
                 </div>
