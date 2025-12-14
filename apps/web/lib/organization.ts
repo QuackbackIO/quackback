@@ -22,3 +22,44 @@ export async function getOrganizationLogoData(organizationId: string): Promise<{
 
   return { logoUrl, hasCustomLogo: true }
 }
+
+/**
+ * Get organization favicon data for SSR.
+ * Uses the logo as favicon (no separate favicon upload).
+ */
+export async function getOrganizationFaviconData(organizationId: string): Promise<{
+  faviconUrl: string | null
+  hasCustomFavicon: boolean
+}> {
+  // Use logo as favicon
+  const logoData = await getOrganizationLogoData(organizationId)
+  return {
+    faviconUrl: logoData.logoUrl,
+    hasCustomFavicon: logoData.hasCustomLogo,
+  }
+}
+
+/**
+ * Get organization branding data (logo) for SSR.
+ * Logo is also used as favicon.
+ */
+export async function getOrganizationBrandingData(organizationId: string): Promise<{
+  logoUrl: string | null
+}> {
+  const org = await db.query.organization.findFirst({
+    where: eq(organization.id, organizationId),
+    columns: {
+      logoBlob: true,
+      logoType: true,
+    },
+  })
+
+  let logoUrl: string | null = null
+
+  if (org?.logoBlob && org?.logoType) {
+    const base64 = org.logoBlob.toString('base64')
+    logoUrl = `data:${org.logoType};base64,${base64}`
+  }
+
+  return { logoUrl }
+}

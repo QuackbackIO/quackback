@@ -1,8 +1,9 @@
+import { Metadata } from 'next'
 import { getOrganizationBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { getUserAvatarData } from '@/lib/avatar'
-import { getOrganizationLogoData } from '@/lib/organization'
+import { getOrganizationBrandingData, getOrganizationFaviconData } from '@/lib/organization'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { SessionProvider } from '@/components/providers/session-provider'
@@ -11,6 +12,36 @@ import { theme } from '@quackback/domain'
 
 // Force dynamic rendering since we read session cookies
 export const dynamic = 'force-dynamic'
+
+/**
+ * Generate dynamic metadata for the portal including custom favicon.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>
+}): Promise<Metadata> {
+  const { orgSlug } = await params
+  const org = await getOrganizationBySlug(orgSlug)
+
+  if (!org) {
+    return {}
+  }
+
+  const faviconData = await getOrganizationFaviconData(org.id)
+
+  // Build icons metadata
+  const icons: Metadata['icons'] = faviconData.faviconUrl
+    ? {
+        icon: faviconData.faviconUrl,
+      }
+    : undefined
+
+  return {
+    title: org.name,
+    icons,
+  }
+}
 
 /**
  * Public portal layout - no auth required
@@ -37,11 +68,11 @@ export default async function PublicLayout({
   }
 
   // Get avatar URL with base64 data for SSR (no flicker)
-  // Get logo URL from blob storage for SSR
+  // Get branding data (logo) from blob storage for SSR
   // Get portal config for branding and auth
-  const [avatarData, logoData, brandingResult, portalResult] = await Promise.all([
+  const [avatarData, brandingData, brandingResult, portalResult] = await Promise.all([
     session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
-    getOrganizationLogoData(org.id),
+    getOrganizationBrandingData(org.id),
     organizationService.getBrandingConfig(org.id),
     organizationService.getPublicPortalConfig(orgSlug),
   ])
@@ -52,6 +83,9 @@ export default async function PublicLayout({
     brandingConfig.preset || brandingConfig.light || brandingConfig.dark
       ? theme.generateThemeCSS(brandingConfig)
       : ''
+
+  // Get Google Fonts URL if using a custom font
+  const googleFontsUrl = theme.getGoogleFontsUrl(brandingConfig)
 
   // Build initial user data for SSR (used by both header props and provider)
   const initialUserData = session?.user
@@ -74,10 +108,13 @@ export default async function PublicLayout({
 
   const content = (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Google Fonts - loaded dynamically based on theme */}
+      {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
+      {/* Theme CSS variables */}
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       <PortalHeader
         orgName={org.name}
-        orgLogo={logoData.logoUrl}
+        orgLogo={brandingData.logoUrl}
         userRole={userRole}
         initialUserData={initialUserData}
       />

@@ -57,7 +57,7 @@ export function FeedbackSidebar({ boards, currentBoard, onBoardChange }: Feedbac
                       <span
                         className={cn(
                           'text-[10px] font-semibold ml-auto pl-1 shrink-0 tabular-nums',
-                          isActive ? 'text-primary' : 'text-muted-foreground/60'
+                          isActive ? 'text-primary' : 'text-muted-foreground'
                         )}
                       >
                         {board.postCount}
@@ -75,7 +75,7 @@ export function FeedbackSidebar({ boards, currentBoard, onBoardChange }: Feedbac
           href="https://quackback.io"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-3"
+          className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-3"
         >
           <span>Powered by</span>
           <Image src="/logo.png" alt="" width={12} height={12} className="opacity-50" />
