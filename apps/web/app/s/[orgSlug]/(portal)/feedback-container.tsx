@@ -130,11 +130,22 @@ export function FeedbackContainer({
     organizationId,
   })
 
-  // Listen for auth success to refetch session and voted posts (no page reload)
+  // Track auth state to detect login/logout
+  const isAuthenticated = !!effectiveUser
+  const prevAuthRef = useRef(isAuthenticated)
+
+  // Refetch voted posts when auth state changes (login or logout)
+  useEffect(() => {
+    if (prevAuthRef.current !== isAuthenticated) {
+      prevAuthRef.current = isAuthenticated
+      refetchVotedPosts()
+    }
+  }, [isAuthenticated, refetchVotedPosts])
+
+  // Listen for auth success via broadcast (for popup OAuth flows)
   useAuthBroadcast({
     onSuccess: () => {
       refetchSession()
-      refetchVotedPosts()
     },
   })
 
