@@ -124,14 +124,10 @@ export function FeedbackContainer({
   const posts = flattenPublicPosts(postsData)
   const isLoading = isFetching && !isFetchingNextPage
 
-  // Get current post IDs for voted posts tracking
-  const currentPostIds = useMemo(() => posts.map((p) => p.id), [posts])
-
   // Track voted posts in client state (syncs with server on vote)
   const { hasVoted, toggleVote, refetchVotedPosts } = useVotedPosts({
     initialVotedIds: votedPostIds,
     organizationId,
-    postIds: currentPostIds,
   })
 
   // Listen for auth success to refetch session and voted posts (no page reload)

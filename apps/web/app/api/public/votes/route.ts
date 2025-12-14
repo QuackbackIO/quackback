@@ -6,28 +6,17 @@ import { getMemberIdentifier } from '@/lib/user-identifier'
 
 /**
  * GET /api/public/votes
- * Returns which posts the current user has voted on.
+ * Returns all posts the current user has voted on.
  * Query params:
  *   - organizationId: required
- *   - postIds: comma-separated list of post IDs to check
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
-    const postIdsParam = searchParams.get('postIds')
 
     if (!organizationId) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-    }
-
-    if (!postIdsParam) {
-      return NextResponse.json({ votedPostIds: [] })
-    }
-
-    const postIds = postIdsParam.split(',').filter(Boolean)
-    if (postIds.length === 0) {
-      return NextResponse.json({ votedPostIds: [] })
     }
 
     // Get current user's member ID
@@ -46,8 +35,8 @@ export async function GET(request: NextRequest) {
 
     const userIdentifier = getMemberIdentifier(memberRecord.id)
 
-    // Get voted post IDs
-    const result = await getPostService().getUserVotedPostIds(postIds, userIdentifier)
+    // Get all voted post IDs for this user
+    const result = await getPostService().getAllUserVotedPostIds(userIdentifier)
     if (!result.success) {
       return NextResponse.json({ votedPostIds: [] })
     }

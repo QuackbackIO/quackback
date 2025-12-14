@@ -1203,6 +1203,24 @@ export class PostService {
   }
 
   /**
+   * Get all posts a user has voted on
+   * No authentication required
+   *
+   * @param userIdentifier - User's identifier
+   * @returns Result containing Set of all voted post IDs
+   */
+  async getAllUserVotedPostIds(userIdentifier: string): Promise<Result<Set<string>, PostError>> {
+    const { db } = await import('@quackback/db')
+
+    const result = await db
+      .select({ postId: votes.postId })
+      .from(votes)
+      .where(eq(votes.userIdentifier, userIdentifier))
+
+    return ok(new Set(result.map((r) => r.postId)))
+  }
+
+  /**
    * Get board by post ID
    * No authentication required
    *

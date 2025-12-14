@@ -517,6 +517,18 @@ export async function getUserVotedPostIds(
 }
 
 /**
+ * Get all post IDs a user has voted on (for the current tenant via RLS)
+ */
+export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Set<string>> {
+  const result = await db
+    .select({ postId: votes.postId })
+    .from(votes)
+    .where(eq(votes.userIdentifier, userIdentifier))
+
+  return new Set(result.map((r) => r.postId))
+}
+
+/**
  * Toggle vote on a post (add or remove)
  */
 export async function togglePublicVote(

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
@@ -29,6 +30,11 @@ export const publicPostsKeys = {
   lists: () => [...publicPostsKeys.all, 'list'] as const,
   list: (organizationId: string, filters: PublicFeedbackFilters) =>
     [...publicPostsKeys.lists(), organizationId, filters] as const,
+}
+
+export const votedPostsKeys = {
+  all: ['votedPosts'] as const,
+  byOrg: (organizationId: string) => [...votedPostsKeys.all, organizationId] as const,
 }
 
 // ============================================================================
@@ -251,61 +257,85 @@ export function useCreatePublicPost() {
 }
 
 // ============================================================================
-// Voted Posts State Hook
+// Voted Posts Query Hook
 // ============================================================================
 
 interface VotedPostsResponse {
   votedPostIds: string[]
 }
 
-async function fetchVotedPosts(
-  organizationId: string,
-  postIds: string[]
-): Promise<VotedPostsResponse> {
-  if (postIds.length === 0) {
-    return { votedPostIds: [] }
-  }
-  const response = await fetch(
-    `/api/public/votes?organizationId=${organizationId}&postIds=${postIds.join(',')}`
-  )
+async function fetchVotedPosts(organizationId: string): Promise<Set<string>> {
+  const response = await fetch(`/api/public/votes?organizationId=${organizationId}`)
   if (!response.ok) {
-    return { votedPostIds: [] }
+    return new Set()
   }
-  return response.json()
+  const data: VotedPostsResponse = await response.json()
+  return new Set(data.votedPostIds)
 }
 
 interface UseVotedPostsOptions {
   initialVotedIds: string[]
   organizationId: string
-  postIds: string[]
 }
 
 /**
  * Hook to track which posts the user has voted on.
- * Maintains client-side state that stays in sync with voting actions.
- * Supports refetching after auth to sync with server state.
+ * Uses React Query for server state with local optimistic updates.
+ * Call refetch() after auth to sync with server state.
  */
-export function useVotedPosts({ initialVotedIds, organizationId, postIds }: UseVotedPostsOptions) {
-  const [votedIds, setVotedIds] = useState(() => new Set(initialVotedIds))
+export function useVotedPosts({ initialVotedIds, organizationId }: UseVotedPostsOptions) {
+  const queryClient = useQueryClient()
 
-  const hasVoted = useCallback((postId: string) => votedIds.has(postId), [votedIds])
+  // Local state for optimistic updates (immediate UI feedback)
+  const [localVotedIds, setLocalVotedIds] = useState(() => new Set(initialVotedIds))
 
-  const toggleVote = useCallback((postId: string, voted: boolean) => {
-    setVotedIds((prev) => {
-      const next = new Set(prev)
-      if (voted) {
-        next.add(postId)
-      } else {
-        next.delete(postId)
-      }
-      return next
-    })
-  }, [])
+  // React Query for server state
+  const { data: serverVotedIds, refetch } = useQuery({
+    queryKey: votedPostsKeys.byOrg(organizationId),
+    queryFn: () => fetchVotedPosts(organizationId),
+    initialData: new Set(initialVotedIds),
+    staleTime: Infinity, // Don't auto-refetch, we control when to refetch
+  })
 
-  const refetchVotedPosts = useCallback(async () => {
-    const result = await fetchVotedPosts(organizationId, postIds)
-    setVotedIds(new Set(result.votedPostIds))
-  }, [organizationId, postIds])
+  // Sync local state when server data changes (e.g., after refetch)
+  useEffect(() => {
+    if (serverVotedIds) {
+      setLocalVotedIds(serverVotedIds)
+    }
+  }, [serverVotedIds])
+
+  const hasVoted = useCallback((postId: string) => localVotedIds.has(postId), [localVotedIds])
+
+  // Optimistically update local state, server state syncs via vote mutation
+  const toggleVote = useCallback(
+    (postId: string, voted: boolean) => {
+      setLocalVotedIds((prev) => {
+        const next = new Set(prev)
+        if (voted) {
+          next.add(postId)
+        } else {
+          next.delete(postId)
+        }
+        return next
+      })
+      // Also update the query cache for consistency
+      queryClient.setQueryData<Set<string>>(votedPostsKeys.byOrg(organizationId), (old) => {
+        if (!old) return new Set([postId])
+        const next = new Set(old)
+        if (voted) {
+          next.add(postId)
+        } else {
+          next.delete(postId)
+        }
+        return next
+      })
+    },
+    [organizationId, queryClient]
+  )
+
+  const refetchVotedPosts = useCallback(() => {
+    refetch()
+  }, [refetch])
 
   return useMemo(
     () => ({ hasVoted, toggleVote, refetchVotedPosts }),
