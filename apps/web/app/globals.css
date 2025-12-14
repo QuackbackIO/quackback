@@ -31,6 +31,8 @@
     --accent-foreground: oklch(0.145 0 0);
     --destructive: oklch(0.577 0.245 27);
     --destructive-foreground: oklch(0.577 0.245 27);
+    --success: oklch(0.696 0.149 163);
+    --success-foreground: oklch(0.985 0 0);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.623 0.214 259);
@@ -51,8 +53,16 @@
     --font-serif: ui-serif, Georgia, Cambria, serif;
     --font-mono: ui-monospace, SFMono-Regular, monospace;
     --radius: 0.625rem;
-    --shadow-color: oklch(0 0 0);
-    --shadow-opacity: 0.1;
+    --letter-spacing: 0em;
+    /* Shadows - light mode (subtle) */
+    --shadow-2xs: 0 1px oklch(0 0 0 / 0.05);
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.05);
+    --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1);
+    --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1);
+    --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.1), 0 2px 4px -2px oklch(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1);
+    --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.25);
   }
 
   .dark {
@@ -73,6 +83,8 @@
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.396 0.141 25);
     --destructive-foreground: oklch(0.637 0.237 25);
+    --success: oklch(0.696 0.149 163);
+    --success-foreground: oklch(0.985 0 0);
     --border: oklch(0.269 0 0);
     --input: oklch(0.269 0 0);
     --ring: oklch(0.556 0 0);
@@ -89,11 +101,19 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(0.269 0 0);
     --sidebar-ring: oklch(0.556 0 0);
-    --shadow-color: oklch(0 0 0);
-    --shadow-opacity: 0.35;
+    /* Shadows - dark mode (more pronounced) */
+    --shadow-2xs: 0 1px oklch(0 0 0 / 0.15);
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.15);
+    --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25);
+    --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25);
+    --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.25);
+    --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.25);
+    --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.25);
+    --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.5);
   }
   
   @theme inline {
+    /* Colors */
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);
@@ -110,6 +130,8 @@
     --color-accent-foreground: var(--accent-foreground);
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
@@ -126,16 +148,19 @@
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
-  
+
+    /* Typography */
     --font-sans: var(--font-sans);
     --font-mono: var(--font-mono);
     --font-serif: var(--font-serif);
-  
-    --radius-sm: calc(var(--radius) - 4px);
-    --radius-md: calc(var(--radius) - 2px);
+
+    /* Border radius - scaled from base --radius to avoid negative values */
+    --radius-sm: calc(var(--radius) * 0.5);
+    --radius-md: calc(var(--radius) * 0.75);
     --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) + 4px);
-  
+    --radius-xl: calc(var(--radius) * 1.5);
+
+    /* Shadows (themeable per tenant) */
     --shadow-2xs: var(--shadow-2xs);
     --shadow-xs: var(--shadow-xs);
     --shadow-sm: var(--shadow-sm);
@@ -144,12 +169,59 @@
     --shadow-lg: var(--shadow-lg);
     --shadow-xl: var(--shadow-xl);
     --shadow-2xl: var(--shadow-2xl);
+
+    /* Letter spacing / tracking variants */
+    --tracking-tighter: calc(var(--letter-spacing) - 0.05em);
+    --tracking-tight: calc(var(--letter-spacing) - 0.025em);
+    --tracking-normal: var(--letter-spacing);
+    --tracking-wide: calc(var(--letter-spacing) + 0.025em);
+    --tracking-wider: calc(var(--letter-spacing) + 0.05em);
+    --tracking-widest: calc(var(--letter-spacing) + 0.1em);
+
+    /* Collapsible animations */
+    --animate-collapsible-down: collapsible-down 150ms ease-out;
+    --animate-collapsible-up: collapsible-up 150ms ease-out;
   }
+
+/* Collapsible keyframes */
+@keyframes collapsible-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
 
 /* ==============================================
    Base Styles (shadcn/ui standard)
    Applies default border and outline colors
    ============================================== */
+
+* {
+  color-scheme: light dark;
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: var(--letter-spacing);
+}
 
 @layer base {
   * {
@@ -157,6 +229,10 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 
@@ -193,49 +269,57 @@ a svg,
   display: none;
 }
 
-/* Custom scrollbar styling */
-.custom-scrollbar {
+/* Scrollbar utilities - tweakcn compatible */
+@utility scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--color-border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+  }
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@utility scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 3px;
+@utility scrollbar-gutter-both {
+  scrollbar-gutter: stable both-edges;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-  transition: background 0.2s ease;
+/* Legacy class aliases for backward compatibility */
+.custom-scrollbar {
+  @apply scrollbar-thin;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
-}
-
-/* Hide scrollbar until hover for cleaner look */
 .custom-scrollbar-hover {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
 
 .custom-scrollbar-hover:hover {
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .custom-scrollbar-hover::-webkit-scrollbar {
   width: 6px;
   height: 6px;
-}
-
-.custom-scrollbar-hover::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 .custom-scrollbar-hover::-webkit-scrollbar-thumb {
@@ -245,9 +329,9 @@ a svg,
 }
 
 .custom-scrollbar-hover:hover::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--color-border);
 }
 
 .custom-scrollbar-hover:hover::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  background: var(--color-muted-foreground);
 }
