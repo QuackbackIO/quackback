@@ -2,8 +2,9 @@ import { requireTenantBySlug } from '@/lib/tenant'
 import { Brush } from 'lucide-react'
 import { ThemeCustomizer } from './theme-customizer'
 import { LogoUploader } from './logo-uploader'
+import { HeaderBranding } from './header-branding'
 import { organizationService } from '@quackback/domain'
-import { getOrganizationLogoData } from '@/lib/organization'
+import { getOrganizationLogoData, getOrganizationHeaderLogoData } from '@/lib/organization'
 
 export default async function BrandingPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
@@ -13,8 +14,11 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
   const brandingConfigResult = await organizationService.getBrandingConfig(organization.id)
   const brandingConfig = brandingConfigResult.success ? brandingConfigResult.value : {}
 
-  // Get logo data for SSR
-  const logoData = await getOrganizationLogoData(organization.id)
+  // Get logo and header branding data for SSR
+  const [logoData, headerData] = await Promise.all([
+    getOrganizationLogoData(organization.id),
+    getOrganizationHeaderLogoData(organization.id),
+  ])
 
   return (
     <div className="space-y-6">
@@ -36,7 +40,7 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
         <div className="space-y-1">
           <h2 className="font-semibold">Logo</h2>
           <p className="text-sm text-muted-foreground">
-            Your brand logo displayed in the portal header and used as the browser favicon
+            Square logo used as browser favicon and in compact spaces
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
@@ -44,6 +48,26 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
             organizationId={organization.id}
             organizationName={organization.name}
             initialLogoUrl={logoData.logoUrl}
+          />
+        </div>
+      </div>
+
+      {/* Header Branding Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <div className="space-y-1">
+          <h2 className="font-semibold">Header Branding</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose how your brand appears in the portal navigation header
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6">
+          <HeaderBranding
+            organizationId={organization.id}
+            organizationName={organization.name}
+            logoUrl={logoData.logoUrl}
+            initialHeaderLogoUrl={headerData.headerLogoUrl}
+            initialDisplayMode={headerData.headerDisplayMode}
+            initialDisplayName={headerData.headerDisplayName}
           />
         </div>
       </div>
@@ -61,6 +85,8 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
           initialThemeConfig={brandingConfig}
           logoUrl={logoData.logoUrl}
           organizationName={organization.name}
+          headerLogoUrl={headerData.headerLogoUrl}
+          headerDisplayMode={headerData.headerDisplayMode}
         />
       </div>
     </div>

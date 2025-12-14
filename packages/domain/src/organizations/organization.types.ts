@@ -102,6 +102,16 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
 // =============================================================================
 
 /**
+ * Header display mode - how the brand appears in the portal navigation header
+ */
+export type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
+
+/**
+ * Default header display mode
+ */
+export const DEFAULT_HEADER_DISPLAY_MODE: HeaderDisplayMode = 'logo_and_name'
+
+/**
  * Theme color variables
  */
 export interface ThemeColors {

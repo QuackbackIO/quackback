@@ -189,6 +189,24 @@ export const organization = pgTable('organization', {
    * Injected after theme styles in the portal layout
    */
   customCss: text('custom_css'),
+  /**
+   * Header logo blob (horizontal wordmark/lockup for custom header branding)
+   * Used when headerDisplayMode is 'custom_logo'
+   */
+  headerLogoBlob: bytea('header_logo_blob'),
+  headerLogoType: text('header_logo_type'), // MIME type: image/png, image/jpeg, image/svg+xml, etc.
+  /**
+   * Header display mode - how the brand appears in portal navigation
+   * - 'logo_and_name': Square logo + organization name (default)
+   * - 'logo_only': Just the square logo
+   * - 'custom_logo': Use headerLogoBlob (horizontal wordmark)
+   */
+  headerDisplayMode: text('header_display_mode').default('logo_and_name'),
+  /**
+   * Custom display name for the header (used in 'logo_and_name' mode)
+   * Falls back to organization.name when not set
+   */
+  headerDisplayName: text('header_display_name'),
 })
 
 /**

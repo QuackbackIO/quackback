@@ -71,6 +71,20 @@
       "when": 1765660000000,
       "tag": "0009_add_user_image_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1765750000000,
+      "tag": "0010_header_branding",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1765850000000,
+      "tag": "0011_header_display_name",
+      "breakpoints": true
     }
   ]
 }

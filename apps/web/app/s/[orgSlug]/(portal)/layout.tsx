@@ -115,6 +115,9 @@ export default async function PublicLayout({
       <PortalHeader
         orgName={org.name}
         orgLogo={brandingData.logoUrl}
+        headerLogo={brandingData.headerLogoUrl}
+        headerDisplayMode={brandingData.headerDisplayMode}
+        headerDisplayName={brandingData.headerDisplayName}
         userRole={userRole}
         initialUserData={initialUserData}
       />

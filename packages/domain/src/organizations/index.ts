@@ -13,6 +13,7 @@ export type {
   PortalOAuthProviders,
   PortalFeatures,
   PortalConfig,
+  HeaderDisplayMode,
   ThemeColors,
   BrandingConfig,
   UpdateAuthConfigInput,
@@ -29,4 +30,8 @@ export type {
 } from './organization.types'
 
 // Default config values
-export { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './organization.types'
+export {
+  DEFAULT_AUTH_CONFIG,
+  DEFAULT_PORTAL_CONFIG,
+  DEFAULT_HEADER_DISPLAY_MODE,
+} from './organization.types'
