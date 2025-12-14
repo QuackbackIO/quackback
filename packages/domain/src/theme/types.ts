@@ -26,6 +26,11 @@ export interface ThemeVariables {
   border?: string
   input?: string
   ring?: string
+
+  // Success/info semantic colors
+  success?: string
+  successForeground?: string
+
   // Sidebar (optional - defaults to main if not set)
   sidebarBackground?: string
   sidebarForeground?: string
@@ -35,12 +40,31 @@ export interface ThemeVariables {
   sidebarAccentForeground?: string
   sidebarBorder?: string
   sidebarRing?: string
+
   // Charts (optional)
   chart1?: string
   chart2?: string
   chart3?: string
   chart4?: string
   chart5?: string
+
+  // Typography
+  fontSans?: string
+  fontSerif?: string
+  fontMono?: string
+
+  // Border radius
+  radius?: string
+
+  // Shadows
+  shadow2xs?: string
+  shadowXs?: string
+  shadowSm?: string
+  shadow?: string
+  shadowMd?: string
+  shadowLg?: string
+  shadowXl?: string
+  shadow2xl?: string
 }
 
 /**
@@ -61,6 +85,8 @@ export interface ThemeConfig {
 export interface ThemePreset {
   /** Display name */
   name: string
+  /** Short description of the theme aesthetic */
+  description: string
   /** Preview hex color for UI */
   color: string
   /** Full light mode variables */

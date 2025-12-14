@@ -10,10 +10,15 @@ export type { ThemeVariables, ThemeConfig, ThemePreset, CoreThemeVariable } from
 export { CORE_THEME_VARIABLES } from './types'
 
 // Presets
-export { themePresets, presetNames, getPreset } from './presets'
+export { themePresets, presetNames, primaryPresetIds, getPreset } from './presets'
 
 // Color conversion
 export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
 
 // CSS generation
-export { generateThemeCSS, parseThemeConfig, serializeThemeConfig } from './generator'
+export {
+  generateThemeCSS,
+  parseThemeConfig,
+  serializeThemeConfig,
+  getGoogleFontsUrl,
+} from './generator'
