@@ -84,19 +84,15 @@ async function getCroppedImg(
     canvas.height
   )
 
-  // Convert to blob
+  // Convert to blob (PNG to preserve transparency)
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob)
-        } else {
-          reject(new Error('Failed to create blob'))
-        }
-      },
-      'image/jpeg',
-      0.9
-    )
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+      } else {
+        reject(new Error('Failed to create blob'))
+      }
+    }, 'image/png')
   })
 }
 
