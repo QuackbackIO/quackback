@@ -16,21 +16,6 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
   // Get logo data for SSR
   const logoData = await getOrganizationLogoData(organization.id)
 
-  // Branding assets component to pass to ThemeCustomizer
-  const brandingAssets = (
-    <div key="branding-assets" className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-      <h2 className="font-medium mb-1 text-sm">Logo</h2>
-      <p className="text-sm text-muted-foreground mb-4">
-        Your logo is also used as the browser favicon
-      </p>
-      <LogoUploader
-        organizationId={organization.id}
-        organizationName={organization.name}
-        initialLogoUrl={logoData.logoUrl}
-      />
-    </div>
-  )
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -46,14 +31,38 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
         </div>
       </div>
 
-      {/* Theme Customizer */}
-      <ThemeCustomizer
-        organizationId={organization.id}
-        initialThemeConfig={brandingConfig}
-        logoUrl={logoData.logoUrl}
-        organizationName={organization.name}
-        brandingAssets={brandingAssets}
-      />
+      {/* Logo Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <div className="space-y-1">
+          <h2 className="font-semibold">Logo</h2>
+          <p className="text-sm text-muted-foreground">
+            Your brand logo displayed in the portal header and used as the browser favicon
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6">
+          <LogoUploader
+            organizationId={organization.id}
+            organizationName={organization.name}
+            initialLogoUrl={logoData.logoUrl}
+          />
+        </div>
+      </div>
+
+      {/* Theme Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <div className="space-y-1">
+          <h2 className="font-semibold">Theme</h2>
+          <p className="text-sm text-muted-foreground">
+            Customize colors, typography, and styling to match your brand
+          </p>
+        </div>
+        <ThemeCustomizer
+          organizationId={organization.id}
+          initialThemeConfig={brandingConfig}
+          logoUrl={logoData.logoUrl}
+          organizationName={organization.name}
+        />
+      </div>
     </div>
   )
 }

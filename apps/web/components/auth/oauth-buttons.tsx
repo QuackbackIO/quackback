@@ -9,6 +9,10 @@ interface OAuthButtonsProps {
   context?: 'team' | 'portal'
   /** Custom domain to return to after OAuth (if on custom domain) */
   returnDomain?: string
+  /** Whether to show GitHub sign-in button (default: true) */
+  showGitHub?: boolean
+  /** Whether to show Google sign-in button (default: true) */
+  showGoogle?: boolean
 }
 
 /**
@@ -23,6 +27,8 @@ export function OAuthButtons({
   callbackUrl = '/',
   context = 'portal',
   returnDomain,
+  showGitHub = true,
+  showGoogle = true,
 }: OAuthButtonsProps) {
   const protocol = appDomain.includes('localhost') ? 'http' : 'https'
 
@@ -43,26 +49,35 @@ export function OAuthButtons({
     window.location.href = oauthUrl
   }
 
+  // Don't render anything if both providers are disabled
+  if (!showGitHub && !showGoogle) {
+    return null
+  }
+
   return (
     <div className="space-y-3">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={() => handleOAuthLogin('github')}
-      >
-        <GitHubIcon className="mr-2 h-4 w-4" />
-        Continue with GitHub
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={() => handleOAuthLogin('google')}
-      >
-        <GoogleIcon className="mr-2 h-4 w-4" />
-        Continue with Google
-      </Button>
+      {showGitHub && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => handleOAuthLogin('github')}
+        >
+          <GitHubIcon className="mr-2 h-4 w-4" />
+          Continue with GitHub
+        </Button>
+      )}
+      {showGoogle && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => handleOAuthLogin('google')}
+        >
+          <GoogleIcon className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+      )}
     </div>
   )
 }

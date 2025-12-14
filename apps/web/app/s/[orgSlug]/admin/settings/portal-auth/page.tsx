@@ -1,10 +1,16 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
-import { Lock, Mail } from 'lucide-react'
+import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
+import { Lock } from 'lucide-react'
+import { PortalAuthSettings } from './portal-auth-settings'
 
 export default async function PortalAuthPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   // Only owners and admins can access portal auth settings
   const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+
+  // Fetch portal config
+  const configResult = await organizationService.getPortalConfig(organization.id)
+  const portalConfig = configResult.success ? configResult.value : DEFAULT_PORTAL_CONFIG
 
   return (
     <div className="space-y-6">
@@ -21,16 +27,21 @@ export default async function PortalAuthPage({ params }: { params: Promise<{ org
         </div>
       </div>
 
-      {/* Portal User Accounts */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Portal User Accounts</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Users sign in to {organization.name}&apos;s portal using magic email codes.
-        </p>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <Mail className="h-4 w-4" />
-          <span>Email authentication is enabled for all portal users</span>
+      {/* Authentication Methods - Two column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        {/* Left column - heading and description */}
+        <div className="space-y-1">
+          <h2 className="font-semibold">Sign-in Methods</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose which authentication methods are available to portal users
+          </p>
         </div>
+
+        {/* Right column - settings card */}
+        <PortalAuthSettings
+          organizationId={organization.id}
+          initialConfig={{ oauth: portalConfig.oauth }}
+        />
       </div>
     </div>
   )

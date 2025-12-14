@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
+import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 
 interface SignupPageProps {
   params: Promise<{ orgSlug: string }>
@@ -16,6 +17,10 @@ const APP_DOMAIN = process.env.APP_DOMAIN
 export default async function SignupPage({ params }: SignupPageProps) {
   const { orgSlug } = await params
 
+  // Fetch portal config to determine which OAuth providers are enabled
+  const configResult = await organizationService.getPublicPortalConfig(orgSlug)
+  const oauthConfig = configResult.success ? configResult.value.oauth : DEFAULT_PORTAL_CONFIG.oauth
+
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-md space-y-8 px-4">
@@ -29,7 +34,7 @@ export default async function SignupPage({ params }: SignupPageProps) {
           context="portal"
           orgSlug={orgSlug}
           appDomain={APP_DOMAIN}
-          showOAuth
+          oauthConfig={oauthConfig}
         />
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}

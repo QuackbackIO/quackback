@@ -71,11 +71,11 @@ export interface ThemeVariables {
  * Theme configuration stored in organization.brandingConfig
  */
 export interface ThemeConfig {
-  /** Preset name for quick selection (indigo, emerald, rose, amber, violet, cyan) */
+  /** @deprecated Presets are now expanded to full values at save time. Kept for migration compatibility. */
   preset?: string
-  /** Custom light mode variable overrides */
+  /** Light mode variables */
   light?: ThemeVariables
-  /** Custom dark mode variable overrides */
+  /** Dark mode variables */
   dark?: ThemeVariables
 }
 

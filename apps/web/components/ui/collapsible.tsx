@@ -14,6 +14,8 @@ const CollapsibleContent = CollapsiblePrimitive.CollapsibleContent
 interface CollapsibleSectionProps {
   title: string
   description?: string
+  icon?: React.ReactNode
+  headerAction?: React.ReactNode
   children: React.ReactNode
   defaultOpen?: boolean
   className?: string
@@ -24,6 +26,8 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({
   title,
   description,
+  icon,
+  headerAction,
   children,
   defaultOpen = false,
   className,
@@ -34,26 +38,32 @@ function CollapsibleSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className={className}>
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'flex w-full items-center justify-between rounded-lg px-4 py-3 text-left hover:bg-muted/50 transition-colors',
-            headerClassName
-          )}
-        >
-          <div>
-            <h3 className="font-medium text-sm">{title}</h3>
-            {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-          </div>
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform duration-200',
-              isOpen && 'rotate-180'
-            )}
-          />
-        </button>
-      </CollapsibleTrigger>
+      <div
+        className={cn(
+          'flex w-full items-center justify-between rounded-lg px-4 py-3 text-left',
+          headerClassName
+        )}
+      >
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex flex-1 items-center gap-2 hover:text-foreground/80 transition-colors"
+          >
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                isOpen && 'rotate-180'
+              )}
+            />
+            {icon}
+            <div className="flex-1 text-left">
+              <h3 className="font-medium text-sm">{title}</h3>
+              {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        {headerAction && <div onClick={(e) => e.stopPropagation()}>{headerAction}</div>}
+      </div>
       <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
         <div className={cn('px-4 pb-4 pt-2', contentClassName)}>{children}</div>
       </CollapsibleContent>

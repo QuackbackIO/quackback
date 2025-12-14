@@ -1,5 +1,4 @@
 import type { ThemeConfig, ThemeVariables } from './types'
-import { themePresets } from './presets'
 
 /**
  * Map camelCase variable names to CSS custom property names
@@ -98,23 +97,9 @@ function variablesToCSS(vars: ThemeVariables): string {
 export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
-  let lightVars: ThemeVariables = {}
-  let darkVars: ThemeVariables = {}
-
-  // Start with preset values if specified
-  if (config.preset && themePresets[config.preset]) {
-    const preset = themePresets[config.preset]
-    lightVars = { ...preset.light }
-    darkVars = { ...preset.dark }
-  }
-
-  // Merge custom overrides (custom values take precedence)
-  if (config.light) {
-    lightVars = { ...lightVars, ...config.light }
-  }
-  if (config.dark) {
-    darkVars = { ...darkVars, ...config.dark }
-  }
+  // Use saved values directly (presets are expanded at save time)
+  const lightVars = config.light || {}
+  const darkVars = config.dark || {}
 
   // Generate CSS
   const lightCSS = variablesToCSS(lightVars)
@@ -236,14 +221,8 @@ function extractGoogleFont(fontFamily: string | undefined): string | null {
 export function getGoogleFontsUrl(config: ThemeConfig): string | null {
   if (!config) return null
 
-  // Get the effective font from config or preset
-  let fontSans: string | undefined
-
-  if (config.light?.fontSans) {
-    fontSans = config.light.fontSans
-  } else if (config.preset && themePresets[config.preset]) {
-    fontSans = themePresets[config.preset].light.fontSans
-  }
+  // Get font from saved config (presets are expanded at save time)
+  const fontSans = config.light?.fontSans
 
   const googleFont = extractGoogleFont(fontSans)
   if (!googleFont) return null
