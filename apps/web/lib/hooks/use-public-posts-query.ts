@@ -254,11 +254,38 @@ export function useCreatePublicPost() {
 // Voted Posts State Hook
 // ============================================================================
 
+interface VotedPostsResponse {
+  votedPostIds: string[]
+}
+
+async function fetchVotedPosts(
+  organizationId: string,
+  postIds: string[]
+): Promise<VotedPostsResponse> {
+  if (postIds.length === 0) {
+    return { votedPostIds: [] }
+  }
+  const response = await fetch(
+    `/api/public/votes?organizationId=${organizationId}&postIds=${postIds.join(',')}`
+  )
+  if (!response.ok) {
+    return { votedPostIds: [] }
+  }
+  return response.json()
+}
+
+interface UseVotedPostsOptions {
+  initialVotedIds: string[]
+  organizationId: string
+  postIds: string[]
+}
+
 /**
  * Hook to track which posts the user has voted on.
  * Maintains client-side state that stays in sync with voting actions.
+ * Supports refetching after auth to sync with server state.
  */
-export function useVotedPosts(initialVotedIds: string[]) {
+export function useVotedPosts({ initialVotedIds, organizationId, postIds }: UseVotedPostsOptions) {
   const [votedIds, setVotedIds] = useState(() => new Set(initialVotedIds))
 
   const hasVoted = useCallback((postId: string) => votedIds.has(postId), [votedIds])
@@ -275,5 +302,13 @@ export function useVotedPosts(initialVotedIds: string[]) {
     })
   }, [])
 
-  return useMemo(() => ({ hasVoted, toggleVote }), [hasVoted, toggleVote])
+  const refetchVotedPosts = useCallback(async () => {
+    const result = await fetchVotedPosts(organizationId, postIds)
+    setVotedIds(new Set(result.votedPostIds))
+  }, [organizationId, postIds])
+
+  return useMemo(
+    () => ({ hasVoted, toggleVote, refetchVotedPosts }),
+    [hasVoted, toggleVote, refetchVotedPosts]
+  )
 }

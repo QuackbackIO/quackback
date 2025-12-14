@@ -64,19 +64,9 @@ export function FeedbackContainer({
         ? { name: sessionData.user.name, email: sessionData.user.email }
         : null
 
-  // Listen for auth success to refetch session (no page reload)
-  useAuthBroadcast({
-    onSuccess: () => {
-      refetchSession()
-    },
-  })
-
   // Refs for intersection observer
   const sentinelRef = useRef<HTMLDivElement>(null)
   const fetchNextPageRef = useRef<() => void>(() => {})
-
-  // Track voted posts in client state (syncs with server on vote)
-  const { hasVoted, toggleVote } = useVotedPosts(votedPostIds)
 
   // Current filter values (URL state takes precedence over props)
   const activeBoard = filters.board ?? currentBoard
@@ -133,6 +123,24 @@ export function FeedbackContainer({
 
   const posts = flattenPublicPosts(postsData)
   const isLoading = isFetching && !isFetchingNextPage
+
+  // Get current post IDs for voted posts tracking
+  const currentPostIds = useMemo(() => posts.map((p) => p.id), [posts])
+
+  // Track voted posts in client state (syncs with server on vote)
+  const { hasVoted, toggleVote, refetchVotedPosts } = useVotedPosts({
+    initialVotedIds: votedPostIds,
+    organizationId,
+    postIds: currentPostIds,
+  })
+
+  // Listen for auth success to refetch session and voted posts (no page reload)
+  useAuthBroadcast({
+    onSuccess: () => {
+      refetchSession()
+      refetchVotedPosts()
+    },
+  })
 
   // Keep ref in sync with latest fetchNextPage
   fetchNextPageRef.current = () => {
