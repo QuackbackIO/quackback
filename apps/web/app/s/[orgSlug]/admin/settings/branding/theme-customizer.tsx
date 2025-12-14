@@ -50,13 +50,21 @@ import {
   type ThemeConfig,
   type ThemeVariables,
 } from '@quackback/domain/theme'
+import {
+  useOrganizationLogo,
+  useOrganizationHeaderLogo,
+} from '@/lib/hooks/use-organization-queries'
 import { ThemePreview } from './theme-preview'
+
+type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
 interface ThemeCustomizerProps {
   organizationId: string
   initialThemeConfig: ThemeConfig
   logoUrl?: string | null
   organizationName?: string
+  headerLogoUrl?: string | null
+  headerDisplayMode?: HeaderDisplayMode
 }
 
 /** Font options - Popular Google Fonts */
@@ -330,9 +338,24 @@ type ColorVariable = (typeof ALL_COLOR_KEYS)[number]
 export function ThemeCustomizer({
   organizationId,
   initialThemeConfig,
-  logoUrl,
+  logoUrl: initialLogoUrl,
   organizationName,
+  headerLogoUrl: initialHeaderLogoUrl,
+  headerDisplayMode: initialHeaderDisplayMode = 'logo_and_name',
 }: ThemeCustomizerProps) {
+  // Fetch logo data reactively so preview stays in sync
+  // when LogoUploader component updates the logo
+  const { data: logoData } = useOrganizationLogo(organizationId)
+  const effectiveLogoUrl = logoData?.logoUrl ?? initialLogoUrl
+
+  // Fetch header branding data reactively so preview stays in sync
+  // when HeaderBranding component updates settings
+  const { data: headerData } = useOrganizationHeaderLogo(organizationId)
+  const effectiveHeaderLogoUrl = headerData?.headerLogoUrl ?? initialHeaderLogoUrl
+  const effectiveHeaderDisplayMode =
+    (headerData?.headerDisplayMode as HeaderDisplayMode) ?? initialHeaderDisplayMode
+  const effectiveHeaderDisplayName = headerData?.headerDisplayName ?? null
+
   // Preview mode (light/dark) - used for preview panel only
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
 
@@ -959,8 +982,11 @@ ${darkVars}
               previewMode={previewMode}
               radius={`${radius}rem`}
               fontFamily={font}
-              logoUrl={logoUrl}
+              logoUrl={effectiveLogoUrl}
               organizationName={organizationName}
+              headerLogoUrl={effectiveHeaderLogoUrl}
+              headerDisplayMode={effectiveHeaderDisplayMode}
+              headerDisplayName={effectiveHeaderDisplayName}
             />
           </div>
         </div>

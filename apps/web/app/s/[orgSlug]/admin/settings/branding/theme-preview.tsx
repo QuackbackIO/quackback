@@ -10,7 +10,6 @@ import {
   Map,
   Megaphone,
   Plus,
-  Search,
 } from 'lucide-react'
 import { oklchToHex, type ThemeVariables } from '@quackback/domain/theme'
 
@@ -50,6 +49,8 @@ function getGoogleFontsUrl(fontFamily: string | undefined): string | null {
   return null
 }
 
+type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
+
 interface ThemePreviewProps {
   lightVars: ThemeVariables
   darkVars: ThemeVariables
@@ -58,6 +59,10 @@ interface ThemePreviewProps {
   fontFamily?: string
   logoUrl?: string | null
   organizationName?: string
+  headerLogoUrl?: string | null
+  headerDisplayMode?: HeaderDisplayMode
+  /** Custom display name (falls back to organizationName) */
+  headerDisplayName?: string | null
 }
 
 export function ThemePreview({
@@ -68,7 +73,12 @@ export function ThemePreview({
   fontFamily,
   logoUrl,
   organizationName = 'Acme Feedback',
+  headerLogoUrl,
+  headerDisplayMode = 'logo_and_name',
+  headerDisplayName,
 }: ThemePreviewProps) {
+  // Use custom display name if provided, otherwise fall back to org name
+  const displayName = headerDisplayName || organizationName
   const vars = previewMode === 'light' ? lightVars : darkVars
 
   // Convert OKLCH to hex for inline styles
@@ -145,7 +155,9 @@ export function ThemePreview({
           colors={colors}
           radius={radius}
           logoUrl={logoUrl}
-          organizationName={organizationName}
+          displayName={displayName}
+          headerLogoUrl={headerLogoUrl}
+          headerDisplayMode={headerDisplayMode}
         />
       </div>
     </>
@@ -157,65 +169,104 @@ function PortalPreview({
   colors,
   radius,
   logoUrl,
-  organizationName,
+  displayName,
+  headerLogoUrl,
+  headerDisplayMode = 'logo_and_name',
 }: {
   colors: Record<string, string>
   radius: string
   logoUrl?: string | null
-  organizationName: string
+  displayName: string
+  headerLogoUrl?: string | null
+  headerDisplayMode?: HeaderDisplayMode
 }) {
+  // Check if using two-row layout (custom header logo)
+  const useTwoRowLayout = headerDisplayMode === 'custom_logo' && headerLogoUrl
+
+  // User/auth controls for the header
+  const HeaderControls = () => (
+    <div className="flex items-center gap-2">
+      <div className="p-1.5 rounded" style={{ color: colors.mutedForeground }}>
+        <Bell className="h-4 w-4" />
+      </div>
+      <div
+        className="h-6 w-6 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: colors.muted, color: colors.mutedForeground }}
+      >
+        <User className="h-3.5 w-3.5" />
+      </div>
+    </div>
+  )
+
+  // Navigation tabs
+  const NavTabs = () => (
+    <div className="flex items-center gap-1">
+      <NavTab icon={LayoutList} label="Feedback" active colors={colors} radius={radius} />
+      <NavTab icon={Map} label="Roadmap" colors={colors} radius={radius} />
+      <NavTab icon={Megaphone} label="Changelog" colors={colors} radius={radius} />
+    </div>
+  )
+
   return (
     <>
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ borderColor: colors.border }}
-      >
-        <div className="flex items-center gap-2">
-          {logoUrl ? (
-            <img src={logoUrl} alt="" className="h-6 w-6 rounded object-cover" />
-          ) : (
-            <div
-              className="h-6 w-6 rounded flex items-center justify-center text-xs font-bold"
-              style={{ backgroundColor: colors.primary, color: colors.primaryForeground }}
-            >
-              {organizationName.charAt(0)}
-            </div>
-          )}
-          <span className="font-semibold text-sm" style={{ color: colors.foreground }}>
-            {organizationName}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Search */}
+      {useTwoRowLayout ? (
+        // Two-row layout for custom logo: header + nav bar below
+        <>
+          {/* Header with logo */}
           <div
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs"
-            style={{ backgroundColor: colors.muted, color: colors.mutedForeground }}
+            className="flex items-center justify-between px-4 py-3 border-b"
+            style={{ borderColor: colors.border }}
           >
-            <Search className="h-3 w-3" />
-            <span>Search...</span>
+            <img
+              src={headerLogoUrl}
+              alt={displayName}
+              className="h-7 max-w-[140px] object-contain"
+            />
+            <HeaderControls />
           </div>
-          <div className="p-1.5 rounded" style={{ color: colors.mutedForeground }}>
-            <Bell className="h-4 w-4" />
+          {/* Navigation below header */}
+          <div className="flex items-center gap-1 px-4 py-1.5">
+            <NavTabs />
           </div>
-          <div
-            className="h-6 w-6 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: colors.muted, color: colors.mutedForeground }}
-          >
-            <User className="h-3.5 w-3.5" />
+        </>
+      ) : (
+        // Single-row header matching portal: [Logo] [Name?] [Nav] [spacer] [Auth]
+        <div
+          className="flex items-center px-4 py-3 border-b"
+          style={{ borderColor: colors.border }}
+        >
+          {/* Logo / Org Name */}
+          <div className="flex items-center gap-2 mr-4">
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="h-6 w-6 rounded object-cover" />
+            ) : (
+              <div
+                className="h-6 w-6 rounded flex items-center justify-center text-xs font-bold"
+                style={{ backgroundColor: colors.primary, color: colors.primaryForeground }}
+              >
+                {displayName.charAt(0)}
+              </div>
+            )}
+            {headerDisplayMode === 'logo_and_name' && (
+              <span
+                className="font-semibold text-sm max-w-[18ch] line-clamp-2"
+                style={{ color: colors.foreground }}
+              >
+                {displayName}
+              </span>
+            )}
           </div>
-        </div>
-      </div>
 
-      {/* Navigation Tabs */}
-      <div
-        className="flex items-center gap-1 px-4 py-2 border-b"
-        style={{ borderColor: colors.border }}
-      >
-        <NavTab icon={LayoutList} label="Feedback" active colors={colors} radius={radius} />
-        <NavTab icon={Map} label="Roadmap" colors={colors} radius={radius} />
-        <NavTab icon={Megaphone} label="Changelog" colors={colors} radius={radius} />
-      </div>
+          {/* Navigation Tabs (inline) */}
+          <NavTabs />
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Auth Controls */}
+          <HeaderControls />
+        </div>
+      )}
 
       {/* Content */}
       <div className="p-4 space-y-3">
