@@ -161,6 +161,9 @@ export const organization = pgTable('organization', {
   // Logo stored as blob (alternative to URL in 'logo' field)
   logoBlob: bytea('logo_blob'),
   logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
+  // Favicon stored as blob
+  faviconBlob: bytea('favicon_blob'),
+  faviconType: text('favicon_type'), // MIME type: image/x-icon, image/png, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   /**
@@ -181,6 +184,11 @@ export const organization = pgTable('organization', {
    * Structure: { preset?, light?: ThemeColors, dark?: ThemeColors }
    */
   brandingConfig: text('branding_config'),
+  /**
+   * Custom CSS for portal customization
+   * Injected after theme styles in the portal layout
+   */
+  customCss: text('custom_css'),
 })
 
 /**

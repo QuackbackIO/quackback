@@ -50,6 +50,27 @@
       "when": 1765561608445,
       "tag": "0006_add_missing_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1765565340000,
+      "tag": "0007_additional_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1765569020000,
+      "tag": "0008_favicon_and_custom_css",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1765660000000,
+      "tag": "0009_add_user_image_blob",
+      "breakpoints": true
     }
   ]
 }
