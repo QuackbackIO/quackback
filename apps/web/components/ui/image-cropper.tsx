@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Cropper from 'react-easy-crop'
-import type { Area } from 'react-easy-crop'
+import type { Area, MediaSize } from 'react-easy-crop'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { ZoomIn } from 'lucide-react'
+import { ZoomIn, ZoomOut } from 'lucide-react'
 
 interface ImageCropperProps {
   imageSrc: string
@@ -108,8 +108,47 @@ export function ImageCropper({
 }: ImageCropperProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
+  const [minZoom, setMinZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Calculate optimal minZoom when media loads so image can fit entirely
+  const onMediaLoaded = useCallback(
+    (mediaSize: MediaSize) => {
+      const imageAspect = mediaSize.naturalWidth / mediaSize.naturalHeight
+
+      // Calculate the zoom level needed to fit the entire image in the crop area
+      // When image is wider than crop area, we need to zoom out more
+      // When image is taller than crop area, we also need to zoom out
+      let calculatedMinZoom: number
+      if (imageAspect > aspectRatio) {
+        // Image is wider than crop area - need to zoom out to see full width
+        calculatedMinZoom = aspectRatio / imageAspect
+      } else {
+        // Image is taller than crop area - need to zoom out to see full height
+        calculatedMinZoom = imageAspect / aspectRatio
+      }
+
+      // Allow 50% extra zoom out for more flexibility, clamped to 0.1 minimum
+      const minZoomWithBuffer = Math.max(0.1, calculatedMinZoom * 0.5)
+      setMinZoom(minZoomWithBuffer)
+
+      // Start at the "fit" level (image fully visible) but allow zooming out further
+      setZoom(calculatedMinZoom)
+      setCrop({ x: 0, y: 0 })
+    },
+    [aspectRatio]
+  )
+
+  // Reset state when dialog opens with new image
+  useEffect(() => {
+    if (open) {
+      setCrop({ x: 0, y: 0 })
+      setZoom(1)
+      setMinZoom(1)
+      setCroppedAreaPixels(null)
+    }
+  }, [open, imageSrc])
 
   const onCropChange = useCallback((location: { x: number; y: number }) => {
     setCrop(location)
@@ -166,21 +205,26 @@ export function ImageCropper({
             onCropChange={onCropChange}
             onZoomChange={onZoomChange}
             onCropComplete={onCropCompleteCallback}
+            onMediaLoaded={onMediaLoaded}
             cropShape={cropShape}
             showGrid={cropShape === 'rect'}
+            minZoom={minZoom}
+            restrictPosition={zoom >= 1}
+            zoomSpeed={0.2}
           />
         </div>
 
         <div className="flex items-center gap-3 px-1">
-          <ZoomIn className="h-4 w-4 text-muted-foreground shrink-0" />
+          <ZoomOut className="h-4 w-4 text-muted-foreground shrink-0" />
           <Slider
             value={[zoom]}
-            min={1}
+            min={minZoom}
             max={3}
             step={0.1}
             onValueChange={(value) => setZoom(value[0])}
             className="flex-1"
           />
+          <ZoomIn className="h-4 w-4 text-muted-foreground shrink-0" />
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

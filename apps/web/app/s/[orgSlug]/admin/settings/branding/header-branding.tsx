@@ -130,7 +130,10 @@ export function HeaderBranding({
       setCropImageSrc(null)
     }
 
-    uploadMutation.mutate(croppedBlob, {
+    // Convert Blob to File for the upload mutation
+    const file = new File([croppedBlob], 'header-logo.png', { type: croppedBlob.type })
+
+    uploadMutation.mutate(file, {
       onSuccess: () => {
         toast.success('Header logo updated')
         // Auto-switch to custom_logo mode when uploading
