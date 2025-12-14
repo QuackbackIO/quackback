@@ -96,7 +96,7 @@ export function ProfileForm({
 
     try {
       const formData = new FormData()
-      formData.append('avatar', croppedBlob, 'avatar.jpg')
+      formData.append('avatar', croppedBlob, 'avatar.png')
 
       const response = await fetch('/api/user/profile', {
         method: 'PATCH',
