@@ -23,15 +23,19 @@ interface ImageCropperProps {
   maxOutputSize?: number
   /** Dialog title (defaults to "Crop your image") */
   title?: string
+  /** Crop shape - 'round' for avatars/logos, 'rect' for landscape images */
+  cropShape?: 'round' | 'rect'
 }
 
 /**
  * Creates a cropped image from the source image
+ * Supports both square and non-square aspect ratios
  */
 async function getCroppedImg(
   imageSrc: string,
   pixelCrop: Area,
-  maxSize: number = 512
+  maxSize: number = 512,
+  aspectRatio: number = 1
 ): Promise<Blob> {
   const image = new Image()
   image.crossOrigin = 'anonymous'
@@ -49,10 +53,23 @@ async function getCroppedImg(
     throw new Error('Could not get canvas context')
   }
 
-  // Calculate output size (scale down if larger than maxSize)
-  const outputSize = Math.min(pixelCrop.width, pixelCrop.height, maxSize)
-  canvas.width = outputSize
-  canvas.height = outputSize
+  // Calculate output dimensions based on aspect ratio
+  // maxSize is the constraint for the largest dimension
+  let outputWidth: number
+  let outputHeight: number
+
+  if (aspectRatio >= 1) {
+    // Landscape or square: width is the larger dimension
+    outputWidth = Math.min(pixelCrop.width, maxSize)
+    outputHeight = outputWidth / aspectRatio
+  } else {
+    // Portrait: height is the larger dimension
+    outputHeight = Math.min(pixelCrop.height, maxSize)
+    outputWidth = outputHeight * aspectRatio
+  }
+
+  canvas.width = Math.round(outputWidth)
+  canvas.height = Math.round(outputHeight)
 
   // Draw the cropped image
   ctx.drawImage(
@@ -63,8 +80,8 @@ async function getCroppedImg(
     pixelCrop.height,
     0,
     0,
-    outputSize,
-    outputSize
+    canvas.width,
+    canvas.height
   )
 
   // Convert to blob
@@ -91,6 +108,7 @@ export function ImageCropper({
   aspectRatio = 1,
   maxOutputSize = 512,
   title = 'Crop your image',
+  cropShape = 'round',
 }: ImageCropperProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
@@ -114,7 +132,12 @@ export function ImageCropper({
 
     setIsProcessing(true)
     try {
-      const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels, maxOutputSize)
+      const croppedBlob = await getCroppedImg(
+        imageSrc,
+        croppedAreaPixels,
+        maxOutputSize,
+        aspectRatio
+      )
       onCropComplete(croppedBlob)
       onOpenChange(false)
     } catch (error) {
@@ -147,8 +170,8 @@ export function ImageCropper({
             onCropChange={onCropChange}
             onZoomChange={onZoomChange}
             onCropComplete={onCropCompleteCallback}
-            cropShape="round"
-            showGrid={false}
+            cropShape={cropShape}
+            showGrid={cropShape === 'rect'}
           />
         </div>
 
