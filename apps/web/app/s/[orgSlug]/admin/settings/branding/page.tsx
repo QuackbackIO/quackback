@@ -16,6 +16,21 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
   // Get logo data for SSR
   const logoData = await getOrganizationLogoData(organization.id)
 
+  // Branding assets component to pass to ThemeCustomizer
+  const brandingAssets = (
+    <div key="branding-assets" className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+      <h2 className="font-medium mb-1 text-sm">Logo</h2>
+      <p className="text-sm text-muted-foreground mb-4">
+        Your logo is also used as the browser favicon
+      </p>
+      <LogoUploader
+        organizationId={organization.id}
+        organizationName={organization.name}
+        initialLogoUrl={logoData.logoUrl}
+      />
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -25,19 +40,20 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
         </div>
         <div>
           <h1 className="text-xl font-semibold text-foreground">Branding</h1>
-          <p className="text-sm text-muted-foreground">Customize your portal's logo and colors</p>
+          <p className="text-sm text-muted-foreground">
+            Customize your portal's appearance and branding
+          </p>
         </div>
       </div>
 
-      {/* Logo Uploader */}
-      <LogoUploader
-        organizationId={organization.id}
-        organizationName={organization.name}
-        initialLogoUrl={logoData.logoUrl}
-      />
-
       {/* Theme Customizer */}
-      <ThemeCustomizer organizationId={organization.id} initialThemeConfig={brandingConfig} />
+      <ThemeCustomizer
+        organizationId={organization.id}
+        initialThemeConfig={brandingConfig}
+        logoUrl={logoData.logoUrl}
+        organizationName={organization.name}
+        brandingAssets={brandingAssets}
+      />
     </div>
   )
 }

@@ -108,12 +108,7 @@ export function LogoUploader({
   const isDeleting = deleteMutation.isPending
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-      <h2 className="font-medium mb-1">Logo</h2>
-      <p className="text-sm text-muted-foreground mb-4">
-        Your organization logo displayed in the portal header
-      </p>
-
+    <div className="space-y-3">
       <div className="flex items-center gap-4">
         {/* Logo Preview */}
         <div className="relative">
@@ -175,6 +170,10 @@ export function LogoUploader({
           className="hidden"
         />
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Recommended: 512x512 pixels. Supports JPEG, PNG, GIF, WebP.
+      </p>
 
       {/* Image Cropper Modal */}
       {cropImageSrc && (
