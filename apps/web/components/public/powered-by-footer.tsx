@@ -5,7 +5,7 @@ export function PoweredByFooter() {
   return (
     <footer className="py-4 mt-auto">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
-        <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70">
+        <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
           <span>Powered by</span>
           <Link
             href="https://quackback.io"

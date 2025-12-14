@@ -27,16 +27,16 @@ export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
   }
 
   return (
-    <div className="mb-4 flex items-center justify-between gap-4 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 px-4 py-3">
+    <div className="mb-4 flex items-center justify-between gap-4 [border-radius:var(--radius)] bg-success/10 border border-success/20 px-4 py-3">
       <div className="flex items-center gap-3">
-        <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-        <p className="text-sm text-green-800 dark:text-green-200">
+        <CheckCircle className="h-5 w-5 text-success flex-shrink-0" />
+        <p className="text-sm text-foreground">
           You&apos;ve been unsubscribed from this post. Use the bell icon to resubscribe.
         </p>
       </div>
       <button
         onClick={() => setVisible(false)}
-        className="flex-shrink-0 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 transition-colors"
+        className="flex-shrink-0 text-success hover:text-success/80 transition-colors"
         aria-label="Dismiss"
       >
         <X className="h-4 w-4" />

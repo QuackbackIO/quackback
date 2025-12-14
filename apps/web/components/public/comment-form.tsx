@@ -132,7 +132,7 @@ export function CommentForm({
   // If not authenticated, show sign-in prompt
   if (!effectiveUser) {
     return (
-      <div className="flex items-center justify-center py-4 px-4 bg-muted/30 rounded-lg border border-border/30">
+      <div className="flex items-center justify-center py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
         <p className="text-sm text-muted-foreground mr-3">Sign in to comment</p>
         {authPopover && (
           <Button

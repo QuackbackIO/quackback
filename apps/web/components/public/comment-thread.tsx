@@ -57,7 +57,7 @@ export function CommentThread({
       {allowCommenting ? (
         <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />
       ) : (
-        <div className="flex items-center justify-center py-4 px-4 bg-muted/30 rounded-lg border border-border/30">
+        <div className="flex items-center justify-center py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
           <p className="text-sm text-muted-foreground mr-3">Sign in to comment</p>
           <Button variant="outline" size="sm" onClick={onAuthRequired}>
             Sign in
@@ -267,7 +267,7 @@ function CommentItem({
 
           {/* Reply form */}
           {showReplyForm && (
-            <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 rounded-lg border border-border/30">
+            <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
               <CommentForm
                 postId={postId}
                 parentId={comment.id}

@@ -16,7 +16,7 @@ export function RoadmapCard({ id, title, voteCount, board }: RoadmapCardProps) {
   return (
     <Link
       href={`/b/${board.slug}/posts/${id}`}
-      className="flex bg-card rounded-lg border border-border/50 shadow-sm hover:bg-muted/30 transition-colors"
+      className="flex bg-card [border-radius:var(--radius)] border border-border/50 shadow-sm hover:bg-muted/30 transition-colors"
     >
       {/* Vote section */}
       <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">

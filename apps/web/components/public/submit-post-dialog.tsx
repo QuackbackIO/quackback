@@ -185,7 +185,7 @@ export function SubmitPostDialog({
 
         <div className="px-4 sm:px-6 py-4 space-y-2">
           {error && (
-            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive mb-4">
+            <div className="[border-radius:calc(var(--radius)*0.8)] bg-destructive/10 px-3 py-2 text-sm text-destructive mb-4">
               {error}
             </div>
           )}

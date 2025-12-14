@@ -39,8 +39,12 @@ export function VoteButton({
     <button
       type="button"
       data-testid="vote-button"
+      aria-label={
+        hasVoted ? `Remove vote (${voteCount} votes)` : `Vote for this post (${voteCount} votes)`
+      }
+      aria-pressed={hasVoted}
       className={cn(
-        'flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors cursor-pointer',
+        'flex flex-col items-center justify-center py-2 px-3 transition-colors cursor-pointer [border-radius:var(--radius)]',
         hasVoted ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
         isPending && 'opacity-70',
         disabled && 'cursor-not-allowed opacity-50'

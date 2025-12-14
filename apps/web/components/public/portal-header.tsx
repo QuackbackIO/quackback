@@ -123,9 +123,13 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
         {/* Logo / Org Name */}
         <Link href="/" className="flex items-center gap-2 mr-6">
           {orgLogo ? (
-            <img src={orgLogo} alt={orgName} className="h-8 w-8 rounded" />
+            <img
+              src={orgLogo}
+              alt={orgName}
+              className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+            />
           ) : (
-            <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+            <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
               {orgName.charAt(0).toUpperCase()}
             </div>
           )}
@@ -145,7 +149,7 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  'px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
                   isActive
                     ? 'bg-muted text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'

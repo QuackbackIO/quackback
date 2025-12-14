@@ -66,6 +66,12 @@ export function PostCard({
       <button
         type="button"
         data-testid="vote-button"
+        aria-label={
+          currentHasVoted
+            ? `Remove vote (${currentVoteCount} votes)`
+            : `Vote for this post (${currentVoteCount} votes)`
+        }
+        aria-pressed={currentHasVoted}
         onClick={handleVote}
         disabled={isPending}
         className={`flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 hover:bg-muted/40 transition-colors ${
@@ -119,7 +125,7 @@ export function PostCard({
             </AvatarFallback>
           </Avatar>
           <span className="font-medium text-foreground/90">{authorName || 'Anonymous'}</span>
-          <span className="text-muted-foreground/60">·</span>
+          <span className="text-muted-foreground">·</span>
           <TimeAgo date={createdAt} />
           <div className="flex-1" />
           <div className="flex items-center gap-1 text-muted-foreground/70">

@@ -150,20 +150,20 @@ export function SubscriptionBell({
         <button
           onClick={handleButtonClick}
           disabled={loading}
+          aria-label={
+            !isSubscribed
+              ? 'Subscribe to notifications'
+              : level === 'status_only'
+                ? 'Subscribed to status changes only'
+                : 'Subscribed to all activity'
+          }
           className={cn(
-            'flex items-center justify-center rounded-md p-2 transition-colors',
+            'flex items-center justify-center [border-radius:calc(var(--radius)*0.8)] p-2 transition-colors',
             !isSubscribed
               ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
               : 'text-primary bg-primary/10 hover:bg-primary/20',
             loading && 'opacity-50 cursor-wait'
           )}
-          title={
-            !isSubscribed
-              ? 'Get notified about updates'
-              : level === 'status_only'
-                ? 'Subscribed to status changes'
-                : 'Subscribed to all activity'
-          }
         >
           {loading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
