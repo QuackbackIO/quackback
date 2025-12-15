@@ -48,17 +48,20 @@ export const getSession = cache(async (): Promise<Session | null> => {
     return null
   }
 
+  // Cast to include organizationId from additionalFields and image from customSession
+  const user = session.user as typeof session.user & { organizationId: string }
+
   return {
     session: session.session,
     user: {
-      id: session.user.id,
-      name: session.user.name,
-      email: session.user.email,
-      emailVerified: session.user.emailVerified,
-      image: session.user.image,
-      organizationId: session.user.organizationId,
-      createdAt: session.user.createdAt,
-      updatedAt: session.user.updatedAt,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      image: user.image,
+      organizationId: user.organizationId,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     },
   }
 })

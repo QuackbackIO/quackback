@@ -1,9 +1,10 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { organization } from 'better-auth/plugins'
+import { organization, customSession } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
-import { db, workspaceDomain, eq, and } from '@quackback/db'
+import { db, workspaceDomain, user as userTable, eq, and } from '@quackback/db'
 import { trustLogin } from './plugins/trust-login'
+import { fromUuid } from '@quackback/ids'
 
 /**
  * Build trusted origins dynamically for CSRF protection.
@@ -123,6 +124,40 @@ export const auth = betterAuth({
   plugins: [
     // Trust login plugin for cross-domain session transfer
     trustLogin(),
+
+    // Custom session plugin to handle avatar URL precedence:
+    // 1. Uploaded avatar (imageBlob exists) -> /api/user/avatar/{userId}?v={timestamp}
+    // 2. OAuth avatar (user.image URL) -> external URL
+    // 3. Initials (no image) -> null
+    customSession(async ({ user, session }) => {
+      // Check if user has a custom uploaded avatar
+      const userRecord = await db.query.user.findFirst({
+        where: eq(userTable.id, user.id),
+        columns: {
+          imageType: true,
+          updatedAt: true,
+        },
+      })
+
+      // Determine the correct image URL based on precedence
+      let image: string | null = null
+      if (userRecord?.imageType) {
+        // User has uploaded avatar - use avatar API endpoint with cache buster
+        const cacheBuster = userRecord.updatedAt?.getTime() ?? Date.now()
+        image = `/api/user/avatar/${fromUuid('user', user.id)}?v=${cacheBuster}`
+      } else if (user.image) {
+        // Fall back to OAuth avatar URL
+        image = user.image
+      }
+
+      return {
+        user: {
+          ...user,
+          image,
+        },
+        session,
+      }
+    }),
 
     organization({
       // Tenant creation is handled by create-workspace flow, not direct API

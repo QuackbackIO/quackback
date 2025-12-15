@@ -210,7 +210,9 @@ export async function proxy(request: NextRequest) {
 
   // Validate user's organizationId matches domain's organization (defense-in-depth)
   // This prevents a session from one tenant being used on another tenant's domain
-  if (session.user.organizationId !== domainRecord.organization.id) {
+  // Cast to include organizationId from additionalFields (customSession plugin changes user type)
+  const user = session.user as typeof session.user & { organizationId: string }
+  if (user.organizationId !== domainRecord.organization.id) {
     const loginUrl = new URL(`${protocol}://${host}/login`)
     loginUrl.searchParams.set('error', 'wrong_organization')
     const response = NextResponse.redirect(loginUrl)
