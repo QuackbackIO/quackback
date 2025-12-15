@@ -100,22 +100,25 @@ export class SlackIntegration extends BaseIntegration {
         const { post } = event.data as PostCreatedEventData
         const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
         const content = this.truncate(this.stripHtml(post.content), 280)
+        const author = post.authorEmail || 'Anonymous'
 
         return {
-          text: `New feedback: ${post.title}`,
+          text: `New post from ${author}: ${post.title}`,
           blocks: [
             {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `📬 *New Feedback*\n\n*<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*`,
-              },
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: `📬 New post from ${author}`,
+                },
+              ],
             },
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: this.escapeSlackMrkdwn(content),
+                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n> ${this.escapeSlackMrkdwn(content)}`,
               },
             },
             {
@@ -123,7 +126,7 @@ export class SlackIntegration extends BaseIntegration {
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `📋 ${post.boardSlug}  •  👤 ${post.authorEmail || 'Anonymous'}`,
+                  text: `📋 ${post.boardSlug}`,
                 },
               ],
             },
@@ -135,22 +138,25 @@ export class SlackIntegration extends BaseIntegration {
         const { post, previousStatus, newStatus } = event.data as StatusChangeData
         const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
         const emoji = this.getStatusEmoji(newStatus)
+        const actor = event.actor.email || 'System'
 
         return {
-          text: `Status updated: ${post.title}`,
+          text: `Status updated by ${actor}: ${post.title}`,
           blocks: [
             {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `${emoji} *Status Updated*\n\n*<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*`,
-              },
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: `${emoji} Status updated by ${actor}`,
+                },
+              ],
             },
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `${this.capitalizeStatus(previousStatus)} → *${this.capitalizeStatus(newStatus)}*`,
+                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n> ${this.capitalizeStatus(previousStatus)} → *${this.capitalizeStatus(newStatus)}*`,
               },
             },
           ],
@@ -162,32 +168,26 @@ export class SlackIntegration extends BaseIntegration {
         // Note: comment events don't have boardSlug yet, use generic URL
         const postUrl = `${tenantUrl}/posts/${post.id}`
         const content = this.truncate(this.stripHtml(comment.content), 200)
+        const author = comment.authorEmail || 'Anonymous'
 
         return {
-          text: `New comment on: ${post.title}`,
+          text: `New comment from ${author}: ${post.title}`,
           blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `💬 *New Comment*\n\nOn *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*`,
-              },
-            },
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `> ${this.escapeSlackMrkdwn(content)}`,
-              },
-            },
             {
               type: 'context',
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `👤 ${comment.authorEmail || 'Anonymous'}`,
+                  text: `💬 New comment from ${author}`,
                 },
               ],
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n> ${this.escapeSlackMrkdwn(content)}`,
+              },
             },
           ],
         }
@@ -197,22 +197,25 @@ export class SlackIntegration extends BaseIntegration {
         const { changelog } = event.data as ChangelogData
         const changelogUrl = `${tenantUrl}/changelog/${changelog.slug}`
         const content = this.truncate(this.stripHtml(changelog.content), 300)
+        const actor = event.actor.email || 'System'
 
         return {
-          text: `New changelog: ${changelog.title}`,
+          text: `New update published by ${actor}: ${changelog.title}`,
           blocks: [
             {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `📢 *New Update Published*\n\n*<${changelogUrl}|${this.escapeSlackMrkdwn(changelog.title)}>*`,
-              },
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: `📢 New update published by ${actor}`,
+                },
+              ],
             },
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: this.escapeSlackMrkdwn(content),
+                text: `> *<${changelogUrl}|${this.escapeSlackMrkdwn(changelog.title)}>*\n> ${this.escapeSlackMrkdwn(content)}`,
               },
             },
           ],
