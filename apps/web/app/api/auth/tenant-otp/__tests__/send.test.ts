@@ -1,8 +1,50 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { POST } from '../send/route'
 import { NextRequest } from 'next/server'
 
-// Mock modules
+/**
+ * Strongly-typed mock interfaces for Drizzle ORM query builders.
+ * These match the subset of the API actually used in tests.
+ */
+interface MockInsertBuilder {
+  values: Mock
+}
+
+interface MockDeleteBuilder {
+  where: Mock
+}
+
+/**
+ * Type-safe factory for creating insert chain mocks.
+ * Returns a properly typed mock that satisfies Drizzle's insert API.
+ */
+function createMockInsertBuilder(valuesFn: Mock = vi.fn()): MockInsertBuilder {
+  return { values: valuesFn }
+}
+
+/**
+ * Type-safe factory for creating delete chain mocks.
+ * Returns a properly typed mock that satisfies Drizzle's delete API.
+ */
+function createMockDeleteBuilder(whereFn: Mock = vi.fn()): MockDeleteBuilder {
+  return { where: whereFn }
+}
+
+/**
+ * Type definition for the mocked database module.
+ * This ensures type safety throughout the test file.
+ */
+interface MockDb {
+  query: {
+    workspaceDomain: {
+      findFirst: Mock
+    }
+  }
+  insert: Mock<() => MockInsertBuilder>
+  delete: Mock<() => MockDeleteBuilder>
+}
+
+// Mock modules with proper typing
 vi.mock('@quackback/db', () => ({
   db: {
     query: {
@@ -10,13 +52,9 @@ vi.mock('@quackback/db', () => ({
         findFirst: vi.fn(),
       },
     },
-    insert: vi.fn(() => ({
-      values: vi.fn(),
-    })),
-    delete: vi.fn(() => ({
-      where: vi.fn(),
-    })),
-  },
+    insert: vi.fn(() => createMockInsertBuilder()),
+    delete: vi.fn(() => createMockDeleteBuilder()),
+  } satisfies MockDb,
   verification: {},
   workspaceDomain: {},
   eq: vi.fn((field, value) => ({ field, value })),
@@ -38,10 +76,12 @@ vi.mock('@/lib/rate-limit', () => ({
   })),
 }))
 
-// Import mocked modules
-import { db, eq } from '@quackback/db'
+// Import mocked modules - cast db to our mock type for proper typing
+import { db as _db, eq } from '@quackback/db'
 import { sendSigninCodeEmail } from '@quackback/email'
 import { checkRateLimit, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
+
+const db = _db as unknown as MockDb
 
 describe('POST /api/auth/tenant-otp/send', () => {
   const mockOrganization = {
@@ -194,9 +234,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -217,9 +255,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockWhere = vi.fn()
-      vi.mocked(db.delete).mockReturnValue({
-        where: mockWhere,
-      } as unknown as ReturnType<typeof db.delete>)
+      db.delete.mockReturnValue(createMockDeleteBuilder(mockWhere))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -236,9 +272,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -270,9 +304,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const now = new Date('2025-01-01T00:00:00Z')
       vi.setSystemTime(now)
@@ -290,9 +322,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const now = Date.now()
       vi.setSystemTime(now)
@@ -338,9 +368,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'TEST@EXAMPLE.COM' })
       await POST(request)
@@ -369,9 +397,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -388,9 +414,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       })
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -404,9 +428,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'user@domain.com' })
       await POST(request)
@@ -755,9 +777,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -773,9 +793,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -792,9 +810,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -809,9 +825,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'TEST@EXAMPLE.COM' })
       await POST(request)
@@ -883,13 +897,9 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockWhere = vi.fn()
       const mockInsert = vi.fn()
 
-      vi.mocked(db.delete).mockReturnValue({
-        where: mockWhere,
-      } as unknown as ReturnType<typeof db.delete>)
+      db.delete.mockReturnValue(createMockDeleteBuilder(mockWhere))
 
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const request = createMockRequest({ email: 'test@example.com' })
       const response = await POST(request)
@@ -922,9 +932,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockDatabaseLookup()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       const emails = ['user1@example.com', 'user2@example.com', 'user3@example.com']
 
@@ -946,9 +954,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       mockRateLimitSuccess()
 
       const mockInsert = vi.fn()
-      vi.mocked(db.insert).mockReturnValue({
-        values: mockInsert,
-      } as unknown as ReturnType<typeof db.insert>)
+      db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
       // First organization
       const mockResult1: WorkspaceDomainWithOrg = {
