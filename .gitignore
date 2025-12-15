@@ -54,4 +54,7 @@ bun.lockb
 *.log
 
 # Temporary plan files
-*.planapps/web/next-env.d.ts
+*.plan
+
+# Next.js generated
+apps/web/next-env.d.ts
