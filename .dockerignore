@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+.next
+**/.next
+dist
+**/dist
+.turbo
+**/.turbo
+
+# Development
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage
+**/coverage
+test-results
+**/test-results
+playwright-report
+**/playwright-report
+e2e
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Docker
+**/Dockerfile*
+docker-compose*.yml
+
+# Misc
+*.md
+!README.md
+LICENSE*
+.DS_Store
+*.tsbuildinfo
