@@ -17,10 +17,10 @@ async function reset() {
   await $`docker compose stop postgres dragonfly`.quiet()
   await $`docker compose rm -f postgres dragonfly`.quiet()
 
-  // Remove volumes
+  // Remove volumes (Docker prefixes with project directory name)
   console.log('Removing volumes...')
-  await $`docker volume rm quackback-v2_postgres_data`.quiet().nothrow()
-  await $`docker volume rm quackback-v2_dragonfly_data`.quiet().nothrow()
+  await $`docker volume rm quackback_postgres_data`.quiet().nothrow()
+  await $`docker volume rm quackback_dragonfly_data`.quiet().nothrow()
 
   // Recreate containers
   console.log('Starting fresh containers...')
