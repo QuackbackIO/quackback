@@ -118,7 +118,7 @@ export class SlackIntegration extends BaseIntegration {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n> ${this.escapeSlackMrkdwn(content)}`,
+                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n${this.quoteText(this.escapeSlackMrkdwn(content))}`,
               },
             },
             {
@@ -186,7 +186,7 @@ export class SlackIntegration extends BaseIntegration {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n> ${this.escapeSlackMrkdwn(content)}`,
+                text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n${this.quoteText(this.escapeSlackMrkdwn(content))}`,
               },
             },
           ],
@@ -215,7 +215,7 @@ export class SlackIntegration extends BaseIntegration {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `> *<${changelogUrl}|${this.escapeSlackMrkdwn(changelog.title)}>*\n> ${this.escapeSlackMrkdwn(content)}`,
+                text: `> *<${changelogUrl}|${this.escapeSlackMrkdwn(changelog.title)}>*\n${this.quoteText(this.escapeSlackMrkdwn(content))}`,
               },
             },
           ],
@@ -244,6 +244,16 @@ export class SlackIntegration extends BaseIntegration {
       .split(/[_\s]+/)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ')
+  }
+
+  /**
+   * Formats text as a Slack quote block by prefixing each line with '>'.
+   */
+  private quoteText(text: string): string {
+    return text
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n')
   }
 
   /**
