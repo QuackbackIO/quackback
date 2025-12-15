@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -40,6 +42,7 @@ export function SubmitPostDialog({
   trigger,
   user,
 }: SubmitPostDialogProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()
@@ -106,7 +109,7 @@ export function SubmitPostDialog({
     }
 
     try {
-      await createPost.mutateAsync({
+      const result = await createPost.mutateAsync({
         boardId: selectedBoardId,
         title: title.trim(),
         content: plainText,
@@ -116,6 +119,14 @@ export function SubmitPostDialog({
       setOpen(false)
       resetForm()
       onSuccess?.()
+
+      // Show success toast with action to view the post
+      toast.success('Feedback submitted', {
+        action: {
+          label: 'View',
+          onClick: () => router.push(`/b/${result.board.slug}/posts/${result.id}`),
+        },
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit feedback')
     }
