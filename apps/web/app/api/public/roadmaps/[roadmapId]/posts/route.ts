@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRoadmapService } from '@/lib/services'
+import { isValidTypeId, type RoadmapId, type StatusId } from '@quackback/ids'
 
 /**
  * GET /api/public/roadmaps/[roadmapId]/posts
@@ -10,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ roadmapId: string }> }
 ) {
   try {
-    const { roadmapId } = await params
+    const { roadmapId: roadmapIdParam } = await params
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
 
@@ -18,7 +19,22 @@ export async function GET(
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
 
-    const statusId = searchParams.get('statusId') || undefined
+    // Validate TypeID format
+    if (!isValidTypeId(roadmapIdParam, 'roadmap')) {
+      return NextResponse.json({ error: 'Invalid roadmap ID format' }, { status: 400 })
+    }
+    const roadmapId = roadmapIdParam as RoadmapId
+
+    // Parse optional statusId TypeID
+    const statusIdParam = searchParams.get('statusId')
+    let statusId: StatusId | undefined
+    if (statusIdParam) {
+      if (!isValidTypeId(statusIdParam, 'status')) {
+        return NextResponse.json({ error: 'Invalid status ID format' }, { status: 400 })
+      }
+      statusId = statusIdParam as StatusId
+    }
+
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
     const offset = parseInt(searchParams.get('offset') || '0', 10)
 
@@ -33,6 +49,7 @@ export async function GET(
       return NextResponse.json({ error: result.error.message }, { status })
     }
 
+    // Response is already in TypeID format from service layer
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error fetching public roadmap posts:', error)

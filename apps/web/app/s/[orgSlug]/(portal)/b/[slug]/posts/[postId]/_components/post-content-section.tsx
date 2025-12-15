@@ -45,12 +45,10 @@ interface PostContentSectionProps {
 export function PostContentSection({ post, currentStatus }: PostContentSectionProps) {
   return (
     <div className="flex-1 p-6">
-      {/* Status */}
-      <StatusBadge
-        name={currentStatus?.name || post.status}
-        color={currentStatus?.color}
-        className="mb-3"
-      />
+      {/* Status - only render if status exists */}
+      {currentStatus && (
+        <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-3" />
+      )}
 
       {/* Title */}
       <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-2">{post.title}</h1>

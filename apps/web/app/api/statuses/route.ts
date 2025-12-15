@@ -46,6 +46,7 @@ export const GET = withApiHandler(async (_request, { validation }) => {
     }
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -86,5 +87,6 @@ export const POST = withApiHandler(async (request, { validation }) => {
     }
   }
 
+  // Response is already in TypeID format from service layer
   return successResponse(result.value, 201)
 })

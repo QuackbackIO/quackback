@@ -41,7 +41,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ votedPostIds: [] })
     }
 
-    return NextResponse.json({ votedPostIds: Array.from(result.value) })
+    // Service returns TypeIDs directly
+    const votedPostIds = Array.from(result.value)
+
+    return NextResponse.json({ votedPostIds })
   } catch (error) {
     console.error('Error fetching voted posts:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

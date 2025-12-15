@@ -17,10 +17,13 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     columns: {
       imageBlob: true,
       imageType: true,
+      image: true,
     },
   })
 
   const hasCustomAvatar = !!(userRecord?.imageBlob && userRecord?.imageType)
+  // OAuth avatar URL (from GitHub, Google, etc.) - used as fallback
+  const oauthAvatarUrl = userRecord?.image ?? null
 
   // Convert blob to base64 data URL for SSR - eliminates flicker
   // Custom blob avatar takes precedence over OAuth image URL
@@ -28,8 +31,8 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   if (hasCustomAvatar && userRecord.imageBlob && userRecord.imageType) {
     const base64 = Buffer.from(userRecord.imageBlob).toString('base64')
     avatarUrl = `data:${userRecord.imageType};base64,${base64}`
-  } else if (user.image) {
-    avatarUrl = user.image
+  } else if (oauthAvatarUrl) {
+    avatarUrl = oauthAvatarUrl
   }
 
   return (
@@ -52,6 +55,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           email: user.email,
         }}
         initialAvatarUrl={avatarUrl}
+        oauthAvatarUrl={oauthAvatarUrl}
         hasCustomAvatar={hasCustomAvatar}
       />
     </div>

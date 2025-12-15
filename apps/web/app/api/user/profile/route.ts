@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, user, eq } from '@quackback/db'
 import { getSession } from '@/lib/auth/server'
+import { fromUuid } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -33,8 +34,10 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    // Transform UUIDs to TypeIDs in response (user table uses raw UUIDs)
     return NextResponse.json({
       ...userRecord,
+      id: fromUuid('user', userRecord.id),
       hasCustomAvatar: !!userRecord.imageType,
     })
   } catch (error) {
@@ -121,8 +124,8 @@ export async function PATCH(request: NextRequest) {
     if (avatarBuffer && avatarType) {
       updates.imageBlob = avatarBuffer
       updates.imageType = avatarType
-      // Set image field to avatar endpoint URL so useSession returns correct avatar
-      updates.image = `/api/user/avatar/${session.user.id}`
+      // Don't overwrite user.image - preserve OAuth avatar URL as fallback
+      // The customSession plugin handles returning the correct avatar URL
     }
 
     if (Object.keys(updates).length === 0) {
@@ -142,10 +145,12 @@ export async function PATCH(request: NextRequest) {
         imageType: user.imageType,
       })
 
+    // Transform UUIDs to TypeIDs in response (user table uses raw UUIDs)
     return NextResponse.json({
       success: true,
       user: {
         ...updated,
+        id: fromUuid('user', updated.id),
         hasCustomAvatar: !!updated.imageType,
       },
     })
@@ -170,7 +175,7 @@ export async function DELETE() {
     const [updated] = await db
       .update(user)
       .set({
-        image: null, // Clear the avatar URL
+        // Only clear blob fields - preserve OAuth image URL as fallback
         imageBlob: null,
         imageType: null,
       })
@@ -183,10 +188,12 @@ export async function DELETE() {
         imageType: user.imageType,
       })
 
+    // Transform UUIDs to TypeIDs in response (user table uses raw UUIDs)
     return NextResponse.json({
       success: true,
       user: {
         ...updated,
+        id: fromUuid('user', updated.id),
         hasCustomAvatar: false,
       },
     })

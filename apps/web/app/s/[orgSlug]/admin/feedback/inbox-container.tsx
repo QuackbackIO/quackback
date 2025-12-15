@@ -22,14 +22,9 @@ import {
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
+import type { StatusId } from '@quackback/ids'
 import type { CurrentUser } from './inbox-types'
-import type {
-  PostStatus,
-  Board,
-  Tag,
-  InboxPostListResult,
-  PostStatusEntity,
-} from '@quackback/db/types'
+import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@quackback/db/types'
 import type { TeamMember } from '@quackback/domain'
 
 interface InboxContainerProps {
@@ -86,7 +81,7 @@ export function InboxContainer({
     if (hasNoFiltersInUrl && boards.length > 0 && statuses.length > 0) {
       setFilters({
         board: boards.map((b) => b.id),
-        status: statuses.map((s) => s.slug) as PostStatus[],
+        status: statuses.map((s) => s.slug),
       })
     }
 
@@ -134,9 +129,9 @@ export function InboxContainer({
     }
   }
 
-  const handleStatusChange = async (status: PostStatus) => {
+  const handleStatusChange = async (statusId: StatusId) => {
     if (!selectedPostId) return
-    updateStatus.mutate({ postId: selectedPostId, status })
+    updateStatus.mutate({ postId: selectedPostId, statusId })
   }
 
   const handleTagsChange = async (tagIds: string[]) => {

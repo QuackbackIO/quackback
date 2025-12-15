@@ -4,15 +4,17 @@ import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getPostService, getMemberService, getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type CommentTreeNode, type PostError } from '@quackback/domain'
+import { isValidTypeId, toMemberId, type PostId, type MemberId } from '@quackback/ids'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
+ * Note: Service returns TypeID format strings, we cast them to MemberId
  */
-function collectCommentMemberIds(comments: CommentTreeNode[]): string[] {
-  const memberIds: string[] = []
+function collectCommentMemberIds(comments: CommentTreeNode[]): MemberId[] {
+  const memberIds: MemberId[] = []
   for (const comment of comments) {
     if (comment.memberId) {
-      memberIds.push(comment.memberId)
+      memberIds.push(comment.memberId as MemberId)
     }
     if (comment.replies.length > 0) {
       memberIds.push(...collectCommentMemberIds(comment.replies))
@@ -44,9 +46,15 @@ export async function GET(
   { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     // Validate tenant access (handles auth + org membership check)
     const validation = await validateApiTenantAccess(organizationId)
@@ -85,8 +93,9 @@ export async function GET(
     const commentsWithReplies = commentsResult.value
 
     // Collect member IDs from post author and all comments for avatar lookup
-    const memberIds: string[] = []
-    if (post.memberId) memberIds.push(post.memberId)
+    // Note: Service returns TypeID format strings, we cast them to MemberId
+    const memberIds: MemberId[] = []
+    if (post.memberId) memberIds.push(post.memberId as MemberId)
     memberIds.push(...collectCommentMemberIds(commentsWithReplies))
 
     // Fetch avatar URLs for all members
@@ -101,10 +110,9 @@ export async function GET(
     const roadmapsResult = await getRoadmapService().getPostRoadmaps(postId, ctx)
     const roadmapIds = roadmapsResult.success ? roadmapsResult.value.map((r) => r.id) : []
 
-    // Transform tags and official response for response format
-    const transformedPost = {
+    // Post and comments are already in TypeID format from the service layer
+    const responseData = {
       ...post,
-      tags: post.tags,
       comments: commentsWithReplies,
       hasVoted,
       roadmapIds,
@@ -119,7 +127,7 @@ export async function GET(
       avatarUrls: Object.fromEntries(avatarMap),
     }
 
-    return NextResponse.json(transformedPost)
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error('Error fetching post:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -131,9 +139,15 @@ export async function PATCH(
   { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
     const body = await request.json()
     const { organizationId, status, ownerId, title, content, contentJson } = body
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     // Validate tenant access (handles auth + org membership check)
     const validation = await validateApiTenantAccess(organizationId)
@@ -151,9 +165,9 @@ export async function PATCH(
       contentJson?: unknown
       status?: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
       ownerId?: string | null
-      ownerMemberId?: string | null
+      ownerMemberId?: MemberId | null
       officialResponse?: string | null
-      officialResponseMemberId?: string | null
+      officialResponseMemberId?: MemberId | null
       officialResponseAuthorName?: string | null
     } = {}
 
@@ -172,7 +186,8 @@ export async function PATCH(
           validation.organization.id
         )
         const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
-        updateInput.ownerMemberId = ownerMember?.id ?? null
+        // Convert raw member ID to MemberId format
+        updateInput.ownerMemberId = ownerMember ? toMemberId(ownerMember.id) : null
       } else {
         updateInput.ownerMemberId = null
       }
@@ -188,7 +203,8 @@ export async function PATCH(
       } else {
         // Set or update official response with member-scoped identity
         updateInput.officialResponse = body.officialResponse
-        updateInput.officialResponseMemberId = validation.member.id
+        // Convert raw member ID to MemberId format
+        updateInput.officialResponseMemberId = toMemberId(validation.member.id)
         updateInput.officialResponseAuthorName = validation.user.name || validation.user.email
       }
     }
@@ -202,6 +218,7 @@ export async function PATCH(
       return NextResponse.json({ error: result.error.message }, { status })
     }
 
+    // Post is already in TypeID format from the service layer
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error updating post:', error)

@@ -8,6 +8,7 @@ import {
   getMemberService,
 } from '@/lib/services'
 import { InboxContainer } from './inbox-container'
+import { fromUuid, type BoardId, type TagId, type MemberId } from '@quackback/ids'
 
 interface FeedbackInboxPageProps {
   params: Promise<{ orgSlug: string }>
@@ -46,22 +47,16 @@ export default async function FeedbackInboxPage({ params, searchParams }: Feedba
   }
 
   // Fetch initial posts with filters from URL using PostService
+  const boardFilterIds = getArrayParam('board') as BoardId[]
+  const tagFilterIds = getArrayParam('tags') as TagId[]
+  const statusFilterSlugs = getArrayParam('status')
+  const ownerFilterId = getStringParam('owner')
   const postsResult = await getPostService().listInboxPosts(
     {
-      boardIds: getArrayParam('board').length > 0 ? getArrayParam('board') : undefined,
-      status:
-        getArrayParam('status').length > 0
-          ? (getArrayParam('status') as (
-              | 'open'
-              | 'under_review'
-              | 'planned'
-              | 'in_progress'
-              | 'complete'
-              | 'closed'
-            )[])
-          : undefined,
-      tagIds: getArrayParam('tags').length > 0 ? getArrayParam('tags') : undefined,
-      ownerId: getStringParam('owner') === 'unassigned' ? null : getStringParam('owner'),
+      boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
+      statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
+      tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
+      ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
       search: getStringParam('search'),
       dateFrom: getStringParam('dateFrom') ? new Date(getStringParam('dateFrom')!) : undefined,
       dateTo: getStringParam('dateTo') ? new Date(getStringParam('dateTo')!) : undefined,
@@ -87,7 +82,13 @@ export default async function FeedbackInboxPage({ params, searchParams }: Feedba
 
   // Fetch team members using MemberService
   const membersResult = await getMemberService().listTeamMembers(organization.id)
-  const teamMembers = membersResult.success ? membersResult.value : []
+  const teamMembersRaw = membersResult.success ? membersResult.value : []
+
+  // Services return TypeIDs directly, only need to transform Better-auth user IDs
+  const teamMembers = teamMembersRaw.map((member) => ({
+    ...member,
+    id: fromUuid('user', member.id),
+  })) as typeof teamMembersRaw
 
   return (
     <InboxContainer

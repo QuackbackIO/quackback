@@ -1,4 +1,4 @@
-import { withApiHandlerParams, ApiError, successResponse } from '@/lib/api-handler'
+import { withApiHandlerParams, ApiError, successResponse, parseId } from '@/lib/api-handler'
 import { db, invitation, eq, and } from '@quackback/db'
 
 /**
@@ -8,7 +8,8 @@ import { db, invitation, eq, and } from '@quackback/db'
  */
 export const DELETE = withApiHandlerParams<{ id: string }>(
   async (request, { validation, params }) => {
-    const { id } = params
+    // Parse TypeID to UUID for database query
+    const id = parseId(params.id, 'invite')
     const organizationId = validation.organization.id
 
     // Find the invitation

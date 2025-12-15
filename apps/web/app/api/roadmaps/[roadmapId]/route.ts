@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { withApiHandlerParams, validateBody, ApiError, successResponse } from '@/lib/api-handler'
+import {
+  withApiHandlerParams,
+  validateBody,
+  ApiError,
+  successResponse,
+  parseId,
+} from '@/lib/api-handler'
 import { z } from 'zod'
 import { getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type RoadmapError } from '@quackback/domain'
@@ -39,7 +45,8 @@ function mapErrorToStatus(error: RoadmapError): number {
  * Get a single roadmap by ID
  */
 export const GET = withApiHandlerParams<RouteParams>(async (_request, { validation, params }) => {
-  const { roadmapId } = params
+  // Parse TypeID to UUID for database query
+  const roadmapId = parseId(params.roadmapId, 'roadmap')
   const ctx = buildServiceContext(validation)
 
   const result = await getRoadmapService().getRoadmap(roadmapId, ctx)
@@ -48,6 +55,7 @@ export const GET = withApiHandlerParams<RouteParams>(async (_request, { validati
     throw new ApiError(result.error.message, mapErrorToStatus(result.error))
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -56,7 +64,8 @@ export const GET = withApiHandlerParams<RouteParams>(async (_request, { validati
  * Update a roadmap
  */
 export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { roadmapId } = params
+  // Validate TypeID format
+  const roadmapId = parseId(params.roadmapId, 'roadmap')
   const body = await request.json()
   const parsed = validateBody(updateRoadmapSchema, body)
 
@@ -73,6 +82,7 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
     throw new ApiError(result.error.message, mapErrorToStatus(result.error))
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -82,7 +92,8 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
  */
 export const DELETE = withApiHandlerParams<RouteParams>(
   async (_request, { validation, params }) => {
-    const { roadmapId } = params
+    // Parse TypeID to UUID for database query
+    const roadmapId = parseId(params.roadmapId, 'roadmap')
     const ctx = buildServiceContext(validation)
 
     const result = await getRoadmapService().deleteRoadmap(roadmapId, ctx)

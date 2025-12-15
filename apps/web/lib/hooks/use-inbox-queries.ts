@@ -13,7 +13,8 @@ import type {
   CommentReaction,
   CommentWithReplies,
 } from '@/app/s/[orgSlug]/admin/feedback/inbox-types'
-import type { PostListItem, PostStatus, InboxPostListResult, Tag } from '@quackback/db/types'
+import type { PostListItem, InboxPostListResult, Tag } from '@quackback/db/types'
+import type { CommentId, PostId, StatusId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -116,76 +117,40 @@ export function usePostDetail({ postId, organizationId, enabled = true }: UsePos
 // Mutation Hooks
 // ============================================================================
 
+/**
+ * @deprecated Use useChangePostStatusId instead - the legacy status field has been removed
+ */
 export function useUpdatePostStatus(organizationId: string) {
+  const changeStatusId = useChangePostStatusId(organizationId)
+  return changeStatusId
+}
+
+/**
+ * Hook to change a post's status using TypeID-based statusId
+ * This is the new status system that uses the post_statuses table
+ */
+export function useChangePostStatusId(organizationId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, status }: { postId: string; status: PostStatus }) => {
-      const response = await fetch(`/api/posts/${postId}`, {
+    mutationFn: async ({ postId, statusId }: { postId: string; statusId: string }) => {
+      const response = await fetch(`/api/posts/${postId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, organizationId }),
+        body: JSON.stringify({ statusId, organizationId }),
       })
-      if (!response.ok) throw new Error('Failed to update status')
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update status')
+      }
       return response.json()
     },
-    onMutate: async ({ postId, status }) => {
-      // Cancel outgoing refetches for all inbox queries
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
-      await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
-
-      // Snapshot previous detail
-      const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
-      )
-
-      // Snapshot ALL list queries (regardless of filters)
-      const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
-        queryKey: inboxKeys.lists(),
-      })
-
-      // Optimistically update detail
-      if (previousDetail) {
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
-          ...previousDetail,
-          status,
-        })
-      }
-
-      // Optimistically update ALL list queries using predicate matching
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) => (post.id === postId ? { ...post, status } : post)),
-            })),
-          }
-        }
-      )
-
-      return { previousDetail, previousLists }
-    },
-    onError: (_err, { postId }, context) => {
-      // Rollback detail on error
-      if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
-      }
-      // Rollback all list queries
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
-    },
-    onSettled: (_data, _error, { postId }) => {
-      // Refetch to ensure consistency
+    onSuccess: (_data, { postId }) => {
+      // Invalidate inbox queries
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      // Invalidate roadmap queries (they're under 'roadmapPosts' key)
+      queryClient.invalidateQueries({ queryKey: ['roadmapPosts'] })
     },
   })
 }
@@ -518,7 +483,7 @@ interface UpdatePostInput {
   title: string
   content: string
   contentJson: unknown
-  status: PostStatus
+  statusId?: StatusId | null
   boardId?: string
   tagIds?: string[]
   allTags?: Tag[]
@@ -529,7 +494,7 @@ interface UpdatePostResponse {
   title: string
   content: string
   contentJson: unknown
-  status: PostStatus
+  statusId: StatusId | null
   boardId: string
 }
 
@@ -542,12 +507,12 @@ export function useUpdatePost(organizationId: string) {
       title,
       content,
       contentJson,
-      status,
+      statusId,
     }: UpdatePostInput): Promise<UpdatePostResponse> => {
       const response = await fetch(`/api/posts/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, contentJson, status, organizationId }),
+        body: JSON.stringify({ title, content, contentJson, statusId, organizationId }),
       })
       if (!response.ok) {
         const data = await response.json()
@@ -555,7 +520,7 @@ export function useUpdatePost(organizationId: string) {
       }
       return response.json()
     },
-    onMutate: async ({ postId, title, content, contentJson, status }) => {
+    onMutate: async ({ postId, title, content, contentJson, statusId }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
@@ -575,7 +540,7 @@ export function useUpdatePost(organizationId: string) {
           title,
           content,
           contentJson,
-          status,
+          statusId: statusId ?? previousDetail.statusId,
         })
       }
 
@@ -589,7 +554,9 @@ export function useUpdatePost(organizationId: string) {
             pages: old.pages.map((page) => ({
               ...page,
               items: page.items.map((post) =>
-                post.id === postId ? { ...post, title, content, status } : post
+                post.id === postId
+                  ? { ...post, title, content, statusId: statusId ?? post.statusId }
+                  : post
               ),
             })),
           }
@@ -620,7 +587,7 @@ export function useUpdatePost(organizationId: string) {
           title: data.title,
           content: data.content,
           contentJson: data.contentJson,
-          status: data.status,
+          statusId: data.statusId,
         }
       })
     },
@@ -806,16 +773,17 @@ export function useAddComment(organizationId: string) {
         queryKey: inboxKeys.lists(),
       })
 
-      // Create optimistic comment
+      // Create optimistic comment with temporary TypeID-format ID
       const optimisticComment: CommentWithReplies = {
-        id: `temp-${Date.now()}`,
-        postId,
+        id: `comment_temp${Date.now()}` as CommentId,
+        postId: postId as PostId,
+        organizationId,
         content,
         authorId: null, // Will be populated by server
         authorName: authorName || null,
         authorEmail: null,
         memberId: null,
-        parentId: parentId || null,
+        parentId: (parentId || null) as CommentId | null,
         isTeamMember: true, // Admin users are team members
         createdAt: new Date(),
         replies: [],
@@ -882,7 +850,7 @@ interface CreatePostInput {
   content: string
   contentJson?: unknown
   boardId: string
-  status: PostStatus
+  statusId?: StatusId
   tagIds: string[]
 }
 
@@ -891,7 +859,7 @@ interface CreatePostResponse {
   title: string
   content: string
   contentJson: unknown
-  status: PostStatus
+  statusId: StatusId | null
   boardId: string
 }
 

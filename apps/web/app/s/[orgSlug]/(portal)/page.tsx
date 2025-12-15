@@ -57,6 +57,7 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
     getTagService().listPublicTags(org.id),
   ])
 
+  // Services now return TypeIDs directly
   const boards = boardsResult.success ? boardsResult.value : []
   const { items: posts, hasMore } = postsResult.success
     ? postsResult.value
@@ -64,14 +65,17 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
   const statuses = statusesResult.success ? statusesResult.value : []
   const tags = tagsResult.success ? tagsResult.value : []
 
-  // Get user's voted posts
+  // Get user's voted posts - service now returns TypeID set directly
   const postIds = posts.map((p) => p.id)
   const votedPostIdsResult = await getPostService().getUserVotedPostIds(postIds, userIdentifier)
-  const votedPostIds = votedPostIdsResult.success ? votedPostIdsResult.value : new Set<string>()
+  const votedPostIds = votedPostIdsResult.success ? Array.from(votedPostIdsResult.value) : []
 
   // Get avatar URLs for post authors (base64 for SSR, no flicker)
   const postMemberIds = posts.map((p) => p.memberId)
   const postAvatarMap = await getBulkMemberAvatarData(postMemberIds)
+
+  // Convert avatar map to record (keys are already TypeIDs)
+  const postAvatarUrls = Object.fromEntries(postAvatarMap)
 
   return (
     <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
@@ -83,8 +87,8 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
         statuses={statuses}
         tags={tags}
         hasMore={hasMore}
-        votedPostIds={Array.from(votedPostIds)}
-        postAvatarUrls={Object.fromEntries(postAvatarMap)}
+        votedPostIds={votedPostIds}
+        postAvatarUrls={postAvatarUrls}
         currentBoard={board}
         currentSearch={search}
         currentSort={sort}

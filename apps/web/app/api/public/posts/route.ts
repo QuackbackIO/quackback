@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPostService } from '@/lib/services'
 import type { PostError } from '@quackback/domain'
+import { isValidTypeId, type TagId, type StatusId } from '@quackback/ids'
 
 /**
  * Map PostError codes to HTTP status codes
@@ -35,9 +36,20 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
 
-    // Parse array params (status and tagIds can have multiple values)
-    const status = searchParams.getAll('status').filter(Boolean)
-    const tagIds = searchParams.getAll('tagIds').filter(Boolean)
+    // Parse status filter - supports both TypeIDs (status_xxx) and slugs (open, planned)
+    const statusParams = searchParams.getAll('status')
+    const statusSlugs: string[] = []
+    const statusIds: StatusId[] = []
+    for (const s of statusParams) {
+      if (isValidTypeId(s, 'status')) {
+        statusIds.push(s as StatusId)
+      } else {
+        statusSlugs.push(s)
+      }
+    }
+
+    // Parse tag filter
+    const tagIds = searchParams.getAll('tagIds').filter(Boolean) as TagId[]
 
     // Call PostService to list public posts
     const postService = getPostService()
@@ -45,7 +57,8 @@ export async function GET(request: NextRequest) {
       organizationId,
       boardSlug,
       search,
-      status: status.length > 0 ? status : undefined,
+      statusIds: statusIds.length > 0 ? statusIds : undefined,
+      statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
       sort,
       page,
@@ -58,6 +71,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: result.error.message }, { status })
     }
 
+    // Response is already in TypeID format from service layer
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error fetching public posts:', error)

@@ -38,7 +38,8 @@ import { ChevronUp } from 'lucide-react'
 import { getInitials } from '@quackback/domain/utils'
 import { REACTION_EMOJIS } from '@quackback/db/types'
 import type { PostDetails, CommentWithReplies, CurrentUser } from './inbox-types'
-import type { PostStatus, Tag, PostStatusEntity } from '@quackback/db/types'
+import type { Tag, PostStatusEntity } from '@quackback/db/types'
+import type { TagId, StatusId } from '@quackback/ids'
 
 interface SubmitCommentParams {
   postId: string
@@ -59,8 +60,8 @@ interface InboxPostDetailProps {
   currentUser: CurrentUser
   onClose: () => void
   onEdit: () => void
-  onStatusChange: (status: PostStatus) => Promise<void>
-  onTagsChange: (tagIds: string[]) => Promise<void>
+  onStatusChange: (statusId: StatusId) => Promise<void>
+  onTagsChange: (tagIds: TagId[]) => Promise<void>
   onOfficialResponseChange: (response: string | null) => Promise<void>
   onRoadmapChange?: () => void
   submitComment: (params: SubmitCommentParams) => Promise<unknown>
@@ -355,13 +356,13 @@ export function InboxPostDetail({
   const handleStatusChange = async (value: string) => {
     setIsUpdating(true)
     try {
-      await onStatusChange(value as PostStatus)
+      await onStatusChange(value as StatusId)
     } finally {
       setIsUpdating(false)
     }
   }
 
-  const handleTagToggle = async (tagId: string) => {
+  const handleTagToggle = async (tagId: TagId) => {
     setIsUpdating(true)
     try {
       const currentTagIds = post.tags.map((t) => t.id)
@@ -374,7 +375,7 @@ export function InboxPostDetail({
     }
   }
 
-  const currentStatus = statuses.find((s) => s.slug === post.status)
+  const currentStatus = statuses.find((s) => s.id === post.statusId)
 
   return (
     <div>
@@ -398,7 +399,7 @@ export function InboxPostDetail({
           <AddToRoadmapDropdown
             organizationId={organizationId}
             postId={post.id}
-            currentStatusId={statuses.find((s) => s.slug === post.status)?.id ?? ''}
+            currentStatusId={post.statusId ?? ''}
             currentRoadmapIds={post.roadmapIds}
             statuses={statuses}
             onSuccess={onRoadmapChange}
@@ -442,7 +443,7 @@ export function InboxPostDetail({
           {/* Status selector */}
           <div className="flex items-center gap-1 mb-3">
             <Select
-              value={post.status}
+              value={post.statusId || ''}
               onValueChange={(value) => handleStatusChange(value)}
               disabled={isUpdating}
             >
@@ -464,7 +465,7 @@ export function InboxPostDetail({
               </SelectTrigger>
               <SelectContent align="start">
                 {statuses.map((status) => (
-                  <SelectItem key={status.id} value={status.slug} className="text-xs py-1">
+                  <SelectItem key={status.id} value={status.id} className="text-xs py-1">
                     <div className="flex items-center gap-1.5">
                       <span
                         className="h-2 w-2 rounded-full"

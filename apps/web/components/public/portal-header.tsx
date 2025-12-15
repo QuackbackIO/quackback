@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar } from '@/components/ui/avatar'
 import { LogOut, Settings, Shield } from 'lucide-react'
-import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
@@ -56,7 +56,8 @@ export function PortalHeader({
 }: PortalHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { openAuthPopover } = useAuthPopover()
+  const authPopover = useAuthPopoverSafe()
+  const openAuthPopover = authPopover?.openAuthPopover
 
   // Use custom display name if provided, otherwise fall back to org name
   const displayName = headerDisplayName || orgName
@@ -208,8 +209,8 @@ export function PortalHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : (
-        // Anonymous user - show login/signup buttons
+      ) : openAuthPopover ? (
+        // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>
             Log in
@@ -218,7 +219,7 @@ export function PortalHeader({
             Sign up
           </Button>
         </div>
-      )}
+      ) : null}
     </div>
   )
 

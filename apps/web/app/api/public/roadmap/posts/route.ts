@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPostService } from '@/lib/services'
 import type { PostError } from '@quackback/domain'
+import type { StatusId } from '@quackback/ids'
 
 /**
  * Map PostError codes to HTTP status codes
@@ -27,7 +28,7 @@ function getHttpStatusFromError(error: PostError): number {
  *
  * Query params:
  * - organizationId (required): Organization ID
- * - statusSlug (required): Single status slug to filter by
+ * - statusId (required): Single status ID to filter by
  * - page (optional, default 1): Page number
  * - limit (optional, default 10): Items per page
  */
@@ -35,14 +36,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
-    const statusSlug = searchParams.get('statusSlug')
+    const statusId = searchParams.get('statusId') as StatusId | null
 
     if (!organizationId) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
 
-    if (!statusSlug) {
-      return NextResponse.json({ error: 'statusSlug is required' }, { status: 400 })
+    if (!statusId) {
+      return NextResponse.json({ error: 'statusId is required' }, { status: 400 })
     }
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     const postService = getPostService()
     const result = await postService.getRoadmapPostsPaginated({
       organizationId,
-      statusSlug,
+      statusId,
       page,
       limit,
     })
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: result.error.message }, { status })
     }
 
+    // Response is already in TypeID format from service layer
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error fetching roadmap posts:', error)

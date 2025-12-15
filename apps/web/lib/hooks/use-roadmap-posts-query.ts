@@ -133,11 +133,6 @@ export function useRoadmapPostsByRoadmap({
 // Mutations for roadmap posts
 // ============================================================================
 
-interface AddPostToRoadmapInput {
-  postId: string
-  statusId: string
-}
-
 /**
  * Hook to add a post to a roadmap
  */
@@ -145,11 +140,11 @@ export function useAddPostToRoadmap(organizationId: string, roadmapId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, statusId }: AddPostToRoadmapInput): Promise<void> => {
+    mutationFn: async (postId: string): Promise<void> => {
       const response = await fetch(`/api/roadmaps/${roadmapId}/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, statusId, organizationId }),
+        body: JSON.stringify({ postId, organizationId }),
       })
       if (!response.ok) {
         const error = await response.json()
@@ -184,37 +179,6 @@ export function useRemovePostFromRoadmap(organizationId: string, roadmapId: stri
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to remove post from roadmap')
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId],
-      })
-    },
-  })
-}
-
-interface MovePostInput {
-  postId: string
-  newStatusId: string
-}
-
-/**
- * Hook to move a post to a different column in a roadmap
- */
-export function useMovePostInRoadmap(organizationId: string, roadmapId: string) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({ postId, newStatusId }: MovePostInput): Promise<void> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}/posts/move`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, newStatusId, organizationId }),
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to move post')
       }
     },
     onSuccess: () => {

@@ -9,21 +9,13 @@ import {
   parseAsStringLiteral,
 } from 'nuqs'
 import { useMemo, useCallback } from 'react'
-import type { PostStatus } from '@quackback/db/types'
 
-const POST_STATUSES = [
-  'open',
-  'under_review',
-  'planned',
-  'in_progress',
-  'complete',
-  'closed',
-] as const
 const SORT_OPTIONS = ['newest', 'oldest', 'votes'] as const
 
 export interface InboxFilters {
   search?: string
-  status?: PostStatus[]
+  /** Status slugs for filtering (e.g., 'open', 'planned') */
+  status?: string[]
   board?: string[]
   tags?: string[]
   owner?: string | 'unassigned'
@@ -36,7 +28,7 @@ export interface InboxFilters {
 // Define parsers for each filter
 const filterParsers = {
   search: parseAsString,
-  status: parseAsArrayOf(parseAsStringLiteral(POST_STATUSES)),
+  status: parseAsArrayOf(parseAsString), // Status slugs (e.g., 'open', 'planned')
   board: parseAsArrayOf(parseAsString),
   tags: parseAsArrayOf(parseAsString),
   owner: parseAsString,
@@ -62,7 +54,7 @@ export function useInboxFilters() {
   const filters: InboxFilters = useMemo(
     () => ({
       search: filterState.search ?? undefined,
-      status: filterState.status?.length ? (filterState.status as PostStatus[]) : undefined,
+      status: filterState.status?.length ? filterState.status : undefined,
       board: filterState.board?.length ? filterState.board : undefined,
       tags: filterState.tags?.length ? filterState.tags : undefined,
       owner: filterState.owner ?? undefined,

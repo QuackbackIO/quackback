@@ -11,9 +11,15 @@ export function PoweredByFooter() {
             href="https://quackback.io"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 font-medium hover:text-muted-foreground transition-colors"
+            className="group inline-flex items-center gap-1 font-medium hover:text-foreground transition-colors"
           >
-            <Image src="/logo.png" alt="" width={16} height={16} className="opacity-70" />
+            <Image
+              src="/logo.png"
+              alt=""
+              width={16}
+              height={16}
+              className="opacity-70 group-hover:opacity-100 transition-opacity"
+            />
             Quackback
           </Link>
         </p>

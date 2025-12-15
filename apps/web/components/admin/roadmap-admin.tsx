@@ -23,9 +23,10 @@ import { AdminRoadmapColumn } from './roadmap-column'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
-import { useMovePostInRoadmap } from '@/lib/hooks/use-roadmap-posts-query'
+import { useChangePostStatusId } from '@/lib/hooks/use-inbox-queries'
 import type { PostStatusEntity } from '@quackback/db/types'
 import type { RoadmapPostEntry } from '@quackback/domain'
+import type { StatusId, PostId } from '@quackback/ids'
 
 interface RoadmapAdminProps {
   organizationId: string
@@ -43,13 +44,13 @@ export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
 
   const selectedRoadmap = roadmaps?.find((r) => r.id === selectedRoadmapId)
 
-  // Move post mutation
-  const movePost = useMovePostInRoadmap(organizationId, selectedRoadmapId ?? '')
+  // Change post status mutation (updates the post's actual status)
+  const changeStatus = useChangePostStatusId(organizationId)
 
   // DnD state
   const [activePost, setActivePost] = useState<RoadmapPostEntry | null>(null)
-  const [activeStatusId, setActiveStatusId] = useState<string | null>(null)
-  const [overStatusId, setOverStatusId] = useState<string | null>(null)
+  const [activeStatusId, setActiveStatusId] = useState<StatusId | null>(null)
+  const [overStatusId, setOverStatusId] = useState<StatusId | null>(null)
 
   // Set of all column IDs for collision detection
   const columnIds = new Set(statuses.map((s) => s.id))
@@ -95,14 +96,14 @@ export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
     }
 
     const overData = over.data.current
-    let targetStatusId: string | null = null
+    let targetStatusId: StatusId | null = null
 
     if (overData?.type === 'column') {
       targetStatusId = overData.statusId
     } else if (overData?.type === 'post') {
       targetStatusId = overData.statusId
-    } else if (columnIds.has(over.id as string)) {
-      targetStatusId = over.id as string
+    } else if (columnIds.has(over.id as StatusId)) {
+      targetStatusId = over.id as StatusId
     }
 
     setOverStatusId(targetStatusId)
@@ -121,27 +122,28 @@ export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
     const activeData = active.data.current
     const overData = over.data.current
 
-    const sourceStatusId = activeData?.statusId
-    let targetStatusId: string | undefined
+    const sourceStatusId = activeData?.statusId as StatusId | undefined
+    let targetStatusId: StatusId | undefined
 
     if (overData?.type === 'column') {
       targetStatusId = overData.statusId
     } else if (overData?.type === 'post') {
       targetStatusId = overData.statusId
-    } else if (columnIds.has(over.id as string)) {
-      targetStatusId = over.id as string
+    } else if (columnIds.has(over.id as StatusId)) {
+      targetStatusId = over.id as StatusId
     }
 
     if (!sourceStatusId || !targetStatusId || sourceStatusId === targetStatusId) {
       return
     }
 
-    const postId = active.id as string
+    const postId = active.id as PostId
 
     try {
-      await movePost.mutateAsync({ postId, newStatusId: targetStatusId })
+      // Update the post's actual status (not a roadmap-specific status)
+      await changeStatus.mutateAsync({ postId, statusId: targetStatusId })
     } catch (error) {
-      console.error('Failed to move post:', error)
+      console.error('Failed to change post status:', error)
     }
   }
 

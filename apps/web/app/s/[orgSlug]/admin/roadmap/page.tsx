@@ -6,7 +6,7 @@ export default async function RoadmapPage({ params }: { params: Promise<{ orgSlu
   const { orgSlug } = await params
   const { organization } = await requireAuthenticatedTenantBySlug(orgSlug)
 
-  // Get statuses marked for roadmap display
+  // Get statuses marked for roadmap display (services now return TypeIDs directly)
   const statusesResult = await getStatusService().listPublicStatuses(organization.id)
   const allStatuses = statusesResult.success ? statusesResult.value : []
   const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)

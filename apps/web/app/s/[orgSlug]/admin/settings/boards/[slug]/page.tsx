@@ -13,6 +13,7 @@ export default async function BoardGeneralSettingsPage({
   const { orgSlug, slug } = await params
   const { organization } = await requireAuthenticatedTenantBySlug(orgSlug)
 
+  // Database now returns TypeIDs directly
   const board = await db.query.boards.findFirst({
     where: and(eq(boards.organizationId, organization.id), eq(boards.slug, slug)),
   })

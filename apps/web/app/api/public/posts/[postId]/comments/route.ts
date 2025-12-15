@@ -4,6 +4,7 @@ import { commentSchema } from '@/lib/schemas/comments'
 import { getSession } from '@/lib/auth/server'
 import { getCommentService, getPostService } from '@/lib/services'
 import type { ServiceContext, CommentError } from '@quackback/domain'
+import { isValidTypeId, toMemberId, type PostId, type CommentId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -31,7 +32,13 @@ function getHttpStatusFromError(error: CommentError): number {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     // Require authentication
     const session = await getSession()
@@ -92,10 +99,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const ctx: ServiceContext = {
       organizationId: board.organizationId,
       userId: session.user.id,
-      memberId: memberRecord.id,
+      memberId: toMemberId(memberRecord.id),
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
       userName: session.user.name || session.user.email,
       userEmail: session.user.email,
+    }
+
+    // Validate parentId TypeID if present
+    let parentIdTypeId: CommentId | null = null
+    if (parentId) {
+      if (!isValidTypeId(parentId, 'comment')) {
+        return NextResponse.json({ error: 'Invalid parent comment ID format' }, { status: 400 })
+      }
+      parentIdTypeId = parentId as CommentId
     }
 
     // Call CommentService to create the comment
@@ -104,7 +120,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       {
         postId,
         content,
-        parentId: parentId || null,
+        parentId: parentIdTypeId,
         authorName: null, // Always use authenticated user's name
         authorEmail: null, // Always use authenticated user's email
       },
@@ -116,6 +132,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: serviceResult.error.message }, { status })
     }
 
+    // Response is already in TypeID format from service layer
     return NextResponse.json(serviceResult.value, { status: 201 })
   } catch (error) {
     console.error('Error creating comment:', error)

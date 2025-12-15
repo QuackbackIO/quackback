@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
 import { getBoardService, getStatusService, getPostService, getMemberService } from '@/lib/services'
 import { buildServiceContext, type ServiceContext } from '@quackback/domain'
+import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ boardId: string }>
@@ -16,7 +17,13 @@ interface RouteParams {
  * Posts are auto-published with the default status.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const { boardId } = await params
+  const { boardId: boardIdParam } = await params
+
+  // Validate TypeID format
+  if (!isValidTypeId(boardIdParam, 'board')) {
+    return NextResponse.json({ error: 'Invalid board ID format' }, { status: 400 })
+  }
+  const boardId = boardIdParam as BoardId
 
   // 1. Get board and verify it exists and is public
   const boardResult = await getBoardService().getPublicBoardById(boardId)
@@ -111,5 +118,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(createResult.value, { status: 201 })
 }

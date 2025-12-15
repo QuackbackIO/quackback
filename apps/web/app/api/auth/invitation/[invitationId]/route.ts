@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, invitation, workspaceDomain, eq } from '@quackback/db'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
+import { isValidTypeId, toUuid, fromUuid } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ invitationId: string }>
@@ -15,7 +16,13 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { invitationId } = await params
+    const { invitationId: invitationIdParam } = await params
+
+    // Parse TypeID to UUID for database query (invitation table uses raw UUIDs)
+    if (!isValidTypeId(invitationIdParam, 'invite')) {
+      return NextResponse.json({ error: 'Invalid invitation ID format' }, { status: 400 })
+    }
+    const invitationId = toUuid(invitationIdParam)
 
     // Rate limit by IP to prevent invitation enumeration
     const clientIp = getClientIp(request.headers)
@@ -86,8 +93,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Return invitation details (limited info for security)
+    // Transform UUIDs to TypeIDs in response (invitation table uses raw UUIDs)
     return NextResponse.json({
-      id: inv.id,
+      id: fromUuid('invite', inv.id),
       email: inv.email,
       name: inv.name || null,
       role: inv.role,

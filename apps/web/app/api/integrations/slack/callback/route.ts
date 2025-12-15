@@ -9,6 +9,7 @@ import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { db, encryptToken, organizationIntegrations, organization, eq } from '@quackback/db'
 import { exchangeSlackCode } from '@quackback/integrations'
+import { toMemberId } from '@quackback/ids'
 
 // Cookie name - use __Secure- prefix for HTTPS
 const APP_DOMAIN = process.env.APP_DOMAIN || 'localhost:3000'
@@ -102,7 +103,9 @@ export async function GET(request: Request) {
     return redirectWithError('invalid_state', storedState)
   }
 
-  const { orgId, memberId } = stateResult.data
+  const { orgId, memberId: rawMemberId } = stateResult.data
+  // Convert raw member ID to TypeID format for Drizzle column
+  const memberId = toMemberId(rawMemberId)
 
   try {
     // Exchange code for token

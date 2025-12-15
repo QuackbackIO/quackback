@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, posts, eq, and } from '@quackback/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
+import { isValidTypeId, toMemberId, type PostId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -14,7 +15,13 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     const session = await getSession()
     if (!session?.user) {
@@ -43,11 +50,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const subscriptionService = new SubscriptionService()
-    const status = await subscriptionService.getSubscriptionStatus(
-      memberRecord.id,
-      postId,
-      organizationId
-    )
+    const memberId = toMemberId(memberRecord.id)
+    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, organizationId)
 
     return NextResponse.json(status)
   } catch (error) {
@@ -65,7 +69,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     const session = await getSession()
     if (!session?.user) {
@@ -97,7 +107,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const reason = body.reason || 'manual'
 
     const subscriptionService = new SubscriptionService()
-    await subscriptionService.subscribeToPost(memberRecord.id, postId, reason, organizationId)
+    const memberId = toMemberId(memberRecord.id)
+    await subscriptionService.subscribeToPost(memberId, postId, reason, organizationId)
 
     return NextResponse.json({
       success: true,
@@ -118,7 +129,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     const session = await getSession()
     if (!session?.user) {
@@ -147,7 +164,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const subscriptionService = new SubscriptionService()
-    await subscriptionService.unsubscribeFromPost(memberRecord.id, postId, organizationId)
+    const memberId = toMemberId(memberRecord.id)
+    await subscriptionService.unsubscribeFromPost(memberId, postId, organizationId)
 
     return NextResponse.json({
       success: true,
@@ -170,7 +188,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     const session = await getSession()
     if (!session?.user) {
@@ -204,19 +228,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const subscriptionService = new SubscriptionService()
-    await subscriptionService.setSubscriptionMuted(
-      memberRecord.id,
-      postId,
-      body.muted,
-      organizationId
-    )
+    const memberId = toMemberId(memberRecord.id)
+    await subscriptionService.setSubscriptionMuted(memberId, postId, body.muted, organizationId)
 
     // Get updated status
-    const status = await subscriptionService.getSubscriptionStatus(
-      memberRecord.id,
-      postId,
-      organizationId
-    )
+    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, organizationId)
 
     return NextResponse.json({
       success: true,

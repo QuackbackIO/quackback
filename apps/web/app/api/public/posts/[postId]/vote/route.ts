@@ -12,6 +12,7 @@ import {
 import { hashIP } from '@/lib/utils/ip-hash'
 import type { ServiceContext } from '@quackback/domain'
 import type { PostError } from '@quackback/domain'
+import { isValidTypeId, toMemberId, type PostId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -36,8 +37,14 @@ function getHttpStatusFromError(error: PostError): number {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { postId } = await params
+    const { postId: postIdParam } = await params
     const clientIp = getClientIp(request.headers)
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
 
     // Require authentication
     const session = await getSession()
@@ -104,10 +111,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const userIdentifier = getMemberIdentifier(memberRecord.id)
 
     // Build service context
+    const memberId = toMemberId(memberRecord.id)
     const ctx: ServiceContext = {
       organizationId: board.organizationId,
       userId: session.user.id,
-      memberId: memberRecord.id,
+      memberId,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
       userName: session.user.name || session.user.email,
       userEmail: session.user.email,
@@ -116,7 +124,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Call PostService to toggle vote
     const postService = getPostService()
     const result = await postService.voteOnPost(postId, userIdentifier, ctx, {
-      memberId: memberRecord.id,
+      memberId,
       ipHash,
     })
 
@@ -125,6 +133,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: result.error.message }, { status })
     }
 
+    // VoteResult contains voted (boolean) and voteCount - no IDs to transform
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error toggling vote:', error)

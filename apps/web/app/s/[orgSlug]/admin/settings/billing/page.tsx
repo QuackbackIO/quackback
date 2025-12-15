@@ -1,11 +1,72 @@
 import { requireTenantBySlug } from '@/lib/tenant'
-import { CreditCard } from 'lucide-react'
+import { isSelfHosted } from '@quackback/domain/features'
+import { CreditCard, Server, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+import { BillingClient } from './billing-client'
+import { getSubscriptionByOrganizationIdAdmin } from '@quackback/db/queries/subscriptions'
 
-export default async function BillingPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+interface BillingPageProps {
+  params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ success?: string; canceled?: string }>
+}
+
+export default async function BillingPage({ params, searchParams }: BillingPageProps) {
   const { orgSlug } = await params
+  const { success, canceled } = await searchParams
   const { organization } = await requireTenantBySlug(orgSlug)
 
+  // Show "not available" message for self-hosted deployments
+  if (isSelfHosted()) {
+    return (
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+            <Server className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Billing</h1>
+            <p className="text-sm text-muted-foreground">
+              Not available for self-hosted deployments
+            </p>
+          </div>
+        </div>
+
+        {/* Explanation Card */}
+        <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+          <h2 className="font-medium mb-2">Self-Hosted Mode</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            You are running Quackback in self-hosted mode. Billing and subscription management are
+            only available for the managed cloud version.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Self-hosted deployments have access to all features without subscription restrictions.
+          </p>
+        </div>
+
+        {/* Back to Settings */}
+        <Link href="/admin/settings/team">
+          <Button variant="outline">Back to Settings</Button>
+        </Link>
+      </div>
+    )
+  }
+
+  // Fetch subscription data for cloud mode
+  const subscription = await getSubscriptionByOrganizationIdAdmin(organization.id)
+
+  const subscriptionData = subscription
+    ? {
+        tier: subscription.tier as 'essentials' | 'professional' | 'team' | 'enterprise',
+        status: subscription.status,
+        currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        trialEnd: subscription.trialEnd?.toISOString() ?? null,
+      }
+    : null
+
+  // Cloud mode - show full billing page
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -19,37 +80,30 @@ export default async function BillingPage({ params }: { params: Promise<{ orgSlu
         </div>
       </div>
 
-      {/* Current Plan */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Current Plan</h2>
-        <p className="text-sm text-muted-foreground mb-4">You are currently on the free plan</p>
-        <div className="flex items-center justify-between">
+      {/* Success/Canceled Messages */}
+      {success === 'true' && (
+        <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-4 flex items-start gap-3">
+          <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
           <div>
-            <p className="text-2xl font-bold text-foreground">Free</p>
-            <p className="text-sm text-muted-foreground">$0/month</p>
+            <p className="text-sm font-medium text-green-600">Subscription successful!</p>
+            <p className="text-sm text-green-600/80">
+              Your subscription has been activated. Thank you for choosing Quackback!
+            </p>
           </div>
-          <Button>Upgrade plan</Button>
         </div>
-      </div>
+      )}
+      {canceled === 'true' && (
+        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 flex items-start gap-3">
+          <XCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-600">Checkout canceled</p>
+            <p className="text-sm text-amber-600/80">No changes were made to your subscription.</p>
+          </div>
+        </div>
+      )}
 
-      {/* Payment Method */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Payment Method</h2>
-        <p className="text-sm text-muted-foreground mb-4">Manage your payment details</p>
-        <div className="rounded-lg bg-muted/30 p-4 mb-4">
-          <p className="text-sm text-muted-foreground">No payment method on file</p>
-        </div>
-        <Button variant="outline">Add payment method</Button>
-      </div>
-
-      {/* Billing History */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Billing History</h2>
-        <p className="text-sm text-muted-foreground mb-4">View past invoices</p>
-        <div className="rounded-lg bg-muted/30 p-4">
-          <p className="text-sm text-muted-foreground">No billing history available</p>
-        </div>
-      </div>
+      {/* Billing Client Component */}
+      <BillingClient organizationId={organization.id} subscription={subscriptionData} />
     </div>
   )
 }

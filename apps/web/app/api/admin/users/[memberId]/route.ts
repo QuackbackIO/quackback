@@ -1,4 +1,4 @@
-import { withApiHandlerParams, ApiError, successResponse } from '@/lib/api-handler'
+import { withApiHandlerParams, ApiError, successResponse, parseId } from '@/lib/api-handler'
 import { getUserService } from '@/lib/services'
 
 type RouteParams = { memberId: string }
@@ -11,7 +11,8 @@ type RouteParams = { memberId: string }
  */
 export const GET = withApiHandlerParams<RouteParams>(
   async (request, { validation, params }) => {
-    const { memberId } = params
+    // Parse TypeID to UUID for database query
+    const memberId = parseId(params.memberId, 'member')
 
     const result = await getUserService().getPortalUserDetail(memberId, validation.organization.id)
 
@@ -36,7 +37,8 @@ export const GET = withApiHandlerParams<RouteParams>(
  */
 export const DELETE = withApiHandlerParams<RouteParams>(
   async (request, { validation, params }) => {
-    const { memberId } = params
+    // Parse TypeID to UUID for database query
+    const memberId = parseId(params.memberId, 'member')
 
     const result = await getUserService().removePortalUser(memberId, validation.organization.id)
 

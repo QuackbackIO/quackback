@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { withApiHandlerParams, validateBody, ApiError, successResponse } from '@/lib/api-handler'
+import {
+  withApiHandlerParams,
+  validateBody,
+  ApiError,
+  successResponse,
+  parseId,
+} from '@/lib/api-handler'
 import { z } from 'zod'
 import { getStatusService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
@@ -21,7 +27,10 @@ type RouteParams = { id: string }
  * Get a single status by ID
  */
 export const GET = withApiHandlerParams<RouteParams>(async (_request, { validation, params }) => {
-  const { id } = params
+  const { id: idParam } = params
+
+  // Parse TypeID to UUID for database query
+  const id = parseId(idParam, 'status')
 
   // Build service context from validation
   const ctx = buildServiceContext(validation)
@@ -46,6 +55,7 @@ export const GET = withApiHandlerParams<RouteParams>(async (_request, { validati
     }
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -54,9 +64,12 @@ export const GET = withApiHandlerParams<RouteParams>(async (_request, { validati
  * Update a status
  */
 export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { id } = params
+  const { id: idParam } = params
   const body = await request.json()
   const input = validateBody(updateStatusSchema, body)
+
+  // Validate TypeID format
+  const id = parseId(idParam, 'status')
 
   // Build service context from validation
   const ctx = buildServiceContext(validation)
@@ -87,6 +100,7 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
     }
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -96,7 +110,10 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
  */
 export const DELETE = withApiHandlerParams<RouteParams>(
   async (_request, { validation, params }) => {
-    const { id } = params
+    const { id: idParam } = params
+
+    // Parse TypeID to UUID for database query
+    const id = parseId(idParam, 'status')
 
     // Build service context from validation
     const ctx = buildServiceContext(validation)

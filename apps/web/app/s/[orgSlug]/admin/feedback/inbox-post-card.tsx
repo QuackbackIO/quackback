@@ -15,7 +15,7 @@ interface InboxPostCardProps {
 }
 
 export function InboxPostCard({ post, statuses, isSelected, onClick }: InboxPostCardProps) {
-  const currentStatus = statuses.find((s) => s.slug === post.status)
+  const currentStatus = statuses.find((s) => s.id === post.statusId)
 
   return (
     <div

@@ -16,12 +16,15 @@ interface ProfileFormProps {
     email: string
   }
   initialAvatarUrl: string | null
+  /** OAuth avatar URL (GitHub, Google, etc.) - fallback when custom avatar is deleted */
+  oauthAvatarUrl: string | null
   hasCustomAvatar: boolean
 }
 
 export function ProfileForm({
   user,
   initialAvatarUrl,
+  oauthAvatarUrl,
   hasCustomAvatar: initialHasCustomAvatar,
 }: ProfileFormProps) {
   const [name, setName] = useState(user.name)
@@ -112,19 +115,8 @@ export function ProfileForm({
       setAvatarUrl(localPreviewUrl)
       setHasCustomAvatar(true)
 
-      // Update better-auth session with the avatar URL
-      // This ensures useSession() returns the correct image field
-      // Add cache-busting query param to force browser to fetch new avatar
-      const avatarEndpointUrl = `/api/user/avatar/${user.id}?v=${Date.now()}`
-      await authClient.updateUser(
-        { image: avatarEndpointUrl },
-        {
-          onSuccess: () => {
-            // Refetch session to update all components using useSession
-            refetchSession?.()
-          },
-        }
-      )
+      // Refetch session to pick up the custom avatar URL from customSession plugin
+      refetchSession?.()
       toast.success('Avatar updated')
     } catch (error) {
       // Revoke the object URL on error
@@ -157,17 +149,11 @@ export function ProfileForm({
       }
 
       setHasCustomAvatar(false)
-      setAvatarUrl(null) // Clear avatar, will show fallback initials
+      // Fall back to OAuth avatar (GitHub, Google, etc.) or initials
+      setAvatarUrl(oauthAvatarUrl)
 
-      // Update better-auth session to clear the image
-      await authClient.updateUser(
-        { image: '' },
-        {
-          onSuccess: () => {
-            refetchSession?.()
-          },
-        }
-      )
+      // Refetch session - customSession plugin will return OAuth URL as fallback
+      refetchSession?.()
       toast.success('Avatar removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')

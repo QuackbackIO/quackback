@@ -7,6 +7,7 @@ export default async function StatusesPage({ params }: { params: Promise<{ orgSl
   const { orgSlug } = await params
   const { organization } = await requireTenantBySlug(orgSlug)
 
+  // Services now return TypeIDs directly
   const statusesResult = await getStatusService().listPublicStatuses(organization.id)
   const statuses = statusesResult.success ? statusesResult.value : []
 

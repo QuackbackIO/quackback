@@ -1,13 +1,16 @@
-import { withApiHandlerParams, ApiError, successResponse } from '@/lib/api-handler'
+import { withApiHandlerParams, ApiError, successResponse, parseId } from '@/lib/api-handler'
 import { getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
 
 type RouteParams = { boardId: string }
 
 export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { boardId } = params
+  const { boardId: boardIdParam } = params
   const body = await request.json()
   const { name, description, isPublic, settings } = body
+
+  // Parse TypeID to UUID for database query
+  const boardId = parseId(boardIdParam, 'board')
 
   // Build service context from validation
   const ctx = buildServiceContext(validation)
@@ -47,12 +50,16 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
     }
   }
 
+  // Response is already in TypeID format from service layer
   return successResponse(result.value)
 })
 
 export const DELETE = withApiHandlerParams<RouteParams>(
   async (_request, { validation, params }) => {
-    const { boardId } = params
+    const { boardId: boardIdParam } = params
+
+    // Parse TypeID to UUID for database query
+    const boardId = parseId(boardIdParam, 'board')
 
     // Build service context from validation
     const ctx = buildServiceContext(validation)

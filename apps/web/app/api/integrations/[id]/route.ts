@@ -15,6 +15,7 @@ import {
   and,
 } from '@quackback/db'
 import { z } from 'zod'
+import { isValidTypeId, type IntegrationId } from '@quackback/ids'
 
 const updateSchema = z.object({
   orgId: z.string(),
@@ -35,7 +36,12 @@ const updateSchema = z.object({
 })
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id: integrationId } = await params
+  const { id: integrationIdParam } = await params
+  // Validate TypeID format - Drizzle column handles UUID conversion
+  if (!isValidTypeId(integrationIdParam, 'integration')) {
+    return NextResponse.json({ error: 'Invalid integration ID format' }, { status: 400 })
+  }
+  const integrationId = integrationIdParam as IntegrationId
 
   // Parse and validate body
   let body: z.infer<typeof updateSchema>
@@ -125,7 +131,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id: integrationId } = await params
+  const { id: integrationIdParam } = await params
+  // Validate TypeID format - Drizzle column handles UUID conversion
+  if (!isValidTypeId(integrationIdParam, 'integration')) {
+    return NextResponse.json({ error: 'Invalid integration ID format' }, { status: 400 })
+  }
+  const integrationId = integrationIdParam as IntegrationId
+
   const { searchParams } = new URL(request.url)
   const orgId = searchParams.get('orgId')
 

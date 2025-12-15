@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { getBulkUserAvatarData } from '@/lib/avatar'
 import { TeamHeader } from './team-header'
 import { PendingInvitations } from './pending-invitations'
+import { fromUuid, ID_PREFIXES } from '@quackback/ids'
 
 export default async function TeamPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
@@ -33,9 +34,9 @@ export default async function TeamPage({ params }: { params: Promise<{ orgSlug: 
   const userIds = members.map((m) => m.userId)
   const avatarMap = await getBulkUserAvatarData(userIds)
 
-  // Format invitations for client component
+  // Format invitations for client component with TypeID transformation
   const formattedInvitations = pendingInvitations.map((inv) => ({
-    id: inv.id,
+    id: fromUuid(ID_PREFIXES.invite, inv.id),
     email: inv.email,
     name: inv.name,
     role: inv.role,

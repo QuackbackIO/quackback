@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { InboxFilters } from './use-inbox-filters'
-import type { PostStatus, Board, Tag, PostStatusEntity } from '@quackback/db/types'
+import type { Board, Tag, PostStatusEntity } from '@quackback/db/types'
 import type { TeamMember } from '@quackback/domain'
 
 interface InboxFiltersProps {
@@ -59,11 +59,11 @@ export function InboxFiltersPanel({
   members,
 }: InboxFiltersProps) {
   // Simple toggle handlers - no useCallback needed for checkbox/button handlers
-  const handleStatusToggle = (status: PostStatus) => {
+  const handleStatusToggle = (statusSlug: string) => {
     const currentStatuses = filters.status || []
-    const newStatuses = currentStatuses.includes(status)
-      ? currentStatuses.filter((s) => s !== status)
-      : [...currentStatuses, status]
+    const newStatuses = currentStatuses.includes(statusSlug)
+      ? currentStatuses.filter((s) => s !== statusSlug)
+      : [...currentStatuses, statusSlug]
     onFiltersChange({ status: newStatuses.length > 0 ? newStatuses : undefined })
   }
 
@@ -94,8 +94,8 @@ export function InboxFiltersPanel({
               className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
             >
               <Checkbox
-                checked={filters.status?.includes(status.slug as PostStatus) || false}
-                onCheckedChange={() => handleStatusToggle(status.slug as PostStatus)}
+                checked={filters.status?.includes(status.slug) || false}
+                onCheckedChange={() => handleStatusToggle(status.slug)}
               />
               <span
                 className="h-2 w-2 rounded-full shrink-0"

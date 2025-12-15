@@ -19,6 +19,9 @@ export default async function BoardImportPage({
     notFound()
   }
 
+  // board.id is already a TypeID from Drizzle schema
+  const boardId = board.id
+
   return (
     <div className="space-y-6">
       <div>
@@ -27,7 +30,7 @@ export default async function BoardImportPage({
           Upload a CSV file to import posts into {board.name}
         </p>
       </div>
-      <BoardImportSection organizationId={organization.id} boardId={board.id} />
+      <BoardImportSection organizationId={organization.id} boardId={boardId} />
     </div>
   )
 }

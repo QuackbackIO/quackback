@@ -27,6 +27,7 @@ import {
 } from '@quackback/db'
 import { getSession } from './auth/server'
 import type { ServiceContext } from '@quackback/domain'
+import { toMemberId } from '@quackback/ids'
 
 // =============================================================================
 // Domain Resolution
@@ -293,7 +294,7 @@ export async function requireAuthenticatedTenant(): Promise<
     serviceContext: {
       organizationId: result.organization.id,
       userId: result.user.id,
-      memberId: result.member.id,
+      memberId: toMemberId(result.member.id),
       memberRole: result.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: result.user.name || result.user.email,
       userEmail: result.user.email,
@@ -551,7 +552,7 @@ export async function requireAuthenticatedTenantBySlug(orgSlug: string): Promise
     serviceContext: {
       organizationId: result.organization.id,
       userId: result.user.id,
-      memberId: result.member.id,
+      memberId: toMemberId(result.member.id),
       memberRole: result.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: result.user.name || result.user.email,
       userEmail: result.user.email,

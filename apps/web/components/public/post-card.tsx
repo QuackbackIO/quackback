@@ -9,13 +9,14 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { getInitials } from '@quackback/domain/utils'
-import type { PostStatus, PostStatusEntity } from '@quackback/db/types'
+import type { PostStatusEntity } from '@quackback/db/types'
+import type { StatusId } from '@quackback/ids'
 
 interface PostCardProps {
   id: string
   title: string
   content: string
-  status: PostStatus
+  statusId: StatusId | null
   statuses: PostStatusEntity[]
   voteCount: number
   commentCount: number
@@ -37,7 +38,7 @@ export function PostCard({
   id,
   title,
   content,
-  status,
+  statusId,
   statuses,
   voteCount,
   commentCount,
@@ -52,7 +53,7 @@ export function PostCard({
   isAuthenticated = true,
 }: PostCardProps) {
   const { openAuthPopover } = useAuthPopover()
-  const currentStatus = statuses.find((s) => s.slug === status)
+  const currentStatus = statuses.find((s) => s.id === statusId)
   const {
     voteCount: currentVoteCount,
     hasVoted: currentHasVoted,
@@ -109,12 +110,10 @@ export function PostCard({
 
       {/* Content section */}
       <div className="post-card__content flex-1 min-w-0 px-4 py-3">
-        {/* Status badge */}
-        <StatusBadge
-          name={currentStatus?.name || status}
-          color={currentStatus?.color}
-          className="mb-2"
-        />
+        {/* Status badge - only render if status exists */}
+        {currentStatus && (
+          <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-2" />
+        )}
 
         {/* Title */}
         <h3 className="font-semibold text-[15px] text-foreground line-clamp-1 mb-1">{title}</h3>

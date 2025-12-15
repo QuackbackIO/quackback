@@ -19,6 +19,9 @@ export default async function BoardExportPage({
     notFound()
   }
 
+  // board.id is already a TypeID from Drizzle schema
+  const boardId = board.id
+
   return (
     <div className="space-y-6">
       <div>
@@ -27,7 +30,7 @@ export default async function BoardExportPage({
           Download posts from {board.name} as a CSV file
         </p>
       </div>
-      <BoardExportSection organizationId={organization.id} boardId={board.id} />
+      <BoardExportSection organizationId={organization.id} boardId={boardId} />
     </div>
   )
 }

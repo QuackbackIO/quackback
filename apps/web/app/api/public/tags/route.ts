@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: result.error.message }, { status: 500 })
     }
 
+    // Response is already in TypeID format from service layer
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error fetching public tags:', error)

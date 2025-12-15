@@ -1,13 +1,20 @@
-import { withApiHandlerParams, validateBody, ApiError, successResponse } from '@/lib/api-handler'
+import {
+  withApiHandlerParams,
+  validateBody,
+  ApiError,
+  successResponse,
+  parseId,
+} from '@/lib/api-handler'
 import { z } from 'zod'
 import { getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type RoadmapError } from '@quackback/domain'
+import { isValidTypeId, type PostId } from '@quackback/ids'
 
 type RouteParams = { roadmapId: string }
 
+// Accept TypeID strings and validate in route handler
 const reorderPostsSchema = z.object({
-  statusId: z.string().uuid(),
-  postIds: z.array(z.string().uuid()),
+  postIds: z.array(z.string()),
 })
 
 /**
@@ -34,18 +41,24 @@ function mapErrorToStatus(error: RoadmapError): number {
 
 /**
  * PUT /api/roadmaps/[roadmapId]/posts/reorder
- * Reorder posts within a roadmap column
+ * Reorder posts within a roadmap
  */
 export const PUT = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { roadmapId } = params
+  // Parse TypeID to UUID for database query
+  const roadmapId = parseId(params.roadmapId, 'roadmap')
   const body = await request.json()
-  const { statusId, postIds } = validateBody(reorderPostsSchema, body)
+  const { postIds: postIdsTypeId } = validateBody(reorderPostsSchema, body)
+
+  // Validate TypeIDs
+  const postIds = postIdsTypeId.map((id) => {
+    if (!isValidTypeId(id, 'post')) {
+      throw new ApiError(`Invalid post ID format: ${id}`, 400)
+    }
+    return id as PostId
+  })
 
   const ctx = buildServiceContext(validation)
-  const result = await getRoadmapService().reorderPostsInColumn(
-    { roadmapId, statusId, postIds },
-    ctx
-  )
+  const result = await getRoadmapService().reorderPostsInColumn({ roadmapId, postIds }, ctx)
 
   if (!result.success) {
     throw new ApiError(result.error.message, mapErrorToStatus(result.error))

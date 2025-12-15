@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and } from '@quackback/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
+import { toMemberId } from '@quackback/ids'
 
 /**
  * GET /api/user/notification-preferences
@@ -34,8 +35,9 @@ export async function GET(request: NextRequest) {
     }
 
     const subscriptionService = new SubscriptionService()
+    const memberId = toMemberId(memberRecord.id)
     const preferences = await subscriptionService.getNotificationPreferences(
-      memberRecord.id,
+      memberId,
       organizationId
     )
 
@@ -101,8 +103,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const subscriptionService = new SubscriptionService()
+    const memberId = toMemberId(memberRecord.id)
     const preferences = await subscriptionService.updateNotificationPreferences(
-      memberRecord.id,
+      memberId,
       updates,
       organizationId
     )

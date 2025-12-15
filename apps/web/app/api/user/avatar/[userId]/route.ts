@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, user, eq } from '@quackback/db'
+import { isValidTypeId, toUuid } from '@quackback/ids'
 
 /**
  * GET /api/user/avatar/[userId]
@@ -12,7 +13,13 @@ export async function GET(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = await params
+    const { userId: userIdParam } = await params
+
+    // Parse TypeID to UUID for database query (user table uses raw UUIDs)
+    if (!isValidTypeId(userIdParam, 'user')) {
+      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 })
+    }
+    const userId = toUuid(userIdParam)
 
     const userRecord = await db.query.user.findFirst({
       where: eq(user.id, userId),

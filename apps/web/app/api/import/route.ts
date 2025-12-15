@@ -6,6 +6,7 @@ import { addImportJob, type ImportJobData } from '@quackback/jobs'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
 import { getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
+import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_ROWS = 10000
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
     // Parse multipart form data
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const boardId = formData.get('boardId') as string | null
+    const boardIdParam = formData.get('boardId') as string | null
     const organizationId = formData.get('organizationId') as string | null
 
     // Validate tenant access
@@ -46,8 +47,17 @@ export async function POST(request: NextRequest) {
     const ctx = buildServiceContext(validation)
     const boardService = getBoardService()
 
+    // Validate boardId TypeID format
+    let boardId: BoardId | null = null
+    if (boardIdParam) {
+      if (!isValidTypeId(boardIdParam, 'board')) {
+        return NextResponse.json({ error: 'Invalid board ID format' }, { status: 400 })
+      }
+      boardId = boardIdParam as BoardId
+    }
+
     // Validate board exists and belongs to organization
-    let targetBoardId = boardId
+    let targetBoardId: BoardId | null = boardId
     if (boardId) {
       const boardResult = await boardService.validateBoardBelongsToOrg(
         boardId,

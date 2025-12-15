@@ -16,7 +16,19 @@ import {
 import { cn } from '@/lib/utils'
 import { toExternalPath } from '@/lib/tenant-paths'
 
-const navSections = [
+interface NavItem {
+  label: string
+  href: string
+  icon: typeof Settings
+  cloudOnly?: boolean
+}
+
+interface NavSection {
+  label: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
     label: 'Organization',
     items: [
@@ -24,7 +36,7 @@ const navSections = [
       { label: 'Integrations', href: '/admin/settings/integrations', icon: Plug2 },
       { label: 'Security', href: '/admin/settings/security', icon: Shield },
       { label: 'Domains', href: '/admin/settings/domains', icon: Globe },
-      { label: 'Billing', href: '/admin/settings/billing', icon: CreditCard },
+      { label: 'Billing', href: '/admin/settings/billing', icon: CreditCard, cloudOnly: true },
     ],
   },
   {
@@ -38,14 +50,24 @@ const navSections = [
   },
 ]
 
-export function SettingsNav() {
+interface SettingsNavProps {
+  isCloud: boolean
+}
+
+export function SettingsNav({ isCloud }: SettingsNavProps) {
   const rawPathname = usePathname()
   const pathname = toExternalPath(rawPathname)
+
+  // Filter sections to remove cloud-only items when not in cloud mode
+  const filteredSections = navSections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.cloudOnly || isCloud),
+  }))
 
   return (
     <nav className="w-56 shrink-0">
       <div className="sticky top-6 bg-card border border-border/50 rounded-lg p-4 shadow-sm space-y-5">
-        {navSections.map((section) => (
+        {filteredSections.map((section) => (
           <div key={section.label}>
             <h3 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2 px-3">
               {section.label}

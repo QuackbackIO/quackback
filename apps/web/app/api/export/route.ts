@@ -3,12 +3,13 @@ import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
 import { getPostService, getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
+import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
-    const boardId = searchParams.get('boardId')
+    const boardIdParam = searchParams.get('boardId')
 
     // Validate tenant access
     const validation = await validateApiTenantAccess(organizationId)
@@ -26,7 +27,13 @@ export async function GET(request: NextRequest) {
     const boardService = getBoardService()
     const postService = getPostService()
 
-    if (boardId) {
+    // Validate boardId TypeID format
+    let boardId: BoardId | undefined
+    if (boardIdParam) {
+      if (!isValidTypeId(boardIdParam, 'board')) {
+        return NextResponse.json({ error: 'Invalid board ID format' }, { status: 400 })
+      }
+      boardId = boardIdParam as BoardId
       // Verify board belongs to organization
       const boardResult = await boardService.validateBoardBelongsToOrg(
         boardId,
@@ -38,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all posts for export
-    const postsResult = await postService.listPostsForExport(boardId || undefined, ctx)
+    const postsResult = await postService.listPostsForExport(boardId, ctx)
     if (!postsResult.success) {
       return NextResponse.json({ error: postsResult.error.message }, { status: 500 })
     }
@@ -60,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     const rows = orgPosts.map((post) => {
       const tagNames = post.tags.map((t) => t.name).join(',')
-      const statusSlug = post.statusDetails?.name || post.status || ''
+      const statusSlug = post.statusDetails?.name || ''
 
       return [
         escapeCSV(post.title),

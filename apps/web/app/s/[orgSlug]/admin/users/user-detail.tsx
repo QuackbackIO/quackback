@@ -123,7 +123,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
       <div className="flex-1 min-w-0 px-3 py-2.5">
         {/* Status and engagement badges row */}
         <div className="flex items-center gap-2 mb-1.5">
-          <StatusBadge name={post.status} color={post.statusColor} />
+          {post.statusName && <StatusBadge name={post.statusName} color={post.statusColor} />}
           <EngagementBadges types={post.engagementTypes} />
         </div>
 

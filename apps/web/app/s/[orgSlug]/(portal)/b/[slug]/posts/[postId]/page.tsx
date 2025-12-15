@@ -9,6 +9,7 @@ import { VoteSidebar, VoteSidebarSkeleton } from './_components/vote-sidebar'
 import { PostContentSection } from './_components/post-content-section'
 import { OfficialResponseSection } from './_components/official-response-section'
 import { CommentsSection, CommentsSectionSkeleton } from './_components/comments-section'
+import { isValidTypeId, type PostId } from '@quackback/ids'
 
 // Ensure page is not cached since it depends on user's cookie
 export const dynamic = 'force-dynamic'
@@ -18,12 +19,18 @@ interface PostDetailPageProps {
 }
 
 export default async function PostDetailPage({ params }: PostDetailPageProps) {
-  const { orgSlug, slug, postId } = await params
+  const { orgSlug, slug, postId: postIdParam } = await params
 
   const org = await getOrganizationBySlug(orgSlug)
   if (!org) {
     return null
   }
+
+  // Validate TypeID format
+  if (!isValidTypeId(postIdParam, 'post')) {
+    notFound()
+  }
+  const postId = postIdParam as PostId
 
   // Verify the board exists and is public
   const boardResult = await getBoardService().getPublicBoardBySlug(org.id, slug)
@@ -32,17 +39,17 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     notFound()
   }
 
-  // Get post detail (needed for 404 check and to pass data to child components)
+  // Get post detail - services now accept TypeIDs and return TypeIDs
   const postResult = await getPostService().getPublicPostDetail(postId)
   const post = postResult.success ? postResult.value : null
   if (!post || post.board.slug !== slug) {
     notFound()
   }
 
-  // Get statuses for display
+  // Get statuses for display - services return TypeIDs directly
   const statusesResult = await getStatusService().listPublicStatuses(org.id)
   const statuses = statusesResult.success ? statusesResult.value : []
-  const currentStatus = statuses.find((s) => s.slug === post.status)
+  const currentStatus = statuses.find((s) => s.id === post.statusId)
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6">
@@ -65,7 +72,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
           {/* Vote & Subscribe section - left column */}
           <Suspense fallback={<VoteSidebarSkeleton />}>
             <VoteSidebar
-              postId={post.id}
+              postId={postId}
               organizationId={org.id}
               initialVoteCount={post.voteCount}
             />

@@ -18,14 +18,15 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
   }
 
   // Get statuses marked for roadmap display and public roadmaps in parallel
+  // Services now return TypeIDs directly
   const [statusesResult, roadmapsResult] = await Promise.all([
     getStatusService().listPublicStatuses(org.id),
     getRoadmapService().listPublicRoadmaps(org.id),
   ])
 
   const allStatuses = statusesResult.success ? statusesResult.value : []
-  const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
-  const publicRoadmaps = roadmapsResult.success ? roadmapsResult.value : []
+  const statuses = allStatuses.filter((s) => s.showOnRoadmap)
+  const roadmaps = roadmapsResult.success ? roadmapsResult.value : []
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -34,11 +35,7 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
         <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
       </div>
 
-      <RoadmapBoard
-        organizationId={org.id}
-        statuses={roadmapStatuses}
-        initialRoadmaps={publicRoadmaps}
-      />
+      <RoadmapBoard organizationId={org.id} statuses={statuses} initialRoadmaps={roadmaps} />
     </div>
   )
 }

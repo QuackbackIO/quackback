@@ -3,9 +3,11 @@ import { withApiHandler, validateBody, ApiError, successResponse } from '@/lib/a
 import { z } from 'zod'
 import { getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type RoadmapError } from '@quackback/domain'
+import { isValidTypeId, type RoadmapId } from '@quackback/ids'
 
+// Accept TypeID strings and validate in route handler
 const reorderRoadmapsSchema = z.object({
-  roadmapIds: z.array(z.string().uuid()),
+  roadmapIds: z.array(z.string()),
 })
 
 /**
@@ -36,7 +38,15 @@ function mapErrorToStatus(error: RoadmapError): number {
  */
 export const PUT = withApiHandler(async (request: NextRequest, { validation }) => {
   const body = await request.json()
-  const { roadmapIds } = validateBody(reorderRoadmapsSchema, body)
+  const { roadmapIds: roadmapIdsTypeId } = validateBody(reorderRoadmapsSchema, body)
+
+  // Validate TypeIDs
+  const roadmapIds = roadmapIdsTypeId.map((id) => {
+    if (!isValidTypeId(id, 'roadmap')) {
+      throw new ApiError(`Invalid roadmap ID format: ${id}`, 400)
+    }
+    return id as RoadmapId
+  })
 
   const ctx = buildServiceContext(validation)
   const result = await getRoadmapService().reorderRoadmaps(roadmapIds, ctx)

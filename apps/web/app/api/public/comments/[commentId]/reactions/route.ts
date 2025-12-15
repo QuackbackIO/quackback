@@ -5,6 +5,7 @@ import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getCommentService } from '@/lib/services'
 import type { ServiceContext, CommentError } from '@quackback/domain'
+import { isValidTypeId, toMemberId, type CommentId } from '@quackback/ids'
 
 const reactionSchema = z.object({
   emoji: z.string().min(1),
@@ -36,7 +37,13 @@ function getHttpStatusFromError(error: CommentError): number {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { commentId } = await params
+    const { commentId: commentIdParam } = await params
+
+    // Validate TypeID format
+    if (!isValidTypeId(commentIdParam, 'comment')) {
+      return NextResponse.json({ error: 'Invalid comment ID format' }, { status: 400 })
+    }
+    const commentId = commentIdParam as CommentId
 
     // Require authentication
     const session = await getSession()
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const ctx: ServiceContext = {
       organizationId: board.organizationId,
       userId: session.user.id,
-      memberId: memberRecord.id,
+      memberId: toMemberId(memberRecord.id),
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
       userName: session.user.name || session.user.email,
       userEmail: session.user.email,

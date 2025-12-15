@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-query'
 import type { PublicFeedbackFilters } from '@/app/s/[orgSlug]/(portal)/use-public-filters'
 import type { PublicPostListItem } from '@quackback/domain'
+import type { PostId, BoardId, StatusId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -184,7 +185,7 @@ interface CreatePostResponse {
   id: string
   title: string
   content: string
-  status: string
+  statusId: StatusId | null
   voteCount: number
   createdAt: string
   board: { id: string; name: string; slug: string }
@@ -219,18 +220,19 @@ export function useCreatePublicPost() {
           if (!old) return old
 
           // Create the new post item matching PublicPostListItem shape
+          // Cast id as PostId since API returns TypeID format strings
           const newPostItem: PublicPostListItem = {
-            id: newPost.id,
+            id: newPost.id as PostId,
             title: newPost.title,
             content: newPost.content,
-            status: newPost.status as PublicPostListItem['status'],
+            statusId: newPost.statusId as StatusId | null,
             voteCount: newPost.voteCount,
             authorName: null, // Will be filled by server on refetch
             memberId: null,
             createdAt: new Date(newPost.createdAt),
             commentCount: 0,
             tags: [],
-            board: newPost.board,
+            board: { ...newPost.board, id: newPost.board.id as BoardId },
           }
 
           return {

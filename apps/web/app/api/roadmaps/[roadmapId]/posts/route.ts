@@ -1,18 +1,26 @@
 import { NextResponse } from 'next/server'
-import { withApiHandlerParams, validateBody, ApiError, successResponse } from '@/lib/api-handler'
+import {
+  withApiHandlerParams,
+  validateBody,
+  ApiError,
+  successResponse,
+  parseId,
+} from '@/lib/api-handler'
 import { z } from 'zod'
 import { getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type RoadmapError } from '@quackback/domain'
+import { isValidTypeId, type StatusId, type PostId } from '@quackback/ids'
+// Note: StatusId still used for GET query params
 
 type RouteParams = { roadmapId: string }
 
+// Accept TypeID strings and validate in route handler
 const addPostSchema = z.object({
-  postId: z.string().uuid(),
-  statusId: z.string().uuid(),
+  postId: z.string(),
 })
 
 const removePostSchema = z.object({
-  postId: z.string().uuid(),
+  postId: z.string(),
 })
 
 /**
@@ -42,9 +50,20 @@ function mapErrorToStatus(error: RoadmapError): number {
  * Get posts for a roadmap, optionally filtered by status
  */
 export const GET = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { roadmapId } = params
+  // Parse TypeID to UUID for database query
+  const roadmapId = parseId(params.roadmapId, 'roadmap')
   const { searchParams } = new URL(request.url)
-  const statusId = searchParams.get('statusId') || undefined
+
+  // Parse optional statusId TypeID
+  const statusIdParam = searchParams.get('statusId')
+  let statusId: StatusId | undefined
+  if (statusIdParam) {
+    if (!isValidTypeId(statusIdParam, 'status')) {
+      throw new ApiError('Invalid status ID format', 400)
+    }
+    statusId = statusIdParam as StatusId
+  }
+
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
   const offset = parseInt(searchParams.get('offset') || '0', 10)
 
@@ -59,6 +78,7 @@ export const GET = withApiHandlerParams<RouteParams>(async (request, { validatio
     throw new ApiError(result.error.message, mapErrorToStatus(result.error))
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -67,12 +87,19 @@ export const GET = withApiHandlerParams<RouteParams>(async (request, { validatio
  * Add a post to a roadmap
  */
 export const POST = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { roadmapId } = params
+  // Parse TypeID to UUID for database query
+  const roadmapId = parseId(params.roadmapId, 'roadmap')
   const body = await request.json()
-  const { postId, statusId } = validateBody(addPostSchema, body)
+  const { postId: postIdTypeId } = validateBody(addPostSchema, body)
+
+  // Validate TypeID format
+  if (!isValidTypeId(postIdTypeId, 'post')) {
+    throw new ApiError('Invalid post ID format', 400)
+  }
+  const postId = postIdTypeId as PostId
 
   const ctx = buildServiceContext(validation)
-  const result = await getRoadmapService().addPostToRoadmap({ postId, roadmapId, statusId }, ctx)
+  const result = await getRoadmapService().addPostToRoadmap({ postId, roadmapId }, ctx)
 
   if (!result.success) {
     throw new ApiError(result.error.message, mapErrorToStatus(result.error))
@@ -86,9 +113,16 @@ export const POST = withApiHandlerParams<RouteParams>(async (request, { validati
  * Remove a post from a roadmap
  */
 export const DELETE = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { roadmapId } = params
+  // Parse TypeID to UUID for database query
+  const roadmapId = parseId(params.roadmapId, 'roadmap')
   const body = await request.json()
-  const { postId } = validateBody(removePostSchema, body)
+  const { postId: postIdTypeId } = validateBody(removePostSchema, body)
+
+  // Validate TypeID format
+  if (!isValidTypeId(postIdTypeId, 'post')) {
+    throw new ApiError('Invalid post ID format', 400)
+  }
+  const postId = postIdTypeId as PostId
 
   const ctx = buildServiceContext(validation)
   const result = await getRoadmapService().removePostFromRoadmap(postId, roadmapId, ctx)

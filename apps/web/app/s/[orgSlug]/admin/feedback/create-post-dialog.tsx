@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { createPostSchema, type CreatePostInput, type PostStatus } from '@/lib/schemas/posts'
+import { createPostSchema, type CreatePostInput } from '@/lib/schemas/posts'
 import { useCreatePost } from '@/lib/hooks/use-inbox-queries'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -37,20 +37,21 @@ export function CreatePostDialog({
   onPostCreated,
 }: CreatePostDialogProps) {
   // Find the default status for new posts
-  const defaultStatus = statuses.find((s) => s.isDefault)?.slug || statuses[0]?.slug || 'open'
+  const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const createPostMutation = useCreatePost(organizationId)
 
   const form = useForm<CreatePostInput>({
-    resolver: standardSchemaResolver(createPostSchema),
+    // Cast resolver since Zod's z.custom<T> doesn't properly infer branded types
+    resolver: standardSchemaResolver(createPostSchema) as any,
     defaultValues: {
       title: '',
       content: '',
       boardId: boards[0]?.id || '',
-      status: defaultStatus as PostStatus,
-      tagIds: [] as string[],
-    },
+      statusId: defaultStatusId,
+      tagIds: [],
+    } as CreatePostInput,
   })
 
   const handleContentChange = useCallback(
@@ -94,7 +95,7 @@ export function CreatePostDialog({
   }
 
   const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
-  const selectedStatus = statuses.find((s) => s.slug === form.watch('status'))
+  const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -145,7 +146,7 @@ export function CreatePostDialog({
 
               <FormField
                 control={form.control}
-                name="status"
+                name="statusId"
                 render={({ field }) => (
                   <FormItem className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Status:</span>
@@ -170,7 +171,7 @@ export function CreatePostDialog({
                       </FormControl>
                       <SelectContent align="start">
                         {statuses.map((status) => (
-                          <SelectItem key={status.id} value={status.slug} className="text-xs py-1">
+                          <SelectItem key={status.id} value={status.id} className="text-xs py-1">
                             <div className="flex items-center gap-1.5">
                               <span
                                 className="h-2 w-2 rounded-full"

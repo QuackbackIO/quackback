@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
+import { boardIdSchema, statusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -17,25 +18,33 @@ import { Badge } from '@/components/ui/badge'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { useUpdatePost, useUpdatePostTags } from '@/lib/hooks/use-inbox-queries'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity, PostStatus } from '@quackback/db/types'
+import type { Board, Tag, PostStatusEntity } from '@quackback/db/types'
+import type { BoardId, StatusId, TagId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 const editPostSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Description is required').max(10000),
-  boardId: z.string().uuid('Select a board'),
-  status: z.enum(['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed']),
-  tagIds: z.array(z.string().uuid()),
+  boardId: boardIdSchema,
+  statusId: statusIdSchema.optional(),
+  tagIds: tagIdsSchema,
 })
 
-type EditPostInput = z.infer<typeof editPostSchema>
+// Manually type since Zod's z.custom<T> doesn't properly infer branded types
+interface EditPostInput {
+  title: string
+  content: string
+  boardId: BoardId
+  statusId?: StatusId
+  tagIds: TagId[]
+}
 
 interface PostToEdit {
   id: string
   title: string
   content: string
   contentJson?: unknown
-  status: PostStatus
+  statusId: StatusId | null
   board: { id: string; name: string; slug: string }
   tags: { id: string; name: string; color: string }[]
 }
@@ -88,14 +97,15 @@ export function EditPostDialog({
   const wasOpenRef = useRef(false)
 
   const form = useForm<EditPostInput>({
-    resolver: standardSchemaResolver(editPostSchema),
+    // Cast resolver since Zod's z.custom<T> doesn't properly infer branded types
+    resolver: standardSchemaResolver(editPostSchema) as any,
     defaultValues: {
       title: post.title,
       content: post.content,
       boardId: post.board.id,
-      status: post.status,
+      statusId: post.statusId || undefined,
       tagIds: post.tags.map((t) => t.id),
-    },
+    } as EditPostInput,
   })
 
   // Reset form when opening dialog (handles both new post and reopening same post)
@@ -109,9 +119,9 @@ export function EditPostDialog({
         title: post.title,
         content: post.content,
         boardId: post.board.id,
-        status: post.status,
+        statusId: post.statusId || undefined,
         tagIds: post.tags.map((t) => t.id),
-      })
+      } as EditPostInput)
       setContentJson(getInitialContentJson(post))
     }
 
@@ -137,7 +147,7 @@ export function EditPostDialog({
         title: data.title,
         content: data.content,
         contentJson,
-        status: data.status,
+        statusId: data.statusId,
       })
 
       // Update tags separately if changed
@@ -173,7 +183,7 @@ export function EditPostDialog({
   }
 
   const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
-  const selectedStatus = statuses.find((s) => s.slug === form.watch('status'))
+  const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -219,7 +229,7 @@ export function EditPostDialog({
 
               <FormField
                 control={form.control}
-                name="status"
+                name="statusId"
                 render={({ field }) => (
                   <FormItem className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Status:</span>
@@ -244,7 +254,7 @@ export function EditPostDialog({
                       </FormControl>
                       <SelectContent align="start">
                         {statuses.map((status) => (
-                          <SelectItem key={status.id} value={status.slug} className="text-xs py-1">
+                          <SelectItem key={status.id} value={status.id} className="text-xs py-1">
                             <div className="flex items-center gap-1.5">
                               <span
                                 className="h-2 w-2 rounded-full"

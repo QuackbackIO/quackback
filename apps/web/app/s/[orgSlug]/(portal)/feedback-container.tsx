@@ -249,7 +249,7 @@ export function FeedbackContainer({
                       id={post.id}
                       title={post.title}
                       content={post.content}
-                      status={post.status}
+                      statusId={post.statusId}
                       statuses={statuses}
                       voteCount={post.voteCount}
                       commentCount={post.commentCount}

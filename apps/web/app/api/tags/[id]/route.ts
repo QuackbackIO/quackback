@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { withApiHandlerParams, validateBody, ApiError, successResponse } from '@/lib/api-handler'
+import {
+  withApiHandlerParams,
+  validateBody,
+  ApiError,
+  successResponse,
+  parseId,
+} from '@/lib/api-handler'
 import { getTagService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
 import { z } from 'zod'
@@ -19,7 +25,8 @@ type RouteParams = { id: string }
  * Get a single tag by ID
  */
 export const GET = withApiHandlerParams<RouteParams>(async (_request, { validation, params }) => {
-  const { id } = params
+  // Parse TypeID to UUID for database query
+  const id = parseId(params.id, 'tag')
 
   // Build service context from validation
   const ctx = buildServiceContext(validation)
@@ -44,6 +51,7 @@ export const GET = withApiHandlerParams<RouteParams>(async (_request, { validati
     }
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -52,7 +60,8 @@ export const GET = withApiHandlerParams<RouteParams>(async (_request, { validati
  * Update a tag
  */
 export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validation, params }) => {
-  const { id } = params
+  // Validate TypeID format
+  const id = parseId(params.id, 'tag')
   const body = await request.json()
   const input = validateBody(updateTagSchema, body)
 
@@ -81,6 +90,7 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
     }
   }
 
+  // Response is already in TypeID format from service layer
   return NextResponse.json(result.value)
 })
 
@@ -90,7 +100,8 @@ export const PATCH = withApiHandlerParams<RouteParams>(async (request, { validat
  */
 export const DELETE = withApiHandlerParams<RouteParams>(
   async (_request, { validation, params }) => {
-    const { id } = params
+    // Parse TypeID to UUID for database query
+    const id = parseId(params.id, 'tag')
 
     // Build service context from validation
     const ctx = buildServiceContext(validation)

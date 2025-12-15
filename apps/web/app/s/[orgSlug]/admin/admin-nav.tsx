@@ -73,11 +73,11 @@ export function AdminNav({ initialUserData }: AdminNavProps) {
   const email =
     isSessionLoaded && clientUser ? (clientUser.email ?? null) : (initialUserData?.email ?? null)
   // For avatar: use session image URL once loaded, fall back to SSR data
-  // During hydration, MUST use SSR data to prevent hydration mismatch
-  // Important: if session is loaded but image is empty/null, show no avatar (not SSR fallback)
+  // During hydration, MUST use SSR data (base64 blob) to prevent hydration mismatch
+  // After hydration, use session image which includes the /api/user/avatar/... URL
   const avatarUrl = isSessionLoaded
-    ? clientUser?.image || null // Use session image or null (for initials fallback)
-    : (initialUserData?.avatarUrl ?? null) // During hydration, use SSR data
+    ? (clientUser?.image ?? null)
+    : (initialUserData?.avatarUrl ?? null)
 
   return (
     <header className="border-b border-border bg-card">

@@ -75,10 +75,16 @@ export function FeedbackSidebar({ boards, currentBoard, onBoardChange }: Feedbac
           href="https://quackback.io"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-3"
+          className="group flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-3"
         >
           <span>Powered by</span>
-          <Image src="/logo.png" alt="" width={12} height={12} className="opacity-50" />
+          <Image
+            src="/logo.png"
+            alt=""
+            width={12}
+            height={12}
+            className="opacity-50 group-hover:opacity-100 transition-opacity"
+          />
           <span className="font-medium">Quackback</span>
         </Link>
       </div>

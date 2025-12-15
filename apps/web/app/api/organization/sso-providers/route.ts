@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db, ssoProvider, eq } from '@quackback/db'
 import { withApiHandler, ApiError, validateBody, successResponse } from '@/lib/api-handler'
 import { createSsoProviderSchema } from '@/lib/schemas/sso-providers'
+import { fromUuid } from '@quackback/ids'
 
 /**
  * GET /api/organization/sso-providers
@@ -15,9 +16,10 @@ export const GET = withApiHandler(
       orderBy: (ssoProvider, { desc }) => [desc(ssoProvider.createdAt)],
     })
 
-    // Parse JSON configs and mask secrets
+    // Parse JSON configs and mask secrets, transform UUIDs to TypeIDs (sso_provider uses raw UUIDs)
     const safeProviders = providers.map((provider) => ({
       ...provider,
+      id: fromUuid('sso_provider', provider.id),
       oidcConfig: provider.oidcConfig ? maskOidcConfig(JSON.parse(provider.oidcConfig)) : null,
       samlConfig: provider.samlConfig ? JSON.parse(provider.samlConfig) : null,
     }))
@@ -65,8 +67,10 @@ export const POST = withApiHandler(
       })
       .returning()
 
+    // Transform UUIDs to TypeIDs in response (sso_provider uses raw UUIDs)
     return successResponse({
       ...created,
+      id: fromUuid('sso_provider', created.id),
       oidcConfig: created.oidcConfig ? maskOidcConfig(JSON.parse(created.oidcConfig)) : null,
       samlConfig: created.samlConfig ? JSON.parse(created.samlConfig) : null,
     })

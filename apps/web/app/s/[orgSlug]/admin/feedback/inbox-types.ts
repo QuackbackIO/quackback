@@ -1,4 +1,5 @@
-import type { PostStatus, Board, Tag, Comment } from '@quackback/db/types'
+import type { Board, Tag, Comment } from '@quackback/db/types'
+import type { StatusId } from '@quackback/ids'
 
 export interface OfficialResponse {
   content: string
@@ -22,7 +23,7 @@ export interface PostDetails {
   title: string
   content: string
   contentJson?: unknown
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   hasVoted: boolean
   // Member-scoped identity (Hub-and-Spoke model)
