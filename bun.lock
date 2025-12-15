@@ -111,6 +111,7 @@
         "@quackback/db": "workspace:*",
         "@quackback/domain": "workspace:*",
         "@quackback/email": "workspace:*",
+        "@quackback/ids": "workspace:*",
         "@quackback/integrations": "workspace:*",
         "@quackback/jobs": "workspace:*",
         "bullmq": "^5.34.8",
@@ -129,6 +130,7 @@
       "dependencies": {
         "@quackback/db": "workspace:*",
         "@quackback/domain": "workspace:*",
+        "@quackback/ids": "workspace:*",
         "stripe": "^20.0.0",
       },
     },
@@ -143,6 +145,7 @@
       "devDependencies": {
         "@faker-js/faker": "^10.1.0",
         "@types/bcryptjs": "^3.0.0",
+        "@types/bun": "^1.3.4",
         "bcryptjs": "^3.0.3",
         "dotenv": "^17.2.3",
         "drizzle-kit": "^0.31.8",
@@ -190,6 +193,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quackback/db": "workspace:*",
+        "@quackback/ids": "workspace:*",
         "@quackback/jobs": "workspace:*",
         "@slack/web-api": "^7.8.0",
         "ioredis": "^5.4.2",

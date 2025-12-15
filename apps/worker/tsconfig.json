@@ -7,7 +7,7 @@
     "moduleResolution": "bundler",
     "target": "ESNext",
     "lib": ["ESNext"],
-    "types": ["bun-types"]
+    "types": ["bun"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@quackback/db": "workspace:*",
+    "@quackback/ids": "workspace:*",
     "@quackback/jobs": "workspace:*",
     "@slack/web-api": "^7.8.0",
     "ioredis": "^5.4.2"
