@@ -494,7 +494,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       await POST(mockRequest)
 
-      expect(capturedAccountValues.providerId).toBe('otp')
+      expect(capturedAccountValues!.providerId).toBe('otp')
     })
 
     it('should create member with role "user" for portal context', async () => {
@@ -530,7 +530,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       await POST(mockRequest)
 
-      expect(capturedMemberValues.role).toBe('user')
+      expect(capturedMemberValues!.role).toBe('user')
     })
 
     it('should create member with role "member" for team context when openSignup enabled', async () => {
@@ -585,7 +585,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       await POST(mockRequest)
 
-      expect(capturedMemberValues.role).toBe('member')
+      expect(capturedMemberValues!.role).toBe('member')
     })
 
     it('should delete verification code after successful signup', async () => {
@@ -629,7 +629,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       await POST(mockRequest)
 
-      expect(capturedUserValues.name).toBe('John Doe')
+      expect(capturedUserValues!.name).toBe('John Doe')
     })
   })
 
@@ -780,7 +780,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       await POST(mockRequest)
 
-      expect(capturedMemberValues.role).toBe('admin')
+      expect(capturedMemberValues!.role).toBe('admin')
     })
 
     it('should mark invitation as accepted', async () => {
@@ -823,7 +823,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       await POST(mockRequest)
 
-      expect(capturedUpdateValues.status).toBe('accepted')
+      expect(capturedUpdateValues!.status).toBe('accepted')
     })
 
     it('should reject invitation for different organization', async () => {

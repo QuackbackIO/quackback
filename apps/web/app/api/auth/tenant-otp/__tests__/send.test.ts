@@ -1,16 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { POST } from '../send/route'
 import { NextRequest } from 'next/server'
-
-// Type for mocked Drizzle insert chain
-interface MockInsertChain {
-  values: Mock
-}
-
-// Type for mocked Drizzle delete chain
-interface MockDeleteChain {
-  where: Mock
-}
 
 // Mock modules
 vi.mock('@quackback/db', () => ({
@@ -206,7 +196,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -229,7 +219,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockWhere = vi.fn()
       vi.mocked(db.delete).mockReturnValue({
         where: mockWhere,
-      } as MockDeleteChain)
+      } as unknown as ReturnType<typeof db.delete>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -248,7 +238,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -282,7 +272,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const now = new Date('2025-01-01T00:00:00Z')
       vi.setSystemTime(now)
@@ -302,7 +292,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const now = Date.now()
       vi.setSystemTime(now)
@@ -350,7 +340,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'TEST@EXAMPLE.COM' })
       await POST(request)
@@ -381,7 +371,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -400,7 +390,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -416,7 +406,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'user@domain.com' })
       await POST(request)
@@ -767,7 +757,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -785,7 +775,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -804,7 +794,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       await POST(request)
@@ -821,7 +811,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'TEST@EXAMPLE.COM' })
       await POST(request)
@@ -895,11 +885,11 @@ describe('POST /api/auth/tenant-otp/send', () => {
 
       vi.mocked(db.delete).mockReturnValue({
         where: mockWhere,
-      } as MockDeleteChain)
+      } as unknown as ReturnType<typeof db.delete>)
 
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const request = createMockRequest({ email: 'test@example.com' })
       const response = await POST(request)
@@ -934,7 +924,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       const emails = ['user1@example.com', 'user2@example.com', 'user3@example.com']
 
@@ -958,7 +948,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockInsert = vi.fn()
       vi.mocked(db.insert).mockReturnValue({
         values: mockInsert,
-      } as MockInsertChain)
+      } as unknown as ReturnType<typeof db.insert>)
 
       // First organization
       const mockResult1: WorkspaceDomainWithOrg = {

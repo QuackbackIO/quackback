@@ -191,7 +191,7 @@ describe('trustLogin plugin', () => {
 
       // Get the handler function from the plugin
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       // The endpoint returned by createAuthEndpoint is itself a function
       const result = await endpoint(mockContext)
 
@@ -209,7 +209,7 @@ describe('trustLogin plugin', () => {
       // Default beforeEach mock already returns empty array
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -221,7 +221,7 @@ describe('trustLogin plugin', () => {
       // Default beforeEach mock returns empty array (no valid token)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockInternalAdapter.createSession).not.toHaveBeenCalled()
@@ -255,7 +255,7 @@ describe('trustLogin plugin', () => {
       })
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       expect(mockDb.transaction).toHaveBeenCalled()
@@ -288,7 +288,7 @@ describe('trustLogin plugin', () => {
       })
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockInternalAdapter.createSession).not.toHaveBeenCalled()
@@ -323,7 +323,7 @@ describe('trustLogin plugin', () => {
       })
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       // Token is deleted atomically within the transaction
@@ -367,7 +367,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       // Token is deleted atomically within the transaction
@@ -416,7 +416,7 @@ describe('trustLogin plugin', () => {
       })
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       // Verify deletion happens before session creation
@@ -472,7 +472,7 @@ describe('trustLogin plugin', () => {
       mockDb.insert.mockReturnValue(mockInsertChain)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockDb.query.workspaceDomain.findFirst).toHaveBeenCalled()
@@ -522,7 +522,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockDb.query.member.findFirst).toHaveBeenCalled()
@@ -551,7 +551,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockDb.query.workspaceDomain.findFirst).not.toHaveBeenCalled()
@@ -582,7 +582,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       expect(mockDb.query.workspaceDomain.findFirst).toHaveBeenCalled()
@@ -621,7 +621,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -655,7 +655,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -685,7 +685,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -717,7 +717,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -747,7 +747,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -761,7 +761,7 @@ describe('trustLogin plugin', () => {
       // Default beforeEach mock returns empty array (no valid token)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -773,7 +773,7 @@ describe('trustLogin plugin', () => {
       // Default beforeEach mock returns empty array (no valid token)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockInternalAdapter.createSession).not.toHaveBeenCalled()
@@ -798,7 +798,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(null) // Session creation fails
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Verify redirect response (better-auth returns APIError with status/headers)
@@ -822,7 +822,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(null)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockSetSignedCookie).not.toHaveBeenCalled()
@@ -857,7 +857,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(null)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       // Token is deleted atomically within the transaction
@@ -873,7 +873,7 @@ describe('trustLogin plugin', () => {
       // so we don't need to set up a transfer
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Empty string for host should be rejected early
@@ -887,7 +887,7 @@ describe('trustLogin plugin', () => {
       // The check for empty host happens before the transaction is called
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Should use empty string for host - verify redirect response (better-auth returns APIError)
@@ -919,7 +919,7 @@ describe('trustLogin plugin', () => {
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       const result = await endpoint(mockContext)
 
       // Should still work with fallback URL
@@ -965,7 +965,7 @@ describe('trustLogin plugin', () => {
       mockDb.insert.mockReturnValue(mockInsertChain)
 
       const plugin = trustLogin()
-      const endpoint = plugin.endpoints!.trustLogin as TrustLoginEndpoint
+      const endpoint = plugin.endpoints!.trustLogin as unknown as TrustLoginEndpoint
       await endpoint(mockContext)
 
       expect(mockInsertChain.values).toHaveBeenCalledWith(

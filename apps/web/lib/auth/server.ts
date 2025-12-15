@@ -15,7 +15,7 @@ export interface SessionUser {
   name: string
   email: string
   emailVerified: boolean
-  image?: string | null
+  image: string | null
   organizationId: string
   createdAt: Date
   updatedAt: Date
