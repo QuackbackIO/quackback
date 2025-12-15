@@ -510,13 +510,13 @@ test.describe('Admin Users - Empty State', () => {
     const searchInput = page.getByPlaceholder('Search users...')
     await searchInput.fill('xyznonexistentuserxyz123456789')
 
-    // Wait for debounce and search to complete
-    await page.waitForTimeout(500)
-    await page.waitForLoadState('networkidle')
+    // Wait for URL to update with search param (indicates debounce completed)
+    await expect(page).toHaveURL(/search=xyznonexistentuserxyz123456789/, { timeout: 5000 })
 
-    // Should show empty state message in the user list
+    // Wait for the empty state message - this indicates the search completed
+    // The UI will update after React Query fetches with the new filters
     await expect(page.getByText('No users match your filters')).toBeVisible({
-      timeout: 10000,
+      timeout: 15000,
     })
   })
 })

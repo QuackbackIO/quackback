@@ -119,7 +119,7 @@ test.describe('Public Voting', () => {
     }
   })
 
-  test('can upvote a post', async () => {
+  test('can upvote a post (from unvoted state)', async () => {
     const page = await sharedContext.newPage()
     try {
       await page.goto('/')
@@ -130,22 +130,39 @@ test.describe('Public Voting', () => {
       const voteButton = voteButtons.nth(5)
       await expect(voteButton).toBeVisible({ timeout: 10000 })
 
-      // Get the initial vote count
       const voteCountSpan = voteButton.getByTestId('vote-count')
-      const initialCountText = await voteCountSpan.textContent()
-      const initialCount = parseInt(initialCountText || '0', 10)
 
-      // Click to vote
+      // Check if already voted (button has active class)
+      const isAlreadyVoted = await voteButton.evaluate((el) =>
+        el.classList.contains('post-card__vote--voted')
+      )
+
+      // If already voted, click to remove vote first to get to clean state
+      if (isAlreadyVoted) {
+        await voteButton.click()
+        // Wait for unvoted state to be reflected
+        await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+        await page.waitForLoadState('networkidle')
+      }
+
+      // Now get the baseline count (user has not voted)
+      const baselineCountText = await voteCountSpan.textContent()
+      const baselineCount = parseInt(baselineCountText || '0', 10)
+
+      // Click to add vote
       await voteButton.click()
 
-      // Wait for the vote to be processed and verify increase
-      await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+      // Wait for voted state first (more reliable than checking count)
+      await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+
+      // Verify the count increased
+      await expect(voteCountSpan).toHaveText(String(baselineCount + 1), { timeout: 5000 })
     } finally {
       await page.close()
     }
   })
 
-  test('can toggle vote off', async () => {
+  test('can remove vote (from voted state)', async () => {
     const page = await sharedContext.newPage()
     try {
       await page.goto('/')
@@ -157,22 +174,38 @@ test.describe('Public Voting', () => {
       await expect(voteButton).toBeVisible({ timeout: 10000 })
 
       const voteCountSpan = voteButton.getByTestId('vote-count')
-      const initialCountText = await voteCountSpan.textContent()
-      const initialCount = parseInt(initialCountText || '0', 10)
 
-      // First click - vote (should increase by 1)
-      await voteButton.click()
-      await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+      // Check if already voted
+      const isAlreadyVoted = await voteButton.evaluate((el) =>
+        el.classList.contains('post-card__vote--voted')
+      )
 
-      // Second click - unvote (should return to initial count)
+      // If not voted, click to add vote first to get to voted state
+      if (!isAlreadyVoted) {
+        await voteButton.click()
+        // Wait for voted state to be reflected
+        await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+        await page.waitForLoadState('networkidle')
+      }
+
+      // Now get the baseline count (user has voted)
+      const baselineCountText = await voteCountSpan.textContent()
+      const baselineCount = parseInt(baselineCountText || '0', 10)
+
+      // Click to remove vote
       await voteButton.click()
-      await expect(voteCountSpan).toHaveText(String(initialCount), { timeout: 5000 })
+
+      // Wait for unvoted state first (more reliable than checking count)
+      await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+
+      // Verify the count decreased
+      await expect(voteCountSpan).toHaveText(String(baselineCount - 1), { timeout: 5000 })
     } finally {
       await page.close()
     }
   })
 
-  test('vote button shows active state when voted', async () => {
+  test('can toggle vote on and off', async () => {
     const page = await sharedContext.newPage()
     try {
       await page.goto('/')
@@ -183,11 +216,29 @@ test.describe('Public Voting', () => {
       const voteButton = voteButtons.nth(7)
       await expect(voteButton).toBeVisible({ timeout: 10000 })
 
-      // Click to vote
-      await voteButton.click()
+      const voteCountSpan = voteButton.getByTestId('vote-count')
 
-      // Button should have voted state class
-      await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+      // Ensure we start from unvoted state
+      const isAlreadyVoted = await voteButton.evaluate((el) =>
+        el.classList.contains('post-card__vote--voted')
+      )
+      if (isAlreadyVoted) {
+        await voteButton.click()
+        await page.waitForTimeout(500)
+      }
+
+      const initialCountText = await voteCountSpan.textContent()
+      const initialCount = parseInt(initialCountText || '0', 10)
+
+      // First click - vote (should increase by 1)
+      await voteButton.click()
+      await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+      await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 2000 })
+
+      // Second click - unvote (should return to initial count)
+      await voteButton.click()
+      await expect(voteCountSpan).toHaveText(String(initialCount), { timeout: 5000 })
+      await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 2000 })
     } finally {
       await page.close()
     }
@@ -216,16 +267,29 @@ test.describe('Public Voting', () => {
       })
       await expect(detailVoteButton).toBeVisible({ timeout: 10000 })
 
-      // Get initial count from the detail page vote button
       const voteCountSpan = detailVoteButton.getByTestId('vote-count')
-      const initialCountText = await voteCountSpan.textContent()
-      const initialCount = parseInt(initialCountText || '0', 10)
 
-      // Click the detail page vote button
+      // Ensure we start from unvoted state (check aria-pressed which works across all vote buttons)
+      const isAlreadyVoted = (await detailVoteButton.getAttribute('aria-pressed')) === 'true'
+      if (isAlreadyVoted) {
+        await detailVoteButton.click()
+        // Wait for unvoted state
+        await expect(detailVoteButton).toHaveAttribute('aria-pressed', 'false', { timeout: 5000 })
+        await page.waitForLoadState('networkidle')
+      }
+
+      // Get baseline count from the detail page vote button
+      const baselineCountText = await voteCountSpan.textContent()
+      const baselineCount = parseInt(baselineCountText || '0', 10)
+
+      // Click the detail page vote button to add vote
       await detailVoteButton.click()
 
-      // Verify count increased on the same element
-      await expect(voteCountSpan).toHaveText(String(initialCount + 1), { timeout: 5000 })
+      // Verify button shows voted state (aria-pressed is more reliable than class name)
+      await expect(detailVoteButton).toHaveAttribute('aria-pressed', 'true', { timeout: 5000 })
+
+      // Verify count increased
+      await expect(voteCountSpan).toHaveText(String(baselineCount + 1), { timeout: 5000 })
     } finally {
       await page.close()
     }

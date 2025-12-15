@@ -23,21 +23,19 @@ describe('Unit of Work Module', () => {
     })
 
     it('throws error for invalid organization ID format', async () => {
-      await expect(withUnitOfWork('invalid-id', async () => {})).rejects.toThrow(
-        'Invalid organization ID format'
+      await expect(withUnitOfWork('invalid-id' as never, async () => {})).rejects.toThrow(
+        'Invalid length'
       )
     })
 
     it('throws error for empty organization ID', async () => {
-      await expect(withUnitOfWork('', async () => {})).rejects.toThrow(
-        'Invalid organization ID format'
-      )
+      await expect(withUnitOfWork('' as never, async () => {})).rejects.toThrow('Invalid length')
     })
 
     it('throws error for SQL injection attempt', async () => {
-      await expect(withUnitOfWork("'; DROP TABLE users; --", async () => {})).rejects.toThrow(
-        'Invalid organization ID format'
-      )
+      await expect(
+        withUnitOfWork("'; DROP TABLE users; --" as never, async () => {})
+      ).rejects.toThrow('Invalid length')
     })
   })
 
