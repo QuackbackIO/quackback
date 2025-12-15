@@ -12,10 +12,7 @@
 // BUSINESS CONSTANTS & ENUMS (from db schema)
 // ============================================
 export {
-  // Post status
-  POST_STATUSES,
-  type PostStatus,
-  // Status categories
+  // Status categories (for custom statuses)
   STATUS_CATEGORIES,
   type StatusCategory,
   // Reaction emojis

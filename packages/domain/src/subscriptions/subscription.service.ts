@@ -20,12 +20,13 @@ import {
   member,
   user,
 } from '@quackback/db'
+import type { MemberId, PostId, PostSubscriptionId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
 
 export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual'
 
 export interface Subscriber {
-  memberId: string
+  memberId: MemberId
   userId: string
   email: string
   name: string | null
@@ -33,8 +34,8 @@ export interface Subscriber {
 }
 
 export interface Subscription {
-  id: string
-  postId: string
+  id: PostSubscriptionId
+  postId: PostId
   postTitle: string
   reason: SubscriptionReason
   muted: boolean
@@ -55,8 +56,8 @@ export class SubscriptionService {
    * Subscribe a member to a post (idempotent - won't duplicate)
    */
   async subscribeToPost(
-    memberId: string,
-    postId: string,
+    memberId: MemberId,
+    postId: PostId,
     reason: SubscriptionReason,
     organizationId: string
   ): Promise<void> {
@@ -76,8 +77,8 @@ export class SubscriptionService {
    * Unsubscribe a member from a post
    */
   async unsubscribeFromPost(
-    memberId: string,
-    postId: string,
+    memberId: MemberId,
+    postId: PostId,
     organizationId: string
   ): Promise<void> {
     await withTenantContext(organizationId, async (txDb) => {
@@ -91,8 +92,8 @@ export class SubscriptionService {
    * Mute/unmute a subscription (keep it but toggle notifications)
    */
   async setSubscriptionMuted(
-    memberId: string,
-    postId: string,
+    memberId: MemberId,
+    postId: PostId,
     muted: boolean,
     organizationId: string
   ): Promise<void> {
@@ -109,8 +110,8 @@ export class SubscriptionService {
    * Returns null if not subscribed, or the subscription details
    */
   async getSubscriptionStatus(
-    memberId: string,
-    postId: string,
+    memberId: MemberId,
+    postId: PostId,
     organizationId: string
   ): Promise<{ subscribed: boolean; muted: boolean; reason: SubscriptionReason | null }> {
     return await withTenantContext(organizationId, async (txDb) => {
@@ -133,7 +134,7 @@ export class SubscriptionService {
   /**
    * Get all active (non-muted) subscribers for a post
    */
-  async getActiveSubscribers(postId: string, organizationId: string): Promise<Subscriber[]> {
+  async getActiveSubscribers(postId: PostId, organizationId: string): Promise<Subscriber[]> {
     return await withTenantContext(organizationId, async (txDb) => {
       // Single query with 3-way JOIN to avoid N+1 problem
       const rows = await txDb
@@ -162,7 +163,10 @@ export class SubscriptionService {
   /**
    * Get all subscriptions for a member
    */
-  async getMemberSubscriptions(memberId: string, organizationId: string): Promise<Subscription[]> {
+  async getMemberSubscriptions(
+    memberId: MemberId,
+    organizationId: string
+  ): Promise<Subscription[]> {
     return await withTenantContext(organizationId, async (txDb) => {
       const rows = await txDb
         .select({
@@ -192,7 +196,7 @@ export class SubscriptionService {
    * Get notification preferences for a member (creates defaults if not exists)
    */
   async getNotificationPreferences(
-    memberId: string,
+    memberId: MemberId,
     organizationId: string
   ): Promise<NotificationPreferencesData> {
     return await withTenantContext(organizationId, async (txDb) => {
@@ -221,7 +225,7 @@ export class SubscriptionService {
    * Update notification preferences for a member (upsert)
    */
   async updateNotificationPreferences(
-    memberId: string,
+    memberId: MemberId,
     preferences: Partial<NotificationPreferencesData>,
     organizationId: string
   ): Promise<NotificationPreferencesData> {
@@ -269,8 +273,8 @@ export class SubscriptionService {
    * Generate an unsubscribe token for email links
    */
   async generateUnsubscribeToken(
-    memberId: string,
-    postId: string | null,
+    memberId: MemberId,
+    postId: PostId | null,
     action: 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
   ): Promise<string> {
     const token = randomUUID()
@@ -294,8 +298,8 @@ export class SubscriptionService {
    */
   async processUnsubscribeToken(token: string): Promise<{
     action: string
-    memberId: string
-    postId: string | null
+    memberId: MemberId
+    postId: PostId | null
     post?: { title: string; boardSlug: string }
     organizationId: string
   } | null> {

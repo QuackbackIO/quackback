@@ -6,6 +6,8 @@
  * and their organization for service operations.
  */
 
+import { toMemberId, type MemberId } from '@quackback/ids'
+
 /**
  * Execution context for service layer operations.
  * Contains authenticated user and organization information.
@@ -19,8 +21,8 @@ export interface ServiceContext {
   organizationId: string
   /** User ID of the authenticated user */
   userId: string
-  /** Member ID - all authenticated users have member records now */
-  memberId: string
+  /** Member ID - all authenticated users have member records now (TypeID format: member_xxx) */
+  memberId: MemberId
   /** Member's role in the organization (unified: owner/admin/member/user) */
   memberRole: 'owner' | 'admin' | 'member' | 'user'
   /** User's display name */
@@ -59,10 +61,12 @@ export interface AuthValidation {
  * @returns ServiceContext ready for service layer operations
  */
 export function buildServiceContext(validation: AuthValidation): ServiceContext {
+  // Convert raw member ID to TypeID format
+  const memberId = toMemberId(validation.member.id)
   return {
     organizationId: validation.organization.id,
     userId: validation.user.id,
-    memberId: validation.member.id,
+    memberId,
     memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
     userName: validation.user.name || validation.user.email,
     userEmail: validation.user.email,

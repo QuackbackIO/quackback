@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TagService } from '../tag.service'
 import type { CreateTagInput, UpdateTagInput } from '../tag.types'
+import type { Tag } from '@quackback/db/types'
 import {
   createMockServiceContext,
   createMockTag,
@@ -82,7 +83,7 @@ describe('TagService', () => {
     it('should create a tag successfully with valid input', async () => {
       const ctx = createMockServiceContext()
       const input: CreateTagInput = { name: 'Bug', color: '#ff0000' }
-      const createdTag = createMockTag({ id: 'tag-new', name: 'Bug', color: '#ff0000' })
+      const createdTag = createMockTag({ id: 'tag_new', name: 'Bug', color: '#ff0000' })
 
       mockTagRepoInstance.findAll.mockResolvedValue([])
       mockTagRepoInstance.create.mockResolvedValue(createdTag)
@@ -270,15 +271,15 @@ describe('TagService', () => {
   describe('updateTag', () => {
     it('should update tag name successfully', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123', name: 'Bug' })
-      const updatedTag = createMockTag({ id: 'tag-123', name: 'Bug Fix' })
+      const existingTag = createMockTag({ id: 'tag_123', name: 'Bug' })
+      const updatedTag = createMockTag({ id: 'tag_123', name: 'Bug Fix' })
       const input: UpdateTagInput = { name: 'Bug Fix' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.findAll.mockResolvedValue([existingTag])
       mockTagRepoInstance.update.mockResolvedValue(updatedTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -288,14 +289,14 @@ describe('TagService', () => {
 
     it('should update tag color successfully', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123', color: '#ff0000' })
-      const updatedTag = createMockTag({ id: 'tag-123', color: '#00ff00' })
+      const existingTag = createMockTag({ id: 'tag_123', color: '#ff0000' })
+      const updatedTag = createMockTag({ id: 'tag_123', color: '#00ff00' })
       const input: UpdateTagInput = { color: '#00ff00' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.update.mockResolvedValue(updatedTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -305,15 +306,15 @@ describe('TagService', () => {
 
     it('should update both name and color', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123' })
-      const updatedTag = createMockTag({ id: 'tag-123', name: 'New Name', color: '#123456' })
+      const existingTag = createMockTag({ id: 'tag_123' })
+      const updatedTag = createMockTag({ id: 'tag_123', name: 'New Name', color: '#123456' })
       const input: UpdateTagInput = { name: 'New Name', color: '#123456' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.findAll.mockResolvedValue([existingTag])
       mockTagRepoInstance.update.mockResolvedValue(updatedTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(true)
     })
@@ -324,7 +325,7 @@ describe('TagService', () => {
 
       mockTagRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await tagService.updateTag('tag-nonexistent', input, ctx)
+      const result = await tagService.updateTag('tag_nonexistent', input, ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -334,12 +335,12 @@ describe('TagService', () => {
 
     it('should return error when update name is empty', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123' })
+      const existingTag = createMockTag({ id: 'tag_123' })
       const input: UpdateTagInput = { name: '' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -349,12 +350,12 @@ describe('TagService', () => {
 
     it('should return error when update name exceeds 50 characters', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123' })
+      const existingTag = createMockTag({ id: 'tag_123' })
       const input: UpdateTagInput = { name: 'a'.repeat(51) }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -364,14 +365,14 @@ describe('TagService', () => {
 
     it('should return error when duplicate name exists on rename (case-insensitive)', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123', name: 'Bug' })
-      const otherTag = createMockTag({ id: 'tag-456', name: 'Feature' })
+      const existingTag = createMockTag({ id: 'tag_123', name: 'Bug' })
+      const otherTag = createMockTag({ id: 'tag_456', name: 'Feature' })
       const input: UpdateTagInput = { name: 'FEATURE' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.findAll.mockResolvedValue([existingTag, otherTag])
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -381,27 +382,27 @@ describe('TagService', () => {
 
     it('should allow renaming to same name with different case', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123', name: 'bug' })
-      const updatedTag = createMockTag({ id: 'tag-123', name: 'Bug' })
+      const existingTag = createMockTag({ id: 'tag_123', name: 'bug' })
+      const updatedTag = createMockTag({ id: 'tag_123', name: 'Bug' })
       const input: UpdateTagInput = { name: 'Bug' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.findAll.mockResolvedValue([existingTag])
       mockTagRepoInstance.update.mockResolvedValue(updatedTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(true)
     })
 
     it('should return error when color format is invalid', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123' })
+      const existingTag = createMockTag({ id: 'tag_123' })
       const input: UpdateTagInput = { color: 'invalid' }
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -413,7 +414,7 @@ describe('TagService', () => {
       const ctx = createMockServiceContext({ memberRole: 'user' })
       const input: UpdateTagInput = { name: 'New Name' }
 
-      const result = await tagService.updateTag('tag-123', input, ctx)
+      const result = await tagService.updateTag('tag_123', input, ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -425,15 +426,15 @@ describe('TagService', () => {
   describe('deleteTag', () => {
     it('should delete tag successfully', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123' })
+      const existingTag = createMockTag({ id: 'tag_123' })
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.delete.mockResolvedValue(true)
 
-      const result = await tagService.deleteTag('tag-123', ctx)
+      const result = await tagService.deleteTag('tag_123', ctx)
 
       expect(result.success).toBe(true)
-      expect(mockTagRepoInstance.delete).toHaveBeenCalledWith('tag-123')
+      expect(mockTagRepoInstance.delete).toHaveBeenCalledWith('tag_123')
     })
 
     it('should return error when tag not found', async () => {
@@ -441,7 +442,7 @@ describe('TagService', () => {
 
       mockTagRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await tagService.deleteTag('tag-nonexistent', ctx)
+      const result = await tagService.deleteTag('tag_nonexistent', ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -452,7 +453,7 @@ describe('TagService', () => {
     it('should return error when user is unauthorized', async () => {
       const ctx = createMockServiceContext({ memberRole: 'user' })
 
-      const result = await tagService.deleteTag('tag-123', ctx)
+      const result = await tagService.deleteTag('tag_123', ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -462,12 +463,12 @@ describe('TagService', () => {
 
     it('should return error when delete operation fails', async () => {
       const ctx = createMockServiceContext()
-      const existingTag = createMockTag({ id: 'tag-123' })
+      const existingTag = createMockTag({ id: 'tag_123' })
 
       mockTagRepoInstance.findById.mockResolvedValue(existingTag)
       mockTagRepoInstance.delete.mockResolvedValue(false)
 
-      const result = await tagService.deleteTag('tag-123', ctx)
+      const result = await tagService.deleteTag('tag_123', ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -479,15 +480,15 @@ describe('TagService', () => {
   describe('getTagById', () => {
     it('should return tag when found', async () => {
       const ctx = createMockServiceContext()
-      const tag = createMockTag({ id: 'tag-123', name: 'Bug' })
+      const tag = createMockTag({ id: 'tag_123', name: 'Bug' })
 
       mockTagRepoInstance.findById.mockResolvedValue(tag)
 
-      const result = await tagService.getTagById('tag-123', ctx)
+      const result = await tagService.getTagById('tag_123', ctx)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.id).toBe('tag-123')
+        expect(result.value.id).toBe('tag_123')
         expect(result.value.name).toBe('Bug')
       }
     })
@@ -497,7 +498,7 @@ describe('TagService', () => {
 
       mockTagRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await tagService.getTagById('tag-nonexistent', ctx)
+      const result = await tagService.getTagById('tag_nonexistent', ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -510,8 +511,8 @@ describe('TagService', () => {
     it('should return all tags for organization', async () => {
       const ctx = createMockServiceContext()
       const tags = [
-        createMockTag({ id: 'tag-1', name: 'Bug' }),
-        createMockTag({ id: 'tag-2', name: 'Feature' }),
+        createMockTag({ id: 'tag_1', name: 'Bug' }),
+        createMockTag({ id: 'tag_2', name: 'Feature' }),
       ]
 
       mockTagRepoInstance.findAll.mockResolvedValue(tags)
@@ -541,22 +542,22 @@ describe('TagService', () => {
   describe('getTagsByBoard', () => {
     it('should return tags used in board', async () => {
       const ctx = createMockServiceContext()
-      const board = createMockBoard({ id: 'board-123' })
+      const board = createMockBoard({ id: 'board_123' })
       const tags = [
-        createMockTag({ id: 'tag-1', name: 'Bug' }),
-        createMockTag({ id: 'tag-2', name: 'Feature' }),
+        createMockTag({ id: 'tag_1', name: 'Bug' }),
+        createMockTag({ id: 'tag_2', name: 'Feature' }),
       ]
 
       mockBoardRepoInstance.findById.mockResolvedValue(board)
       mockTagRepoInstance.findByBoardId.mockResolvedValue(tags)
 
-      const result = await tagService.getTagsByBoard('board-123', ctx)
+      const result = await tagService.getTagsByBoard('board_123', ctx)
 
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toHaveLength(2)
       }
-      expect(mockTagRepoInstance.findByBoardId).toHaveBeenCalledWith('board-123')
+      expect(mockTagRepoInstance.findByBoardId).toHaveBeenCalledWith('board_123')
     })
 
     it('should return error when board not found', async () => {
@@ -564,7 +565,7 @@ describe('TagService', () => {
 
       mockBoardRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await tagService.getTagsByBoard('board-nonexistent', ctx)
+      const result = await tagService.getTagsByBoard('board_nonexistent', ctx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -574,12 +575,12 @@ describe('TagService', () => {
 
     it('should return empty array when board has no tags', async () => {
       const ctx = createMockServiceContext()
-      const board = createMockBoard({ id: 'board-123' })
+      const board = createMockBoard({ id: 'board_123' })
 
       mockBoardRepoInstance.findById.mockResolvedValue(board)
       mockTagRepoInstance.findByBoardId.mockResolvedValue([])
 
-      const result = await tagService.getTagsByBoard('board-123', ctx)
+      const result = await tagService.getTagsByBoard('board_123', ctx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -590,9 +591,9 @@ describe('TagService', () => {
 
   describe('listPublicTags', () => {
     it('should return tags without authentication', async () => {
-      const mockTags = [
-        createMockTag({ id: 'tag-1', name: 'Bug', color: '#ff0000' }),
-        createMockTag({ id: 'tag-2', name: 'Feature', color: '#00ff00' }),
+      const mockTags: Tag[] = [
+        createMockTag({ id: 'tag_1', name: 'Bug', color: '#ff0000' }) as Tag,
+        createMockTag({ id: 'tag_2', name: 'Feature', color: '#00ff00' }) as Tag,
       ]
 
       const { db } = await import('@quackback/db')

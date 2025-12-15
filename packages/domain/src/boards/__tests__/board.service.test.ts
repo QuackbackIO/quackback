@@ -4,6 +4,8 @@ import type { CreateBoardInput, UpdateBoardInput } from '../board.types'
 import type { ServiceContext } from '../../shared/service-context'
 import type { Board, BoardSettings, NewBoard } from '@quackback/db/types'
 import type { UnitOfWork } from '@quackback/db'
+import type { BoardId } from '@quackback/ids'
+import { createMockBoard } from '../../__tests__/test-utils'
 
 /** Mocked BoardRepository interface with the methods used in tests */
 interface MockBoardRepository {
@@ -66,7 +68,7 @@ describe('BoardService', () => {
     mockContext = {
       organizationId: 'org-123',
       userId: 'user-123',
-      memberId: 'member-123',
+      memberId: 'member_123',
       memberRole: 'admin',
       userName: 'Test User',
       userEmail: 'test@example.com',
@@ -85,8 +87,8 @@ describe('BoardService', () => {
 
     // Setup mock unit of work
     mockUnitOfWork = {
-      db: {},
-    }
+      db: {} as unknown,
+    } as UnitOfWork
 
     boardService = new BoardService()
 
@@ -114,7 +116,7 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Feature Requests',
         slug: 'feature-requests',
@@ -151,7 +153,7 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-2',
+        id: 'board_2',
         organizationId: 'org-123',
         name: 'Bug Reports & Issues',
         slug: 'bug-reports-issues',
@@ -179,7 +181,7 @@ describe('BoardService', () => {
       }
 
       const existingBoard: Board = {
-        id: 'board-existing',
+        id: 'board_existing',
         organizationId: 'org-123',
         name: 'General',
         slug: 'general',
@@ -192,7 +194,7 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         ...existingBoard,
-        id: 'board-new',
+        id: 'board_new',
         slug: 'general-1',
       }
 
@@ -217,7 +219,7 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-new',
+        id: 'board_new',
         organizationId: 'org-123',
         name: 'Ideas',
         slug: 'ideas-3',
@@ -229,10 +231,11 @@ describe('BoardService', () => {
       }
 
       // Simulate collisions for ideas, ideas-1, ideas-2
+      // Use partial Board data - findBySlug only needs id and slug to indicate existence
       mockBoardRepo.findBySlug
-        .mockResolvedValueOnce({ id: 'existing-1', slug: 'ideas' })
-        .mockResolvedValueOnce({ id: 'existing-2', slug: 'ideas-1' })
-        .mockResolvedValueOnce({ id: 'existing-3', slug: 'ideas-2' })
+        .mockResolvedValueOnce(createMockBoard({ id: 'board_existing1', slug: 'ideas' }))
+        .mockResolvedValueOnce(createMockBoard({ id: 'board_existing2', slug: 'ideas-1' }))
+        .mockResolvedValueOnce(createMockBoard({ id: 'board_existing3', slug: 'ideas-2' }))
         .mockResolvedValueOnce(null)
       mockBoardRepo.create.mockResolvedValue(mockBoard)
 
@@ -322,7 +325,7 @@ describe('BoardService', () => {
       const input: CreateBoardInput = { name: 'Board' }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Board',
         slug: 'board',
@@ -346,7 +349,7 @@ describe('BoardService', () => {
       const input: CreateBoardInput = { name: 'Board' }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Board',
         slug: 'board',
@@ -372,7 +375,7 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Feature Requests',
         slug: 'features',
@@ -400,7 +403,7 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Board',
         slug: 'board',
@@ -430,7 +433,7 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Private Board',
         slug: 'private-board',
@@ -464,10 +467,10 @@ describe('BoardService', () => {
       }
 
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Board with Settings',
-        slug: 'board-with-settings',
+        slug: 'board_with-settings',
         description: null,
         isPublic: true,
         settings,
@@ -490,7 +493,7 @@ describe('BoardService', () => {
 
   describe('updateBoard', () => {
     const existingBoard: Board = {
-      id: 'board-1',
+      id: 'board_1',
       organizationId: 'org-123',
       name: 'Original Name',
       slug: 'original-name',
@@ -516,7 +519,7 @@ describe('BoardService', () => {
       mockBoardRepo.findBySlug.mockResolvedValue(null)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -531,7 +534,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(null)
 
-      const result = await boardService.updateBoard('nonexistent', input, mockContext)
+      const result = await boardService.updateBoard('board_nonexistent', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -547,7 +550,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoard('board-1', input, userContext)
+      const result = await boardService.updateBoard('board_1', input, userContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -571,10 +574,10 @@ describe('BoardService', () => {
       mockBoardRepo.findBySlug.mockResolvedValue(null)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      await boardService.updateBoard('board-1', input, mockContext)
+      await boardService.updateBoard('board_1', input, mockContext)
 
       expect(mockBoardRepo.update).toHaveBeenCalledWith(
-        'board-1',
+        'board_1',
         expect.objectContaining({
           name: 'New Name',
           slug: 'new-name',
@@ -588,7 +591,7 @@ describe('BoardService', () => {
       }
 
       const existingBoardWithSlug: Board = {
-        id: 'board-2',
+        id: 'board_2',
         organizationId: 'org-123',
         name: 'Existing Board Name',
         slug: 'existing-board-name',
@@ -606,10 +609,10 @@ describe('BoardService', () => {
         name: 'Existing Board Name',
       })
 
-      await boardService.updateBoard('board-1', input, mockContext)
+      await boardService.updateBoard('board_1', input, mockContext)
 
       expect(mockBoardRepo.update).toHaveBeenCalledWith(
-        'board-1',
+        'board_1',
         expect.not.objectContaining({
           slug: expect.anything(),
         })
@@ -630,7 +633,7 @@ describe('BoardService', () => {
       mockBoardRepo.findBySlug.mockResolvedValue(null)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -644,7 +647,7 @@ describe('BoardService', () => {
       }
 
       const anotherBoard: Board = {
-        id: 'board-2',
+        id: 'board_2',
         organizationId: 'org-123',
         name: 'Another Board',
         slug: 'existing-slug',
@@ -658,7 +661,7 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.findBySlug.mockResolvedValue(anotherBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -675,7 +678,7 @@ describe('BoardService', () => {
       mockBoardRepo.findBySlug.mockResolvedValue(existingBoard)
       mockBoardRepo.update.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(true)
     })
@@ -687,7 +690,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -703,7 +706,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -719,7 +722,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -741,10 +744,10 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      await boardService.updateBoard('board-1', input, mockContext)
+      await boardService.updateBoard('board_1', input, mockContext)
 
       expect(mockBoardRepo.update).toHaveBeenCalledWith(
-        'board-1',
+        'board_1',
         expect.objectContaining({
           isPublic: false,
         })
@@ -758,7 +761,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -780,7 +783,7 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      const result = await boardService.updateBoard('board-1', input, mockContext)
+      const result = await boardService.updateBoard('board_1', input, mockContext)
 
       expect(result.success).toBe(true)
     })
@@ -788,10 +791,10 @@ describe('BoardService', () => {
 
   describe('deleteBoard', () => {
     const existingBoard: Board = {
-      id: 'board-1',
+      id: 'board_1',
       organizationId: 'org-123',
       name: 'Board to Delete',
-      slug: 'board-to-delete',
+      slug: 'board_to-delete',
       description: null,
       isPublic: true,
       settings: {},
@@ -803,16 +806,16 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.delete.mockResolvedValue(true)
 
-      const result = await boardService.deleteBoard('board-1', mockContext)
+      const result = await boardService.deleteBoard('board_1', mockContext)
 
       expect(result.success).toBe(true)
-      expect(mockBoardRepo.delete).toHaveBeenCalledWith('board-1')
+      expect(mockBoardRepo.delete).toHaveBeenCalledWith('board_1')
     })
 
     it('should return error when board not found', async () => {
       mockBoardRepo.findById.mockResolvedValue(null)
 
-      const result = await boardService.deleteBoard('nonexistent', mockContext)
+      const result = await boardService.deleteBoard('board_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -825,7 +828,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.deleteBoard('board-1', memberContext)
+      const result = await boardService.deleteBoard('board_1', memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -840,7 +843,7 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.delete.mockResolvedValue(true)
 
-      const result = await boardService.deleteBoard('board-1', ownerContext)
+      const result = await boardService.deleteBoard('board_1', ownerContext)
 
       expect(result.success).toBe(true)
     })
@@ -851,7 +854,7 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.delete.mockResolvedValue(true)
 
-      const result = await boardService.deleteBoard('board-1', adminContext)
+      const result = await boardService.deleteBoard('board_1', adminContext)
 
       expect(result.success).toBe(true)
     })
@@ -860,7 +863,7 @@ describe('BoardService', () => {
   describe('getBoardById', () => {
     it('should return board when found', async () => {
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Test Board',
         slug: 'test-board',
@@ -873,11 +876,11 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(mockBoard)
 
-      const result = await boardService.getBoardById('board-1', mockContext)
+      const result = await boardService.getBoardById('board_1', mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.id).toBe('board-1')
+        expect(result.value.id).toBe('board_1')
         expect(result.value.name).toBe('Test Board')
       }
     })
@@ -885,7 +888,7 @@ describe('BoardService', () => {
     it('should return error when board not found', async () => {
       mockBoardRepo.findById.mockResolvedValue(null)
 
-      const result = await boardService.getBoardById('nonexistent', mockContext)
+      const result = await boardService.getBoardById('board_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -897,7 +900,7 @@ describe('BoardService', () => {
   describe('getBoardBySlug', () => {
     it('should return board when found by slug', async () => {
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Test Board',
         slug: 'test-board',
@@ -921,7 +924,7 @@ describe('BoardService', () => {
     it('should return error when board not found by slug', async () => {
       mockBoardRepo.findBySlug.mockResolvedValue(null)
 
-      const result = await boardService.getBoardBySlug('nonexistent', mockContext)
+      const result = await boardService.getBoardBySlug('board_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -934,10 +937,10 @@ describe('BoardService', () => {
     it('should return all boards for organization', async () => {
       const mockBoards: Board[] = [
         {
-          id: 'board-1',
+          id: 'board_1',
           organizationId: 'org-123',
           name: 'Board 1',
-          slug: 'board-1',
+          slug: 'board_1',
           description: null,
           isPublic: true,
           settings: {},
@@ -945,10 +948,10 @@ describe('BoardService', () => {
           updatedAt: new Date(),
         },
         {
-          id: 'board-2',
+          id: 'board_2',
           organizationId: 'org-123',
           name: 'Board 2',
-          slug: 'board-2',
+          slug: 'board_2',
           description: null,
           isPublic: false,
           settings: {},
@@ -983,12 +986,12 @@ describe('BoardService', () => {
 
   describe('listBoardsWithDetails', () => {
     it('should return boards with post counts', async () => {
-      const mockBoardsWithDetails = [
+      const mockBoardsWithDetails: (Board & { postCount: number })[] = [
         {
-          id: 'board-1',
+          id: 'board_1' as BoardId,
           organizationId: 'org-123',
           name: 'Board 1',
-          slug: 'board-1',
+          slug: 'board_1',
           description: null,
           isPublic: true,
           settings: {},
@@ -997,10 +1000,10 @@ describe('BoardService', () => {
           postCount: 5,
         },
         {
-          id: 'board-2',
+          id: 'board_2' as BoardId,
           organizationId: 'org-123',
           name: 'Board 2',
-          slug: 'board-2',
+          slug: 'board_2',
           description: null,
           isPublic: true,
           settings: {},
@@ -1025,7 +1028,7 @@ describe('BoardService', () => {
 
   describe('updateBoardSettings', () => {
     const existingBoard: Board = {
-      id: 'board-1',
+      id: 'board_1',
       organizationId: 'org-123',
       name: 'Test Board',
       slug: 'test-board',
@@ -1053,7 +1056,7 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      const result = await boardService.updateBoardSettings('board-1', newSettings, mockContext)
+      const result = await boardService.updateBoardSettings('board_1', newSettings, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1066,7 +1069,7 @@ describe('BoardService', () => {
     it('should return error when board not found', async () => {
       mockBoardRepo.findById.mockResolvedValue(null)
 
-      const result = await boardService.updateBoardSettings('nonexistent', {}, mockContext)
+      const result = await boardService.updateBoardSettings('board_nonexistent', {}, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1079,7 +1082,7 @@ describe('BoardService', () => {
 
       mockBoardRepo.findById.mockResolvedValue(existingBoard)
 
-      const result = await boardService.updateBoardSettings('board-1', {}, userContext)
+      const result = await boardService.updateBoardSettings('board_1', {}, userContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1105,7 +1108,7 @@ describe('BoardService', () => {
       mockBoardRepo.findById.mockResolvedValue(boardWithoutSettings)
       mockBoardRepo.update.mockResolvedValue(updatedBoard)
 
-      const result = await boardService.updateBoardSettings('board-1', newSettings, mockContext)
+      const result = await boardService.updateBoardSettings('board_1', newSettings, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1117,7 +1120,7 @@ describe('BoardService', () => {
   describe('getPublicBoardById', () => {
     it('should return public board without authentication', async () => {
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Public Board',
         slug: 'public-board',
@@ -1131,11 +1134,11 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(mockBoard)
 
-      const result = await boardService.getPublicBoardById('board-1')
+      const result = await boardService.getPublicBoardById('board_1')
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.id).toBe('board-1')
+        expect(result.value.id).toBe('board_1')
       }
     })
 
@@ -1143,7 +1146,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(undefined)
 
-      const result = await boardService.getPublicBoardById('nonexistent')
+      const result = await boardService.getPublicBoardById('board_nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1155,7 +1158,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockRejectedValue(new Error('Database error'))
 
-      const result = await boardService.getPublicBoardById('board-1')
+      const result = await boardService.getPublicBoardById('board_1')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1169,7 +1172,7 @@ describe('BoardService', () => {
     it('should return only public boards with post counts', async () => {
       const mockBoards: Board[] = [
         {
-          id: 'board-1',
+          id: 'board_1',
           organizationId: 'org-123',
           name: 'Public Board 1',
           slug: 'public-board-1',
@@ -1180,7 +1183,7 @@ describe('BoardService', () => {
           updatedAt: new Date(),
         },
         {
-          id: 'board-2',
+          id: 'board_2',
           organizationId: 'org-123',
           name: 'Public Board 2',
           slug: 'public-board-2',
@@ -1196,8 +1199,8 @@ describe('BoardService', () => {
       vi.mocked(db.query.boards.findMany).mockResolvedValue(mockBoards)
       // Use the hoisted mock for the groupBy result
       mockGroupBy.mockResolvedValue([
-        { boardId: 'board-1', count: 10 },
-        { boardId: 'board-2', count: 5 },
+        { boardId: 'board_1', count: 10 },
+        { boardId: 'board_2', count: 5 },
       ])
 
       const result = await boardService.listPublicBoardsWithStats('org-123')
@@ -1225,7 +1228,7 @@ describe('BoardService', () => {
     it('should handle boards with no posts', async () => {
       const mockBoards: Board[] = [
         {
-          id: 'board-1',
+          id: 'board_1',
           organizationId: 'org-123',
           name: 'Empty Board',
           slug: 'empty-board',
@@ -1255,7 +1258,7 @@ describe('BoardService', () => {
   describe('getPublicBoardBySlug', () => {
     it('should return public board by slug', async () => {
       const mockBoard: Board = {
-        id: 'board-1',
+        id: 'board_1',
         organizationId: 'org-123',
         name: 'Public Board',
         slug: 'public-board',
@@ -1293,7 +1296,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(undefined)
 
-      const result = await boardService.getPublicBoardBySlug('org-123', 'nonexistent')
+      const result = await boardService.getPublicBoardBySlug('org-123', 'board_nonexistent')
 
       expect(result.success).toBe(true)
       if (result.success) {

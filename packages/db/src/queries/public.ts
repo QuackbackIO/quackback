@@ -1,8 +1,9 @@
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
+import type { BoardId, PostId, TagId, CommentId, MemberId, StatusId } from '@quackback/ids'
 import { db } from '../tenant-context'
 import { boards, tags } from '../schema/boards'
 import { posts, votes, comments, postTags, commentReactions } from '../schema/posts'
-import { REACTION_EMOJIS, type Board, type PostStatus } from '../types'
+import { REACTION_EMOJIS, type Board } from '../types'
 import { buildCommentTree, aggregateReactions } from './comments'
 
 // Types for public queries
@@ -11,34 +12,34 @@ export interface BoardWithStats extends Board {
 }
 
 export interface PublicPostListParams {
-  boardId: string
+  boardId: BoardId
   search?: string
-  status?: PostStatus[]
+  statusIds?: StatusId[]
   sort?: 'newest' | 'oldest' | 'votes'
   page?: number
   limit?: number
 }
 
 export interface PublicPostListItem {
-  id: string
+  id: PostId
   title: string
   content: string
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   authorName: string | null
   /** Member ID for fetching avatar data (null for anonymous posts) */
-  memberId: string | null
+  memberId: MemberId | null
   createdAt: Date
   commentCount: number
-  tags: { id: string; name: string; color: string }[]
-  board?: { id: string; name: string; slug: string }
+  tags: { id: TagId; name: string; color: string }[]
+  board?: { id: BoardId; name: string; slug: string }
 }
 
 export interface AllBoardsPostListParams {
   organizationId: string
   boardSlug?: string
   search?: string
-  status?: PostStatus[]
+  statusIds?: StatusId[]
   sort?: 'top' | 'new' | 'trending'
   page?: number
   limit?: number
@@ -57,16 +58,16 @@ export interface OfficialResponse {
 }
 
 export interface PublicPostDetail {
-  id: string
+  id: PostId
   title: string
   content: string
   contentJson: unknown
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   authorName: string | null
   createdAt: Date
-  board: { id: string; name: string; slug: string }
-  tags: { id: string; name: string; color: string }[]
+  board: { id: BoardId; name: string; slug: string }
+  tags: { id: TagId; name: string; color: string }[]
   comments: PublicComment[]
   officialResponse: OfficialResponse | null
 }
@@ -78,24 +79,24 @@ export interface CommentReactionCount {
 }
 
 export interface PublicComment {
-  id: string
+  id: CommentId
   content: string
   authorName: string | null
   /** Member ID for fetching avatar data (null for anonymous comments) */
-  memberId: string | null
+  memberId: MemberId | null
   createdAt: Date
-  parentId: string | null
+  parentId: CommentId | null
   isTeamMember: boolean
   replies: PublicComment[]
   reactions: CommentReactionCount[]
 }
 
 export interface RoadmapPost {
-  id: string
+  id: PostId
   title: string
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
-  board: { id: string; name: string; slug: string }
+  board: { id: BoardId; name: string; slug: string }
 }
 
 /**
@@ -139,7 +140,7 @@ export async function getPublicBoardBySlug(
  * Get a board by ID (for public post submissions)
  * Returns board with organizationId for member validation
  */
-export async function getPublicBoardById(boardId: string): Promise<Board | undefined> {
+export async function getPublicBoardById(boardId: BoardId): Promise<Board | undefined> {
   return db.query.boards.findFirst({
     where: eq(boards.id, boardId),
   })
@@ -151,20 +152,19 @@ export async function getPublicBoardById(boardId: string): Promise<Board | undef
 export async function getPublicPostList(
   params: PublicPostListParams
 ): Promise<PublicPostListResult> {
-  const { boardId, search, status, sort = 'newest', page = 1, limit = 20 } = params
+  const { boardId, search, statusIds, sort = 'newest', page = 1, limit = 20 } = params
   const offset = (page - 1) * limit
 
   // Build where conditions
   const conditions = [eq(posts.boardId, boardId)]
 
-  if (status && status.length > 0) {
-    conditions.push(inArray(posts.status, status))
+  if (statusIds && statusIds.length > 0) {
+    conditions.push(inArray(posts.statusId, statusIds))
   }
 
+  // Full-text search using tsvector (much faster than ILIKE)
   if (search) {
-    conditions.push(
-      sql`(${posts.title} ILIKE ${'%' + search + '%'} OR ${posts.content} ILIKE ${'%' + search + '%'})`
-    )
+    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
   }
 
   // Get total count
@@ -188,14 +188,11 @@ export async function getPublicPostList(
       id: posts.id,
       title: posts.title,
       content: posts.content,
-      status: posts.status,
+      statusId: posts.statusId,
       voteCount: posts.voteCount,
       authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
-      commentCount: sql<number>`(
-        SELECT count(*)::int FROM comments WHERE comments.post_id = ${posts.id}
-      )`,
     })
     .from(posts)
     .where(and(...conditions))
@@ -203,8 +200,24 @@ export async function getPublicPostList(
     .limit(limit)
     .offset(offset)
 
-  // Get tags for all posts
+  // Get post IDs for batch queries
   const postIds = postsResult.map((p) => p.id)
+
+  // Get comment counts for all posts (batch query instead of N+1)
+  const commentCounts =
+    postIds.length > 0
+      ? await db
+          .select({
+            postId: comments.postId,
+            count: sql<number>`count(*)`.as('count'),
+          })
+          .from(comments)
+          .where(inArray(comments.postId, postIds))
+          .groupBy(comments.postId)
+      : []
+  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
+
+  // Get tags for all posts
   const tagsResult =
     postIds.length > 0
       ? await db
@@ -220,7 +233,7 @@ export async function getPublicPostList(
       : []
 
   // Group tags by post
-  const tagsByPost = new Map<string, { id: string; name: string; color: string }[]>()
+  const tagsByPost = new Map<PostId, { id: TagId; name: string; color: string }[]>()
   for (const row of tagsResult) {
     const existing = tagsByPost.get(row.postId) || []
     existing.push({ id: row.id, name: row.name, color: row.color })
@@ -229,6 +242,7 @@ export async function getPublicPostList(
 
   const items: PublicPostListItem[] = postsResult.map((post) => ({
     ...post,
+    commentCount: commentCountMap.get(post.id) ?? 0,
     tags: tagsByPost.get(post.id) || [],
   }))
 
@@ -246,7 +260,15 @@ export async function getPublicPostList(
 export async function getPublicPostListAllBoards(
   params: AllBoardsPostListParams
 ): Promise<PublicPostListResult> {
-  const { organizationId, boardSlug, search, status, sort = 'top', page = 1, limit = 20 } = params
+  const {
+    organizationId,
+    boardSlug,
+    search,
+    statusIds,
+    sort = 'top',
+    page = 1,
+    limit = 20,
+  } = params
   const offset = (page - 1) * limit
 
   // Build where conditions
@@ -256,14 +278,13 @@ export async function getPublicPostListAllBoards(
     conditions.push(eq(boards.slug, boardSlug))
   }
 
-  if (status && status.length > 0) {
-    conditions.push(inArray(posts.status, status))
+  if (statusIds && statusIds.length > 0) {
+    conditions.push(inArray(posts.statusId, statusIds))
   }
 
+  // Full-text search using tsvector (much faster than ILIKE)
   if (search) {
-    conditions.push(
-      sql`(${posts.title} ILIKE ${'%' + search + '%'} OR ${posts.content} ILIKE ${'%' + search + '%'})`
-    )
+    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
   }
 
   // Get total count
@@ -289,14 +310,11 @@ export async function getPublicPostListAllBoards(
       id: posts.id,
       title: posts.title,
       content: posts.content,
-      status: posts.status,
+      statusId: posts.statusId,
       voteCount: posts.voteCount,
       authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
-      commentCount: sql<number>`(
-        SELECT count(*)::int FROM comments WHERE comments.post_id = ${posts.id}
-      )`,
       boardId: boards.id,
       boardName: boards.name,
       boardSlug: boards.slug,
@@ -308,8 +326,24 @@ export async function getPublicPostListAllBoards(
     .limit(limit)
     .offset(offset)
 
-  // Get tags for all posts
+  // Get post IDs for batch queries
   const postIds = postsResult.map((p) => p.id)
+
+  // Get comment counts for all posts (batch query instead of N+1)
+  const commentCounts =
+    postIds.length > 0
+      ? await db
+          .select({
+            postId: comments.postId,
+            count: sql<number>`count(*)`.as('count'),
+          })
+          .from(comments)
+          .where(inArray(comments.postId, postIds))
+          .groupBy(comments.postId)
+      : []
+  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
+
+  // Get tags for all posts
   const tagsResult =
     postIds.length > 0
       ? await db
@@ -325,7 +359,7 @@ export async function getPublicPostListAllBoards(
       : []
 
   // Group tags by post
-  const tagsByPost = new Map<string, { id: string; name: string; color: string }[]>()
+  const tagsByPost = new Map<PostId, { id: TagId; name: string; color: string }[]>()
   for (const row of tagsResult) {
     const existing = tagsByPost.get(row.postId) || []
     existing.push({ id: row.id, name: row.name, color: row.color })
@@ -336,12 +370,12 @@ export async function getPublicPostListAllBoards(
     id: post.id,
     title: post.title,
     content: post.content,
-    status: post.status,
+    statusId: post.statusId,
     voteCount: post.voteCount,
     authorName: post.authorName,
     memberId: post.memberId,
     createdAt: post.createdAt,
-    commentCount: post.commentCount,
+    commentCount: commentCountMap.get(post.id) ?? 0,
     tags: tagsByPost.get(post.id) || [],
     board: {
       id: post.boardId,
@@ -361,7 +395,7 @@ export async function getPublicPostListAllBoards(
  * Get a single post with details for public view
  */
 export async function getPublicPostDetail(
-  postId: string,
+  postId: PostId,
   userIdentifier?: string
 ): Promise<PublicPostDetail | null> {
   // Get post with board
@@ -419,7 +453,7 @@ export async function getPublicPostDetail(
     title: post.title,
     content: post.content,
     contentJson: post.contentJson,
-    status: post.status,
+    statusId: post.statusId,
     voteCount: post.voteCount,
     authorName: post.authorName,
     createdAt: post.createdAt,
@@ -443,13 +477,13 @@ export async function getPublicPostDetail(
 /**
  * Get posts for roadmap view across all public boards
  * @param organizationId - The organization ID
- * @param statusSlugs - Array of status slugs to filter by (e.g., ['planned', 'in_progress'])
+ * @param statusIds - Array of status IDs to filter by
  */
 export async function getRoadmapPosts(
   organizationId: string,
-  statusSlugs: string[]
+  statusIds: StatusId[]
 ): Promise<RoadmapPost[]> {
-  if (statusSlugs.length === 0) {
+  if (statusIds.length === 0) {
     return []
   }
 
@@ -457,7 +491,7 @@ export async function getRoadmapPosts(
     .select({
       id: posts.id,
       title: posts.title,
-      status: posts.status,
+      statusId: posts.statusId,
       voteCount: posts.voteCount,
       boardId: boards.id,
       boardName: boards.name,
@@ -469,7 +503,7 @@ export async function getRoadmapPosts(
       and(
         eq(boards.organizationId, organizationId),
         eq(boards.isPublic, true),
-        inArray(posts.status, statusSlugs as PostStatus[])
+        inArray(posts.statusId, statusIds)
       )
     )
     .orderBy(desc(posts.voteCount))
@@ -477,7 +511,7 @@ export async function getRoadmapPosts(
   return result.map((row) => ({
     id: row.id,
     title: row.title,
-    status: row.status,
+    statusId: row.statusId,
     voteCount: row.voteCount,
     board: {
       id: row.boardId,
@@ -490,7 +524,7 @@ export async function getRoadmapPosts(
 /**
  * Check if a user has voted on a post
  */
-export async function hasUserVotedOnPost(postId: string, userIdentifier: string): Promise<boolean> {
+export async function hasUserVotedOnPost(postId: PostId, userIdentifier: string): Promise<boolean> {
   const vote = await db.query.votes.findFirst({
     where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
   })
@@ -501,9 +535,9 @@ export async function hasUserVotedOnPost(postId: string, userIdentifier: string)
  * Get which posts a user has voted on from a list
  */
 export async function getUserVotedPostIds(
-  postIds: string[],
+  postIds: PostId[],
   userIdentifier: string
-): Promise<Set<string>> {
+): Promise<Set<PostId>> {
   if (postIds.length === 0) {
     return new Set()
   }
@@ -519,7 +553,7 @@ export async function getUserVotedPostIds(
 /**
  * Get all post IDs a user has voted on (for the current tenant via RLS)
  */
-export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Set<string>> {
+export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Set<PostId>> {
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
@@ -532,8 +566,9 @@ export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Se
  * Toggle vote on a post (add or remove)
  */
 export async function togglePublicVote(
-  postId: string,
-  userIdentifier: string
+  postId: PostId,
+  userIdentifier: string,
+  organizationId: string
 ): Promise<{ voted: boolean; newCount: number }> {
   // Check if vote exists
   const existingVote = await db.query.votes.findFirst({
@@ -556,7 +591,7 @@ export async function togglePublicVote(
     return { voted: false, newCount: updated?.voteCount || 0 }
   } else {
     // Add vote
-    await db.insert(votes).values({ postId, userIdentifier })
+    await db.insert(votes).values({ postId, userIdentifier, organizationId })
 
     // Increment vote count
     const [updated] = await db
@@ -572,7 +607,7 @@ export async function togglePublicVote(
 /**
  * Get board by post ID
  */
-export async function getBoardByPostId(postId: string): Promise<Board | null> {
+export async function getBoardByPostId(postId: PostId): Promise<Board | null> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     with: { board: true },
@@ -583,7 +618,7 @@ export async function getBoardByPostId(postId: string): Promise<Board | null> {
 /**
  * Check if a comment exists for a given post
  */
-export async function commentExistsForPost(postId: string, commentId: string): Promise<boolean> {
+export async function commentExistsForPost(postId: PostId, commentId: CommentId): Promise<boolean> {
   const comment = await db.query.comments.findFirst({
     where: and(eq(comments.id, commentId), eq(comments.postId, postId)),
   })
@@ -596,12 +631,13 @@ export async function commentExistsForPost(postId: string, commentId: string): P
  * For anonymous users, pass authorName and authorEmail (memberId should be undefined)
  */
 export async function addPublicComment(
-  postId: string,
+  postId: PostId,
   content: string,
   authorName: string | null,
   authorEmail: string | null,
-  parentId?: string,
-  memberId?: string
+  organizationId: string,
+  parentId?: CommentId,
+  memberId?: MemberId
 ): Promise<PublicComment> {
   const [comment] = await db
     .insert(comments)
@@ -610,6 +646,7 @@ export async function addPublicComment(
       content,
       authorName,
       authorEmail,
+      organizationId,
       parentId: parentId || null,
       memberId: memberId || null,
     })
@@ -632,7 +669,7 @@ export async function addPublicComment(
  * Toggle a reaction on a comment (add if not exists, remove if exists)
  */
 export async function toggleCommentReaction(
-  commentId: string,
+  commentId: CommentId,
   userIdentifier: string,
   emoji: string
 ): Promise<{ added: boolean; reactions: CommentReactionCount[] }> {

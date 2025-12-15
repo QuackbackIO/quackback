@@ -16,10 +16,12 @@ import {
   createMockComment,
   createMockUnitOfWork,
   TEST_ROLES,
+  TEST_IDS,
   type MockBoardRepository,
   type MockPostRepository,
   type MockUnitOfWork,
 } from '../../__tests__/test-utils'
+import type { BoardId, MemberId, PostId, StatusId } from '@quackback/ids'
 
 // Mock the withUnitOfWork function and repositories before importing PostService
 const mockWithUnitOfWork = vi.fn()
@@ -102,9 +104,10 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const mockPost = createMockPost()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: 'Test Post',
         content: 'Test content',
+        statusId: TEST_IDS.STATUS_ID, // Explicit statusId to bypass default lookup
       }
 
       setupMocks({
@@ -126,7 +129,7 @@ describe('PostService', () => {
     it('should return error when board does not exist', async () => {
       const mockCtx = createMockServiceContext()
       const input: CreatePostInput = {
-        boardId: 'nonexistent-board',
+        boardId: 'board_nonexistent' as BoardId,
         title: 'Test Post',
         content: 'Test content',
       }
@@ -147,7 +150,7 @@ describe('PostService', () => {
       const mockCtx = createMockServiceContext()
       const mockBoard = createMockBoard()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: '   ',
         content: 'Test content',
       }
@@ -169,7 +172,7 @@ describe('PostService', () => {
       const mockCtx = createMockServiceContext()
       const mockBoard = createMockBoard()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: 'Test Post',
         content: '   ',
       }
@@ -191,7 +194,7 @@ describe('PostService', () => {
       const mockCtx = createMockServiceContext()
       const mockBoard = createMockBoard()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: 'a'.repeat(201),
         content: 'Test content',
       }
@@ -213,7 +216,7 @@ describe('PostService', () => {
       const mockCtx = createMockServiceContext()
       const mockBoard = createMockBoard()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: 'Test Post',
         content: 'a'.repeat(10001),
       }
@@ -236,10 +239,11 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const mockPost = createMockPost()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: 'Test Post',
         content: 'Test content',
-        tagIds: ['tag-1', 'tag-2'],
+        statusId: TEST_IDS.STATUS_ID, // Explicit statusId to bypass default lookup
+        tagIds: ['tag_1', 'tag_2'],
       }
 
       const setTagsSpy = vi.fn()
@@ -255,7 +259,7 @@ describe('PostService', () => {
       const result = await postService.createPost(input, mockCtx)
 
       expect(result.success).toBe(true)
-      expect(setTagsSpy).toHaveBeenCalledWith(mockPost.id, ['tag-1', 'tag-2'])
+      expect(setTagsSpy).toHaveBeenCalledWith(mockPost.id, ['tag_1', 'tag_2'])
     })
 
     it('should trim whitespace from title and content', async () => {
@@ -263,9 +267,10 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const mockPost = createMockPost()
       const input: CreatePostInput = {
-        boardId: 'board-123',
+        boardId: TEST_IDS.BOARD_ID,
         title: '  Test Post  ',
         content: '  Test content  ',
+        statusId: TEST_IDS.STATUS_ID, // Explicit statusId to bypass default lookup
       }
 
       let capturedData!: Record<string, unknown>
@@ -307,7 +312,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -325,7 +330,7 @@ describe('PostService', () => {
         postRepo: { findById: vi.fn().mockResolvedValue(null) },
       })
 
-      const result = await postService.updatePost('nonexistent', input, mockCtx)
+      const result = await postService.updatePost('post_nonexistent', input, mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -346,7 +351,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -371,7 +376,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(true)
     })
@@ -393,7 +398,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(true)
     })
@@ -411,7 +416,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -433,7 +438,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -448,7 +453,7 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const updatedPost = createMockPost()
       const input: UpdatePostInput = {
-        tagIds: ['tag-1', 'tag-2'],
+        tagIds: ['tag_1', 'tag_2'],
       }
 
       const setTagsSpy = vi.fn()
@@ -462,10 +467,10 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.updatePost('post-123', input, mockCtx)
+      const result = await postService.updatePost('post_123', input, mockCtx)
 
       expect(result.success).toBe(true)
-      expect(setTagsSpy).toHaveBeenCalledWith('post-123', ['tag-1', 'tag-2'])
+      expect(setTagsSpy).toHaveBeenCalledWith('post_123', ['tag_1', 'tag_2'])
     })
 
     it('should set official response with member context', async () => {
@@ -474,7 +479,7 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const updatedPost = createMockPost({
         officialResponse: 'This is resolved',
-        officialResponseMemberId: 'member-123',
+        officialResponseMemberId: TEST_IDS.MEMBER_ID,
       })
       const input: UpdatePostInput = {
         officialResponse: 'This is resolved',
@@ -494,10 +499,10 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      await postService.updatePost('post-123', input, mockCtx)
+      await postService.updatePost('post_123', input, mockCtx)
 
       expect(capturedUpdateData.officialResponse).toBe('This is resolved')
-      expect(capturedUpdateData.officialResponseMemberId).toBe('member-123')
+      expect(capturedUpdateData.officialResponseMemberId).toBe(TEST_IDS.MEMBER_ID)
       expect(capturedUpdateData.officialResponseAuthorName).toBe('Test User')
       expect(capturedUpdateData.officialResponseAt).toBeInstanceOf(Date)
     })
@@ -525,7 +530,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      await postService.updatePost('post-123', input, mockCtx)
+      await postService.updatePost('post_123', input, mockCtx)
 
       expect(capturedUpdateData.officialResponse).toBe(null)
       expect(capturedUpdateData.officialResponseMemberId).toBe(null)
@@ -554,7 +559,7 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.voteOnPost('post-123', userIdentifier, mockCtx)
+      const result = await postService.voteOnPost(TEST_IDS.POST_ID, userIdentifier, mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -583,7 +588,7 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.voteOnPost('post-123', userIdentifier, mockCtx)
+      const result = await postService.voteOnPost(TEST_IDS.POST_ID, userIdentifier, mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -601,7 +606,7 @@ describe('PostService', () => {
         postRepo: { findById: vi.fn().mockResolvedValue(null) },
       })
 
-      const result = await postService.voteOnPost('nonexistent', userIdentifier, mockCtx)
+      const result = await postService.voteOnPost('post_nonexistent', userIdentifier, mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -628,7 +633,7 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.voteOnPost('post-123', userIdentifier, mockCtx)
+      const result = await postService.voteOnPost(TEST_IDS.POST_ID, userIdentifier, mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -641,7 +646,7 @@ describe('PostService', () => {
       const mockPost = createMockPost({ voteCount: 5 })
       const mockBoard = createMockBoard()
       const userIdentifier = 'member:member-123'
-      const options = { memberId: 'member-456', ipHash: 'abc123' }
+      const options = { memberId: 'member_456' as MemberId, ipHash: 'abc123' }
 
       const executeSpy = vi.fn().mockResolvedValue([{ vote_count: 6, voted: true }])
 
@@ -655,7 +660,12 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.voteOnPost('post-123', userIdentifier, mockCtx, options)
+      const result = await postService.voteOnPost(
+        TEST_IDS.POST_ID,
+        userIdentifier,
+        mockCtx,
+        options
+      )
 
       expect(result.success).toBe(true)
       expect(executeSpy).toHaveBeenCalled()
@@ -668,7 +678,7 @@ describe('PostService', () => {
       const mockPost = createMockPost()
       const mockBoard = createMockBoard()
       const mockStatus = createMockPostStatus()
-      const updatedPost = createMockPost({ statusId: 'status-123' })
+      const updatedPost = createMockPost({ statusId: 'status_123' })
 
       setupMocks({
         postRepo: {
@@ -685,11 +695,11 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.changeStatus('post-123', 'status-123', mockCtx)
+      const result = await postService.changeStatus('post_123', 'status_123', mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.statusId).toBe('status-123')
+        expect(result.value.statusId).toBe('status_123')
       }
     })
 
@@ -700,7 +710,7 @@ describe('PostService', () => {
         postRepo: { findById: vi.fn().mockResolvedValue(null) },
       })
 
-      const result = await postService.changeStatus('nonexistent', 'status-123', mockCtx)
+      const result = await postService.changeStatus('post_nonexistent', 'status_123', mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -718,7 +728,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.changeStatus('post-123', 'status-123', mockCtx)
+      const result = await postService.changeStatus('post_123', 'status_123', mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -743,7 +753,11 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.changeStatus('post-123', 'nonexistent', mockCtx)
+      const result = await postService.changeStatus(
+        'post_123' as PostId,
+        'status_nonexistent' as StatusId,
+        mockCtx
+      )
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -763,7 +777,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(mockBoard) },
       })
 
-      const result = await postService.getPostById('post-123', mockCtx)
+      const result = await postService.getPostById('post_123', mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -778,7 +792,7 @@ describe('PostService', () => {
         postRepo: { findById: vi.fn().mockResolvedValue(null) },
       })
 
-      const result = await postService.getPostById('nonexistent', mockCtx)
+      const result = await postService.getPostById('post_nonexistent', mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -795,7 +809,7 @@ describe('PostService', () => {
         boardRepo: { findById: vi.fn().mockResolvedValue(null) },
       })
 
-      const result = await postService.getPostById('post-123', mockCtx)
+      const result = await postService.getPostById('post_123', mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -809,7 +823,7 @@ describe('PostService', () => {
       const mockCtx = createMockServiceContext()
       const mockPost = createMockPost()
       const mockBoard = createMockBoard()
-      const mockTags = [createMockTag({ id: 'tag-1' }), createMockTag({ id: 'tag-2' })]
+      const mockTags = [createMockTag({ id: 'tag_1' }), createMockTag({ id: 'tag_2' })]
 
       setupMocks({
         postRepo: { findById: vi.fn().mockResolvedValue(mockPost) },
@@ -830,7 +844,7 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.getPostWithDetails('post-123', mockCtx)
+      const result = await postService.getPostWithDetails('post_123', mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -848,7 +862,7 @@ describe('PostService', () => {
         postRepo: { findById: vi.fn().mockResolvedValue(null) },
       })
 
-      const result = await postService.getPostWithDetails('nonexistent', mockCtx)
+      const result = await postService.getPostWithDetails('post_nonexistent', mockCtx)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -863,8 +877,8 @@ describe('PostService', () => {
       const mockPost = createMockPost()
       const mockBoard = createMockBoard()
       const mockComments = [
-        createMockComment({ id: 'comment-1', parentId: null }),
-        createMockComment({ id: 'comment-2', parentId: 'comment-1' }),
+        createMockComment({ id: 'comment_1', parentId: null }),
+        createMockComment({ id: 'comment_2', parentId: 'comment_1' }),
       ]
 
       setupMocks({
@@ -882,7 +896,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.getCommentsWithReplies(
-        'post-123',
+        'post_123',
         'member:member-123',
         mockCtx
       )
@@ -901,7 +915,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.getCommentsWithReplies(
-        'nonexistent',
+        'post_nonexistent',
         'member:member-123',
         mockCtx
       )
@@ -922,7 +936,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.getCommentsWithReplies(
-        'post-123',
+        'post_123',
         'member:member-123',
         mockCtx
       )
@@ -1089,7 +1103,7 @@ describe('PostService', () => {
       const result = await postService.listPublicPosts({
         organizationId: 'org-123',
         search: 'bug fix',
-        status: ['open'],
+        statusSlugs: ['open'],
         sort: 'new',
       })
 
@@ -1104,7 +1118,7 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const mockTag = createMockTag()
 
-      const mockBoardsResult = [{ id: 'board-123' }]
+      const mockBoardsResult = [{ id: TEST_IDS.BOARD_ID }]
       const mockPostsResult = [
         {
           ...mockPost,
@@ -1177,7 +1191,7 @@ describe('PostService', () => {
         uowDbMocks: {
           query: {
             boards: {
-              findMany: vi.fn().mockResolvedValue([{ id: 'board-123' }]),
+              findMany: vi.fn().mockResolvedValue([{ id: TEST_IDS.BOARD_ID }]),
             },
           },
           selectDistinct: vi.fn().mockReturnValue({
@@ -1188,7 +1202,7 @@ describe('PostService', () => {
         },
       })
 
-      const result = await postService.listInboxPosts({ tagIds: ['tag-1'] }, mockCtx)
+      const result = await postService.listInboxPosts({ tagIds: ['tag_1'] }, mockCtx)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1205,7 +1219,7 @@ describe('PostService', () => {
       const mockBoard = createMockBoard()
       const mockTag = createMockTag()
 
-      const mockBoardsResult = [{ id: 'board-123' }]
+      const mockBoardsResult = [{ id: TEST_IDS.BOARD_ID }]
       const mockPostsResult = [
         {
           ...mockPost,
@@ -1263,11 +1277,11 @@ describe('PostService', () => {
 
     it('should include status details when post has statusId', async () => {
       const mockCtx = createMockServiceContext()
-      const mockPost = createMockPost({ statusId: 'status-123' })
+      const mockPost = createMockPost({ statusId: 'status_123' })
       const mockBoard = createMockBoard()
-      const mockStatus = createMockPostStatus({ id: 'status-123', name: 'In Progress' })
+      const mockStatus = createMockPostStatus({ id: 'status_123', name: 'In Progress' })
 
-      const mockBoardsResult = [{ id: 'board-123' }]
+      const mockBoardsResult = [{ id: TEST_IDS.BOARD_ID }]
       const mockPostsResult = [
         {
           ...mockPost,

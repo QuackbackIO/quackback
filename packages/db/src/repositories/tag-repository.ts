@@ -1,4 +1,5 @@
 import { eq, inArray } from 'drizzle-orm'
+import type { TagId, BoardId } from '@quackback/ids'
 import type { Database } from '../client'
 import { tags, postTags, posts } from '../schema'
 import type { Tag, NewTag } from '../types'
@@ -16,7 +17,7 @@ export class TagRepository {
   /**
    * Find a tag by ID
    */
-  async findById(id: string): Promise<Tag | null> {
+  async findById(id: TagId): Promise<Tag | null> {
     const tag = await this.db.query.tags.findFirst({
       where: eq(tags.id, id),
     })
@@ -26,7 +27,7 @@ export class TagRepository {
   /**
    * Find multiple tags by IDs
    */
-  async findByIds(ids: string[]): Promise<Tag[]> {
+  async findByIds(ids: TagId[]): Promise<Tag[]> {
     if (ids.length === 0) {
       return []
     }
@@ -49,7 +50,7 @@ export class TagRepository {
    * Find all tags used in a specific board
    * This queries the post_tags junction table to find tags associated with posts in the board
    */
-  async findByBoardId(boardId: string): Promise<Tag[]> {
+  async findByBoardId(boardId: BoardId): Promise<Tag[]> {
     // Get unique tag IDs used by posts in this board
     const tagResults = await this.db
       .selectDistinct({ id: tags.id })
@@ -78,7 +79,7 @@ export class TagRepository {
   /**
    * Update a tag by ID
    */
-  async update(id: string, data: Partial<Tag>): Promise<Tag | null> {
+  async update(id: TagId, data: Partial<Tag>): Promise<Tag | null> {
     const [updated] = await this.db.update(tags).set(data).where(eq(tags.id, id)).returning()
 
     return updated ?? null
@@ -87,7 +88,7 @@ export class TagRepository {
   /**
    * Delete a tag by ID
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: TagId): Promise<boolean> {
     const result = await this.db.delete(tags).where(eq(tags.id, id)).returning()
     return result.length > 0
   }

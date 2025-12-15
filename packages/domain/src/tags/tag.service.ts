@@ -15,6 +15,7 @@ import {
   type Tag,
   type UnitOfWork,
 } from '@quackback/db'
+import type { TagId, BoardId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { TagError } from './tag.errors'
@@ -96,7 +97,7 @@ export class TagService {
    * @returns Result containing the updated tag or an error
    */
   async updateTag(
-    id: string,
+    id: TagId,
     input: UpdateTagInput,
     ctx: ServiceContext
   ): Promise<Result<Tag, TagError>> {
@@ -168,7 +169,7 @@ export class TagService {
    * @param ctx - Service context with user/org information
    * @returns Result containing void or an error
    */
-  async deleteTag(id: string, ctx: ServiceContext): Promise<Result<void, TagError>> {
+  async deleteTag(id: TagId, ctx: ServiceContext): Promise<Result<void, TagError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       // Authorization check - only team members (owner, admin, member) can delete tags
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
@@ -200,7 +201,7 @@ export class TagService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the tag or an error
    */
-  async getTagById(id: string, ctx: ServiceContext): Promise<Result<Tag, TagError>> {
+  async getTagById(id: TagId, ctx: ServiceContext): Promise<Result<Tag, TagError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const tagRepo = new TagRepository(uow.db)
 
@@ -238,7 +239,7 @@ export class TagService {
    * @param ctx - Service context with user/org information
    * @returns Result containing array of tags or an error
    */
-  async getTagsByBoard(boardId: string, ctx: ServiceContext): Promise<Result<Tag[], TagError>> {
+  async getTagsByBoard(boardId: BoardId, ctx: ServiceContext): Promise<Result<Tag[], TagError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
       const tagRepo = new TagRepository(uow.db)

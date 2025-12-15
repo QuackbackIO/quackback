@@ -23,6 +23,7 @@ import {
   type Comment,
   type UnitOfWork,
 } from '@quackback/db'
+import type { CommentId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { CommentError } from './comment.errors'
@@ -101,11 +102,11 @@ export class CommentService {
 
       // Create the comment with member-scoped identity
       const comment = await commentRepo.create({
+        organizationId: ctx.organizationId,
         postId: input.postId,
         content: input.content.trim(),
         parentId: input.parentId || null,
         memberId: ctx.memberId,
-        // Legacy fields for display compatibility
         authorName: input.authorName || ctx.userName,
         authorEmail: input.authorEmail || ctx.userEmail,
         isTeamMember,
@@ -154,7 +155,7 @@ export class CommentService {
    * @returns Result containing the updated comment or an error
    */
   async updateComment(
-    id: string,
+    id: CommentId,
     input: UpdateCommentInput,
     ctx: ServiceContext
   ): Promise<Result<Comment, CommentError>> {
@@ -225,7 +226,7 @@ export class CommentService {
    * @param ctx - Service context with user/org information
    * @returns Result indicating success or an error
    */
-  async deleteComment(id: string, ctx: ServiceContext): Promise<Result<void, CommentError>> {
+  async deleteComment(id: CommentId, ctx: ServiceContext): Promise<Result<void, CommentError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
@@ -273,7 +274,7 @@ export class CommentService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the comment or an error
    */
-  async getCommentById(id: string, ctx: ServiceContext): Promise<Result<Comment, CommentError>> {
+  async getCommentById(id: CommentId, ctx: ServiceContext): Promise<Result<Comment, CommentError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
@@ -310,7 +311,7 @@ export class CommentService {
    * @returns Result containing threaded comments or an error
    */
   async getCommentsByPost(
-    postId: string,
+    postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<CommentThread[], CommentError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
@@ -376,7 +377,7 @@ export class CommentService {
    * @returns Result containing reaction status or an error
    */
   async addReaction(
-    commentId: string,
+    commentId: CommentId,
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
@@ -453,7 +454,7 @@ export class CommentService {
    * @returns Result containing reaction status or an error
    */
   async removeReaction(
-    commentId: string,
+    commentId: CommentId,
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
@@ -523,7 +524,7 @@ export class CommentService {
    * @param commentId - Comment ID to resolve context for
    * @returns Result containing the full context or an error
    */
-  async resolveCommentContext(commentId: string): Promise<Result<CommentContext, CommentError>> {
+  async resolveCommentContext(commentId: CommentId): Promise<Result<CommentContext, CommentError>> {
     try {
       // Fetch comment with its post and board in a single query
       const comment = await db.query.comments.findFirst({
@@ -592,7 +593,7 @@ export class CommentService {
    * @returns Result containing reaction status or an error
    */
   async toggleReaction(
-    commentId: string,
+    commentId: CommentId,
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {

@@ -10,6 +10,7 @@
  */
 
 import { withUnitOfWork, StatusRepository, eq, sql, posts, type UnitOfWork } from '@quackback/db'
+import type { StatusId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { StatusError } from './status.errors'
@@ -107,7 +108,7 @@ export class StatusService {
    * @returns Result containing the updated status or an error
    */
   async updateStatus(
-    id: string,
+    id: StatusId,
     input: UpdateStatusInput,
     ctx: ServiceContext
   ): Promise<Result<Status, StatusError>> {
@@ -178,7 +179,7 @@ export class StatusService {
    * @param ctx - Service context with user/org information
    * @returns Result containing void or an error
    */
-  async deleteStatus(id: string, ctx: ServiceContext): Promise<Result<void, StatusError>> {
+  async deleteStatus(id: StatusId, ctx: ServiceContext): Promise<Result<void, StatusError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
@@ -223,7 +224,7 @@ export class StatusService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the status or an error
    */
-  async getStatusById(id: string, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
+  async getStatusById(id: StatusId, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
@@ -267,7 +268,7 @@ export class StatusService {
    * @param ctx - Service context with user/org information
    * @returns Result containing void or an error
    */
-  async reorderStatuses(ids: string[], ctx: ServiceContext): Promise<Result<void, StatusError>> {
+  async reorderStatuses(ids: StatusId[], ctx: ServiceContext): Promise<Result<void, StatusError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
@@ -301,7 +302,7 @@ export class StatusService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the updated status or an error
    */
-  async setDefaultStatus(id: string, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
+  async setDefaultStatus(id: StatusId, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 

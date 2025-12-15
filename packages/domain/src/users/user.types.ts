@@ -4,6 +4,8 @@
  * Types for portal user management operations.
  */
 
+import type { StatusId } from '@quackback/ids'
+
 /**
  * Portal user list item with activity counts
  *
@@ -57,7 +59,8 @@ export interface EngagedPost {
   id: string
   title: string
   content: string
-  status: string
+  statusId: StatusId | null
+  statusName: string | null
   statusColor: string
   voteCount: number
   commentCount: number

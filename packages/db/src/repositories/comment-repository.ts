@@ -1,4 +1,5 @@
 import { eq, and, isNull, sql } from 'drizzle-orm'
+import type { CommentId, PostId } from '@quackback/ids'
 import type { Database } from '../client'
 import { comments } from '../schema/posts'
 import type { Comment, NewComment } from '../types'
@@ -16,7 +17,7 @@ export class CommentRepository {
   /**
    * Find a comment by ID
    */
-  async findById(id: string): Promise<Comment | null> {
+  async findById(id: CommentId): Promise<Comment | null> {
     const comment = await this.db.query.comments.findFirst({
       where: eq(comments.id, id),
     })
@@ -26,7 +27,7 @@ export class CommentRepository {
   /**
    * Find all comments for a post (flat list, not threaded)
    */
-  async findByPostId(postId: string): Promise<Comment[]> {
+  async findByPostId(postId: PostId): Promise<Comment[]> {
     return this.db.query.comments.findMany({
       where: eq(comments.postId, postId),
       orderBy: (comments, { asc }) => [asc(comments.createdAt)],
@@ -37,7 +38,7 @@ export class CommentRepository {
    * Find all comments for a post including replies (for threading)
    * Returns a flat list - tree building should be done in the domain layer
    */
-  async findByPostIdWithReplies(postId: string): Promise<Comment[]> {
+  async findByPostIdWithReplies(postId: PostId): Promise<Comment[]> {
     return this.db.query.comments.findMany({
       where: eq(comments.postId, postId),
       orderBy: (comments, { asc }) => [asc(comments.createdAt)],
@@ -55,7 +56,7 @@ export class CommentRepository {
   /**
    * Update a comment by ID
    */
-  async update(id: string, data: Partial<Comment>): Promise<Comment | null> {
+  async update(id: CommentId, data: Partial<Comment>): Promise<Comment | null> {
     const [updated] = await this.db
       .update(comments)
       .set(data)
@@ -68,7 +69,7 @@ export class CommentRepository {
   /**
    * Delete a comment by ID
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: CommentId): Promise<boolean> {
     const result = await this.db.delete(comments).where(eq(comments.id, id)).returning()
     return result.length > 0
   }
@@ -76,7 +77,7 @@ export class CommentRepository {
   /**
    * Find all replies to a specific comment
    */
-  async findReplies(parentId: string): Promise<Comment[]> {
+  async findReplies(parentId: CommentId): Promise<Comment[]> {
     return this.db.query.comments.findMany({
       where: eq(comments.parentId, parentId),
       orderBy: (comments, { asc }) => [asc(comments.createdAt)],
@@ -86,7 +87,7 @@ export class CommentRepository {
   /**
    * Count total comments for a post
    */
-  async countByPostId(postId: string): Promise<number> {
+  async countByPostId(postId: PostId): Promise<number> {
     const result = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(comments)
@@ -98,7 +99,7 @@ export class CommentRepository {
   /**
    * Find root comments (top-level, no parent) for a post
    */
-  async findRootComments(postId: string): Promise<Comment[]> {
+  async findRootComments(postId: PostId): Promise<Comment[]> {
     return this.db.query.comments.findMany({
       where: and(eq(comments.postId, postId), isNull(comments.parentId)),
       orderBy: (comments, { asc }) => [asc(comments.createdAt)],

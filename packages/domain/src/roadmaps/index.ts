@@ -9,7 +9,6 @@ export type {
   CreateRoadmapInput,
   UpdateRoadmapInput,
   AddPostToRoadmapInput,
-  MovePostInRoadmapInput,
   ReorderPostsInput,
   RoadmapWithStats,
   RoadmapPostEntry,

@@ -3,16 +3,17 @@
  * Extracted to avoid duplication between posts.ts and public.ts
  */
 
+import type { CommentId, PostId, MemberId } from '@quackback/ids'
 import type { CommentReactionCount } from './public'
 
 /**
  * Raw comment data with reactions from database query
  */
 export interface CommentWithReactions {
-  id: string
-  postId: string
-  parentId: string | null
-  memberId: string | null
+  id: CommentId
+  postId: PostId
+  parentId: CommentId | null
+  memberId: MemberId | null
   authorId: string | null
   authorName: string | null
   authorEmail: string | null
@@ -29,10 +30,10 @@ export interface CommentWithReactions {
  * Comment node with nested replies and aggregated reactions
  */
 export interface CommentNode {
-  id: string
-  postId: string
-  parentId: string | null
-  memberId: string | null
+  id: CommentId
+  postId: PostId
+  parentId: CommentId | null
+  memberId: MemberId | null
   authorId: string | null
   authorName: string | null
   authorEmail: string | null
@@ -84,7 +85,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
   comments: T[],
   userIdentifier?: string
 ): CommentNode[] {
-  const commentMap = new Map<string, CommentNode>()
+  const commentMap = new Map<CommentId, CommentNode>()
   const rootComments: CommentNode[] = []
 
   // First pass: create all nodes with aggregated reactions

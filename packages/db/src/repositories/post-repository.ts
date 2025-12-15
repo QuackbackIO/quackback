@@ -1,4 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
+import type { PostId, BoardId, TagId } from '@quackback/ids'
 import type { Database } from '../client'
 import { posts, postTags } from '../schema/posts'
 import type { Post, NewPost } from '../types'
@@ -16,7 +17,7 @@ export class PostRepository {
   /**
    * Find a post by ID
    */
-  async findById(id: string): Promise<Post | null> {
+  async findById(id: PostId): Promise<Post | null> {
     const post = await this.db.query.posts.findFirst({
       where: eq(posts.id, id),
     })
@@ -28,7 +29,7 @@ export class PostRepository {
    * Note: Posts don't have slugs in the current schema.
    * This method is reserved for future use when slug support is added.
    */
-  async findBySlug(_boardId: string, _slug: string): Promise<Post | null> {
+  async findBySlug(_boardId: BoardId, _slug: string): Promise<Post | null> {
     // This is a placeholder for when posts get slug support
     // For now, we'll return null as posts don't have slugs
     return null
@@ -38,7 +39,7 @@ export class PostRepository {
    * Find all posts for a board with pagination
    */
   async findByBoardId(
-    boardId: string,
+    boardId: BoardId,
     options?: { limit?: number; offset?: number }
   ): Promise<Post[]> {
     const { limit = 20, offset = 0 } = options ?? {}
@@ -61,7 +62,7 @@ export class PostRepository {
   /**
    * Update a post by ID
    */
-  async update(id: string, data: Partial<Post>): Promise<Post | null> {
+  async update(id: PostId, data: Partial<Post>): Promise<Post | null> {
     const [updated] = await this.db
       .update(posts)
       .set({ ...data, updatedAt: new Date() })
@@ -74,7 +75,7 @@ export class PostRepository {
   /**
    * Delete a post by ID
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: PostId): Promise<boolean> {
     const result = await this.db.delete(posts).where(eq(posts.id, id)).returning()
     return result.length > 0
   }
@@ -82,7 +83,7 @@ export class PostRepository {
   /**
    * Increment vote count for a post
    */
-  async incrementVoteCount(id: string): Promise<void> {
+  async incrementVoteCount(id: PostId): Promise<void> {
     await this.db
       .update(posts)
       .set({ voteCount: sql`${posts.voteCount} + 1` })
@@ -92,7 +93,7 @@ export class PostRepository {
   /**
    * Decrement vote count for a post
    */
-  async decrementVoteCount(id: string): Promise<void> {
+  async decrementVoteCount(id: PostId): Promise<void> {
     await this.db
       .update(posts)
       .set({ voteCount: sql`${posts.voteCount} - 1` })
@@ -102,7 +103,7 @@ export class PostRepository {
   /**
    * Set tags for a post (replaces all existing tags)
    */
-  async setTags(postId: string, tagIds: string[]): Promise<void> {
+  async setTags(postId: PostId, tagIds: TagId[]): Promise<void> {
     // Remove all existing tags
     await this.db.delete(postTags).where(eq(postTags.postId, postId))
 

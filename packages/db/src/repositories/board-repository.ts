@@ -1,4 +1,5 @@
 import { eq, sql, inArray } from 'drizzle-orm'
+import type { BoardId } from '@quackback/ids'
 import type { Database } from '../client'
 import { boards } from '../schema/boards'
 import { posts } from '../schema/posts'
@@ -17,7 +18,7 @@ export class BoardRepository {
   /**
    * Find a board by ID
    */
-  async findById(id: string): Promise<Board | null> {
+  async findById(id: BoardId): Promise<Board | null> {
     const board = await this.db.query.boards.findFirst({
       where: eq(boards.id, id),
     })
@@ -58,7 +59,7 @@ export class BoardRepository {
   /**
    * Update a board by ID
    */
-  async update(id: string, data: Partial<Board>): Promise<Board | null> {
+  async update(id: BoardId, data: Partial<Board>): Promise<Board | null> {
     const [updated] = await this.db
       .update(boards)
       .set({ ...data, updatedAt: new Date() })
@@ -71,7 +72,7 @@ export class BoardRepository {
   /**
    * Delete a board by ID
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: BoardId): Promise<boolean> {
     const result = await this.db.delete(boards).where(eq(boards.id, id)).returning()
     return result.length > 0
   }

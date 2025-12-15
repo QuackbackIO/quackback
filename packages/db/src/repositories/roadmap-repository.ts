@@ -1,4 +1,5 @@
 import { eq, and, asc, sql } from 'drizzle-orm'
+import type { RoadmapId, PostId, StatusId, BoardId } from '@quackback/ids'
 import type { Database } from '../client'
 import { roadmaps, boards } from '../schema/boards'
 import { postRoadmaps, posts } from '../schema/posts'
@@ -21,7 +22,7 @@ export class RoadmapRepository {
   /**
    * Find a roadmap by ID
    */
-  async findById(id: string): Promise<Roadmap | null> {
+  async findById(id: RoadmapId): Promise<Roadmap | null> {
     const roadmap = await this.db.query.roadmaps.findFirst({
       where: eq(roadmaps.id, id),
     })
@@ -70,7 +71,7 @@ export class RoadmapRepository {
    * Update a roadmap by ID
    */
   async update(
-    id: string,
+    id: RoadmapId,
     data: Partial<Omit<Roadmap, 'id' | 'organizationId' | 'createdAt'>>
   ): Promise<Roadmap | null> {
     const [updated] = await this.db
@@ -85,7 +86,7 @@ export class RoadmapRepository {
   /**
    * Delete a roadmap by ID
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: RoadmapId): Promise<boolean> {
     const result = await this.db.delete(roadmaps).where(eq(roadmaps.id, id)).returning()
     return result.length > 0
   }
@@ -93,7 +94,7 @@ export class RoadmapRepository {
   /**
    * Reorder roadmaps by updating their positions
    */
-  async reorder(ids: string[]): Promise<void> {
+  async reorder(ids: RoadmapId[]): Promise<void> {
     await Promise.all(
       ids.map((id, index) =>
         this.db.update(roadmaps).set({ position: index }).where(eq(roadmaps.id, id))
@@ -128,7 +129,7 @@ export class RoadmapRepository {
   /**
    * Remove a post from a roadmap
    */
-  async removePost(postId: string, roadmapId: string): Promise<boolean> {
+  async removePost(postId: PostId, roadmapId: RoadmapId): Promise<boolean> {
     const result = await this.db
       .delete(postRoadmaps)
       .where(and(eq(postRoadmaps.postId, postId), eq(postRoadmaps.roadmapId, roadmapId)))
@@ -139,7 +140,7 @@ export class RoadmapRepository {
   /**
    * Check if a post is in a roadmap
    */
-  async isPostInRoadmap(postId: string, roadmapId: string): Promise<boolean> {
+  async isPostInRoadmap(postId: PostId, roadmapId: RoadmapId): Promise<boolean> {
     const entry = await this.db.query.postRoadmaps.findFirst({
       where: and(eq(postRoadmaps.postId, postId), eq(postRoadmaps.roadmapId, roadmapId)),
     })
@@ -147,76 +148,51 @@ export class RoadmapRepository {
   }
 
   /**
-   * Update the status column for a post in a roadmap
+   * Reorder posts within a roadmap
+   * Position is set based on array order
    */
-  async updatePostStatus(
-    postId: string,
-    roadmapId: string,
-    statusId: string
-  ): Promise<PostRoadmap | null> {
-    const [updated] = await this.db
-      .update(postRoadmaps)
-      .set({ statusId })
-      .where(and(eq(postRoadmaps.postId, postId), eq(postRoadmaps.roadmapId, roadmapId)))
-      .returning()
-
-    return updated ?? null
-  }
-
-  /**
-   * Reorder posts within a roadmap column (by status)
-   */
-  async reorderPostsInColumn(
-    roadmapId: string,
-    statusId: string,
-    postIds: string[]
-  ): Promise<void> {
+  async reorderPostsInColumn(roadmapId: RoadmapId, postIds: PostId[]): Promise<void> {
     await Promise.all(
       postIds.map((postId, index) =>
         this.db
           .update(postRoadmaps)
           .set({ position: index })
-          .where(
-            and(
-              eq(postRoadmaps.roadmapId, roadmapId),
-              eq(postRoadmaps.postId, postId),
-              eq(postRoadmaps.statusId, statusId)
-            )
-          )
+          .where(and(eq(postRoadmaps.roadmapId, roadmapId), eq(postRoadmaps.postId, postId)))
       )
     )
   }
 
   /**
-   * Get the next position for a post in a roadmap column
+   * Get the next position for a post in a roadmap
    */
-  async getNextPostPosition(roadmapId: string, statusId: string): Promise<number> {
+  async getNextPostPosition(roadmapId: RoadmapId): Promise<number> {
     const result = await this.db
       .select({ maxPosition: sql<number>`COALESCE(MAX(${postRoadmaps.position}), -1)` })
       .from(postRoadmaps)
-      .where(and(eq(postRoadmaps.roadmapId, roadmapId), eq(postRoadmaps.statusId, statusId)))
+      .where(eq(postRoadmaps.roadmapId, roadmapId))
 
     return (result[0]?.maxPosition ?? -1) + 1
   }
 
   /**
-   * Get posts for a roadmap, optionally filtered by status
-   * Returns posts with their roadmap entry data (position, statusId)
+   * Get posts for a roadmap, optionally filtered by post's status
+   * Returns posts with their roadmap entry data (position) and status info
    */
   async getRoadmapPosts(
-    roadmapId: string,
+    roadmapId: RoadmapId,
     options: {
-      statusId?: string
+      statusId?: StatusId
       limit?: number
       offset?: number
     } = {}
   ): Promise<
     {
       post: {
-        id: string
+        id: PostId
         title: string
         voteCount: number
-        board: { id: string; name: string; slug: string }
+        statusId: StatusId | null
+        board: { id: BoardId; name: string; slug: string }
       }
       roadmapEntry: PostRoadmap
     }[]
@@ -224,8 +200,9 @@ export class RoadmapRepository {
     const { statusId, limit = 10, offset = 0 } = options
 
     const conditions = [eq(postRoadmaps.roadmapId, roadmapId)]
+    // Filter by post's status (not roadmap-specific status)
     if (statusId) {
-      conditions.push(eq(postRoadmaps.statusId, statusId))
+      conditions.push(eq(posts.statusId, statusId))
     }
 
     const results = await this.db
@@ -234,6 +211,7 @@ export class RoadmapRepository {
           id: posts.id,
           title: posts.title,
           voteCount: posts.voteCount,
+          statusId: posts.statusId,
         },
         board: {
           id: boards.id,
@@ -255,6 +233,7 @@ export class RoadmapRepository {
         id: r.post.id,
         title: r.post.title,
         voteCount: r.post.voteCount,
+        statusId: r.post.statusId,
         board: r.board,
       },
       roadmapEntry: r.roadmapEntry,
@@ -262,17 +241,19 @@ export class RoadmapRepository {
   }
 
   /**
-   * Count posts in a roadmap, optionally filtered by status
+   * Count posts in a roadmap, optionally filtered by post's status
    */
-  async countRoadmapPosts(roadmapId: string, statusId?: string): Promise<number> {
+  async countRoadmapPosts(roadmapId: RoadmapId, statusId?: StatusId): Promise<number> {
     const conditions = [eq(postRoadmaps.roadmapId, roadmapId)]
+    // Filter by post's status (not roadmap-specific status)
     if (statusId) {
-      conditions.push(eq(postRoadmaps.statusId, statusId))
+      conditions.push(eq(posts.statusId, statusId))
     }
 
     const result = await this.db
       .select({ count: sql<number>`COUNT(*)` })
       .from(postRoadmaps)
+      .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
       .where(and(...conditions))
 
     return Number(result[0]?.count ?? 0)
@@ -281,7 +262,7 @@ export class RoadmapRepository {
   /**
    * Get all roadmaps a post belongs to
    */
-  async getPostRoadmaps(postId: string): Promise<Roadmap[]> {
+  async getPostRoadmaps(postId: PostId): Promise<Roadmap[]> {
     const entries = await this.db
       .select({ roadmap: roadmaps })
       .from(postRoadmaps)

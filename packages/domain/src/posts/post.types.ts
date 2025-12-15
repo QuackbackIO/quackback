@@ -2,20 +2,20 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, PostStatus, Board, Tag } from '@quackback/db/types'
+import type { Post, Board, Tag } from '@quackback/db/types'
+import type { PostId, BoardId, TagId, StatusId, MemberId } from '@quackback/ids'
 import type { CommentReactionCount } from '../comments/comment.types'
 
 /**
  * Input for creating a new post
  */
 export interface CreatePostInput {
-  boardId: string
+  boardId: BoardId
   title: string
   content: string
   contentJson?: unknown // TipTap JSON
-  status?: PostStatus
-  statusId?: string
-  tagIds?: string[]
+  statusId?: StatusId
+  tagIds?: TagId[]
 }
 
 /**
@@ -25,12 +25,12 @@ export interface UpdatePostInput {
   title?: string
   content?: string
   contentJson?: unknown // TipTap JSON
-  status?: PostStatus
-  tagIds?: string[]
+  statusId?: StatusId
+  tagIds?: TagId[]
   ownerId?: string | null
-  ownerMemberId?: string | null
+  ownerMemberId?: MemberId | null
   officialResponse?: string | null
-  officialResponseMemberId?: string | null
+  officialResponseMemberId?: MemberId | null
   officialResponseAuthorName?: string | null
 }
 
@@ -48,8 +48,8 @@ export interface VoteResult {
  * Input for changing post status
  */
 export interface ChangeStatusInput {
-  postId: string
-  statusId: string
+  postId: PostId
+  statusId: StatusId
 }
 
 /**
@@ -57,13 +57,13 @@ export interface ChangeStatusInput {
  */
 export interface PostWithDetails extends Post {
   board: {
-    id: string
+    id: BoardId
     name: string
     slug: string
     organizationId: string
   }
   tags: Array<{
-    id: string
+    id: TagId
     name: string
     color: string
   }>
@@ -74,17 +74,17 @@ export interface PostWithDetails extends Post {
  * Public post list item for portal view
  */
 export interface PublicPostListItem {
-  id: string
+  id: PostId
   title: string
   content: string
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   authorName: string | null
-  memberId: string | null
+  memberId: MemberId | null
   createdAt: Date
   commentCount: number
-  tags: Array<{ id: string; name: string; color: string }>
-  board?: { id: string; name: string; slug: string }
+  tags: Array<{ id: TagId; name: string; color: string }>
+  board?: { id: BoardId; name: string; slug: string }
 }
 
 /**
@@ -101,9 +101,12 @@ export interface PublicPostListResult {
  * Note: organizationId comes from ServiceContext, not these params
  */
 export interface InboxPostListParams {
-  boardIds?: string[]
-  status?: PostStatus[]
-  tagIds?: string[]
+  boardIds?: BoardId[]
+  /** Filter by status IDs (legacy, prefer statusSlugs) */
+  statusIds?: StatusId[]
+  /** Filter by status slugs - uses indexed lookup */
+  statusSlugs?: string[]
+  tagIds?: TagId[]
   ownerId?: string | null
   search?: string
   dateFrom?: Date
@@ -139,7 +142,7 @@ export interface PostForExport {
   id: string
   title: string
   content: string
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   authorName: string | null
   authorEmail: string | null
@@ -159,7 +162,7 @@ export interface PostForExport {
 export interface RoadmapPost {
   id: string
   title: string
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   board: { id: string; name: string; slug: string }
 }
@@ -205,7 +208,7 @@ export interface PublicPostDetail {
   title: string
   content: string
   contentJson: unknown
-  status: PostStatus
+  statusId: StatusId | null
   voteCount: number
   authorName: string | null
   createdAt: Date

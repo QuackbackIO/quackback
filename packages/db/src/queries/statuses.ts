@@ -1,4 +1,5 @@
 import { eq, and, asc, sql } from 'drizzle-orm'
+import type { StatusId } from '@quackback/ids'
 import { db } from '../tenant-context'
 import { postStatuses, DEFAULT_STATUSES } from '../schema/statuses'
 import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../types'
@@ -62,7 +63,7 @@ export async function getRoadmapStatuses(organizationId: string): Promise<PostSt
 /**
  * Get a status by ID
  */
-export async function getStatusById(id: string): Promise<PostStatusEntity | undefined> {
+export async function getStatusById(id: StatusId): Promise<PostStatusEntity | undefined> {
   return db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
   })
@@ -103,7 +104,7 @@ export async function createStatus(data: NewPostStatusEntity): Promise<PostStatu
  * Update a status
  */
 export async function updateStatus(
-  id: string,
+  id: StatusId,
   data: Partial<Omit<NewPostStatusEntity, 'organizationId'>>
 ): Promise<PostStatusEntity | undefined> {
   const [updated] = await db
@@ -118,7 +119,7 @@ export async function updateStatus(
  * Delete a status by ID
  * Note: You should check if any posts use this status before deleting
  */
-export async function deleteStatus(id: string): Promise<void> {
+export async function deleteStatus(id: StatusId): Promise<void> {
   await db.delete(postStatuses).where(eq(postStatuses.id, id))
 }
 
@@ -129,7 +130,7 @@ export async function deleteStatus(id: string): Promise<void> {
 export async function reorderStatuses(
   organizationId: string,
   category: StatusCategory,
-  statusIds: string[]
+  statusIds: StatusId[]
 ): Promise<void> {
   // Update each status's position based on its index in the array
   await Promise.all(
@@ -152,7 +153,7 @@ export async function reorderStatuses(
  * Set a status as the default for new posts
  * This will unset any other default status in the organization
  */
-export async function setDefaultStatus(organizationId: string, statusId: string): Promise<void> {
+export async function setDefaultStatus(organizationId: string, statusId: StatusId): Promise<void> {
   // First, unset all defaults for this organization
   await db
     .update(postStatuses)
@@ -197,7 +198,7 @@ export async function hasStatuses(organizationId: string): Promise<boolean> {
  * Get count of posts using a specific status
  * Useful before deleting a status to warn users
  */
-export async function getStatusUsageCount(statusId: string): Promise<number> {
+export async function getStatusUsageCount(statusId: StatusId): Promise<number> {
   const posts = await import('../schema/posts').then((m) => m.posts)
   const result = await db
     .select({ count: sql<number>`count(*)` })

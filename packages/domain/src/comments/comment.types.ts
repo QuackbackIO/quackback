@@ -2,13 +2,15 @@
  * Input/Output types for CommentService operations
  */
 
+import type { PostId, CommentId, BoardId, MemberId } from '@quackback/ids'
+
 /**
  * Input for creating a new comment
  */
 export interface CreateCommentInput {
-  postId: string
+  postId: PostId
   content: string
-  parentId?: string | null
+  parentId?: CommentId | null
   authorName?: string | null
   authorEmail?: string | null
 }
@@ -33,10 +35,10 @@ export interface CommentReactionCount {
  * Comment with nested replies (threaded structure)
  */
 export interface CommentThread {
-  id: string
-  postId: string
-  parentId: string | null
-  memberId: string | null
+  id: CommentId
+  postId: PostId
+  parentId: CommentId | null
+  memberId: MemberId | null
   authorId: string | null
   authorName: string | null
   authorEmail: string | null
@@ -63,21 +65,21 @@ export interface ReactionResult {
  */
 export interface CommentContext {
   comment: {
-    id: string
-    postId: string
+    id: CommentId
+    postId: PostId
     content: string
-    parentId: string | null
-    memberId: string | null
+    parentId: CommentId | null
+    memberId: MemberId | null
     authorName: string | null
     createdAt: Date
   }
   post: {
-    id: string
-    boardId: string
+    id: PostId
+    boardId: BoardId
     title: string
   }
   board: {
-    id: string
+    id: BoardId
     organizationId: string
     name: string
     slug: string

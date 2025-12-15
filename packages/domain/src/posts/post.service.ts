@@ -14,8 +14,6 @@ import {
   BoardRepository,
   eq,
   and,
-  or,
-  ilike,
   inArray,
   desc,
   asc,
@@ -28,9 +26,16 @@ import {
   tags,
   comments,
   type Post,
-  type PostStatus,
   type UnitOfWork,
 } from '@quackback/db'
+import {
+  toUuid,
+  type PostId,
+  type BoardId,
+  type StatusId,
+  type TagId,
+  type MemberId,
+} from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'
@@ -94,16 +99,36 @@ export class PostService {
         return err(PostError.validationError('Content must be 10,000 characters or less'))
       }
 
+      // Determine statusId - either from input or use default "open" status
+      let statusId = input.statusId
+      if (!statusId) {
+        // Look up default "open" status
+        const [defaultStatus] = await uow.db
+          .select()
+          .from(postStatuses)
+          .where(eq(postStatuses.slug, 'open'))
+          .limit(1)
+
+        if (!defaultStatus) {
+          return err(
+            PostError.validationError(
+              'Default "open" status not found. Please ensure post statuses are configured for this organization.'
+            )
+          )
+        }
+
+        statusId = defaultStatus.id
+      }
+
       // Create the post with member-scoped identity
       const post = await postRepo.create({
+        organizationId: ctx.organizationId,
         boardId: input.boardId,
         title: input.title.trim(),
         content: input.content.trim(),
         contentJson: input.contentJson,
-        status: input.status || 'open',
-        statusId: input.statusId,
+        statusId,
         memberId: ctx.memberId,
-        // Legacy fields for display compatibility
         authorName: ctx.userName,
         authorEmail: ctx.userEmail,
       })
@@ -156,7 +181,7 @@ export class PostService {
    * @returns Result containing the updated post or an error
    */
   async updatePost(
-    id: string,
+    id: PostId,
     input: UpdatePostInput,
     ctx: ServiceContext
   ): Promise<Result<Post, PostError>> {
@@ -205,7 +230,7 @@ export class PostService {
       if (input.title !== undefined) updateData.title = input.title.trim()
       if (input.content !== undefined) updateData.content = input.content.trim()
       if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
-      if (input.status !== undefined) updateData.status = input.status
+      if (input.statusId !== undefined) updateData.statusId = input.statusId
       if (input.ownerId !== undefined) updateData.ownerId = input.ownerId
       if (input.ownerMemberId !== undefined) updateData.ownerMemberId = input.ownerMemberId
 
@@ -256,10 +281,10 @@ export class PostService {
    * @returns Result containing vote status and new count, or an error
    */
   async voteOnPost(
-    postId: string,
+    postId: PostId,
     userIdentifier: string,
     ctx: ServiceContext,
-    options?: { memberId?: string; ipHash?: string }
+    options?: { memberId?: MemberId; ipHash?: string }
   ): Promise<Result<VoteResult, PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
@@ -279,10 +304,17 @@ export class PostService {
 
       // Single atomic operation: check existing vote, then insert or delete + update count
       // Uses existing unique index on (post_id, user_identifier)
+      // Convert TypeIDs to UUIDs for raw SQL query
+      const postUuid = toUuid(postId)
+      // Extract raw ID from memberId (pseudo-TypeID format: member_<raw-uuid>)
+      // Note: member IDs from Better-auth are NOT proper TypeIDs, so we can't use parseTypeId
+      const memberUuid = options?.memberId?.startsWith('member_')
+        ? options.memberId.slice('member_'.length)
+        : null
       const result = await uow.db.execute<{ vote_count: number; voted: boolean }>(sql`
         WITH existing_vote AS (
           SELECT id FROM votes
-          WHERE post_id = ${postId} AND user_identifier = ${userIdentifier}
+          WHERE post_id = ${postUuid} AND user_identifier = ${userIdentifier}
           FOR UPDATE
         ),
         vote_action AS (
@@ -293,8 +325,8 @@ export class PostService {
         ),
         insert_vote AS (
           -- Only insert if no existing vote was found (and thus not deleted)
-          INSERT INTO votes (post_id, user_identifier, member_id, ip_hash, updated_at)
-          SELECT ${postId}, ${userIdentifier}, ${options?.memberId ?? null}, ${options?.ipHash ?? null}, NOW()
+          INSERT INTO votes (id, organization_id, post_id, user_identifier, member_id, ip_hash, updated_at)
+          SELECT gen_random_uuid(), ${ctx.organizationId}, ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
           WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
           RETURNING id, true AS is_new_vote
         ),
@@ -308,7 +340,7 @@ export class PostService {
           WHEN (SELECT is_new_vote FROM combined LIMIT 1) THEN 1
           ELSE -1
         END)
-        WHERE id = ${postId}
+        WHERE id = ${postUuid}
         RETURNING vote_count, (SELECT is_new_vote FROM combined LIMIT 1) AS voted
       `)
 
@@ -344,8 +376,8 @@ export class PostService {
    * @returns Result containing the updated post or an error
    */
   async changeStatus(
-    postId: string,
-    statusId: string,
+    postId: PostId,
+    statusId: StatusId,
     ctx: ServiceContext
   ): Promise<Result<Post, PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
@@ -370,15 +402,23 @@ export class PostService {
       }
 
       // Validate status exists (query the postStatuses table)
-      const status = await uow.db.query.postStatuses.findFirst({
+      const newStatus = await uow.db.query.postStatuses.findFirst({
         where: eq(postStatuses.id, statusId),
       })
-      if (!status) {
+      if (!newStatus) {
         return err(PostError.statusNotFound(statusId))
       }
 
-      // Capture previous status for event
-      const previousStatus = existingPost.status
+      // Get previous status name for event
+      let previousStatusName = 'Open'
+      if (existingPost.statusId) {
+        const prevStatus = await uow.db.query.postStatuses.findFirst({
+          where: eq(postStatuses.id, existingPost.statusId),
+        })
+        if (prevStatus) {
+          previousStatusName = prevStatus.name
+        }
+      }
 
       // Update the post status
       const updatedPost = await postRepo.update(postId, { statusId })
@@ -395,8 +435,8 @@ export class PostService {
             title: updatedPost.title,
             boardSlug: board.slug,
           },
-          previousStatus: previousStatus || 'open',
-          newStatus: status.name,
+          previousStatus: previousStatusName,
+          newStatus: newStatus.name,
         },
         ctx
       )
@@ -412,7 +452,7 @@ export class PostService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the post with details or an error
    */
-  async getPostById(postId: string, ctx: ServiceContext): Promise<Result<Post, PostError>> {
+  async getPostById(postId: PostId, ctx: ServiceContext): Promise<Result<Post, PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -440,7 +480,7 @@ export class PostService {
    * @returns Result containing the post with details or an error
    */
   async getPostWithDetails(
-    postId: string,
+    postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<PostWithDetails, PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
@@ -503,7 +543,7 @@ export class PostService {
    * @returns Result containing nested comment tree or an error
    */
   async getCommentsWithReplies(
-    postId: string,
+    postId: PostId,
     userIdentifier: string,
     ctx: ServiceContext
   ): Promise<Result<CommentTreeNode[], PostError>> {
@@ -541,15 +581,18 @@ export class PostService {
   /**
    * List posts for public portal (no authentication required)
    *
-   * @param params - Query parameters including organizationId, boardSlug, search, status, sort, pagination
+   * @param params - Query parameters including organizationId, boardSlug, search, statusIds/statusSlugs, sort, pagination
    * @returns Result containing public post list or an error
    */
   async listPublicPosts(params: {
     organizationId: string
     boardSlug?: string
     search?: string
-    status?: string[]
-    tagIds?: string[]
+    /** Filter by status IDs (legacy, prefer statusSlugs) */
+    statusIds?: StatusId[]
+    /** Filter by status slugs - uses indexed lookup */
+    statusSlugs?: string[]
+    tagIds?: TagId[]
     sort?: 'top' | 'new' | 'trending'
     page?: number
     limit?: number
@@ -557,7 +600,16 @@ export class PostService {
     // Note: This is a PUBLIC method, no auth context needed
     // We use organizationId directly in withUnitOfWork
     return withUnitOfWork(params.organizationId, async (uow: UnitOfWork) => {
-      const { boardSlug, search, status, tagIds, sort = 'top', page = 1, limit = 20 } = params
+      const {
+        boardSlug,
+        search,
+        statusIds,
+        statusSlugs,
+        tagIds,
+        sort = 'top',
+        page = 1,
+        limit = 20,
+      } = params
       const offset = (page - 1) * limit
 
       // Build where conditions - only include posts from public boards
@@ -570,8 +622,18 @@ export class PostService {
         conditions.push(eq(boards.slug, boardSlug))
       }
 
-      if (status && status.length > 0) {
-        conditions.push(inArray(posts.status, status as PostStatus[]))
+      // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
+      let resolvedStatusIds = statusIds
+      if (statusSlugs && statusSlugs.length > 0) {
+        const statusesBySlug = await uow.db.query.postStatuses.findMany({
+          where: inArray(postStatuses.slug, statusSlugs),
+          columns: { id: true },
+        })
+        resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
+      }
+
+      if (resolvedStatusIds && resolvedStatusIds.length > 0) {
+        conditions.push(inArray(posts.statusId, resolvedStatusIds))
       }
 
       // Tag filter - posts must have at least one of the selected tags
@@ -589,8 +651,9 @@ export class PostService {
         conditions.push(inArray(posts.id, postIdsWithTags))
       }
 
+      // Full-text search using tsvector (much faster than ILIKE)
       if (search) {
-        conditions.push(or(ilike(posts.title, `%${search}%`), ilike(posts.content, `%${search}%`))!)
+        conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
       }
 
       // Get total count
@@ -616,7 +679,7 @@ export class PostService {
           id: posts.id,
           title: posts.title,
           content: posts.content,
-          status: posts.status,
+          statusId: posts.statusId,
           voteCount: posts.voteCount,
           authorName: posts.authorName,
           memberId: posts.memberId,
@@ -652,7 +715,7 @@ export class PostService {
           : []
 
       // Group tags by post
-      const tagsByPost = new Map<string, Array<{ id: string; name: string; color: string }>>()
+      const tagsByPost = new Map<PostId, Array<{ id: TagId; name: string; color: string }>>()
       for (const row of tagsResult) {
         const existing = tagsByPost.get(row.postId) || []
         existing.push({ id: row.id, name: row.name, color: row.color })
@@ -663,7 +726,7 @@ export class PostService {
         id: post.id,
         title: post.title,
         content: post.content,
-        status: post.status,
+        statusId: post.statusId,
         voteCount: post.voteCount,
         authorName: post.authorName,
         memberId: post.memberId,
@@ -699,7 +762,8 @@ export class PostService {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const {
         boardIds,
-        status,
+        statusIds,
+        statusSlugs,
         tagIds,
         ownerId,
         search,
@@ -730,9 +794,18 @@ export class PostService {
 
       conditions.push(inArray(posts.boardId, orgBoardIds))
 
-      // Status filter (multiple statuses = OR)
-      if (status && status.length > 0) {
-        conditions.push(inArray(posts.status, status as PostStatus[]))
+      // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
+      let resolvedStatusIds = statusIds
+      if (statusSlugs && statusSlugs.length > 0) {
+        const statusesBySlug = await uow.db.query.postStatuses.findMany({
+          where: inArray(postStatuses.slug, statusSlugs),
+          columns: { id: true },
+        })
+        resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
+      }
+
+      if (resolvedStatusIds && resolvedStatusIds.length > 0) {
+        conditions.push(inArray(posts.statusId, resolvedStatusIds))
       }
 
       // Owner filter
@@ -743,8 +816,9 @@ export class PostService {
       }
 
       // Search filter
+      // Full-text search using tsvector (much faster than ILIKE)
       if (search) {
-        conditions.push(or(ilike(posts.title, `%${search}%`), ilike(posts.content, `%${search}%`))!)
+        conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
       }
 
       // Date range filters
@@ -761,7 +835,7 @@ export class PostService {
       }
 
       // Tag filter - posts must have at least one of the selected tags
-      let postIdsWithTags: string[] | null = null
+      let postIdsWithTags: PostId[] | null = null
       if (tagIds && tagIds.length > 0) {
         const postsWithSelectedTags = await uow.db
           .selectDistinct({ postId: postTags.postId })
@@ -853,7 +927,7 @@ export class PostService {
    * @returns Result containing posts for export or an error
    */
   async listPostsForExport(
-    boardId: string | undefined,
+    boardId: BoardId | undefined,
     ctx: ServiceContext
   ): Promise<Result<PostForExport[], PostError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
@@ -916,7 +990,7 @@ export class PostService {
         id: post.id,
         title: post.title,
         content: post.content,
-        status: post.status,
+        statusId: post.statusId,
         voteCount: post.voteCount,
         authorName: post.authorName,
         authorEmail: post.authorEmail,
@@ -944,7 +1018,7 @@ export class PostService {
    * @returns Result containing post detail or null if not found/not public
    */
   async getPublicPostDetail(
-    postId: string,
+    postId: PostId,
     userIdentifier?: string
   ): Promise<Result<PublicPostDetail | null, PostError>> {
     // Use db from tenant-context for public queries (no UnitOfWork needed - read-only)
@@ -1004,7 +1078,7 @@ export class PostService {
       title: postResult.title,
       content: postResult.content,
       contentJson: postResult.contentJson,
-      status: postResult.status,
+      statusId: postResult.statusId,
       voteCount: postResult.voteCount,
       authorName: postResult.authorName,
       createdAt: postResult.createdAt,
@@ -1030,14 +1104,14 @@ export class PostService {
    * No authentication required
    *
    * @param organizationId - Organization ID
-   * @param statusSlugs - Array of status slugs to filter by
+   * @param statusIds - Array of status IDs to filter by
    * @returns Result containing roadmap posts
    */
   async getRoadmapPosts(
     organizationId: string,
-    statusSlugs: string[]
+    statusIds: StatusId[]
   ): Promise<Result<RoadmapPost[], PostError>> {
-    if (statusSlugs.length === 0) {
+    if (statusIds.length === 0) {
       return ok([])
     }
 
@@ -1047,7 +1121,7 @@ export class PostService {
       .select({
         id: posts.id,
         title: posts.title,
-        status: posts.status,
+        statusId: posts.statusId,
         voteCount: posts.voteCount,
         boardId: boards.id,
         boardName: boards.name,
@@ -1059,7 +1133,7 @@ export class PostService {
         and(
           eq(boards.organizationId, organizationId),
           eq(boards.isPublic, true),
-          inArray(posts.status, statusSlugs as PostStatus[])
+          inArray(posts.statusId, statusIds)
         )
       )
       .orderBy(desc(posts.voteCount))
@@ -1068,7 +1142,7 @@ export class PostService {
       result.map((row) => ({
         id: row.id,
         title: row.title,
-        status: row.status,
+        statusId: row.statusId,
         voteCount: row.voteCount,
         board: {
           id: row.boardId,
@@ -1088,11 +1162,11 @@ export class PostService {
    */
   async getRoadmapPostsPaginated(params: {
     organizationId: string
-    statusSlug: string
+    statusId: StatusId
     page?: number
     limit?: number
   }): Promise<Result<RoadmapPostListResult, PostError>> {
-    const { organizationId, statusSlug, page = 1, limit = 10 } = params
+    const { organizationId, statusId, page = 1, limit = 10 } = params
     const offset = (page - 1) * limit
 
     const { db } = await import('@quackback/db')
@@ -1106,7 +1180,7 @@ export class PostService {
         and(
           eq(boards.organizationId, organizationId),
           eq(boards.isPublic, true),
-          eq(posts.status, statusSlug as PostStatus)
+          eq(posts.statusId, statusId)
         )
       )
 
@@ -1117,7 +1191,7 @@ export class PostService {
       .select({
         id: posts.id,
         title: posts.title,
-        status: posts.status,
+        statusId: posts.statusId,
         voteCount: posts.voteCount,
         boardId: boards.id,
         boardName: boards.name,
@@ -1129,7 +1203,7 @@ export class PostService {
         and(
           eq(boards.organizationId, organizationId),
           eq(boards.isPublic, true),
-          eq(posts.status, statusSlug as PostStatus)
+          eq(posts.statusId, statusId)
         )
       )
       .orderBy(desc(posts.voteCount))
@@ -1139,7 +1213,7 @@ export class PostService {
     const items = result.map((row) => ({
       id: row.id,
       title: row.title,
-      status: row.status,
+      statusId: row.statusId,
       voteCount: row.voteCount,
       board: {
         id: row.boardId,
@@ -1164,7 +1238,7 @@ export class PostService {
    * @returns Result containing boolean
    */
   async hasUserVotedOnPost(
-    postId: string,
+    postId: PostId,
     userIdentifier: string
   ): Promise<Result<boolean, PostError>> {
     const { db } = await import('@quackback/db')
@@ -1185,9 +1259,9 @@ export class PostService {
    * @returns Result containing Set of voted post IDs
    */
   async getUserVotedPostIds(
-    postIds: string[],
+    postIds: PostId[],
     userIdentifier: string
-  ): Promise<Result<Set<string>, PostError>> {
+  ): Promise<Result<Set<PostId>, PostError>> {
     if (postIds.length === 0) {
       return ok(new Set())
     }
@@ -1209,7 +1283,7 @@ export class PostService {
    * @param userIdentifier - User's identifier
    * @returns Result containing Set of all voted post IDs
    */
-  async getAllUserVotedPostIds(userIdentifier: string): Promise<Result<Set<string>, PostError>> {
+  async getAllUserVotedPostIds(userIdentifier: string): Promise<Result<Set<PostId>, PostError>> {
     const { db } = await import('@quackback/db')
 
     const result = await db
@@ -1228,7 +1302,7 @@ export class PostService {
    * @returns Result containing Board or null
    */
   async getBoardByPostId(
-    postId: string
+    postId: PostId
   ): Promise<Result<import('@quackback/db').Board | null, PostError>> {
     const { db } = await import('@quackback/db')
 

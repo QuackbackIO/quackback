@@ -22,6 +22,7 @@ import {
   boards,
   posts,
 } from '@quackback/db'
+import type { BoardId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { BoardError } from './board.errors'
@@ -136,7 +137,7 @@ export class BoardService {
    * @returns Result containing the updated board or an error
    */
   async updateBoard(
-    id: string,
+    id: BoardId,
     input: UpdateBoardInput,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
@@ -226,7 +227,7 @@ export class BoardService {
    * @param ctx - Service context with user/org information
    * @returns Result containing void or an error
    */
-  async deleteBoard(id: string, ctx: ServiceContext): Promise<Result<void, BoardError>> {
+  async deleteBoard(id: BoardId, ctx: ServiceContext): Promise<Result<void, BoardError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
@@ -258,7 +259,7 @@ export class BoardService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the board or an error
    */
-  async getBoardById(id: string, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
+  async getBoardById(id: BoardId, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
@@ -336,7 +337,7 @@ export class BoardService {
    * @returns Result containing the updated board or an error
    */
   async updateBoardSettings(
-    id: string,
+    id: BoardId,
     settings: BoardSettings,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
@@ -380,7 +381,7 @@ export class BoardService {
    * @param boardId - Board ID to fetch
    * @returns Result containing the board or an error
    */
-  async getPublicBoardById(boardId: string): Promise<Result<Board, BoardError>> {
+  async getPublicBoardById(boardId: BoardId): Promise<Result<Board, BoardError>> {
     try {
       const board = await db.query.boards.findFirst({
         where: eq(boards.id, boardId),
@@ -494,7 +495,7 @@ export class BoardService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the board or an error
    */
-  async getBoardByPostId(postId: string, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
+  async getBoardByPostId(postId: PostId, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
@@ -553,7 +554,7 @@ export class BoardService {
    * @returns Result containing the board if valid, or an error
    */
   async validateBoardBelongsToOrg(
-    boardId: string,
+    boardId: BoardId,
     organizationId: string
   ): Promise<Result<Board, BoardError>> {
     try {

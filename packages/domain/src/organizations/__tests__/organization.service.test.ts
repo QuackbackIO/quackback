@@ -61,7 +61,7 @@ describe('OrganizationService', () => {
     mockContext = {
       organizationId: 'org-123',
       userId: 'user-123',
-      memberId: 'member-123',
+      memberId: 'member_123',
       memberRole: 'admin',
       userName: 'Test User',
       userEmail: 'test@example.com',
@@ -1014,7 +1014,7 @@ describe('OrganizationService', () => {
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPublicAuthConfig('nonexistent')
+      const result = await orgService.getPublicAuthConfig('board_nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1050,7 +1050,7 @@ describe('OrganizationService', () => {
     it('should return error when organization not found', async () => {
       mockDb.query.organization.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPublicPortalConfig('nonexistent')
+      const result = await orgService.getPublicPortalConfig('board_nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {

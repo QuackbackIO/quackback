@@ -15,6 +15,7 @@ import { CommentService } from '../comment.service'
 import type { ServiceContext } from '../../shared/service-context'
 import type { CreateCommentInput, UpdateCommentInput } from '../comment.types'
 import type { Comment, Post, Board } from '@quackback/db'
+import type { CommentId, PostId } from '@quackback/ids'
 
 // Use vi.hoisted to create mock instances that are available at mock factory time
 const { mockCommentRepoInstance, mockPostRepoInstance, mockBoardRepoInstance, mockDbInstance } =
@@ -97,10 +98,10 @@ describe('CommentService', () => {
   // Test data
   const mockOrgId = 'org-123'
   const mockUserId = 'user-123'
-  const mockMemberId = 'member-123'
-  const mockPostId = 'post-123'
-  const mockBoardId = 'board-123'
-  const mockCommentId = 'comment-123'
+  const mockMemberId = 'member_123'
+  const mockPostId = 'post_123'
+  const mockBoardId = 'board_123'
+  const mockCommentId = 'comment_123'
 
   const mockPost: Post = {
     id: mockPostId,
@@ -333,7 +334,7 @@ describe('CommentService', () => {
     })
 
     describe('nested comments', () => {
-      const parentCommentId = 'parent-123'
+      const parentCommentId = 'comment_parent123' as CommentId
       const parentComment: Comment = {
         ...mockComment,
         id: parentCommentId,
@@ -345,7 +346,7 @@ describe('CommentService', () => {
       })
 
       it('should create a nested comment with valid parent', async () => {
-        const nestedInput = { ...validInput, parentId: parentCommentId }
+        const nestedInput: CreateCommentInput = { ...validInput, parentId: parentCommentId }
 
         const result = await commentService.createComment(nestedInput, mockContext)
 
@@ -359,7 +360,10 @@ describe('CommentService', () => {
 
       it('should return error if parent comment not found', async () => {
         mockCommentRepoInstance.findById.mockResolvedValue(null)
-        const nestedInput = { ...validInput, parentId: 'nonexistent' }
+        const nestedInput: CreateCommentInput = {
+          ...validInput,
+          parentId: 'comment_nonexistent' as CommentId,
+        }
 
         const result = await commentService.createComment(nestedInput, mockContext)
 
@@ -370,9 +374,9 @@ describe('CommentService', () => {
       })
 
       it('should return error if parent belongs to different post', async () => {
-        const wrongPostParent = { ...parentComment, postId: 'different-post' }
+        const wrongPostParent = { ...parentComment, postId: 'post_different' as PostId }
         mockCommentRepoInstance.findById.mockResolvedValue(wrongPostParent)
-        const nestedInput = { ...validInput, parentId: parentCommentId }
+        const nestedInput: CreateCommentInput = { ...validInput, parentId: parentCommentId }
 
         const result = await commentService.createComment(nestedInput, mockContext)
 

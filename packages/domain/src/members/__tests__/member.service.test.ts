@@ -50,7 +50,7 @@ describe('MemberService', () => {
   describe('getMemberByUserAndOrg', () => {
     it('should return member when found', async () => {
       const mockMember: Member = {
-        id: 'member-123',
+        id: 'member_123',
         userId: 'user-123',
         organizationId: 'org-123',
         role: 'admin',
@@ -93,7 +93,7 @@ describe('MemberService', () => {
 
     it('should work with different user and org IDs', async () => {
       const mockMember: Member = {
-        id: 'member-456',
+        id: 'member_456',
         userId: 'user-456',
         organizationId: 'org-456',
         role: 'member',
@@ -115,7 +115,7 @@ describe('MemberService', () => {
   describe('getMemberById', () => {
     it('should return member when found', async () => {
       const mockMember: Member = {
-        id: 'member-123',
+        id: 'member_123',
         userId: 'user-123',
         organizationId: 'org-123',
         role: 'admin',
@@ -124,19 +124,19 @@ describe('MemberService', () => {
 
       mockMemberRepo.findById.mockResolvedValue(mockMember)
 
-      const result = await memberService.getMemberById('member-123')
+      const result = await memberService.getMemberById('member_123')
 
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toEqual(mockMember)
       }
-      expect(mockMemberRepo.findById).toHaveBeenCalledWith('member-123')
+      expect(mockMemberRepo.findById).toHaveBeenCalledWith('member_123')
     })
 
     it('should return null when member not found', async () => {
       mockMemberRepo.findById.mockResolvedValue(null)
 
-      const result = await memberService.getMemberById('member-nonexistent')
+      const result = await memberService.getMemberById('member_nonexistent')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -147,7 +147,7 @@ describe('MemberService', () => {
     it('should return error when database operation fails', async () => {
       mockMemberRepo.findById.mockRejectedValue(new Error('Database error'))
 
-      const result = await memberService.getMemberById('member-123')
+      const result = await memberService.getMemberById('member_123')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -340,7 +340,7 @@ describe('MemberService', () => {
   describe('checkMembership', () => {
     it('should return isMember true with member data when user is member', async () => {
       const mockMember: Member = {
-        id: 'member-123',
+        id: 'member_123',
         userId: 'user-123',
         organizationId: 'org-123',
         role: 'admin',
@@ -384,7 +384,7 @@ describe('MemberService', () => {
 
     it('should check membership for different user and org combinations', async () => {
       const mockMember: Member = {
-        id: 'member-456',
+        id: 'member_456',
         userId: 'user-456',
         organizationId: 'org-456',
         role: 'member',
@@ -404,7 +404,7 @@ describe('MemberService', () => {
 
     it('should handle owner role correctly', async () => {
       const mockMember: Member = {
-        id: 'member-789',
+        id: 'member_789',
         userId: 'user-789',
         organizationId: 'org-789',
         role: 'owner',
@@ -424,7 +424,7 @@ describe('MemberService', () => {
 
     it('should handle team member role correctly', async () => {
       const mockMember: Member = {
-        id: 'member-999',
+        id: 'member_999',
         userId: 'user-999',
         organizationId: 'org-999',
         role: 'member',

@@ -3,6 +3,7 @@
  */
 
 import type { Roadmap, PostRoadmap } from '@quackback/db/types'
+import type { PostId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
 
 /**
  * Input for creating a new roadmap
@@ -27,27 +28,16 @@ export interface UpdateRoadmapInput {
  * Input for adding a post to a roadmap
  */
 export interface AddPostToRoadmapInput {
-  postId: string
-  roadmapId: string
-  statusId: string
+  postId: PostId
+  roadmapId: RoadmapId
 }
 
 /**
- * Input for moving a post within a roadmap (change status/column)
- */
-export interface MovePostInRoadmapInput {
-  postId: string
-  roadmapId: string
-  newStatusId: string
-}
-
-/**
- * Input for reordering posts within a roadmap column
+ * Input for reordering posts within a roadmap
  */
 export interface ReorderPostsInput {
-  roadmapId: string
-  statusId: string
-  postIds: string[]
+  roadmapId: RoadmapId
+  postIds: PostId[]
 }
 
 /**
@@ -61,11 +51,12 @@ export interface RoadmapWithStats extends Roadmap {
  * Roadmap post entry for display
  */
 export interface RoadmapPostEntry {
-  id: string
+  id: PostId
   title: string
   voteCount: number
+  statusId: StatusId | null
   board: {
-    id: string
+    id: BoardId
     name: string
     slug: string
   }
@@ -85,7 +76,7 @@ export interface RoadmapPostsListResult {
  * Query options for listing roadmap posts
  */
 export interface RoadmapPostsQueryOptions {
-  statusId?: string
+  statusId?: StatusId
   limit?: number
   offset?: number
 }

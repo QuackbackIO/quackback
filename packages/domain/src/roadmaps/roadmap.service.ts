@@ -12,10 +12,10 @@ import {
   withUnitOfWork,
   RoadmapRepository,
   PostRepository,
-  StatusRepository,
   type Roadmap,
   type UnitOfWork,
 } from '@quackback/db'
+import type { RoadmapId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { RoadmapError } from './roadmap.errors'
@@ -23,7 +23,6 @@ import type {
   CreateRoadmapInput,
   UpdateRoadmapInput,
   AddPostToRoadmapInput,
-  MovePostInRoadmapInput,
   ReorderPostsInput,
   RoadmapPostsListResult,
   RoadmapPostsQueryOptions,
@@ -97,7 +96,7 @@ export class RoadmapService {
    * Update an existing roadmap
    */
   async updateRoadmap(
-    id: string,
+    id: RoadmapId,
     input: UpdateRoadmapInput,
     ctx: ServiceContext
   ): Promise<Result<Roadmap, RoadmapError>> {
@@ -142,7 +141,7 @@ export class RoadmapService {
   /**
    * Delete a roadmap
    */
-  async deleteRoadmap(id: string, ctx: ServiceContext): Promise<Result<void, RoadmapError>> {
+  async deleteRoadmap(id: RoadmapId, ctx: ServiceContext): Promise<Result<void, RoadmapError>> {
     // Authorization check - only owner/admin can delete
     if (!ctx.memberRole || !['owner', 'admin'].includes(ctx.memberRole)) {
       return err(RoadmapError.unauthorized('delete roadmaps'))
@@ -167,7 +166,7 @@ export class RoadmapService {
   /**
    * Get a roadmap by ID
    */
-  async getRoadmap(id: string, ctx: ServiceContext): Promise<Result<Roadmap, RoadmapError>> {
+  async getRoadmap(id: RoadmapId, ctx: ServiceContext): Promise<Result<Roadmap, RoadmapError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       const roadmap = await roadmapRepo.findById(id)
@@ -225,7 +224,7 @@ export class RoadmapService {
    * Reorder roadmaps in the sidebar
    */
   async reorderRoadmaps(
-    roadmapIds: string[],
+    roadmapIds: RoadmapId[],
     ctx: ServiceContext
   ): Promise<Result<void, RoadmapError>> {
     // Authorization check
@@ -259,7 +258,6 @@ export class RoadmapService {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
-      const statusRepo = new StatusRepository(uow.db)
 
       // Verify roadmap exists
       const roadmap = await roadmapRepo.findById(input.roadmapId)
@@ -273,26 +271,19 @@ export class RoadmapService {
         return err(RoadmapError.postNotFound(input.postId))
       }
 
-      // Verify status exists
-      const status = await statusRepo.findById(input.statusId)
-      if (!status) {
-        return err(RoadmapError.statusNotFound(input.statusId))
-      }
-
       // Check if post is already in roadmap
       const isInRoadmap = await roadmapRepo.isPostInRoadmap(input.postId, input.roadmapId)
       if (isInRoadmap) {
         return err(RoadmapError.postAlreadyInRoadmap(input.postId, input.roadmapId))
       }
 
-      // Get next position in the column
-      const position = await roadmapRepo.getNextPostPosition(input.roadmapId, input.statusId)
+      // Get next position in the roadmap
+      const position = await roadmapRepo.getNextPostPosition(input.roadmapId)
 
       // Add the post to the roadmap
       await roadmapRepo.addPost({
         postId: input.postId,
         roadmapId: input.roadmapId,
-        statusId: input.statusId,
         position,
       })
 
@@ -304,8 +295,8 @@ export class RoadmapService {
    * Remove a post from a roadmap
    */
   async removePostFromRoadmap(
-    postId: string,
-    roadmapId: string,
+    postId: PostId,
+    roadmapId: RoadmapId,
     ctx: ServiceContext
   ): Promise<Result<void, RoadmapError>> {
     // Authorization check
@@ -330,48 +321,7 @@ export class RoadmapService {
   }
 
   /**
-   * Move a post to a different column (status) within a roadmap
-   */
-  async movePostInRoadmap(
-    input: MovePostInRoadmapInput,
-    ctx: ServiceContext
-  ): Promise<Result<void, RoadmapError>> {
-    // Authorization check
-    if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
-      return err(RoadmapError.unauthorized('move posts in roadmaps'))
-    }
-
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const statusRepo = new StatusRepository(uow.db)
-
-      // Verify roadmap exists
-      const roadmap = await roadmapRepo.findById(input.roadmapId)
-      if (!roadmap) {
-        return err(RoadmapError.notFound(input.roadmapId))
-      }
-
-      // Check if post is in roadmap
-      const isInRoadmap = await roadmapRepo.isPostInRoadmap(input.postId, input.roadmapId)
-      if (!isInRoadmap) {
-        return err(RoadmapError.postNotInRoadmap(input.postId, input.roadmapId))
-      }
-
-      // Verify new status exists
-      const status = await statusRepo.findById(input.newStatusId)
-      if (!status) {
-        return err(RoadmapError.statusNotFound(input.newStatusId))
-      }
-
-      // Update the post's status in the roadmap
-      await roadmapRepo.updatePostStatus(input.postId, input.roadmapId, input.newStatusId)
-
-      return ok(undefined)
-    })
-  }
-
-  /**
-   * Reorder posts within a roadmap column
+   * Reorder posts within a roadmap
    */
   async reorderPostsInColumn(
     input: ReorderPostsInput,
@@ -392,7 +342,7 @@ export class RoadmapService {
       }
 
       // Reorder the posts
-      await roadmapRepo.reorderPostsInColumn(input.roadmapId, input.statusId, input.postIds)
+      await roadmapRepo.reorderPostsInColumn(input.roadmapId, input.postIds)
 
       return ok(undefined)
     })
@@ -406,7 +356,7 @@ export class RoadmapService {
    * Get posts for a roadmap, optionally filtered by status
    */
   async getRoadmapPosts(
-    roadmapId: string,
+    roadmapId: RoadmapId,
     options: RoadmapPostsQueryOptions,
     ctx: ServiceContext
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {
@@ -440,6 +390,7 @@ export class RoadmapService {
           id: r.post.id,
           title: r.post.title,
           voteCount: r.post.voteCount,
+          statusId: r.post.statusId,
           board: r.post.board,
           roadmapEntry: r.roadmapEntry,
         })),
@@ -454,7 +405,7 @@ export class RoadmapService {
    */
   async getPublicRoadmapPosts(
     organizationId: string,
-    roadmapId: string,
+    roadmapId: RoadmapId,
     options: RoadmapPostsQueryOptions
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {
     return withUnitOfWork(organizationId, async (uow: UnitOfWork) => {
@@ -488,6 +439,7 @@ export class RoadmapService {
           id: r.post.id,
           title: r.post.title,
           voteCount: r.post.voteCount,
+          statusId: r.post.statusId,
           board: r.post.board,
           roadmapEntry: r.roadmapEntry,
         })),
@@ -501,7 +453,7 @@ export class RoadmapService {
    * Get all roadmaps a post belongs to
    */
   async getPostRoadmaps(
-    postId: string,
+    postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<Roadmap[], RoadmapError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {

@@ -7,6 +7,8 @@
 
 import { vi, type Mock } from 'vitest'
 import type { ServiceContext } from '../shared/service-context'
+import { generateId } from '@quackback/ids'
+import type { Board, Comment, Post, PostStatusEntity, Tag, Vote } from '@quackback/db/types'
 
 // ============================================
 // TEST CONSTANTS
@@ -28,6 +30,16 @@ export type TestRole = (typeof TEST_ROLES)[keyof typeof TEST_ROLES]
 // MOCK ENTITY FACTORIES
 // ============================================
 
+// Expose test IDs for tests that need to reference them
+export const TEST_IDS = {
+  POST_ID: generateId('post'),
+  BOARD_ID: generateId('board'),
+  MEMBER_ID: generateId('member'),
+  TAG_ID: generateId('tag'),
+  COMMENT_ID: generateId('comment'),
+  STATUS_ID: generateId('status'),
+} as const
+
 /**
  * Create a mock ServiceContext for testing
  */
@@ -35,7 +47,7 @@ export function createMockServiceContext(overrides?: Partial<ServiceContext>): S
   return {
     organizationId: 'org-123',
     userId: 'user-123',
-    memberId: 'member-123',
+    memberId: TEST_IDS.MEMBER_ID as ServiceContext['memberId'],
     memberRole: 'admin',
     userName: 'Test User',
     userEmail: 'test@example.com',
@@ -43,20 +55,28 @@ export function createMockServiceContext(overrides?: Partial<ServiceContext>): S
   }
 }
 
+// Use TEST_IDS for consistent mock entity creation
+const TEST_POST_ID = TEST_IDS.POST_ID
+const TEST_BOARD_ID = TEST_IDS.BOARD_ID
+const TEST_MEMBER_ID = TEST_IDS.MEMBER_ID
+const TEST_TAG_ID = TEST_IDS.TAG_ID
+const TEST_COMMENT_ID = TEST_IDS.COMMENT_ID
+const TEST_STATUS_ID = TEST_IDS.STATUS_ID
+
 /**
  * Create a mock Post for testing
  */
-export function createMockPost(overrides?: Record<string, unknown>) {
+export function createMockPost(overrides?: Record<string, unknown>): Post {
   return {
-    id: 'post-123',
-    boardId: 'board-123',
+    id: TEST_POST_ID,
+    boardId: TEST_BOARD_ID,
     title: 'Test Post',
     content: 'Test content',
     contentJson: null,
     status: 'open',
     statusId: null,
     voteCount: 0,
-    memberId: 'member-123',
+    memberId: TEST_MEMBER_ID,
     authorId: null,
     authorName: 'Test User',
     authorEmail: 'test@example.com',
@@ -71,15 +91,15 @@ export function createMockPost(overrides?: Record<string, unknown>) {
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     ...overrides,
-  }
+  } as Post
 }
 
 /**
  * Create a mock Board for testing
  */
-export function createMockBoard(overrides?: Record<string, unknown>) {
+export function createMockBoard(overrides?: Record<string, unknown>): Board {
   return {
-    id: 'board-123',
+    id: TEST_BOARD_ID,
     organizationId: 'org-123',
     name: 'Test Board',
     slug: 'test-board',
@@ -89,33 +109,32 @@ export function createMockBoard(overrides?: Record<string, unknown>) {
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     ...overrides,
-  }
+  } as Board
 }
 
 /**
  * Create a mock Tag for testing
  */
-export function createMockTag(overrides?: Record<string, unknown>) {
+export function createMockTag(overrides?: Record<string, unknown>): Tag {
   return {
-    id: 'tag-123',
+    id: TEST_TAG_ID,
     organizationId: 'org-123',
     name: 'Test Tag',
     color: '#3b82f6',
     createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
     ...overrides,
-  }
+  } as Tag
 }
 
 /**
  * Create a mock Comment for testing
  */
-export function createMockComment(overrides?: Record<string, unknown>) {
+export function createMockComment(overrides?: Record<string, unknown>): Comment {
   return {
-    id: 'comment-123',
-    postId: 'post-123',
+    id: TEST_COMMENT_ID,
+    postId: TEST_POST_ID,
     parentId: null,
-    memberId: 'member-123',
+    memberId: TEST_MEMBER_ID,
     authorId: null,
     authorName: 'Test User',
     authorEmail: 'test@example.com',
@@ -123,39 +142,42 @@ export function createMockComment(overrides?: Record<string, unknown>) {
     isTeamMember: true,
     createdAt: new Date('2024-01-01'),
     ...overrides,
-  }
+  } as Comment
 }
 
 /**
  * Create a mock Vote for testing
  */
-export function createMockVote(overrides?: Record<string, unknown>) {
+export function createMockVote(overrides?: Record<string, unknown>): Vote {
   return {
-    id: 'vote-123',
-    postId: 'post-123',
-    userIdentifier: 'member:member-123',
+    id: crypto.randomUUID(),
+    postId: TEST_POST_ID,
+    userIdentifier: `member:${TEST_MEMBER_ID}`,
+    memberId: TEST_MEMBER_ID,
+    ipHash: null,
     createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
     ...overrides,
-  }
+  } as Vote
 }
 
 /**
  * Create a mock PostStatus for testing
  */
-export function createMockPostStatus(overrides?: Record<string, unknown>) {
+export function createMockPostStatus(overrides?: Record<string, unknown>): PostStatusEntity {
   return {
-    id: 'status-123',
+    id: TEST_STATUS_ID,
     organizationId: 'org-123',
     name: 'In Progress',
     slug: 'in-progress',
     color: '#3b82f6',
-    category: 'active',
+    category: 'active' as const,
+    showOnRoadmap: false,
     position: 1,
     isDefault: false,
     createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01'),
     ...overrides,
-  }
+  } as PostStatusEntity
 }
 
 /**
@@ -163,10 +185,10 @@ export function createMockPostStatus(overrides?: Record<string, unknown>) {
  */
 export function createMockMember(overrides?: Record<string, unknown>) {
   return {
-    id: 'member-123',
+    id: TEST_MEMBER_ID,
     userId: 'user-123',
     organizationId: 'org-123',
-    role: 'admin',
+    role: 'admin' as const,
     createdAt: new Date('2024-01-01'),
     ...overrides,
   }
@@ -410,15 +432,21 @@ export function createMockUnitOfWork(): MockUnitOfWork {
           returning: vi.fn().mockResolvedValue([]),
         }),
       }),
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        leftJoin: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        offset: vi.fn().mockReturnThis(),
-        groupBy: vi.fn().mockReturnThis(),
+      select: vi.fn().mockImplementation(() => {
+        // Create a thenable chain that resolves to an empty array by default
+        const chainable: Record<string, unknown> = {
+          then: vi.fn((resolve: (v: unknown[]) => void) => resolve([])),
+        }
+        // Set methods after initialization to avoid circular reference
+        chainable.from = vi.fn().mockReturnValue(chainable)
+        chainable.where = vi.fn().mockReturnValue(chainable)
+        chainable.innerJoin = vi.fn().mockReturnValue(chainable)
+        chainable.leftJoin = vi.fn().mockReturnValue(chainable)
+        chainable.orderBy = vi.fn().mockReturnValue(chainable)
+        chainable.limit = vi.fn().mockReturnValue(chainable)
+        chainable.offset = vi.fn().mockReturnValue(chainable)
+        chainable.groupBy = vi.fn().mockReturnValue(chainable)
+        return chainable
       }),
       execute: vi.fn(),
     },
@@ -476,15 +504,21 @@ export function createMockWithUnitOfWork(repoMocks: Record<string, unknown> = {}
           returning: vi.fn().mockResolvedValue([]),
         }),
       }),
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        leftJoin: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        offset: vi.fn().mockReturnThis(),
-        groupBy: vi.fn().mockReturnThis(),
+      select: vi.fn().mockImplementation(() => {
+        // Create a thenable chain that resolves to an empty array by default
+        const chainable: Record<string, unknown> = {
+          then: vi.fn((resolve: (v: unknown[]) => void) => resolve([])),
+        }
+        // Set methods after initialization to avoid circular reference
+        chainable.from = vi.fn().mockReturnValue(chainable)
+        chainable.where = vi.fn().mockReturnValue(chainable)
+        chainable.innerJoin = vi.fn().mockReturnValue(chainable)
+        chainable.leftJoin = vi.fn().mockReturnValue(chainable)
+        chainable.orderBy = vi.fn().mockReturnValue(chainable)
+        chainable.limit = vi.fn().mockReturnValue(chainable)
+        chainable.offset = vi.fn().mockReturnValue(chainable)
+        chainable.groupBy = vi.fn().mockReturnValue(chainable)
+        return chainable
       }),
       execute: vi.fn(),
       ...repoMocks,

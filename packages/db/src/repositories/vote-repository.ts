@@ -1,4 +1,5 @@
 import { eq, and } from 'drizzle-orm'
+import type { PostId, VoteId } from '@quackback/ids'
 import type { Database } from '../client'
 import { votes } from '../schema/posts'
 import type { Vote, NewVote } from '../types'
@@ -16,7 +17,7 @@ export class VoteRepository {
   /**
    * Find a vote by post ID and user identifier
    */
-  async findByPostAndUser(postId: string, userIdentifier: string): Promise<Vote | null> {
+  async findByPostAndUser(postId: PostId, userIdentifier: string): Promise<Vote | null> {
     const vote = await this.db.query.votes.findFirst({
       where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
     })
@@ -26,7 +27,7 @@ export class VoteRepository {
   /**
    * Find all votes for a post
    */
-  async findByPost(postId: string): Promise<Vote[]> {
+  async findByPost(postId: PostId): Promise<Vote[]> {
     return this.db.query.votes.findMany({
       where: eq(votes.postId, postId),
     })
@@ -43,7 +44,7 @@ export class VoteRepository {
   /**
    * Delete a vote by ID
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: VoteId): Promise<boolean> {
     const result = await this.db.delete(votes).where(eq(votes.id, id)).returning()
     return result.length > 0
   }
@@ -51,7 +52,7 @@ export class VoteRepository {
   /**
    * Delete a vote by post ID and user identifier
    */
-  async deleteByPostAndUser(postId: string, userIdentifier: string): Promise<boolean> {
+  async deleteByPostAndUser(postId: PostId, userIdentifier: string): Promise<boolean> {
     const result = await this.db
       .delete(votes)
       .where(and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)))

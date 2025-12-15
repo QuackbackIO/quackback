@@ -3,6 +3,7 @@
  */
 
 import type { PostStatusEntity, StatusCategory } from '@quackback/db/types'
+import type { StatusId } from '@quackback/ids'
 
 /**
  * Re-export Status type for convenience
@@ -37,5 +38,5 @@ export interface UpdateStatusInput {
  */
 export interface ReorderStatusesInput {
   category: StatusCategory
-  statusIds: string[]
+  statusIds: StatusId[]
 }

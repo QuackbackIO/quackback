@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { StatusService } from '../status.service'
 import type { CreateStatusInput, UpdateStatusInput, Status } from '../status.types'
 import type { ServiceContext } from '../../shared/service-context'
+import type { StatusId } from '@quackback/ids'
 
 // Use vi.hoisted to create mock instances that are available at mock factory time
 const { mockStatusRepoInstance, mockDbInstance } = vi.hoisted(() => ({
@@ -82,7 +83,7 @@ describe('StatusService', () => {
     mockContext = {
       organizationId: 'org-123',
       userId: 'user-123',
-      memberId: 'member-123',
+      memberId: 'member_123',
       memberRole: 'admin',
       userName: 'Test User',
       userEmail: 'test@example.com',
@@ -117,7 +118,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'In Progress',
         slug: 'in_progress',
@@ -270,7 +271,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Test',
         slug: 'valid_slug_123',
@@ -367,7 +368,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Test',
         slug: 'test',
@@ -396,7 +397,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Test',
         slug: 'test',
@@ -425,7 +426,7 @@ describe('StatusService', () => {
       }
 
       const existingStatus: Status = {
-        id: 'status-existing',
+        id: 'status_existing',
         organizationId: 'org-123',
         name: 'Existing Status',
         slug: 'existing_slug',
@@ -474,7 +475,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Test',
         slug: 'test',
@@ -508,7 +509,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Default Status',
         slug: 'default_status',
@@ -527,7 +528,7 @@ describe('StatusService', () => {
       const result = await statusService.createStatus(input, mockContext)
 
       expect(result.success).toBe(true)
-      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status-1')
+      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status_1')
     })
 
     it('should handle showOnRoadmap flag', async () => {
@@ -540,7 +541,7 @@ describe('StatusService', () => {
       }
 
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Roadmap Status',
         slug: 'roadmap_status',
@@ -567,7 +568,7 @@ describe('StatusService', () => {
 
   describe('updateStatus', () => {
     const existingStatus: Status = {
-      id: 'status-1',
+      id: 'status_1',
       organizationId: 'org-123',
       name: 'Original Name',
       slug: 'original_name',
@@ -592,7 +593,7 @@ describe('StatusService', () => {
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
       mockStatusRepoInstance.update.mockResolvedValue(updatedStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -607,7 +608,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await statusService.updateStatus('nonexistent', input, mockContext)
+      const result = await statusService.updateStatus('status_nonexistent', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -623,7 +624,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.updateStatus('status-1', input, userContext)
+      const result = await statusService.updateStatus('status_1', input, userContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -639,7 +640,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -655,7 +656,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -677,7 +678,7 @@ describe('StatusService', () => {
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
       mockStatusRepoInstance.update.mockResolvedValue(updatedStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -692,7 +693,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -708,7 +709,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -730,10 +731,10 @@ describe('StatusService', () => {
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
       mockStatusRepoInstance.update.mockResolvedValue(updatedStatus)
 
-      await statusService.updateStatus('status-1', input, mockContext)
+      await statusService.updateStatus('status_1', input, mockContext)
 
       expect(mockStatusRepoInstance.update).toHaveBeenCalledWith(
-        'status-1',
+        'status_1',
         expect.objectContaining({
           showOnRoadmap: true,
         })
@@ -754,9 +755,9 @@ describe('StatusService', () => {
       mockStatusRepoInstance.setDefault.mockResolvedValue(undefined)
       mockStatusRepoInstance.update.mockResolvedValue(updatedStatus)
 
-      const result = await statusService.updateStatus('status-1', input, mockContext)
+      const result = await statusService.updateStatus('status_1', input, mockContext)
 
-      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status-1')
+      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status_1')
       expect(result.success).toBe(true)
     })
 
@@ -778,10 +779,10 @@ describe('StatusService', () => {
       mockStatusRepoInstance.findById.mockResolvedValue(defaultStatus)
       mockStatusRepoInstance.update.mockResolvedValue(updatedStatus)
 
-      await statusService.updateStatus('status-1', input, mockContext)
+      await statusService.updateStatus('status_1', input, mockContext)
 
       expect(mockStatusRepoInstance.update).toHaveBeenCalledWith(
-        'status-1',
+        'status_1',
         expect.objectContaining({
           isDefault: false,
         })
@@ -791,7 +792,7 @@ describe('StatusService', () => {
 
   describe('deleteStatus', () => {
     const existingStatus: Status = {
-      id: 'status-1',
+      id: 'status_1',
       organizationId: 'org-123',
       name: 'Status to Delete',
       slug: 'status_to_delete',
@@ -812,16 +813,16 @@ describe('StatusService', () => {
       })
       mockStatusRepoInstance.delete.mockResolvedValue(true)
 
-      const result = await statusService.deleteStatus('status-1', mockContext)
+      const result = await statusService.deleteStatus('status_1', mockContext)
 
       expect(result.success).toBe(true)
-      expect(mockStatusRepoInstance.delete).toHaveBeenCalledWith('status-1')
+      expect(mockStatusRepoInstance.delete).toHaveBeenCalledWith('status_1')
     })
 
     it('should return error when status not found', async () => {
       mockStatusRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await statusService.deleteStatus('nonexistent', mockContext)
+      const result = await statusService.deleteStatus('status_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -834,7 +835,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.deleteStatus('status-1', userContext)
+      const result = await statusService.deleteStatus('status_1', userContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -851,7 +852,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(defaultStatus)
 
-      const result = await statusService.deleteStatus('status-1', mockContext)
+      const result = await statusService.deleteStatus('status_1', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -868,7 +869,7 @@ describe('StatusService', () => {
         }),
       })
 
-      const result = await statusService.deleteStatus('status-1', mockContext)
+      const result = await statusService.deleteStatus('status_1', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -881,7 +882,7 @@ describe('StatusService', () => {
   describe('getStatusById', () => {
     it('should return status when found', async () => {
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Test Status',
         slug: 'test_status',
@@ -895,11 +896,11 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(mockStatus)
 
-      const result = await statusService.getStatusById('status-1', mockContext)
+      const result = await statusService.getStatusById('status_1', mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value.id).toBe('status-1')
+        expect(result.value.id).toBe('status_1')
         expect(result.value.name).toBe('Test Status')
       }
     })
@@ -907,7 +908,7 @@ describe('StatusService', () => {
     it('should return error when status not found', async () => {
       mockStatusRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await statusService.getStatusById('nonexistent', mockContext)
+      const result = await statusService.getStatusById('status_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -920,7 +921,7 @@ describe('StatusService', () => {
     it('should return all statuses ordered by category and position', async () => {
       const mockStatuses: Status[] = [
         {
-          id: 'status-1',
+          id: 'status_1',
           organizationId: 'org-123',
           name: 'Open',
           slug: 'open',
@@ -932,7 +933,7 @@ describe('StatusService', () => {
           createdAt: new Date(),
         },
         {
-          id: 'status-2',
+          id: 'status_2',
           organizationId: 'org-123',
           name: 'Complete',
           slug: 'complete',
@@ -971,7 +972,11 @@ describe('StatusService', () => {
 
   describe('reorderStatuses', () => {
     it('should reorder statuses successfully', async () => {
-      const statusIds = ['status-3', 'status-1', 'status-2']
+      const statusIds: StatusId[] = [
+        'status_3' as StatusId,
+        'status_1' as StatusId,
+        'status_2' as StatusId,
+      ]
 
       mockStatusRepoInstance.reorder.mockResolvedValue(undefined)
 
@@ -983,7 +988,7 @@ describe('StatusService', () => {
 
     it('should reject unauthorized user', async () => {
       const userContext = { ...mockContext, memberRole: 'user' as const }
-      const statusIds = ['status-1', 'status-2']
+      const statusIds: StatusId[] = ['status_1' as StatusId, 'status_2' as StatusId]
 
       const result = await statusService.reorderStatuses(statusIds, userContext)
 
@@ -1007,7 +1012,7 @@ describe('StatusService', () => {
 
   describe('setDefaultStatus', () => {
     const existingStatus: Status = {
-      id: 'status-1',
+      id: 'status_1',
       organizationId: 'org-123',
       name: 'Status',
       slug: 'status',
@@ -1030,19 +1035,19 @@ describe('StatusService', () => {
         .mockResolvedValueOnce(updatedStatus)
       mockStatusRepoInstance.setDefault.mockResolvedValue(undefined)
 
-      const result = await statusService.setDefaultStatus('status-1', mockContext)
+      const result = await statusService.setDefaultStatus('status_1', mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value.isDefault).toBe(true)
       }
-      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status-1')
+      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status_1')
     })
 
     it('should return error when status not found', async () => {
       mockStatusRepoInstance.findById.mockResolvedValue(null)
 
-      const result = await statusService.setDefaultStatus('nonexistent', mockContext)
+      const result = await statusService.setDefaultStatus('status_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1055,7 +1060,7 @@ describe('StatusService', () => {
 
       mockStatusRepoInstance.findById.mockResolvedValue(existingStatus)
 
-      const result = await statusService.setDefaultStatus('status-1', userContext)
+      const result = await statusService.setDefaultStatus('status_1', userContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1068,7 +1073,7 @@ describe('StatusService', () => {
   describe('getDefaultStatus', () => {
     it('should return default status when it exists', async () => {
       const defaultStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Open',
         slug: 'open',
@@ -1105,7 +1110,7 @@ describe('StatusService', () => {
   describe('getStatusBySlug', () => {
     it('should return status when found by slug', async () => {
       const mockStatus: Status = {
-        id: 'status-1',
+        id: 'status_1',
         organizationId: 'org-123',
         name: 'Test Status',
         slug: 'test_status',
@@ -1130,7 +1135,7 @@ describe('StatusService', () => {
     it('should return error when status not found by slug', async () => {
       mockStatusRepoInstance.findBySlug.mockResolvedValue(null)
 
-      const result = await statusService.getStatusBySlug('nonexistent', mockContext)
+      const result = await statusService.getStatusBySlug('status_nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1143,7 +1148,7 @@ describe('StatusService', () => {
     it('should seed default statuses for new organization', async () => {
       const mockStatuses: Status[] = [
         {
-          id: 'status-1',
+          id: 'status_1',
           organizationId: 'org-new',
           name: 'Open',
           slug: 'open',
@@ -1194,7 +1199,7 @@ describe('StatusService', () => {
     it('should return statuses without authentication', async () => {
       const mockStatuses: Status[] = [
         {
-          id: 'status-1',
+          id: 'status_1',
           organizationId: 'org-123',
           name: 'Open',
           slug: 'open',
@@ -1206,7 +1211,7 @@ describe('StatusService', () => {
           createdAt: new Date(),
         },
         {
-          id: 'status-2',
+          id: 'status_2',
           organizationId: 'org-123',
           name: 'Complete',
           slug: 'complete',

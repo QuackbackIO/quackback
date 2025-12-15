@@ -30,6 +30,7 @@ import {
   postStatuses,
   type Database,
 } from '@quackback/db'
+import { toMemberId, type MemberId } from '@quackback/ids'
 import { ok, err, type Result } from '../shared/result'
 import { UserError } from './user.errors'
 import type {
@@ -213,7 +214,7 @@ export class UserService {
    * Returns user info and all posts they've engaged with (authored, commented on, or voted on).
    */
   async getPortalUserDetail(
-    memberId: string,
+    memberId: MemberId,
     organizationId: string
   ): Promise<Result<PortalUserDetail | null, UserError>> {
     try {
@@ -245,6 +246,8 @@ export class UserService {
       }
 
       const memberData = memberResult[0]
+      // Convert raw member ID to MemberId format for queries
+      const memberIdForQuery = toMemberId(memberData.memberId)
 
       // Use withTenantContext for RLS-protected queries (posts, comments, votes)
       const engagementData = await withTenantContext(organizationId, async (tx: Database) => {
@@ -256,24 +259,19 @@ export class UserService {
               id: posts.id,
               title: posts.title,
               content: posts.content,
-              status: posts.status,
+              statusId: posts.statusId,
               voteCount: posts.voteCount,
               createdAt: posts.createdAt,
               authorName: posts.authorName,
               boardSlug: boards.slug,
               boardName: boards.name,
+              statusName: postStatuses.name,
               statusColor: postStatuses.color,
             })
             .from(posts)
             .innerJoin(boards, eq(posts.boardId, boards.id))
-            .leftJoin(
-              postStatuses,
-              and(
-                eq(postStatuses.slug, posts.status),
-                eq(postStatuses.organizationId, organizationId)
-              )
-            )
-            .where(eq(posts.memberId, memberData.memberId))
+            .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
+            .where(eq(posts.memberId, memberIdForQuery))
             .orderBy(desc(posts.createdAt))
             .limit(100),
 
@@ -284,7 +282,7 @@ export class UserService {
               latestCommentAt: sql<Date>`max(${comments.createdAt})`.as('latest_comment_at'),
             })
             .from(comments)
-            .where(eq(comments.memberId, memberData.memberId))
+            .where(eq(comments.memberId, memberIdForQuery))
             .groupBy(comments.postId)
             .limit(100),
 
@@ -295,7 +293,7 @@ export class UserService {
               votedAt: votes.createdAt,
             })
             .from(votes)
-            .where(eq(votes.memberId, memberData.memberId))
+            .where(eq(votes.memberId, memberIdForQuery))
             .orderBy(desc(votes.createdAt))
             .limit(100),
         ])
@@ -318,23 +316,18 @@ export class UserService {
                   id: posts.id,
                   title: posts.title,
                   content: posts.content,
-                  status: posts.status,
+                  statusId: posts.statusId,
                   voteCount: posts.voteCount,
                   createdAt: posts.createdAt,
                   authorName: posts.authorName,
                   boardSlug: boards.slug,
                   boardName: boards.name,
+                  statusName: postStatuses.name,
                   statusColor: postStatuses.color,
                 })
                 .from(posts)
                 .innerJoin(boards, eq(posts.boardId, boards.id))
-                .leftJoin(
-                  postStatuses,
-                  and(
-                    eq(postStatuses.slug, posts.status),
-                    eq(postStatuses.organizationId, organizationId)
-                  )
-                )
+                .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
                 .where(inArray(posts.id, otherPostIds))
             : Promise.resolve([]),
 
@@ -430,7 +423,8 @@ export class UserService {
             id: post.id,
             title: post.title,
             content: contentPreview,
-            status: post.status,
+            statusId: post.statusId,
+            statusName: post.statusName,
             statusColor: post.statusColor ?? '#6b7280',
             voteCount: post.voteCount,
             commentCount: commentCountMap.get(post.id) ?? 0,

@@ -2,14 +2,14 @@ import { eq, and, desc, asc, sql, inArray, gte, lte, isNull } from 'drizzle-orm'
 import { db } from '../tenant-context'
 import { posts, comments, postTags } from '../schema/posts'
 import { boards } from '../schema/boards'
-import type { InboxPostListParams, PostListItem, InboxPostListResult } from '../types'
+import type { InboxPostListParams, PostListItem, InboxPostListResult, Post } from '../types'
 
 // Inbox query - fetches posts with board, tags, and comment count for the feedback inbox
 export async function getInboxPostList(params: InboxPostListParams): Promise<InboxPostListResult> {
   const {
     organizationId,
     boardIds,
-    status,
+    statusIds,
     tagIds,
     ownerId,
     search,
@@ -42,8 +42,8 @@ export async function getInboxPostList(params: InboxPostListParams): Promise<Inb
   conditions.push(inArray(posts.boardId, orgBoardIds))
 
   // Status filter (multiple statuses = OR)
-  if (status && status.length > 0) {
-    conditions.push(inArray(posts.status, status))
+  if (statusIds && statusIds.length > 0) {
+    conditions.push(inArray(posts.statusId, statusIds))
   }
 
   // Owner filter
@@ -53,11 +53,9 @@ export async function getInboxPostList(params: InboxPostListParams): Promise<Inb
     conditions.push(eq(posts.ownerId, ownerId))
   }
 
-  // Search filter
+  // Full-text search using tsvector (much faster than ILIKE)
   if (search) {
-    conditions.push(
-      sql`(${posts.title} ILIKE ${'%' + search + '%'} OR ${posts.content} ILIKE ${'%' + search + '%'})`
-    )
+    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
   }
 
   // Date range filters
@@ -74,7 +72,7 @@ export async function getInboxPostList(params: InboxPostListParams): Promise<Inb
   }
 
   // Tag filter - posts must have at least one of the selected tags
-  let postIdsWithTags: string[] | null = null
+  let postIdsWithTags: Post['id'][] | null = null
   if (tagIds && tagIds.length > 0) {
     const postsWithSelectedTags = await db
       .selectDistinct({ postId: postTags.postId })
