@@ -1,6 +1,6 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
 import { Plug2 } from 'lucide-react'
-import { db, organizationIntegrations, integrationEventMappings, eq } from '@quackback/db'
+import { db, organizationIntegrations, eq } from '@quackback/db'
 import { IntegrationList } from './integration-list'
 
 export default async function IntegrationsPage({
@@ -11,31 +11,17 @@ export default async function IntegrationsPage({
   const { orgSlug } = await params
   const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
 
-  // Fetch existing integrations
-  const integrations = await db.query.organizationIntegrations.findMany({
+  // Fetch existing integrations (minimal data for catalog view)
+  const rawIntegrations = await db.query.organizationIntegrations.findMany({
     where: eq(organizationIntegrations.organizationId, organization.id),
   })
 
-  // Get event mappings for each integration
-  const integrationIds = integrations.map((i) => i.id)
-  const allMappings =
-    integrationIds.length > 0
-      ? await db.query.integrationEventMappings.findMany({
-          where: eq(integrationEventMappings.integrationId, integrationIds[0]),
-        })
-      : []
-
-  // Build mappings by integration
-  const mappingsByIntegration = integrations.reduce(
-    (acc, integration) => {
-      acc[integration.id] = allMappings.filter((m) => m.integrationId === integration.id)
-      return acc
-    },
-    {} as Record<string, typeof allMappings>
-  )
-
-  // Build Slack integration data
-  const slackIntegration = integrations.find((i) => i.integrationType === 'slack')
+  // Map to simplified status format for the catalog
+  const integrations = rawIntegrations.map((i) => ({
+    id: i.integrationType,
+    status: i.status as 'active' | 'paused' | 'error',
+    workspaceName: i.externalWorkspaceName || undefined,
+  }))
 
   return (
     <div className="space-y-6">
@@ -52,21 +38,8 @@ export default async function IntegrationsPage({
         </div>
       </div>
 
-      {/* Integration List */}
-      <IntegrationList
-        organizationId={organization.id}
-        slackIntegration={
-          slackIntegration
-            ? {
-                id: slackIntegration.id,
-                status: slackIntegration.status,
-                workspaceName: slackIntegration.externalWorkspaceName || undefined,
-                config: slackIntegration.config as { channelId?: string },
-                eventMappings: mappingsByIntegration[slackIntegration.id] || [],
-              }
-            : null
-        }
-      />
+      {/* Integration Catalog */}
+      <IntegrationList integrations={integrations} />
     </div>
   )
 }

@@ -156,12 +156,12 @@ export async function GET(request: Request) {
       return redirectWithError('org_not_found', storedState)
     }
 
-    // Redirect to tenant subdomain integrations page with success
+    // Redirect to Slack detail page with success
     const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
     const isLocalhost = appDomain.includes('localhost')
     const protocol = isLocalhost ? 'http' : 'https'
     return NextResponse.redirect(
-      `${protocol}://${org.slug}.${appDomain}/admin/settings/integrations?slack=connected`
+      `${protocol}://${org.slug}.${appDomain}/admin/settings/integrations/slack?slack=connected`
     )
   } catch (err) {
     console.error('[Slack OAuth] Exchange error:', err)
@@ -185,7 +185,7 @@ async function redirectWithError(error: string, storedState: string | undefined)
         })
         if (org) {
           return NextResponse.redirect(
-            `${protocol}://${org.slug}.${appDomain}/admin/settings/integrations?slack=error&reason=${error}`
+            `${protocol}://${org.slug}.${appDomain}/admin/settings/integrations/slack?slack=error&reason=${error}`
           )
         }
       }
