@@ -14,7 +14,7 @@ import type {
   CommentWithReplies,
 } from '@/app/s/[orgSlug]/admin/feedback/inbox-types'
 import type { PostListItem, InboxPostListResult, Tag } from '@quackback/db/types'
-import type { CommentId, PostId, StatusId } from '@quackback/ids'
+import type { CommentId, PostId, StatusId, OrgId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -733,7 +733,7 @@ interface AddCommentResponse {
   createdAt: string
 }
 
-export function useAddComment(organizationId: string) {
+export function useAddComment(organizationId: OrgId) {
   const queryClient = useQueryClient()
 
   return useMutation({

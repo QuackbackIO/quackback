@@ -3,6 +3,7 @@ import { XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
 import { db, eq, and, workspaceDomain } from '@quackback/db'
+import type { OrgId } from '@quackback/ids'
 
 interface UnsubscribePageProps {
   searchParams: Promise<{ token?: string }>
@@ -24,7 +25,7 @@ export default async function UnsubscribePage({ searchParams }: UnsubscribePageP
     }
 
     // Get the primary workspace domain for redirect
-    const tenantUrl = await getTenantUrl(result.organizationId)
+    const tenantUrl = await getTenantUrl(result.organizationId as OrgId)
 
     // Redirect to the post
     if (result.postId && result.post) {
@@ -95,7 +96,7 @@ function getErrorContent(error: string): { title: string; message: string } {
   }
 }
 
-async function getTenantUrl(organizationId: string): Promise<string> {
+async function getTenantUrl(organizationId: OrgId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
     where: and(
       eq(workspaceDomain.organizationId, organizationId),

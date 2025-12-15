@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { OrgId, PostId } from '@quackback/ids'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
@@ -65,8 +66,8 @@ export function CommentsSectionSkeleton() {
 }
 
 interface CommentsSectionProps {
-  postId: string
-  organizationId: string
+  postId: PostId
+  organizationId: OrgId
   comments: PublicComment[]
 }
 

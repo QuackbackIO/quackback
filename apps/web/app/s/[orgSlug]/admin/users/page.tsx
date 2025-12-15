@@ -1,7 +1,6 @@
 import { requireAuthenticatedTenantBySlug } from '@/lib/tenant'
 import { getUserService } from '@/lib/services'
 import { UsersContainer } from './users-container'
-import { fromUuid } from '@quackback/ids'
 
 export default async function UsersPage({
   params,
@@ -38,19 +37,9 @@ export default async function UsersPage({
     limit: 20,
   })
 
-  const initialUsersRaw = usersResult.success
+  const initialUsers = usersResult.success
     ? usersResult.value
     : { items: [], total: 0, hasMore: false }
-
-  // Transform Better-auth IDs to TypeIDs for client components
-  const initialUsers = {
-    ...initialUsersRaw,
-    items: initialUsersRaw.items.map((user) => ({
-      ...user,
-      memberId: fromUuid('member', user.memberId),
-      userId: fromUuid('user', user.userId),
-    })),
-  } as typeof initialUsersRaw
 
   return (
     <UsersContainer

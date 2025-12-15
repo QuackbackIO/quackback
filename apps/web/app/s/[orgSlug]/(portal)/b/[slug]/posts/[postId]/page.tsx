@@ -94,7 +94,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
         {/* Comments section */}
         <Suspense fallback={<CommentsSectionSkeleton />}>
-          <CommentsSection postId={post.id} organizationId={org.id} comments={post.comments} />
+          <CommentsSection postId={postId} organizationId={org.id} comments={post.comments} />
         </Suspense>
       </div>
     </div>

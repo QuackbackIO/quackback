@@ -8,7 +8,7 @@ import {
   getMemberService,
 } from '@/lib/services'
 import { InboxContainer } from './inbox-container'
-import { fromUuid, type BoardId, type TagId, type MemberId } from '@quackback/ids'
+import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
 
 interface FeedbackInboxPageProps {
   params: Promise<{ orgSlug: string }>
@@ -80,15 +80,9 @@ export default async function FeedbackInboxPage({ params, searchParams }: Feedba
   const statusesResult = await getStatusService().listStatuses(serviceContext)
   const orgStatuses = statusesResult.success ? statusesResult.value : []
 
-  // Fetch team members using MemberService
+  // Fetch team members using MemberService (returns TypeIDs directly)
   const membersResult = await getMemberService().listTeamMembers(organization.id)
-  const teamMembersRaw = membersResult.success ? membersResult.value : []
-
-  // Services return TypeIDs directly, only need to transform Better-auth user IDs
-  const teamMembers = teamMembersRaw.map((member) => ({
-    ...member,
-    id: fromUuid('user', member.id),
-  })) as typeof teamMembersRaw
+  const teamMembers = membersResult.success ? membersResult.value : []
 
   return (
     <InboxContainer

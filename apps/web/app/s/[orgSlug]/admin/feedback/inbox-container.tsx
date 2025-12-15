@@ -22,13 +22,13 @@ import {
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
-import type { StatusId } from '@quackback/ids'
+import type { StatusId, OrgId } from '@quackback/ids'
 import type { CurrentUser } from './inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@quackback/db/types'
 import type { TeamMember } from '@quackback/domain'
 
 interface InboxContainerProps {
-  organizationId: string
+  organizationId: OrgId
   initialPosts: InboxPostListResult
   boards: Board[]
   tags: Tag[]

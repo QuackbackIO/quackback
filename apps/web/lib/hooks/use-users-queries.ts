@@ -68,18 +68,28 @@ interface UsePortalUsersOptions {
 }
 
 export function usePortalUsers({ organizationId, filters, initialData }: UsePortalUsersOptions) {
+  // Only use initialData when there are no active filters
+  // Otherwise React Query would use stale server-rendered data for filtered queries
+  const hasActiveFilters = !!(
+    filters.search ||
+    filters.verified !== undefined ||
+    filters.dateFrom ||
+    filters.dateTo
+  )
+  const useInitialData = initialData && !hasActiveFilters
+
   return useInfiniteQuery({
     queryKey: usersKeys.list(organizationId, filters),
     queryFn: ({ pageParam }) => fetchUsers(organizationId, filters, pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    initialData: initialData
+    initialData: useInitialData
       ? {
           pages: [initialData],
           pageParams: [1],
         }
       : undefined,
-    refetchOnMount: !initialData,
+    refetchOnMount: !useInitialData,
   })
 }
 

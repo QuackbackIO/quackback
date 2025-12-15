@@ -206,11 +206,30 @@ export function useCreatePublicPost() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, content, contentJson }),
       })
+
+      // Get response text first to debug empty responses
+      const text = await response.text()
+
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create post')
+        // Try to parse error message from response
+        try {
+          const data = JSON.parse(text)
+          throw new Error(data.error || 'Failed to create post')
+        } catch {
+          throw new Error(`Failed to create post (status ${response.status})`)
+        }
       }
-      return response.json()
+
+      // Parse successful response
+      if (!text) {
+        throw new Error('Server returned empty response')
+      }
+
+      try {
+        return JSON.parse(text)
+      } catch {
+        throw new Error(`Invalid JSON response: ${text.slice(0, 100)}`)
+      }
     },
     onSuccess: (newPost) => {
       // Add new post to the beginning of all list queries

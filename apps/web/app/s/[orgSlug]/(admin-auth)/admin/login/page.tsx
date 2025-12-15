@@ -9,8 +9,21 @@ const APP_DOMAIN = process.env.APP_DOMAIN
  * For team members (owner, admin, member) to sign in to the admin dashboard using magic OTP codes.
  * Uses the organization's team auth settings.
  */
-export default async function AdminLoginPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+export default async function AdminLoginPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ callbackUrl?: string }>
+}) {
   const { orgSlug } = await params
+  const { callbackUrl } = await searchParams
+
+  // Validate callbackUrl is a relative path to prevent open redirects
+  const safeCallbackUrl =
+    callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
+      ? callbackUrl
+      : '/admin'
 
   // Fetch org auth config using the service
   const result = await organizationService.getPublicAuthConfig(orgSlug)
@@ -37,7 +50,7 @@ export default async function AdminLoginPage({ params }: { params: Promise<{ org
         <OTPAuthForm
           mode="login"
           authConfig={authConfig}
-          callbackUrl="/admin"
+          callbackUrl={safeCallbackUrl}
           context="team"
           orgSlug={orgSlug}
           appDomain={APP_DOMAIN}
