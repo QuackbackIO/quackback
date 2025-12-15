@@ -35,3 +35,12 @@ export {
   handleInvoicePaymentFailed,
   type WebhookEventType,
 } from './webhooks'
+
+// Customer data (invoices, payment methods)
+export {
+  getCustomerInvoices,
+  getCustomerPaymentMethods,
+  getDefaultPaymentMethod,
+  type InvoiceListItem,
+  type PaymentMethodInfo,
+} from './customer'

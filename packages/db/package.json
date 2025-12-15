@@ -9,6 +9,7 @@
     ".": "./index.ts",
     "./queries/public": "./src/queries/public.ts",
     "./queries/subscriptions": "./src/queries/subscriptions.ts",
+    "./queries/usage": "./src/queries/usage.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

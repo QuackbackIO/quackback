@@ -150,7 +150,8 @@ export async function createCheckoutSession({
     sessionParams.customer = existingCustomerId
   } else {
     sessionParams.customer_email = customerEmail
-    sessionParams.customer_creation = 'always'
+    // Note: customer_creation is not valid in subscription mode
+    // Stripe automatically creates a customer when customer_email is provided
   }
 
   return stripe.checkout.sessions.create(sessionParams)

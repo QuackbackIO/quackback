@@ -5,6 +5,14 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { BillingClient } from './billing-client'
 import { getSubscriptionByOrganizationIdAdmin } from '@quackback/db/queries/subscriptions'
+import { getOrganizationUsageCounts } from '@quackback/db/queries/usage'
+import {
+  getCustomerInvoices,
+  getDefaultPaymentMethod,
+  isStripeConfigured,
+  type InvoiceListItem,
+  type PaymentMethodInfo,
+} from '@quackback/ee/billing'
 
 interface BillingPageProps {
   params: Promise<{ orgSlug: string }>
@@ -53,8 +61,11 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
     )
   }
 
-  // Fetch subscription data for cloud mode
-  const subscription = await getSubscriptionByOrganizationIdAdmin(organization.id)
+  // Fetch subscription and usage data for cloud mode
+  const [subscription, usageCounts] = await Promise.all([
+    getSubscriptionByOrganizationIdAdmin(organization.id),
+    getOrganizationUsageCounts(organization.id),
+  ])
 
   const subscriptionData = subscription
     ? {
@@ -65,6 +76,30 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
         trialEnd: subscription.trialEnd?.toISOString() ?? null,
       }
     : null
+
+  // Fetch Stripe customer data (invoices, payment method) if customer exists
+  let invoices: InvoiceListItem[] = []
+  let paymentMethod: PaymentMethodInfo | null = null
+
+  if (subscription?.stripeCustomerId && isStripeConfigured()) {
+    try {
+      ;[invoices, paymentMethod] = await Promise.all([
+        getCustomerInvoices(subscription.stripeCustomerId, 5),
+        getDefaultPaymentMethod(subscription.stripeCustomerId),
+      ])
+    } catch (error) {
+      // Log but don't fail - graceful degradation
+      console.error('Failed to fetch Stripe customer data:', error)
+    }
+  }
+
+  // Serialize data for client component
+  const serializedInvoices = invoices.map((inv) => ({
+    ...inv,
+    created: inv.created.toISOString(),
+    periodStart: inv.periodStart.toISOString(),
+    periodEnd: inv.periodEnd.toISOString(),
+  }))
 
   // Cloud mode - show full billing page
   return (
@@ -103,7 +138,13 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
       )}
 
       {/* Billing Client Component */}
-      <BillingClient organizationId={organization.id} subscription={subscriptionData} />
+      <BillingClient
+        organizationId={organization.id}
+        subscription={subscriptionData}
+        usage={usageCounts}
+        invoices={serializedInvoices}
+        paymentMethod={paymentMethod}
+      />
     </div>
   )
 }
