@@ -128,7 +128,7 @@ export class SlackIntegration extends BaseIntegration {
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `in <${tenantUrl}/b/${post.boardSlug}|${post.boardSlug}>`,
+                  text: `in <${tenantUrl}/?board=${post.boardSlug}|${post.boardSlug}>`,
                 },
               ],
             },
