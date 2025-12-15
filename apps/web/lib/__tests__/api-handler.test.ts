@@ -6,6 +6,11 @@ vi.mock('@/lib/tenant', () => ({
   validateApiTenantAccess: vi.fn(),
 }))
 
+// Mock the features module
+vi.mock('@/lib/features/server', () => ({
+  checkFeatureAccess: vi.fn().mockResolvedValue({ allowed: true }),
+}))
+
 // Mock next/server to avoid issues
 vi.mock('next/server', () => ({
   NextRequest: vi.fn(),

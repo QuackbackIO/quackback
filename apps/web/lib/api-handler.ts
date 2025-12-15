@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { ZodSchema } from 'zod'
+import { z } from 'zod'
 import { validateApiTenantAccess, type ApiTenantResult } from '@/lib/tenant'
+import { Feature } from '@quackback/domain'
+import { checkFeatureAccess } from '@/lib/features/server'
+import {
+  isValidTypeId,
+  type IdPrefix,
+  type PostId,
+  type BoardId,
+  type CommentId,
+  type TagId,
+  type StatusId,
+  type RoadmapId,
+  type MemberId,
+  type IntegrationId,
+} from '@quackback/ids'
 
 /**
  * Unified role type for all users (team + portal)
@@ -22,6 +36,55 @@ export class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
   }
+}
+
+/**
+ * Map of prefix to TypeId type for type-safe ID parsing
+ */
+type PrefixToTypeId = {
+  post: PostId
+  board: BoardId
+  comment: CommentId
+  tag: TagId
+  status: StatusId
+  roadmap: RoadmapId
+  member: MemberId
+  integration: IntegrationId
+}
+
+/**
+ * Validate and return a TypeID from request input.
+ * Throws ApiError with 400 status if format is invalid.
+ *
+ * Now that Drizzle handles TypeID ↔ UUID conversion automatically,
+ * this function just validates the format and returns the TypeID as-is.
+ *
+ * @param value - TypeID string (e.g., 'post_01h455vb4pex5vsknk084sn02q')
+ * @param expectedPrefix - Prefix to validate against (required for type safety)
+ * @returns The validated TypeID with proper branded type
+ * @throws ApiError if format is invalid or prefix doesn't match
+ *
+ * @example
+ * const postId = parseId('post_01h455vb4pex5vsknk084sn02q', 'post') // => PostId
+ * const boardId = parseId('board_01h455vb4pex5vsknk084sn02q', 'board') // => BoardId
+ * parseId('invalid', 'post') // throws ApiError(400)
+ */
+export function parseId<P extends keyof PrefixToTypeId>(
+  value: string,
+  expectedPrefix: P
+): PrefixToTypeId[P]
+export function parseId(value: string, expectedPrefix?: IdPrefix): string
+export function parseId(value: string, expectedPrefix?: IdPrefix): string {
+  if (!isValidTypeId(value, expectedPrefix)) {
+    throw new ApiError(
+      expectedPrefix
+        ? `Invalid ID format. Expected ${expectedPrefix}_xxx, got: ${value}`
+        : `Invalid TypeID format: ${value}`,
+      400
+    )
+  }
+  // Return the TypeID as-is - Drizzle columns handle UUID conversion
+  return value
 }
 
 /**
@@ -54,7 +117,7 @@ export function verifyResourceOwnership<T extends { organizationId: string }>(
  * const body = await request.json()
  * const { name, description } = validateBody(createBoardSchema, body)
  */
-export function validateBody<T>(schema: ZodSchema<T>, body: unknown): T {
+export function validateBody<T extends z.ZodTypeAny>(schema: T, body: unknown): z.output<T> {
   const result = schema.safeParse(body)
   if (!result.success) {
     throw new ApiError(result.error.issues[0]?.message || 'Invalid input', 400)
@@ -117,6 +180,11 @@ interface ApiHandlerOptions {
    * Required roles for this endpoint. If not specified, any authenticated member can access.
    */
   roles?: Role[]
+  /**
+   * Required feature for this endpoint. If specified, checks subscription tier access.
+   * OSS (self-hosted) editions automatically have access to all features.
+   */
+  feature?: Feature
 }
 
 /**
@@ -182,6 +250,21 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
       if (options.roles && options.roles.length > 0) {
         if (!isAllowedRole(validation.member.role, options.roles)) {
           return forbiddenResponse()
+        }
+      }
+
+      // Check feature access if required
+      if (options.feature) {
+        const featureCheck = await checkFeatureAccess(validation.organization.id, options.feature)
+        if (!featureCheck.allowed) {
+          return NextResponse.json(
+            {
+              error: featureCheck.error,
+              requiredTier: featureCheck.requiredTier,
+              upgradeUrl: featureCheck.upgradeUrl,
+            },
+            { status: 402 } // Payment Required
+          )
         }
       }
 
@@ -289,6 +372,21 @@ export function withApiHandlerParams<P>(
         }
       }
 
+      // Check feature access if required
+      if (options.feature) {
+        const featureCheck = await checkFeatureAccess(validation.organization.id, options.feature)
+        if (!featureCheck.allowed) {
+          return NextResponse.json(
+            {
+              error: featureCheck.error,
+              requiredTier: featureCheck.requiredTier,
+              upgradeUrl: featureCheck.upgradeUrl,
+            },
+            { status: 402 } // Payment Required
+          )
+        }
+      }
+
       // Call the handler with params
       return await handler(request, { validation, params })
     } catch (error) {
@@ -300,3 +398,6 @@ export function withApiHandlerParams<P>(
     }
   }
 }
+
+// Re-export Feature for convenience
+export { Feature }
