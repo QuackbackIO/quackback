@@ -118,6 +118,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  // Response is already in TypeID format from service layer
-  return NextResponse.json(createResult.value, { status: 201 })
+  const post = createResult.value
+
+  // Include board details in response (client needs it for optimistic updates)
+  return NextResponse.json(
+    {
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      statusId: post.statusId,
+      voteCount: post.voteCount,
+      createdAt: post.createdAt,
+      board: {
+        id: board.id,
+        name: board.name,
+        slug: board.slug,
+      },
+    },
+    { status: 201 }
+  )
 }
