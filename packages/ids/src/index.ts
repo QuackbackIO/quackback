@@ -50,10 +50,6 @@ export {
   // Flexible handling
   normalizeToUuid,
   ensureTypeId,
-  // Better-auth ID helpers
-  toMemberId,
-  toUserId,
-  toOrgId,
 } from './core'
 
 // ============================================
