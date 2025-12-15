@@ -79,7 +79,8 @@ describe('Schema definitions', () => {
       expect(columns).toContain('authorId')
       expect(columns).toContain('authorName')
       expect(columns).toContain('authorEmail')
-      expect(columns).toContain('status')
+      expect(columns).toContain('statusId')
+      expect(columns).toContain('organizationId')
       expect(columns).toContain('ownerId')
       expect(columns).toContain('estimated')
       expect(columns).toContain('voteCount')
@@ -89,7 +90,8 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      expect(columns.length).toBe(22)
+      // 22 business columns + 1 searchVector (generated column for full-text search)
+      expect(columns.length).toBe(23)
     })
   })
 
@@ -115,9 +117,8 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(postRoadmaps))
       expect(columns).toContain('postId')
       expect(columns).toContain('roadmapId')
-      expect(columns).toContain('statusId')
       expect(columns).toContain('position')
-      expect(columns.length).toBe(4)
+      expect(columns.length).toBe(3)
     })
   })
 

@@ -8,6 +8,7 @@
   "exports": {
     ".": "./index.ts",
     "./queries/public": "./src/queries/public.ts",
+    "./queries/subscriptions": "./src/queries/subscriptions.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {
@@ -19,6 +20,7 @@
     "db:reset": "bun src/reset.ts"
   },
   "dependencies": {
+    "@quackback/ids": "workspace:*",
     "drizzle-orm": "^0.45.0",
     "postgres": "^3"
   },

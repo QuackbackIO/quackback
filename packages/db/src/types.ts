@@ -1,4 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
+import type { BoardId, TagId, StatusId } from '@quackback/ids'
 import type { boards, roadmaps, tags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
@@ -23,14 +24,14 @@ export type NewBoard = InferInsertModel<typeof boards>
 
 // Board settings (stored in boards.settings JSONB column)
 export interface BoardSettings {
-  roadmapStatuses?: PostStatus[] // default: ['planned', 'in_progress', 'complete']
+  roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
 }
 
 // Helper to get typed board settings
 export function getBoardSettings(board: Board): BoardSettings {
   const settings = (board.settings || {}) as BoardSettings
   return {
-    roadmapStatuses: settings.roadmapStatuses ?? ['planned', 'in_progress', 'complete'],
+    roadmapStatusIds: settings.roadmapStatusIds,
   }
 }
 
@@ -49,17 +50,6 @@ export type NewPostStatusEntity = InferInsertModel<typeof postStatuses>
 // Post types
 export type Post = InferSelectModel<typeof posts>
 export type NewPost = InferInsertModel<typeof posts>
-export type PostStatus = Post['status']
-
-// Post status constants (matches enum in schema)
-export const POST_STATUSES = [
-  'open',
-  'under_review',
-  'planned',
-  'in_progress',
-  'complete',
-  'closed',
-] as const
 
 // Post tag types
 export type PostTag = InferSelectModel<typeof postTags>
@@ -139,10 +129,10 @@ export type BoardWithRoadmaps = Board & {
 // Inbox query types
 export interface InboxPostListParams {
   organizationId: string
-  boardIds?: string[]
-  status?: PostStatus[]
-  tagIds?: string[]
-  ownerId?: string | null // null = unassigned
+  boardIds?: BoardId[]
+  statusIds?: StatusId[]
+  tagIds?: TagId[]
+  ownerId?: string | null // null = unassigned (legacy field, raw text)
   search?: string
   dateFrom?: Date
   dateTo?: Date

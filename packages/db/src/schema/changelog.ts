@@ -1,12 +1,7 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  index,
-} from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, index } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
+import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { boards } from './boards'
 import { appUser } from './rls'
 
@@ -18,8 +13,8 @@ const changelogOrgCheck = sql`board_id IN (
 export const changelogEntries = pgTable(
   'changelog_entries',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    boardId: uuid('board_id')
+    id: typeIdWithDefault('changelog')('id').primaryKey(),
+    boardId: typeIdColumn('board')('board_id')
       .notNull()
       .references(() => boards.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),

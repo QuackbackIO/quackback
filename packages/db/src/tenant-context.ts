@@ -4,6 +4,15 @@ import { db, type Database } from './client'
 // Re-export db and Database type for consumers
 export { db, type Database }
 
+/**
+ * Admin database access without RLS restrictions.
+ * Use for webhook handlers and system-level operations that need
+ * to bypass tenant isolation (e.g., Stripe webhooks creating subscriptions).
+ *
+ * IMPORTANT: Only use this for operations that cannot use tenant context.
+ */
+export const adminDb = db
+
 // UUID regex pattern for validation (prevents SQL injection)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

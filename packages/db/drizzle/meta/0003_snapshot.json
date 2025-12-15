@@ -1,6 +1,6 @@
 {
-  "id": "b4e9d20d-d238-436e-aa97-67bf8a9d8a4c",
-  "prevId": "21492e09-aef9-4110-b00b-24f031bd71aa",
+  "id": "2496db43-a756-4c8c-ab24-7e43ceeebc36",
+  "prevId": "3e05cbe6-ce2f-45d2-ab1b-e585ce28f295",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2372,6 +2372,16 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "search_vector": {
+          "name": "search_vector",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')",
+            "type": "stored"
+          }
         }
       },
       "indexes": {
@@ -2626,6 +2636,21 @@
           "where": "status_id IS NOT NULL",
           "concurrently": false,
           "method": "btree",
+          "with": {}
+        },
+        "posts_search_vector_idx": {
+          "name": "posts_search_vector_idx",
+          "columns": [
+            {
+              "expression": "search_vector",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
           "with": {}
         }
       },

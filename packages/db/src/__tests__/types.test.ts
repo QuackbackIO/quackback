@@ -8,7 +8,6 @@ import type {
   NewTag,
   Post,
   NewPost,
-  PostStatus,
   PostTag,
   NewPostTag,
   PostRoadmap,
@@ -105,7 +104,7 @@ describe('Type definitions', () => {
       expectTypeOf<Post>().toHaveProperty('content')
       expectTypeOf<Post>().toHaveProperty('authorId')
       expectTypeOf<Post>().toHaveProperty('authorName')
-      expectTypeOf<Post>().toHaveProperty('status')
+      expectTypeOf<Post>().toHaveProperty('statusId')
       expectTypeOf<Post>().toHaveProperty('voteCount')
     })
 
@@ -113,10 +112,6 @@ describe('Type definitions', () => {
       expectTypeOf<NewPost>().toHaveProperty('boardId')
       expectTypeOf<NewPost>().toHaveProperty('title')
       expectTypeOf<NewPost>().toHaveProperty('content')
-    })
-
-    it('PostStatus is a string literal union', () => {
-      expectTypeOf<PostStatus>().toBeString()
     })
 
     it('Post.voteCount is a number', () => {
@@ -175,7 +170,8 @@ describe('Type definitions', () => {
     })
 
     it('Comment.parentId can be null', () => {
-      expectTypeOf<Comment['parentId']>().toEqualTypeOf<string | null>()
+      // parentId is now CommentId | null (TypeId branded string)
+      expectTypeOf<Comment['parentId']>().toMatchTypeOf<`comment_${string}` | null>()
     })
   })
 
@@ -198,14 +194,14 @@ describe('Type definitions', () => {
     it('Integration has correct shape', () => {
       expectTypeOf<Integration>().toHaveProperty('id')
       expectTypeOf<Integration>().toHaveProperty('organizationId')
-      expectTypeOf<Integration>().toHaveProperty('type')
+      expectTypeOf<Integration>().toHaveProperty('integrationType')
       expectTypeOf<Integration>().toHaveProperty('status')
       expectTypeOf<Integration>().toHaveProperty('config')
     })
 
     it('NewIntegration has required fields', () => {
       expectTypeOf<NewIntegration>().toHaveProperty('organizationId')
-      expectTypeOf<NewIntegration>().toHaveProperty('type')
+      expectTypeOf<NewIntegration>().toHaveProperty('integrationType')
     })
 
     it('IntegrationType is github | slack | discord', () => {

@@ -1,6 +1,5 @@
 import {
   pgTable,
-  uuid,
   text,
   timestamp,
   integer,
@@ -8,24 +7,35 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  customType,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
+import { typeIdWithDefault, typeIdColumn, textIdColumnNullable } from '@quackback/ids/drizzle'
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
-import { member } from './auth'
+import { member, organization } from './auth'
 import { appUser } from './rls'
 
-const postsOrgCheck = sql`board_id IN (
-  SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)
-)`
+// Custom tsvector type for full-text search
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector'
+  },
+})
+
+// Simplified RLS check - direct organization_id column comparison
+const directOrgCheck = sql`organization_id = current_setting('app.organization_id', true)`
 
 export const posts = pgTable(
   'posts',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    boardId: uuid('board_id')
+    id: typeIdWithDefault('post')('id').primaryKey(),
+    // Denormalized for RLS performance - avoids join to boards table
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    boardId: typeIdColumn('board')('board_id')
       .notNull()
       .references(() => boards.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
@@ -35,27 +45,29 @@ export const posts = pgTable(
     // Member-scoped identity (Hub-and-Spoke model)
     // memberId links to the organization-scoped member record
     // For anonymous posts, memberId is null and authorName/authorEmail are used
-    memberId: text('member_id').references(() => member.id, { onDelete: 'set null' }),
+    memberId: textIdColumnNullable('member')('member_id').references(() => member.id, {
+      onDelete: 'set null',
+    }),
     // Legacy fields (kept for anonymous posts and migration compatibility)
     authorId: text('author_id'),
     authorName: text('author_name'),
     authorEmail: text('author_email'),
-    // Legacy status field - kept during migration, will be removed
-    status: text('status', {
-      enum: ['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed'],
-    })
-      .default('open')
-      .notNull(),
-    // New status reference to post_statuses table
-    statusId: uuid('status_id').references(() => postStatuses.id, { onDelete: 'set null' }),
+    // Status reference to post_statuses table
+    statusId: typeIdColumn('status')('status_id').references(() => postStatuses.id, {
+      onDelete: 'set null',
+    }),
     // Owner is also member-scoped (team member assigned to this post)
-    ownerMemberId: text('owner_member_id').references(() => member.id, { onDelete: 'set null' }),
+    ownerMemberId: textIdColumnNullable('member')('owner_member_id').references(() => member.id, {
+      onDelete: 'set null',
+    }),
     ownerId: text('owner_id'), // Legacy, kept for migration
     estimated: text('estimated'),
     voteCount: integer('vote_count').default(0).notNull(),
     // Official team response (member-scoped)
     officialResponse: text('official_response'),
-    officialResponseMemberId: text('official_response_member_id').references(() => member.id, {
+    officialResponseMemberId: textIdColumnNullable('member')(
+      'official_response_member_id'
+    ).references(() => member.id, {
       onDelete: 'set null',
     }),
     officialResponseAuthorId: text('official_response_author_id'), // Legacy
@@ -63,10 +75,16 @@ export const posts = pgTable(
     officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    // Full-text search vector (generated column, auto-computed from title and content)
+    // Title has weight 'A' (highest), content has weight 'B'
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')`
+    ),
   },
   (table) => [
+    // Organization index for RLS performance
+    index('posts_org_id_idx').on(table.organizationId),
     index('posts_board_id_idx').on(table.boardId),
-    index('posts_status_idx').on(table.status),
     index('posts_status_id_idx').on(table.statusId),
     index('posts_member_id_idx').on(table.memberId),
     index('posts_owner_member_id_idx').on(table.ownerMemberId),
@@ -77,31 +95,42 @@ export const posts = pgTable(
     index('posts_board_vote_count_idx').on(table.boardId, table.voteCount),
     index('posts_board_created_at_idx').on(table.boardId, table.createdAt),
     // Composite index for admin inbox filtering by status
-    index('posts_board_status_idx').on(table.boardId, table.status),
+    index('posts_board_status_id_idx').on(table.boardId, table.statusId),
     // Composite index for user activity pages (posts by author)
     index('posts_member_created_at_idx').on(table.memberId, table.createdAt),
+    // Composite index for org-scoped post listings (replaces board-based RLS lookups)
+    index('posts_org_board_vote_created_idx').on(
+      table.organizationId,
+      table.boardId,
+      table.voteCount
+    ),
+    // Partial index for roadmap posts (only posts with status)
+    index('posts_with_status_idx')
+      .on(table.statusId, table.voteCount)
+      .where(sql`status_id IS NOT NULL`),
+    // GIN index for full-text search
+    index('posts_search_vector_idx').using('gin', table.searchVector),
     pgPolicy('posts_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postsOrgCheck,
-      withCheck: postsOrgCheck,
+      using: directOrgCheck,
+      withCheck: directOrgCheck,
     }),
   ]
 ).enableRLS()
 
-const postRelatedOrgCheck = sql`post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+// RLS check via posts table (single join to posts.organization_id)
+const postTagsOrgCheck = sql`post_id IN (
+  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)
 )`
 
 export const postTags = pgTable(
   'post_tags',
   {
-    postId: uuid('post_id')
+    postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    tagId: uuid('tag_id')
+    tagId: typeIdColumn('tag')('tag_id')
       .notNull()
       .references(() => tags.id, { onDelete: 'cascade' }),
   },
@@ -112,8 +141,8 @@ export const postTags = pgTable(
     pgPolicy('post_tags_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postRelatedOrgCheck,
-      withCheck: postRelatedOrgCheck,
+      using: postTagsOrgCheck,
+      withCheck: postTagsOrgCheck,
     }),
   ]
 ).enableRLS()
@@ -121,25 +150,24 @@ export const postTags = pgTable(
 export const postRoadmaps = pgTable(
   'post_roadmaps',
   {
-    postId: uuid('post_id')
+    postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    roadmapId: uuid('roadmap_id')
+    roadmapId: typeIdColumn('roadmap')('roadmap_id')
       .notNull()
       .references(() => roadmaps.id, { onDelete: 'cascade' }),
-    statusId: uuid('status_id').references(() => postStatuses.id, { onDelete: 'set null' }),
     position: integer('position').notNull().default(0),
   },
   (table) => [
     uniqueIndex('post_roadmaps_pk').on(table.postId, table.roadmapId),
     index('post_roadmaps_post_id_idx').on(table.postId),
     index('post_roadmaps_roadmap_id_idx').on(table.roadmapId),
-    index('post_roadmaps_position_idx').on(table.roadmapId, table.statusId, table.position),
+    index('post_roadmaps_position_idx').on(table.roadmapId, table.position),
     pgPolicy('post_roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postRelatedOrgCheck,
-      withCheck: postRelatedOrgCheck,
+      using: postTagsOrgCheck,
+      withCheck: postTagsOrgCheck,
     }),
   ]
 ).enableRLS()
@@ -147,30 +175,33 @@ export const postRoadmaps = pgTable(
 export const votes = pgTable(
   'votes',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    postId: uuid('post_id')
+    id: typeIdWithDefault('vote')('id').primaryKey(),
+    // Denormalized for RLS performance
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     userIdentifier: text('user_identifier').notNull(),
-    // Member reference for FK integrity (nullable for anonymous votes)
-    memberId: text('member_id').references(() => member.id, { onDelete: 'cascade' }),
-    // Hashed IP for abuse detection (privacy-preserving)
+    memberId: textIdColumnNullable('member')('member_id').references(() => member.id, {
+      onDelete: 'cascade',
+    }),
     ipHash: text('ip_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    // Track when vote was last toggled
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    index('votes_org_id_idx').on(table.organizationId),
     index('votes_post_id_idx').on(table.postId),
     uniqueIndex('votes_unique_idx').on(table.postId, table.userIdentifier),
     index('votes_member_id_idx').on(table.memberId),
-    // Composite index for user activity pages (votes by member)
     index('votes_member_created_at_idx').on(table.memberId, table.createdAt),
     pgPolicy('votes_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postRelatedOrgCheck,
-      withCheck: postRelatedOrgCheck,
+      using: directOrgCheck,
+      withCheck: directOrgCheck,
     }),
   ]
 ).enableRLS()
@@ -178,16 +209,18 @@ export const votes = pgTable(
 export const comments = pgTable(
   'comments',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    postId: uuid('post_id')
+    id: typeIdWithDefault('comment')('id').primaryKey(),
+    // Denormalized for RLS performance
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    parentId: uuid('parent_id'),
-    // Member-scoped identity (Hub-and-Spoke model)
-    // memberId links to the organization-scoped member record
-    // For anonymous comments, memberId is null and authorName/authorEmail are used
-    memberId: text('member_id').references(() => member.id, { onDelete: 'set null' }),
-    // Legacy fields (kept for anonymous comments and migration compatibility)
+    parentId: typeIdColumn('comment')('parent_id'),
+    memberId: textIdColumnNullable('member')('member_id').references(() => member.id, {
+      onDelete: 'set null',
+    }),
     authorId: text('author_id'),
     authorName: text('author_name'),
     authorEmail: text('author_email'),
@@ -196,35 +229,31 @@ export const comments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    index('comments_org_id_idx').on(table.organizationId),
     index('comments_post_id_idx').on(table.postId),
     index('comments_parent_id_idx').on(table.parentId),
     index('comments_member_id_idx').on(table.memberId),
     index('comments_created_at_idx').on(table.createdAt),
-    // Composite index for comment threads ordered chronologically
     index('comments_post_created_at_idx').on(table.postId, table.createdAt),
     pgPolicy('comments_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postRelatedOrgCheck,
-      withCheck: postRelatedOrgCheck,
+      using: directOrgCheck,
+      withCheck: directOrgCheck,
     }),
   ]
 ).enableRLS()
 
-// REACTION_EMOJIS and ReactionEmoji are exported from types.ts
-
+// RLS check via comments table (single join to comments.organization_id)
 const commentReactionsOrgCheck = sql`comment_id IN (
-  SELECT c.id FROM comments c
-  JOIN posts p ON c.post_id = p.id
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)
 )`
 
 export const commentReactions = pgTable(
   'comment_reactions',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    commentId: uuid('comment_id')
+    id: typeIdWithDefault('reaction')('id').primaryKey(),
+    commentId: typeIdColumn('comment')('comment_id')
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
     userIdentifier: text('user_identifier').notNull(),
@@ -290,10 +319,6 @@ export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
   roadmap: one(roadmaps, {
     fields: [postRoadmaps.roadmapId],
     references: [roadmaps.id],
-  }),
-  status: one(postStatuses, {
-    fields: [postRoadmaps.statusId],
-    references: [postStatuses.id],
   }),
 }))
 

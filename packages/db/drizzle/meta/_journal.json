@@ -12,78 +12,15 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1765405929913,
-      "tag": "0001_roadmaps_v2",
+      "when": 1765790377743,
+      "tag": "0001_daily_fenris",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1733911200000,
-      "tag": "0002_integrations_v2",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1733961500000,
-      "tag": "0003_notifications",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1733961600000,
-      "tag": "0004_invitation_name",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1733961700000,
-      "tag": "0005_invitation_last_sent",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1765561608445,
-      "tag": "0006_add_missing_indexes",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1765565340000,
-      "tag": "0007_additional_indexes",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1765569020000,
-      "tag": "0008_favicon_and_custom_css",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1765660000000,
-      "tag": "0009_add_user_image_blob",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1765750000000,
-      "tag": "0010_header_branding",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1765850000000,
-      "tag": "0011_header_display_name",
+      "when": 1765791600000,
+      "tag": "0002_full_text_search",
       "breakpoints": true
     }
   ]

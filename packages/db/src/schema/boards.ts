@@ -1,6 +1,5 @@
 import {
   pgTable,
-  uuid,
   text,
   timestamp,
   boolean,
@@ -11,12 +10,13 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
+import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
 
 export const boards = pgTable(
   'boards',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: typeIdWithDefault('board')('id').primaryKey(),
     organizationId: text('organization_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
@@ -41,7 +41,7 @@ export const boards = pgTable(
 export const roadmaps = pgTable(
   'roadmaps',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: typeIdWithDefault('roadmap')('id').primaryKey(),
     organizationId: text('organization_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
@@ -67,7 +67,7 @@ export const roadmaps = pgTable(
 export const tags = pgTable(
   'tags',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: typeIdWithDefault('tag')('id').primaryKey(),
     organizationId: text('organization_id').notNull(),
     name: text('name').notNull(),
     color: text('color').default('#6b7280').notNull(),

@@ -1,15 +1,7 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  boolean,
-  integer,
-  uniqueIndex,
-  index,
-} from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, integer, uniqueIndex, index } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
+import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
 import { STATUS_CATEGORIES, type StatusCategory } from '../types'
 
@@ -19,7 +11,7 @@ export { STATUS_CATEGORIES, type StatusCategory }
 export const postStatuses = pgTable(
   'post_statuses',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: typeIdWithDefault('status')('id').primaryKey(),
     organizationId: text('organization_id').notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),

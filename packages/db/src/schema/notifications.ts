@@ -1,15 +1,12 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  boolean,
-  index,
-  uniqueIndex,
-  varchar,
-} from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, index, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
+import {
+  typeIdWithDefault,
+  typeIdColumn,
+  typeIdColumnNullable,
+  textIdColumn,
+} from '@quackback/ids/drizzle'
 import { posts } from './posts'
 import { member } from './auth'
 import { appUser } from './rls'
@@ -38,11 +35,11 @@ const preferencesOrgCheck = sql`member_id IN (
 export const postSubscriptions = pgTable(
   'post_subscriptions',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    postId: uuid('post_id')
+    id: typeIdWithDefault('post_sub')('id').primaryKey(),
+    postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    memberId: text('member_id')
+    memberId: textIdColumn('member')('member_id')
       .notNull()
       .references(() => member.id, { onDelete: 'cascade' }),
     reason: varchar('reason', { length: 20 }).notNull(), // 'author' | 'vote' | 'comment' | 'manual'
@@ -74,8 +71,8 @@ export const postSubscriptions = pgTable(
 export const notificationPreferences = pgTable(
   'notification_preferences',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    memberId: text('member_id')
+    id: typeIdWithDefault('notif_pref')('id').primaryKey(),
+    memberId: textIdColumn('member')('member_id')
       .notNull()
       .unique()
       .references(() => member.id, { onDelete: 'cascade' }),
@@ -103,12 +100,14 @@ export const notificationPreferences = pgTable(
 export const unsubscribeTokens = pgTable(
   'unsubscribe_tokens',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: typeIdWithDefault('unsub_token')('id').primaryKey(),
     token: text('token').notNull().unique(),
-    memberId: text('member_id')
+    memberId: textIdColumn('member')('member_id')
       .notNull()
       .references(() => member.id, { onDelete: 'cascade' }),
-    postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }), // null = global unsubscribe
+    postId: typeIdColumnNullable('post')('post_id').references(() => posts.id, {
+      onDelete: 'cascade',
+    }), // null = global unsubscribe
     action: varchar('action', { length: 30 }).notNull(), // 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),

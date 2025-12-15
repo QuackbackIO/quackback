@@ -12,6 +12,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
+import { typeIdWithDefault, typeIdColumn, textIdColumnNullable } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
 import { member } from './auth'
 
@@ -22,7 +23,7 @@ import { member } from './auth'
 export const organizationIntegrations = pgTable(
   'organization_integrations',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: typeIdWithDefault('integration')('id').primaryKey(),
     organizationId: text('organization_id').notNull(),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
@@ -40,7 +41,9 @@ export const organizationIntegrations = pgTable(
     externalWorkspaceName: varchar('external_workspace_name', { length: 255 }),
 
     // Metadata
-    connectedByMemberId: text('connected_by_member_id').references(() => member.id),
+    connectedByMemberId: textIdColumnNullable('member')('connected_by_member_id').references(
+      () => member.id
+    ),
     connectedAt: timestamp('connected_at', { withTimezone: true }),
     lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
     lastError: text('last_error'),
@@ -70,10 +73,12 @@ export const organizationIntegrations = pgTable(
 export const integrationEventMappings = pgTable(
   'integration_event_mappings',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    integrationId: uuid('integration_id')
+    id: typeIdWithDefault('event_mapping')('id').primaryKey(),
+    integrationId: typeIdColumn('integration')('integration_id')
       .notNull()
-      .references(() => organizationIntegrations.id, { onDelete: 'cascade' }),
+      .references(() => organizationIntegrations.id, {
+        onDelete: 'cascade',
+      }),
     eventType: varchar('event_type', { length: 100 }).notNull(),
     actionType: varchar('action_type', { length: 50 }).notNull(),
     actionConfig: jsonb('action_config').notNull().default({}),
@@ -95,10 +100,12 @@ export const integrationEventMappings = pgTable(
 export const integrationLinkedEntities = pgTable(
   'integration_linked_entities',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    integrationId: uuid('integration_id')
+    id: typeIdWithDefault('linked_entity')('id').primaryKey(),
+    integrationId: typeIdColumn('integration')('integration_id')
       .notNull()
-      .references(() => organizationIntegrations.id, { onDelete: 'cascade' }),
+      .references(() => organizationIntegrations.id, {
+        onDelete: 'cascade',
+      }),
     entityType: varchar('entity_type', { length: 50 }).notNull(),
     entityId: uuid('entity_id').notNull(),
     externalEntityType: varchar('external_entity_type', { length: 50 }).notNull(),
@@ -120,10 +127,12 @@ export const integrationLinkedEntities = pgTable(
 export const integrationSyncLog = pgTable(
   'integration_sync_log',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    integrationId: uuid('integration_id')
+    id: typeIdWithDefault('sync_log')('id').primaryKey(),
+    integrationId: typeIdColumn('integration')('integration_id')
       .notNull()
-      .references(() => organizationIntegrations.id, { onDelete: 'cascade' }),
+      .references(() => organizationIntegrations.id, {
+        onDelete: 'cascade',
+      }),
     eventId: uuid('event_id'),
     eventType: varchar('event_type', { length: 100 }).notNull(),
     actionType: varchar('action_type', { length: 50 }).notNull(),
