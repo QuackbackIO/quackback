@@ -8,14 +8,16 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, organizationIntegrations, decryptToken, eq, and } from '@quackback/db'
 import { listSlackChannels } from '@quackback/integrations'
+import { isValidTypeId, type OrgId } from '@quackback/ids'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const orgId = searchParams.get('orgId')
+  const orgIdParam = searchParams.get('orgId')
 
-  if (!orgId) {
+  if (!orgIdParam || !isValidTypeId(orgIdParam, 'org')) {
     return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
   }
+  const orgId = orgIdParam as OrgId
 
   // Validate session
   const session = await getSession()

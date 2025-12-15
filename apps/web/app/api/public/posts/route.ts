@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPostService } from '@/lib/services'
 import type { PostError } from '@quackback/domain'
-import { isValidTypeId, type TagId, type StatusId } from '@quackback/ids'
+import { isValidTypeId, type TagId, type StatusId, type OrgId } from '@quackback/ids'
 
 /**
  * Map PostError codes to HTTP status codes
@@ -23,11 +23,16 @@ function getHttpStatusFromError(error: PostError): number {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    const organizationIdParam = searchParams.get('organizationId')
 
-    if (!organizationId) {
+    if (!organizationIdParam) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
+
+    if (!isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
 
     // Parse filter params
     const boardSlug = searchParams.get('board') || undefined

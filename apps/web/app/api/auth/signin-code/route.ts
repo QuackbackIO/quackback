@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, verification, eq } from '@quackback/db'
 import { sendSigninCodeEmail } from '@quackback/email'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
+import { generateId } from '@quackback/ids'
 
 /**
  * Generate a 6-digit code
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
     await db.insert(verification).values({
-      id: crypto.randomUUID(),
+      id: generateId('verification'),
       identifier: `signin:${normalizedEmail}`,
       value: code,
       expiresAt,

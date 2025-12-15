@@ -1,9 +1,10 @@
 import { headers } from 'next/headers'
 import { auth } from './index'
 import { cache } from 'react'
+import type { UserId, OrgId, SessionId } from '@quackback/ids'
 
 /**
- * Session user type aligned with Better-Auth
+ * Session user type with TypeID types
  *
  * Users are scoped to organizations. Each user belongs to exactly one org.
  * Organization access is determined by member table with unified roles:
@@ -11,24 +12,24 @@ import { cache } from 'react'
  * - user: Portal users with public portal access only
  */
 export interface SessionUser {
-  id: string
+  id: UserId
   name: string
   email: string
   emailVerified: boolean
   image: string | null
-  organizationId: string
+  organizationId: OrgId
   createdAt: Date
   updatedAt: Date
 }
 
 export interface Session {
   session: {
-    id: string
+    id: SessionId
     expiresAt: Date
     token: string
     createdAt: Date
     updatedAt: Date
-    userId: string
+    userId: UserId
   }
   user: SessionUser
 }
@@ -36,8 +37,8 @@ export interface Session {
 /**
  * Get the current session with user.
  *
- * Users are scoped to organizations. To check organization access:
- * - Query member table for the user's role (owner/admin/member/user)
+ * Returns session with properly typed IDs (UserId, OrgId, SessionId).
+ * The database stores UUIDs but the schema layer returns TypeID format.
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   const session = await auth.api.getSession({
@@ -48,18 +49,26 @@ export const getSession = cache(async (): Promise<Session | null> => {
     return null
   }
 
-  // Cast to include organizationId from additionalFields and image from customSession
+  // Better-auth returns raw data from our schema, which already provides TypeID format
+  // We cast to our typed interfaces for TypeScript awareness
   const user = session.user as typeof session.user & { organizationId: string }
 
   return {
-    session: session.session,
+    session: {
+      id: session.session.id as SessionId,
+      expiresAt: session.session.expiresAt,
+      token: session.session.token,
+      createdAt: session.session.createdAt,
+      updatedAt: session.session.updatedAt,
+      userId: session.session.userId as UserId,
+    },
     user: {
-      id: user.id,
+      id: user.id as UserId,
       name: user.name,
       email: user.email,
       emailVerified: user.emailVerified,
       image: user.image,
-      organizationId: user.organizationId,
+      organizationId: user.organizationId as OrgId,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     },

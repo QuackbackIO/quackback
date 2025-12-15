@@ -7,6 +7,7 @@ import {
   getMinimumTierForFeature,
 } from '@quackback/domain'
 import { getSubscription, isSubscriptionActive } from '../subscription'
+import type { OrgId } from '@quackback/ids'
 
 export interface OrganizationFeatures {
   /** Current edition */
@@ -31,7 +32,7 @@ export interface OrganizationFeatures {
  * Cached per request for efficiency.
  */
 export const getOrganizationFeatures = cache(
-  async (organizationId: string): Promise<OrganizationFeatures> => {
+  async (organizationId: OrgId): Promise<OrganizationFeatures> => {
     // OSS (self-hosted): all features enabled, no limits
     if (isSelfHosted()) {
       return {
@@ -80,7 +81,7 @@ export const getOrganizationFeatures = cache(
  * Check if an organization has a specific feature.
  * Convenience wrapper for getOrganizationFeatures.
  */
-export async function hasFeature(organizationId: string, feature: Feature): Promise<boolean> {
+export async function hasFeature(organizationId: OrgId, feature: Feature): Promise<boolean> {
   const features = await getOrganizationFeatures(organizationId)
   return features.hasFeature(feature)
 }
@@ -88,7 +89,7 @@ export async function hasFeature(organizationId: string, feature: Feature): Prom
 /**
  * Check if an organization has at least a certain tier.
  */
-export async function hasTier(organizationId: string, requiredTier: PricingTier): Promise<boolean> {
+export async function hasTier(organizationId: OrgId, requiredTier: PricingTier): Promise<boolean> {
   // OSS always has highest tier
   if (isSelfHosted()) return true
 
@@ -110,7 +111,7 @@ export interface FeatureCheckResult {
  * Check feature access and get detailed result for API/UI responses.
  */
 export async function checkFeatureAccess(
-  organizationId: string,
+  organizationId: OrgId,
   feature: Feature
 ): Promise<FeatureCheckResult> {
   const features = await getOrganizationFeatures(organizationId)

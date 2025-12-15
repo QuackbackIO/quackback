@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, user, session, eq, and } from '@quackback/db'
+import { generateId } from '@quackback/ids'
 
 /**
  * POST /api/test/create-session
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
     await db.insert(session).values({
-      id: crypto.randomUUID(),
+      id: generateId('session'),
       token: sessionToken,
       userId: existingUser.id,
       expiresAt,

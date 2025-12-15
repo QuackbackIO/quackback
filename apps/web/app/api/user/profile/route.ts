@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, user, eq } from '@quackback/db'
 import { getSession } from '@/lib/auth/server'
-import { fromUuid } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -34,10 +33,9 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Transform UUIDs to TypeIDs in response (user table uses raw UUIDs)
+    // User table now uses TypeID columns, so userRecord.id is already a TypeID
     return NextResponse.json({
       ...userRecord,
-      id: fromUuid('user', userRecord.id),
       hasCustomAvatar: !!userRecord.imageType,
     })
   } catch (error) {
@@ -145,12 +143,11 @@ export async function PATCH(request: NextRequest) {
         imageType: user.imageType,
       })
 
-    // Transform UUIDs to TypeIDs in response (user table uses raw UUIDs)
+    // User table now uses TypeID columns, so updated.id is already a TypeID
     return NextResponse.json({
       success: true,
       user: {
         ...updated,
-        id: fromUuid('user', updated.id),
         hasCustomAvatar: !!updated.imageType,
       },
     })
@@ -188,12 +185,11 @@ export async function DELETE() {
         imageType: user.imageType,
       })
 
-    // Transform UUIDs to TypeIDs in response (user table uses raw UUIDs)
+    // User table now uses TypeID columns, so updated.id is already a TypeID
     return NextResponse.json({
       success: true,
       user: {
         ...updated,
-        id: fromUuid('user', updated.id),
         hasCustomAvatar: false,
       },
     })

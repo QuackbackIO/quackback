@@ -4,7 +4,7 @@ import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getPostService, getMemberService, getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type CommentTreeNode, type PostError } from '@quackback/domain'
-import { isValidTypeId, toMemberId, type PostId, type MemberId } from '@quackback/ids'
+import { isValidTypeId, type PostId, type MemberId, type OrgId } from '@quackback/ids'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
@@ -48,13 +48,21 @@ export async function GET(
   try {
     const { postId: postIdParam } = await params
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    const organizationIdParam = searchParams.get('organizationId')
 
-    // Validate TypeID format
+    // Validate TypeID formats
     if (!isValidTypeId(postIdParam, 'post')) {
       return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
     }
     const postId = postIdParam as PostId
+
+    let organizationId: OrgId | null = null
+    if (organizationIdParam) {
+      if (!isValidTypeId(organizationIdParam, 'org')) {
+        return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+      }
+      organizationId = organizationIdParam as OrgId
+    }
 
     // Validate tenant access (handles auth + org membership check)
     const validation = await validateApiTenantAccess(organizationId)
@@ -187,7 +195,7 @@ export async function PATCH(
         )
         const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
         // Convert raw member ID to MemberId format
-        updateInput.ownerMemberId = ownerMember ? toMemberId(ownerMember.id) : null
+        updateInput.ownerMemberId = ownerMember ? ownerMember.id : null
       } else {
         updateInput.ownerMemberId = null
       }
@@ -204,7 +212,7 @@ export async function PATCH(
         // Set or update official response with member-scoped identity
         updateInput.officialResponse = body.officialResponse
         // Convert raw member ID to MemberId format
-        updateInput.officialResponseMemberId = toMemberId(validation.member.id)
+        updateInput.officialResponseMemberId = validation.member.id
         updateInput.officialResponseAuthorName = validation.user.name || validation.user.email
       }
     }

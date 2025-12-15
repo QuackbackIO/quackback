@@ -2,9 +2,21 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization, customSession } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
-import { db, workspaceDomain, user as userTable, eq, and } from '@quackback/db'
+import {
+  db,
+  workspaceDomain,
+  user as userTable,
+  session as sessionTable,
+  account as accountTable,
+  verification as verificationTable,
+  organization as organizationTable,
+  member as memberTable,
+  invitation as invitationTable,
+  eq,
+  and,
+} from '@quackback/db'
+import type { UserId } from '@quackback/ids'
 import { trustLogin } from './plugins/trust-login'
-import { fromUuid } from '@quackback/ids'
 
 /**
  * Build trusted origins dynamically for CSRF protection.
@@ -71,6 +83,16 @@ function buildBaseURL(): string | undefined {
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: 'pg',
+    // Pass our custom schema so Better-auth uses our TypeID column types
+    schema: {
+      user: userTable,
+      session: sessionTable,
+      account: accountTable,
+      verification: verificationTable,
+      organization: organizationTable,
+      member: memberTable,
+      invitation: invitationTable,
+    },
   }),
 
   // Base URL for OAuth callbacks when running behind a proxy (e.g., ngrok)
@@ -109,6 +131,8 @@ export const auth = betterAuth({
   trustedOrigins: getTrustedOrigins,
 
   advanced: {
+    // Disable Better-auth's ID generation - Drizzle schema handles TypeID generation
+    generateId: false,
     // Disable cross-subdomain cookies for tenant isolation
     // Each subdomain has its own session cookie
     crossSubDomainCookies: {
@@ -131,8 +155,9 @@ export const auth = betterAuth({
     // 3. Initials (no image) -> null
     customSession(async ({ user, session }) => {
       // Check if user has a custom uploaded avatar
+      // Better-auth types user.id as string, cast to UserId for database query
       const userRecord = await db.query.user.findFirst({
-        where: eq(userTable.id, user.id),
+        where: eq(userTable.id, user.id as UserId),
         columns: {
           imageType: true,
           updatedAt: true,
@@ -143,8 +168,9 @@ export const auth = betterAuth({
       let image: string | null = null
       if (userRecord?.imageType) {
         // User has uploaded avatar - use avatar API endpoint with cache buster
+        // user.id is already in TypeID format (e.g., 'user_01h...')
         const cacheBuster = userRecord.updatedAt?.getTime() ?? Date.now()
-        image = `/api/user/avatar/${fromUuid('user', user.id)}?v=${cacheBuster}`
+        image = `/api/user/avatar/${user.id}?v=${cacheBuster}`
       } else if (user.image) {
         // Fall back to OAuth avatar URL
         image = user.image

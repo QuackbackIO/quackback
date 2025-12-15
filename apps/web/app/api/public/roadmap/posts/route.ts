@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPostService } from '@/lib/services'
 import type { PostError } from '@quackback/domain'
-import type { StatusId } from '@quackback/ids'
+import { isValidTypeId, type StatusId, type OrgId } from '@quackback/ids'
 
 /**
  * Map PostError codes to HTTP status codes
@@ -35,16 +35,26 @@ function getHttpStatusFromError(error: PostError): number {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-    const statusId = searchParams.get('statusId') as StatusId | null
+    const organizationIdParam = searchParams.get('organizationId')
+    const statusIdParam = searchParams.get('statusId')
 
-    if (!organizationId) {
+    if (!organizationIdParam) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
 
-    if (!statusId) {
+    if (!isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
+
+    if (!statusIdParam) {
       return NextResponse.json({ error: 'statusId is required' }, { status: 400 })
     }
+
+    if (!isValidTypeId(statusIdParam, 'status')) {
+      return NextResponse.json({ error: 'Invalid status ID format' }, { status: 400 })
+    }
+    const statusId = statusIdParam as StatusId
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)))

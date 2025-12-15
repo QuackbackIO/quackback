@@ -12,6 +12,7 @@ import {
   gt,
 } from '@quackback/db'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
+import { generateId } from '@quackback/ids'
 
 interface WorkspaceInfo {
   id: string
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
     // This prevents someone from skipping verification
     const verifiedEmailToken = crypto.randomUUID()
     await db.insert(verification).values({
-      id: crypto.randomUUID(),
+      id: generateId('verification'),
       identifier: `verified-email:${verifiedEmailToken}`,
       value: normalizedEmail,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes

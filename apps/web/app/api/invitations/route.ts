@@ -2,6 +2,7 @@ import { withApiHandler, ApiError, successResponse, validateBody } from '@/lib/a
 import { inviteSchema } from '@/lib/schemas/auth'
 import { db, invitation, user, eq, and } from '@quackback/db'
 import { sendInvitationEmail } from '@quackback/email'
+import { generateId } from '@quackback/ids'
 
 /**
  * POST /api/invitations
@@ -41,7 +42,7 @@ export const POST = withApiHandler(
     }
 
     // Create the invitation
-    const invitationId = crypto.randomUUID()
+    const invitationId = generateId('invite')
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     const now = new Date()
 

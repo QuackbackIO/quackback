@@ -961,7 +961,7 @@ describe('trustLogin plugin', () => {
 
       expect(mockInsertChain.values).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: 'mock-uuid-123',
+          id: expect.stringMatching(/^member_[0-9a-z]{26}$/),
           userId: 'user-123',
           organizationId: 'org-123',
           role: 'user',

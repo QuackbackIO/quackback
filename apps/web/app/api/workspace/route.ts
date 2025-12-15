@@ -11,6 +11,7 @@ import {
 import { createWorkspaceSchema } from '@/lib/schemas/auth'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { getStatusService } from '@/lib/services'
+import { generateId } from '@quackback/ids'
 
 /**
  * Generate a secure token
@@ -103,11 +104,11 @@ export async function POST(request: NextRequest) {
     // No need to check for existing users globally since each org has isolated user identities.
 
     // Generate IDs
-    const orgId = crypto.randomUUID()
-    const userId = crypto.randomUUID()
-    const memberId = crypto.randomUUID()
-    const domainId = crypto.randomUUID()
-    const tokenId = crypto.randomUUID()
+    const orgId = generateId('org')
+    const userId = generateId('user')
+    const memberId = generateId('member')
+    const domainId = generateId('domain')
+    const tokenId = generateId('transfer_token')
 
     // Generate transfer token
     const transferToken = generateSecureToken()

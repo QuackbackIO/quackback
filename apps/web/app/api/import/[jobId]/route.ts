@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and } from '@quackback/db'
 import { getImportJobStatus } from '@quackback/jobs'
-
-// UUID regex for validation
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { isValidTypeId, type OrgId } from '@quackback/ids'
 
 export async function GET(
   request: NextRequest,
@@ -24,14 +22,15 @@ export async function GET(
     }
 
     // Extract and verify organizationId from jobId (format: import-{orgId}-{timestamp})
+    // TypeID format: import-org_01h455vb4pex5vsknk084sn02q-1702000000000
     const parts = jobId.split('-')
-    if (parts.length < 7 || parts[0] !== 'import') {
+    if (parts.length !== 3 || parts[0] !== 'import') {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
-    // UUID is parts 1-5 (5 segments separated by dashes)
-    const orgIdFromJob = parts.slice(1, 6).join('-')
-    if (!UUID_REGEX.test(orgIdFromJob)) {
+    // parts[1] is the TypeID (org_...)
+    const orgIdFromJob = parts[1] as OrgId
+    if (!isValidTypeId(orgIdFromJob, 'org')) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 

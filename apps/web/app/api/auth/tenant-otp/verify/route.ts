@@ -14,6 +14,7 @@ import {
 } from '@quackback/db'
 import { organizationService } from '@quackback/domain'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
+import { generateId, type InviteId, type OrgId } from '@quackback/ids'
 
 /**
  * Generate a secure random token
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
       // Delete the code (one-time use)
       await db.delete(verification).where(eq(verification.id, verificationRecord.id))
 
-      const transferTokenId = crypto.randomUUID()
+      const transferTokenId = generateId('transfer_token')
       const transferToken = generateSecureToken()
 
       await db.insert(sessionTransferToken).values({
@@ -179,10 +180,10 @@ export async function POST(request: NextRequest) {
 
     // Validate invitation if provided
     let validInvitation: {
-      id: string
+      id: InviteId
       role: string | null
       email: string
-      organizationId: string
+      organizationId: OrgId
     } | null = null
 
     if (invitationId) {
@@ -239,10 +240,10 @@ export async function POST(request: NextRequest) {
     const memberRole = validInvitation?.role || (context === 'team' ? 'member' : 'user')
 
     // Create user + account + member + session transfer token
-    const userId = crypto.randomUUID()
-    const memberId = crypto.randomUUID()
-    const accountId = crypto.randomUUID()
-    const transferTokenId = crypto.randomUUID()
+    const userId = generateId('user')
+    const memberId = generateId('member')
+    const accountId = generateId('account')
+    const transferTokenId = generateId('transfer_token')
     const transferToken = generateSecureToken()
 
     await db.transaction(async (tx) => {

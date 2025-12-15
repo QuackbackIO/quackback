@@ -783,9 +783,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       await POST(request)
 
       const insertCall = mockInsert.mock.calls[0][0]
-      expect(insertCall.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      )
+      expect(insertCall.id).toMatch(/^verification_[0-9a-z]{26}$/)
     })
 
     it('creates record with all required fields', async () => {

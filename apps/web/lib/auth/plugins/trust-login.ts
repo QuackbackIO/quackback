@@ -21,6 +21,7 @@ import { createAuthEndpoint } from 'better-auth/api'
 import type { BetterAuthPlugin } from 'better-auth'
 import { z } from 'zod'
 import { db, sessionTransferToken, member, workspaceDomain, eq, and, gt } from '@quackback/db'
+import { generateId } from '@quackback/ids'
 
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase()
@@ -91,7 +92,7 @@ export const trustLogin = () => {
               // Create member record with role='user' if it doesn't exist
               if (!existingMember) {
                 await db.insert(member).values({
-                  id: crypto.randomUUID(),
+                  id: generateId('member'),
                   userId: transfer.userId,
                   organizationId: domainRecord.organizationId,
                   role: 'user',
@@ -130,8 +131,16 @@ export const trustLogin = () => {
             return ctx.redirect('/auth-complete')
           }
 
-          // Normal mode: redirect based on context (hardcoded paths to prevent open redirect)
-          const redirectUrl = transfer.context === 'portal' ? '/' : '/admin'
+          // Normal mode: use callbackUrl from transfer token
+          // The callbackUrl is validated to be a relative path (starts with /)
+          // and was set during the OTP/OAuth flow, so it's safe to use
+          let redirectUrl = transfer.callbackUrl || (transfer.context === 'portal' ? '/' : '/admin')
+
+          // Security: ensure redirectUrl is a relative path to prevent open redirects
+          if (!redirectUrl.startsWith('/') || redirectUrl.startsWith('//')) {
+            redirectUrl = transfer.context === 'portal' ? '/' : '/admin'
+          }
+
           return ctx.redirect(redirectUrl)
         }
       ),

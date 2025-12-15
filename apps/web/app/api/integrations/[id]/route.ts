@@ -15,10 +15,12 @@ import {
   and,
 } from '@quackback/db'
 import { z } from 'zod'
-import { isValidTypeId, type IntegrationId } from '@quackback/ids'
+import { isValidTypeId, type IntegrationId, type OrgId } from '@quackback/ids'
 
 const updateSchema = z.object({
-  orgId: z.string(),
+  orgId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+    message: 'Invalid organization ID format',
+  }) as z.ZodType<OrgId>,
   enabled: z.boolean().optional(),
   config: z
     .object({
@@ -139,11 +141,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const integrationId = integrationIdParam as IntegrationId
 
   const { searchParams } = new URL(request.url)
-  const orgId = searchParams.get('orgId')
+  const orgIdParam = searchParams.get('orgId')
 
-  if (!orgId) {
+  if (!orgIdParam || !isValidTypeId(orgIdParam, 'org')) {
     return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
   }
+  const orgId = orgIdParam as OrgId
 
   // Validate session
   const session = await getSession()

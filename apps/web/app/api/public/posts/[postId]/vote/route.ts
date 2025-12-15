@@ -12,7 +12,7 @@ import {
 import { hashIP } from '@/lib/utils/ip-hash'
 import type { ServiceContext } from '@quackback/domain'
 import type { PostError } from '@quackback/domain'
-import { isValidTypeId, toMemberId, type PostId } from '@quackback/ids'
+import { isValidTypeId, type PostId, type MemberId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -110,8 +110,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Use member identifier for authenticated users
     const userIdentifier = getMemberIdentifier(memberRecord.id)
 
-    // Build service context
-    const memberId = toMemberId(memberRecord.id)
+    // Build service context - memberRecord.id is already a MemberId from TypeID schema
+    const memberId = memberRecord.id as MemberId
     const ctx: ServiceContext = {
       organizationId: board.organizationId,
       userId: session.user.id,

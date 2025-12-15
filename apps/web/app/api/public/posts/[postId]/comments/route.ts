@@ -4,7 +4,7 @@ import { commentSchema } from '@/lib/schemas/comments'
 import { getSession } from '@/lib/auth/server'
 import { getCommentService, getPostService } from '@/lib/services'
 import type { ServiceContext, CommentError } from '@quackback/domain'
-import { isValidTypeId, toMemberId, type PostId, type CommentId } from '@quackback/ids'
+import { isValidTypeId, type PostId, type CommentId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const ctx: ServiceContext = {
       organizationId: board.organizationId,
       userId: session.user.id,
-      memberId: toMemberId(memberRecord.id),
+      memberId: memberRecord.id,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
       userName: session.user.name || session.user.email,
       userEmail: session.user.email,

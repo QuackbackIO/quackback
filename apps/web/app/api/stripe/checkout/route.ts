@@ -5,16 +5,19 @@ import { isCloud, type PricingTier } from '@quackback/domain/features'
 import { createCheckoutSession, isStripeConfigured } from '@quackback/ee/billing'
 import { getSubscriptionByOrganizationIdAdmin } from '@quackback/db/queries/subscriptions'
 import { db, workspaceDomain, eq, and } from '@quackback/db'
+import { isValidTypeId, type OrgId } from '@quackback/ids'
 
 const checkoutSchema = z.object({
-  organizationId: z.string(),
+  organizationId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+    message: 'Invalid organization ID format',
+  }) as z.ZodType<OrgId>,
   tier: z.enum(['essentials', 'professional', 'team']),
 })
 
 /**
  * Get the tenant URL for an organization (supports custom domains and subdomains)
  */
-async function getTenantUrl(organizationId: string): Promise<string> {
+async function getTenantUrl(organizationId: OrgId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
     where: and(
       eq(workspaceDomain.organizationId, organizationId),

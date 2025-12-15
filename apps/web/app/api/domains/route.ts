@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, workspaceDomain, organization, eq, and } from '@quackback/db'
 import { auth } from '@/lib/auth'
 import { z } from 'zod'
+import { generateId, isValidTypeId, type OrgId, type DomainId } from '@quackback/ids'
 
 /**
  * Custom Domain Management API
@@ -18,7 +19,9 @@ const addDomainSchema = z.object({
     .refine((d) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d), {
       message: 'Invalid domain format',
     }),
-  organizationId: z.string().uuid(),
+  organizationId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+    message: 'Invalid organization ID format',
+  }) as z.ZodType<OrgId>,
 })
 
 function getCnameTarget(): string {
@@ -38,17 +41,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const organizationId = request.nextUrl.searchParams.get('organizationId')
-  if (!organizationId) {
+  const organizationIdParam = request.nextUrl.searchParams.get('organizationId')
+  if (!organizationIdParam || !isValidTypeId(organizationIdParam, 'org')) {
     return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
   }
+  const organizationId = organizationIdParam as OrgId
 
   // Verify user is admin/owner of this org
   const org = await db.query.organization.findFirst({
     where: eq(organization.id, organizationId),
     with: {
       members: {
-        where: (members, { eq }) => eq(members.userId, session.user.id),
+        where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
       },
     },
   })
@@ -94,7 +98,7 @@ export async function POST(request: NextRequest) {
     where: eq(organization.id, organizationId),
     with: {
       members: {
-        where: (members, { eq }) => eq(members.userId, session.user.id),
+        where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
       },
     },
   })
@@ -118,7 +122,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Create domain with verification token for HTTP verification
-  const domainId = crypto.randomUUID()
+  const domainId = generateId('domain')
   const verificationToken = `qb_${crypto.randomUUID().replace(/-/g, '')}`
 
   await db.insert(workspaceDomain).values({
@@ -157,11 +161,16 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { domainId, isPrimary } = body
+  const { domainId: domainIdParam, isPrimary } = body
 
-  if (!domainId || typeof domainId !== 'string') {
+  if (
+    !domainIdParam ||
+    typeof domainIdParam !== 'string' ||
+    !isValidTypeId(domainIdParam, 'domain')
+  ) {
     return NextResponse.json({ error: 'domainId is required' }, { status: 400 })
   }
+  const domainId = domainIdParam as DomainId
 
   // Get the domain with org membership check
   const domain = await db.query.workspaceDomain.findFirst({
@@ -170,7 +179,7 @@ export async function PATCH(request: NextRequest) {
       organization: {
         with: {
           members: {
-            where: (members, { eq }) => eq(members.userId, session.user.id),
+            where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
           },
         },
       },
@@ -224,10 +233,11 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const domainId = request.nextUrl.searchParams.get('id')
-  if (!domainId) {
+  const domainIdParam = request.nextUrl.searchParams.get('id')
+  if (!domainIdParam || !isValidTypeId(domainIdParam, 'domain')) {
     return NextResponse.json({ error: 'Domain ID is required' }, { status: 400 })
   }
+  const domainId = domainIdParam as DomainId
 
   // Get the domain
   const domain = await db.query.workspaceDomain.findFirst({
@@ -236,7 +246,7 @@ export async function DELETE(request: NextRequest) {
       organization: {
         with: {
           members: {
-            where: (members, { eq }) => eq(members.userId, session.user.id),
+            where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
           },
         },
       },

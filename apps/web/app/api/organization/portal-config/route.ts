@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { organizationService } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
-import { toMemberId } from '@quackback/ids'
 
 /**
  * GET /api/organization/portal-config?organizationId={id}
@@ -75,7 +74,7 @@ export const PATCH = withApiHandler(
     const result = await organizationService.updatePortalConfig(input, {
       userId: validation.user.id,
       organizationId: validation.organization.id,
-      memberId: toMemberId(validation.member.id),
+      memberId: validation.member.id,
       memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: validation.user.name ?? '',
       userEmail: validation.user.email,

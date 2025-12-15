@@ -3,13 +3,19 @@ import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
 import { getPostService, getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
-import { isValidTypeId, type BoardId } from '@quackback/ids'
+import { isValidTypeId, type BoardId, type OrgId } from '@quackback/ids'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    const organizationIdParam = searchParams.get('organizationId')
     const boardIdParam = searchParams.get('boardId')
+
+    // Validate organization ID format
+    if (!organizationIdParam || !isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
 
     // Validate tenant access
     const validation = await validateApiTenantAccess(organizationId)

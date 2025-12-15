@@ -14,6 +14,9 @@ import {
   type RoadmapId,
   type MemberId,
   type IntegrationId,
+  type InviteId,
+  type OrgId,
+  type UserId,
 } from '@quackback/ids'
 
 /**
@@ -50,6 +53,9 @@ type PrefixToTypeId = {
   roadmap: RoadmapId
   member: MemberId
   integration: IntegrationId
+  invite: InviteId
+  org: OrgId
+  user: UserId
 }
 
 /**
@@ -214,11 +220,11 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
   return async (request: NextRequest): Promise<NextResponse> => {
     try {
       // Extract organizationId from body or query params
-      let organizationId: string | null = null
+      let organizationIdParam: string | null = null
 
       if (request.method === 'GET' || request.method === 'DELETE') {
         const { searchParams } = new URL(request.url)
-        organizationId = searchParams.get('organizationId')
+        organizationIdParam = searchParams.get('organizationId')
       } else {
         // For POST/PATCH/PUT, try to parse the body
         // Clone the request so we can read the body twice
@@ -229,15 +235,24 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
           if (contentType.includes('multipart/form-data')) {
             // Handle multipart/form-data (file uploads)
             const formData = await clonedRequest.formData()
-            organizationId = formData.get('organizationId') as string | null
+            organizationIdParam = formData.get('organizationId') as string | null
           } else {
             // Handle JSON body
             const body = await clonedRequest.json()
-            organizationId = body.organizationId ?? null
+            organizationIdParam = body.organizationId ?? null
           }
         } catch {
           // Body might not be JSON/FormData or might be empty
         }
+      }
+
+      // Validate organizationId format if provided
+      let organizationId: OrgId | null = null
+      if (organizationIdParam) {
+        if (!isValidTypeId(organizationIdParam, 'org')) {
+          return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+        }
+        organizationId = organizationIdParam as OrgId
       }
 
       // Validate tenant access
@@ -334,11 +349,11 @@ export function withApiHandlerParams<P>(
       const params = await routeContext.params
 
       // Extract organizationId from body or query params
-      let organizationId: string | null = null
+      let organizationIdParam: string | null = null
 
       if (request.method === 'GET' || request.method === 'DELETE') {
         const { searchParams } = new URL(request.url)
-        organizationId = searchParams.get('organizationId')
+        organizationIdParam = searchParams.get('organizationId')
       } else {
         // For POST/PATCH/PUT, try to parse the body
         const clonedRequest = request.clone()
@@ -348,15 +363,24 @@ export function withApiHandlerParams<P>(
           if (contentType.includes('multipart/form-data')) {
             // Handle multipart/form-data (file uploads)
             const formData = await clonedRequest.formData()
-            organizationId = formData.get('organizationId') as string | null
+            organizationIdParam = formData.get('organizationId') as string | null
           } else {
             // Handle JSON body
             const body = await clonedRequest.json()
-            organizationId = body.organizationId ?? null
+            organizationIdParam = body.organizationId ?? null
           }
         } catch {
           // Body might not be JSON/FormData or might be empty
         }
+      }
+
+      // Validate organizationId format if provided
+      let organizationId: OrgId | null = null
+      if (organizationIdParam) {
+        if (!isValidTypeId(organizationIdParam, 'org')) {
+          return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+        }
+        organizationId = organizationIdParam as OrgId
       }
 
       // Validate tenant access

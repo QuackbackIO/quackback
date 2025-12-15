@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, workspaceDomain, eq } from '@quackback/db'
 import { auth } from '@/lib/auth'
+import { isValidTypeId, type DomainId } from '@quackback/ids'
 
 /**
  * Domain Verification API
@@ -188,11 +189,16 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const domainId = body.domainId
+  const domainIdParam = body.domainId
 
-  if (!domainId || typeof domainId !== 'string') {
+  if (
+    !domainIdParam ||
+    typeof domainIdParam !== 'string' ||
+    !isValidTypeId(domainIdParam, 'domain')
+  ) {
     return NextResponse.json({ error: 'domainId is required' }, { status: 400 })
   }
+  const domainId = domainIdParam as DomainId
 
   // Get the domain with org membership check
   const domain = await db.query.workspaceDomain.findFirst({
@@ -201,7 +207,7 @@ export async function POST(request: NextRequest) {
       organization: {
         with: {
           members: {
-            where: (members, { eq }) => eq(members.userId, session.user.id),
+            where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
           },
         },
       },

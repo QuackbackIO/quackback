@@ -6,7 +6,7 @@ import { addImportJob, type ImportJobData } from '@quackback/jobs'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
 import { getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
-import { isValidTypeId, type BoardId } from '@quackback/ids'
+import { isValidTypeId, type BoardId, type OrgId } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_ROWS = 10000
@@ -17,7 +17,13 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const boardIdParam = formData.get('boardId') as string | null
-    const organizationId = formData.get('organizationId') as string | null
+    const organizationIdParam = formData.get('organizationId') as string | null
+
+    // Validate organization ID format
+    if (!organizationIdParam || !isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
 
     // Validate tenant access
     const validation = await validateApiTenantAccess(organizationId)

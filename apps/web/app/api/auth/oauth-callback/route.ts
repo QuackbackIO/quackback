@@ -11,6 +11,7 @@ import {
   and,
 } from '@quackback/db'
 import { verifyOAuthState } from '@/lib/auth/oauth-state'
+import { generateId, type UserId } from '@quackback/ids'
 
 /**
  * OAuth Callback Handler
@@ -304,7 +305,7 @@ export async function GET(request: NextRequest) {
       where: and(eq(user.email, email), eq(user.organizationId, org.id)),
     })
 
-    let userId: string
+    let userId: UserId
 
     if (existingUser) {
       // User exists - check if this OAuth account is linked
@@ -321,7 +322,7 @@ export async function GET(request: NextRequest) {
       if (!existingAccount) {
         // Link this OAuth account to existing user
         await db.insert(account).values({
-          id: crypto.randomUUID(),
+          id: generateId('account'),
           userId,
           accountId: providerAccountId,
           providerId,
@@ -338,9 +339,9 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // Create new user
-      userId = crypto.randomUUID()
-      const memberId = crypto.randomUUID()
-      const accountId = crypto.randomUUID()
+      userId = generateId('user')
+      const memberId = generateId('member')
+      const accountId = generateId('account')
 
       // Determine role based on context
       const memberRole = state.context === 'team' ? 'member' : 'user'
@@ -381,7 +382,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Create session transfer token
-    const transferTokenId = crypto.randomUUID()
+    const transferTokenId = generateId('transfer_token')
     const transferToken = generateSecureToken()
 
     await db.insert(sessionTransferToken).values({

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { db, ssoProvider, eq, and } from '@quackback/db'
 import { withApiHandlerParams, ApiError, validateBody, successResponse } from '@/lib/api-handler'
 import { updateSsoProviderSchema } from '@/lib/schemas/sso-providers'
-import { isValidTypeId, toUuid, fromUuid } from '@quackback/ids'
+import { isValidTypeId, type SsoProviderId } from '@quackback/ids'
 
 type RouteParams = { providerId: string }
 
@@ -16,11 +16,11 @@ export const PATCH = withApiHandlerParams<RouteParams>(
     const body = await request.json()
     const updateData = validateBody(updateSsoProviderSchema, body)
 
-    // Parse TypeID to UUID for database query (sso_provider uses raw UUIDs)
+    // Validate TypeID format
     if (!isValidTypeId(providerIdParam, 'sso_provider')) {
       throw new ApiError('Invalid provider ID format', 400)
     }
-    const providerId = toUuid(providerIdParam)
+    const providerId = providerIdParam as SsoProviderId
 
     // Find the existing provider
     const existingProvider = await db.query.ssoProvider.findFirst({
@@ -77,10 +77,8 @@ export const PATCH = withApiHandlerParams<RouteParams>(
       .where(eq(ssoProvider.id, providerId))
       .returning()
 
-    // Transform UUIDs to TypeIDs in response (sso_provider uses raw UUIDs)
     return NextResponse.json({
       ...updated,
-      id: fromUuid('sso_provider', updated.id),
       oidcConfig: updated.oidcConfig ? maskOidcConfig(JSON.parse(updated.oidcConfig)) : null,
       samlConfig: updated.samlConfig ? JSON.parse(updated.samlConfig) : null,
     })
@@ -96,11 +94,11 @@ export const DELETE = withApiHandlerParams<RouteParams>(
   async (_request, { validation, params }) => {
     const { providerId: providerIdParam } = params
 
-    // Parse TypeID to UUID for database query (sso_provider uses raw UUIDs)
+    // Validate TypeID format
     if (!isValidTypeId(providerIdParam, 'sso_provider')) {
       throw new ApiError('Invalid provider ID format', 400)
     }
-    const providerId = toUuid(providerIdParam)
+    const providerId = providerIdParam as SsoProviderId
 
     // Find the existing provider
     const existingProvider = await db.query.ssoProvider.findFirst({

@@ -12,6 +12,7 @@ import {
   gt,
 } from '@quackback/db'
 import { headers } from 'next/headers'
+import { generateId, isValidTypeId, type OrgId } from '@quackback/ids'
 
 /**
  * POST /api/auth/workspace-redirect
@@ -31,9 +32,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    if (!workspaceId || typeof workspaceId !== 'string') {
+    if (!workspaceId || typeof workspaceId !== 'string' || !isValidTypeId(workspaceId, 'org')) {
       return NextResponse.json({ error: 'Workspace is required' }, { status: 400 })
     }
+    const orgId = workspaceId as OrgId
 
     // Verify the email token
     const verifiedEmailRecord = await db.query.verification.findFirst({
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     // Find the user in this workspace
     const org = await db.query.organization.findFirst({
-      where: eq(organization.id, workspaceId),
+      where: eq(organization.id, orgId),
     })
 
     if (!org) {
@@ -97,7 +99,7 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + 60 * 1000) // 1 minute
 
     await db.insert(sessionTransferToken).values({
-      id: crypto.randomUUID(),
+      id: generateId('transfer_token'),
       token,
       userId: userRecord.id,
       targetDomain: domain.domain,

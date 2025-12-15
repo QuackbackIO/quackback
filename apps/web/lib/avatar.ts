@@ -1,4 +1,5 @@
 import { db, user as userTable, member as memberTable, eq, inArray } from '@quackback/db'
+import type { UserId, MemberId } from '@quackback/ids'
 
 interface AvatarData {
   avatarUrl: string | null
@@ -14,7 +15,7 @@ interface AvatarData {
  * @returns Avatar data with base64 URL or fallback URL
  */
 export async function getUserAvatarData(
-  userId: string,
+  userId: UserId,
   fallbackImageUrl?: string | null
 ): Promise<AvatarData> {
   const userRecord = await db.query.user.findFirst({
@@ -54,8 +55,8 @@ export async function getUserAvatarData(
  * @returns Map of userId to avatar URL
  */
 export async function getBulkUserAvatarData(
-  userIds: string[]
-): Promise<Map<string, string | null>> {
+  userIds: UserId[]
+): Promise<Map<UserId, string | null>> {
   if (userIds.length === 0) {
     return new Map()
   }
@@ -70,7 +71,7 @@ export async function getBulkUserAvatarData(
     },
   })
 
-  const avatarMap = new Map<string, string | null>()
+  const avatarMap = new Map<UserId, string | null>()
 
   for (const user of users) {
     if (user.imageBlob && user.imageType) {
@@ -99,10 +100,10 @@ export async function getBulkUserAvatarData(
  * @returns Map of memberId to avatar URL (base64 data URL or external URL)
  */
 export async function getBulkMemberAvatarData(
-  memberIds: (string | null)[]
-): Promise<Map<string, string | null>> {
-  // Filter out nulls
-  const validMemberIds = memberIds.filter((id): id is string => id !== null)
+  memberIds: (MemberId | string | null)[]
+): Promise<Map<MemberId, string | null>> {
+  // Filter out nulls and cast to MemberId
+  const validMemberIds = memberIds.filter((id): id is MemberId => id !== null)
 
   if (validMemberIds.length === 0) {
     return new Map()
@@ -121,7 +122,7 @@ export async function getBulkMemberAvatarData(
     .innerJoin(userTable, eq(memberTable.userId, userTable.id))
     .where(inArray(memberTable.id, validMemberIds))
 
-  const avatarMap = new Map<string, string | null>()
+  const avatarMap = new Map<MemberId, string | null>()
 
   for (const member of members) {
     if (member.imageBlob && member.imageType) {

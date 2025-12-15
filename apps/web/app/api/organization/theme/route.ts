@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { organizationService, type BrandingConfig } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
-import { toMemberId } from '@quackback/ids'
 
 // Re-export type for consumers
 export type { BrandingConfig } from '@quackback/domain'
@@ -51,7 +50,7 @@ export const PATCH = withApiHandler(
       {
         userId: validation.user.id,
         organizationId: validation.organization.id,
-        memberId: toMemberId(validation.member.id),
+        memberId: validation.member.id,
         memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
         userName: validation.user.name ?? '',
         userEmail: validation.user.email,

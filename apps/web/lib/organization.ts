@@ -1,11 +1,12 @@
 import { db, organization, eq } from '@quackback/db'
 import type { HeaderDisplayMode } from '@quackback/domain'
+import type { OrgId } from '@quackback/ids'
 
 /**
  * Get organization logo data for SSR.
  * Converts blob to base64 data URL.
  */
-export async function getOrganizationLogoData(organizationId: string): Promise<{
+export async function getOrganizationLogoData(organizationId: OrgId): Promise<{
   logoUrl: string | null
   hasCustomLogo: boolean
 }> {
@@ -28,7 +29,7 @@ export async function getOrganizationLogoData(organizationId: string): Promise<{
  * Get organization favicon data for SSR.
  * Uses the logo as favicon (no separate favicon upload).
  */
-export async function getOrganizationFaviconData(organizationId: string): Promise<{
+export async function getOrganizationFaviconData(organizationId: OrgId): Promise<{
   faviconUrl: string | null
   hasCustomFavicon: boolean
 }> {
@@ -43,7 +44,7 @@ export async function getOrganizationFaviconData(organizationId: string): Promis
 /**
  * Get organization header logo data for SSR.
  */
-export async function getOrganizationHeaderLogoData(organizationId: string): Promise<{
+export async function getOrganizationHeaderLogoData(organizationId: OrgId): Promise<{
   headerLogoUrl: string | null
   hasHeaderLogo: boolean
   headerDisplayMode: HeaderDisplayMode
@@ -86,7 +87,7 @@ export async function getOrganizationHeaderLogoData(organizationId: string): Pro
  * Get organization branding data (logo + header branding) for SSR.
  * Logo is also used as favicon.
  */
-export async function getOrganizationBrandingData(organizationId: string): Promise<{
+export async function getOrganizationBrandingData(organizationId: OrgId): Promise<{
   logoUrl: string | null
   headerLogoUrl: string | null
   headerDisplayMode: HeaderDisplayMode

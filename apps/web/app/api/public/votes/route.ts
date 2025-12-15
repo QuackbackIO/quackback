@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/server'
 import { getPostService } from '@/lib/services'
 import { db, member, eq, and } from '@quackback/db'
 import { getMemberIdentifier } from '@/lib/user-identifier'
+import { isValidTypeId, type OrgId } from '@quackback/ids'
 
 /**
  * GET /api/public/votes
@@ -13,11 +14,15 @@ import { getMemberIdentifier } from '@/lib/user-identifier'
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    const organizationIdParam = searchParams.get('organizationId')
 
-    if (!organizationId) {
+    if (!organizationIdParam) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
+    if (!isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
 
     // Get current user's member ID
     const session = await getSession()

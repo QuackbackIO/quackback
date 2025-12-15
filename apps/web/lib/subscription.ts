@@ -1,12 +1,13 @@
 import { cache } from 'react'
 import { getSubscriptionByOrganizationId } from '@quackback/db/queries/subscriptions'
 import { isCloud, type PricingTier } from '@quackback/domain'
+import type { OrgId, SubscriptionId } from '@quackback/ids'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
 
 export interface OrganizationSubscription {
-  id: string
-  organizationId: string
+  id: SubscriptionId
+  organizationId: OrgId
   tier: PricingTier
   status: SubscriptionStatus
   stripeCustomerId: string | null
@@ -22,7 +23,7 @@ export interface OrganizationSubscription {
  * Cached per request.
  */
 export const getSubscription = cache(
-  async (organizationId: string): Promise<OrganizationSubscription | null> => {
+  async (organizationId: OrgId): Promise<OrganizationSubscription | null> => {
     // OSS edition doesn't use subscriptions
     if (!isCloud()) {
       return null

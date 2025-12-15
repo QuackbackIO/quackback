@@ -27,7 +27,7 @@ import {
 } from '@quackback/db'
 import { getSession } from './auth/server'
 import type { ServiceContext } from '@quackback/domain'
-import { toMemberId } from '@quackback/ids'
+import type { UserId, OrgId } from '@quackback/ids'
 
 // =============================================================================
 // Domain Resolution
@@ -87,8 +87,8 @@ export const getCurrentOrganization = cache(async () => {
  * - user: Portal users with public portal access only
  */
 async function getMemberRecord(
-  userId: string,
-  organizationId: string
+  userId: UserId,
+  organizationId: OrgId
 ): Promise<typeof member.$inferSelect | null> {
   const memberRecord = await db.query.member.findFirst({
     where: and(eq(member.organizationId, organizationId), eq(member.userId, userId)),
@@ -294,7 +294,7 @@ export async function requireAuthenticatedTenant(): Promise<
     serviceContext: {
       organizationId: result.organization.id,
       userId: result.user.id,
-      memberId: toMemberId(result.member.id),
+      memberId: result.member.id,
       memberRole: result.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: result.user.name || result.user.email,
       userEmail: result.user.email,
@@ -334,7 +334,7 @@ export type ApiTenantResult =
  * const { organization, member, user } = validation
  */
 export async function validateApiTenantAccess(
-  organizationId: string | null | undefined
+  organizationId: OrgId | null | undefined
 ): Promise<ApiTenantResult> {
   if (!organizationId) {
     return { success: false, error: 'organizationId is required', status: 400 }
@@ -386,7 +386,7 @@ export async function validateApiTenantAccess(
 type ApiTenantSuccessResult = Extract<ApiTenantResult, { success: true }>
 
 export async function withApiTenantContext<T>(
-  organizationId: string | null | undefined,
+  organizationId: OrgId | null | undefined,
   callback: (ctx: AuthenticatedTenantContext) => Promise<T>
 ): Promise<
   | { success: false; error: string; status: 401 | 403 | 400 }
@@ -552,7 +552,7 @@ export async function requireAuthenticatedTenantBySlug(orgSlug: string): Promise
     serviceContext: {
       organizationId: result.organization.id,
       userId: result.user.id,
-      memberId: toMemberId(result.member.id),
+      memberId: result.member.id,
       memberRole: result.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: result.user.name || result.user.email,
       userEmail: result.user.email,

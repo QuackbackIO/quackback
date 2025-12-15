@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, posts, eq, and } from '@quackback/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import { isValidTypeId, toMemberId, type PostId } from '@quackback/ids'
+import { isValidTypeId, type PostId } from '@quackback/ids'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const subscriptionService = new SubscriptionService()
-    const memberId = toMemberId(memberRecord.id)
+    const memberId = memberRecord.id
     const status = await subscriptionService.getSubscriptionStatus(memberId, postId, organizationId)
 
     return NextResponse.json(status)
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const reason = body.reason || 'manual'
 
     const subscriptionService = new SubscriptionService()
-    const memberId = toMemberId(memberRecord.id)
+    const memberId = memberRecord.id
     await subscriptionService.subscribeToPost(memberId, postId, reason, organizationId)
 
     return NextResponse.json({
@@ -164,7 +164,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const subscriptionService = new SubscriptionService()
-    const memberId = toMemberId(memberRecord.id)
+    const memberId = memberRecord.id
     await subscriptionService.unsubscribeFromPost(memberId, postId, organizationId)
 
     return NextResponse.json({
@@ -228,7 +228,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const subscriptionService = new SubscriptionService()
-    const memberId = toMemberId(memberRecord.id)
+    const memberId = memberRecord.id
     await subscriptionService.setSubscriptionMuted(memberId, postId, body.muted, organizationId)
 
     // Get updated status

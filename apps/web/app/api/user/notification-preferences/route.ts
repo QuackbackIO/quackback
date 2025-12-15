@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and } from '@quackback/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import { toMemberId } from '@quackback/ids'
+import { isValidTypeId, type MemberId, type OrgId } from '@quackback/ids'
 
 /**
  * GET /api/user/notification-preferences
@@ -19,11 +19,15 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    const organizationIdParam = searchParams.get('organizationId')
 
-    if (!organizationId) {
+    if (!organizationIdParam) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
+    if (!isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
 
     // Check membership in the organization
     const memberRecord = await db.query.member.findFirst({
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
 
     const subscriptionService = new SubscriptionService()
-    const memberId = toMemberId(memberRecord.id)
+    const memberId = memberRecord.id as MemberId
     const preferences = await subscriptionService.getNotificationPreferences(
       memberId,
       organizationId
@@ -66,11 +70,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { organizationId, emailStatusChange, emailNewComment, emailMuted } = body
+    const {
+      organizationId: organizationIdParam,
+      emailStatusChange,
+      emailNewComment,
+      emailMuted,
+    } = body
 
-    if (!organizationId) {
+    if (!organizationIdParam) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
     }
+    if (!isValidTypeId(organizationIdParam, 'org')) {
+      return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+    }
+    const organizationId = organizationIdParam as OrgId
 
     // Check membership in the organization
     const memberRecord = await db.query.member.findFirst({
@@ -103,7 +116,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const subscriptionService = new SubscriptionService()
-    const memberId = toMemberId(memberRecord.id)
+    const memberId = memberRecord.id as MemberId
     const preferences = await subscriptionService.updateNotificationPreferences(
       memberId,
       updates,
