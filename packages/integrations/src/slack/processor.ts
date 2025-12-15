@@ -99,7 +99,7 @@ export class SlackIntegration extends BaseIntegration {
       case 'post.created': {
         const { post } = event.data as PostCreatedEventData
         const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
-        const content = this.truncate(this.stripHtml(post.content), 280)
+        const content = this.stripHtml(post.content)
         const author = post.authorEmail || 'Anonymous'
 
         return {
@@ -167,7 +167,7 @@ export class SlackIntegration extends BaseIntegration {
         const { comment, post } = event.data as CommentData
         // Note: comment events don't have boardSlug yet, use generic URL
         const postUrl = `${tenantUrl}/posts/${post.id}`
-        const content = this.truncate(this.stripHtml(comment.content), 200)
+        const content = this.stripHtml(comment.content)
         const author = comment.authorEmail || 'Anonymous'
 
         return {
@@ -196,7 +196,7 @@ export class SlackIntegration extends BaseIntegration {
       case 'changelog.published': {
         const { changelog } = event.data as ChangelogData
         const changelogUrl = `${tenantUrl}/changelog/${changelog.slug}`
-        const content = this.truncate(this.stripHtml(changelog.content), 300)
+        const content = this.stripHtml(changelog.content)
         const actor = event.actor.email || 'System'
 
         return {
