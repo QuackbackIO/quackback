@@ -74,6 +74,8 @@ export class SlackIntegration extends BaseIntegration {
 
       const result = await client.chat.postMessage({
         channel: channelId,
+        unfurl_links: false,
+        unfurl_media: false,
         ...message,
       })
 
