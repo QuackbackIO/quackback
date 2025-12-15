@@ -1,24 +1,84 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, Page, BrowserContext } from '@playwright/test'
+import { getOtpCode } from '../../utils/db-helpers'
+
+const TEST_HOST = 'acme.localhost:3000'
+const TEST_EMAIL = 'demo@example.com'
+
+// Configure test to run serially (no parallelization)
+// This prevents OTP race conditions across different describe blocks
+test.describe.configure({ mode: 'serial' })
+
+/**
+ * Helper function to authenticate using OTP flow via API
+ * This is faster and more reliable than using the UI
+ */
+async function loginWithOTP(page: Page) {
+  const context = page.context()
+
+  // Step 1: Request OTP code via API
+  const sendResponse = await context.request.post('/api/auth/tenant-otp/send', {
+    data: { email: TEST_EMAIL },
+  })
+
+  if (!sendResponse.ok()) {
+    const errorBody = await sendResponse.text()
+    throw new Error(`OTP send failed (${sendResponse.status()}): ${errorBody}`)
+  }
+
+  // Step 2: Get OTP code directly from database
+  const code = getOtpCode(TEST_EMAIL, TEST_HOST)
+  expect(code).toMatch(/^\d{6}$/) // 6-digit code
+
+  // Step 3: Verify OTP code via API with 'portal' context
+  const verifyResponse = await context.request.post('/api/auth/tenant-otp/verify', {
+    data: {
+      email: TEST_EMAIL,
+      code,
+      context: 'portal',
+      callbackUrl: '/',
+    },
+  })
+  expect(verifyResponse.ok()).toBeTruthy()
+
+  const verifyData = await verifyResponse.json()
+  expect(verifyData.success).toBe(true)
+  expect(verifyData.redirectUrl).toBeTruthy()
+
+  // Step 4: Navigate to trust-login URL to complete authentication
+  // This sets the session cookie
+  await page.goto(verifyData.redirectUrl)
+  await page.waitForLoadState('networkidle')
+
+  // Verify we're on the home page (portal)
+  await expect(page).toHaveURL('/', { timeout: 10000 })
+}
+
+// Global variables to share context and page across all tests
+let globalContext: BrowserContext
+let globalPage: Page
+
+// Set up authentication once for the entire file
+test.beforeAll(async ({ browser }) => {
+  globalContext = await browser.newContext()
+  globalPage = await globalContext.newPage()
+  await loginWithOTP(globalPage)
+})
+
+// Clean up after all tests in the file
+test.afterAll(async () => {
+  await globalPage.close()
+  await globalContext.close()
+})
 
 test.describe('Public Post Submission', () => {
-  test.beforeEach(async ({ page }) => {
-    // Post submission requires authentication
-    // Login with demo credentials
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
-
-    await page.locator('input[type="email"]').fill('demo@example.com')
-    await page.locator('input[type="password"]').fill('demo1234')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-
-    // Wait for redirect after login
-    await page.waitForURL('**/*', { timeout: 10000 })
-    await page.waitForLoadState('networkidle')
-
-    // Navigate to the public portal
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+  test.beforeEach(async () => {
+    // Navigate to home for each test
+    await globalPage.goto('/')
+    await globalPage.waitForLoadState('networkidle')
   })
+
+  // Pass the global page to each test
+  test.use({ page: async (_, use) => await use(globalPage) })
 
   test('can open submit post dialog', async ({ page }) => {
     // Find and click the "Create post" button
@@ -228,18 +288,14 @@ test.describe('Public Post Submission', () => {
 
 // Phase 1.5: Board Selector Tests
 test.describe('Board Selector', () => {
-  test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
-    await page.locator('input[type="email"]').fill('demo@example.com')
-    await page.locator('input[type="password"]').fill('demo1234')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-    await page.waitForURL('**/*', { timeout: 10000 })
-
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+  test.beforeEach(async () => {
+    // Navigate to home for each test
+    await globalPage.goto('/')
+    await globalPage.waitForLoadState('networkidle')
   })
+
+  // Pass the global page to each test
+  test.use({ page: async (_, use) => await use(globalPage) })
 
   test('board selector is visible in dialog header', async ({ page }) => {
     // Open the dialog
@@ -568,21 +624,18 @@ test.describe('Board Selector', () => {
 
 // Phase 2: Rich Text Editor Tests
 test.describe('Rich Text Editor', () => {
-  test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
-    await page.locator('input[type="email"]').fill('demo@example.com')
-    await page.locator('input[type="password"]').fill('demo1234')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-    await page.waitForURL('**/*', { timeout: 10000 })
+  test.beforeEach(async () => {
+    // Navigate to home for each test
+    await globalPage.goto('/')
+    await globalPage.waitForLoadState('networkidle')
 
-    // Navigate to portal and open dialog
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
-    await page.getByRole('button', { name: /create post/i }).click()
-    await expect(page.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    // Open the dialog for all tests
+    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
   })
+
+  // Pass the global page to each test
+  test.use({ page: async (_, use) => await use(globalPage) })
 
   test('can type plain text in editor', async ({ page }) => {
     const editor = page.locator('.tiptap')
@@ -737,18 +790,14 @@ test.describe('Rich Text Editor', () => {
 
 // Phase 3: Submission States and Integration Tests
 test.describe('Submission States and Integration', () => {
-  test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
-    await page.locator('input[type="email"]').fill('demo@example.com')
-    await page.locator('input[type="password"]').fill('demo1234')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-    await page.waitForURL('**/*', { timeout: 10000 })
-
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+  test.beforeEach(async () => {
+    // Navigate to home for each test
+    await globalPage.goto('/')
+    await globalPage.waitForLoadState('networkidle')
   })
+
+  // Pass the global page to each test
+  test.use({ page: async (_, use) => await use(globalPage) })
 
   test('Submit button shows "Submit" initially', async ({ page }) => {
     await page.getByRole('button', { name: /create post/i }).click()

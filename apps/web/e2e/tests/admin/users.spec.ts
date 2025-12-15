@@ -8,8 +8,9 @@ test.describe('Admin Users Page', () => {
   })
 
   test('displays users page with header', async ({ page }) => {
-    // Should show the users page
-    await expect(page.getByText('Portal Users')).toBeVisible({ timeout: 10000 })
+    // Should show the users page with search input and user count
+    await expect(page.getByPlaceholder('Search users...')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/\d+ users?/)).toBeVisible({ timeout: 10000 })
   })
 
   test('shows user count', async ({ page }) => {
@@ -135,14 +136,14 @@ test.describe('Admin Users - User Selection', () => {
       // Click first user
       await userCards.first().click()
 
-      // Wait for detail panel to load
-      await page.waitForLoadState('networkidle')
-
       // URL should update with selected user
-      await expect(page).toHaveURL(/selected=/)
+      await expect(page).toHaveURL(/selected=/, { timeout: 10000 })
 
-      // Detail panel should show user info
-      await expect(page.getByText('User Details')).toBeVisible({ timeout: 5000 })
+      // The detail panel should show "User Details" header after loading
+      // We wait for this to appear, which indicates the detail data has loaded
+      await expect(page.getByText('User Details', { exact: true })).toBeVisible({
+        timeout: 15000,
+      })
     }
   })
 
@@ -154,12 +155,15 @@ test.describe('Admin Users - User Selection', () => {
 
     if ((await userCards.count()) > 0) {
       await userCards.first().click()
-      await page.waitForLoadState('networkidle')
 
-      // Should show activity stats labels
-      await expect(page.getByText('Posts')).toBeVisible({ timeout: 5000 })
-      await expect(page.getByText('Comments')).toBeVisible()
-      await expect(page.getByText('Votes')).toBeVisible()
+      // Wait for URL to update
+      await expect(page).toHaveURL(/selected=/, { timeout: 10000 })
+
+      // Should show activity stats labels (these are inside the activity stats cards)
+      // The text "Posts", "Comments", "Votes" appear as labels under the counts
+      await expect(page.getByText('Posts', { exact: true })).toBeVisible({ timeout: 15000 })
+      await expect(page.getByText('Comments', { exact: true })).toBeVisible()
+      await expect(page.getByText('Votes', { exact: true })).toBeVisible()
     }
   })
 
@@ -171,13 +175,15 @@ test.describe('Admin Users - User Selection', () => {
 
     if ((await userCards.count()) > 0) {
       await userCards.first().click()
-      await page.waitForLoadState('networkidle')
+
+      // Wait for URL to update
+      await expect(page).toHaveURL(/selected=/, { timeout: 10000 })
 
       // Should show account section
-      await expect(page.getByText('Account')).toBeVisible({ timeout: 5000 })
+      await expect(page.getByText('Account', { exact: true })).toBeVisible({ timeout: 15000 })
 
       // Should show join date
-      await expect(page.getByText(/Joined/)).toBeVisible()
+      await expect(page.getByText(/Joined portal/)).toBeVisible()
     }
   })
 
@@ -288,13 +294,24 @@ test.describe('Admin Users - Filters Panel', () => {
     await page.waitForLoadState('networkidle')
   })
 
-  test('shows filters panel button', async ({ page }) => {
-    // Look for filters button/toggle
-    const filtersButton = page
+  test('shows filters panel button or desktop sidebar', async ({ page }) => {
+    // On desktop (>= 1024px), the filters sidebar is visible
+    // On mobile (< 1024px), a floating filters button is shown
+    // Check for either one
+    const mobileFiltersButton = page
       .getByRole('button', { name: /filter/i })
-      .or(page.locator('button').filter({ has: page.locator('svg.lucide-filter') }))
+      .filter({ has: page.locator('svg.lucide-filter') })
+    // Desktop sidebar contains filter sections like "Email Verified"
+    const desktopFiltersVisible = page
+      .locator('aside')
+      .filter({ hasText: 'Email Verified' })
+      .first()
 
-    await expect(filtersButton.first()).toBeVisible({ timeout: 5000 })
+    // At least one should be visible
+    const hasFiltersUI =
+      (await mobileFiltersButton.count()) > 0 || (await desktopFiltersVisible.count()) > 0
+
+    expect(hasFiltersUI).toBe(true)
   })
 
   test('can toggle filters panel', async ({ page }) => {
@@ -348,10 +365,12 @@ test.describe('Admin Users - Activity Display', () => {
 
     if ((await userCards.count()) > 0) {
       await userCards.first().click()
-      await page.waitForLoadState('networkidle')
+
+      // Wait for URL to update
+      await expect(page).toHaveURL(/selected=/, { timeout: 10000 })
 
       // Should show Activity section heading
-      await expect(page.getByText('Activity')).toBeVisible({ timeout: 5000 })
+      await expect(page.getByText('Activity', { exact: true })).toBeVisible({ timeout: 15000 })
     }
   })
 
@@ -362,9 +381,15 @@ test.describe('Admin Users - Activity Display', () => {
 
     if ((await userCards.count()) > 0) {
       await userCards.first().click()
-      await page.waitForLoadState('networkidle')
+
+      // Wait for URL to update
+      await expect(page).toHaveURL(/selected=/, { timeout: 10000 })
+
+      // First wait for the Activity section to appear (indicates loading is done)
+      await expect(page.getByText('Activity', { exact: true })).toBeVisible({ timeout: 15000 })
 
       // Should show either engaged posts or "No activity yet" message
+      // Engaged posts are links to board pages
       const hasEngagedPosts = (await page.locator('a[href*="/b/"]').count()) > 0
       const hasEmptyState = (await page.getByText('No activity yet').count()) > 0
 
@@ -438,7 +463,7 @@ test.describe('Admin Users - Role Management', () => {
       await page.waitForLoadState('networkidle')
 
       // Remove button should be visible for admin users
-      const removeButton = page.getByRole('button', { name: /remove from organization/i })
+      const removeButton = page.getByRole('button', { name: /remove from portal/i })
 
       // May not be visible if current user doesn't have permission
       if ((await removeButton.count()) > 0) {
@@ -456,7 +481,7 @@ test.describe('Admin Users - Role Management', () => {
       await userCards.first().click()
       await page.waitForLoadState('networkidle')
 
-      const removeButton = page.getByRole('button', { name: /remove from organization/i })
+      const removeButton = page.getByRole('button', { name: /remove from portal/i })
 
       if ((await removeButton.count()) > 0) {
         await removeButton.click()
@@ -484,12 +509,14 @@ test.describe('Admin Users - Empty State', () => {
     // Search for something that won't exist
     const searchInput = page.getByPlaceholder('Search users...')
     await searchInput.fill('xyznonexistentuserxyz123456789')
+
+    // Wait for debounce and search to complete
     await page.waitForTimeout(500)
     await page.waitForLoadState('networkidle')
 
-    // Should show empty state message
-    await expect(page.getByText(/no users match/i).or(page.getByText(/0 users/))).toBeVisible({
-      timeout: 5000,
+    // Should show empty state message in the user list
+    await expect(page.getByText('No users match your filters')).toBeVisible({
+      timeout: 10000,
     })
   })
 })

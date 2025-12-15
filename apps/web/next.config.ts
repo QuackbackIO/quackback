@@ -1,7 +1,12 @@
 import type { NextConfig } from 'next'
+import { resolve } from 'path'
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   transpilePackages: ['@quackback/db', '@quackback/domain'],
+  turbopack: {
+    root: resolve(__dirname, '../..'),
+  },
   allowedDevOrigins: ['localhost', '*.localhost', '*.ngrok.app', '*.quackback.ngrok.app'],
   async headers() {
     return [

@@ -54,6 +54,8 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        /* Use larger viewport to ensure detail panels are visible */
+        viewport: { width: 1920, height: 1080 },
         /* Use saved auth state */
         storageState: 'e2e/.auth/admin.json',
       },

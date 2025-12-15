@@ -131,42 +131,47 @@ export function checkRateLimit(identifier: string, config: RateLimitConfig): Rat
   }
 }
 
+// Use higher limits in development/test environments
+const isDevOrTest = process.env.NODE_ENV !== 'production'
+const devMultiplier = isDevOrTest ? 10 : 1
+
 /**
  * Pre-configured rate limits for common scenarios
+ * Limits are 10x higher in development/test environments
  */
 export const rateLimits = {
-  /** Login attempts: 5 per minute per IP */
-  login: { limit: 5, windowMs: 60 * 1000 },
+  /** Login attempts: 5 per minute per IP (50 in dev) */
+  login: { limit: 5 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** Signup attempts: 3 per minute per IP */
-  signup: { limit: 3, windowMs: 60 * 1000 },
+  /** Signup attempts: 3 per minute per IP (30 in dev) */
+  signup: { limit: 3 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** OTP code requests: 3 per 15 minutes per email */
-  otpRequest: { limit: 3, windowMs: 15 * 60 * 1000 },
+  /** OTP code requests: 3 per 15 minutes per email (30 in dev) */
+  otpRequest: { limit: 3 * devMultiplier, windowMs: 15 * 60 * 1000 },
 
-  /** Workspace creation: 3 per hour per IP */
-  workspaceCreation: { limit: 3, windowMs: 60 * 60 * 1000 },
+  /** Workspace creation: 3 per hour per IP (30 in dev) */
+  workspaceCreation: { limit: 3 * devMultiplier, windowMs: 60 * 60 * 1000 },
 
-  /** API general: 100 per minute per IP */
-  apiGeneral: { limit: 100, windowMs: 60 * 1000 },
+  /** API general: 100 per minute per IP (1000 in dev) */
+  apiGeneral: { limit: 100 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** Vote attempts (anonymous): 20 per minute per IP */
-  voteGlobalAnonymous: { limit: 20, windowMs: 60 * 1000 },
+  /** Vote attempts (anonymous): 20 per minute per IP (200 in dev) */
+  voteGlobalAnonymous: { limit: 20 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** Vote attempts per post (anonymous): 5 per minute */
-  votePerPostAnonymous: { limit: 5, windowMs: 60 * 1000 },
+  /** Vote attempts per post (anonymous): 5 per minute (50 in dev) */
+  votePerPostAnonymous: { limit: 5 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** Vote attempts (authenticated): 60 per minute per user */
-  voteGlobalAuthenticated: { limit: 60, windowMs: 60 * 1000 },
+  /** Vote attempts (authenticated): 60 per minute per user (600 in dev) */
+  voteGlobalAuthenticated: { limit: 60 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** Vote attempts per post (authenticated): 10 per minute */
-  votePerPostAuthenticated: { limit: 10, windowMs: 60 * 1000 },
+  /** Vote attempts per post (authenticated): 10 per minute (100 in dev) */
+  votePerPostAuthenticated: { limit: 10 * devMultiplier, windowMs: 60 * 1000 },
 
-  /** Signin code requests: 5 per 15 minutes per IP */
-  signinCode: { limit: 5, windowMs: 15 * 60 * 1000 },
+  /** Signin code requests: 5 per 15 minutes per IP (50 in dev) */
+  signinCode: { limit: 5 * devMultiplier, windowMs: 15 * 60 * 1000 },
 
-  /** Signin code verification: 10 per 15 minutes per IP */
-  signinCodeVerify: { limit: 10, windowMs: 15 * 60 * 1000 },
+  /** Signin code verification: 10 per 15 minutes per IP (100 in dev) */
+  signinCodeVerify: { limit: 10 * devMultiplier, windowMs: 15 * 60 * 1000 },
 } as const
 
 /**

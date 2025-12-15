@@ -1,120 +1,234 @@
 import { test, expect } from '@playwright/test'
 import { TEST_ADMIN } from '../../fixtures/auth'
+import { getOtpCode } from '../../utils/db-helpers'
 
-test.describe('Admin Login', () => {
+const TEST_HOST = 'acme.localhost:3000'
+
+test.describe('Admin Login with OTP', () => {
+  // Configure tests to run serially to avoid OTP race conditions
+  // Multiple tests requesting OTP codes for the same email in parallel
+  // can interfere with each other since getOtpCode() retrieves the most recent code
+  test.describe.configure({ mode: 'serial' })
+
   test.beforeEach(async ({ page }) => {
     // Start fresh - clear any existing session
     await page.context().clearCookies()
   })
 
-  test('shows login form with email and password fields', async ({ page }) => {
-    // Navigate to login page (may be /admin/login or /login depending on routing)
+  test('shows OTP login form with email input', async ({ page }) => {
     await page.goto('/admin/login')
 
-    // Wait for page to settle - accept either admin or portal login page
-    const heading = page.getByRole('heading', { name: /team sign in|welcome back/i, level: 1 })
+    // Wait for page heading
+    const heading = page.getByRole('heading', { name: /team sign in/i, level: 1 })
     await expect(heading).toBeVisible({ timeout: 15000 })
 
-    // Check for email and password fields using placeholder or type
-    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 10000 })
-    await expect(page.locator('input[type="password"]')).toBeVisible({ timeout: 5000 })
+    // Check for description text
+    await expect(page.getByText(/sign in to access the admin dashboard/i)).toBeVisible()
 
-    // Use exact match to avoid OAuth buttons (Sign in with Google, Sign in with GitHub)
-    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible({
-      timeout: 5000,
-    })
+    // Check for email input field
+    const emailInput = page.locator('input[type="email"]')
+    await expect(emailInput).toBeVisible()
+    await expect(emailInput).toHaveAttribute('placeholder', 'you@example.com')
+
+    // Check for continue button (not "Sign in" anymore, but "Continue with email")
+    await expect(page.getByRole('button', { name: /continue with email/i })).toBeVisible()
   })
 
-  test('logs in with valid credentials', async ({ page }) => {
+  test('completes full OTP login flow', async ({ page }) => {
     await page.goto('/admin/login')
 
-    // Wait for form to be fully loaded and interactive
+    // Step 1: Enter email
     const emailInput = page.locator('input[type="email"]')
     await expect(emailInput).toBeVisible({ timeout: 15000 })
-    await expect(emailInput).toBeEnabled({ timeout: 5000 })
+    await expect(emailInput).toBeEnabled()
 
     await emailInput.fill(TEST_ADMIN.email)
-    await page.locator('input[type="password"]').fill(TEST_ADMIN.password)
 
-    // Submit form and wait for auth API response
-    const [response] = await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/sign-in/email'), {
+    // Submit email and wait for OTP send API response
+    const [sendResponse] = await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send'), {
         timeout: 15000,
       }),
-      page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
-    expect(response.ok()).toBeTruthy()
+    expect(sendResponse.ok()).toBeTruthy()
 
-    // Wait for auth to be established then navigate to admin
-    await page.waitForTimeout(1000) // Brief wait for session cookie to be set
-    await page.goto('/admin')
+    // Step 2: Code input should now be visible
+    await expect(page.getByText(/we sent a 6-digit code to/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(TEST_ADMIN.email)).toBeVisible()
+
+    // Get the OTP code from the database
+    const code = getOtpCode(TEST_ADMIN.email, TEST_HOST)
+    expect(code).toMatch(/^\d{6}$/) // Should be a 6-digit code
+
+    // Enter the code
+    const codeInput = page.locator('input#code')
+    await expect(codeInput).toBeVisible()
+    await expect(codeInput).toHaveAttribute('maxlength', '6')
+    await codeInput.fill(code)
+
+    // Submit code and wait for verification
+    const [verifyResponse] = await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/verify'), {
+        timeout: 15000,
+      }),
+      page.getByRole('button', { name: /verify code/i }).click(),
+    ])
+
+    expect(verifyResponse.ok()).toBeTruthy()
+
+    // Should redirect to admin dashboard after successful authentication
     await expect(page).toHaveURL(/\/admin/, { timeout: 15000 })
   })
 
-  test('shows error with invalid credentials', async ({ page }) => {
+  test('shows error with invalid OTP code', async ({ page }) => {
     await page.goto('/admin/login')
 
-    // Wait for form to be fully loaded and interactive
+    // Step 1: Enter email and request OTP
     const emailInput = page.locator('input[type="email"]')
-    await expect(emailInput).toBeVisible({ timeout: 15000 })
-    await expect(emailInput).toBeEnabled({ timeout: 5000 })
+    await emailInput.fill(TEST_ADMIN.email)
 
-    await emailInput.fill('invalid@example.com')
-    await page.locator('input[type="password"]').fill('wrongpassword')
-
-    // Click and wait for the error response
     await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/sign-in/email'), {
-        timeout: 15000,
-      }),
-      page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
-    // Should show error message (increase timeout for slower CI)
-    await expect(page.getByText(/invalid|error|incorrect/i)).toBeVisible({ timeout: 10000 })
+    // Step 2: Enter invalid code
+    const codeInput = page.locator('input#code')
+    await expect(codeInput).toBeVisible({ timeout: 10000 })
+    await codeInput.fill('000000') // Invalid code
 
-    // Should stay on a login page (either /admin/login or /login)
-    await expect(page).toHaveURL(/\/login/)
+    // Submit and wait for error
+    await page.getByRole('button', { name: /verify code/i }).click()
+
+    // Should show error message
+    await expect(page.getByText(/invalid|incorrect|failed to verify/i)).toBeVisible({
+      timeout: 10000,
+    })
+
+    // Should stay on the code verification step
+    await expect(codeInput).toBeVisible()
   })
 
-  test('redirects to callback URL after login', async ({ page }) => {
+  test('allows going back from code step to email step', async ({ page }) => {
+    await page.goto('/admin/login')
+
+    // Enter email and proceed to code step
+    const emailInput = page.locator('input[type="email"]')
+    await emailInput.fill(TEST_ADMIN.email)
+
+    await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.getByRole('button', { name: /continue with email/i }).click(),
+    ])
+
+    // Verify we're on code step
+    await expect(page.locator('input#code')).toBeVisible({ timeout: 10000 })
+
+    // Click back button
+    const backButton = page.getByRole('button', { name: /back/i })
+    await expect(backButton).toBeVisible()
+    await backButton.click()
+
+    // Should be back on email step
+    await expect(page.locator('input[type="email"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: /continue with email/i })).toBeVisible()
+  })
+
+  test('redirects to callback URL after successful login', async ({ page }) => {
     const callbackUrl = '/admin/settings/boards'
     await page.goto(`/admin/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
 
-    // Wait for form to be fully loaded and interactive
+    // Complete OTP flow
     const emailInput = page.locator('input[type="email"]')
-    await expect(emailInput).toBeVisible({ timeout: 15000 })
-    await expect(emailInput).toBeEnabled({ timeout: 5000 })
-
     await emailInput.fill(TEST_ADMIN.email)
-    await page.locator('input[type="password"]').fill(TEST_ADMIN.password)
 
-    // Submit form and wait for auth API response
-    const [response] = await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/sign-in/email'), {
-        timeout: 15000,
-      }),
-      page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+    await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
-    expect(response.ok()).toBeTruthy()
+    // Get OTP code and verify
+    const code = getOtpCode(TEST_ADMIN.email, TEST_HOST)
+    const codeInput = page.locator('input#code')
+    await expect(codeInput).toBeVisible({ timeout: 10000 })
+    await codeInput.fill(code)
 
-    // Wait for auth to be established then navigate to callback URL
-    await page.waitForTimeout(1000) // Brief wait for session cookie to be set
-    await page.goto(callbackUrl)
+    const [verifyResponse] = await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/verify')),
+      page.getByRole('button', { name: /verify code/i }).click(),
+    ])
+
+    expect(verifyResponse.ok()).toBeTruthy()
+
+    // Should redirect to the callback URL
     await expect(page).toHaveURL(new RegExp(callbackUrl), { timeout: 15000 })
   })
 
-  test('has link to signup page', async ({ page }) => {
+  test('shows resend code option after cooldown', async ({ page }) => {
     await page.goto('/admin/login')
 
-    // Wait for page to load by checking for the signup link
-    const signupLink = page.getByRole('link', { name: /sign up/i })
-    await expect(signupLink).toBeVisible({ timeout: 15000 })
+    // Request OTP code
+    const emailInput = page.locator('input[type="email"]')
+    await emailInput.fill(TEST_ADMIN.email)
 
-    // Accept either /admin/signup or /signup depending on which login page we're on
-    const href = await signupLink.getAttribute('href')
-    expect(href).toMatch(/signup/)
+    await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.getByRole('button', { name: /continue with email/i }).click(),
+    ])
+
+    // Should see resend button (initially disabled with cooldown)
+    await expect(page.locator('input#code')).toBeVisible({ timeout: 10000 })
+    const resendButton = page.getByRole('button', { name: /resend code in \d+s/i })
+    await expect(resendButton).toBeVisible()
+    await expect(resendButton).toBeDisabled()
+
+    // After some time, check the cooldown text changes (not waiting full 60s)
+    // Just verify the pattern exists
+    await expect(page.getByText(/resend code in \d+s/i)).toBeVisible()
+  })
+
+  test('shows OAuth login options', async ({ page }) => {
+    await page.goto('/admin/login')
+
+    // OAuth buttons should be visible before entering email
+    // Based on the OTPAuthForm component, OAuth is shown with showOAuth=true
+    await expect(page.getByRole('button', { name: /sign in with google/i })).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(page.getByRole('button', { name: /sign in with github/i })).toBeVisible()
+
+    // Separator text
+    await expect(page.getByText(/or continue with email/i)).toBeVisible()
+  })
+
+  test('verify code button is disabled until 6 digits entered', async ({ page }) => {
+    await page.goto('/admin/login')
+
+    // Request OTP code
+    const emailInput = page.locator('input[type="email"]')
+    await emailInput.fill(TEST_ADMIN.email)
+
+    await Promise.all([
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.getByRole('button', { name: /continue with email/i }).click(),
+    ])
+
+    const codeInput = page.locator('input#code')
+    await expect(codeInput).toBeVisible({ timeout: 10000 })
+
+    const verifyButton = page.getByRole('button', { name: /verify code/i })
+
+    // Button should be disabled initially
+    await expect(verifyButton).toBeDisabled()
+
+    // Enter only 3 digits
+    await codeInput.fill('123')
+    await expect(verifyButton).toBeDisabled()
+
+    // Enter 6 digits
+    await codeInput.fill('123456')
+    await expect(verifyButton).toBeEnabled()
   })
 })
