@@ -15,7 +15,7 @@ import {
   type Tag,
   type UnitOfWork,
 } from '@quackback/db'
-import type { TagId, BoardId } from '@quackback/ids'
+import type { TagId, BoardId, OrgId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { TagError } from './tag.errors'
@@ -266,7 +266,7 @@ export class TagService {
    * @param organizationId - Organization ID
    * @returns Result containing array of tags or an error
    */
-  async listPublicTags(organizationId: string): Promise<Result<Tag[], TagError>> {
+  async listPublicTags(organizationId: OrgId): Promise<Result<Tag[], TagError>> {
     try {
       const { db, tags, asc, eq } = await import('@quackback/db')
 

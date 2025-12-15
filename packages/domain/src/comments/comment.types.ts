@@ -2,7 +2,7 @@
  * Input/Output types for CommentService operations
  */
 
-import type { PostId, CommentId, BoardId, MemberId } from '@quackback/ids'
+import type { PostId, CommentId, BoardId, MemberId, OrgId } from '@quackback/ids'
 
 /**
  * Input for creating a new comment
@@ -80,9 +80,9 @@ export interface CommentContext {
   }
   board: {
     id: BoardId
-    organizationId: string
+    organizationId: OrgId
     name: string
     slug: string
   }
-  organizationId: string
+  organizationId: OrgId
 }

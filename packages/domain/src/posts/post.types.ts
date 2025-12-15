@@ -3,7 +3,7 @@
  */
 
 import type { Post, Board, Tag } from '@quackback/db/types'
-import type { PostId, BoardId, TagId, StatusId, MemberId } from '@quackback/ids'
+import type { PostId, BoardId, TagId, StatusId, MemberId, OrgId } from '@quackback/ids'
 import type { CommentReactionCount } from '../comments/comment.types'
 
 /**
@@ -60,7 +60,7 @@ export interface PostWithDetails extends Post {
     id: BoardId
     name: string
     slug: string
-    organizationId: string
+    organizationId: OrgId
   }
   tags: Array<{
     id: TagId

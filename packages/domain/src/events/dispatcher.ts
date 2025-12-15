@@ -4,6 +4,7 @@
  */
 import { createRedisClient, addIntegrationJob } from '@quackback/jobs'
 import { db, organizationIntegrations, integrationEventMappings, eq } from '@quackback/db'
+import type { OrgId } from '@quackback/ids'
 import type { DomainEvent } from './types'
 
 const CACHE_TTL = 300 // 5 minutes
@@ -76,7 +77,7 @@ export async function dispatchToIntegrations(event: DomainEvent): Promise<void> 
 /**
  * Gets integration mappings for an organization with Redis caching.
  */
-async function getCachedMappings(organizationId: string): Promise<CachedMapping[]> {
+async function getCachedMappings(organizationId: OrgId): Promise<CachedMapping[]> {
   const redis = getRedis()
   const cacheKey = `int:mappings:${organizationId}`
 
@@ -116,7 +117,7 @@ async function getCachedMappings(organizationId: string): Promise<CachedMapping[
  * Invalidates the mapping cache for an organization.
  * Call this when integration config changes.
  */
-export async function invalidateMappingCache(organizationId: string): Promise<void> {
+export async function invalidateMappingCache(organizationId: OrgId): Promise<void> {
   const redis = getRedis()
   await redis.del(`int:mappings:${organizationId}`)
 }

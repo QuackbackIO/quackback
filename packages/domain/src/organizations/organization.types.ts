@@ -5,6 +5,8 @@
  * This allows adding new settings without migrations.
  */
 
+import type { OrgId } from '@quackback/ids'
+
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
 // =============================================================================
@@ -212,7 +214,7 @@ export interface SamlConfig {
  */
 export interface SsoProvider {
   id: string
-  organizationId: string
+  organizationId: OrgId
   providerId: string
   issuer: string
   domain: string

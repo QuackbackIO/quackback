@@ -1,6 +1,7 @@
 /**
  * Domain event types for integration dispatching.
  */
+import type { OrgId } from '@quackback/ids'
 
 export type DomainEventType =
   | 'post.created'
@@ -20,7 +21,7 @@ export type EventActor =
 export interface DomainEvent<T = unknown> {
   id: string
   type: DomainEventType
-  organizationId: string
+  organizationId: OrgId
   timestamp: string
   actor: EventActor
   data: T

@@ -10,7 +10,7 @@
  */
 
 import { withUnitOfWork, StatusRepository, eq, sql, posts, type UnitOfWork } from '@quackback/db'
-import type { StatusId } from '@quackback/ids'
+import type { StatusId, OrgId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { StatusError } from './status.errors'
@@ -381,7 +381,7 @@ export class StatusService {
    * @param organizationId - Organization ID to seed statuses for
    * @returns Result containing the created statuses or an error
    */
-  async seedDefaultStatuses(organizationId: string): Promise<Result<Status[], StatusError>> {
+  async seedDefaultStatuses(organizationId: OrgId): Promise<Result<Status[], StatusError>> {
     try {
       const { db, postStatuses, DEFAULT_STATUSES } = await import('@quackback/db')
 
@@ -411,7 +411,7 @@ export class StatusService {
    * @param organizationId - Organization ID
    * @returns Result containing array of statuses or an error
    */
-  async listPublicStatuses(organizationId: string): Promise<Result<Status[], StatusError>> {
+  async listPublicStatuses(organizationId: OrgId): Promise<Result<Status[], StatusError>> {
     try {
       const { db, postStatuses, asc } = await import('@quackback/db')
 

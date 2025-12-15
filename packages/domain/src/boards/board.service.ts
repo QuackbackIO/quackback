@@ -22,7 +22,7 @@ import {
   boards,
   posts,
 } from '@quackback/db'
-import type { BoardId, PostId } from '@quackback/ids'
+import type { BoardId, PostId, OrgId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { BoardError } from './board.errors'
@@ -411,7 +411,7 @@ export class BoardService {
    * @returns Result containing array of public boards with stats or an error
    */
   async listPublicBoardsWithStats(
-    organizationId: string
+    organizationId: OrgId
   ): Promise<Result<BoardWithStats[], BoardError>> {
     try {
       // Fetch all public boards for the organization
@@ -463,7 +463,7 @@ export class BoardService {
    * @returns Result containing the board or null if not found/not public
    */
   async getPublicBoardBySlug(
-    organizationId: string,
+    organizationId: OrgId,
     slug: string
   ): Promise<Result<Board | null, BoardError>> {
     try {
@@ -526,7 +526,7 @@ export class BoardService {
    * @param organizationId - Organization ID
    * @returns Result containing the board count
    */
-  async countBoardsByOrg(organizationId: string): Promise<Result<number, BoardError>> {
+  async countBoardsByOrg(organizationId: OrgId): Promise<Result<number, BoardError>> {
     try {
       const result = await db
         .select({ count: sql<number>`count(*)`.as('count') })
@@ -555,7 +555,7 @@ export class BoardService {
    */
   async validateBoardBelongsToOrg(
     boardId: BoardId,
-    organizationId: string
+    organizationId: OrgId
   ): Promise<Result<Board, BoardError>> {
     try {
       const board = await db.query.boards.findFirst({

@@ -30,7 +30,7 @@ import {
   postStatuses,
   type Database,
 } from '@quackback/db'
-import { toMemberId, type MemberId } from '@quackback/ids'
+import type { MemberId, OrgId } from '@quackback/ids'
 import { ok, err, type Result } from '../shared/result'
 import { UserError } from './user.errors'
 import type {
@@ -54,7 +54,7 @@ export class UserService {
    * using the indexed member_id columns on posts, comments, and votes tables.
    */
   async listPortalUsers(
-    organizationId: string,
+    organizationId: OrgId,
     params: PortalUserListParams = {}
   ): Promise<Result<PortalUserListResult, UserError>> {
     try {
@@ -215,7 +215,7 @@ export class UserService {
    */
   async getPortalUserDetail(
     memberId: MemberId,
-    organizationId: string
+    organizationId: OrgId
   ): Promise<Result<PortalUserDetail | null, UserError>> {
     try {
       // Get member with user details (filter for role='user')
@@ -246,8 +246,8 @@ export class UserService {
       }
 
       const memberData = memberResult[0]
-      // Convert raw member ID to MemberId format for queries
-      const memberIdForQuery = toMemberId(memberData.memberId)
+      // memberData.memberId is already in MemberId format from the query
+      const memberIdForQuery = memberData.memberId
 
       // Use withTenantContext for RLS-protected queries (posts, comments, votes)
       const engagementData = await withTenantContext(organizationId, async (tx: Database) => {
@@ -475,8 +475,8 @@ export class UserService {
    * Since users are org-scoped, this also deletes the user record (CASCADE).
    */
   async removePortalUser(
-    memberId: string,
-    organizationId: string
+    memberId: MemberId,
+    organizationId: OrgId
   ): Promise<Result<void, UserError>> {
     try {
       // Verify member exists, belongs to this org, and has role='user'

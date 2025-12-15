@@ -35,6 +35,7 @@ import {
   type StatusId,
   type TagId,
   type MemberId,
+  type OrgId,
 } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
@@ -121,6 +122,7 @@ export class PostService {
       }
 
       // Create the post with member-scoped identity
+      // Convert member TypeID back to raw UUID for database foreign key
       const post = await postRepo.create({
         organizationId: ctx.organizationId,
         boardId: input.boardId,
@@ -138,12 +140,13 @@ export class PostService {
         await postRepo.setTags(post.id, input.tagIds)
       }
 
-      // Auto-subscribe the author to their own post
+      // Auto-subscribe the author to their own post (within the same transaction)
       if (ctx.memberId) {
         const subscriptionService = new SubscriptionService()
-        subscriptionService
-          .subscribeToPost(ctx.memberId, post.id, 'author', ctx.organizationId)
-          .catch((err) => console.error('[Subscriptions] Failed to auto-subscribe author:', err))
+        await subscriptionService.subscribeToPost(ctx.memberId, post.id, 'author', {
+          organizationId: ctx.organizationId,
+          db: uow.db,
+        })
       }
 
       // Emit post.created event for integrations
@@ -244,8 +247,9 @@ export class PostService {
           updateData.officialResponseAt = null
         } else {
           // Set or update official response with member-scoped identity
+          const responseMemberId = input.officialResponseMemberId || ctx.memberId
           updateData.officialResponse = input.officialResponse
-          updateData.officialResponseMemberId = input.officialResponseMemberId || ctx.memberId
+          updateData.officialResponseMemberId = responseMemberId
           updateData.officialResponseAuthorName = input.officialResponseAuthorName || ctx.userName
           updateData.officialResponseAt = new Date()
         }
@@ -306,11 +310,9 @@ export class PostService {
       // Uses existing unique index on (post_id, user_identifier)
       // Convert TypeIDs to UUIDs for raw SQL query
       const postUuid = toUuid(postId)
-      // Extract raw ID from memberId (pseudo-TypeID format: member_<raw-uuid>)
-      // Note: member IDs from Better-auth are NOT proper TypeIDs, so we can't use parseTypeId
-      const memberUuid = options?.memberId?.startsWith('member_')
-        ? options.memberId.slice('member_'.length)
-        : null
+      const orgUuid = toUuid(ctx.organizationId)
+      // Convert memberId TypeID to UUID for raw SQL
+      const memberUuid = options?.memberId ? toUuid(options.memberId) : null
       const result = await uow.db.execute<{ vote_count: number; voted: boolean }>(sql`
         WITH existing_vote AS (
           SELECT id FROM votes
@@ -326,7 +328,7 @@ export class PostService {
         insert_vote AS (
           -- Only insert if no existing vote was found (and thus not deleted)
           INSERT INTO votes (id, organization_id, post_id, user_identifier, member_id, ip_hash, updated_at)
-          SELECT gen_random_uuid(), ${ctx.organizationId}, ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
+          SELECT gen_random_uuid(), ${orgUuid}, ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
           WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
           RETURNING id, true AS is_new_vote
         ),
@@ -350,9 +352,10 @@ export class PostService {
       // Auto-subscribe voter when they upvote (not when they remove vote)
       if (voted && options?.memberId) {
         const subscriptionService = new SubscriptionService()
-        subscriptionService
-          .subscribeToPost(options.memberId, postId, 'vote', ctx.organizationId)
-          .catch((err) => console.error('[Subscriptions] Failed to auto-subscribe voter:', err))
+        await subscriptionService.subscribeToPost(options.memberId, postId, 'vote', {
+          organizationId: ctx.organizationId,
+          db: uow.db,
+        })
       }
 
       return ok({
@@ -585,7 +588,7 @@ export class PostService {
    * @returns Result containing public post list or an error
    */
   async listPublicPosts(params: {
-    organizationId: string
+    organizationId: OrgId
     boardSlug?: string
     search?: string
     /** Filter by status IDs (legacy, prefer statusSlugs) */
@@ -1108,7 +1111,7 @@ export class PostService {
    * @returns Result containing roadmap posts
    */
   async getRoadmapPosts(
-    organizationId: string,
+    organizationId: OrgId,
     statusIds: StatusId[]
   ): Promise<Result<RoadmapPost[], PostError>> {
     if (statusIds.length === 0) {
@@ -1161,7 +1164,7 @@ export class PostService {
    * @returns Result containing paginated roadmap posts
    */
   async getRoadmapPostsPaginated(params: {
-    organizationId: string
+    organizationId: OrgId
     statusId: StatusId
     page?: number
     limit?: number

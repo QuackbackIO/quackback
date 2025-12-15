@@ -101,6 +101,7 @@ export class CommentService {
       const isTeamMember = ['owner', 'admin', 'member'].includes(ctx.memberRole)
 
       // Create the comment with member-scoped identity
+      // Convert member TypeID back to raw UUID for database foreign key
       const comment = await commentRepo.create({
         organizationId: ctx.organizationId,
         postId: input.postId,
@@ -112,12 +113,13 @@ export class CommentService {
         isTeamMember,
       })
 
-      // Auto-subscribe commenter to the post
+      // Auto-subscribe commenter to the post (within the same transaction)
       if (ctx.memberId) {
         const subscriptionService = new SubscriptionService()
-        subscriptionService
-          .subscribeToPost(ctx.memberId, input.postId, 'comment', ctx.organizationId)
-          .catch((err) => console.error('[Subscriptions] Failed to auto-subscribe commenter:', err))
+        await subscriptionService.subscribeToPost(ctx.memberId, input.postId, 'comment', {
+          organizationId: ctx.organizationId,
+          db: uow.db,
+        })
       }
 
       // Emit comment.created event for integrations

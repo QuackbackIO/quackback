@@ -2,6 +2,7 @@
  * Event emission utilities for domain services.
  */
 import { randomUUID } from 'crypto'
+import type { OrgId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import type { DomainEvent, DomainEventType } from './types'
 import { dispatchToIntegrations } from './dispatcher'
@@ -48,7 +49,7 @@ export function emitEvent<T>(type: DomainEventType, data: T, ctx: ServiceContext
 export function emitSystemEvent<T>(
   type: DomainEventType,
   data: T,
-  organizationId: string,
+  organizationId: OrgId,
   serviceName: string
 ): void {
   const event: DomainEvent<T> = {

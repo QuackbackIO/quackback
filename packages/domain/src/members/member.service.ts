@@ -6,6 +6,7 @@
 
 import { db, MemberRepository, eq, and, sql, member, user } from '@quackback/db'
 import type { Member } from '@quackback/db'
+import type { MemberId, OrgId, UserId } from '@quackback/ids'
 import { Result, ok, err } from '../shared/result'
 
 export type MemberError = {
@@ -17,7 +18,7 @@ export type MemberError = {
  * Team member info with user details
  */
 export interface TeamMember {
-  id: string
+  id: UserId
   name: string | null
   email: string
   image: string | null
@@ -31,8 +32,8 @@ export class MemberService {
    * it's a simple lookup operation used during authentication flows.
    */
   async getMemberByUserAndOrg(
-    userId: string,
-    organizationId: string
+    userId: UserId,
+    organizationId: OrgId
   ): Promise<Result<Member | null, MemberError>> {
     try {
       const memberRepo = new MemberRepository(db)
@@ -50,7 +51,7 @@ export class MemberService {
   /**
    * Find a member by ID
    */
-  async getMemberById(memberId: string): Promise<Result<Member | null, MemberError>> {
+  async getMemberById(memberId: MemberId): Promise<Result<Member | null, MemberError>> {
     try {
       const memberRepo = new MemberRepository(db)
       const foundMember = await memberRepo.findById(memberId)
@@ -70,7 +71,7 @@ export class MemberService {
    * Returns user info (id, name, email, image) for all members of the organization.
    * Used for member assignment dropdowns and team lists.
    */
-  async listTeamMembers(organizationId: string): Promise<Result<TeamMember[], MemberError>> {
+  async listTeamMembers(organizationId: OrgId): Promise<Result<TeamMember[], MemberError>> {
     try {
       const teamMembers = await db
         .select({
@@ -98,7 +99,7 @@ export class MemberService {
    *
    * Used by getting-started page.
    */
-  async countMembersByOrg(organizationId: string): Promise<Result<number, MemberError>> {
+  async countMembersByOrg(organizationId: OrgId): Promise<Result<number, MemberError>> {
     try {
       const result = await db
         .select({ count: sql<number>`count(*)`.as('count') })
@@ -121,8 +122,8 @@ export class MemberService {
    * Returns member record if exists, null otherwise.
    */
   async checkMembership(
-    userId: string,
-    organizationId: string
+    userId: UserId,
+    organizationId: OrgId
   ): Promise<Result<{ isMember: boolean; member?: Member }, MemberError>> {
     try {
       const foundMember = await db.query.member.findFirst({

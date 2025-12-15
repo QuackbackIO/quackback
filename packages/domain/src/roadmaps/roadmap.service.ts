@@ -15,7 +15,7 @@ import {
   type Roadmap,
   type UnitOfWork,
 } from '@quackback/db'
-import type { RoadmapId, PostId } from '@quackback/ids'
+import type { RoadmapId, PostId, OrgId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { RoadmapError } from './roadmap.errors'
@@ -212,7 +212,7 @@ export class RoadmapService {
   /**
    * List public roadmaps (for portal view)
    */
-  async listPublicRoadmaps(organizationId: string): Promise<Result<Roadmap[], RoadmapError>> {
+  async listPublicRoadmaps(organizationId: OrgId): Promise<Result<Roadmap[], RoadmapError>> {
     return withUnitOfWork(organizationId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       const roadmaps = await roadmapRepo.findPublic(organizationId)
@@ -404,7 +404,7 @@ export class RoadmapService {
    * Get public roadmap posts (no auth required)
    */
   async getPublicRoadmapPosts(
-    organizationId: string,
+    organizationId: OrgId,
     roadmapId: RoadmapId,
     options: RoadmapPostsQueryOptions
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {

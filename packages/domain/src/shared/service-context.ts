@@ -6,7 +6,7 @@
  * and their organization for service operations.
  */
 
-import { toMemberId, type MemberId } from '@quackback/ids'
+import type { MemberId, OrgId, UserId } from '@quackback/ids'
 
 /**
  * Execution context for service layer operations.
@@ -17,10 +17,10 @@ import { toMemberId, type MemberId } from '@quackback/ids'
  * - user: Portal users with public portal access only
  */
 export interface ServiceContext {
-  /** Organization ID for multi-tenant isolation */
-  organizationId: string
-  /** User ID of the authenticated user */
-  userId: string
+  /** Organization ID for multi-tenant isolation (TypeID format: org_xxx) */
+  organizationId: OrgId
+  /** User ID of the authenticated user (TypeID format: user_xxx) */
+  userId: UserId
   /** Member ID - all authenticated users have member records now (TypeID format: member_xxx) */
   memberId: MemberId
   /** Member's role in the organization (unified: owner/admin/member/user) */
@@ -41,15 +41,15 @@ export interface ServiceContext {
  */
 export interface AuthValidation {
   organization: {
-    id: string
+    id: OrgId
   }
   user: {
-    id: string
+    id: UserId
     name: string | null
     email: string
   }
   member: {
-    id: string
+    id: MemberId
     role: string
   }
 }
@@ -61,12 +61,10 @@ export interface AuthValidation {
  * @returns ServiceContext ready for service layer operations
  */
 export function buildServiceContext(validation: AuthValidation): ServiceContext {
-  // Convert raw member ID to TypeID format
-  const memberId = toMemberId(validation.member.id)
   return {
     organizationId: validation.organization.id,
     userId: validation.user.id,
-    memberId,
+    memberId: validation.member.id,
     memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
     userName: validation.user.name || validation.user.email,
     userEmail: validation.user.email,

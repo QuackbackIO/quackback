@@ -9,6 +9,7 @@
  */
 
 import { db, eq, and, desc, organization, ssoProvider } from '@quackback/db'
+import { generateId, type OrgId, type SsoProviderId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { OrgError } from './organization.errors'
@@ -111,7 +112,7 @@ export class OrganizationService {
    * Get auth configuration for an organization
    * Public method - no auth required
    */
-  async getAuthConfig(organizationId: string): Promise<Result<AuthConfig, OrgError>> {
+  async getAuthConfig(organizationId: OrgId): Promise<Result<AuthConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -188,7 +189,7 @@ export class OrganizationService {
    * Get portal configuration for an organization
    * Public method - no auth required
    */
-  async getPortalConfig(organizationId: string): Promise<Result<PortalConfig, OrgError>> {
+  async getPortalConfig(organizationId: OrgId): Promise<Result<PortalConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -265,7 +266,7 @@ export class OrganizationService {
    * Get branding configuration for an organization
    * Public method - no auth required
    */
-  async getBrandingConfig(organizationId: string): Promise<Result<BrandingConfig, OrgError>> {
+  async getBrandingConfig(organizationId: OrgId): Promise<Result<BrandingConfig, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -328,7 +329,7 @@ export class OrganizationService {
    * Get custom CSS for an organization
    * Public method - no auth required
    */
-  async getCustomCss(organizationId: string): Promise<Result<string | null, OrgError>> {
+  async getCustomCss(organizationId: OrgId): Promise<Result<string | null, OrgError>> {
     try {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -442,7 +443,7 @@ export class OrganizationService {
    * Requires owner or admin role
    */
   async getSsoProvider(
-    providerId: string,
+    providerId: SsoProviderId,
     ctx: ServiceContext
   ): Promise<Result<SsoProviderResponse, OrgError>> {
     // Authorization check
@@ -515,7 +516,7 @@ export class OrganizationService {
       }
 
       const providerId = generateProviderId()
-      const id = crypto.randomUUID()
+      const id = generateId('sso_provider')
 
       const [created] = await db
         .insert(ssoProvider)
@@ -555,7 +556,7 @@ export class OrganizationService {
    * Requires owner or admin role
    */
   async updateSsoProvider(
-    providerId: string,
+    providerId: SsoProviderId,
     input: UpdateSsoProviderInput,
     ctx: ServiceContext
   ): Promise<Result<SsoProviderResponse, OrgError>> {
@@ -654,7 +655,7 @@ export class OrganizationService {
    * Requires owner or admin role
    */
   async deleteSsoProvider(
-    providerId: string,
+    providerId: SsoProviderId,
     ctx: ServiceContext
   ): Promise<Result<void, OrgError>> {
     // Authorization check

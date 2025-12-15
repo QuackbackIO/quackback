@@ -91,6 +91,16 @@ vi.mock('../../shared/comment-tree', () => ({
   ),
 }))
 
+// Mock SubscriptionService to avoid database calls in tests
+vi.mock('../../subscriptions/subscription.service', () => {
+  const mockSubscribeToPost = vi.fn().mockResolvedValue(undefined)
+  return {
+    SubscriptionService: class MockSubscriptionService {
+      subscribeToPost = mockSubscribeToPost
+    },
+  }
+})
+
 describe('CommentService', () => {
   let commentService: CommentService
   let mockContext: ServiceContext

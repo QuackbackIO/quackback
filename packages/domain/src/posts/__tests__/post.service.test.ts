@@ -21,7 +21,7 @@ import {
   type MockPostRepository,
   type MockUnitOfWork,
 } from '../../__tests__/test-utils'
-import type { BoardId, MemberId, PostId, StatusId } from '@quackback/ids'
+import type { BoardId, PostId, StatusId } from '@quackback/ids'
 
 // Mock the withUnitOfWork function and repositories before importing PostService
 const mockWithUnitOfWork = vi.fn()
@@ -35,6 +35,16 @@ vi.mock('@quackback/db', async () => {
     withUnitOfWork: mockWithUnitOfWork,
     BoardRepository: mockBoardRepository,
     PostRepository: mockPostRepository,
+  }
+})
+
+// Mock SubscriptionService to avoid database calls in tests
+vi.mock('../../subscriptions/subscription.service', () => {
+  const mockSubscribeToPost = vi.fn().mockResolvedValue(undefined)
+  return {
+    SubscriptionService: class MockSubscriptionService {
+      subscribeToPost = mockSubscribeToPost
+    },
   }
 })
 
@@ -646,7 +656,7 @@ describe('PostService', () => {
       const mockPost = createMockPost({ voteCount: 5 })
       const mockBoard = createMockBoard()
       const userIdentifier = 'member:member-123'
-      const options = { memberId: 'member_456' as MemberId, ipHash: 'abc123' }
+      const options = { memberId: TEST_IDS.MEMBER_ID, ipHash: 'abc123' }
 
       const executeSpy = vi.fn().mockResolvedValue([{ vote_count: 6, voted: true }])
 
@@ -963,7 +973,7 @@ describe('PostService', () => {
           id: mockPost.id,
           title: mockPost.title,
           content: mockPost.content,
-          status: mockPost.status,
+          statusId: mockPost.statusId,
           voteCount: mockPost.voteCount,
           authorName: mockPost.authorName,
           memberId: mockPost.memberId,
@@ -1027,7 +1037,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        organizationId: 'org-123',
+        organizationId: TEST_IDS.ORG_ID,
       })
 
       expect(result.success).toBe(true)
@@ -1064,7 +1074,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        organizationId: 'org-123',
+        organizationId: TEST_IDS.ORG_ID,
         boardSlug: 'test-board',
       })
 
@@ -1101,7 +1111,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        organizationId: 'org-123',
+        organizationId: TEST_IDS.ORG_ID,
         search: 'bug fix',
         statusSlugs: ['open'],
         sort: 'new',
@@ -1318,7 +1328,7 @@ describe('PostService', () => {
 
   describe('getRoadmapPosts', () => {
     it('should return empty array when no status slugs provided', async () => {
-      const result = await postService.getRoadmapPosts('org-123', [])
+      const result = await postService.getRoadmapPosts(TEST_IDS.ORG_ID, [])
 
       expect(result.success).toBe(true)
       if (result.success) {

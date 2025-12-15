@@ -7,7 +7,7 @@
 
 import { vi, type Mock } from 'vitest'
 import type { ServiceContext } from '../shared/service-context'
-import { generateId } from '@quackback/ids'
+import { generateId, type OrgId } from '@quackback/ids'
 import type { Board, Comment, Post, PostStatusEntity, Tag, Vote } from '@quackback/db/types'
 
 // ============================================
@@ -32,9 +32,11 @@ export type TestRole = (typeof TEST_ROLES)[keyof typeof TEST_ROLES]
 
 // Expose test IDs for tests that need to reference them
 export const TEST_IDS = {
+  ORG_ID: generateId('org'),
   POST_ID: generateId('post'),
   BOARD_ID: generateId('board'),
   MEMBER_ID: generateId('member'),
+  USER_ID: generateId('user'),
   TAG_ID: generateId('tag'),
   COMMENT_ID: generateId('comment'),
   STATUS_ID: generateId('status'),
@@ -45,8 +47,8 @@ export const TEST_IDS = {
  */
 export function createMockServiceContext(overrides?: Partial<ServiceContext>): ServiceContext {
   return {
-    organizationId: 'org-123',
-    userId: 'user-123',
+    organizationId: TEST_IDS.ORG_ID as ServiceContext['organizationId'],
+    userId: TEST_IDS.USER_ID as ServiceContext['userId'],
     memberId: TEST_IDS.MEMBER_ID as ServiceContext['memberId'],
     memberRole: 'admin',
     userName: 'Test User',
@@ -69,11 +71,11 @@ const TEST_STATUS_ID = TEST_IDS.STATUS_ID
 export function createMockPost(overrides?: Record<string, unknown>): Post {
   return {
     id: TEST_POST_ID,
+    organizationId: TEST_IDS.ORG_ID,
     boardId: TEST_BOARD_ID,
     title: 'Test Post',
     content: 'Test content',
     contentJson: null,
-    status: 'open',
     statusId: null,
     voteCount: 0,
     memberId: TEST_MEMBER_ID,
@@ -88,6 +90,7 @@ export function createMockPost(overrides?: Record<string, unknown>): Post {
     officialResponseAuthorId: null,
     officialResponseAuthorName: null,
     officialResponseAt: null,
+    searchVector: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     ...overrides,
@@ -100,7 +103,7 @@ export function createMockPost(overrides?: Record<string, unknown>): Post {
 export function createMockBoard(overrides?: Record<string, unknown>): Board {
   return {
     id: TEST_BOARD_ID,
-    organizationId: 'org-123',
+    organizationId: TEST_IDS.ORG_ID,
     name: 'Test Board',
     slug: 'test-board',
     description: null,
@@ -118,7 +121,7 @@ export function createMockBoard(overrides?: Record<string, unknown>): Board {
 export function createMockTag(overrides?: Record<string, unknown>): Tag {
   return {
     id: TEST_TAG_ID,
-    organizationId: 'org-123',
+    organizationId: TEST_IDS.ORG_ID,
     name: 'Test Tag',
     color: '#3b82f6',
     createdAt: new Date('2024-01-01'),
@@ -167,7 +170,7 @@ export function createMockVote(overrides?: Record<string, unknown>): Vote {
 export function createMockPostStatus(overrides?: Record<string, unknown>): PostStatusEntity {
   return {
     id: TEST_STATUS_ID,
-    organizationId: 'org-123',
+    organizationId: TEST_IDS.ORG_ID,
     name: 'In Progress',
     slug: 'in-progress',
     color: '#3b82f6',
@@ -187,7 +190,7 @@ export function createMockMember(overrides?: Record<string, unknown>) {
   return {
     id: TEST_MEMBER_ID,
     userId: 'user-123',
-    organizationId: 'org-123',
+    organizationId: TEST_IDS.ORG_ID,
     role: 'admin' as const,
     createdAt: new Date('2024-01-01'),
     ...overrides,
@@ -199,7 +202,7 @@ export function createMockMember(overrides?: Record<string, unknown>) {
  */
 export function createMockOrganization(overrides?: Record<string, unknown>) {
   return {
-    id: 'org-123',
+    id: TEST_IDS.ORG_ID,
     name: 'Test Organization',
     slug: 'test-org',
     logo: null,
@@ -472,7 +475,7 @@ export function createMockUnitOfWork(): MockUnitOfWork {
  */
 export function createMockWithUnitOfWork(repoMocks: Record<string, unknown> = {}) {
   return async <T>(
-    _organizationId: string,
+    _organizationId: OrgId,
     callback: (uow: { db: unknown }) => Promise<T>
   ): Promise<T> => {
     // Create a minimal mock db object
