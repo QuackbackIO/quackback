@@ -3,6 +3,7 @@
  */
 
 import type { PricingTier } from '@quackback/domain'
+import type { OrgId } from '@quackback/ids'
 
 /**
  * License status
@@ -14,7 +15,7 @@ export type LicenseStatus = 'active' | 'expired' | 'invalid' | 'trial'
  */
 export interface License {
   id: string
-  organizationId: string
+  organizationId: OrgId
   tier: PricingTier
   status: LicenseStatus
   licenseKey: string
@@ -32,7 +33,7 @@ export interface License {
  * Decoded license key payload
  */
 export interface LicensePayload {
-  organizationId: string
+  organizationId: OrgId
   tier: PricingTier
   expiresAt: number // Unix timestamp
   seats: number

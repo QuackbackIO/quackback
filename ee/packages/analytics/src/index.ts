@@ -5,6 +5,8 @@
  * Available on Enterprise tier.
  */
 
+import type { OrgId } from '@quackback/ids'
+
 // TODO: Implement advanced analytics
 // - Feedback trends over time
 // - User engagement metrics
@@ -62,25 +64,25 @@ export interface AnalyticsDashboard {
  */
 export class AnalyticsService {
   async getFeedbackTrends(
-    _organizationId: string,
+    _organizationId: OrgId,
     _timeRange: AnalyticsTimeRange
   ): Promise<FeedbackTrend[]> {
     throw new Error('Analytics not yet implemented')
   }
 
   async getEngagementMetrics(
-    _organizationId: string,
+    _organizationId: OrgId,
     _timeRange: AnalyticsTimeRange
   ): Promise<EngagementMetrics[]> {
     throw new Error('Analytics not yet implemented')
   }
 
-  async getFeatureUsage(_organizationId: string): Promise<FeatureUsage[]> {
+  async getFeatureUsage(_organizationId: OrgId): Promise<FeatureUsage[]> {
     throw new Error('Analytics not yet implemented')
   }
 
   async getDashboard(
-    _organizationId: string,
+    _organizationId: OrgId,
     _timeRange: AnalyticsTimeRange
   ): Promise<AnalyticsDashboard> {
     throw new Error('Analytics not yet implemented')

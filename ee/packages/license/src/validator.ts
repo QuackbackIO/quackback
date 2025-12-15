@@ -15,6 +15,7 @@ import {
   requiresEnterpriseCode,
   isSelfHosted,
 } from '@quackback/domain'
+import type { OrgId } from '@quackback/ids'
 import type { License, LicenseValidationResult, LicenseCheckOptions } from './types'
 
 // Cache licenses to avoid repeated database lookups
@@ -25,16 +26,16 @@ const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
  * LicenseValidator handles all license-related operations
  */
 export class LicenseValidator {
-  private getLicenseFromDb: (organizationId: string) => Promise<License | null>
+  private getLicenseFromDb: (organizationId: OrgId) => Promise<License | null>
 
-  constructor(getLicenseFromDb: (organizationId: string) => Promise<License | null>) {
+  constructor(getLicenseFromDb: (organizationId: OrgId) => Promise<License | null>) {
     this.getLicenseFromDb = getLicenseFromDb
   }
 
   /**
    * Get license for an organization (with caching)
    */
-  async getLicense(organizationId: string, skipCache = false): Promise<License | null> {
+  async getLicense(organizationId: OrgId, skipCache = false): Promise<License | null> {
     const cacheKey = organizationId
     const cached = licenseCache.get(cacheKey)
 
@@ -56,7 +57,7 @@ export class LicenseValidator {
    * Validate a license
    */
   async validateLicense(
-    organizationId: string,
+    organizationId: OrgId,
     options: LicenseCheckOptions = {}
   ): Promise<LicenseValidationResult> {
     const { allowExpired = false, gracePeriodDays = 7 } = options
@@ -123,7 +124,7 @@ export class LicenseValidator {
    * Self-hosted deployments ALWAYS return true (all features free).
    * Cloud deployments check subscription tier.
    */
-  async hasFeature(organizationId: string, feature: Feature): Promise<boolean> {
+  async hasFeature(organizationId: OrgId, feature: Feature): Promise<boolean> {
     // Self-hosted: ALL features enabled, no checks needed
     if (isSelfHosted()) {
       return true
@@ -155,7 +156,7 @@ export class LicenseValidator {
    *
    * Self-hosted: Always returns true (equivalent to enterprise tier).
    */
-  async hasTier(organizationId: string, requiredTier: PricingTier): Promise<boolean> {
+  async hasTier(organizationId: OrgId, requiredTier: PricingTier): Promise<boolean> {
     // Self-hosted: Equivalent to enterprise tier (highest)
     if (isSelfHosted()) {
       return true
@@ -183,7 +184,7 @@ export class LicenseValidator {
    *
    * Self-hosted: Returns 'enterprise' (all features available).
    */
-  async getTier(organizationId: string): Promise<PricingTier | null> {
+  async getTier(organizationId: OrgId): Promise<PricingTier | null> {
     // Self-hosted: Equivalent to enterprise tier
     if (isSelfHosted()) {
       return 'enterprise'
@@ -209,7 +210,7 @@ export class LicenseValidator {
   /**
    * Clear the license cache for an organization
    */
-  clearCache(organizationId?: string): void {
+  clearCache(organizationId?: OrgId): void {
     if (organizationId) {
       licenseCache.delete(organizationId)
     } else {
@@ -223,7 +224,7 @@ export class LicenseValidator {
  */
 export function createFeatureGate(validator: LicenseValidator) {
   return async function requireFeature(
-    organizationId: string,
+    organizationId: OrgId,
     feature: Feature
   ): Promise<{ allowed: boolean; error?: string; upgradeUrl?: string }> {
     const hasAccess = await validator.hasFeature(organizationId, feature)

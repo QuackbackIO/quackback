@@ -5,6 +5,8 @@
  * Available on Team tier and above.
  */
 
+import type { OrgId } from '@quackback/ids'
+
 // TODO: Implement SCIM 2.0 endpoints
 // - /Users - User CRUD operations
 // - /Groups - Group management
@@ -52,28 +54,28 @@ export interface SCIMGroup {
  */
 export class SCIMService {
   async listUsers(
-    _organizationId: string
+    _organizationId: OrgId
   ): Promise<{ Resources: SCIMUser[]; totalResults: number }> {
     throw new Error('SCIM not yet implemented')
   }
 
-  async getUser(_organizationId: string, _userId: string): Promise<SCIMUser> {
+  async getUser(_organizationId: OrgId, _userId: string): Promise<SCIMUser> {
     throw new Error('SCIM not yet implemented')
   }
 
-  async createUser(_organizationId: string, _user: Partial<SCIMUser>): Promise<SCIMUser> {
+  async createUser(_organizationId: OrgId, _user: Partial<SCIMUser>): Promise<SCIMUser> {
     throw new Error('SCIM not yet implemented')
   }
 
   async updateUser(
-    _organizationId: string,
+    _organizationId: OrgId,
     _userId: string,
     _updates: Partial<SCIMUser>
   ): Promise<SCIMUser> {
     throw new Error('SCIM not yet implemented')
   }
 
-  async deleteUser(_organizationId: string, _userId: string): Promise<void> {
+  async deleteUser(_organizationId: OrgId, _userId: string): Promise<void> {
     throw new Error('SCIM not yet implemented')
   }
 }

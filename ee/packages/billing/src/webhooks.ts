@@ -7,6 +7,7 @@ import {
   type SubscriptionStatus,
   type SubscriptionTier,
 } from '@quackback/db/queries/subscriptions'
+import type { OrgId } from '@quackback/ids'
 
 // ============================================================================
 // Helpers
@@ -59,13 +60,14 @@ function extractSubscriptionId(
  * Handle checkout.session.completed - New subscription created
  */
 export async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
-  const organizationId = session.metadata?.organizationId
+  const organizationIdParam = session.metadata?.organizationId
   const tier = session.metadata?.tier as SubscriptionTier | undefined
 
-  if (!organizationId || !tier) {
+  if (!organizationIdParam || !tier) {
     console.error('Missing metadata in checkout session:', session.id)
     return
   }
+  const organizationId = organizationIdParam as OrgId
 
   const subscriptionId = extractSubscriptionId(session.subscription)
   const customerId = extractCustomerId(session.customer)
@@ -133,8 +135,9 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
   if (!existing) {
     // This might happen if webhook arrives before checkout completion
     // Try to get org ID from metadata
-    const organizationId = subscription.metadata?.organizationId
-    if (organizationId) {
+    const organizationIdParam = subscription.metadata?.organizationId
+    if (organizationIdParam) {
+      const organizationId = organizationIdParam as OrgId
       const customerId = extractCustomerId(subscription.customer)
       if (!customerId) {
         console.error('Cannot extract customer ID from subscription:', subscription.id)

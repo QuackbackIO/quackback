@@ -5,6 +5,8 @@
  * Available on Team tier and above.
  */
 
+import type { OrgId } from '@quackback/ids'
+
 // TODO: Implement SAML authentication
 // - SAML 2.0 service provider
 // - IdP metadata parsing
@@ -27,7 +29,7 @@ export interface SSOConfig {
 
 export interface SSOSession {
   userId: string
-  organizationId: string
+  organizationId: OrgId
   provider: string
   idpSessionId?: string
   expiresAt: Date
@@ -37,12 +39,12 @@ export interface SSOSession {
  * Placeholder SSO Service - To be implemented
  */
 export class SSOService {
-  async initiateSSOLogin(_organizationId: string): Promise<{ redirectUrl: string }> {
+  async initiateSSOLogin(_organizationId: OrgId): Promise<{ redirectUrl: string }> {
     throw new Error('SSO not yet implemented')
   }
 
   async handleCallback(
-    _organizationId: string,
+    _organizationId: OrgId,
     _samlResponse: string
   ): Promise<{ session: SSOSession }> {
     throw new Error('SSO not yet implemented')

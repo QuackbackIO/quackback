@@ -5,6 +5,8 @@
  * Basic audit logs available on Team tier, extended on Enterprise tier.
  */
 
+import type { OrgId } from '@quackback/ids'
+
 // TODO: Implement extended audit logging
 // - All user actions with full context
 // - IP address and user agent tracking
@@ -33,7 +35,7 @@ export type AuditAction =
 
 export interface AuditLogEntry {
   id: string
-  organizationId: string
+  organizationId: OrgId
   action: AuditAction
   actorId: string
   actorType: 'user' | 'system' | 'api'
@@ -48,7 +50,7 @@ export interface AuditLogEntry {
 }
 
 export interface AuditLogQuery {
-  organizationId: string
+  organizationId: OrgId
   actions?: AuditAction[]
   actorId?: string
   resourceType?: string

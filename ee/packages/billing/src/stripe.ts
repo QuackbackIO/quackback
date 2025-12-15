@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import type { PricingTier } from '@quackback/domain/features'
+import type { OrgId } from '@quackback/ids'
 
 // ============================================================================
 // Stripe Client
@@ -79,7 +80,7 @@ export function getPriceIdForTier(tier: PricingTier): string | null {
 // ============================================================================
 
 export interface CreateCheckoutSessionParams {
-  organizationId: string
+  organizationId: OrgId
   organizationName: string
   tier: Exclude<PricingTier, 'enterprise'>
   customerEmail: string

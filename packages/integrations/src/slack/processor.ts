@@ -4,6 +4,7 @@
  */
 import { WebClient } from '@slack/web-api'
 import { db, workspaceDomain, eq, and } from '@quackback/db'
+import type { OrgId } from '@quackback/ids'
 import {
   BaseIntegration,
   type DomainEvent,
@@ -246,7 +247,7 @@ export class SlackIntegration extends BaseIntegration {
    * Look up the primary workspace domain for an organization.
    * Returns the full URL including protocol.
    */
-  private async getTenantUrl(organizationId: string): Promise<string> {
+  private async getTenantUrl(organizationId: OrgId): Promise<string> {
     // Look up primary workspace domain
     const domain = await db.query.workspaceDomain.findFirst({
       where: and(

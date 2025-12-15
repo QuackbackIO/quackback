@@ -15,6 +15,7 @@
   "dependencies": {
     "@quackback/db": "workspace:*",
     "@quackback/domain": "workspace:*",
+    "@quackback/ids": "workspace:*",
     "stripe": "^20.0.0"
   }
 }
