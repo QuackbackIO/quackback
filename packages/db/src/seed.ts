@@ -9,8 +9,18 @@ config({ path: '../../.env', quiet: true })
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { generateId, toMemberId } from '@quackback/ids'
-import type { TagId, BoardId, StatusId, MemberId, PostId, RoadmapId } from '@quackback/ids'
+import { generateId } from '@quackback/ids'
+import type {
+  TagId,
+  BoardId,
+  StatusId,
+  MemberId,
+  PostId,
+  RoadmapId,
+  OrgId,
+  UserId,
+  DomainId,
+} from '@quackback/ids'
 import { user, organization, member, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
@@ -222,7 +232,7 @@ async function seed() {
   await verifyMigrationsApplied()
 
   // Create organization
-  const orgId = uuid()
+  const orgId: OrgId = generateId('org')
   await db.insert(organization).values({
     id: orgId,
     name: DEMO_ORG.name,
@@ -230,8 +240,9 @@ async function seed() {
     createdAt: new Date(),
   })
 
+  const domainId: DomainId = generateId('domain')
   await db.insert(workspaceDomain).values({
-    id: uuid(),
+    id: domainId,
     organizationId: orgId,
     domain: `${DEMO_ORG.slug}.localhost:3000`,
     domainType: 'subdomain',
@@ -255,8 +266,8 @@ async function seed() {
   console.log('Created default statuses')
 
   // Create demo user (owner)
-  const demoUserId = uuid()
-  const demoMemberId = uuid()
+  const demoUserId: UserId = generateId('user')
+  const demoMemberId: MemberId = generateId('member')
   await db.insert(user).values({
     id: demoUserId,
     organizationId: orgId,
@@ -276,11 +287,11 @@ async function seed() {
 
   // Create sample users
   const members: Array<{ id: MemberId; name: string }> = [
-    { id: toMemberId(demoMemberId), name: DEMO_USER.name },
+    { id: demoMemberId, name: DEMO_USER.name },
   ]
   for (let i = 0; i < CONFIG.users; i++) {
-    const userId = uuid()
-    const memberId = uuid()
+    const userId: UserId = generateId('user')
+    const memberId: MemberId = generateId('member')
     const name = `${pick(firstNames)} ${pick(lastNames)}`
     const email = `user${i + 1}@example.com`
 
@@ -300,7 +311,7 @@ async function seed() {
       role: i < 3 ? 'admin' : 'user', // First 3 are admins
       createdAt: randomDate(90),
     })
-    members.push({ id: toMemberId(memberId), name })
+    members.push({ id: memberId, name })
   }
   console.log(`Created ${members.length} users`)
 

@@ -1,12 +1,7 @@
 import { pgTable, text, timestamp, boolean, index, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
-import {
-  typeIdWithDefault,
-  typeIdColumn,
-  typeIdColumnNullable,
-  textIdColumn,
-} from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { posts } from './posts'
 import { member } from './auth'
 import { appUser } from './rls'
@@ -17,7 +12,7 @@ import { appUser } from './rls'
 const subscriptionsOrgCheck = sql`post_id IN (
   SELECT p.id FROM posts p
   JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  WHERE b.organization_id = current_setting('app.organization_id', true)::uuid
 )`
 
 /**
@@ -25,7 +20,7 @@ const subscriptionsOrgCheck = sql`post_id IN (
  */
 const preferencesOrgCheck = sql`member_id IN (
   SELECT id FROM member
-  WHERE organization_id = current_setting('app.organization_id', true)
+  WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )`
 
 /**
@@ -39,7 +34,7 @@ export const postSubscriptions = pgTable(
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    memberId: textIdColumn('member')('member_id')
+    memberId: typeIdColumn('member')('member_id')
       .notNull()
       .references(() => member.id, { onDelete: 'cascade' }),
     reason: varchar('reason', { length: 20 }).notNull(), // 'author' | 'vote' | 'comment' | 'manual'
@@ -72,7 +67,7 @@ export const notificationPreferences = pgTable(
   'notification_preferences',
   {
     id: typeIdWithDefault('notif_pref')('id').primaryKey(),
-    memberId: textIdColumn('member')('member_id')
+    memberId: typeIdColumn('member')('member_id')
       .notNull()
       .unique()
       .references(() => member.id, { onDelete: 'cascade' }),
@@ -102,7 +97,7 @@ export const unsubscribeTokens = pgTable(
   {
     id: typeIdWithDefault('unsub_token')('id').primaryKey(),
     token: text('token').notNull().unique(),
-    memberId: textIdColumn('member')('member_id')
+    memberId: typeIdColumn('member')('member_id')
       .notNull()
       .references(() => member.id, { onDelete: 'cascade' }),
     postId: typeIdColumnNullable('post')('post_id').references(() => posts.id, {

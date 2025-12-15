@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, boolean, integer, uniqueIndex, index } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
 import { STATUS_CATEGORIES, type StatusCategory } from '../types'
 
@@ -12,7 +12,7 @@ export const postStatuses = pgTable(
   'post_statuses',
   {
     id: typeIdWithDefault('status')('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
+    organizationId: typeIdColumn('org')('organization_id').notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     color: text('color').notNull().default('#6b7280'),
@@ -29,8 +29,8 @@ export const postStatuses = pgTable(
     pgPolicy('post_statuses_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)`,
+      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
     }),
   ]
 ).enableRLS()

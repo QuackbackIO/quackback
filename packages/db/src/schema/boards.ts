@@ -10,14 +10,14 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
 
 export const boards = pgTable(
   'boards',
   {
     id: typeIdWithDefault('board')('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
+    organizationId: typeIdColumn('org')('organization_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
@@ -32,8 +32,8 @@ export const boards = pgTable(
     pgPolicy('boards_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)`,
+      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
@@ -42,7 +42,7 @@ export const roadmaps = pgTable(
   'roadmaps',
   {
     id: typeIdWithDefault('roadmap')('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
+    organizationId: typeIdColumn('org')('organization_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
@@ -58,8 +58,8 @@ export const roadmaps = pgTable(
     pgPolicy('roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)`,
+      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
@@ -68,7 +68,7 @@ export const tags = pgTable(
   'tags',
   {
     id: typeIdWithDefault('tag')('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
+    organizationId: typeIdColumn('org')('organization_id').notNull(),
     name: text('name').notNull(),
     color: text('color').default('#6b7280').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -79,8 +79,8 @@ export const tags = pgTable(
     pgPolicy('tags_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)`,
+      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
     }),
   ]
 ).enableRLS()

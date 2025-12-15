@@ -1,5 +1,5 @@
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
-import type { BoardId, PostId, TagId, CommentId, MemberId, StatusId } from '@quackback/ids'
+import type { BoardId, PostId, TagId, CommentId, MemberId, StatusId, OrgId } from '@quackback/ids'
 import { db } from '../tenant-context'
 import { boards, tags } from '../schema/boards'
 import { posts, votes, comments, postTags, commentReactions } from '../schema/posts'
@@ -36,7 +36,7 @@ export interface PublicPostListItem {
 }
 
 export interface AllBoardsPostListParams {
-  organizationId: string
+  organizationId: OrgId
   boardSlug?: string
   search?: string
   statusIds?: StatusId[]
@@ -102,7 +102,7 @@ export interface RoadmapPost {
 /**
  * Get public boards with post counts for an organization
  */
-export async function getPublicBoardsWithStats(organizationId: string): Promise<BoardWithStats[]> {
+export async function getPublicBoardsWithStats(organizationId: OrgId): Promise<BoardWithStats[]> {
   const result = await db
     .select({
       board: boards,
@@ -124,7 +124,7 @@ export async function getPublicBoardsWithStats(organizationId: string): Promise<
  * Get a single public board by slug
  */
 export async function getPublicBoardBySlug(
-  organizationId: string,
+  organizationId: OrgId,
   slug: string
 ): Promise<Board | undefined> {
   return db.query.boards.findFirst({
@@ -480,7 +480,7 @@ export async function getPublicPostDetail(
  * @param statusIds - Array of status IDs to filter by
  */
 export async function getRoadmapPosts(
-  organizationId: string,
+  organizationId: OrgId,
   statusIds: StatusId[]
 ): Promise<RoadmapPost[]> {
   if (statusIds.length === 0) {
@@ -568,7 +568,7 @@ export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Se
 export async function togglePublicVote(
   postId: PostId,
   userIdentifier: string,
-  organizationId: string
+  organizationId: OrgId
 ): Promise<{ voted: boolean; newCount: number }> {
   // Check if vote exists
   const existingVote = await db.query.votes.findFirst({
@@ -635,7 +635,7 @@ export async function addPublicComment(
   content: string,
   authorName: string | null,
   authorEmail: string | null,
-  organizationId: string,
+  organizationId: OrgId,
   parentId?: CommentId,
   memberId?: MemberId
 ): Promise<PublicComment> {

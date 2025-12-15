@@ -1,5 +1,5 @@
 import { eq, and, asc, sql } from 'drizzle-orm'
-import type { StatusId } from '@quackback/ids'
+import type { StatusId, OrgId } from '@quackback/ids'
 import { db } from '../tenant-context'
 import { postStatuses, DEFAULT_STATUSES } from '../schema/statuses'
 import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../types'
@@ -8,7 +8,7 @@ import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../t
  * Get all statuses for an organization, ordered by category and position
  */
 export async function getStatusesByOrganization(
-  organizationId: string
+  organizationId: OrgId
 ): Promise<PostStatusEntity[]> {
   return db.query.postStatuses.findMany({
     where: eq(postStatuses.organizationId, organizationId),
@@ -28,7 +28,7 @@ export async function getStatusesByOrganization(
  * Get statuses by category for an organization
  */
 export async function getStatusesByCategory(
-  organizationId: string,
+  organizationId: OrgId,
   category: StatusCategory
 ): Promise<PostStatusEntity[]> {
   return db.query.postStatuses.findMany({
@@ -43,7 +43,7 @@ export async function getStatusesByCategory(
 /**
  * Get roadmap statuses (showOnRoadmap = true)
  */
-export async function getRoadmapStatuses(organizationId: string): Promise<PostStatusEntity[]> {
+export async function getRoadmapStatuses(organizationId: OrgId): Promise<PostStatusEntity[]> {
   return db.query.postStatuses.findMany({
     where: and(
       eq(postStatuses.organizationId, organizationId),
@@ -73,7 +73,7 @@ export async function getStatusById(id: StatusId): Promise<PostStatusEntity | un
  * Get a status by slug within an organization
  */
 export async function getStatusBySlug(
-  organizationId: string,
+  organizationId: OrgId,
   slug: string
 ): Promise<PostStatusEntity | undefined> {
   return db.query.postStatuses.findFirst({
@@ -85,7 +85,7 @@ export async function getStatusBySlug(
  * Get the default status for new posts in an organization
  */
 export async function getDefaultStatus(
-  organizationId: string
+  organizationId: OrgId
 ): Promise<PostStatusEntity | undefined> {
   return db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.organizationId, organizationId), eq(postStatuses.isDefault, true)),
@@ -128,7 +128,7 @@ export async function deleteStatus(id: StatusId): Promise<void> {
  * Takes an array of status IDs in the desired order and updates their positions
  */
 export async function reorderStatuses(
-  organizationId: string,
+  organizationId: OrgId,
   category: StatusCategory,
   statusIds: StatusId[]
 ): Promise<void> {
@@ -153,7 +153,7 @@ export async function reorderStatuses(
  * Set a status as the default for new posts
  * This will unset any other default status in the organization
  */
-export async function setDefaultStatus(organizationId: string, statusId: StatusId): Promise<void> {
+export async function setDefaultStatus(organizationId: OrgId, statusId: StatusId): Promise<void> {
   // First, unset all defaults for this organization
   await db
     .update(postStatuses)
@@ -171,7 +171,7 @@ export async function setDefaultStatus(organizationId: string, statusId: StatusI
  * Seed default statuses for a new organization
  * Call this when a new organization is created
  */
-export async function seedDefaultStatuses(organizationId: string): Promise<PostStatusEntity[]> {
+export async function seedDefaultStatuses(organizationId: OrgId): Promise<PostStatusEntity[]> {
   const statusesToCreate = DEFAULT_STATUSES.map((status) => ({
     ...status,
     organizationId,
@@ -186,7 +186,7 @@ export async function seedDefaultStatuses(organizationId: string): Promise<PostS
  * Check if an organization has any statuses
  * Useful to determine if default statuses need to be seeded
  */
-export async function hasStatuses(organizationId: string): Promise<boolean> {
+export async function hasStatuses(organizationId: OrgId): Promise<boolean> {
   const result = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.organizationId, organizationId),
     columns: { id: true },

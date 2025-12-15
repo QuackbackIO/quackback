@@ -1,5 +1,5 @@
 {
-  "id": "21492e09-aef9-4110-b00b-24f031bd71aa",
+  "id": "885ed2c9-d18a-488b-919a-c3ba8be082cc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -10,7 +10,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
@@ -28,7 +28,7 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -128,13 +128,13 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -184,7 +184,7 @@
         },
         "inviter_id": {
           "name": "inviter_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         }
@@ -280,19 +280,19 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -416,7 +416,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
@@ -587,13 +587,13 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
         "active_organization_id": {
           "name": "active_organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         }
@@ -644,7 +644,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
@@ -656,7 +656,7 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -739,13 +739,13 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -876,13 +876,13 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1072,13 +1072,13 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1189,7 +1189,7 @@
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1287,8 +1287,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "organization_id = current_setting('app.organization_id', true)",
-          "withCheck": "organization_id = current_setting('app.organization_id', true)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -1306,7 +1306,7 @@
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1425,8 +1425,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "organization_id = current_setting('app.organization_id', true)",
-          "withCheck": "organization_id = current_setting('app.organization_id', true)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -1444,7 +1444,7 @@
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1516,8 +1516,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "organization_id = current_setting('app.organization_id', true)",
-          "withCheck": "organization_id = current_setting('app.organization_id', true)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -1535,7 +1535,7 @@
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1668,8 +1668,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "organization_id = current_setting('app.organization_id', true)",
-          "withCheck": "organization_id = current_setting('app.organization_id', true)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -1774,8 +1774,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "comment_id IN (\n  SELECT c.id FROM comments c\n  JOIN posts p ON c.post_id = p.id\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "comment_id IN (\n  SELECT c.id FROM comments c\n  JOIN posts p ON c.post_id = p.id\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "comment_id IN (\n  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)",
+          "withCheck": "comment_id IN (\n  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)"
         }
       },
       "checkConstraints": {},
@@ -1789,6 +1789,12 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
           "notNull": true
         },
         "post_id": {
@@ -1805,7 +1811,7 @@
         },
         "member_id": {
           "name": "member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -1849,6 +1855,21 @@
         }
       },
       "indexes": {
+        "comments_org_id_idx": {
+          "name": "comments_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "comments_post_id_idx": {
           "name": "comments_post_id_idx",
           "columns": [
@@ -1932,6 +1953,15 @@
         }
       },
       "foreignKeys": {
+        "comments_organization_id_organization_id_fk": {
+          "name": "comments_organization_id_organization_id_fk",
+          "tableFrom": "comments",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "comments_post_id_posts_id_fk": {
           "name": "comments_post_id_posts_id_fk",
           "tableFrom": "comments",
@@ -1959,8 +1989,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -2092,8 +2122,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "post_id IN (\n  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)",
+          "withCheck": "post_id IN (\n  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)"
         }
       },
       "checkConstraints": {},
@@ -2197,8 +2227,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "post_id IN (\n  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)",
+          "withCheck": "post_id IN (\n  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)"
         }
       },
       "checkConstraints": {},
@@ -2212,6 +2242,12 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
           "notNull": true
         },
         "board_id": {
@@ -2240,7 +2276,7 @@
         },
         "member_id": {
           "name": "member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -2270,7 +2306,7 @@
         },
         "owner_member_id": {
           "name": "owner_member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -2301,7 +2337,7 @@
         },
         "official_response_member_id": {
           "name": "official_response_member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -2336,9 +2372,34 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "search_vector": {
+          "name": "search_vector",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')",
+            "type": "stored"
+          }
         }
       },
       "indexes": {
+        "posts_org_id_idx": {
+          "name": "posts_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "posts_board_id_idx": {
           "name": "posts_board_id_idx",
           "columns": [
@@ -2527,9 +2588,82 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "posts_org_board_vote_created_idx": {
+          "name": "posts_org_board_vote_created_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "board_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vote_count",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "posts_with_status_idx": {
+          "name": "posts_with_status_idx",
+          "columns": [
+            {
+              "expression": "status_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vote_count",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "status_id IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "posts_search_vector_idx": {
+          "name": "posts_search_vector_idx",
+          "columns": [
+            {
+              "expression": "search_vector",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
         }
       },
       "foreignKeys": {
+        "posts_organization_id_organization_id_fk": {
+          "name": "posts_organization_id_organization_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "posts_board_id_boards_id_fk": {
           "name": "posts_board_id_boards_id_fk",
           "tableFrom": "posts",
@@ -2584,8 +2718,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "board_id IN (\n  SELECT id FROM boards\n  WHERE organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "board_id IN (\n  SELECT id FROM boards\n  WHERE organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -2599,6 +2733,12 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
           "notNull": true
         },
         "post_id": {
@@ -2615,7 +2755,7 @@
         },
         "member_id": {
           "name": "member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -2641,6 +2781,21 @@
         }
       },
       "indexes": {
+        "votes_org_id_idx": {
+          "name": "votes_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "votes_post_id_idx": {
           "name": "votes_post_id_idx",
           "columns": [
@@ -2715,6 +2870,15 @@
         }
       },
       "foreignKeys": {
+        "votes_organization_id_organization_id_fk": {
+          "name": "votes_organization_id_organization_id_fk",
+          "tableFrom": "votes",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "votes_post_id_posts_id_fk": {
           "name": "votes_post_id_posts_id_fk",
           "tableFrom": "votes",
@@ -2742,8 +2906,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -2842,8 +3006,8 @@
         }
       },
       "foreignKeys": {
-        "integration_event_mappings_integration_id_organization_integrations_id_fk": {
-          "name": "integration_event_mappings_integration_id_organization_integrations_id_fk",
+        "event_mappings_integration_fk": {
+          "name": "event_mappings_integration_fk",
           "tableFrom": "integration_event_mappings",
           "tableTo": "organization_integrations",
           "columnsFrom": ["integration_id"],
@@ -2954,8 +3118,8 @@
         }
       },
       "foreignKeys": {
-        "integration_linked_entities_integration_id_organization_integrations_id_fk": {
-          "name": "integration_linked_entities_integration_id_organization_integrations_id_fk",
+        "linked_entities_integration_fk": {
+          "name": "linked_entities_integration_fk",
           "tableFrom": "integration_linked_entities",
           "tableTo": "organization_integrations",
           "columnsFrom": ["integration_id"],
@@ -3060,8 +3224,8 @@
         }
       },
       "foreignKeys": {
-        "integration_sync_log_integration_id_organization_integrations_id_fk": {
-          "name": "integration_sync_log_integration_id_organization_integrations_id_fk",
+        "sync_log_integration_fk": {
+          "name": "sync_log_integration_fk",
           "tableFrom": "integration_sync_log",
           "tableTo": "organization_integrations",
           "columnsFrom": ["integration_id"],
@@ -3088,7 +3252,7 @@
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -3144,7 +3308,7 @@
         },
         "connected_by_member_id": {
           "name": "connected_by_member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -3257,8 +3421,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "organization_id = current_setting('app.organization_id', true)",
-          "withCheck": "organization_id = current_setting('app.organization_id', true)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},
@@ -3364,8 +3528,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "board_id IN (\n  SELECT id FROM boards\n  WHERE organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "board_id IN (\n  SELECT id FROM boards\n  WHERE organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "board_id IN (\n  SELECT id FROM boards\n  WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)",
+          "withCheck": "board_id IN (\n  SELECT id FROM boards\n  WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)"
         }
       },
       "checkConstraints": {},
@@ -3383,7 +3547,7 @@
         },
         "member_id": {
           "name": "member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -3465,8 +3629,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "member_id IN (\n  SELECT id FROM member\n  WHERE organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "member_id IN (\n  SELECT id FROM member\n  WHERE organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "member_id IN (\n  SELECT id FROM member\n  WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)",
+          "withCheck": "member_id IN (\n  SELECT id FROM member\n  WHERE organization_id = current_setting('app.organization_id', true)::uuid\n)"
         }
       },
       "checkConstraints": {},
@@ -3490,7 +3654,7 @@
         },
         "member_id": {
           "name": "member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -3619,8 +3783,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)",
-          "withCheck": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)\n)"
+          "using": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)::uuid\n)",
+          "withCheck": "post_id IN (\n  SELECT p.id FROM posts p\n  JOIN boards b ON p.board_id = b.id\n  WHERE b.organization_id = current_setting('app.organization_id', true)::uuid\n)"
         }
       },
       "checkConstraints": {},
@@ -3644,7 +3808,7 @@
         },
         "member_id": {
           "name": "member_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -3756,7 +3920,7 @@
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -3909,8 +4073,8 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
-          "using": "organization_id = current_setting('app.organization_id', true)",
-          "withCheck": "organization_id = current_setting('app.organization_id', true)"
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
         }
       },
       "checkConstraints": {},

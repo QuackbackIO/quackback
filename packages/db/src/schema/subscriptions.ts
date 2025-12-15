@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
 import { organization } from './auth'
 
@@ -22,7 +22,7 @@ export const subscription = pgTable(
   'subscription',
   {
     id: typeIdWithDefault('subscription')('id').primaryKey(),
-    organizationId: text('organization_id')
+    organizationId: typeIdColumn('org')('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     // Pricing tier determines feature access
@@ -64,8 +64,8 @@ export const subscription = pgTable(
     pgPolicy('subscription_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)`,
+      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
     }),
   ]
 ).enableRLS()

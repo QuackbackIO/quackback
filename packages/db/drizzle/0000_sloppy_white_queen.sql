@@ -1,15 +1,9 @@
-CREATE ROLE "app_user";--> statement-breakpoint
-CREATE OR REPLACE FUNCTION app_org_id() RETURNS text AS $$
-BEGIN
-  RETURN NULLIF(current_setting('app.organization_id', true), '');
-END;
-$$ LANGUAGE plpgsql STABLE;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION app_org_id() TO app_user;--> statement-breakpoint
+DO $$ BEGIN CREATE ROLE "app_user"; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
 CREATE TABLE "account" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
 	"provider_id" text NOT NULL,
-	"user_id" text NOT NULL,
+	"user_id" uuid NOT NULL,
 	"access_token" text,
 	"refresh_token" text,
 	"id_token" text,
@@ -22,8 +16,8 @@ CREATE TABLE "account" (
 );
 --> statement-breakpoint
 CREATE TABLE "invitation" (
-	"id" text PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"email" text NOT NULL,
 	"name" text,
 	"role" text,
@@ -31,19 +25,19 @@ CREATE TABLE "invitation" (
 	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_sent_at" timestamp with time zone,
-	"inviter_id" text NOT NULL
+	"inviter_id" uuid NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "member" (
-	"id" text PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
-	"user_id" text NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"user_id" uuid NOT NULL,
 	"role" text DEFAULT 'member' NOT NULL,
 	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "organization" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"logo" text,
@@ -72,15 +66,15 @@ CREATE TABLE "session" (
 	"updated_at" timestamp with time zone NOT NULL,
 	"ip_address" text,
 	"user_agent" text,
-	"user_id" text NOT NULL,
-	"active_organization_id" text,
+	"user_id" uuid NOT NULL,
+	"active_organization_id" uuid,
 	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "session_transfer_token" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"token" text NOT NULL,
-	"user_id" text NOT NULL,
+	"user_id" uuid NOT NULL,
 	"target_domain" text NOT NULL,
 	"callback_url" text NOT NULL,
 	"context" text DEFAULT 'team' NOT NULL,
@@ -90,8 +84,8 @@ CREATE TABLE "session_transfer_token" (
 );
 --> statement-breakpoint
 CREATE TABLE "sso_provider" (
-	"id" text PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"issuer" text NOT NULL,
 	"domain" text NOT NULL,
 	"provider_id" text NOT NULL,
@@ -103,8 +97,8 @@ CREATE TABLE "sso_provider" (
 );
 --> statement-breakpoint
 CREATE TABLE "user" (
-	"id" text PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
 	"email_verified" boolean DEFAULT false NOT NULL,
@@ -126,8 +120,8 @@ CREATE TABLE "verification" (
 );
 --> statement-breakpoint
 CREATE TABLE "workspace_domain" (
-	"id" text PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"domain" text NOT NULL,
 	"domain_type" text NOT NULL,
 	"is_primary" boolean DEFAULT false NOT NULL,
@@ -139,7 +133,7 @@ CREATE TABLE "workspace_domain" (
 --> statement-breakpoint
 CREATE TABLE "boards" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"slug" text NOT NULL,
 	"name" text NOT NULL,
 	"description" text,
@@ -152,7 +146,7 @@ CREATE TABLE "boards" (
 ALTER TABLE "boards" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "roadmaps" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"slug" text NOT NULL,
 	"name" text NOT NULL,
 	"description" text,
@@ -165,7 +159,7 @@ CREATE TABLE "roadmaps" (
 ALTER TABLE "roadmaps" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "tags" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"color" text DEFAULT '#6b7280' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -174,7 +168,7 @@ CREATE TABLE "tags" (
 ALTER TABLE "tags" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "post_statuses" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"color" text DEFAULT '#6b7280' NOT NULL,
@@ -197,9 +191,10 @@ CREATE TABLE "comment_reactions" (
 ALTER TABLE "comment_reactions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "comments" (
 	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"post_id" uuid NOT NULL,
 	"parent_id" uuid,
-	"member_id" text,
+	"member_id" uuid,
 	"author_id" text,
 	"author_name" text,
 	"author_email" text,
@@ -224,34 +219,37 @@ CREATE TABLE "post_tags" (
 ALTER TABLE "post_tags" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "posts" (
 	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"board_id" uuid NOT NULL,
 	"title" text NOT NULL,
 	"content" text NOT NULL,
 	"content_json" jsonb,
-	"member_id" text,
+	"member_id" uuid,
 	"author_id" text,
 	"author_name" text,
 	"author_email" text,
 	"status_id" uuid,
-	"owner_member_id" text,
+	"owner_member_id" uuid,
 	"owner_id" text,
 	"estimated" text,
 	"vote_count" integer DEFAULT 0 NOT NULL,
 	"official_response" text,
-	"official_response_member_id" text,
+	"official_response_member_id" uuid,
 	"official_response_author_id" text,
 	"official_response_author_name" text,
 	"official_response_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"search_vector" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')) STORED
 );
 --> statement-breakpoint
 ALTER TABLE "posts" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "votes" (
 	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"post_id" uuid NOT NULL,
 	"user_identifier" text NOT NULL,
-	"member_id" text,
+	"member_id" uuid,
 	"ip_hash" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -298,7 +296,7 @@ CREATE TABLE "integration_sync_log" (
 --> statement-breakpoint
 CREATE TABLE "organization_integrations" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"integration_type" varchar(50) NOT NULL,
 	"status" varchar(20) DEFAULT 'pending' NOT NULL,
 	"access_token_encrypted" text,
@@ -307,7 +305,7 @@ CREATE TABLE "organization_integrations" (
 	"config" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"external_workspace_id" varchar(255),
 	"external_workspace_name" varchar(255),
-	"connected_by_member_id" text,
+	"connected_by_member_id" uuid,
 	"connected_at" timestamp with time zone,
 	"last_sync_at" timestamp with time zone,
 	"last_error" text,
@@ -332,7 +330,7 @@ CREATE TABLE "changelog_entries" (
 ALTER TABLE "changelog_entries" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "notification_preferences" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"member_id" text NOT NULL,
+	"member_id" uuid NOT NULL,
 	"email_status_change" boolean DEFAULT true NOT NULL,
 	"email_new_comment" boolean DEFAULT true NOT NULL,
 	"email_muted" boolean DEFAULT false NOT NULL,
@@ -345,7 +343,7 @@ ALTER TABLE "notification_preferences" ENABLE ROW LEVEL SECURITY;--> statement-b
 CREATE TABLE "post_subscriptions" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"post_id" uuid NOT NULL,
-	"member_id" text NOT NULL,
+	"member_id" uuid NOT NULL,
 	"reason" varchar(20) NOT NULL,
 	"muted" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -356,7 +354,7 @@ ALTER TABLE "post_subscriptions" ENABLE ROW LEVEL SECURITY;--> statement-breakpo
 CREATE TABLE "unsubscribe_tokens" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"token" text NOT NULL,
-	"member_id" text NOT NULL,
+	"member_id" uuid NOT NULL,
 	"post_id" uuid,
 	"action" varchar(30) NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
@@ -367,7 +365,7 @@ CREATE TABLE "unsubscribe_tokens" (
 --> statement-breakpoint
 CREATE TABLE "subscription" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
+	"organization_id" uuid NOT NULL,
 	"tier" text NOT NULL,
 	"status" text DEFAULT 'trialing' NOT NULL,
 	"stripe_customer_id" text,
@@ -395,17 +393,20 @@ ALTER TABLE "sso_provider" ADD CONSTRAINT "sso_provider_organization_id_organiza
 ALTER TABLE "user" ADD CONSTRAINT "user_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_domain" ADD CONSTRAINT "workspace_domain_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_reactions" ADD CONSTRAINT "comment_reactions_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_roadmaps" ADD CONSTRAINT "post_roadmaps_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_roadmaps" ADD CONSTRAINT "post_roadmaps_roadmap_id_roadmaps_id_fk" FOREIGN KEY ("roadmap_id") REFERENCES "public"."roadmaps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_status_id_post_statuses_id_fk" FOREIGN KEY ("status_id") REFERENCES "public"."post_statuses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_owner_member_id_member_id_fk" FOREIGN KEY ("owner_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_official_response_member_id_member_id_fk" FOREIGN KEY ("official_response_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "votes" ADD CONSTRAINT "votes_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "votes" ADD CONSTRAINT "votes_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "votes" ADD CONSTRAINT "votes_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_event_mappings" ADD CONSTRAINT "event_mappings_integration_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."organization_integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -449,6 +450,7 @@ CREATE INDEX "post_statuses_org_id_idx" ON "post_statuses" USING btree ("organiz
 CREATE INDEX "post_statuses_position_idx" ON "post_statuses" USING btree ("organization_id","category","position");--> statement-breakpoint
 CREATE INDEX "comment_reactions_comment_id_idx" ON "comment_reactions" USING btree ("comment_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "comment_reactions_unique_idx" ON "comment_reactions" USING btree ("comment_id","user_identifier","emoji");--> statement-breakpoint
+CREATE INDEX "comments_org_id_idx" ON "comments" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "comments_post_id_idx" ON "comments" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "comments_parent_id_idx" ON "comments" USING btree ("parent_id");--> statement-breakpoint
 CREATE INDEX "comments_member_id_idx" ON "comments" USING btree ("member_id");--> statement-breakpoint
@@ -461,6 +463,7 @@ CREATE INDEX "post_roadmaps_position_idx" ON "post_roadmaps" USING btree ("roadm
 CREATE UNIQUE INDEX "post_tags_pk" ON "post_tags" USING btree ("post_id","tag_id");--> statement-breakpoint
 CREATE INDEX "post_tags_post_id_idx" ON "post_tags" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "post_tags_tag_id_idx" ON "post_tags" USING btree ("tag_id");--> statement-breakpoint
+CREATE INDEX "posts_org_id_idx" ON "posts" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "posts_board_id_idx" ON "posts" USING btree ("board_id");--> statement-breakpoint
 CREATE INDEX "posts_status_id_idx" ON "posts" USING btree ("status_id");--> statement-breakpoint
 CREATE INDEX "posts_member_id_idx" ON "posts" USING btree ("member_id");--> statement-breakpoint
@@ -472,6 +475,10 @@ CREATE INDEX "posts_board_vote_count_idx" ON "posts" USING btree ("board_id","vo
 CREATE INDEX "posts_board_created_at_idx" ON "posts" USING btree ("board_id","created_at");--> statement-breakpoint
 CREATE INDEX "posts_board_status_id_idx" ON "posts" USING btree ("board_id","status_id");--> statement-breakpoint
 CREATE INDEX "posts_member_created_at_idx" ON "posts" USING btree ("member_id","created_at");--> statement-breakpoint
+CREATE INDEX "posts_org_board_vote_created_idx" ON "posts" USING btree ("organization_id","board_id","vote_count");--> statement-breakpoint
+CREATE INDEX "posts_with_status_idx" ON "posts" USING btree ("status_id","vote_count") WHERE status_id IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "posts_search_vector_idx" ON "posts" USING gin ("search_vector");--> statement-breakpoint
+CREATE INDEX "votes_org_id_idx" ON "votes" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "votes_post_id_idx" ON "votes" USING btree ("post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "votes_unique_idx" ON "votes" USING btree ("post_id","user_identifier");--> statement-breakpoint
 CREATE INDEX "votes_member_id_idx" ON "votes" USING btree ("member_id");--> statement-breakpoint
@@ -493,89 +500,53 @@ CREATE INDEX "unsubscribe_tokens_member_idx" ON "unsubscribe_tokens" USING btree
 CREATE UNIQUE INDEX "subscription_org_id_idx" ON "subscription" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "subscription_stripe_customer_idx" ON "subscription" USING btree ("stripe_customer_id");--> statement-breakpoint
 CREATE INDEX "subscription_stripe_sub_idx" ON "subscription" USING btree ("stripe_subscription_id");--> statement-breakpoint
-CREATE POLICY "boards_tenant_isolation" ON "boards" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)) WITH CHECK (organization_id = current_setting('app.organization_id', true));--> statement-breakpoint
-CREATE POLICY "roadmaps_tenant_isolation" ON "roadmaps" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)) WITH CHECK (organization_id = current_setting('app.organization_id', true));--> statement-breakpoint
-CREATE POLICY "tags_tenant_isolation" ON "tags" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)) WITH CHECK (organization_id = current_setting('app.organization_id', true));--> statement-breakpoint
-CREATE POLICY "post_statuses_tenant_isolation" ON "post_statuses" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)) WITH CHECK (organization_id = current_setting('app.organization_id', true));--> statement-breakpoint
+CREATE POLICY "boards_tenant_isolation" ON "boards" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "roadmaps_tenant_isolation" ON "roadmaps" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "tags_tenant_isolation" ON "tags" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "post_statuses_tenant_isolation" ON "post_statuses" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 CREATE POLICY "comment_reactions_tenant_isolation" ON "comment_reactions" AS PERMISSIVE FOR ALL TO "app_user" USING (comment_id IN (
-  SELECT c.id FROM comments c
-  JOIN posts p ON c.post_id = p.id
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )) WITH CHECK (comment_id IN (
-  SELECT c.id FROM comments c
-  JOIN posts p ON c.post_id = p.id
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
-CREATE POLICY "comments_tenant_isolation" ON "comments" AS PERMISSIVE FOR ALL TO "app_user" USING (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
-)) WITH CHECK (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
-));--> statement-breakpoint
+CREATE POLICY "comments_tenant_isolation" ON "comments" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 CREATE POLICY "post_roadmaps_tenant_isolation" ON "post_roadmaps" AS PERMISSIVE FOR ALL TO "app_user" USING (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )) WITH CHECK (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
 CREATE POLICY "post_tags_tenant_isolation" ON "post_tags" AS PERMISSIVE FOR ALL TO "app_user" USING (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )) WITH CHECK (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
-CREATE POLICY "posts_tenant_isolation" ON "posts" AS PERMISSIVE FOR ALL TO "app_user" USING (board_id IN (
-  SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)
-)) WITH CHECK (board_id IN (
-  SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)
-));--> statement-breakpoint
-CREATE POLICY "votes_tenant_isolation" ON "votes" AS PERMISSIVE FOR ALL TO "app_user" USING (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
-)) WITH CHECK (post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
-));--> statement-breakpoint
-CREATE POLICY "org_integrations_isolation" ON "organization_integrations" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)) WITH CHECK (organization_id = current_setting('app.organization_id', true));--> statement-breakpoint
+CREATE POLICY "posts_tenant_isolation" ON "posts" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "votes_tenant_isolation" ON "votes" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "org_integrations_isolation" ON "organization_integrations" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 CREATE POLICY "changelog_tenant_isolation" ON "changelog_entries" AS PERMISSIVE FOR ALL TO "app_user" USING (board_id IN (
   SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)
+  WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )) WITH CHECK (board_id IN (
   SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)
+  WHERE organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
 CREATE POLICY "notification_preferences_tenant_isolation" ON "notification_preferences" AS PERMISSIVE FOR ALL TO "app_user" USING (member_id IN (
   SELECT id FROM member
-  WHERE organization_id = current_setting('app.organization_id', true)
+  WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )) WITH CHECK (member_id IN (
   SELECT id FROM member
-  WHERE organization_id = current_setting('app.organization_id', true)
+  WHERE organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
 CREATE POLICY "post_subscriptions_tenant_isolation" ON "post_subscriptions" AS PERMISSIVE FOR ALL TO "app_user" USING (post_id IN (
   SELECT p.id FROM posts p
   JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  WHERE b.organization_id = current_setting('app.organization_id', true)::uuid
 )) WITH CHECK (post_id IN (
   SELECT p.id FROM posts p
   JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)
+  WHERE b.organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
-CREATE POLICY "subscription_tenant_isolation" ON "subscription" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)) WITH CHECK (organization_id = current_setting('app.organization_id', true));--> statement-breakpoint
+CREATE POLICY "subscription_tenant_isolation" ON "subscription" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 GRANT USAGE ON SCHEMA public TO app_user;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;--> statement-breakpoint
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;

@@ -11,7 +11,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault, typeIdColumn, textIdColumnNullable } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
 import { member, organization } from './auth'
@@ -25,14 +25,14 @@ const tsvector = customType<{ data: string }>({
 })
 
 // Simplified RLS check - direct organization_id column comparison
-const directOrgCheck = sql`organization_id = current_setting('app.organization_id', true)`
+const directOrgCheck = sql`organization_id = current_setting('app.organization_id', true)::uuid`
 
 export const posts = pgTable(
   'posts',
   {
     id: typeIdWithDefault('post')('id').primaryKey(),
     // Denormalized for RLS performance - avoids join to boards table
-    organizationId: text('organization_id')
+    organizationId: typeIdColumn('org')('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     boardId: typeIdColumn('board')('board_id')
@@ -45,7 +45,7 @@ export const posts = pgTable(
     // Member-scoped identity (Hub-and-Spoke model)
     // memberId links to the organization-scoped member record
     // For anonymous posts, memberId is null and authorName/authorEmail are used
-    memberId: textIdColumnNullable('member')('member_id').references(() => member.id, {
+    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
       onDelete: 'set null',
     }),
     // Legacy fields (kept for anonymous posts and migration compatibility)
@@ -57,7 +57,7 @@ export const posts = pgTable(
       onDelete: 'set null',
     }),
     // Owner is also member-scoped (team member assigned to this post)
-    ownerMemberId: textIdColumnNullable('member')('owner_member_id').references(() => member.id, {
+    ownerMemberId: typeIdColumnNullable('member')('owner_member_id').references(() => member.id, {
       onDelete: 'set null',
     }),
     ownerId: text('owner_id'), // Legacy, kept for migration
@@ -65,7 +65,7 @@ export const posts = pgTable(
     voteCount: integer('vote_count').default(0).notNull(),
     // Official team response (member-scoped)
     officialResponse: text('official_response'),
-    officialResponseMemberId: textIdColumnNullable('member')(
+    officialResponseMemberId: typeIdColumnNullable('member')(
       'official_response_member_id'
     ).references(() => member.id, {
       onDelete: 'set null',
@@ -121,7 +121,7 @@ export const posts = pgTable(
 
 // RLS check via posts table (single join to posts.organization_id)
 const postTagsOrgCheck = sql`post_id IN (
-  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )`
 
 export const postTags = pgTable(
@@ -177,14 +177,14 @@ export const votes = pgTable(
   {
     id: typeIdWithDefault('vote')('id').primaryKey(),
     // Denormalized for RLS performance
-    organizationId: text('organization_id')
+    organizationId: typeIdColumn('org')('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     userIdentifier: text('user_identifier').notNull(),
-    memberId: textIdColumnNullable('member')('member_id').references(() => member.id, {
+    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
       onDelete: 'cascade',
     }),
     ipHash: text('ip_hash'),
@@ -211,14 +211,14 @@ export const comments = pgTable(
   {
     id: typeIdWithDefault('comment')('id').primaryKey(),
     // Denormalized for RLS performance
-    organizationId: text('organization_id')
+    organizationId: typeIdColumn('org')('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     parentId: typeIdColumn('comment')('parent_id'),
-    memberId: textIdColumnNullable('member')('member_id').references(() => member.id, {
+    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
       onDelete: 'set null',
     }),
     authorId: text('author_id'),
@@ -246,7 +246,7 @@ export const comments = pgTable(
 
 // RLS check via comments table (single join to comments.organization_id)
 const commentReactionsOrgCheck = sql`comment_id IN (
-  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)
+  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )`
 
 export const commentReactions = pgTable(

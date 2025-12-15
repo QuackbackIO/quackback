@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db, adminDb } from '../tenant-context'
 import { subscription } from '../schema/subscriptions'
-import { generateId } from '@quackback/ids'
+import { generateId, type OrgId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -11,7 +11,7 @@ export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled'
 export type SubscriptionTier = 'essentials' | 'professional' | 'team' | 'enterprise'
 
 export interface CreateSubscriptionData {
-  organizationId: string
+  organizationId: OrgId
   tier: SubscriptionTier
   status?: SubscriptionStatus
   stripeCustomerId?: string
@@ -46,7 +46,7 @@ export interface UpdateSubscriptionData {
 /**
  * Get subscription for an organization (uses RLS)
  */
-export async function getSubscriptionByOrganizationId(organizationId: string) {
+export async function getSubscriptionByOrganizationId(organizationId: OrgId) {
   return db.query.subscription.findFirst({
     where: eq(subscription.organizationId, organizationId),
   })
@@ -77,7 +77,7 @@ export async function getSubscriptionByStripeSubscriptionId(stripeSubscriptionId
 /**
  * Get subscription by organization ID (admin - bypasses RLS for webhooks)
  */
-export async function getSubscriptionByOrganizationIdAdmin(organizationId: string) {
+export async function getSubscriptionByOrganizationIdAdmin(organizationId: OrgId) {
   return adminDb.query.subscription.findFirst({
     where: eq(subscription.organizationId, organizationId),
   })
@@ -115,7 +115,7 @@ export async function createSubscription(data: CreateSubscriptionData) {
  * Update a subscription by organization ID (admin - bypasses RLS)
  */
 export async function updateSubscriptionByOrganizationId(
-  organizationId: string,
+  organizationId: OrgId,
   data: UpdateSubscriptionData
 ) {
   const [result] = await adminDb

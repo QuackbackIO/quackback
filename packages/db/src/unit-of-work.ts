@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db, type Database } from './client'
+import { toUuid, type OrgId } from '@quackback/ids'
 import {
   PostRepository,
   BoardRepository,
@@ -13,9 +14,9 @@ import {
 // UUID regex pattern for validation (prevents SQL injection)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function validateOrganizationId(organizationId: string): void {
-  if (!UUID_REGEX.test(organizationId)) {
-    throw new Error(`Invalid organization ID format: ${organizationId}`)
+function validateUuid(uuid: string): void {
+  if (!UUID_REGEX.test(uuid)) {
+    throw new Error(`Invalid UUID format: ${uuid}`)
   }
 }
 
@@ -119,16 +120,18 @@ export class UnitOfWork {
  * ```
  */
 export async function withUnitOfWork<T>(
-  organizationId: string,
+  organizationId: OrgId,
   callback: (uow: UnitOfWork) => Promise<T>
 ): Promise<T> {
-  validateOrganizationId(organizationId)
+  // Convert TypeID to raw UUID for RLS policy
+  const uuid = toUuid(organizationId)
+  validateUuid(uuid)
 
   return db.transaction(async (tx) => {
     // Set up tenant context for RLS
     // Note: SET LOCAL doesn't support parameterized queries in PostgreSQL,
     // so we use sql.raw() with validated UUID to prevent SQL injection
-    await tx.execute(sql.raw(`SET LOCAL app.organization_id = '${organizationId}'`))
+    await tx.execute(sql.raw(`SET LOCAL app.organization_id = '${uuid}'`))
     await tx.execute(sql`SET LOCAL ROLE app_user`)
 
     // Create UnitOfWork instance and execute callback

@@ -7,7 +7,7 @@ import { appUser } from './rls'
 
 const changelogOrgCheck = sql`board_id IN (
   SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)
+  WHERE organization_id = current_setting('app.organization_id', true)::uuid
 )`
 
 export const changelogEntries = pgTable(

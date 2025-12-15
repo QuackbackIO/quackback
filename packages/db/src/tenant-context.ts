@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db, type Database } from './client'
+import { toUuid, type OrgId } from '@quackback/ids'
 
 // Re-export db and Database type for consumers
 export { db, type Database }
@@ -16,9 +17,9 @@ export const adminDb = db
 // UUID regex pattern for validation (prevents SQL injection)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function validateOrganizationId(organizationId: string): void {
-  if (!UUID_REGEX.test(organizationId)) {
-    throw new Error(`Invalid organization ID format: ${organizationId}`)
+function validateUuid(uuid: string): void {
+  if (!UUID_REGEX.test(uuid)) {
+    throw new Error(`Invalid UUID format: ${uuid}`)
   }
 }
 
@@ -28,14 +29,16 @@ function validateOrganizationId(organizationId: string): void {
  * All RLS policies will automatically filter by this organization.
  */
 export async function withTenantContext<T>(
-  organizationId: string,
+  organizationId: OrgId,
   callback: (tx: Database) => Promise<T>
 ): Promise<T> {
-  validateOrganizationId(organizationId)
+  // Convert TypeID to raw UUID for RLS policy
+  const uuid = toUuid(organizationId)
+  validateUuid(uuid)
   return db.transaction(async (tx) => {
     // Note: SET LOCAL doesn't support parameterized queries in PostgreSQL,
     // so we use sql.raw() with validated UUID to prevent SQL injection
-    await tx.execute(sql.raw(`SET LOCAL app.organization_id = '${organizationId}'`))
+    await tx.execute(sql.raw(`SET LOCAL app.organization_id = '${uuid}'`))
     await tx.execute(sql`SET LOCAL ROLE app_user`)
     return callback(tx as unknown as Database)
   })
@@ -45,11 +48,13 @@ export async function withTenantContext<T>(
  * Sets tenant context for a single query (when not using transactions).
  * Prefer withTenantContext for multiple queries.
  */
-export async function setTenantContext(organizationId: string): Promise<void> {
-  validateOrganizationId(organizationId)
+export async function setTenantContext(organizationId: OrgId): Promise<void> {
+  // Convert TypeID to raw UUID for RLS policy
+  const uuid = toUuid(organizationId)
+  validateUuid(uuid)
   // Note: SET doesn't support parameterized queries in PostgreSQL,
   // so we use sql.raw() with validated UUID to prevent SQL injection
-  await db.execute(sql.raw(`SET app.organization_id = '${organizationId}'`))
+  await db.execute(sql.raw(`SET app.organization_id = '${uuid}'`))
   await db.execute(sql`SET ROLE app_user`)
 }
 
