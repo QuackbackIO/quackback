@@ -9,10 +9,12 @@
     "./sso": "./packages/sso/src/index.ts",
     "./scim": "./packages/scim/src/index.ts",
     "./audit-logs": "./packages/audit-logs/src/index.ts",
-    "./analytics": "./packages/analytics/src/index.ts"
+    "./analytics": "./packages/analytics/src/index.ts",
+    "./billing": "./packages/billing/src/index.ts"
   },
   "dependencies": {
     "@quackback/db": "workspace:*",
-    "@quackback/domain": "workspace:*"
+    "@quackback/domain": "workspace:*",
+    "stripe": "^20.0.0"
   }
 }
