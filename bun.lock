@@ -153,6 +153,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quackback/db": "workspace:*",
+        "@quackback/ids": "workspace:*",
         "@quackback/jobs": "workspace:*",
       },
     },
