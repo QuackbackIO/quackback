@@ -24,4 +24,6 @@ export {
   type DomainEventPayload,
   type IntegrationJobData,
   type IntegrationJobResult,
+  type UserNotificationJobData,
+  type UserNotificationJobResult,
 } from './types'

@@ -3,18 +3,18 @@ import Papa from 'papaparse'
 import { z } from 'zod'
 import { withTenantContext, posts, tags, postTags, postStatuses, eq, and } from '@quackback/db'
 import type { ImportJobData, ImportJobResult, ImportRowError } from '@quackback/jobs'
+import { orgIdSchema, boardIdSchema, type OrgId, type BoardId } from '@quackback/ids'
 
 // Constants
 const MAX_ERRORS = 100
 const MAX_TAGS_PER_POST = 20
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Job data validation schema
  */
 const jobDataSchema = z.object({
-  organizationId: z.string().regex(UUID_REGEX, 'Invalid organization ID'),
-  boardId: z.string().regex(UUID_REGEX, 'Invalid board ID'),
+  organizationId: orgIdSchema,
+  boardId: boardIdSchema,
   csvContent: z.string().min(1, 'CSV content is required'),
   totalRows: z.number().int().positive(),
 })
@@ -54,7 +54,7 @@ const csvRowSchema = z.object({
 interface ProcessedRow {
   title: string
   content: string
-  boardId: string
+  boardId: BoardId
   statusId: string | null
   status: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
   authorName: string | null
@@ -140,8 +140,8 @@ export async function processImportJob(job: Job<ImportJobData>): Promise<ImportJ
  */
 async function processBatch(
   rows: Record<string, string>[],
-  organizationId: string,
-  defaultBoardId: string,
+  organizationId: OrgId,
+  defaultBoardId: BoardId,
   startIndex: number
 ): Promise<BatchResult> {
   const result: BatchResult = {

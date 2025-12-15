@@ -15,6 +15,7 @@ import {
 import type { UserNotificationJobData, UserNotificationJobResult } from '@quackback/jobs'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
+import type { OrgId } from '@quackback/ids'
 
 interface StatusChangeEventData {
   post: { id: string; title: string; boardSlug: string }
@@ -244,7 +245,7 @@ function shouldSkipActor(
  * Look up the primary workspace domain for an organization.
  * Returns the full URL including protocol.
  */
-async function getTenantUrl(organizationId: string): Promise<string> {
+async function getTenantUrl(organizationId: OrgId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
     where: and(
       eq(workspaceDomain.organizationId, organizationId),
@@ -268,7 +269,7 @@ async function getTenantUrl(organizationId: string): Promise<string> {
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: string, organizationId: string): Promise<string | null> {
+async function getPostBoardSlug(postId: string, organizationId: OrgId): Promise<string | null> {
   const result = await withTenantContext(organizationId, async (txDb) => {
     const post = await txDb.query.posts.findFirst({
       where: (posts, { eq }) => eq(posts.id, postId),

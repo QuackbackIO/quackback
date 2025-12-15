@@ -1,3 +1,5 @@
+import type { OrgId, BoardId, MemberId } from '@quackback/ids'
+
 /**
  * Job type identifiers
  */
@@ -13,15 +15,15 @@ export type JobType = (typeof JobTypes)[keyof typeof JobTypes]
  */
 export interface ImportJobData {
   /** Organization ID for tenant isolation */
-  organizationId: string
+  organizationId: OrgId
   /** Target board ID for imported posts */
-  boardId: string
+  boardId: BoardId
   /** CSV content encoded as base64 */
   csvContent: string
   /** Total number of rows in the CSV (excluding header) */
   totalRows: number
   /** Member ID of the user who initiated the import */
-  initiatedByMemberId: string
+  initiatedByMemberId: MemberId
 }
 
 /**
@@ -86,7 +88,7 @@ export interface ImportJobStatus {
 export interface DomainEventPayload {
   id: string
   type: string
-  organizationId: string
+  organizationId: OrgId
   timestamp: string
   actor: { type: 'user' | 'system'; userId?: string; email?: string; service?: string }
   data: unknown
@@ -97,7 +99,7 @@ export interface DomainEventPayload {
  */
 export interface IntegrationJobData {
   /** Organization ID for tenant isolation */
-  organizationId: string
+  organizationId: OrgId
   /** Integration configuration ID */
   integrationId: string
   /** Integration type (slack, discord, linear, etc.) */
@@ -135,7 +137,7 @@ export interface UserNotificationJobData {
   /** Event type (post.status_changed, comment.created) */
   eventType: string
   /** Organization ID for tenant isolation */
-  organizationId: string
+  organizationId: OrgId
   /** Event timestamp */
   timestamp: string
   /** Actor who triggered the event (excluded from notifications) */

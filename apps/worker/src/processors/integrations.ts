@@ -23,6 +23,7 @@ import {
   markAsProcessed,
   type IntegrationContext,
 } from '@quackback/integrations'
+import type { OrgId } from '@quackback/ids'
 
 // Lazy-initialized Redis client
 let _redis: ReturnType<typeof createRedisClient> | null = null
@@ -187,7 +188,7 @@ export async function processIntegrationJob(
  * Records a sync operation in the audit log.
  */
 async function recordSyncLog(
-  organizationId: string,
+  organizationId: OrgId,
   integrationId: string,
   eventId: string,
   eventType: string,
