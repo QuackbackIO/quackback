@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Parse tag filter
-    const tagIds = searchParams.getAll('tagIds').filter(Boolean) as TagId[]
+    // Parse tag filter - only include valid TypeIDs
+    const tagIds = searchParams.getAll('tagIds').filter((id) => isValidTypeId(id, 'tag')) as TagId[]
 
     // Call PostService to list public posts
     const postService = getPostService()
