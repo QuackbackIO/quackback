@@ -7,27 +7,34 @@
  */
 
 /**
- * Deployment mode detection
- * Self-hosted deployments get ALL features without restrictions
+ * Edition detection
+ * OSS (self-hosted) deployments get ALL features without restrictions
  */
-export type DeploymentMode = 'self-hosted' | 'cloud'
+export type Edition = 'oss' | 'cloud'
 
 /**
- * Check if running in self-hosted mode
- * Self-hosted = all features enabled, no tier checks needed
+ * Check if running in OSS (self-hosted) mode
+ * OSS = all features enabled, no tier checks needed
  *
- * @returns true if self-hosted (default), false if cloud
+ * @returns true if OSS/self-hosted (default), false if cloud
  */
 export function isSelfHosted(): boolean {
-  // Default to self-hosted (more permissive) if not specified
-  return process.env.DEPLOYMENT_MODE !== 'cloud'
+  // Default to OSS (more permissive) if not specified
+  return process.env.EDITION !== 'cloud'
 }
 
 /**
- * Get current deployment mode
+ * Check if running in cloud mode
  */
-export function getDeploymentMode(): DeploymentMode {
-  return isSelfHosted() ? 'self-hosted' : 'cloud'
+export function isCloud(): boolean {
+  return process.env.EDITION === 'cloud'
+}
+
+/**
+ * Get current edition
+ */
+export function getEdition(): Edition {
+  return isCloud() ? 'cloud' : 'oss'
 }
 
 /**
