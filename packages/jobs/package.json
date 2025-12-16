@@ -12,6 +12,7 @@
     "./queues": "./src/queues.ts"
   },
   "dependencies": {
+    "@quackback/ids": "workspace:*",
     "bullmq": "^5.34.8",
     "ioredis": "^5.6.1"
   }
