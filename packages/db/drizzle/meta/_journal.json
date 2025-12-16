@@ -8,6 +8,13 @@
       "when": 1765829135602,
       "tag": "0000_sloppy_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765837988681,
+      "tag": "0001_faithful_rage",
+      "breakpoints": true
     }
   ]
 }

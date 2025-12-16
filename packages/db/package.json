@@ -10,6 +10,7 @@
     "./queries/public": "./src/queries/public.ts",
     "./queries/subscriptions": "./src/queries/subscriptions.ts",
     "./queries/usage": "./src/queries/usage.ts",
+    "./queries/domains": "./src/queries/domains.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

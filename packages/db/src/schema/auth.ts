@@ -433,12 +433,18 @@ export const workspaceDomain = pgTable(
     isPrimary: boolean('is_primary').default(false).notNull(),
     verified: boolean('verified').default(true).notNull(),
     verificationToken: text('verification_token'),
+    // Cloudflare for SaaS fields (cloud edition only)
+    cloudflareHostnameId: text('cloudflare_hostname_id'),
+    sslStatus: text('ssl_status'), // CF SSL status: initializing, pending_validation, active, etc.
+    ownershipStatus: text('ownership_status'), // CF ownership: pending, active, blocked
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('workspace_domain_org_id_idx').on(table.organizationId),
     // Index for tenant resolution by domain (critical path for every request)
     index('workspace_domain_domain_idx').on(table.domain),
+    // Index for Cloudflare webhook lookups by hostname ID
+    index('workspace_domain_cf_hostname_id_idx').on(table.cloudflareHostnameId),
   ]
 )
 
