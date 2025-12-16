@@ -44,6 +44,10 @@ interface WorkspaceDomain {
   isPrimary: boolean
   verified: boolean
   verificationToken: string | null
+  // Cloudflare for SaaS fields (cloud edition only)
+  cloudflareHostnameId: string | null
+  sslStatus: string | null
+  ownershipStatus: string | null
   createdAt: string
 }
 
@@ -115,27 +119,72 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
       }
 
       try {
-        const response = await fetch('/api/domains/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domainId: domain.id }),
-        })
-        const data = await response.json()
+        // Use status endpoint for CF-managed domains, verify endpoint for self-hosted
+        if (domain.cloudflareHostnameId) {
+          // Cloudflare-managed: poll status endpoint
+          const response = await fetch(`/api/domains/status?domainId=${domain.id}`)
+          const data = await response.json()
 
-        if (!isMounted) return
+          if (!isMounted) return
 
-        if (data.verified) {
-          setDomains((prev) => prev.map((d) => (d.id === domain.id ? { ...d, verified: true } : d)))
-          setVerificationStatus((prev) => ({
-            ...prev,
-            [domain.id]: { checking: false },
-          }))
-          router.refresh()
+          if (data.verified) {
+            setDomains((prev) =>
+              prev.map((d) =>
+                d.id === domain.id
+                  ? {
+                      ...d,
+                      verified: true,
+                      sslStatus: data.sslStatus,
+                      ownershipStatus: data.ownershipStatus,
+                    }
+                  : d
+              )
+            )
+            setVerificationStatus((prev) => ({
+              ...prev,
+              [domain.id]: { checking: false },
+            }))
+            router.refresh()
+          } else {
+            // Update SSL status even if not yet verified
+            setDomains((prev) =>
+              prev.map((d) =>
+                d.id === domain.id
+                  ? { ...d, sslStatus: data.sslStatus, ownershipStatus: data.ownershipStatus }
+                  : d
+              )
+            )
+            setVerificationStatus((prev) => ({
+              ...prev,
+              [domain.id]: { checking: false },
+            }))
+          }
         } else {
-          setVerificationStatus((prev) => ({
-            ...prev,
-            [domain.id]: { checking: false, check: data.check },
-          }))
+          // Self-hosted: use verify endpoint
+          const response = await fetch('/api/domains/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domainId: domain.id }),
+          })
+          const data = await response.json()
+
+          if (!isMounted) return
+
+          if (data.verified) {
+            setDomains((prev) =>
+              prev.map((d) => (d.id === domain.id ? { ...d, verified: true } : d))
+            )
+            setVerificationStatus((prev) => ({
+              ...prev,
+              [domain.id]: { checking: false },
+            }))
+            router.refresh()
+          } else {
+            setVerificationStatus((prev) => ({
+              ...prev,
+              [domain.id]: { checking: false, check: data.check },
+            }))
+          }
         }
       } catch {
         if (!isMounted) return
@@ -151,17 +200,34 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
       checkVerification(domain, true)
     })
 
-    // Then poll silently every 30 seconds
-    const interval = setInterval(() => {
-      const stillPending = domains.filter((d) => d.domainType === 'custom' && !d.verified)
-      stillPending.forEach((domain) => {
-        checkVerification(domain, false)
-      })
-    }, 30000)
+    // Poll every 10 seconds for CF domains (faster), 30 seconds for self-hosted
+    const cfDomains = pendingDomains.filter((d) => d.cloudflareHostnameId)
+    const selfHostedDomains = pendingDomains.filter((d) => !d.cloudflareHostnameId)
+
+    const cfInterval =
+      cfDomains.length > 0
+        ? setInterval(() => {
+            const stillPending = domains.filter(
+              (d) => d.domainType === 'custom' && !d.verified && d.cloudflareHostnameId
+            )
+            stillPending.forEach((domain) => checkVerification(domain, false))
+          }, 10000)
+        : null
+
+    const selfHostedInterval =
+      selfHostedDomains.length > 0
+        ? setInterval(() => {
+            const stillPending = domains.filter(
+              (d) => d.domainType === 'custom' && !d.verified && !d.cloudflareHostnameId
+            )
+            stillPending.forEach((domain) => checkVerification(domain, false))
+          }, 30000)
+        : null
 
     return () => {
       isMounted = false
-      clearInterval(interval)
+      if (cfInterval) clearInterval(cfInterval)
+      if (selfHostedInterval) clearInterval(selfHostedInterval)
     }
   }, [domains, router])
 
@@ -248,6 +314,74 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  // Render status badge for custom domains (handles both CF and self-hosted)
+  function renderStatusBadge(domain: WorkspaceDomain, isChecking: boolean) {
+    // Cloudflare-managed domain
+    if (domain.cloudflareHostnameId) {
+      if (domain.verified || domain.sslStatus === 'active') {
+        return (
+          <Badge variant="outline" className="text-green-600 border-green-600/50">
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+            SSL Active
+          </Badge>
+        )
+      }
+
+      // Show SSL provisioning status
+      switch (domain.sslStatus) {
+        case 'pending_validation':
+        case 'pending_issuance':
+        case 'pending_deployment':
+          return (
+            <Badge variant="outline" className="text-blue-600 border-blue-600">
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              SSL {domain.sslStatus?.replace('pending_', '').replace('_', ' ')}
+            </Badge>
+          )
+        case 'initializing':
+          return (
+            <Badge variant="outline" className="text-amber-600 border-amber-600">
+              <Clock className="mr-1 h-3 w-3" />
+              Initializing
+            </Badge>
+          )
+        default:
+          return (
+            <Badge variant="outline" className="text-amber-600 border-amber-600">
+              <Clock className="mr-1 h-3 w-3" />
+              {domain.sslStatus || 'Pending'}
+            </Badge>
+          )
+      }
+    }
+
+    // Self-hosted domain (existing logic)
+    if (domain.verified) {
+      return (
+        <Badge variant="outline" className="text-green-600 border-green-600/50">
+          <CheckCircle2 className="mr-1 h-3 w-3" />
+          Verified
+        </Badge>
+      )
+    }
+
+    if (isChecking) {
+      return (
+        <Badge variant="outline" className="text-blue-600 border-blue-600">
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          Checking...
+        </Badge>
+      )
+    }
+
+    return (
+      <Badge variant="outline" className="text-amber-600 border-amber-600">
+        <Clock className="mr-1 h-3 w-3" />
+        Pending
+      </Badge>
+    )
+  }
+
   if (loading) {
     return (
       <Card>
@@ -306,23 +440,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
                           Primary
                         </Badge>
                       )}
-                      {!isSubdomain &&
-                        (domain.verified ? (
-                          <Badge variant="outline" className="text-green-600 border-green-600/50">
-                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                            Verified
-                          </Badge>
-                        ) : isChecking ? (
-                          <Badge variant="outline" className="text-blue-600 border-blue-600">
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            Checking...
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-amber-600 border-amber-600">
-                            <Clock className="mr-1 h-3 w-3" />
-                            Pending
-                          </Badge>
-                        ))}
+                      {!isSubdomain && renderStatusBadge(domain, isChecking)}
                     </div>
                     <div className="flex items-center gap-2">
                       {(domain.verified || isSubdomain) && !domain.isPrimary && (
