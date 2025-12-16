@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, invitation, workspaceDomain, eq } from '@quackback/db'
+import { db, invitation, workspaceDomain, eq } from '@/lib/db'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { isValidTypeId, type InviteId } from '@quackback/ids'
 

@@ -9,7 +9,7 @@ import {
   workspaceDomain,
   eq,
   and,
-} from '@quackback/db'
+} from '@/lib/db'
 import { verifyOAuthState } from '@/lib/auth/oauth-state'
 import { generateId, type UserId } from '@quackback/ids'
 
@@ -84,9 +84,17 @@ async function exchangeCodeForToken(
       }),
     })
 
-    const data = await response.json()
+    const data = (await response.json()) as {
+      error?: string
+      error_description?: string
+      access_token?: string
+    }
+
     if (data.error) {
       return { error: data.error_description || data.error }
+    }
+    if (!data.access_token) {
+      return { error: 'No access token received from GitHub' }
     }
     return { accessToken: data.access_token }
   }
@@ -106,9 +114,16 @@ async function exchangeCodeForToken(
       }),
     })
 
-    const data = await response.json()
+    const data = (await response.json()) as {
+      error?: string
+      error_description?: string
+      access_token?: string
+    }
     if (data.error) {
       return { error: data.error_description || data.error }
+    }
+    if (!data.access_token) {
+      return { error: 'No access token received from Google' }
     }
     return { accessToken: data.access_token }
   }
@@ -126,6 +141,7 @@ async function getUserInfo(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/vnd.github+json',
+        'User-Agent': 'Quackback',
       },
     })
 
@@ -133,7 +149,13 @@ async function getUserInfo(
       return { error: 'Failed to get user info from GitHub' }
     }
 
-    const userData = await userResponse.json()
+    const userData = (await userResponse.json()) as {
+      email?: string
+      name?: string
+      login: string
+      avatar_url: string
+      id: number
+    }
 
     // Get primary email (may not be in profile)
     let email = userData.email
@@ -142,14 +164,17 @@ async function getUserInfo(
         headers: {
           Authorization: `Bearer ${accessToken}`,
           Accept: 'application/vnd.github+json',
+          'User-Agent': 'Quackback',
         },
       })
 
       if (emailsResponse.ok) {
-        const emails = await emailsResponse.json()
-        const primaryEmail = emails.find(
-          (e: { primary: boolean; verified: boolean }) => e.primary && e.verified
-        )
+        const emails = (await emailsResponse.json()) as Array<{
+          email: string
+          primary: boolean
+          verified: boolean
+        }>
+        const primaryEmail = emails.find((e) => e.primary && e.verified)
         email = primaryEmail?.email || emails[0]?.email
       }
     }
@@ -180,7 +205,12 @@ async function getUserInfo(
       return { error: 'Failed to get user info from Google' }
     }
 
-    const userData = await response.json()
+    const userData = (await response.json()) as {
+      email?: string
+      name?: string
+      picture?: string
+      id: string
+    }
 
     if (!userData.email) {
       return { error: 'Could not get email from Google' }

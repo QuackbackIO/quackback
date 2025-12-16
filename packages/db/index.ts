@@ -1,5 +1,5 @@
 // Client and tenant context
-export { db, type Database } from './src/tenant-context'
+export { db, getDb, type Database } from './src/tenant-context'
 export { withTenantContext, setTenantContext, clearTenantContext } from './src/tenant-context'
 
 // Unit of Work

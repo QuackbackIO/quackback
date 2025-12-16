@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { getPostService } from '@/lib/services'
-import { db, member, eq, and } from '@quackback/db'
+import { db, member, eq, and } from '@/lib/db'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { isValidTypeId, type OrgId } from '@quackback/ids'
 

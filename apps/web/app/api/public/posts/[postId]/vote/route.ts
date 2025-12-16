@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, member, eq, and } from '@quackback/db'
+import { db, member, eq, and } from '@/lib/db'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getPostService } from '@/lib/services'

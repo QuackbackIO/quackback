@@ -11,7 +11,7 @@ import {
   eq,
   and,
   gt,
-} from '@quackback/db'
+} from '@/lib/db'
 import { organizationService } from '@quackback/domain'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { generateId, type InviteId, type OrgId } from '@quackback/ids'

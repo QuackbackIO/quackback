@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { db, encryptToken, organizationIntegrations, organization, eq } from '@quackback/db'
+import { db, encryptToken, organizationIntegrations, organization, eq } from '@/lib/db'
 import { exchangeSlackCode } from '@quackback/integrations'
 import type { MemberId, OrgId } from '@quackback/ids'
 

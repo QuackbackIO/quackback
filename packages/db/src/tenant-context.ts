@@ -1,9 +1,9 @@
 import { sql } from 'drizzle-orm'
-import { db, type Database } from './client'
+import { db, getDb, type Database } from './client'
 import { toUuid, type OrgId } from '@quackback/ids'
 
 // Re-export db and Database type for consumers
-export { db, type Database }
+export { db, getDb, type Database }
 
 /**
  * Admin database access without RLS restrictions.

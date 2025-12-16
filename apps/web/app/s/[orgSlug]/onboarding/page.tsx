@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireTenantBySlug } from '@/lib/tenant'
-import { db, boards, eq } from '@quackback/db'
+import { db, boards, eq } from '@/lib/db'
 import { OnboardingWizard } from './onboarding-wizard'
 
 interface OnboardingPageProps {

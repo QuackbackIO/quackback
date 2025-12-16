@@ -1,5 +1,5 @@
 import { requireTenantBySlug } from '@/lib/tenant'
-import { db, boards, member, eq } from '@quackback/db'
+import { db, boards, member, eq } from '@/lib/db'
 import Link from 'next/link'
 import { MessageSquare, Users, Palette, Plug, Check, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'

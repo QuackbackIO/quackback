@@ -549,4 +549,9 @@ CREATE POLICY "post_subscriptions_tenant_isolation" ON "post_subscriptions" AS P
 CREATE POLICY "subscription_tenant_isolation" ON "subscription" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 GRANT USAGE ON SCHEMA public TO app_user;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;--> statement-breakpoint
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;--> statement-breakpoint
+-- PostgreSQL 16+ requires explicit SET option for role membership to allow SET ROLE
+DO $$
+BEGIN
+  EXECUTE format('GRANT app_user TO %I WITH SET TRUE', current_user);
+END $$;

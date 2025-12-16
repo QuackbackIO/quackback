@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, user, eq } from '@quackback/db'
+import { db, user, eq } from '@/lib/db'
 import { getSession } from '@/lib/auth/server'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB

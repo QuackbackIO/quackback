@@ -6,14 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import {
-  db,
-  member,
-  organizationIntegrations,
-  integrationEventMappings,
-  eq,
-  and,
-} from '@quackback/db'
+import { db, member, organizationIntegrations, integrationEventMappings, eq, and } from '@/lib/db'
 import { z } from 'zod'
 import { isValidTypeId, type IntegrationId, type OrgId } from '@quackback/ids'
 

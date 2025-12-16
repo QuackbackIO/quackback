@@ -10,7 +10,7 @@ import {
   eq,
   and,
   gt,
-} from '@quackback/db'
+} from '@/lib/db'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { generateId } from '@quackback/ids'
 

@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { isCloud, type PricingTier } from '@quackback/domain/features'
 import { createCheckoutSession, isStripeConfigured } from '@quackback/ee/billing'
-import { getSubscriptionByOrganizationIdAdmin } from '@quackback/db/queries/subscriptions'
-import { db, workspaceDomain, eq, and } from '@quackback/db'
+import { getSubscriptionByOrganizationIdAdmin } from '@/lib/db'
+import { db, workspaceDomain, eq, and } from '@/lib/db'
 import { isValidTypeId, type OrgId } from '@quackback/ids'
 
 const checkoutSchema = z.object({

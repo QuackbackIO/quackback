@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { REACTION_EMOJIS, db, commentReactions, eq, and } from '@quackback/db'
+import { REACTION_EMOJIS, db, commentReactions, eq, and } from '@/lib/db'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { getCommentService } from '@/lib/services'

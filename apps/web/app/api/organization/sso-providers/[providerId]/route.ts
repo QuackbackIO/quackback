@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db, ssoProvider, eq, and } from '@quackback/db'
+import { db, ssoProvider, eq, and } from '@/lib/db'
 import { withApiHandlerParams, ApiError, validateBody, successResponse } from '@/lib/api-handler'
 import { updateSsoProviderSchema } from '@/lib/schemas/sso-providers'
 import { isValidTypeId, type SsoProviderId } from '@quackback/ids'

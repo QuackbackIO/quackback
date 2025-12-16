@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
-import type { PostStatusEntity } from '@quackback/db/types'
+import type { PostStatusEntity } from '@/lib/db/types'
 
 interface AddToRoadmapDropdownProps {
   organizationId: string

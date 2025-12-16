@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { requireAuthenticatedTenantBySlug } from '@/lib/tenant'
-import { db, boards, eq, and } from '@quackback/db'
+import { db, boards, eq, and } from '@/lib/db'
 import { BoardSettingsHeader } from './board-settings-header'
 import { BoardSettingsNav } from './board-settings-nav'
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Board, BoardSettings } from '@quackback/db/types'
+import type { Board, BoardSettings } from '@/lib/db/types'
 import type { CreateBoardInput } from '@/lib/schemas/boards'
 
 // ============================================================================

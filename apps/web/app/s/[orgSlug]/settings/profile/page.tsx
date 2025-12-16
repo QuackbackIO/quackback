@@ -1,5 +1,5 @@
 import { requireTenantBySlug } from '@/lib/tenant'
-import { db, user as userTable, eq } from '@quackback/db'
+import { db, user as userTable, eq } from '@/lib/db'
 import { User } from 'lucide-react'
 import { ProfileForm } from './profile-form'
 

@@ -14,7 +14,7 @@ import {
   invitation as invitationTable,
   eq,
   and,
-} from '@quackback/db'
+} from '@/lib/db'
 import type { UserId } from '@quackback/ids'
 import { trustLogin } from './plugins/trust-login'
 

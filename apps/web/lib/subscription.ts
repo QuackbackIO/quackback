@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { getSubscriptionByOrganizationId } from '@quackback/db/queries/subscriptions'
+import { getSubscriptionByOrganizationId } from '@/lib/db'
 import { isCloud, type PricingTier } from '@quackback/domain'
 import type { OrgId, SubscriptionId } from '@quackback/ids'
 

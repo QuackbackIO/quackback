@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, verification, eq } from '@quackback/db'
+import { db, verification, eq } from '@/lib/db'
 import { sendSigninCodeEmail } from '@quackback/email'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { generateId } from '@quackback/ids'
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
+    const body = (await request.json()) as { email?: string }
     const { email } = body
 
     if (!email || typeof email !== 'string') {

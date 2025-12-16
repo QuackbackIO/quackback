@@ -1,4 +1,4 @@
-import type { Board, Tag, Comment } from '@quackback/db/types'
+import type { Board, Tag, Comment } from '@/lib/db/types'
 import type { StatusId } from '@quackback/ids'
 
 export interface OfficialResponse {

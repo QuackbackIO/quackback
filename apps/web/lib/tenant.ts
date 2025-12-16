@@ -24,7 +24,7 @@ import {
   and,
   withTenantContext,
   type Database,
-} from '@quackback/db'
+} from '@/lib/db'
 import { getSession } from './auth/server'
 import type { ServiceContext } from '@quackback/domain'
 import type { UserId, OrgId } from '@quackback/ids'

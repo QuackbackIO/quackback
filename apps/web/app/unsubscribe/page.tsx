@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import { db, eq, and, workspaceDomain } from '@quackback/db'
+import { db, eq, and, workspaceDomain } from '@/lib/db'
 import type { OrgId } from '@quackback/ids'
 
 interface UnsubscribePageProps {

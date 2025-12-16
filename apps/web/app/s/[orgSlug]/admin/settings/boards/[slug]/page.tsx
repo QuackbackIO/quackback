@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { requireAuthenticatedTenantBySlug } from '@/lib/tenant'
-import { db, boards, eq, and } from '@quackback/db'
+import { db, boards, eq, and } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { BoardGeneralForm } from './board-general-form'
 import { DeleteBoardForm } from './delete-board-form'

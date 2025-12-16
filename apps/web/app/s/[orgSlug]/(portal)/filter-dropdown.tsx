@@ -5,7 +5,7 @@ import { Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { PostStatusEntity, Tag } from '@quackback/db/types'
+import type { PostStatusEntity, Tag } from '@/lib/db/types'
 
 interface FilterDropdownProps {
   statuses: PostStatusEntity[]

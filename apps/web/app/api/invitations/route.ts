@@ -1,6 +1,6 @@
 import { withApiHandler, ApiError, successResponse, validateBody } from '@/lib/api-handler'
 import { inviteSchema } from '@/lib/schemas/auth'
-import { db, invitation, user, eq, and } from '@quackback/db'
+import { db, invitation, user, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
 import { generateId } from '@quackback/ids'
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, verification, workspaceDomain, eq } from '@quackback/db'
+import { db, verification, workspaceDomain, eq } from '@/lib/db'
 import { sendSigninCodeEmail } from '@quackback/email'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { generateId } from '@quackback/ids'

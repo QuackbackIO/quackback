@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, user, eq } from '@quackback/db'
+import { db, user, eq } from '@/lib/db'
 import { isValidTypeId, type UserId } from '@quackback/ids'
 
 /**

@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePublicRoadmaps } from '@/lib/hooks/use-roadmaps-query'
-import type { PostStatusEntity, Roadmap } from '@quackback/db/types'
+import type { PostStatusEntity, Roadmap } from '@/lib/db/types'
 
 interface RoadmapBoardProps {
   organizationId: string

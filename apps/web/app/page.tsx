@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, MessageSquare, BarChart3, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { db, organization, workspaceDomain, eq } from '@quackback/db'
+import { db, organization, workspaceDomain, eq } from '@/lib/db'
 
 const APP_DOMAIN = process.env.APP_DOMAIN
 

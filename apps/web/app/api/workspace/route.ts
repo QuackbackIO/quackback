@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  db,
-  organization,
-  user,
-  member,
-  eq,
-  sessionTransferToken,
-  workspaceDomain,
-} from '@quackback/db'
+import { db, organization, user, member, eq, sessionTransferToken, workspaceDomain } from '@/lib/db'
 import { createWorkspaceSchema } from '@/lib/schemas/auth'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { getStatusService } from '@/lib/services'

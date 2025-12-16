@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, organizationIntegrations, decryptToken, eq, and } from '@quackback/db'
+import { db, member, organizationIntegrations, decryptToken, eq, and } from '@/lib/db'
 import { listSlackChannels } from '@quackback/integrations'
 import { isValidTypeId, type OrgId } from '@quackback/ids'
 

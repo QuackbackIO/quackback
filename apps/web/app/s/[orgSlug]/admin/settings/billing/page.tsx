@@ -4,8 +4,8 @@ import { CreditCard, Server, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { BillingClient } from './billing-client'
-import { getSubscriptionByOrganizationIdAdmin } from '@quackback/db/queries/subscriptions'
-import { getOrganizationUsageCounts } from '@quackback/db/queries/usage'
+import { getSubscriptionByOrganizationIdAdmin } from '@/lib/db'
+import { getOrganizationUsageCounts } from '@/lib/db'
 import {
   getCustomerInvoices,
   getDefaultPaymentMethod,

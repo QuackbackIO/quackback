@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, user, session, eq, and } from '@quackback/db'
+import { db, user, session, eq, and } from '@/lib/db'
 import { generateId } from '@quackback/ids'
 
 /**

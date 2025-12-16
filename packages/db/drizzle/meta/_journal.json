@@ -15,6 +15,13 @@
       "when": 1765837988681,
       "tag": "0001_faithful_rage",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765893600000,
+      "tag": "0002_fix_app_user_set_role",
+      "breakpoints": true
     }
   ]
 }

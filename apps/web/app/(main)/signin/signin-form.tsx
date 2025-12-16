@@ -69,7 +69,7 @@ export function SigninForm() {
         body: JSON.stringify({ email: data.email }),
       })
 
-      const result = await response.json()
+      const result = (await response.json()) as { error?: string }
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to send code')
@@ -96,7 +96,11 @@ export function SigninForm() {
         body: JSON.stringify({ email, code: data.code }),
       })
 
-      const result = await response.json()
+      const result = (await response.json()) as {
+        error?: string
+        workspaces: Workspace[]
+        verifiedEmailToken: string
+      }
 
       if (!response.ok) {
         throw new Error(result.error || 'Invalid code')
@@ -127,7 +131,7 @@ export function SigninForm() {
         }),
       })
 
-      const result = await response.json()
+      const result = (await response.json()) as { error?: string; redirectUrl: string }
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to sign in')
@@ -163,7 +167,7 @@ export function SigninForm() {
         body: JSON.stringify({ email }),
       })
 
-      const result = await response.json()
+      const result = (await response.json()) as { error?: string }
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to resend code')

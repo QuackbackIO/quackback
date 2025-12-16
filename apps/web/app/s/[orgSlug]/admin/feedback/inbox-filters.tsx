@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { InboxFilters } from './use-inbox-filters'
-import type { Board, Tag, PostStatusEntity } from '@quackback/db/types'
+import type { Board, Tag, PostStatusEntity } from '@/lib/db/types'
 import type { TeamMember } from '@quackback/domain'
 
 interface InboxFiltersProps {

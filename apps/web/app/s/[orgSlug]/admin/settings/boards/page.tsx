@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireAuthenticatedTenantBySlug } from '@/lib/tenant'
-import { db, boards, eq } from '@quackback/db'
+import { db, boards, eq } from '@/lib/db'
 import { Layout, MessageSquare } from 'lucide-react'
 import { CreateBoardDialog } from './create-board-dialog'
 

@@ -1,5 +1,5 @@
 import { withApiHandlerParams, ApiError, successResponse, parseId } from '@/lib/api-handler'
-import { db, invitation, eq, and } from '@quackback/db'
+import { db, invitation, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
 
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes

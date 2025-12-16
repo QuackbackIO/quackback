@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
+import { db, organization, eq } from '@/lib/db'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']

@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { PenSquare } from 'lucide-react'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@quackback/db/types'
+import type { Board, Tag, PostStatusEntity } from '@/lib/db/types'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 interface CreatePostDialogProps {

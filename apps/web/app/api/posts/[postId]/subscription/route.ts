@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, posts, eq, and } from '@quackback/db'
+import { db, member, posts, eq, and } from '@/lib/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
 import { isValidTypeId, type PostId } from '@quackback/ids'
 

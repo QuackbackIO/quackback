@@ -1,4 +1,4 @@
-import { db, organization, eq } from '@quackback/db'
+import { db, organization, eq } from '@/lib/db'
 import type { HeaderDisplayMode } from '@quackback/domain'
 import type { OrgId } from '@quackback/ids'
 

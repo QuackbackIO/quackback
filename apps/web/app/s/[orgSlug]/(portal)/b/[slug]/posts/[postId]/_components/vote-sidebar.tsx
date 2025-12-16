@@ -1,4 +1,4 @@
-import { db, member, eq, and } from '@quackback/db'
+import { db, member, eq, and } from '@/lib/db'
 import { getPostService } from '@/lib/services'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'

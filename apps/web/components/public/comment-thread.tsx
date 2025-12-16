@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CommentForm } from './comment-form'
 import { cn } from '@/lib/utils'
 import { getInitials } from '@quackback/domain/utils'
-import { REACTION_EMOJIS } from '@quackback/db/types'
+import { REACTION_EMOJIS } from '@/lib/db/types'
 
 interface CommentReaction {
   emoji: string

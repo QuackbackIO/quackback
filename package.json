@@ -61,5 +61,8 @@
     "*.{json,md,yml,yaml}": [
       "prettier --write"
     ]
+  },
+  "overrides": {
+    "@noble/ciphers": "1.3.0"
   }
 }

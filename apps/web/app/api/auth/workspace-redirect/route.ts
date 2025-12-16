@@ -10,7 +10,7 @@ import {
   eq,
   and,
   gt,
-} from '@quackback/db'
+} from '@/lib/db'
 import { headers } from 'next/headers'
 import { generateId, isValidTypeId, type OrgId } from '@quackback/ids'
 

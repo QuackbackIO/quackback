@@ -39,7 +39,7 @@ import {
   useUpdateRoadmap,
   useDeleteRoadmap,
 } from '@/lib/hooks/use-roadmaps-query'
-import type { Roadmap } from '@quackback/db/types'
+import type { Roadmap } from '@/lib/db/types'
 
 interface RoadmapSidebarProps {
   organizationId: string

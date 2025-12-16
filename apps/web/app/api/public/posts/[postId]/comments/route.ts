@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, eq, member, and } from '@quackback/db'
+import { db, eq, member, and } from '@/lib/db'
 import { commentSchema } from '@/lib/schemas/comments'
 import { getSession } from '@/lib/auth/server'
 import { getCommentService, getPostService } from '@/lib/services'

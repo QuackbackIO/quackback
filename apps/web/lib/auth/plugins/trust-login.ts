@@ -20,7 +20,7 @@
 import { createAuthEndpoint } from 'better-auth/api'
 import type { BetterAuthPlugin } from 'better-auth'
 import { z } from 'zod'
-import { db, sessionTransferToken, member, workspaceDomain, eq, and, gt } from '@quackback/db'
+import { db, sessionTransferToken, member, workspaceDomain, eq, and, gt } from '@/lib/db'
 import { generateId } from '@quackback/ids'
 
 function normalizeHost(host: string): string {

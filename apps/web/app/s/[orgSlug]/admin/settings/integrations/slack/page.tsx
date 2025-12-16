@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireTenantRoleBySlug } from '@/lib/tenant'
 import { ArrowLeft, Slack } from 'lucide-react'
-import { db, organizationIntegrations, integrationEventMappings, eq, and } from '@quackback/db'
+import { db, organizationIntegrations, integrationEventMappings, eq, and } from '@/lib/db'
 import { Badge } from '@/components/ui/badge'
 import { SlackConfig } from './slack-config'
 import { SlackConnectionActions } from './slack-connection-actions'

@@ -1,5 +1,5 @@
 import type { PublicComment } from '@quackback/domain'
-import { db, member, eq, and } from '@quackback/db'
+import { db, member, eq, and } from '@/lib/db'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'

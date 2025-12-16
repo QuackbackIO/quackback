@@ -1,4 +1,4 @@
-import { db, user as userTable, member as memberTable, eq, inArray } from '@quackback/db'
+import { db, user as userTable, member as memberTable, eq, inArray } from '@/lib/db'
 import type { UserId, MemberId } from '@quackback/ids'
 
 interface AvatarData {

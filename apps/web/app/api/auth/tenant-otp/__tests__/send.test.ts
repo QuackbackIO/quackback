@@ -77,7 +77,7 @@ vi.mock('@/lib/rate-limit', () => ({
 }))
 
 // Import mocked modules - cast db to our mock type for proper typing
-import { db as _db, eq } from '@quackback/db'
+import { db as _db, eq } from '@/lib/db'
 import { sendSigninCodeEmail } from '@quackback/email'
 import { checkRateLimit, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 

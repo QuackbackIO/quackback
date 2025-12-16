@@ -1,5 +1,5 @@
 import { requireTenantBySlug } from '@/lib/tenant'
-import { db, member, user, invitation, eq, and, ne } from '@quackback/db'
+import { db, member, user, invitation, eq, and, ne } from '@/lib/db'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { getBulkUserAvatarData } from '@/lib/avatar'

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@quackback/db'
+import { db, organization, eq } from '@/lib/db'
 import { signOAuthState } from '@/lib/auth/oauth-state'
 
 /**

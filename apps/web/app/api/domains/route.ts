@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, workspaceDomain, organization, eq, and } from '@quackback/db'
+import { db, workspaceDomain, organization, eq, and } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { z } from 'zod'
 import { generateId, isValidTypeId, type OrgId, type DomainId } from '@quackback/ids'

@@ -2,7 +2,7 @@ import { getOrganizationBySlug } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getBoardService, getPostService, getStatusService, getTagService } from '@/lib/services'
-import { db, member, eq, and } from '@quackback/db'
+import { db, member, eq, and } from '@/lib/db'
 import { FeedbackContainer } from './feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 

@@ -9,7 +9,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { getInitials } from '@quackback/domain/utils'
-import type { PostStatusEntity } from '@quackback/db/types'
+import type { PostStatusEntity } from '@/lib/db/types'
 import type { StatusId } from '@quackback/ids'
 
 interface PostCardProps {

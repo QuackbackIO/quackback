@@ -1,6 +1,6 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
 import { Plug2 } from 'lucide-react'
-import { db, organizationIntegrations, eq } from '@quackback/db'
+import { db, organizationIntegrations, eq } from '@/lib/db'
 import { IntegrationList } from './integration-list'
 
 export default async function IntegrationsPage({

@@ -13,7 +13,7 @@ import type {
   CommentReaction,
   CommentWithReplies,
 } from '@/app/s/[orgSlug]/admin/feedback/inbox-types'
-import type { PostListItem, InboxPostListResult, Tag } from '@quackback/db/types'
+import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db/types'
 import type { CommentId, PostId, StatusId, OrgId } from '@quackback/ids'
 
 // ============================================================================

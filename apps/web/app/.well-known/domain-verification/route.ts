@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, workspaceDomain, eq } from '@quackback/db'
+import { db, workspaceDomain, eq } from '@/lib/db'
 import { headers } from 'next/headers'
 
 /**

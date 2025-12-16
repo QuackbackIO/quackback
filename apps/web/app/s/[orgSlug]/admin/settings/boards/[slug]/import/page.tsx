@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { requireAuthenticatedTenantBySlug } from '@/lib/tenant'
-import { db, boards, eq, and } from '@quackback/db'
+import { db, boards, eq, and } from '@/lib/db'
 import { BoardImportSection } from './board-import-section'
 
 export default async function BoardImportPage({

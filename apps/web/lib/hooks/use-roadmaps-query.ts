@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Roadmap } from '@quackback/db/types'
+import type { Roadmap } from '@/lib/db/types'
 
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
