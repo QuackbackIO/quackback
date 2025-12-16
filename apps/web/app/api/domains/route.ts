@@ -3,6 +3,12 @@ import { db, workspaceDomain, organization, eq, and } from '@quackback/db'
 import { auth } from '@/lib/auth'
 import { z } from 'zod'
 import { generateId, isValidTypeId, type OrgId, type DomainId } from '@quackback/ids'
+import { isCloud } from '@quackback/domain/features'
+import {
+  isCloudflareConfigured,
+  createCustomHostname,
+  deleteCustomHostname,
+} from '@quackback/ee/cloudflare'
 
 /**
  * Custom Domain Management API
@@ -121,7 +127,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Domain is already in use' }, { status: 409 })
   }
 
-  // Create domain with verification token for HTTP verification
+  // Create domain with verification token for HTTP verification (self-hosted fallback)
   const domainId = generateId('domain')
   const verificationToken = `qb_${crypto.randomUUID().replace(/-/g, '')}`
 
@@ -136,6 +142,38 @@ export async function POST(request: NextRequest) {
     createdAt: new Date(),
   })
 
+  // If cloud edition + Cloudflare configured, register with Cloudflare immediately
+  let cloudflareData = null
+  if (isCloud() && isCloudflareConfigured()) {
+    try {
+      const cfHostname = await createCustomHostname({
+        hostname: domain,
+        organizationId,
+      })
+
+      // Store CF hostname ID and initial status
+      await db
+        .update(workspaceDomain)
+        .set({
+          cloudflareHostnameId: cfHostname.id,
+          sslStatus: cfHostname.ssl.status,
+          ownershipStatus: cfHostname.status,
+          // Clear verification token since CF handles verification
+          verificationToken: null,
+        })
+        .where(eq(workspaceDomain.id, domainId))
+
+      cloudflareData = {
+        hostnameId: cfHostname.id,
+        sslStatus: cfHostname.ssl.status,
+        ownershipStatus: cfHostname.status,
+      }
+    } catch (error) {
+      console.error('[Domains API] Failed to register with Cloudflare:', error)
+      // Don't fail the request - domain is created, CF can be retried
+    }
+  }
+
   const newDomain = await db.query.workspaceDomain.findFirst({
     where: eq(workspaceDomain.id, domainId),
   })
@@ -148,6 +186,7 @@ export async function POST(request: NextRequest) {
       name: domain,
       value: cnameTarget,
     },
+    cloudflare: cloudflareData,
   })
 }
 
@@ -280,6 +319,16 @@ export async function DELETE(request: NextRequest) {
           eq(workspaceDomain.domainType, 'subdomain')
         )
       )
+  }
+
+  // Delete from Cloudflare if it was registered
+  if (isCloud() && isCloudflareConfigured() && domain.cloudflareHostnameId) {
+    try {
+      await deleteCustomHostname(domain.cloudflareHostnameId)
+    } catch (error) {
+      console.error('[Domains API] Failed to delete from Cloudflare:', error)
+      // Continue with local deletion
+    }
   }
 
   await db.delete(workspaceDomain).where(eq(workspaceDomain.id, domainId))

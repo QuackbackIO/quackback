@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, workspaceDomain, eq } from '@quackback/db'
 import { auth } from '@/lib/auth'
 import { isValidTypeId, type DomainId } from '@quackback/ids'
+import { isCloud } from '@quackback/domain/features'
+import { isCloudflareConfigured } from '@quackback/ee/cloudflare'
 
 /**
  * Domain Verification API
@@ -229,7 +231,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Domain is already verified' })
   }
 
-  // Check via HTTP - the .well-known endpoint will auto-verify if reachable
+  // If Cloudflare is managing this domain, skip HTTP verification
+  // UI should poll /api/domains/status for real-time CF status updates
+  if (isCloud() && isCloudflareConfigured() && domain.cloudflareHostnameId) {
+    return NextResponse.json({
+      verified: false,
+      sslStatus: domain.sslStatus,
+      ownershipStatus: domain.ownershipStatus,
+      message:
+        domain.sslStatus === 'active'
+          ? 'Domain verified via Cloudflare'
+          : 'Waiting for Cloudflare SSL provisioning. Set up your CNAME record to proceed.',
+      mode: 'cloudflare',
+    })
+  }
+
+  // Self-hosted: Check via HTTP - the .well-known endpoint will auto-verify if reachable
   const result = await checkHttpVerification(domain.domain)
 
   if (result.verified) {
