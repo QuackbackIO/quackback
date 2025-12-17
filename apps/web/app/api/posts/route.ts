@@ -1,8 +1,10 @@
 import { withApiHandler, validateBody, ApiError, successResponse, parseId } from '@/lib/api-handler'
 import { createPostSchema, type CreatePostInput } from '@/lib/schemas/posts'
 import { getPostService } from '@/lib/services'
-import { buildServiceContext } from '@quackback/domain'
+import { buildServiceContext, buildPostCreatedEvent } from '@quackback/domain'
 import { isValidTypeId, type StatusId } from '@quackback/ids'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
 
 export const GET = withApiHandler(async (request, { validation }) => {
   const { searchParams } = new URL(request.url)
@@ -102,6 +104,25 @@ export const POST = withApiHandler(async (request, { validation }) => {
     }
   }
 
+  // Trigger EventWorkflow for integrations and notifications
+  const { boardSlug, ...post } = result.value
+  const eventData = buildPostCreatedEvent(
+    ctx.organizationId,
+    { type: 'user', userId: ctx.userId, email: ctx.userEmail },
+    {
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      boardId: post.boardId,
+      boardSlug,
+      authorEmail: ctx.userEmail,
+      voteCount: post.voteCount,
+    }
+  )
+  const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
+  const jobAdapter = getJobAdapter(env)
+  await jobAdapter.addEventJob(eventData)
+
   // Response is already in TypeID format from service layer
-  return successResponse(result.value, 201)
+  return successResponse(post, 201)
 })

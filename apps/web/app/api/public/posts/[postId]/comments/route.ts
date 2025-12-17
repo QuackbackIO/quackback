@@ -3,8 +3,10 @@ import { db, eq, member, and } from '@/lib/db'
 import { commentSchema } from '@/lib/schemas/comments'
 import { getSession } from '@/lib/auth/server'
 import { getCommentService, getPostService } from '@/lib/services'
-import type { ServiceContext, CommentError } from '@quackback/domain'
+import { buildCommentCreatedEvent, type ServiceContext, type CommentError } from '@quackback/domain'
 import { isValidTypeId, type PostId, type CommentId } from '@quackback/ids'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
 
 interface RouteParams {
   params: Promise<{ postId: string }>
@@ -132,8 +134,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: serviceResult.error.message }, { status })
     }
 
+    // Trigger EventWorkflow for integrations and notifications
+    const { comment, post } = serviceResult.value
+    const eventData = buildCommentCreatedEvent(
+      ctx.organizationId,
+      { type: 'user', userId: ctx.userId, email: ctx.userEmail },
+      { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
+      { id: post.id, title: post.title }
+    )
+    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
+    const jobAdapter = getJobAdapter(env)
+    await jobAdapter.addEventJob(eventData)
+
     // Response is already in TypeID format from service layer
-    return NextResponse.json(serviceResult.value, { status: 201 })
+    return NextResponse.json(comment, { status: 201 })
   } catch (error) {
     console.error('Error creating comment:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

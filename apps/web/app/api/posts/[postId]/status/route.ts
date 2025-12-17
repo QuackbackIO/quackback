@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { getPostService } from '@/lib/services'
-import { buildServiceContext } from '@quackback/domain'
+import { buildServiceContext, buildPostStatusChangedEvent } from '@quackback/domain'
 import type { PostError } from '@quackback/domain'
 import { isValidTypeId, type PostId, type StatusId } from '@quackback/ids'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
 
 /**
  * Map PostError codes to HTTP status codes
@@ -66,8 +68,21 @@ export async function PATCH(
       return NextResponse.json({ error: result.error.message }, { status })
     }
 
+    // Trigger EventWorkflow for integrations and notifications
+    const { boardSlug, previousStatus, newStatus, ...post } = result.value
+    const eventData = buildPostStatusChangedEvent(
+      ctx.organizationId,
+      { type: 'user', userId: ctx.userId, email: ctx.userEmail },
+      { id: post.id, title: post.title, boardSlug },
+      previousStatus,
+      newStatus
+    )
+    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
+    const jobAdapter = getJobAdapter(env)
+    await jobAdapter.addEventJob(eventData)
+
     // Response is already in TypeID format from service layer
-    return NextResponse.json(result.value)
+    return NextResponse.json(post)
   } catch (error) {
     console.error('Error changing post status:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { publicPostSchema } from '@/lib/schemas/posts'
 import { getBoardService, getStatusService, getPostService, getMemberService } from '@/lib/services'
-import { buildServiceContext, type ServiceContext } from '@quackback/domain'
+import { buildServiceContext, buildPostCreatedEvent, type ServiceContext } from '@quackback/domain'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
 
 interface RouteParams {
   params: Promise<{ boardId: string }>
@@ -118,7 +120,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  const post = createResult.value
+  const { boardSlug, ...post } = createResult.value
+
+  // Trigger EventWorkflow for integrations and notifications
+  const eventData = buildPostCreatedEvent(
+    ctx.organizationId,
+    { type: 'user', userId: ctx.userId, email: ctx.userEmail },
+    {
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      boardId: post.boardId,
+      boardSlug,
+      authorEmail: ctx.userEmail,
+      voteCount: post.voteCount,
+    }
+  )
+  const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
+  const jobAdapter = getJobAdapter(env)
+  await jobAdapter.addEventJob(eventData)
 
   // Include board details in response (client needs it for optimistic updates)
   return NextResponse.json(
