@@ -68,7 +68,7 @@ export function FeedbackToolbar({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
       {/* Sort Tabs */}
       <div className="flex items-center gap-1">
         {sortOptions.map((option) => {
@@ -93,13 +93,13 @@ export function FeedbackToolbar({
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
         {/* Search */}
         <Popover open={searchOpen} onOpenChange={setSearchOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1.5">
               <Search className="h-4 w-4" />
-              Search
+              <span className="hidden sm:inline">Search</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-80" align="end">
@@ -157,7 +157,7 @@ export function FeedbackToolbar({
                 className="portal-submit-button gap-1.5 bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"
               >
                 <Plus className="h-4 w-4" />
-                Create post
+                <span className="hidden sm:inline">Create post</span>
               </Button>
             }
           />

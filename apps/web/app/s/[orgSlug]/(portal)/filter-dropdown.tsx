@@ -55,7 +55,7 @@ export function FilterDropdown({
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 relative">
           <Filter className="h-4 w-4" />
-          Filter
+          <span className="hidden sm:inline">Filter</span>
           {activeCount > 0 && (
             <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
               {activeCount}

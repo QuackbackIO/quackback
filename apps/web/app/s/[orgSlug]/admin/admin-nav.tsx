@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { MessageSquare, Map, Users, LogOut, Settings, Globe } from 'lucide-react'
+import { MessageSquare, Map, Users, LogOut, Settings, Globe, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toExternalPath } from '@/lib/tenant-paths'
 import { Avatar } from '@/components/ui/avatar'
@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { signOut, useSession } from '@/lib/auth/client'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
 interface AdminNavProps {
   /** Initial user data for SSR (store values override these after hydration) */
@@ -55,6 +56,7 @@ export function AdminNav({ initialUserData }: AdminNavProps) {
 
   // Track if we've completed initial hydration to prevent SSR/client mismatch
   const [isHydrated, setIsHydrated] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   useEffect(() => {
     setIsHydrated(true)
   }, [])
@@ -81,12 +83,68 @@ export function AdminNav({ initialUserData }: AdminNavProps) {
 
   return (
     <header className="border-b border-border bg-card">
-      <div className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-8">
-          <Link href="/admin">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4">
+        <div className="flex items-center gap-4 sm:gap-8">
+          {/* Mobile Menu */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="sm" className="sm:hidden" aria-label="Open menu">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64">
+              <SheetHeader>
+                <SheetTitle>
+                  <Link href="/admin" onClick={() => setMobileMenuOpen(false)}>
+                    <img src="/logo.png" alt="Quackback" width={32} height={32} />
+                  </Link>
+                </SheetTitle>
+              </SheetHeader>
+              <nav className="flex flex-col gap-1 mt-4">
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                  const Icon = item.icon
+
+                  return (
+                    <Button
+                      key={item.href}
+                      variant={isActive ? 'secondary' : 'ghost'}
+                      className="justify-start"
+                      asChild
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Link href={item.href}>
+                        <Icon className="mr-2 h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    </Button>
+                  )
+                })}
+                <div className="border-t border-border my-2" />
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  asChild
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Link href="/">
+                    <Globe className="mr-2 h-4 w-4" />
+                    Portal
+                  </Link>
+                </Button>
+              </nav>
+            </SheetContent>
+          </Sheet>
+
+          <Link href="/admin" className="hidden sm:block">
             <img src="/logo.png" alt="Quackback" width={32} height={32} />
           </Link>
-          <nav className="flex items-center gap-1">
+          {/* Mobile: Show logo in center */}
+          <Link href="/admin" className="sm:hidden">
+            <img src="/logo.png" alt="Quackback" width={32} height={32} />
+          </Link>
+          {/* Desktop Navigation */}
+          <nav className="hidden sm:flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               const Icon = item.icon
@@ -99,7 +157,7 @@ export function AdminNav({ initialUserData }: AdminNavProps) {
                   asChild
                 >
                   <Link href={item.href}>
-                    <Icon className="h-4 w-4" />
+                    <Icon className="mr-2 h-4 w-4" />
                     {item.label}
                   </Link>
                 </Button>
@@ -108,8 +166,8 @@ export function AdminNav({ initialUserData }: AdminNavProps) {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          {/* Portal Button */}
-          <Button variant="outline" size="sm" asChild>
+          {/* Portal Button - Desktop only */}
+          <Button variant="outline" size="sm" asChild className="hidden sm:flex">
             <Link href="/">
               <Globe className="mr-2 h-4 w-4" />
               Portal
