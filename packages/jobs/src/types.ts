@@ -1,4 +1,4 @@
-import type { OrgId, BoardId, MemberId } from '@quackback/ids'
+import type { OrgId, BoardId, MemberId, IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
  * Job type identifiers
@@ -101,11 +101,11 @@ export interface IntegrationJobData {
   /** Organization ID for tenant isolation */
   organizationId: OrgId
   /** Integration configuration ID */
-  integrationId: string
+  integrationId: IntegrationId
   /** Integration type (slack, discord, linear, etc.) */
   integrationType: string
   /** Event mapping ID */
-  mappingId: string
+  mappingId: EventMappingId
   /** The domain event that triggered this job */
   event: DomainEventPayload
 }
@@ -156,4 +156,51 @@ export interface UserNotificationJobResult {
   skipped: number
   /** Errors encountered */
   errors: string[]
+}
+
+// ============================================================================
+// Event Job Types (Consolidated workflow for integrations + notifications)
+// ============================================================================
+
+/**
+ * Supported event types for the consolidated EventWorkflow
+ */
+export type EventType = 'post.created' | 'post.status_changed' | 'comment.created'
+
+/**
+ * Event job data - sent when a domain event needs processing.
+ * Consolidates integration and notification processing into a single workflow.
+ */
+export interface EventJobData {
+  /** Unique event ID for idempotency */
+  id: string
+  /** Event type */
+  type: EventType
+  /** Organization ID for tenant isolation */
+  organizationId: OrgId
+  /** ISO timestamp of when the event occurred */
+  timestamp: string
+  /** Actor who triggered the event */
+  actor: {
+    type: 'user' | 'system'
+    userId?: string
+    email?: string
+    service?: string
+  }
+  /** Event-specific payload data */
+  data: unknown
+}
+
+/**
+ * Event job result - returned when workflow completes
+ */
+export interface EventJobResult {
+  /** Number of integrations successfully processed */
+  integrationsProcessed: number
+  /** Errors from integration processing */
+  integrationErrors: string[]
+  /** Number of notification emails sent */
+  notificationsSent: number
+  /** Errors from notification sending */
+  notificationErrors: string[]
 }
