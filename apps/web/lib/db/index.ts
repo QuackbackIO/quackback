@@ -6,29 +6,26 @@
  *
  * @example
  * import { db, eq, and, posts } from '@/lib/db'
+ *
+ * The database adapter is auto-detected based on runtime environment:
+ * - Cloudflare Workers: Uses Hyperdrive
+ * - Node.js / Local dev: Uses DATABASE_URL
  */
 
-import { setDbGetter, createDb } from '@quackback/db/client'
-import { cache } from 'react'
+import { initializeDb, getDbAsync } from '@/lib/adapters/db'
 
-/**
- * Get database connection, memoized per-request via React cache().
- */
-const getDatabase = cache(() => createDb(process.env.DATABASE_URL!))
+// Initialize database connection on module load
+initializeDb()
 
-// Configure the global database getter
-setDbGetter(getDatabase)
-
-// Re-export everything from the db package
-export * from '@quackback/db'
-
-// Re-export types
-export * from '@quackback/db/types'
+// Re-export everything from the adapters (which re-exports from @quackback/db)
+export * from '@/lib/adapters/db'
 
 // Re-export query helpers
 export * from '@quackback/db/queries/subscriptions'
 export * from '@quackback/db/queries/usage'
 
+// Export async database getter for Cloudflare ISR/SSG routes
+export { getDbAsync }
+
 // Export initialization utilities for advanced use cases
-export { getDatabase }
 export { createDb, setDbGetter, getDb } from '@quackback/db/client'

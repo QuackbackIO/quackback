@@ -3,17 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
-    ".": "./index.ts"
+    ".": "./src/index.ts",
+    "./templates": "./src/templates/index.ts"
   },
-  "dependencies": {
-    "resend": "^6",
-    "@react-email/components": "^1",
-    "react": "^19.2.1"
+  "scripts": {
+    "build:templates": "bun run scripts/build-templates.ts"
   },
   "devDependencies": {
-    "@types/react": "^19"
+    "@react-email/components": "^1",
+    "@react-email/render": "^1",
+    "@types/react": "^19",
+    "react": "^19.2.1"
   }
 }

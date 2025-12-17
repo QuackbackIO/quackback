@@ -20,11 +20,11 @@ export function getCloudflare(): CloudflareClient {
     return cfInstance
   }
 
-  const apiToken = process.env.CLOUDFLARE_API_TOKEN
+  const apiToken = process.env.CF_HOSTNAME_TOKEN
   const zoneId = process.env.CLOUDFLARE_ZONE_ID
 
   if (!apiToken || !zoneId) {
-    throw new Error('CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID are required')
+    throw new Error('CF_HOSTNAME_TOKEN and CLOUDFLARE_ZONE_ID are required')
   }
 
   cfInstance = {
@@ -40,7 +40,7 @@ export function getCloudflare(): CloudflareClient {
  * Check if Cloudflare is configured.
  */
 export function isCloudflareConfigured(): boolean {
-  return Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID)
+  return Boolean(process.env.CF_HOSTNAME_TOKEN && process.env.CLOUDFLARE_ZONE_ID)
 }
 
 /**

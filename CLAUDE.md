@@ -51,14 +51,28 @@ quackback/
 
 ## Multi-tenancy Model
 
+The routing mode is determined by the `EDITION` environment variable:
+
+### Single-Tenant (EDITION=oss, default)
+
+- All routes rewrite to `/s/[DEFAULT_ORG_SLUG]/`
+- No subdomain routing required
+- Ideal for self-hosted single-organization deployments
+
+### Multi-Tenant (EDITION=cloud)
+
 - Uses **Better-auth organizations plugin** with full tenant isolation
 - **Main domain**: `localhost:3000` (dev) / `quackback.io` (prod)
 - **Tenant subdomains**: `{org-slug}.localhost:3000` (dev) / `{org-slug}.quackback.io` (prod)
-- **Domain resolution**: Uses `workspace_domain` table to map domains to organizations (supports custom domains)
-- Users are scoped to a single organization (`organizationId` on user table)
+- **Custom domains**: Uses `workspace_domain` table + Cloudflare service binding for resolution
 - Per-subdomain session cookies (no cross-subdomain session sharing)
 - OAuth flows through main domain with one-time DB token transfer via `trustLogin` plugin
+
+### Common
+
+- Users are scoped to a single organization (`organizationId` on user table)
 - Data tables reference `organization_id` for isolation
+- RLS policies enforce tenant isolation at database level
 - Team roles: `owner` > `admin` > `member`; Portal users have role `user`
 
 ## Next.js 16 Notes
@@ -72,7 +86,7 @@ quackback/
 ```bash
 # Development
 bun run dev           # Start dev server (auto-migrates)
-bun run build         # Build for production
+bun run build         # Build for production (Node.js)
 bun run lint          # Run ESLint
 bun run test          # Run all Vitest tests
 bun run test <file>   # Run single test file (e.g., bun run test packages/db/src/foo.test.ts)
@@ -83,7 +97,41 @@ bun run db:migrate    # Run migrations (creates tables, RLS policies, permission
 bun run db:studio     # Open Drizzle Studio
 bun run db:seed       # Seed demo data (requires migrations first)
 bun run db:reset      # Reset database (destructive, then run db:migrate + db:seed)
+
+# Cloudflare Workers Deployment
+cd apps/web
+bun run build:cf      # Build for Cloudflare Workers
+bun run preview:cf    # Build and preview locally with wrangler
+bun run deploy:cf     # Build and deploy to Cloudflare
 ```
+
+## Deployment Options
+
+The codebase supports multiple deployment targets via the `EDITION` environment variable:
+
+### Self-Hosted (Default)
+
+```bash
+EDITION="oss"                    # All features enabled, no billing
+DEFAULT_ORG_SLUG="default"       # Single-tenant routing
+DATABASE_URL="postgresql://..."  # Standard PostgreSQL
+```
+
+- Uses standard `next build` output
+- Routes all traffic to `/s/[DEFAULT_ORG_SLUG]/`
+- Deploy via Docker, Vercel, or any Node.js host
+
+### Cloudflare Workers
+
+```bash
+EDITION="cloud"                  # Feature tiers + billing
+APP_DOMAIN="your-domain.com"     # Multi-tenant subdomain routing
+```
+
+- Uses OpenNext adapter for Cloudflare Workers
+- Database via Cloudflare Hyperdrive
+- Multi-tenant routing with subdomain + custom domain support
+- See `apps/web/wrangler.jsonc.example` for configuration template
 
 ## Key Conventions
 

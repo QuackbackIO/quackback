@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "fuser -k 3000/tcp 2>/dev/null; rm -f .next/dev/lock && dotenv -e ../../.env -- next dev --turbopack",
     "build": "dotenv -e ../../.env -- next build",
+    "build:cf": "./scripts/build-cloudflare.sh",
+    "deploy:cf": "./scripts/build-cloudflare.sh && npx wrangler deploy -c wrangler.jsonc",
+    "preview:cf": "./scripts/build-cloudflare.sh && npx wrangler dev",
     "start": "dotenv -e ../../.env -- next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -79,6 +82,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.53.0"
+  },
+  "optionalDependencies": {
+    "@opennextjs/cloudflare": "^1.14.6"
   }
 }
