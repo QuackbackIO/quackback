@@ -23,6 +23,27 @@ export interface UpdateCommentInput {
 }
 
 /**
+ * Result of creating a comment, including post info for event building
+ */
+export interface CreateCommentResult {
+  comment: {
+    id: CommentId
+    postId: PostId
+    content: string
+    parentId: CommentId | null
+    memberId: MemberId | null
+    authorName: string | null
+    authorEmail: string | null
+    isTeamMember: boolean
+    createdAt: Date
+  }
+  post: {
+    id: PostId
+    title: string
+  }
+}
+
+/**
  * Reaction count with user status
  */
 export interface CommentReactionCount {

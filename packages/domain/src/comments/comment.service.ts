@@ -27,11 +27,10 @@ import type { CommentId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { CommentError } from './comment.errors'
-import { emitEvent } from '../events/emit'
-import type { CommentCreatedData } from '../events/types'
 import { SubscriptionService } from '../subscriptions'
 import type {
   CreateCommentInput,
+  CreateCommentResult,
   UpdateCommentInput,
   CommentThread,
   ReactionResult,
@@ -58,7 +57,7 @@ export class CommentService {
   async createComment(
     input: CreateCommentInput,
     ctx: ServiceContext
-  ): Promise<Result<Comment, CommentError>> {
+  ): Promise<Result<CreateCommentResult, CommentError>> {
     return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
@@ -122,24 +121,8 @@ export class CommentService {
         })
       }
 
-      // Emit comment.created event for integrations
-      emitEvent<CommentCreatedData>(
-        'comment.created',
-        {
-          comment: {
-            id: comment.id,
-            content: comment.content,
-            authorEmail: ctx.userEmail,
-          },
-          post: {
-            id: post.id,
-            title: post.title,
-          },
-        },
-        ctx
-      )
-
-      return ok(comment)
+      // Return comment with post info for event building in API route
+      return ok({ comment, post: { id: post.id, title: post.title } })
     })
   }
 

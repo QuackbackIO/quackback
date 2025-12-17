@@ -30,7 +30,8 @@ export interface IntegrationContext {
   integrationId: string
   accessToken: string
   config: Record<string, unknown>
-  redis: Redis
+  /** Redis client (optional - not available in Cloudflare Workers) */
+  redis?: Redis
 }
 
 export interface ProcessResult {

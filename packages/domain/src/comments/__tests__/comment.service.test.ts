@@ -222,7 +222,9 @@ describe('CommentService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value).toEqual(mockComment)
+        // Result now includes both comment and post info for event building
+        expect(result.value.comment).toEqual(mockComment)
+        expect(result.value.post).toEqual({ id: mockPost.id, title: mockPost.title })
       }
       expect(mockCommentRepoInstance.create).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -40,8 +40,6 @@ import {
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'
-import { emitEvent } from '../events/emit'
-import type { PostCreatedData, PostStatusChangedData } from '../events/types'
 import { SubscriptionService } from '../subscriptions'
 import { buildCommentTree, type CommentTreeNode } from '../shared/comment-tree'
 import type {
@@ -149,24 +147,8 @@ export class PostService {
         })
       }
 
-      // Emit post.created event for integrations
-      emitEvent<PostCreatedData>(
-        'post.created',
-        {
-          post: {
-            id: post.id,
-            title: post.title,
-            content: post.content,
-            boardId: board.id,
-            boardSlug: board.slug,
-            authorEmail: ctx.userEmail,
-            voteCount: post.voteCount,
-          },
-        },
-        ctx
-      )
-
-      return ok(post)
+      // Return post with board info for event building in API route
+      return ok({ ...post, boardSlug: board.slug })
     })
   }
 
@@ -429,22 +411,13 @@ export class PostService {
         return err(PostError.notFound(postId))
       }
 
-      // Emit post.status_changed event for integrations
-      emitEvent<PostStatusChangedData>(
-        'post.status_changed',
-        {
-          post: {
-            id: updatedPost.id,
-            title: updatedPost.title,
-            boardSlug: board.slug,
-          },
-          previousStatus: previousStatusName,
-          newStatus: newStatus.name,
-        },
-        ctx
-      )
-
-      return ok(updatedPost)
+      // Return post with status change info for event building in API route
+      return ok({
+        ...updatedPost,
+        boardSlug: board.slug,
+        previousStatus: previousStatusName,
+        newStatus: newStatus.name,
+      })
     })
   }
 

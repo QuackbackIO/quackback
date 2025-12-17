@@ -41,3 +41,11 @@ export * from './organizations'
 export * from './users'
 export * from './roadmaps'
 export * from './subscriptions'
+
+// Event builder utilities (for API routes to construct events)
+export {
+  buildPostCreatedEvent,
+  buildPostStatusChangedEvent,
+  buildCommentCreatedEvent,
+  type EventActor,
+} from './events/event-builder'

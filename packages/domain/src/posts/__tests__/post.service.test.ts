@@ -132,7 +132,8 @@ describe('PostService', () => {
 
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.value).toEqual(mockPost)
+        // Result now includes boardSlug for event building
+        expect(result.value).toEqual({ ...mockPost, boardSlug: mockBoard.slug })
       }
     })
 
