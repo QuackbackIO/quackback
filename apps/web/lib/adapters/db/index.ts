@@ -8,9 +8,9 @@
  * This module is imported by lib/db/index.ts to initialize the database connection.
  */
 
-import { setDbGetter } from '@quackback/db/client'
+import { setDbGetter, createDb, type Database } from '@quackback/db/client'
 
-let initPromise: Promise<void> | null = null
+let initialized = false
 
 /**
  * Detect if we're running in Cloudflare Workers environment.
@@ -32,19 +32,34 @@ function isCloudflareWorker(): boolean {
 /**
  * Initialize the database connection based on runtime environment.
  * Auto-detects Cloudflare Workers and uses Hyperdrive when available.
+ *
+ * This is synchronous - it sets up a lazy getter that resolves the connection
+ * on first use within each request context.
  */
 export function initializeDb(): void {
-  if (initPromise) return
+  if (initialized) return
+  initialized = true
 
-  initPromise = (async () => {
-    if (isCloudflareWorker()) {
-      const { getCloudflareDb } = await import('./cloudflare')
-      setDbGetter(getCloudflareDb)
-    } else {
-      const { getNodeDb } = await import('./node')
-      setDbGetter(getNodeDb)
-    }
-  })()
+  if (isCloudflareWorker()) {
+    // Cloudflare Workers: Use Hyperdrive via lazy getter
+    // The getter is called per-request and uses getCloudflareContext()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCloudflareContext } = require('@opennextjs/cloudflare')
+
+    setDbGetter((): Database => {
+      const { env } = getCloudflareContext()
+      return createDb(env.HYPERDRIVE.connectionString, { prepare: true, max: 5 })
+    })
+  } else {
+    // Node.js / Local dev: Use DATABASE_URL
+    setDbGetter((): Database => {
+      const connectionString = process.env.DATABASE_URL
+      if (!connectionString) {
+        throw new Error('DATABASE_URL environment variable is required')
+      }
+      return createDb(connectionString, { max: 10 })
+    })
+  }
 }
 
 /**

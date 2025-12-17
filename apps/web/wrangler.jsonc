@@ -2,8 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "quackback-web",
   "account_id": "67cf7d5c8b797bfd5cbd417b233cc0d0",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2024-09-23",
+  // Custom worker that exports Workflows and DOs, wrapping OpenNext handler
+  "main": "worker.ts",
+  "compatibility_date": "2024-10-22",
   "compatibility_flags": [
     "nodejs_compat_v2",
     "global_fetch_strictly_public"
@@ -46,6 +47,37 @@
       "binding": "HYPERDRIVE",
       "id": "26028391fa214c51aa70a8f09dc161ab",
       "localConnectionString": "postgresql://postgres:password@localhost:5432/quackback"
+    }
+  ],
+  // Cloudflare Workflows for job processing (import, events)
+  "workflows": [
+    {
+      "binding": "IMPORT_WORKFLOW",
+      "name": "quackback-import",
+      "class_name": "ImportWorkflow"
+    },
+    {
+      "binding": "EVENT_WORKFLOW",
+      "name": "quackback-event",
+      "class_name": "EventWorkflow"
+    }
+  ],
+  // Durable Objects for state management (circuit breaker, idempotency)
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "INTEGRATION_STATE",
+        "class_name": "IntegrationStateDO"
+      }
+    ]
+  },
+  // DO migrations - required for first deployment
+  // Using new_sqlite_classes for SQLite-backed DOs (recommended by Cloudflare)
+  // Provides Point-in-Time Recovery and better resilience
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["IntegrationStateDO"]
     }
   ],
   "vars": {

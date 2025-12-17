@@ -6,7 +6,7 @@
  *
  * Key differences from Node.js adapter:
  * - Uses getCloudflareContext() to access Hyperdrive binding
- * - Disables prepared statements (Hyperdrive doesn't support them)
+ * - Hyperdrive now supports prepared statements (enabled by default)
  * - Provides async variant for ISR/SSG routes
  */
 
@@ -27,7 +27,8 @@ declare global {
  */
 export const getCloudflareDb = cache((): Database => {
   const { env } = getCloudflareContext()
-  return createDb(env.HYPERDRIVE.connectionString, { prepare: false })
+  // Hyperdrive now supports prepared statements for better performance
+  return createDb(env.HYPERDRIVE.connectionString, { prepare: true, max: 5 })
 })
 
 /**
@@ -36,5 +37,6 @@ export const getCloudflareDb = cache((): Database => {
  */
 export const getCloudflareDbAsync = cache(async (): Promise<Database> => {
   const { env } = await getCloudflareContext({ async: true })
-  return createDb(env.HYPERDRIVE.connectionString, { prepare: false })
+  // Hyperdrive now supports prepared statements for better performance
+  return createDb(env.HYPERDRIVE.connectionString, { prepare: true, max: 5 })
 })
