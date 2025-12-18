@@ -1,8 +1,30 @@
 import { withApiHandler, ApiError, successResponse, validateBody } from '@/lib/api-handler'
 import { inviteSchema } from '@/lib/schemas/auth'
-import { db, invitation, user, eq, and } from '@/lib/db'
+import { db, invitation, user, workspaceDomain, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
 import { generateId } from '@quackback/ids'
+import type { OrgId } from '@quackback/ids'
+
+/**
+ * Look up the primary workspace domain for an organization.
+ * Returns the full URL including protocol.
+ */
+async function getTenantUrl(organizationId: OrgId): Promise<string> {
+  const domain = await db.query.workspaceDomain.findFirst({
+    where: and(
+      eq(workspaceDomain.organizationId, organizationId),
+      eq(workspaceDomain.isPrimary, true)
+    ),
+  })
+
+  if (!domain) {
+    throw new ApiError('No primary workspace domain configured', 500)
+  }
+
+  const isLocalhost = domain.domain.includes('localhost')
+  const protocol = isLocalhost ? 'http' : 'https'
+  return `${protocol}://${domain.domain}`
+}
 
 /**
  * POST /api/invitations
@@ -58,14 +80,9 @@ export const POST = withApiHandler(
       inviterId,
     })
 
-    // Build invitation link
-    const domain = process.env.APP_DOMAIN
-    if (!domain) {
-      throw new ApiError('APP_DOMAIN environment variable is required', 500)
-    }
-    const isLocalhost = domain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    const inviteLink = `${protocol}://${validation.organization.slug}.${domain}/accept-invitation/${invitationId}`
+    // Build invitation link using workspace domain
+    const tenantUrl = await getTenantUrl(organizationId)
+    const inviteLink = `${tenantUrl}/accept-invitation/${invitationId}`
 
     // Send invitation email
     await sendInvitationEmail({

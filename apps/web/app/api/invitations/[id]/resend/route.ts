@@ -1,6 +1,28 @@
 import { withApiHandlerParams, ApiError, successResponse, parseId } from '@/lib/api-handler'
-import { db, invitation, eq, and } from '@/lib/db'
+import { db, invitation, workspaceDomain, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
+import type { OrgId } from '@quackback/ids'
+
+/**
+ * Look up the primary workspace domain for an organization.
+ * Returns the full URL including protocol.
+ */
+async function getTenantUrl(organizationId: OrgId): Promise<string> {
+  const domain = await db.query.workspaceDomain.findFirst({
+    where: and(
+      eq(workspaceDomain.organizationId, organizationId),
+      eq(workspaceDomain.isPrimary, true)
+    ),
+  })
+
+  if (!domain) {
+    throw new ApiError('No primary workspace domain configured', 500)
+  }
+
+  const isLocalhost = domain.domain.includes('localhost')
+  const protocol = isLocalhost ? 'http' : 'https'
+  return `${protocol}://${domain.domain}`
+}
 
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -45,14 +67,9 @@ export const POST = withApiHandlerParams<{ id: string }>(
       throw new ApiError('This invitation has expired. Please create a new invitation.', 400)
     }
 
-    // Build invitation link
-    const domain = process.env.APP_DOMAIN
-    if (!domain) {
-      throw new ApiError('APP_DOMAIN environment variable is required', 500)
-    }
-    const isLocalhost = domain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    const inviteLink = `${protocol}://${validation.organization.slug}.${domain}/accept-invitation/${id}`
+    // Build invitation link using workspace domain
+    const tenantUrl = await getTenantUrl(organizationId)
+    const inviteLink = `${tenantUrl}/accept-invitation/${id}`
 
     // Send invitation email
     await sendInvitationEmail({

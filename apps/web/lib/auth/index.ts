@@ -15,8 +15,29 @@ import {
   eq,
   and,
 } from '@/lib/db'
-import type { UserId } from '@quackback/ids'
+import type { UserId, OrgId } from '@quackback/ids'
 import { trustLogin } from './plugins/trust-login'
+
+/**
+ * Look up the primary workspace domain for an organization.
+ * Returns the full URL including protocol.
+ */
+async function getTenantUrl(organizationId: OrgId): Promise<string> {
+  const domain = await db.query.workspaceDomain.findFirst({
+    where: and(
+      eq(workspaceDomain.organizationId, organizationId),
+      eq(workspaceDomain.isPrimary, true)
+    ),
+  })
+
+  if (!domain) {
+    throw new Error('No primary workspace domain configured')
+  }
+
+  const isLocalhost = domain.domain.includes('localhost')
+  const protocol = isLocalhost ? 'http' : 'https'
+  return `${protocol}://${domain.domain}`
+}
 
 /**
  * Build trusted origins dynamically for CSRF protection.
@@ -192,14 +213,9 @@ export const auth = betterAuth({
       memberRole: 'member',
       sendInvitationEmail: async ({ email, organization, inviter, invitation }) => {
         const { sendInvitationEmail } = await import('@quackback/email')
-        // Build the subdomain URL for the org
-        const domain = process.env.APP_DOMAIN
-        if (!domain) {
-          throw new Error('APP_DOMAIN environment variable is required')
-        }
-        const isLocalhost = domain.includes('localhost')
-        const protocol = isLocalhost ? 'http' : 'https'
-        const inviteLink = `${protocol}://${organization.slug}.${domain}/accept-invitation/${invitation.id}`
+        // Build invitation link using workspace domain
+        const tenantUrl = await getTenantUrl(organization.id as OrgId)
+        const inviteLink = `${tenantUrl}/accept-invitation/${invitation.id}`
         await sendInvitationEmail({
           to: email,
           invitedByName: inviter.user.name,
