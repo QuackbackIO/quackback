@@ -8,7 +8,12 @@
  * worker-configuration.d.ts with the new bindings.
  */
 
-import type { Workflow, DurableObjectNamespace } from '@cloudflare/workers-types'
+import type {
+  Workflow,
+  DurableObjectNamespace,
+  Hyperdrive,
+  Fetcher,
+} from '@cloudflare/workers-types'
 import type {
   ImportJobData,
   IntegrationJobData,
@@ -21,6 +26,12 @@ import type {
 // Augment the global CloudflareEnv interface
 declare global {
   interface CloudflareEnv {
+    // Database connection via Hyperdrive
+    HYPERDRIVE: Hyperdrive
+
+    // Self-reference for internal service binding calls
+    WORKER_SELF_REFERENCE: Fetcher
+
     // Job processing workflows
     IMPORT_WORKFLOW: Workflow<ImportJobData, ImportJobResult>
     INTEGRATION_WORKFLOW: Workflow<IntegrationJobData, IntegrationJobResult>

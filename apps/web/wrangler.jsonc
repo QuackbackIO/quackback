@@ -32,9 +32,10 @@
   // The wildcard catches tenant subdomains and fallback.quackback.io handles
   // custom hostname traffic via Cloudflare for SaaS
   "routes": [
-    { "pattern": "quackback.io/*", "zone_name": "quackback.io" },
-    { "pattern": "test.quackback.io/*", "zone_name": "quackback.io" },
-    { "pattern": "*.test.quackback.io/*", "zone_name": "quackback.io" }
+    {
+      "pattern": "*.quackback.io/*",
+      "zone_name": "quackback.io"
+    }
   ],
   "services": [
     {
@@ -77,16 +78,18 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["IntegrationStateDO"]
+      "new_sqlite_classes": [
+        "IntegrationStateDO"
+      ]
     }
   ],
   "vars": {
     // Edition: "cloud" for SaaS with billing, "oss" for self-hosted
     "EDITION": "cloud",
     // Production domain (without protocol)
-    "APP_DOMAIN": "test.quackback.io",
-    // Auth URL (with protocol)
-    "BETTER_AUTH_URL": "https://test.quackback.io",
+    "APP_DOMAIN": "app.quackback.io",
+    // Auth URL - main app entry point (with protocol)
+    "BETTER_AUTH_URL": "https://app.quackback.io",
     // Email settings (use real address for better deliverability)
     "EMAIL_FROM": "Quackback <hello@quackback.io>",
     // Stripe price IDs (cloud edition)

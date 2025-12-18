@@ -26,14 +26,6 @@ function isCloudflareWorker(): boolean {
   }
 }
 
-// Cloud-only: Augment the CloudflareEnv interface with our custom bindings
-declare global {
-  interface CloudflareEnv {
-    HYPERDRIVE: Hyperdrive
-    WORKER_SELF_REFERENCE: Fetcher
-  }
-}
-
 /** Public routes on main domain (cloud only) */
 const mainDomainPublicRoutes = ['/', '/create-workspace', '/accept-invitation', '/api/']
 
@@ -54,39 +46,20 @@ function getProtocol(request: NextRequest): string {
   return request.headers.get('x-forwarded-proto') || 'https'
 }
 
-/**
- * Extract org slug from subdomain.
- * For example: acme.quackback.io -> acme
- */
-function getOrgSlugFromSubdomain(host: string): string | null {
-  if (!APP_DOMAIN) return null
-
-  const hostWithoutPort = host.split(':')[0]
-  const appDomainWithoutPort = APP_DOMAIN.split(':')[0]
-
-  if (hostWithoutPort.endsWith(`.${appDomainWithoutPort}`)) {
-    const subdomain = hostWithoutPort.replace(`.${appDomainWithoutPort}`, '')
-    if (subdomain && !subdomain.includes('.')) {
-      return subdomain
-    }
-  }
-
-  return null
-}
-
 // Store the last error for debugging (cloud only)
 let lastDomainLookupError: string | null = null
 
 /**
- * Look up org slug from custom domain via service binding (cloud only).
+ * Look up org slug from domain via service binding (cloud only).
  * Uses WORKER_SELF_REFERENCE to call internal API route without external network hop.
+ * This handles both subdomains and custom domains via the workspace_domains table.
  */
-async function getOrgSlugFromCustomDomain(host: string): Promise<string | null> {
+async function getOrgSlugFromDomain(host: string): Promise<string | null> {
   lastDomainLookupError = null
 
-  // Skip custom domain lookup during local dev (no Cloudflare context)
+  // Skip domain lookup during local dev (no Cloudflare context)
   if (!isCloudflareWorker()) {
-    lastDomainLookupError = 'Custom domain lookup not available in local dev'
+    lastDomainLookupError = 'Domain lookup not available in local dev'
     return null
   }
 
@@ -121,7 +94,7 @@ async function getOrgSlugFromCustomDomain(host: string): Promise<string | null> 
     return null
   } catch (error) {
     lastDomainLookupError = `Error: ${error instanceof Error ? error.message : String(error)}`
-    console.error('Error looking up custom domain:', host, error)
+    console.error('Error looking up domain:', host, error)
     return null
   }
 }
@@ -181,12 +154,8 @@ async function handleMultiTenant(request: NextRequest, pathname: string): Promis
     return NextResponse.next()
   }
 
-  // Try subdomain first, then custom domain lookup
-  let orgSlug = getOrgSlugFromSubdomain(host)
-
-  if (!orgSlug) {
-    orgSlug = await getOrgSlugFromCustomDomain(host)
-  }
+  // Look up org slug from workspace_domains table
+  const orgSlug = await getOrgSlugFromDomain(host)
 
   if (!orgSlug) {
     const url = request.nextUrl.clone()
@@ -244,9 +213,7 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/__debug-middleware') {
     const isCloud = isCloudflareWorker()
     if (isCloud) {
-      const subdomainSlug = host ? getOrgSlugFromSubdomain(host) : null
-      const customDomainSlug =
-        !subdomainSlug && host ? await getOrgSlugFromCustomDomain(host) : null
+      const orgSlug = host ? await getOrgSlugFromDomain(host) : null
       return NextResponse.json({
         timestamp: new Date().toISOString(),
         runtime: 'cloudflare-workers',
@@ -255,9 +222,7 @@ export async function middleware(request: NextRequest) {
         pathname,
         appDomain: APP_DOMAIN,
         isMain: host === APP_DOMAIN,
-        subdomainSlug,
-        customDomainSlug,
-        orgSlug: subdomainSlug || customDomainSlug,
+        orgSlug,
         domainLookupError: lastDomainLookupError,
       })
     }

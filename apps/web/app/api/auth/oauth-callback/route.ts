@@ -234,26 +234,13 @@ function buildErrorRedirect(returnDomain: string, error: string): string {
 }
 
 /**
- * Validate that the return domain is allowed:
- * - A subdomain of APP_DOMAIN, OR
- * - A verified custom domain in workspace_domain table
+ * Validate that the return domain is allowed by checking workspace_domain table.
+ * This is more flexible than suffix-based validation and handles both
+ * subdomain and custom domain types.
  */
 async function isValidReturnDomain(domain: string): Promise<boolean> {
-  const appDomain = process.env.APP_DOMAIN
-  if (!appDomain) return false
-
-  // Check if it's a subdomain of APP_DOMAIN
-  if (domain.endsWith(`.${appDomain}`)) {
-    return true
-  }
-
-  // Check if it's a verified custom domain
   const domainRecord = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.domain, domain),
-      eq(workspaceDomain.domainType, 'custom'),
-      eq(workspaceDomain.verified, true)
-    ),
+    where: and(eq(workspaceDomain.domain, domain), eq(workspaceDomain.verified, true)),
   })
 
   return !!domainRecord
