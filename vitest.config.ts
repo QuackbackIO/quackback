@@ -23,6 +23,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),
+      // Path alias for apps/web (matches tsconfig.json "@/*": ["./*"])
+      '@': path.resolve(__dirname, './apps/web'),
     },
   },
 })

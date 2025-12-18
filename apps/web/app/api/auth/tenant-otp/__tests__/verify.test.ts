@@ -42,7 +42,7 @@ const { mockCheckRateLimit, mockGetClientIp, mockCreateRateLimitHeaders } = vi.h
   mockCreateRateLimitHeaders: vi.fn(),
 }))
 
-vi.mock('@quackback/db', () => ({
+vi.mock('@/lib/db', () => ({
   db: mockDb,
   verification: {
     id: 'id',

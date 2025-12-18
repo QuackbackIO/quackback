@@ -45,7 +45,7 @@ interface MockDb {
 }
 
 // Mock modules with proper typing
-vi.mock('@quackback/db', () => ({
+vi.mock('@/lib/db', () => ({
   db: {
     query: {
       workspaceDomain: {

@@ -78,7 +78,7 @@ const mockDb = vi.hoisted(() => ({
 }))
 
 // Mock db and imports
-vi.mock('@quackback/db', () => ({
+vi.mock('@/lib/db', () => ({
   db: mockDb,
   sessionTransferToken: {
     token: 'token',
