@@ -222,11 +222,11 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
       // Extract organizationId from body or query params
       let organizationIdParam: string | null = null
 
-      if (request.method === 'GET' || request.method === 'DELETE') {
+      if (request.method === 'GET') {
         const { searchParams } = new URL(request.url)
         organizationIdParam = searchParams.get('organizationId')
       } else {
-        // For POST/PATCH/PUT, try to parse the body
+        // For POST/PATCH/PUT/DELETE, try to parse the body
         // Clone the request so we can read the body twice
         const clonedRequest = request.clone()
         const contentType = request.headers.get('content-type') || ''
@@ -236,13 +236,19 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
             // Handle multipart/form-data (file uploads)
             const formData = await clonedRequest.formData()
             organizationIdParam = formData.get('organizationId') as string | null
-          } else {
+          } else if (contentType.includes('application/json')) {
             // Handle JSON body
             const body = await clonedRequest.json()
             organizationIdParam = body.organizationId ?? null
           }
         } catch {
           // Body might not be JSON/FormData or might be empty
+        }
+
+        // Fallback to query params if not found in body
+        if (!organizationIdParam) {
+          const { searchParams } = new URL(request.url)
+          organizationIdParam = searchParams.get('organizationId')
         }
       }
 
@@ -351,11 +357,11 @@ export function withApiHandlerParams<P>(
       // Extract organizationId from body or query params
       let organizationIdParam: string | null = null
 
-      if (request.method === 'GET' || request.method === 'DELETE') {
+      if (request.method === 'GET') {
         const { searchParams } = new URL(request.url)
         organizationIdParam = searchParams.get('organizationId')
       } else {
-        // For POST/PATCH/PUT, try to parse the body
+        // For POST/PATCH/PUT/DELETE, try to parse the body
         const clonedRequest = request.clone()
         const contentType = request.headers.get('content-type') || ''
 
@@ -364,13 +370,19 @@ export function withApiHandlerParams<P>(
             // Handle multipart/form-data (file uploads)
             const formData = await clonedRequest.formData()
             organizationIdParam = formData.get('organizationId') as string | null
-          } else {
+          } else if (contentType.includes('application/json')) {
             // Handle JSON body
             const body = await clonedRequest.json()
             organizationIdParam = body.organizationId ?? null
           }
         } catch {
           // Body might not be JSON/FormData or might be empty
+        }
+
+        // Fallback to query params if not found in body
+        if (!organizationIdParam) {
+          const { searchParams } = new URL(request.url)
+          organizationIdParam = searchParams.get('organizationId')
         }
       }
 
