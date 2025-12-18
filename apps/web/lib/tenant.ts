@@ -334,19 +334,21 @@ export type ApiTenantResult =
  * const { organization, member, user } = validation
  */
 export async function validateApiTenantAccess(
-  organizationId: OrgId | null | undefined
+  organizationId?: OrgId | null
 ): Promise<ApiTenantResult> {
-  if (!organizationId) {
-    return { success: false, error: 'organizationId is required', status: 400 }
-  }
-
   const session = await getSession()
   if (!session?.user) {
     return { success: false, error: 'Unauthorized', status: 401 }
   }
 
+  // Use provided organizationId or fall back to user's organization from session
+  const orgId = organizationId || (session.user.organizationId as OrgId | undefined)
+  if (!orgId) {
+    return { success: false, error: 'organizationId is required', status: 400 }
+  }
+
   // Check member table for team access
-  const memberRecord = await getMemberRecord(session.user.id, organizationId)
+  const memberRecord = await getMemberRecord(session.user.id, orgId)
 
   if (!memberRecord) {
     return { success: false, error: 'Forbidden', status: 403 }
@@ -354,7 +356,7 @@ export async function validateApiTenantAccess(
 
   // Get the organization details
   const org = await db.query.organization.findFirst({
-    where: eq(organization.id, organizationId),
+    where: eq(organization.id, orgId),
   })
 
   if (!org) {
