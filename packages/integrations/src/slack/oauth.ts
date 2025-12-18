@@ -4,7 +4,13 @@
  */
 import { WebClient } from '@slack/web-api'
 
-const SLACK_SCOPES = ['channels:read', 'groups:read', 'chat:write', 'team:read'].join(',')
+const SLACK_SCOPES = [
+  'channels:read',
+  'groups:read',
+  'channels:join',
+  'chat:write',
+  'team:read',
+].join(',')
 
 /**
  * Generates the Slack OAuth authorization URL.

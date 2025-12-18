@@ -72,12 +72,7 @@ export class SlackIntegration extends BaseIntegration {
     try {
       const message = await this.buildMessage(event)
 
-      const result = await client.chat.postMessage({
-        channel: channelId,
-        unfurl_links: false,
-        unfurl_media: false,
-        ...message,
-      })
+      const result = await this.postMessageWithAutoJoin(client, channelId, message)
 
       return {
         success: result.ok === true,
@@ -91,6 +86,77 @@ export class SlackIntegration extends BaseIntegration {
         shouldRetry: this.isRetryableError(error),
       }
     }
+  }
+
+  /**
+   * Posts a message to a channel, automatically joining public channels if needed.
+   * Private channels (starting with 'G') require manual invitation.
+   */
+  private async postMessageWithAutoJoin(
+    client: WebClient,
+    channelId: string,
+    message: { text: string; blocks?: unknown[] }
+  ): Promise<{ ok?: boolean; ts?: string; error?: string }> {
+    try {
+      return await client.chat.postMessage({
+        channel: channelId,
+        unfurl_links: false,
+        unfurl_media: false,
+        ...message,
+      })
+    } catch (error) {
+      const errorCode = this.getSlackErrorCode(error)
+
+      // If not in channel, try to join (only works for public channels)
+      if (errorCode === 'not_in_channel' || errorCode === 'channel_not_found') {
+        // Private channels start with 'G', public with 'C'
+        const isPrivateChannel = channelId.startsWith('G')
+
+        if (isPrivateChannel) {
+          throw new Error(
+            'Bot is not in this private channel. Please invite the bot to the channel first.'
+          )
+        }
+
+        // Attempt to join the public channel
+        const joinResult = await client.conversations.join({ channel: channelId })
+
+        if (!joinResult.ok) {
+          throw new Error(`Failed to join channel: ${joinResult.error}`)
+        }
+
+        // Retry posting after joining
+        return await client.chat.postMessage({
+          channel: channelId,
+          unfurl_links: false,
+          unfurl_media: false,
+          ...message,
+        })
+      }
+
+      throw error
+    }
+  }
+
+  /**
+   * Extracts the Slack error code from various error formats.
+   */
+  private getSlackErrorCode(error: unknown): string | undefined {
+    if (error && typeof error === 'object') {
+      // @slack/web-api error format
+      if ('data' in error && typeof (error as { data?: { error?: string } }).data === 'object') {
+        return (error as { data: { error?: string } }).data.error
+      }
+      // Direct error property
+      if ('error' in error) {
+        return (error as { error?: string }).error
+      }
+      // Error code property
+      if ('code' in error) {
+        return (error as { code?: string }).code
+      }
+    }
+    return undefined
   }
 
   private async buildMessage(event: DomainEvent): Promise<{ text: string; blocks?: unknown[] }> {
