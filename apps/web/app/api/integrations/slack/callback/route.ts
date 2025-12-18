@@ -7,9 +7,29 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { db, encryptToken, organizationIntegrations, organization, eq } from '@/lib/db'
+import { db, encryptToken, organizationIntegrations, workspaceDomain, eq, and } from '@/lib/db'
 import { exchangeSlackCode } from '@quackback/integrations'
 import type { MemberId, OrgId } from '@quackback/ids'
+
+/**
+ * Get the tenant URL for an organization using its primary workspace domain.
+ */
+async function getTenantUrl(organizationId: OrgId): Promise<string | null> {
+  const domain = await db.query.workspaceDomain.findFirst({
+    where: and(
+      eq(workspaceDomain.organizationId, organizationId),
+      eq(workspaceDomain.isPrimary, true)
+    ),
+  })
+
+  if (!domain) {
+    return null
+  }
+
+  const isLocalhost = domain.domain.includes('localhost')
+  const protocol = isLocalhost ? 'http' : 'https'
+  return `${protocol}://${domain.domain}`
+}
 
 // Cookie name - use __Secure- prefix for HTTPS
 const APP_DOMAIN = process.env.APP_DOMAIN || 'localhost:3000'
@@ -147,22 +167,15 @@ export async function GET(request: Request) {
         },
       })
 
-    // Get org slug for redirect
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, orgId),
-    })
+    // Get tenant URL for redirect (uses workspace_domains)
+    const tenantUrl = await getTenantUrl(orgId)
 
-    if (!org) {
-      return redirectWithError('org_not_found', storedState)
+    if (!tenantUrl) {
+      return redirectWithError('domain_not_found', storedState)
     }
 
     // Redirect to Slack detail page with success
-    const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
-    const isLocalhost = appDomain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    return NextResponse.redirect(
-      `${protocol}://${org.slug}.${appDomain}/admin/settings/integrations/slack?slack=connected`
-    )
+    return NextResponse.redirect(`${tenantUrl}/admin/settings/integrations/slack?slack=connected`)
   } catch (err) {
     console.error('[Slack OAuth] Exchange error:', err)
     return redirectWithError('exchange_failed', storedState)
@@ -180,12 +193,10 @@ async function redirectWithError(error: string, storedState: string | undefined)
       const [payloadB64] = storedState.split('.')
       if (payloadB64) {
         const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'))
-        const org = await db.query.organization.findFirst({
-          where: eq(organization.id, payload.orgId),
-        })
-        if (org) {
+        const tenantUrl = await getTenantUrl(payload.orgId as OrgId)
+        if (tenantUrl) {
           return NextResponse.redirect(
-            `${protocol}://${org.slug}.${appDomain}/admin/settings/integrations/slack?slack=error&reason=${error}`
+            `${tenantUrl}/admin/settings/integrations/slack?slack=error&reason=${error}`
           )
         }
       }
