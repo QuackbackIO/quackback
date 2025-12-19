@@ -9,7 +9,7 @@ import Papa from 'papaparse'
 import { z } from 'zod'
 import { withTenantContext, posts, tags, postTags, postStatuses, eq, and } from '@quackback/db'
 import {
-  orgIdSchema,
+  workspaceIdSchema,
   boardIdSchema,
   type WorkspaceId,
   type BoardId,
@@ -28,7 +28,7 @@ export const BATCH_SIZE = 100
  * Job data validation schema
  */
 export const jobDataSchema = z.object({
-  workspaceId: orgIdSchema,
+  workspaceId: workspaceIdSchema,
   boardId: boardIdSchema,
   csvContent: z.string().min(1, 'CSV content is required'),
   totalRows: z.number().int().positive(),

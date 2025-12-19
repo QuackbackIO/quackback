@@ -3,7 +3,7 @@ import Papa from 'papaparse'
 import { z } from 'zod'
 import { withTenantContext, posts, tags, postTags, postStatuses, eq, and } from '@quackback/db'
 import type { ImportJobData, ImportJobResult, ImportRowError } from '@quackback/jobs'
-import { orgIdSchema, boardIdSchema, type OrgId, type BoardId } from '@quackback/ids'
+import { workspaceIdSchema, boardIdSchema, type WorkspaceId, type BoardId } from '@quackback/ids'
 
 // Constants
 const MAX_ERRORS = 100
@@ -13,7 +13,7 @@ const MAX_TAGS_PER_POST = 20
  * Job data validation schema
  */
 const jobDataSchema = z.object({
-  organizationId: orgIdSchema,
+  workspaceId: workspaceIdSchema,
   boardId: boardIdSchema,
   csvContent: z.string().min(1, 'CSV content is required'),
   totalRows: z.number().int().positive(),
@@ -81,7 +81,7 @@ export async function processImportJob(job: Job<ImportJobData>): Promise<ImportJ
     throw new Error(`Invalid job data: ${validated.error.issues[0].message}`)
   }
 
-  const { organizationId, boardId, csvContent, totalRows } = validated.data
+  const { workspaceId, boardId, csvContent, totalRows } = validated.data
 
   // Decode CSV content from base64
   const csvText = Buffer.from(csvContent, 'base64').toString('utf-8')
@@ -107,7 +107,7 @@ export async function processImportJob(job: Job<ImportJobData>): Promise<ImportJ
   // Process in batches
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize)
-    const batchResult = await processBatch(batch, organizationId, boardId, i)
+    const batchResult = await processBatch(batch, workspaceId, boardId, i)
 
     imported += batchResult.imported
     skipped += batchResult.skipped
@@ -140,7 +140,7 @@ export async function processImportJob(job: Job<ImportJobData>): Promise<ImportJ
  */
 async function processBatch(
   rows: Record<string, string>[],
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   defaultBoardId: BoardId,
   startIndex: number
 ): Promise<BatchResult> {
@@ -152,21 +152,21 @@ async function processBatch(
   }
 
   // Use tenant context for RLS
-  await withTenantContext(organizationId, async (tx) => {
-    // Get default status for the organization
+  await withTenantContext(workspaceId, async (tx) => {
+    // Get default status for the workspace
     const defaultStatus = await tx.query.postStatuses.findFirst({
-      where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.isDefault, true)),
+      where: and(eq(postStatuses.workspaceId, workspaceId), eq(postStatuses.isDefault, true)),
     })
 
     // Get all existing statuses for lookup
     const existingStatuses = await tx.query.postStatuses.findMany({
-      where: eq(postStatuses.workspaceId, organizationId),
+      where: eq(postStatuses.workspaceId, workspaceId),
     })
     const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
 
     // Get all existing tags for lookup
     const existingTags = await tx.query.tags.findMany({
-      where: eq(tags.workspaceId, organizationId),
+      where: eq(tags.workspaceId, workspaceId),
     })
     const tagMap = new Map(existingTags.map((t) => [t.name.toLowerCase(), t]))
 
@@ -255,7 +255,7 @@ async function processBatch(
     // Create missing tags
     if (tagsToCreate.size > 0) {
       const newTags = Array.from(tagsToCreate).map((name) => ({
-        organizationId,
+        workspaceId,
         name,
         color: '#6b7280', // Default gray color
       }))
