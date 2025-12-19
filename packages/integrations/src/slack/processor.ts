@@ -5,6 +5,11 @@
 import { WebClient } from '@slack/web-api'
 import { db, workspaceDomain, eq, and } from '@quackback/db'
 import type { OrgId } from '@quackback/ids'
+import type {
+  PostCreatedPayload,
+  PostStatusChangedPayload,
+  CommentCreatedPayload,
+} from '@quackback/jobs'
 import {
   BaseIntegration,
   type DomainEvent,
@@ -13,32 +18,12 @@ import {
   type ProcessResult,
 } from '../base'
 
-interface PostData {
-  id: string
-  title: string
-  content: string
-  boardId?: string
-  boardSlug?: string
-  authorEmail?: string
-  voteCount?: number
-}
-
-interface PostCreatedEventData {
-  post: PostData
-}
-
-interface StatusChangeData {
-  post: { id: string; title: string; boardSlug: string }
-  previousStatus: string
-  newStatus: string
-}
-
-interface CommentData {
-  comment: { id: string; content: string; authorEmail?: string }
-  post: { id: string; title: string }
-}
-
-interface ChangelogData {
+/**
+ * Changelog data for changelog.published events.
+ * Note: changelog events are not yet part of the core EventJobData types
+ * as they're integration-specific and not used for notifications.
+ */
+interface ChangelogPublishedPayload {
   changelog: { id: string; title: string; slug: string; content: string }
 }
 
@@ -165,7 +150,7 @@ export class SlackIntegration extends BaseIntegration {
 
     switch (event.type) {
       case 'post.created': {
-        const { post } = event.data as PostCreatedEventData
+        const { post } = event.data as PostCreatedPayload
         const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
         const content = this.stripHtml(post.content)
         const author = post.authorEmail || 'Anonymous'
@@ -203,7 +188,7 @@ export class SlackIntegration extends BaseIntegration {
       }
 
       case 'post.status_changed': {
-        const { post, previousStatus, newStatus } = event.data as StatusChangeData
+        const { post, previousStatus, newStatus } = event.data as PostStatusChangedPayload
         const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
         const emoji = this.getStatusEmoji(newStatus)
         const actor = event.actor.email || 'System'
@@ -232,7 +217,7 @@ export class SlackIntegration extends BaseIntegration {
       }
 
       case 'comment.created': {
-        const { comment, post } = event.data as CommentData
+        const { comment, post } = event.data as CommentCreatedPayload
         // Note: comment events don't have boardSlug yet, use generic URL
         const postUrl = `${tenantUrl}/posts/${post.id}`
         const content = this.stripHtml(comment.content)
@@ -262,7 +247,7 @@ export class SlackIntegration extends BaseIntegration {
       }
 
       case 'changelog.published': {
-        const { changelog } = event.data as ChangelogData
+        const { changelog } = event.data as ChangelogPublishedPayload
         const changelogUrl = `${tenantUrl}/changelog/${changelog.slug}`
         const content = this.stripHtml(changelog.content)
         const actor = event.actor.email || 'System'
