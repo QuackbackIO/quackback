@@ -8,13 +8,13 @@ import { CSV_TEMPLATE } from '@/lib/schemas/import'
 import type { ImportJobStatus } from '@quackback/jobs'
 
 interface BoardImportSectionProps {
-  organizationId: string
+  workspaceId: string
   boardId: string
 }
 
 type ImportState = 'idle' | 'uploading' | 'processing' | 'completed' | 'failed'
 
-export function BoardImportSection({ organizationId, boardId }: BoardImportSectionProps) {
+export function BoardImportSection({ workspaceId, boardId }: BoardImportSectionProps) {
   const [state, setState] = useState<ImportState>('idle')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -97,7 +97,7 @@ export function BoardImportSection({ organizationId, boardId }: BoardImportSecti
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('boardId', boardId)
-      formData.append('organizationId', organizationId)
+      formData.append('workspaceId', workspaceId)
 
       const response = await fetch('/api/import', {
         method: 'POST',

@@ -1,6 +1,6 @@
 import { requireTenantRoleBySlug } from '@/lib/tenant'
 import { Plug2 } from 'lucide-react'
-import { db, organizationIntegrations, eq } from '@/lib/db'
+import { db, workspaceIntegrations, eq } from '@/lib/db'
 import { IntegrationList } from './integration-list'
 
 export default async function IntegrationsPage({
@@ -9,11 +9,11 @@ export default async function IntegrationsPage({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+  const { workspace } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
 
   // Fetch existing integrations (minimal data for catalog view)
-  const rawIntegrations = await db.query.organizationIntegrations.findMany({
-    where: eq(organizationIntegrations.organizationId, organization.id),
+  const rawIntegrations = await db.query.workspaceIntegrations.findMany({
+    where: eq(workspaceIntegrations.workspaceId, workspace.id),
   })
 
   // Map to simplified status format for the catalog

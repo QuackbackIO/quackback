@@ -25,14 +25,14 @@ interface OfficialResponseSectionProps {
   content: string
   authorName: string | null
   respondedAt: Date
-  organizationName: string
+  workspaceName: string
 }
 
 export function OfficialResponseSection({
   content,
   authorName,
   respondedAt,
-  organizationName,
+  workspaceName,
 }: OfficialResponseSectionProps) {
   return (
     <div className="border-t border-border/30 p-6">
@@ -40,7 +40,7 @@ export function OfficialResponseSection({
         content={content}
         authorName={authorName}
         respondedAt={respondedAt}
-        organizationName={organizationName}
+        workspaceName={workspaceName}
       />
     </div>
   )

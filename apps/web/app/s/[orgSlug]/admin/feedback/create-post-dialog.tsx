@@ -22,7 +22,7 @@ import type { Board, Tag, PostStatusEntity } from '@/lib/db/types'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 interface CreatePostDialogProps {
-  organizationId: string
+  workspaceId: string
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
@@ -30,7 +30,7 @@ interface CreatePostDialogProps {
 }
 
 export function CreatePostDialog({
-  organizationId,
+  workspaceId,
   boards,
   tags,
   statuses,
@@ -40,7 +40,7 @@ export function CreatePostDialog({
   const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const createPostMutation = useCreatePost(organizationId)
+  const createPostMutation = useCreatePost(workspaceId)
 
   const form = useForm<CreatePostInput>({
     // Cast resolver since Zod's z.custom<T> doesn't properly infer branded types

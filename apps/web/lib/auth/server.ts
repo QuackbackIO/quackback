@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { auth } from './index'
 import { cache } from 'react'
-import type { UserId, OrgId, SessionId } from '@quackback/ids'
+import type { UserId, WorkspaceId, SessionId } from '@quackback/ids'
 
 /**
  * Session user type with TypeID types
@@ -17,7 +17,7 @@ export interface SessionUser {
   email: string
   emailVerified: boolean
   image: string | null
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   createdAt: Date
   updatedAt: Date
 }
@@ -37,7 +37,7 @@ export interface Session {
 /**
  * Get the current session with user.
  *
- * Returns session with properly typed IDs (UserId, OrgId, SessionId).
+ * Returns session with properly typed IDs (UserId, WorkspaceId, SessionId).
  * The database stores UUIDs but the schema layer returns TypeID format.
  */
 export const getSession = cache(async (): Promise<Session | null> => {
@@ -51,7 +51,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
 
   // Better-auth returns raw data from our schema, which already provides TypeID format
   // We cast to our typed interfaces for TypeScript awareness
-  const user = session.user as typeof session.user & { organizationId: string }
+  const user = session.user as typeof session.user & { workspaceId: string }
 
   return {
     session: {
@@ -68,7 +68,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       email: user.email,
       emailVerified: user.emailVerified,
       image: user.image,
-      organizationId: user.organizationId as OrgId,
+      workspaceId: user.workspaceId as WorkspaceId,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     },

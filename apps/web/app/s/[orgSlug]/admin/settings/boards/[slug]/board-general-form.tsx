@@ -25,11 +25,11 @@ interface Board {
 
 interface BoardGeneralFormProps {
   board: Board
-  organizationId: string
+  workspaceId: string
 }
 
-export function BoardGeneralForm({ board, organizationId }: BoardGeneralFormProps) {
-  const mutation = useUpdateBoard(organizationId)
+export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) {
+  const mutation = useUpdateBoard(workspaceId)
 
   const form = useForm<UpdateBoardInput>({
     resolver: standardSchemaResolver(updateBoardSchema),

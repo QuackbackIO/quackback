@@ -1,17 +1,17 @@
-import { db, organization, eq } from '@/lib/db'
+import { db, workspace, eq } from '@/lib/db'
 import type { HeaderDisplayMode } from '@quackback/domain'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 /**
  * Get organization logo data for SSR.
  * Converts blob to base64 data URL.
  */
-export async function getOrganizationLogoData(organizationId: OrgId): Promise<{
+export async function getWorkspaceLogoData(workspaceId: WorkspaceId): Promise<{
   logoUrl: string | null
   hasCustomLogo: boolean
 }> {
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, organizationId),
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.id, workspaceId),
     columns: { logoBlob: true, logoType: true },
   })
 
@@ -29,12 +29,12 @@ export async function getOrganizationLogoData(organizationId: OrgId): Promise<{
  * Get organization favicon data for SSR.
  * Uses the logo as favicon (no separate favicon upload).
  */
-export async function getOrganizationFaviconData(organizationId: OrgId): Promise<{
+export async function getWorkspaceFaviconData(workspaceId: WorkspaceId): Promise<{
   faviconUrl: string | null
   hasCustomFavicon: boolean
 }> {
   // Use logo as favicon
-  const logoData = await getOrganizationLogoData(organizationId)
+  const logoData = await getWorkspaceLogoData(workspaceId)
   return {
     faviconUrl: logoData.logoUrl,
     hasCustomFavicon: logoData.hasCustomLogo,
@@ -44,14 +44,14 @@ export async function getOrganizationFaviconData(organizationId: OrgId): Promise
 /**
  * Get organization header logo data for SSR.
  */
-export async function getOrganizationHeaderLogoData(organizationId: OrgId): Promise<{
+export async function getWorkspaceHeaderLogoData(workspaceId: WorkspaceId): Promise<{
   headerLogoUrl: string | null
   hasHeaderLogo: boolean
   headerDisplayMode: HeaderDisplayMode
   headerDisplayName: string | null
 }> {
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, organizationId),
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.id, workspaceId),
     columns: {
       headerLogoBlob: true,
       headerLogoType: true,
@@ -87,14 +87,14 @@ export async function getOrganizationHeaderLogoData(organizationId: OrgId): Prom
  * Get organization branding data (logo + header branding) for SSR.
  * Logo is also used as favicon.
  */
-export async function getOrganizationBrandingData(organizationId: OrgId): Promise<{
+export async function getWorkspaceBrandingData(workspaceId: WorkspaceId): Promise<{
   logoUrl: string | null
   headerLogoUrl: string | null
   headerDisplayMode: HeaderDisplayMode
   headerDisplayName: string | null
 }> {
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, organizationId),
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.id, workspaceId),
     columns: {
       logoBlob: true,
       logoType: true,

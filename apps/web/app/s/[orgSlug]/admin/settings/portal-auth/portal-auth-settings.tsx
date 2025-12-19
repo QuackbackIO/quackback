@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface PortalAuthSettingsProps {
-  organizationId: string
+  workspaceId: string
   initialConfig: {
     oauth: { google: boolean; github: boolean }
   }
@@ -45,7 +45,7 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-export function PortalAuthSettings({ organizationId, initialConfig }: PortalAuthSettingsProps) {
+export function PortalAuthSettings({ workspaceId, initialConfig }: PortalAuthSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
@@ -55,10 +55,10 @@ export function PortalAuthSettings({ organizationId, initialConfig }: PortalAuth
   const saveConfig = async (oauth: { google?: boolean; github?: boolean }) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/organization/portal-config', {
+      const res = await fetch('/api/workspace/portal-config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, oauth }),
+        body: JSON.stringify({ workspaceId, oauth }),
       })
       if (res.ok) {
         startTransition(() => {

@@ -12,7 +12,7 @@ export default async function ConfigureSsoProviderPage({
   params: Promise<{ orgSlug: string; templateId: string }>
 }) {
   const { orgSlug, templateId } = await params
-  const { organization, user } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+  const { workspace, user } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
 
   const template = SSO_PROVIDER_TEMPLATES[templateId]
 
@@ -73,7 +73,7 @@ export default async function ConfigureSsoProviderPage({
       <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
         <SsoProviderForm
           template={template}
-          organizationId={organization.id}
+          workspaceId={workspace.id}
           suggestedDomain={suggestedDomain}
         />
       </div>

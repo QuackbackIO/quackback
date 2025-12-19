@@ -2,13 +2,13 @@
  * Trust Login Plugin for Better-Auth
  *
  * This plugin provides a secure way to create sessions for users who have
- * been authenticated through a trusted flow (e.g., workspace creation, OAuth callback).
+ * been authenticated through a trusted flow (e.g., workspace creation, OAuth callback, SSO).
  *
  * It exposes a `/trust-login` endpoint that:
  * 1. Validates a one-time transfer token from the database
  * 2. Validates target domain matches current host (prevents token theft)
  * 3. Deletes token (one-time use)
- * 4. For portal OAuth, creates member record with role='user' if needed
+ * 4. Creates member record if needed (role based on context: portal='user', team='member')
  * 5. Creates a proper session using Better-Auth's internal adapter
  * 6. Sets the session cookie correctly
  * 7. Redirects to the callback URL
@@ -71,34 +71,35 @@ export const trustLogin = () => {
             return ctx.redirect('/login?error=invalid_domain')
           }
 
-          // 4. For portal context, ensure member record with role='user' exists
-          // (OAuth signup creates user but member may not exist)
-          if (transfer.context === 'portal') {
-            // Look up organization from target domain
-            const domainRecord = await db.query.workspaceDomain.findFirst({
-              where: eq(workspaceDomain.domain, transfer.targetDomain),
-              columns: { organizationId: true },
+          // 4. Ensure member record exists for the user
+          // This handles: portal OAuth/SSO, team SSO, and any other auth flows
+          // OAuth signup creates user but member may not exist for SSO users
+          // Look up organization from target domain
+          const domainRecord = await db.query.workspaceDomain.findFirst({
+            where: eq(workspaceDomain.domain, transfer.targetDomain),
+            columns: { workspaceId: true },
+          })
+
+          if (domainRecord) {
+            // Check if member record already exists
+            const existingMember = await db.query.member.findFirst({
+              where: and(
+                eq(member.userId, transfer.userId),
+                eq(member.workspaceId, domainRecord.workspaceId)
+              ),
             })
 
-            if (domainRecord) {
-              // Check if member record already exists
-              const existingMember = await db.query.member.findFirst({
-                where: and(
-                  eq(member.userId, transfer.userId),
-                  eq(member.organizationId, domainRecord.organizationId)
-                ),
+            // Create member record if it doesn't exist
+            // Role is based on context: portal → 'user', team/sso → 'member'
+            if (!existingMember) {
+              const memberRole = transfer.context === 'portal' ? 'user' : 'member'
+              await db.insert(member).values({
+                id: generateId('member'),
+                userId: transfer.userId,
+                workspaceId: domainRecord.workspaceId,
+                role: memberRole,
+                createdAt: new Date(),
               })
-
-              // Create member record with role='user' if it doesn't exist
-              if (!existingMember) {
-                await db.insert(member).values({
-                  id: generateId('member'),
-                  userId: transfer.userId,
-                  organizationId: domainRecord.organizationId,
-                  role: 'user',
-                  createdAt: new Date(),
-                })
-              }
             }
           }
 

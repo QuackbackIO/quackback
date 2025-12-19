@@ -30,12 +30,12 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    label: 'Organization',
+    label: 'Workspace',
     items: [
       { label: 'Team Members', href: '/admin/settings/team', icon: Users },
       { label: 'Integrations', href: '/admin/settings/integrations', icon: Plug2 },
-      { label: 'Security', href: '/admin/settings/security', icon: Shield },
-      { label: 'Domains', href: '/admin/settings/domains', icon: Globe },
+      { label: 'Security', href: '/admin/settings/security', icon: Shield, cloudOnly: true },
+      { label: 'Domains', href: '/admin/settings/domains', icon: Globe, cloudOnly: true },
       { label: 'Billing', href: '/admin/settings/billing', icon: CreditCard, cloudOnly: true },
     ],
   },

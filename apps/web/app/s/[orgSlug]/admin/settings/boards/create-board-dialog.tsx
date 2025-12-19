@@ -31,13 +31,13 @@ import {
 } from '@/components/ui/form'
 
 interface CreateBoardDialogProps {
-  organizationId: string
+  workspaceId: string
 }
 
-export function CreateBoardDialog({ organizationId }: CreateBoardDialogProps) {
+export function CreateBoardDialog({ workspaceId }: CreateBoardDialogProps) {
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  const mutation = useCreateBoard(organizationId)
+  const mutation = useCreateBoard(workspaceId)
 
   const form = useForm<CreateBoardInput>({
     resolver: standardSchemaResolver(createBoardSchema),

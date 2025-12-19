@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { organization, customSession } from 'better-auth/plugins'
+import { customSession } from 'better-auth/plugins'
 import { sso } from '@better-auth/sso'
 import {
   db,
@@ -9,35 +9,14 @@ import {
   session as sessionTable,
   account as accountTable,
   verification as verificationTable,
-  organization as organizationTable,
+  workspace as workspaceTable,
   member as memberTable,
   invitation as invitationTable,
   eq,
   and,
 } from '@/lib/db'
-import type { UserId, OrgId } from '@quackback/ids'
+import type { UserId } from '@quackback/ids'
 import { trustLogin } from './plugins/trust-login'
-
-/**
- * Look up the primary workspace domain for an organization.
- * Returns the full URL including protocol.
- */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
-  const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
-  })
-
-  if (!domain) {
-    throw new Error('No primary workspace domain configured')
-  }
-
-  const isLocalhost = domain.domain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${domain.domain}`
-}
 
 /**
  * Build trusted origins dynamically for CSRF protection.
@@ -110,7 +89,7 @@ export const auth = betterAuth({
       session: sessionTable,
       account: accountTable,
       verification: verificationTable,
-      organization: organizationTable,
+      workspace: workspaceTable,
       member: memberTable,
       invitation: invitationTable,
     },
@@ -124,11 +103,11 @@ export const auth = betterAuth({
     enabled: false,
   },
 
-  // Include organizationId in user object for tenant validation
+  // Include workspaceId in user object for tenant validation
   // This enables the proxy to verify the session belongs to the correct tenant
   user: {
     additionalFields: {
-      organizationId: {
+      workspaceId: {
         type: 'string',
         required: true,
       },
@@ -206,35 +185,11 @@ export const auth = betterAuth({
       }
     }),
 
-    organization({
-      // Tenant creation is handled by create-workspace flow, not direct API
-      allowUserToCreateOrganization: false,
-      creatorRole: 'owner',
-      memberRole: 'member',
-      sendInvitationEmail: async ({ email, organization, inviter, invitation }) => {
-        const { sendInvitationEmail } = await import('@quackback/email')
-        // Build invitation link using workspace domain
-        const tenantUrl = await getTenantUrl(organization.id as OrgId)
-        const inviteLink = `${tenantUrl}/accept-invitation/${invitation.id}`
-        await sendInvitationEmail({
-          to: email,
-          invitedByName: inviter.user.name,
-          organizationName: organization.name,
-          inviteLink,
-        })
-      },
-    }),
-
     // SSO plugin for enterprise SAML/OIDC authentication
     // Uses automatic email-based account linking (no email salting)
+    // Note: Member provisioning is handled by trust-login plugin during session transfer
     sso({
       disableImplicitSignUp: false,
-
-      // Organization provisioning: automatically add SSO users to the org
-      organizationProvisioning: {
-        disabled: false,
-        defaultRole: 'member',
-      },
     }),
   ],
 })

@@ -50,7 +50,7 @@ interface PostToEdit {
 }
 
 interface EditPostDialogProps {
-  organizationId: string
+  workspaceId: string
   post: PostToEdit
   boards: Board[]
   tags: Tag[]
@@ -61,7 +61,7 @@ interface EditPostDialogProps {
 }
 
 export function EditPostDialog({
-  organizationId,
+  workspaceId,
   post,
   boards,
   tags,
@@ -72,8 +72,8 @@ export function EditPostDialog({
   const [error, setError] = useState('')
 
   // Use mutations for optimistic updates
-  const updatePost = useUpdatePost(organizationId)
-  const updateTags = useUpdatePostTags(organizationId)
+  const updatePost = useUpdatePost(workspaceId)
+  const updateTags = useUpdatePostTags(workspaceId)
   // Convert plain text to TipTap JSON format for posts without contentJson
   const getInitialContentJson = (post: PostToEdit): JSONContent | null => {
     if (post.contentJson) {

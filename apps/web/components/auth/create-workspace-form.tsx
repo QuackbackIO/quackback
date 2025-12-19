@@ -17,14 +17,20 @@ import {
   FormDescription,
 } from '@/components/ui/form'
 
+interface CreateWorkspaceFormProps {
+  isCloud?: boolean
+}
+
 /**
  * Create Workspace Form
  *
- * Used on the main domain to create a new tenant (org + user).
- * After creation, redirects to the subdomain with a session cookie.
+ * Used on the main domain to create a new workspace (org + user).
+ * - Cloud: Creates subdomain workspace (slug.domain.com)
+ * - OSS: Creates workspace on main domain (domain.com)
+ *
  * Note: No password - uses email OTP for subsequent authentication.
  */
-export function CreateWorkspaceForm() {
+export function CreateWorkspaceForm({ isCloud = false }: CreateWorkspaceFormProps) {
   const [error, setError] = useState('')
   const [baseDomain, setBaseDomain] = useState('')
 
@@ -108,23 +114,25 @@ export function CreateWorkspaceForm() {
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="workspaceSlug"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Workspace URL</FormLabel>
-                <FormControl>
-                  <div className="flex items-center gap-2">
-                    <Input placeholder="acme" {...field} className="max-w-[200px]" />
-                    <span className="text-sm text-muted-foreground">.{baseDomain}</span>
-                  </div>
-                </FormControl>
-                <FormDescription>This will be your unique workspace URL</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {isCloud && (
+            <FormField
+              control={form.control}
+              name="workspaceSlug"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Workspace URL</FormLabel>
+                  <FormControl>
+                    <div className="flex items-center gap-2">
+                      <Input placeholder="acme" {...field} className="max-w-[200px]" />
+                      <span className="text-sm text-muted-foreground">.{baseDomain}</span>
+                    </div>
+                  </FormControl>
+                  <FormDescription>This will be your unique workspace URL</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
         </div>
 
         <div className="space-y-4">

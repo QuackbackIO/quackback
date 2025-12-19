@@ -1,12 +1,12 @@
-import { requireTenantBySlug, getOrganizationBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
+import { requireTenantBySlug, getWorkspaceBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { SettingsNav } from './settings-nav'
 import { getUserAvatarData } from '@/lib/avatar'
-import { getOrganizationBrandingData } from '@/lib/organization'
+import { getWorkspaceBrandingData } from '@/lib/workspace'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { SessionProvider } from '@/components/providers/session-provider'
-import { organizationService, theme } from '@quackback/domain'
+import { workspaceService, theme } from '@quackback/domain'
 
 interface SettingsLayoutProps {
   children: React.ReactNode
@@ -19,7 +19,7 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
   // Allow ALL authenticated users (team members and portal users)
   const { user } = await requireTenantBySlug(orgSlug)
   const [org, userRole, session] = await Promise.all([
-    getOrganizationBySlug(orgSlug),
+    getWorkspaceBySlug(orgSlug),
     getCurrentUserRoleBySlug(orgSlug),
     getSession(),
   ])
@@ -34,9 +34,9 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
   // Get custom CSS for portal customization
   const [avatarData, brandingData, brandingResult, customCssResult] = await Promise.all([
     getUserAvatarData(user.id, user.image),
-    getOrganizationBrandingData(org.id),
-    organizationService.getBrandingConfig(org.id),
-    organizationService.getCustomCss(org.id),
+    getWorkspaceBrandingData(org.id),
+    workspaceService.getBrandingConfig(org.id),
+    workspaceService.getCustomCss(org.id),
   ])
 
   // Generate theme CSS from org config

@@ -1,13 +1,13 @@
 import { cache } from 'react'
-import { getSubscriptionByOrganizationId } from '@/lib/db'
+import { getSubscriptionByWorkspaceId } from '@/lib/db'
 import { isCloud, type PricingTier } from '@quackback/domain'
-import type { OrgId, SubscriptionId } from '@quackback/ids'
+import type { WorkspaceId, SubscriptionId } from '@quackback/ids'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
 
-export interface OrganizationSubscription {
+export interface WorkspaceSubscription {
   id: SubscriptionId
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   tier: PricingTier
   status: SubscriptionStatus
   stripeCustomerId: string | null
@@ -23,18 +23,18 @@ export interface OrganizationSubscription {
  * Cached per request.
  */
 export const getSubscription = cache(
-  async (organizationId: OrgId): Promise<OrganizationSubscription | null> => {
+  async (workspaceId: WorkspaceId): Promise<WorkspaceSubscription | null> => {
     // OSS edition doesn't use subscriptions
     if (!isCloud()) {
       return null
     }
 
-    const row = await getSubscriptionByOrganizationId(organizationId)
+    const row = await getSubscriptionByWorkspaceId(workspaceId)
     if (!row) return null
 
     return {
       id: row.id,
-      organizationId: row.organizationId,
+      workspaceId: row.workspaceId,
       tier: row.tier as PricingTier,
       status: row.status as SubscriptionStatus,
       stripeCustomerId: row.stripeCustomerId,
@@ -49,7 +49,7 @@ export const getSubscription = cache(
 /**
  * Check if a subscription is active (can access features)
  */
-export function isSubscriptionActive(subscription: OrganizationSubscription | null): boolean {
+export function isSubscriptionActive(subscription: WorkspaceSubscription | null): boolean {
   if (!subscription) return false
   return subscription.status === 'active' || subscription.status === 'trialing'
 }

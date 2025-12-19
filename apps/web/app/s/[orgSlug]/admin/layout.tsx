@@ -4,7 +4,7 @@ import { AdminNav } from './admin-nav'
 import { getUserAvatarData } from '@/lib/avatar'
 import { SessionProvider } from '@/components/providers/session-provider'
 import { FeaturesProvider } from '@/components/providers/features-provider'
-import { getOrganizationFeatures } from '@/lib/features/server'
+import { getWorkspaceFeatures } from '@/lib/features/server'
 
 export default async function AdminLayout({
   children,
@@ -16,13 +16,13 @@ export default async function AdminLayout({
   // Only team members (owner, admin, member roles) can access admin dashboard
   // Portal users don't have member records, so they can't access this
   const { orgSlug } = await params
-  const [{ user, organization }, session] = await Promise.all([
+  const [{ user, workspace }, session] = await Promise.all([
     requireTenantRoleBySlug(orgSlug, ['owner', 'admin', 'member']),
     getSession(),
   ])
 
   // Get features for SSR hydration
-  const features = await getOrganizationFeatures(organization.id)
+  const features = await getWorkspaceFeatures(workspace.id)
 
   // Get avatar URL with base64 data for SSR (no flicker)
   const avatarData = await getUserAvatarData(user.id, user.image)
@@ -36,7 +36,7 @@ export default async function AdminLayout({
   return (
     <SessionProvider initialSession={session}>
       <FeaturesProvider
-        organizationId={organization.id}
+        workspaceId={workspace.id}
         initialFeatures={{
           edition: features.edition,
           tier: features.tier,

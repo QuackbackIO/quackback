@@ -3,10 +3,10 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@quackback/domain/features'
-import { featuresKeys, type OrganizationFeaturesData } from '@/lib/hooks/use-features'
+import { featuresKeys, type WorkspaceFeaturesData } from '@/lib/hooks/use-features'
 
 interface FeaturesContextValue {
-  organizationId: string
+  workspaceId: string
   edition: 'oss' | 'cloud'
   tier: PricingTier | null
   enabledFeatures: Feature[]
@@ -23,9 +23,9 @@ const FeaturesContext = createContext<FeaturesContextValue | null>(null)
 
 interface FeaturesProviderProps {
   children: ReactNode
-  organizationId: string
+  workspaceId: string
   /** SSR-fetched features data for hydration */
-  initialFeatures: OrganizationFeaturesData
+  initialFeatures: WorkspaceFeaturesData
 }
 
 /**
@@ -34,35 +34,35 @@ interface FeaturesProviderProps {
  * This provides:
  * 1. Immediate access to features via useFeatures() hook with no loading state
  * 2. Context for quick synchronous feature checks via hasFeature()
- * 3. Automatic cache population for useOrganizationFeatures() queries
+ * 3. Automatic cache population for useWorkspaceFeatures() queries
  *
  * Usage:
  * ```tsx
  * // In a server component
- * const features = await getOrganizationFeatures(organizationId)
+ * const features = await getWorkspaceFeatures(workspaceId)
  *
  * // Pass to client
- * <FeaturesProvider organizationId={orgId} initialFeatures={features}>
+ * <FeaturesProvider workspaceId={orgId} initialFeatures={features}>
  *   {children}
  * </FeaturesProvider>
  * ```
  */
 export function FeaturesProvider({
   children,
-  organizationId,
+  workspaceId,
   initialFeatures,
 }: FeaturesProviderProps) {
   const queryClient = useQueryClient()
 
   // Hydrate React Query cache with SSR data
-  queryClient.setQueryData(featuresKeys.organization(organizationId), initialFeatures)
+  queryClient.setQueryData(featuresKeys.organization(workspaceId), initialFeatures)
 
   const hasFeature = (feature: Feature) => initialFeatures.enabledFeatures.includes(feature)
 
   return (
     <FeaturesContext.Provider
       value={{
-        organizationId,
+        workspaceId,
         edition: initialFeatures.edition,
         tier: initialFeatures.tier,
         enabledFeatures: initialFeatures.enabledFeatures,

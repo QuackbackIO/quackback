@@ -14,7 +14,7 @@ import type {
   CommentWithReplies,
 } from '@/app/s/[orgSlug]/admin/feedback/inbox-types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db/types'
-import type { CommentId, PostId, StatusId, OrgId } from '@quackback/ids'
+import type { CommentId, PostId, StatusId, WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -23,11 +23,11 @@ import type { CommentId, PostId, StatusId, OrgId } from '@quackback/ids'
 export const inboxKeys = {
   all: ['inbox'] as const,
   lists: () => [...inboxKeys.all, 'list'] as const,
-  list: (organizationId: string, filters: InboxFilters) =>
-    [...inboxKeys.lists(), organizationId, filters] as const,
+  list: (workspaceId: string, filters: InboxFilters) =>
+    [...inboxKeys.lists(), workspaceId, filters] as const,
   details: () => [...inboxKeys.all, 'detail'] as const,
-  detail: (postId: string, organizationId: string) =>
-    [...inboxKeys.details(), postId, organizationId] as const,
+  detail: (postId: string, workspaceId: string) =>
+    [...inboxKeys.details(), postId, workspaceId] as const,
 }
 
 // ============================================================================
@@ -35,12 +35,12 @@ export const inboxKeys = {
 // ============================================================================
 
 async function fetchInboxPosts(
-  organizationId: string,
+  workspaceId: string,
   filters: InboxFilters,
   page: number
 ): Promise<InboxPostListResult> {
   const params = new URLSearchParams()
-  params.set('organizationId', organizationId)
+  params.set('workspaceId', workspaceId)
   params.set('page', page.toString())
 
   if (filters.search) params.set('search', filters.search)
@@ -58,8 +58,8 @@ async function fetchInboxPosts(
   return response.json()
 }
 
-async function fetchPostDetail(postId: string, organizationId: string): Promise<PostDetails> {
-  const response = await fetch(`/api/posts/${postId}?organizationId=${organizationId}`)
+async function fetchPostDetail(postId: string, workspaceId: string): Promise<PostDetails> {
+  const response = await fetch(`/api/posts/${postId}?workspaceId=${workspaceId}`)
   if (!response.ok) throw new Error('Failed to fetch post')
   return response.json()
 }
@@ -69,15 +69,15 @@ async function fetchPostDetail(postId: string, organizationId: string): Promise<
 // ============================================================================
 
 interface UseInboxPostsOptions {
-  organizationId: string
+  workspaceId: string
   filters: InboxFilters
   initialData?: InboxPostListResult
 }
 
-export function useInboxPosts({ organizationId, filters, initialData }: UseInboxPostsOptions) {
+export function useInboxPosts({ workspaceId, filters, initialData }: UseInboxPostsOptions) {
   return useInfiniteQuery({
-    queryKey: inboxKeys.list(organizationId, filters),
-    queryFn: ({ pageParam }) => fetchInboxPosts(organizationId, filters, pageParam),
+    queryKey: inboxKeys.list(workspaceId, filters),
+    queryFn: ({ pageParam }) => fetchInboxPosts(workspaceId, filters, pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     initialData: initialData
@@ -100,14 +100,14 @@ export function flattenInboxPosts(
 
 interface UsePostDetailOptions {
   postId: string | null
-  organizationId: string
+  workspaceId: string
   enabled?: boolean
 }
 
-export function usePostDetail({ postId, organizationId, enabled = true }: UsePostDetailOptions) {
+export function usePostDetail({ postId, workspaceId, enabled = true }: UsePostDetailOptions) {
   return useQuery({
-    queryKey: inboxKeys.detail(postId!, organizationId),
-    queryFn: () => fetchPostDetail(postId!, organizationId),
+    queryKey: inboxKeys.detail(postId!, workspaceId),
+    queryFn: () => fetchPostDetail(postId!, workspaceId),
     enabled: enabled && !!postId,
     staleTime: 30 * 1000,
   })
@@ -120,8 +120,8 @@ export function usePostDetail({ postId, organizationId, enabled = true }: UsePos
 /**
  * @deprecated Use useChangePostStatusId instead - the legacy status field has been removed
  */
-export function useUpdatePostStatus(organizationId: string) {
-  const changeStatusId = useChangePostStatusId(organizationId)
+export function useUpdatePostStatus(workspaceId: string) {
+  const changeStatusId = useChangePostStatusId(workspaceId)
   return changeStatusId
 }
 
@@ -129,7 +129,7 @@ export function useUpdatePostStatus(organizationId: string) {
  * Hook to change a post's status using TypeID-based statusId
  * This is the new status system that uses the post_statuses table
  */
-export function useChangePostStatusId(organizationId: string) {
+export function useChangePostStatusId(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -137,7 +137,7 @@ export function useChangePostStatusId(organizationId: string) {
       const response = await fetch(`/api/posts/${postId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statusId, organizationId }),
+        body: JSON.stringify({ statusId, workspaceId }),
       })
       if (!response.ok) {
         const error = await response.json()
@@ -147,7 +147,7 @@ export function useChangePostStatusId(organizationId: string) {
     },
     onSuccess: (_data, { postId }) => {
       // Invalidate inbox queries
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       // Invalidate roadmap queries (they're under 'roadmapPosts' key)
       queryClient.invalidateQueries({ queryKey: ['roadmapPosts'] })
@@ -155,7 +155,7 @@ export function useChangePostStatusId(organizationId: string) {
   })
 }
 
-export function useUpdatePostOwner(organizationId: string) {
+export function useUpdatePostOwner(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -163,17 +163,17 @@ export function useUpdatePostOwner(organizationId: string) {
       const response = await fetch(`/api/posts/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ownerId, organizationId }),
+        body: JSON.stringify({ ownerId, workspaceId }),
       })
       if (!response.ok) throw new Error('Failed to update owner')
       return response.json()
     },
     onMutate: async ({ postId, ownerId }) => {
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
+        inboxKeys.detail(postId, workspaceId)
       )
 
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
@@ -182,7 +182,7 @@ export function useUpdatePostOwner(organizationId: string) {
 
       // Optimistically update detail
       if (previousDetail) {
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), {
           ...previousDetail,
           ownerId,
         })
@@ -207,7 +207,7 @@ export function useUpdatePostOwner(organizationId: string) {
     },
     onError: (_err, { postId }, context) => {
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(postId, workspaceId), context.previousDetail)
       }
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
@@ -218,7 +218,7 @@ export function useUpdatePostOwner(organizationId: string) {
       }
     },
     onSettled: (_data, _error, { postId }) => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
     },
   })
 }
@@ -229,7 +229,7 @@ interface UpdateTagsInput {
   allTags: Tag[]
 }
 
-export function useUpdatePostTags(organizationId: string) {
+export function useUpdatePostTags(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -237,17 +237,17 @@ export function useUpdatePostTags(organizationId: string) {
       const response = await fetch(`/api/posts/${postId}/tags`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tagIds, organizationId }),
+        body: JSON.stringify({ tagIds, workspaceId }),
       })
       if (!response.ok) throw new Error('Failed to update tags')
       return response.json()
     },
     onMutate: async ({ postId, tagIds, allTags }) => {
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
+        inboxKeys.detail(postId, workspaceId)
       )
 
       // Snapshot ALL list queries (regardless of filters)
@@ -263,7 +263,7 @@ export function useUpdatePostTags(organizationId: string) {
 
       // Update detail
       if (previousDetail) {
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), {
           ...previousDetail,
           tags: mappedTags,
         })
@@ -291,7 +291,7 @@ export function useUpdatePostTags(organizationId: string) {
     onError: (_err, { postId }, context) => {
       // Rollback detail on error
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(postId, workspaceId), context.previousDetail)
       }
       // Rollback all list queries
       if (context?.previousLists) {
@@ -303,12 +303,12 @@ export function useUpdatePostTags(organizationId: string) {
       }
     },
     onSettled: (_data, _error, { postId }) => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
     },
   })
 }
 
-export function useUpdateOfficialResponse(organizationId: string) {
+export function useUpdateOfficialResponse(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -316,14 +316,14 @@ export function useUpdateOfficialResponse(organizationId: string) {
       const res = await fetch(`/api/posts/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ officialResponse: response, organizationId }),
+        body: JSON.stringify({ officialResponse: response, workspaceId }),
       })
       if (!res.ok) throw new Error('Failed to update official response')
       return res.json()
     },
     onSuccess: (data, { postId }) => {
       // Update detail cache with server response (includes author name, timestamp)
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), (old) => {
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), (old) => {
         if (!old) return old
         return {
           ...old,
@@ -338,7 +338,7 @@ export function useUpdateOfficialResponse(organizationId: string) {
       })
     },
     onSettled: (_data, _error, { postId }) => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
     },
   })
 }
@@ -357,7 +357,7 @@ interface ToggleReactionResponse {
   reactions: CommentReaction[]
 }
 
-export function useToggleCommentReaction(organizationId: string) {
+export function useToggleCommentReaction(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -375,16 +375,16 @@ export function useToggleCommentReaction(organizationId: string) {
     },
     onMutate: async ({ postId, commentId, emoji }) => {
       // Cancel any outgoing refetches for post detail
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
 
       // Snapshot the previous value
       const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
+        inboxKeys.detail(postId, workspaceId)
       )
 
       // Optimistically update the post detail cache
       if (previousDetail) {
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), {
           ...previousDetail,
           comments: updateCommentsReaction(previousDetail.comments, commentId, emoji),
         })
@@ -395,12 +395,12 @@ export function useToggleCommentReaction(organizationId: string) {
     onError: (_err, { postId }, context) => {
       // Rollback on error
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(postId, workspaceId), context.previousDetail)
       }
     },
     onSuccess: (data, { postId, commentId }) => {
       // Update with server response for accurate counts
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), (old) => {
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), (old) => {
         if (!old) return old
         return {
           ...old,
@@ -498,7 +498,7 @@ interface UpdatePostResponse {
   boardId: string
 }
 
-export function useUpdatePost(organizationId: string) {
+export function useUpdatePost(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -512,7 +512,7 @@ export function useUpdatePost(organizationId: string) {
       const response = await fetch(`/api/posts/${postId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, contentJson, statusId, organizationId }),
+        body: JSON.stringify({ title, content, contentJson, statusId, workspaceId }),
       })
       if (!response.ok) {
         const data = await response.json()
@@ -522,12 +522,12 @@ export function useUpdatePost(organizationId: string) {
     },
     onMutate: async ({ postId, title, content, contentJson, statusId }) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       // Snapshot previous state
       const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
+        inboxKeys.detail(postId, workspaceId)
       )
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
         queryKey: inboxKeys.lists(),
@@ -535,7 +535,7 @@ export function useUpdatePost(organizationId: string) {
 
       // Optimistically update detail
       if (previousDetail) {
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), {
           ...previousDetail,
           title,
           content,
@@ -568,7 +568,7 @@ export function useUpdatePost(organizationId: string) {
     onError: (_err, { postId }, context) => {
       // Rollback on error
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(postId, workspaceId), context.previousDetail)
       }
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
@@ -580,7 +580,7 @@ export function useUpdatePost(organizationId: string) {
     },
     onSuccess: (data, { postId }) => {
       // Update with server response for accuracy
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), (old) => {
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), (old) => {
         if (!old) return old
         return {
           ...old,
@@ -593,7 +593,7 @@ export function useUpdatePost(organizationId: string) {
     },
     onSettled: (_data, _error, { postId }) => {
       // Ensure consistency
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
     },
   })
 }
@@ -607,7 +607,7 @@ interface VotePostResponse {
   voted: boolean
 }
 
-export function useVotePost(organizationId: string) {
+export function useVotePost(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -621,12 +621,12 @@ export function useVotePost(organizationId: string) {
     },
     onMutate: async (postId) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       // Snapshot previous state
       const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
+        inboxKeys.detail(postId, workspaceId)
       )
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
         queryKey: inboxKeys.lists(),
@@ -635,7 +635,7 @@ export function useVotePost(organizationId: string) {
       // Optimistically update detail
       if (previousDetail) {
         const newHasVoted = !previousDetail.hasVoted
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), {
           ...previousDetail,
           hasVoted: newHasVoted,
           voteCount: newHasVoted ? previousDetail.voteCount + 1 : previousDetail.voteCount - 1,
@@ -668,7 +668,7 @@ export function useVotePost(organizationId: string) {
     onError: (_err, postId, context) => {
       // Rollback on error
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(postId, workspaceId), context.previousDetail)
       }
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
@@ -680,7 +680,7 @@ export function useVotePost(organizationId: string) {
     },
     onSuccess: (data, postId) => {
       // Update with server response for accuracy
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), (old) => {
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), (old) => {
         if (!old) return old
         return {
           ...old,
@@ -733,7 +733,7 @@ interface AddCommentResponse {
   createdAt: string
 }
 
-export function useAddComment(organizationId: OrgId) {
+export function useAddComment(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -762,12 +762,12 @@ export function useAddComment(organizationId: OrgId) {
     },
     onMutate: async ({ postId, content, parentId, authorName }) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       // Snapshot previous state
       const previousDetail = queryClient.getQueryData<PostDetails>(
-        inboxKeys.detail(postId, organizationId)
+        inboxKeys.detail(postId, workspaceId)
       )
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
         queryKey: inboxKeys.lists(),
@@ -777,7 +777,7 @@ export function useAddComment(organizationId: OrgId) {
       const optimisticComment: CommentWithReplies = {
         id: `comment_temp${Date.now()}` as CommentId,
         postId: postId as PostId,
-        organizationId,
+        workspaceId,
         content,
         authorId: null, // Will be populated by server
         authorName: authorName || null,
@@ -796,7 +796,7 @@ export function useAddComment(organizationId: OrgId) {
           ? addReplyToComment(previousDetail.comments, parentId, optimisticComment)
           : [...previousDetail.comments, optimisticComment]
 
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, organizationId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId, workspaceId), {
           ...previousDetail,
           comments: updatedComments,
         })
@@ -824,7 +824,7 @@ export function useAddComment(organizationId: OrgId) {
     onError: (_err, { postId }, context) => {
       // Rollback on error
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId, organizationId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(postId, workspaceId), context.previousDetail)
       }
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
@@ -836,7 +836,7 @@ export function useAddComment(organizationId: OrgId) {
     },
     onSettled: (_data, _error, { postId }) => {
       // Refetch to get accurate data with proper IDs
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, organizationId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId, workspaceId) })
     },
   })
 }
@@ -863,7 +863,7 @@ interface CreatePostResponse {
   boardId: string
 }
 
-export function useCreatePost(organizationId: string) {
+export function useCreatePost(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -871,7 +871,7 @@ export function useCreatePost(organizationId: string) {
       const response = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, organizationId }),
+        body: JSON.stringify({ ...input, workspaceId }),
       })
 
       if (!response.ok) {

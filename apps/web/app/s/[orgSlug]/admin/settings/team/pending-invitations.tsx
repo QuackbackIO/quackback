@@ -18,14 +18,14 @@ interface PendingInvitation {
 
 interface PendingInvitationsProps {
   invitations: PendingInvitation[]
-  organizationId: string
+  workspaceId: string
 }
 
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
 
 export function PendingInvitations({
   invitations: initialInvitations,
-  organizationId,
+  workspaceId,
 }: PendingInvitationsProps) {
   const [invitations, setInvitations] = useState(initialInvitations)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -52,7 +52,7 @@ export function PendingInvitations({
       const response = await fetch(`/api/invitations/${invitationId}/resend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId }),
+        body: JSON.stringify({ workspaceId }),
       })
 
       if (!response.ok) {
@@ -81,7 +81,7 @@ export function PendingInvitations({
       const response = await fetch(`/api/invitations/${invitationId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId }),
+        body: JSON.stringify({ workspaceId }),
       })
 
       if (!response.ok) {

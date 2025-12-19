@@ -25,7 +25,7 @@ interface InvitationInfo {
   email: string
   name: string | null
   role: string | null
-  organizationName: string
+  workspaceName: string
   inviterName: string | null
 }
 
@@ -296,7 +296,7 @@ export function OTPAuthForm({
               <p className="font-medium text-foreground">You&apos;ve been invited!</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Create your account to join{' '}
-                <span className="font-medium text-foreground">{invitation.organizationName}</span>
+                <span className="font-medium text-foreground">{invitation.workspaceName}</span>
                 {invitation.inviterName && <> (invited by {invitation.inviterName})</>}
               </p>
             </div>

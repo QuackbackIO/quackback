@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getOrganizationBySlug } from '@/lib/tenant'
+import { getWorkspaceBySlug } from '@/lib/tenant'
 import { getPostService, getBoardService, getStatusService } from '@/lib/services'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from './_components/vote-sidebar'
@@ -21,7 +21,7 @@ interface PostDetailPageProps {
 export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const { orgSlug, slug, postId: postIdParam } = await params
 
-  const org = await getOrganizationBySlug(orgSlug)
+  const org = await getWorkspaceBySlug(orgSlug)
   if (!org) {
     return null
   }
@@ -71,11 +71,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         <div className="flex">
           {/* Vote & Subscribe section - left column */}
           <Suspense fallback={<VoteSidebarSkeleton />}>
-            <VoteSidebar
-              postId={postId}
-              organizationId={org.id}
-              initialVoteCount={post.voteCount}
-            />
+            <VoteSidebar postId={postId} workspaceId={org.id} initialVoteCount={post.voteCount} />
           </Suspense>
 
           {/* Content section */}
@@ -88,13 +84,13 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
             content={post.officialResponse.content}
             authorName={post.officialResponse.authorName}
             respondedAt={post.officialResponse.respondedAt}
-            organizationName={org.name}
+            workspaceName={org.name}
           />
         )}
 
         {/* Comments section */}
         <Suspense fallback={<CommentsSectionSkeleton />}>
-          <CommentsSection postId={postId} organizationId={org.id} comments={post.comments} />
+          <CommentsSection postId={postId} workspaceId={org.id} comments={post.comments} />
         </Suspense>
       </div>
     </div>

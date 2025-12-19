@@ -6,31 +6,27 @@ import { Camera, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import {
-  useOrganizationLogo,
-  useUploadOrganizationLogo,
-  useDeleteOrganizationLogo,
-} from '@/lib/hooks/use-organization-queries'
+  useWorkspaceLogo,
+  useUploadWorkspaceLogo,
+  useDeleteWorkspaceLogo,
+} from '@/lib/hooks/use-workspace-queries'
 
 interface LogoUploaderProps {
-  organizationId: string
-  organizationName: string
+  workspaceId: string
+  workspaceName: string
   /** Initial logo URL from server (for SSR) */
   initialLogoUrl?: string | null
 }
 
-export function LogoUploader({
-  organizationId,
-  organizationName,
-  initialLogoUrl,
-}: LogoUploaderProps) {
+export function LogoUploader({ workspaceId, workspaceName, initialLogoUrl }: LogoUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
   // TanStack Query hooks
-  const { data: logoData } = useOrganizationLogo(organizationId)
-  const uploadMutation = useUploadOrganizationLogo(organizationId)
-  const deleteMutation = useDeleteOrganizationLogo(organizationId)
+  const { data: logoData } = useWorkspaceLogo(workspaceId)
+  const uploadMutation = useUploadWorkspaceLogo(workspaceId)
+  const deleteMutation = useDeleteWorkspaceLogo(workspaceId)
 
   // Use query data if available, fall back to initial prop
   const logoUrl = logoData?.logoUrl ?? initialLogoUrl
@@ -115,12 +111,12 @@ export function LogoUploader({
           {logoUrl ? (
             <img
               src={logoUrl}
-              alt={organizationName}
+              alt={workspaceName}
               className="h-16 w-16 rounded-lg object-cover border border-border/50"
             />
           ) : (
             <div className="h-16 w-16 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold border border-border/50">
-              {organizationName.charAt(0).toUpperCase()}
+              {workspaceName.charAt(0).toUpperCase()}
             </div>
           )}
           {isUploading && (

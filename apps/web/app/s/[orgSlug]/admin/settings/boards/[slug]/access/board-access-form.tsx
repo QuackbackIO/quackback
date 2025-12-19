@@ -18,15 +18,15 @@ import { Globe, Lock } from 'lucide-react'
 
 interface BoardAccessFormProps {
   board: Board
-  organizationId: string
+  workspaceId: string
 }
 
 interface FormValues {
   isPublic: boolean
 }
 
-export function BoardAccessForm({ board, organizationId }: BoardAccessFormProps) {
-  const mutation = useUpdateBoard(organizationId)
+export function BoardAccessForm({ board, workspaceId }: BoardAccessFormProps) {
+  const mutation = useUpdateBoard(workspaceId)
 
   const form = useForm<FormValues>({
     defaultValues: {

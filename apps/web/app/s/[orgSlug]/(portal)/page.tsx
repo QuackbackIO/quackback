@@ -1,4 +1,5 @@
-import { getOrganizationBySlug } from '@/lib/tenant'
+import { redirect } from 'next/navigation'
+import { getWorkspaceBySlug } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getBoardService, getPostService, getStatusService, getTagService } from '@/lib/services'
@@ -21,7 +22,7 @@ interface PublicPortalPageProps {
  */
 export default async function PublicPortalPage({ params, searchParams }: PublicPortalPageProps) {
   const { orgSlug } = await params
-  const org = await getOrganizationBySlug(orgSlug)
+  const org = await getWorkspaceBySlug(orgSlug)
 
   // Org validation is done in parent tenant layout
   if (!org) {
@@ -35,7 +36,7 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
   let userIdentifier = await getUserIdentifier()
   if (session?.user) {
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, org.id)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, org.id)),
     })
     if (memberRecord) {
       userIdentifier = getMemberIdentifier(memberRecord.id)
@@ -46,7 +47,7 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
   const [boardsResult, postsResult, statusesResult, tagsResult] = await Promise.all([
     getBoardService().listPublicBoardsWithStats(org.id),
     getPostService().listPublicPosts({
-      organizationId: org.id,
+      workspaceId: org.id,
       boardSlug: board,
       search,
       sort,
@@ -65,6 +66,11 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
   const statuses = statusesResult.success ? statusesResult.value : []
   const tags = tagsResult.success ? tagsResult.value : []
 
+  // If no boards exist, redirect to onboarding
+  if (boards.length === 0) {
+    redirect('/onboarding')
+  }
+
   // Get user's voted posts - service now returns TypeID set directly
   const postIds = posts.map((p) => p.id)
   const votedPostIdsResult = await getPostService().getUserVotedPostIds(postIds, userIdentifier)
@@ -80,8 +86,8 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
   return (
     <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
       <FeedbackContainer
-        organizationId={org.id}
-        organizationName={org.name}
+        workspaceId={org.id}
+        workspaceName={org.name}
         boards={boards}
         posts={posts}
         statuses={statuses}

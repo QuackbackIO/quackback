@@ -6,7 +6,7 @@ import { SubscriptionService } from '@quackback/domain/subscriptions'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PostId, MemberId, OrgId } from '@quackback/ids'
+import type { PostId, MemberId, WorkspaceId } from '@quackback/ids'
 
 export function VoteSidebarSkeleton() {
   return (
@@ -22,11 +22,11 @@ export function VoteSidebarSkeleton() {
 
 interface VoteSidebarProps {
   postId: PostId
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   initialVoteCount: number
 }
 
-export async function VoteSidebar({ postId, organizationId, initialVoteCount }: VoteSidebarProps) {
+export async function VoteSidebar({ postId, workspaceId, initialVoteCount }: VoteSidebarProps) {
   const session = await getSession()
 
   let userIdentifier = ''
@@ -35,7 +35,7 @@ export async function VoteSidebar({ postId, organizationId, initialVoteCount }: 
 
   if (session?.user) {
     memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
       columns: { id: true },
     })
     if (memberRecord) {
@@ -63,7 +63,7 @@ export async function VoteSidebar({ postId, organizationId, initialVoteCount }: 
     subscriptionStatus = await subscriptionService.getSubscriptionStatus(
       memberId,
       postId,
-      organizationId
+      workspaceId
     )
   }
 

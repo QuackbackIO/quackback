@@ -4,22 +4,22 @@ import { ThemeCustomizer } from './theme-customizer'
 import { LogoUploader } from './logo-uploader'
 import { HeaderBranding } from './header-branding'
 import { CustomCssEditor } from './custom-css-editor'
-import { organizationService } from '@quackback/domain'
-import { getOrganizationLogoData, getOrganizationHeaderLogoData } from '@/lib/organization'
+import { workspaceService } from '@quackback/domain'
+import { getWorkspaceLogoData, getWorkspaceHeaderLogoData } from '@/lib/workspace'
 
 export default async function BrandingPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
-  const { organization } = await requireTenantBySlug(orgSlug)
+  const { workspace } = await requireTenantBySlug(orgSlug)
 
   // Fetch branding config from service
-  const brandingConfigResult = await organizationService.getBrandingConfig(organization.id)
+  const brandingConfigResult = await workspaceService.getBrandingConfig(workspace.id)
   const brandingConfig = brandingConfigResult.success ? brandingConfigResult.value : {}
 
   // Get logo, header branding data, and custom CSS for SSR
   const [logoData, headerData, customCssResult] = await Promise.all([
-    getOrganizationLogoData(organization.id),
-    getOrganizationHeaderLogoData(organization.id),
-    organizationService.getCustomCss(organization.id),
+    getWorkspaceLogoData(workspace.id),
+    getWorkspaceHeaderLogoData(workspace.id),
+    workspaceService.getCustomCss(workspace.id),
   ])
   const customCss = customCssResult.success ? customCssResult.value : null
 
@@ -48,8 +48,8 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
           <LogoUploader
-            organizationId={organization.id}
-            organizationName={organization.name}
+            workspaceId={workspace.id}
+            workspaceName={workspace.name}
             initialLogoUrl={logoData.logoUrl}
           />
         </div>
@@ -65,8 +65,8 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
           <HeaderBranding
-            organizationId={organization.id}
-            organizationName={organization.name}
+            workspaceId={workspace.id}
+            workspaceName={workspace.name}
             logoUrl={logoData.logoUrl}
             initialHeaderLogoUrl={headerData.headerLogoUrl}
             initialDisplayMode={headerData.headerDisplayMode}
@@ -84,10 +84,10 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
           </p>
         </div>
         <ThemeCustomizer
-          organizationId={organization.id}
+          workspaceId={workspace.id}
           initialThemeConfig={brandingConfig}
           logoUrl={logoData.logoUrl}
-          organizationName={organization.name}
+          workspaceName={workspace.name}
           headerLogoUrl={headerData.headerLogoUrl}
           headerDisplayMode={headerData.headerDisplayMode}
         />
@@ -102,7 +102,7 @@ export default async function BrandingPage({ params }: { params: Promise<{ orgSl
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
-          <CustomCssEditor organizationId={organization.id} initialCustomCss={customCss} />
+          <CustomCssEditor workspaceId={workspace.id} initialCustomCss={customCss} />
         </div>
       </div>
     </div>

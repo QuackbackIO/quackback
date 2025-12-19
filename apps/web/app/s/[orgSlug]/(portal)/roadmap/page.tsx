@@ -1,4 +1,4 @@
-import { getOrganizationBySlug } from '@/lib/tenant'
+import { getWorkspaceBySlug } from '@/lib/tenant'
 import { getRoadmapService, getStatusService } from '@/lib/services'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 
@@ -11,7 +11,7 @@ interface RoadmapPageProps {
  */
 export default async function RoadmapPage({ params }: RoadmapPageProps) {
   const { orgSlug } = await params
-  const org = await getOrganizationBySlug(orgSlug)
+  const org = await getWorkspaceBySlug(orgSlug)
 
   if (!org) {
     return null
@@ -35,7 +35,7 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
         <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
       </div>
 
-      <RoadmapBoard organizationId={org.id} statuses={statuses} initialRoadmaps={roadmaps} />
+      <RoadmapBoard workspaceId={org.id} statuses={statuses} initialRoadmaps={roadmaps} />
     </div>
   )
 }

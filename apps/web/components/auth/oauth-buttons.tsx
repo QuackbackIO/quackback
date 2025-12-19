@@ -39,7 +39,7 @@ export function OAuthButtons({
 
   function handleOAuthLogin(provider: 'github' | 'google') {
     const params = new URLSearchParams({
-      org: orgSlug,
+      workspace: orgSlug,
       returnDomain: targetDomain,
       context,
       callbackUrl,

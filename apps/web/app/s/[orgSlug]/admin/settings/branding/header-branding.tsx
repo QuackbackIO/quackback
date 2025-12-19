@@ -9,12 +9,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { Input } from '@/components/ui/input'
 import {
-  useOrganizationHeaderLogo,
-  useUploadOrganizationHeaderLogo,
+  useWorkspaceHeaderLogo,
+  useUploadWorkspaceHeaderLogo,
   useUpdateHeaderDisplayMode,
   useUpdateHeaderDisplayName,
-  useDeleteOrganizationHeaderLogo,
-} from '@/lib/hooks/use-organization-queries'
+  useDeleteWorkspaceHeaderLogo,
+} from '@/lib/hooks/use-workspace-queries'
 import { cn } from '@/lib/utils'
 
 /** Aspect ratio for header logo (4:1 landscape) */
@@ -25,8 +25,8 @@ const HEADER_LOGO_MAX_WIDTH = 400
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
 interface HeaderBrandingProps {
-  organizationId: string
-  organizationName: string
+  workspaceId: string
+  workspaceName: string
   /** Square logo URL (for preview) */
   logoUrl?: string | null
   /** Initial header logo URL from server (for SSR) */
@@ -38,8 +38,8 @@ interface HeaderBrandingProps {
 }
 
 export function HeaderBranding({
-  organizationId,
-  organizationName,
+  workspaceId,
+  workspaceName,
   logoUrl,
   initialHeaderLogoUrl,
   initialDisplayMode = 'logo_and_name',
@@ -50,11 +50,11 @@ export function HeaderBranding({
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
   // TanStack Query hooks
-  const { data: headerData } = useOrganizationHeaderLogo(organizationId)
-  const uploadMutation = useUploadOrganizationHeaderLogo(organizationId)
-  const updateModeMutation = useUpdateHeaderDisplayMode(organizationId)
-  const updateNameMutation = useUpdateHeaderDisplayName(organizationId)
-  const deleteMutation = useDeleteOrganizationHeaderLogo(organizationId)
+  const { data: headerData } = useWorkspaceHeaderLogo(workspaceId)
+  const uploadMutation = useUploadWorkspaceHeaderLogo(workspaceId)
+  const updateModeMutation = useUpdateHeaderDisplayMode(workspaceId)
+  const updateNameMutation = useUpdateHeaderDisplayName(workspaceId)
+  const deleteMutation = useDeleteWorkspaceHeaderLogo(workspaceId)
 
   // Use query data if available, fall back to initial props
   const headerLogoUrl = headerData?.headerLogoUrl ?? initialHeaderLogoUrl
@@ -178,7 +178,7 @@ export function HeaderBranding({
   const hasSquareLogo = !!logoUrl
 
   // Effective name to display (custom display name or org name)
-  const effectiveDisplayName = localDisplayName || organizationName
+  const effectiveDisplayName = localDisplayName || workspaceName
 
   // Preview component for radio options
   const LogoPreview = ({ showName = true }: { showName?: boolean }) => (
@@ -248,7 +248,7 @@ export function HeaderBranding({
               type="text"
               value={localDisplayName}
               onChange={(e) => handleDisplayNameChange(e.target.value)}
-              placeholder={organizationName}
+              placeholder={workspaceName}
               className="h-8 text-sm"
             />
             <p className="text-xs text-muted-foreground">

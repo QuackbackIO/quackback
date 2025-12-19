@@ -18,8 +18,8 @@ import type { BoardWithStats, PublicPostListItem } from '@quackback/domain'
 import type { PostStatusEntity, Tag } from '@/lib/db/types'
 
 interface FeedbackContainerProps {
-  organizationId: string
-  organizationName: string
+  workspaceId: string
+  workspaceName: string
   boards: BoardWithStats[]
   posts: PublicPostListItem[]
   statuses: PostStatusEntity[]
@@ -36,8 +36,8 @@ interface FeedbackContainerProps {
 }
 
 export function FeedbackContainer({
-  organizationId,
-  organizationName,
+  workspaceId,
+  workspaceName,
   boards,
   posts: initialPosts,
   statuses,
@@ -110,7 +110,7 @@ export function FeedbackContainer({
     hasNextPage,
     fetchNextPage,
   } = usePublicPosts({
-    organizationId,
+    workspaceId,
     filters: mergedFilters,
     initialData: filtersMatchInitial
       ? {
@@ -127,7 +127,7 @@ export function FeedbackContainer({
   // Track voted posts in client state (syncs with server on vote)
   const { hasVoted, toggleVote, refetchVotedPosts } = useVotedPosts({
     initialVotedIds: votedPostIds,
-    organizationId,
+    workspaceId,
   })
 
   // Track auth state to detect login/logout
@@ -214,7 +214,7 @@ export function FeedbackContainer({
       <div className="flex gap-8">
         <div className="flex-1 min-w-0">
           <FeedbackHeader
-            organizationName={organizationName}
+            workspaceName={workspaceName}
             boards={boards}
             defaultBoardId={boardIdForCreate}
             user={effectiveUser}

@@ -8,7 +8,7 @@ import { PendingInvitations } from './pending-invitations'
 
 export default async function TeamPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
-  const { organization } = await requireTenantBySlug(orgSlug)
+  const { workspace } = await requireTenantBySlug(orgSlug)
 
   // Only show team members (owner, admin, member) - exclude portal users (role='user')
   const members = await db
@@ -21,11 +21,11 @@ export default async function TeamPage({ params }: { params: Promise<{ orgSlug: 
     })
     .from(member)
     .innerJoin(user, eq(member.userId, user.id))
-    .where(and(eq(member.organizationId, organization.id), ne(member.role, 'user')))
+    .where(and(eq(member.workspaceId, workspace.id), ne(member.role, 'user')))
 
   // Fetch pending invitations
   const pendingInvitations = await db.query.invitation.findMany({
-    where: and(eq(invitation.organizationId, organization.id), eq(invitation.status, 'pending')),
+    where: and(eq(invitation.workspaceId, workspace.id), eq(invitation.status, 'pending')),
     orderBy: (invitation, { desc }) => [desc(invitation.createdAt)],
   })
 
@@ -46,10 +46,10 @@ export default async function TeamPage({ params }: { params: Promise<{ orgSlug: 
 
   return (
     <div className="space-y-6">
-      <TeamHeader organizationId={organization.id} organizationName={organization.name} />
+      <TeamHeader workspaceId={workspace.id} workspaceName={workspace.name} />
 
       {/* Pending Invitations */}
-      <PendingInvitations invitations={formattedInvitations} organizationId={organization.id} />
+      <PendingInvitations invitations={formattedInvitations} workspaceId={workspace.id} />
 
       {/* Members List */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">

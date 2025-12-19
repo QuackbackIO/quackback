@@ -28,7 +28,7 @@ interface InvitationInfo {
   id: string
   email: string
   role: string | null
-  organizationName: string
+  workspaceName: string
   inviterName: string | null
 }
 
@@ -279,7 +279,7 @@ export function OTPAuthFormInline({
     const returnDomain = window.location.host
 
     const oauthUrl = new URL(`${protocol}://${appDomain}/api/auth/oauth/${provider}`)
-    oauthUrl.searchParams.set('org', orgSlug)
+    oauthUrl.searchParams.set('workspace', orgSlug)
     oauthUrl.searchParams.set('returnDomain', returnDomain)
     oauthUrl.searchParams.set('context', 'portal')
     oauthUrl.searchParams.set('callbackUrl', '/')
@@ -383,7 +383,7 @@ export function OTPAuthFormInline({
               <p className="font-medium text-foreground">You&apos;ve been invited!</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Create your account to join{' '}
-                <span className="font-medium text-foreground">{invitation.organizationName}</span>
+                <span className="font-medium text-foreground">{invitation.workspaceName}</span>
                 {invitation.inviterName && <> (invited by {invitation.inviterName})</>}
               </p>
             </div>

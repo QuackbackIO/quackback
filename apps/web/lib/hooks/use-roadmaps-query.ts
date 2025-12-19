@@ -5,26 +5,24 @@ import type { Roadmap } from '@/lib/db/types'
 
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
-  list: (organizationId: string) => [...roadmapsKeys.all, 'list', organizationId] as const,
-  publicList: (organizationId: string) => [...roadmapsKeys.all, 'public', organizationId] as const,
+  list: (workspaceId: string) => [...roadmapsKeys.all, 'list', workspaceId] as const,
+  publicList: (workspaceId: string) => [...roadmapsKeys.all, 'public', workspaceId] as const,
   detail: (roadmapId: string) => [...roadmapsKeys.all, 'detail', roadmapId] as const,
 }
 
 interface UseRoadmapsOptions {
-  organizationId: string
+  workspaceId: string
   enabled?: boolean
 }
 
 /**
  * Hook to fetch all roadmaps for an organization (admin)
  */
-export function useRoadmaps({ organizationId, enabled = true }: UseRoadmapsOptions) {
+export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions) {
   return useQuery({
-    queryKey: roadmapsKeys.list(organizationId),
+    queryKey: roadmapsKeys.list(workspaceId),
     queryFn: async (): Promise<Roadmap[]> => {
-      const response = await fetch(
-        `/api/roadmaps?organizationId=${encodeURIComponent(organizationId)}`
-      )
+      const response = await fetch(`/api/roadmaps?workspaceId=${encodeURIComponent(workspaceId)}`)
       if (!response.ok) {
         throw new Error('Failed to fetch roadmaps')
       }
@@ -37,12 +35,12 @@ export function useRoadmaps({ organizationId, enabled = true }: UseRoadmapsOptio
 /**
  * Hook to fetch public roadmaps for an organization (portal)
  */
-export function usePublicRoadmaps({ organizationId, enabled = true }: UseRoadmapsOptions) {
+export function usePublicRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions) {
   return useQuery({
-    queryKey: roadmapsKeys.publicList(organizationId),
+    queryKey: roadmapsKeys.publicList(workspaceId),
     queryFn: async (): Promise<Roadmap[]> => {
       const response = await fetch(
-        `/api/public/roadmaps?organizationId=${encodeURIComponent(organizationId)}`
+        `/api/public/roadmaps?workspaceId=${encodeURIComponent(workspaceId)}`
       )
       if (!response.ok) {
         throw new Error('Failed to fetch public roadmaps')
@@ -63,7 +61,7 @@ interface CreateRoadmapInput {
 /**
  * Hook to create a new roadmap
  */
-export function useCreateRoadmap(organizationId: string) {
+export function useCreateRoadmap(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -71,7 +69,7 @@ export function useCreateRoadmap(organizationId: string) {
       const response = await fetch('/api/roadmaps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, organizationId }),
+        body: JSON.stringify({ ...input, workspaceId }),
       })
       if (!response.ok) {
         const error = await response.json()
@@ -80,7 +78,7 @@ export function useCreateRoadmap(organizationId: string) {
       return response.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(organizationId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
     },
   })
 }
@@ -94,7 +92,7 @@ interface UpdateRoadmapInput {
 /**
  * Hook to update a roadmap
  */
-export function useUpdateRoadmap(organizationId: string) {
+export function useUpdateRoadmap(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -105,10 +103,10 @@ export function useUpdateRoadmap(organizationId: string) {
       roadmapId: string
       input: UpdateRoadmapInput
     }): Promise<Roadmap> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}?organizationId=${organizationId}`, {
+      const response = await fetch(`/api/roadmaps/${roadmapId}?workspaceId=${workspaceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, organizationId }),
+        body: JSON.stringify({ ...input, workspaceId }),
       })
       if (!response.ok) {
         const error = await response.json()
@@ -117,7 +115,7 @@ export function useUpdateRoadmap(organizationId: string) {
       return response.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(organizationId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
     },
   })
 }
@@ -125,12 +123,12 @@ export function useUpdateRoadmap(organizationId: string) {
 /**
  * Hook to delete a roadmap
  */
-export function useDeleteRoadmap(organizationId: string) {
+export function useDeleteRoadmap(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (roadmapId: string): Promise<void> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}?organizationId=${organizationId}`, {
+      const response = await fetch(`/api/roadmaps/${roadmapId}?workspaceId=${workspaceId}`, {
         method: 'DELETE',
       })
       if (!response.ok) {
@@ -139,7 +137,7 @@ export function useDeleteRoadmap(organizationId: string) {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(organizationId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
     },
   })
 }
@@ -147,7 +145,7 @@ export function useDeleteRoadmap(organizationId: string) {
 /**
  * Hook to reorder roadmaps
  */
-export function useReorderRoadmaps(organizationId: string) {
+export function useReorderRoadmaps(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -155,7 +153,7 @@ export function useReorderRoadmaps(organizationId: string) {
       const response = await fetch('/api/roadmaps/reorder', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roadmapIds, organizationId }),
+        body: JSON.stringify({ roadmapIds, workspaceId }),
       })
       if (!response.ok) {
         const error = await response.json()
@@ -163,7 +161,7 @@ export function useReorderRoadmaps(organizationId: string) {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(organizationId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
     },
   })
 }

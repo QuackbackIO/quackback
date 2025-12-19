@@ -27,7 +27,7 @@ interface BoardOption {
 }
 
 interface FeedbackHeaderProps {
-  organizationName: string
+  workspaceName: string
   boards: BoardOption[]
   defaultBoardId?: string
   user?: { name: string | null; email: string } | null

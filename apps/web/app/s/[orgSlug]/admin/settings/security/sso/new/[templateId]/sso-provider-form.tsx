@@ -25,13 +25,13 @@ import {
 
 interface SsoProviderFormProps {
   template: SsoProviderTemplate
-  organizationId: string
+  workspaceId: string
   suggestedDomain?: string
 }
 
 export function SsoProviderForm({
   template,
-  organizationId,
+  workspaceId,
   suggestedDomain = '',
 }: SsoProviderFormProps) {
   const router = useRouter()
@@ -86,12 +86,12 @@ export function SsoProviderForm({
     setError('')
 
     try {
-      const response = await fetch('/api/organization/sso-providers', {
+      const response = await fetch('/api/workspace/sso-providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          organizationId,
+          workspaceId,
         }),
       })
 

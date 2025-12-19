@@ -9,14 +9,14 @@ import { Feature, type PricingTier } from '@quackback/domain/features'
 
 export const featuresKeys = {
   all: ['features'] as const,
-  organization: (organizationId: string) => [...featuresKeys.all, organizationId] as const,
+  organization: (workspaceId: string) => [...featuresKeys.all, workspaceId] as const,
 }
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export interface OrganizationFeaturesData {
+export interface WorkspaceFeaturesData {
   edition: 'oss' | 'cloud'
   tier: PricingTier | null
   enabledFeatures: Feature[]
@@ -36,11 +36,11 @@ export interface OrganizationFeaturesData {
  * Query hook to fetch organization features.
  * Uses SSR-provided initial data when available to prevent flash.
  */
-export function useOrganizationFeatures(organizationId: string) {
+export function useWorkspaceFeatures(workspaceId: string) {
   return useQuery({
-    queryKey: featuresKeys.organization(organizationId),
-    queryFn: async (): Promise<OrganizationFeaturesData> => {
-      const response = await fetch(`/api/organization/features?organizationId=${organizationId}`)
+    queryKey: featuresKeys.organization(workspaceId),
+    queryFn: async (): Promise<WorkspaceFeaturesData> => {
+      const response = await fetch(`/api/workspace/features?workspaceId=${workspaceId}`)
       if (!response.ok) throw new Error('Failed to fetch features')
       return response.json()
     },
@@ -52,8 +52,8 @@ export function useOrganizationFeatures(organizationId: string) {
  * Hook to check if a specific feature is enabled.
  * Returns { enabled, isLoading, tier, edition } for conditional rendering.
  */
-export function useFeature(organizationId: string, feature: Feature) {
-  const { data, isLoading, error } = useOrganizationFeatures(organizationId)
+export function useFeature(workspaceId: string, feature: Feature) {
+  const { data, isLoading, error } = useWorkspaceFeatures(workspaceId)
 
   return {
     enabled: data?.enabledFeatures.includes(feature) ?? false,
@@ -68,17 +68,14 @@ export function useFeature(organizationId: string, feature: Feature) {
  * Hook to hydrate features from SSR data.
  * Call this in a client component that receives SSR features data.
  */
-export function useHydrateFeatures(
-  organizationId: string,
-  initialData: OrganizationFeaturesData | null
-) {
+export function useHydrateFeatures(workspaceId: string, initialData: WorkspaceFeaturesData | null) {
   const queryClient = useQueryClient()
 
   // Hydrate cache if initial data is provided and not already cached
   if (initialData) {
-    const existing = queryClient.getQueryData(featuresKeys.organization(organizationId))
+    const existing = queryClient.getQueryData(featuresKeys.organization(workspaceId))
     if (!existing) {
-      queryClient.setQueryData(featuresKeys.organization(organizationId), initialData)
+      queryClient.setQueryData(featuresKeys.organization(workspaceId), initialData)
     }
   }
 }

@@ -9,10 +9,10 @@ export default async function BoardImportPage({
   params: Promise<{ orgSlug: string; slug: string }>
 }) {
   const { orgSlug, slug } = await params
-  const { organization } = await requireAuthenticatedTenantBySlug(orgSlug)
+  const { workspace } = await requireAuthenticatedTenantBySlug(orgSlug)
 
   const board = await db.query.boards.findFirst({
-    where: and(eq(boards.organizationId, organization.id), eq(boards.slug, slug)),
+    where: and(eq(boards.workspaceId, workspace.id), eq(boards.slug, slug)),
   })
 
   if (!board) {
@@ -30,7 +30,7 @@ export default async function BoardImportPage({
           Upload a CSV file to import posts into {board.name}
         </p>
       </div>
-      <BoardImportSection organizationId={organization.id} boardId={boardId} />
+      <BoardImportSection workspaceId={workspace.id} boardId={boardId} />
     </div>
   )
 }

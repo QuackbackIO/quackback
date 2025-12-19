@@ -17,11 +17,11 @@ import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from 
 export const usersKeys = {
   all: ['users'] as const,
   lists: () => [...usersKeys.all, 'list'] as const,
-  list: (organizationId: string, filters: UsersFilters) =>
-    [...usersKeys.lists(), organizationId, filters] as const,
+  list: (workspaceId: string, filters: UsersFilters) =>
+    [...usersKeys.lists(), workspaceId, filters] as const,
   details: () => [...usersKeys.all, 'detail'] as const,
-  detail: (memberId: string, organizationId: string) =>
-    [...usersKeys.details(), memberId, organizationId] as const,
+  detail: (memberId: string, workspaceId: string) =>
+    [...usersKeys.details(), memberId, workspaceId] as const,
 }
 
 // ============================================================================
@@ -29,12 +29,12 @@ export const usersKeys = {
 // ============================================================================
 
 async function fetchUsers(
-  organizationId: string,
+  workspaceId: string,
   filters: UsersFilters,
   page: number
 ): Promise<PortalUserListResult> {
   const params = new URLSearchParams()
-  params.set('organizationId', organizationId)
+  params.set('workspaceId', workspaceId)
   params.set('page', page.toString())
 
   if (filters.search) params.set('search', filters.search)
@@ -48,11 +48,8 @@ async function fetchUsers(
   return response.json()
 }
 
-async function fetchUserDetail(
-  memberId: string,
-  organizationId: string
-): Promise<PortalUserDetail> {
-  const response = await fetch(`/api/admin/users/${memberId}?organizationId=${organizationId}`)
+async function fetchUserDetail(memberId: string, workspaceId: string): Promise<PortalUserDetail> {
+  const response = await fetch(`/api/admin/users/${memberId}?workspaceId=${workspaceId}`)
   if (!response.ok) throw new Error('Failed to fetch user')
   return response.json()
 }
@@ -62,12 +59,12 @@ async function fetchUserDetail(
 // ============================================================================
 
 interface UsePortalUsersOptions {
-  organizationId: string
+  workspaceId: string
   filters: UsersFilters
   initialData?: PortalUserListResult
 }
 
-export function usePortalUsers({ organizationId, filters, initialData }: UsePortalUsersOptions) {
+export function usePortalUsers({ workspaceId, filters, initialData }: UsePortalUsersOptions) {
   // Only use initialData when there are no active filters
   // Otherwise React Query would use stale server-rendered data for filtered queries
   const hasActiveFilters = !!(
@@ -79,8 +76,8 @@ export function usePortalUsers({ organizationId, filters, initialData }: UsePort
   const useInitialData = initialData && !hasActiveFilters
 
   return useInfiniteQuery({
-    queryKey: usersKeys.list(organizationId, filters),
-    queryFn: ({ pageParam }) => fetchUsers(organizationId, filters, pageParam),
+    queryKey: usersKeys.list(workspaceId, filters),
+    queryFn: ({ pageParam }) => fetchUsers(workspaceId, filters, pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     initialData: useInitialData
@@ -103,14 +100,14 @@ export function flattenUsers(
 
 interface UseUserDetailOptions {
   memberId: string | null
-  organizationId: string
+  workspaceId: string
   enabled?: boolean
 }
 
-export function useUserDetail({ memberId, organizationId, enabled = true }: UseUserDetailOptions) {
+export function useUserDetail({ memberId, workspaceId, enabled = true }: UseUserDetailOptions) {
   return useQuery({
-    queryKey: usersKeys.detail(memberId!, organizationId),
-    queryFn: () => fetchUserDetail(memberId!, organizationId),
+    queryKey: usersKeys.detail(memberId!, workspaceId),
+    queryFn: () => fetchUserDetail(memberId!, workspaceId),
     enabled: enabled && !!memberId,
     staleTime: 30 * 1000,
   })
@@ -124,15 +121,14 @@ export function useUserDetail({ memberId, organizationId, enabled = true }: UseU
  * Hook to remove a portal user from an organization.
  * This deletes their member record and org-scoped user account.
  */
-export function useRemovePortalUser(organizationId: string) {
+export function useRemovePortalUser(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (memberId: string) => {
-      const response = await fetch(
-        `/api/admin/users/${memberId}?organizationId=${organizationId}`,
-        { method: 'DELETE' }
-      )
+      const response = await fetch(`/api/admin/users/${memberId}?workspaceId=${workspaceId}`, {
+        method: 'DELETE',
+      })
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || 'Failed to remove portal user')

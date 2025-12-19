@@ -12,15 +12,15 @@ export default async function BoardSettingsLayout({
   params: Promise<{ orgSlug: string; slug: string }>
 }) {
   const { orgSlug, slug } = await params
-  const { organization } = await requireAuthenticatedTenantBySlug(orgSlug)
+  const { workspace } = await requireAuthenticatedTenantBySlug(orgSlug)
 
   // Get current board and all boards for the switcher
   const [board, allBoards] = await Promise.all([
     db.query.boards.findFirst({
-      where: and(eq(boards.organizationId, organization.id), eq(boards.slug, slug)),
+      where: and(eq(boards.workspaceId, workspace.id), eq(boards.slug, slug)),
     }),
     db.query.boards.findMany({
-      where: eq(boards.organizationId, organization.id),
+      where: eq(boards.workspaceId, workspace.id),
       orderBy: (boards, { asc }) => [asc(boards.name)],
     }),
   ])
@@ -31,11 +31,7 @@ export default async function BoardSettingsLayout({
 
   return (
     <div className="space-y-6">
-      <BoardSettingsHeader
-        currentBoard={board}
-        allBoards={allBoards}
-        organizationId={organization.id}
-      />
+      <BoardSettingsHeader currentBoard={board} allBoards={allBoards} workspaceId={workspace.id} />
       <div className="flex gap-8">
         <BoardSettingsNav boardSlug={slug} />
         <div className="min-w-0 flex-1">{children}</div>

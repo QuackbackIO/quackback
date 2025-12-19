@@ -2,7 +2,8 @@
 
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { acceptInvitation, useSession } from '@/lib/auth/client'
+import { useSession } from '@/lib/auth/client'
+import { acceptInvitationAction } from '@/lib/actions/invitations'
 
 export default function AcceptInvitationPage({
   params,
@@ -39,12 +40,10 @@ export default function AcceptInvitationPage({
           }
         }
 
-        const { error: acceptError } = await acceptInvitation({
-          invitationId: id,
-        })
+        const result = await acceptInvitationAction(id)
 
-        if (acceptError) {
-          throw new Error(acceptError.message)
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to accept invitation')
         }
 
         setStatus('success')

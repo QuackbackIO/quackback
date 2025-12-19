@@ -11,7 +11,7 @@ import type { CreateBoardInput } from '@/lib/schemas/boards'
 export const boardKeys = {
   all: ['boards'] as const,
   lists: () => [...boardKeys.all, 'list'] as const,
-  list: (organizationId: string) => [...boardKeys.lists(), organizationId] as const,
+  list: (workspaceId: string) => [...boardKeys.lists(), workspaceId] as const,
   details: () => [...boardKeys.all, 'detail'] as const,
   detail: (boardId: string) => [...boardKeys.details(), boardId] as const,
 }
@@ -32,7 +32,7 @@ interface DeleteBoardResponse {
 // Mutation Hooks
 // ============================================================================
 
-export function useCreateBoard(organizationId: string) {
+export function useCreateBoard(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -40,7 +40,7 @@ export function useCreateBoard(organizationId: string) {
       const response = await fetch('/api/boards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, organizationId }),
+        body: JSON.stringify({ ...input, workspaceId }),
       })
 
       if (!response.ok) {
@@ -65,7 +65,7 @@ interface UpdateBoardInput_Full {
   settings?: BoardSettings
 }
 
-export function useUpdateBoard(organizationId: string) {
+export function useUpdateBoard(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -76,7 +76,7 @@ export function useUpdateBoard(organizationId: string) {
       const response = await fetch(`/api/boards/${boardId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, organizationId }),
+        body: JSON.stringify({ ...input, workspaceId }),
       })
 
       if (!response.ok) {
@@ -95,12 +95,12 @@ export function useUpdateBoard(organizationId: string) {
   })
 }
 
-export function useDeleteBoard(organizationId: string) {
+export function useDeleteBoard(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (boardId: string): Promise<DeleteBoardResponse> => {
-      const response = await fetch(`/api/boards/${boardId}?organizationId=${organizationId}`, {
+      const response = await fetch(`/api/boards/${boardId}?workspaceId=${workspaceId}`, {
         method: 'DELETE',
       })
 

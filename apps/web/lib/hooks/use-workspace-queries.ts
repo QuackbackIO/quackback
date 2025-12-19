@@ -8,16 +8,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 export const organizationKeys = {
   all: ['organization'] as const,
-  logo: (organizationId: string) => [...organizationKeys.all, 'logo', organizationId] as const,
-  headerLogo: (organizationId: string) =>
-    [...organizationKeys.all, 'headerLogo', organizationId] as const,
+  logo: (workspaceId: string) => [...organizationKeys.all, 'logo', workspaceId] as const,
+  headerLogo: (workspaceId: string) =>
+    [...organizationKeys.all, 'headerLogo', workspaceId] as const,
 }
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface OrganizationLogoData {
+interface WorkspaceLogoData {
   logoUrl: string | null
   hasCustomLogo: boolean
 }
@@ -56,11 +56,11 @@ interface UpdateDisplayModeResponse {
  * Query hook to fetch organization logo.
  * Uses SSR-provided initial data when available to prevent flash.
  */
-export function useOrganizationLogo(organizationId: string) {
+export function useWorkspaceLogo(workspaceId: string) {
   return useQuery({
-    queryKey: organizationKeys.logo(organizationId),
-    queryFn: async (): Promise<OrganizationLogoData> => {
-      const response = await fetch(`/api/organization/logo?organizationId=${organizationId}`)
+    queryKey: organizationKeys.logo(workspaceId),
+    queryFn: async (): Promise<WorkspaceLogoData> => {
+      const response = await fetch(`/api/workspace/logo?workspaceId=${workspaceId}`)
       if (!response.ok) throw new Error('Failed to fetch logo')
       return response.json()
     },
@@ -76,16 +76,16 @@ export function useOrganizationLogo(organizationId: string) {
  * Mutation hook to upload organization logo.
  * Updates the query cache on success.
  */
-export function useUploadOrganizationLogo(organizationId: string) {
+export function useUploadWorkspaceLogo(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (logoBlob: Blob): Promise<UploadLogoResponse> => {
       const formData = new FormData()
       formData.append('logo', logoBlob, 'logo.jpg')
-      formData.append('organizationId', organizationId)
+      formData.append('workspaceId', workspaceId)
 
-      const response = await fetch('/api/organization/logo', {
+      const response = await fetch('/api/workspace/logo', {
         method: 'PATCH',
         body: formData,
       })
@@ -99,7 +99,7 @@ export function useUploadOrganizationLogo(organizationId: string) {
     },
     onSuccess: (data) => {
       // Update cache with new logo URL
-      queryClient.setQueryData<OrganizationLogoData>(organizationKeys.logo(organizationId), {
+      queryClient.setQueryData<WorkspaceLogoData>(organizationKeys.logo(workspaceId), {
         logoUrl: data.logoUrl,
         hasCustomLogo: true,
       })
@@ -111,12 +111,12 @@ export function useUploadOrganizationLogo(organizationId: string) {
  * Mutation hook to delete organization logo.
  * Clears the logo from the query cache on success.
  */
-export function useDeleteOrganizationLogo(organizationId: string) {
+export function useDeleteWorkspaceLogo(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (): Promise<{ success: boolean }> => {
-      const response = await fetch(`/api/organization/logo?organizationId=${organizationId}`, {
+      const response = await fetch(`/api/workspace/logo?workspaceId=${workspaceId}`, {
         method: 'DELETE',
       })
 
@@ -129,7 +129,7 @@ export function useDeleteOrganizationLogo(organizationId: string) {
     },
     onSuccess: () => {
       // Clear logo from cache
-      queryClient.setQueryData<OrganizationLogoData>(organizationKeys.logo(organizationId), {
+      queryClient.setQueryData<WorkspaceLogoData>(organizationKeys.logo(workspaceId), {
         logoUrl: null,
         hasCustomLogo: false,
       })
@@ -144,11 +144,11 @@ export function useDeleteOrganizationLogo(organizationId: string) {
 /**
  * Query hook to fetch organization header logo and display mode.
  */
-export function useOrganizationHeaderLogo(organizationId: string) {
+export function useWorkspaceHeaderLogo(workspaceId: string) {
   return useQuery({
-    queryKey: organizationKeys.headerLogo(organizationId),
+    queryKey: organizationKeys.headerLogo(workspaceId),
     queryFn: async (): Promise<HeaderLogoData> => {
-      const response = await fetch(`/api/organization/header-logo?organizationId=${organizationId}`)
+      const response = await fetch(`/api/workspace/header-logo?workspaceId=${workspaceId}`)
       if (!response.ok) throw new Error('Failed to fetch header logo')
       return response.json()
     },
@@ -160,16 +160,16 @@ export function useOrganizationHeaderLogo(organizationId: string) {
  * Mutation hook to upload organization header logo.
  * Updates the query cache on success.
  */
-export function useUploadOrganizationHeaderLogo(organizationId: string) {
+export function useUploadWorkspaceHeaderLogo(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (file: File): Promise<UploadHeaderLogoResponse> => {
       const formData = new FormData()
       formData.append('headerLogo', file)
-      formData.append('organizationId', organizationId)
+      formData.append('workspaceId', workspaceId)
 
-      const response = await fetch('/api/organization/header-logo', {
+      const response = await fetch('/api/workspace/header-logo', {
         method: 'PATCH',
         body: formData,
       })
@@ -183,15 +183,12 @@ export function useUploadOrganizationHeaderLogo(organizationId: string) {
     },
     onSuccess: (data) => {
       // Update cache with new header logo, preserving display name
-      queryClient.setQueryData<HeaderLogoData>(
-        organizationKeys.headerLogo(organizationId),
-        (old) => ({
-          headerLogoUrl: data.headerLogoUrl,
-          hasHeaderLogo: true,
-          headerDisplayMode: data.headerDisplayMode,
-          headerDisplayName: old?.headerDisplayName ?? null,
-        })
-      )
+      queryClient.setQueryData<HeaderLogoData>(organizationKeys.headerLogo(workspaceId), (old) => ({
+        headerLogoUrl: data.headerLogoUrl,
+        hasHeaderLogo: true,
+        headerDisplayMode: data.headerDisplayMode,
+        headerDisplayName: old?.headerDisplayName ?? null,
+      }))
     },
   })
 }
@@ -199,17 +196,17 @@ export function useUploadOrganizationHeaderLogo(organizationId: string) {
 /**
  * Mutation hook to update header display mode.
  */
-export function useUpdateHeaderDisplayMode(organizationId: string) {
+export function useUpdateHeaderDisplayMode(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (
       headerDisplayMode: HeaderDisplayMode
     ): Promise<UpdateDisplayModeResponse> => {
-      const response = await fetch('/api/organization/header-logo', {
+      const response = await fetch('/api/workspace/header-logo', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, headerDisplayMode }),
+        body: JSON.stringify({ workspaceId, headerDisplayMode }),
       })
 
       if (!response.ok) {
@@ -221,15 +218,12 @@ export function useUpdateHeaderDisplayMode(organizationId: string) {
     },
     onSuccess: (data) => {
       // Update cache with new display mode, preserving other fields
-      queryClient.setQueryData<HeaderLogoData>(
-        organizationKeys.headerLogo(organizationId),
-        (old) => ({
-          headerLogoUrl: old?.headerLogoUrl ?? null,
-          hasHeaderLogo: old?.hasHeaderLogo ?? false,
-          headerDisplayMode: data.headerDisplayMode ?? old?.headerDisplayMode ?? 'logo_and_name',
-          headerDisplayName: data.headerDisplayName ?? old?.headerDisplayName ?? null,
-        })
-      )
+      queryClient.setQueryData<HeaderLogoData>(organizationKeys.headerLogo(workspaceId), (old) => ({
+        headerLogoUrl: old?.headerLogoUrl ?? null,
+        hasHeaderLogo: old?.hasHeaderLogo ?? false,
+        headerDisplayMode: data.headerDisplayMode ?? old?.headerDisplayMode ?? 'logo_and_name',
+        headerDisplayName: data.headerDisplayName ?? old?.headerDisplayName ?? null,
+      }))
     },
   })
 }
@@ -238,15 +232,14 @@ export function useUpdateHeaderDisplayMode(organizationId: string) {
  * Mutation hook to delete organization header logo.
  * Resets display mode to 'logo_and_name'.
  */
-export function useDeleteOrganizationHeaderLogo(organizationId: string) {
+export function useDeleteWorkspaceHeaderLogo(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (): Promise<{ success: boolean }> => {
-      const response = await fetch(
-        `/api/organization/header-logo?organizationId=${organizationId}`,
-        { method: 'DELETE' }
-      )
+      const response = await fetch(`/api/workspace/header-logo?workspaceId=${workspaceId}`, {
+        method: 'DELETE',
+      })
 
       if (!response.ok) {
         const data = await response.json()
@@ -257,15 +250,12 @@ export function useDeleteOrganizationHeaderLogo(organizationId: string) {
     },
     onSuccess: () => {
       // Clear header logo from cache and reset display mode, preserving display name
-      queryClient.setQueryData<HeaderLogoData>(
-        organizationKeys.headerLogo(organizationId),
-        (old) => ({
-          headerLogoUrl: null,
-          hasHeaderLogo: false,
-          headerDisplayMode: 'logo_and_name',
-          headerDisplayName: old?.headerDisplayName ?? null,
-        })
-      )
+      queryClient.setQueryData<HeaderLogoData>(organizationKeys.headerLogo(workspaceId), (old) => ({
+        headerLogoUrl: null,
+        hasHeaderLogo: false,
+        headerDisplayMode: 'logo_and_name',
+        headerDisplayName: old?.headerDisplayName ?? null,
+      }))
     },
   })
 }
@@ -274,15 +264,15 @@ export function useDeleteOrganizationHeaderLogo(organizationId: string) {
  * Mutation hook to update header display name.
  * Pass empty string or null to clear the custom name (falls back to org name).
  */
-export function useUpdateHeaderDisplayName(organizationId: string) {
+export function useUpdateHeaderDisplayName(workspaceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (headerDisplayName: string | null): Promise<UpdateDisplayModeResponse> => {
-      const response = await fetch('/api/organization/header-logo', {
+      const response = await fetch('/api/workspace/header-logo', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, headerDisplayName }),
+        body: JSON.stringify({ workspaceId, headerDisplayName }),
       })
 
       if (!response.ok) {
@@ -294,15 +284,12 @@ export function useUpdateHeaderDisplayName(organizationId: string) {
     },
     onSuccess: (data) => {
       // Update cache with new display name
-      queryClient.setQueryData<HeaderLogoData>(
-        organizationKeys.headerLogo(organizationId),
-        (old) => ({
-          headerLogoUrl: old?.headerLogoUrl ?? null,
-          hasHeaderLogo: old?.hasHeaderLogo ?? false,
-          headerDisplayMode: old?.headerDisplayMode ?? 'logo_and_name',
-          headerDisplayName: data.headerDisplayName ?? null,
-        })
-      )
+      queryClient.setQueryData<HeaderLogoData>(organizationKeys.headerLogo(workspaceId), (old) => ({
+        headerLogoUrl: old?.headerLogoUrl ?? null,
+        hasHeaderLogo: old?.hasHeaderLogo ?? false,
+        headerDisplayMode: old?.headerDisplayMode ?? 'logo_and_name',
+        headerDisplayName: data.headerDisplayName ?? null,
+      }))
     },
   })
 }

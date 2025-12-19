@@ -18,18 +18,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 
 interface OnboardingWizardProps {
-  organizationName: string
-  organizationId: string
+  workspaceName: string
+  workspaceId: string
   userName: string
 }
 
 type Step = 'welcome' | 'create-board' | 'complete'
 
-export function OnboardingWizard({
-  organizationName,
-  organizationId,
-  userName,
-}: OnboardingWizardProps) {
+export function OnboardingWizard({ workspaceName, workspaceId, userName }: OnboardingWizardProps) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('welcome')
   const [boardName, setBoardName] = useState('')
@@ -50,7 +46,7 @@ export function OnboardingWizard({
         body: JSON.stringify({
           name: boardName,
           description: boardDescription,
-          organizationId,
+          workspaceId,
         }),
       })
 
@@ -79,8 +75,8 @@ export function OnboardingWizard({
           <div className="space-y-2">
             <h1 className="text-2xl font-bold tracking-tight">Welcome, {firstName}!</h1>
             <p className="text-muted-foreground">
-              Let's set up <span className="font-semibold text-foreground">{organizationName}</span>{' '}
-              to start collecting feedback.
+              Let's set up <span className="font-semibold text-foreground">{workspaceName}</span> to
+              start collecting feedback.
             </p>
           </div>
         </div>

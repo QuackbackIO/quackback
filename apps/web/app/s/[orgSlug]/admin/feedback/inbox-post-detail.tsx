@@ -53,7 +53,7 @@ interface SubmitCommentParams {
 }
 
 interface InboxPostDetailProps {
-  organizationId: string
+  workspaceId: string
   post: PostDetails | null
   isLoading: boolean
   allTags: Tag[]
@@ -317,7 +317,7 @@ function CommentItem({
 }
 
 export function InboxPostDetail({
-  organizationId,
+  workspaceId,
   post,
   isLoading,
   allTags,
@@ -408,7 +408,7 @@ export function InboxPostDetail({
             Edit post
           </Button>
           <AddToRoadmapDropdown
-            organizationId={organizationId}
+            workspaceId={workspaceId}
             postId={post.id}
             currentStatusId={post.statusId ?? ''}
             currentRoadmapIds={post.roadmapIds}

@@ -86,7 +86,7 @@ vi.mock('@/lib/db', () => ({
   },
   member: {
     userId: 'userId',
-    organizationId: 'organizationId',
+    workspaceId: 'workspaceId',
   },
   workspaceDomain: {
     domain: 'domain',
@@ -461,7 +461,7 @@ describe('trustLogin plugin', () => {
       }
 
       const mockDomain = {
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
       }
 
       const mockSession = {
@@ -489,7 +489,7 @@ describe('trustLogin plugin', () => {
       expect(mockInsertChain.values).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           role: 'user',
         })
       )
@@ -508,13 +508,13 @@ describe('trustLogin plugin', () => {
       }
 
       const mockDomain = {
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
       }
 
       const mockExistingMember = {
         id: 'member-1',
         userId: 'user-123',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         role: 'user',
       }
 
@@ -536,7 +536,7 @@ describe('trustLogin plugin', () => {
       expect(mockDb.insert).not.toHaveBeenCalled()
     })
 
-    it('should not create member record for team context', async () => {
+    it('should create member record with member role for team context', async () => {
       const mockTransfer = {
         id: 'transfer-1',
         token: 'test-token-123',
@@ -548,6 +548,10 @@ describe('trustLogin plugin', () => {
         createdAt: new Date(),
       }
 
+      const mockDomain = {
+        workspaceId: 'org_abc123',
+      }
+
       const mockSession = {
         token: 'session-token-abc',
         userId: 'user-123',
@@ -555,14 +559,17 @@ describe('trustLogin plugin', () => {
       }
 
       setupTransactionMock(mockTransfer)
+      mockDb.query.workspaceDomain.findFirst.mockResolvedValue(mockDomain)
+      mockDb.query.member.findFirst.mockResolvedValue(null) // No existing member
       mockInternalAdapter.createSession.mockResolvedValue(mockSession)
 
       const endpoint = getTrustLoginEndpoint()
       await endpoint(mockContext)
 
-      expect(mockDb.query.workspaceDomain.findFirst).not.toHaveBeenCalled()
-      expect(mockDb.query.member.findFirst).not.toHaveBeenCalled()
-      expect(mockDb.insert).not.toHaveBeenCalled()
+      expect(mockDb.query.workspaceDomain.findFirst).toHaveBeenCalled()
+      expect(mockDb.query.member.findFirst).toHaveBeenCalled()
+      // Should create member with 'member' role for team context
+      expect(mockDb.insert).toHaveBeenCalled()
     })
 
     it('should handle missing domain record gracefully', async () => {
@@ -933,7 +940,7 @@ describe('trustLogin plugin', () => {
       }
 
       const mockDomain = {
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
       }
 
       const mockSession = {
@@ -963,7 +970,7 @@ describe('trustLogin plugin', () => {
         expect.objectContaining({
           id: expect.stringMatching(/^member_[0-9a-z]{26}$/),
           userId: 'user-123',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           role: 'user',
           createdAt: expect.any(Date),
         })

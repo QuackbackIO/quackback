@@ -6,14 +6,14 @@ interface OfficialResponseProps {
   content: string
   authorName: string | null
   respondedAt: Date
-  organizationName: string
+  workspaceName: string
 }
 
 export function OfficialResponse({
   content,
   authorName,
   respondedAt,
-  organizationName,
+  workspaceName,
 }: OfficialResponseProps) {
   return (
     <div className="[border-radius:var(--radius)] border border-primary/20 bg-primary/5 p-4">
@@ -23,7 +23,7 @@ export function OfficialResponse({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-sm font-semibold text-foreground">{organizationName}</span>
+            <span className="text-sm font-semibold text-foreground">{workspaceName}</span>
             <Badge className="text-[10px] px-1.5 py-0">Official</Badge>
             <span className="text-muted-foreground">·</span>
             <TimeAgo date={respondedAt} className="text-xs text-muted-foreground" />

@@ -1,13 +1,13 @@
 import { Metadata } from 'next'
-import { getOrganizationBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
+import { getWorkspaceBySlug, getCurrentUserRoleBySlug } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { PortalHeader } from '@/components/public/portal-header'
 import { getUserAvatarData } from '@/lib/avatar'
-import { getOrganizationBrandingData, getOrganizationFaviconData } from '@/lib/organization'
+import { getWorkspaceBrandingData, getWorkspaceFaviconData } from '@/lib/workspace'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { SessionProvider } from '@/components/providers/session-provider'
-import { organizationService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
+import { workspaceService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { theme } from '@quackback/domain'
 
 // Force dynamic rendering since we read session cookies
@@ -22,13 +22,13 @@ export async function generateMetadata({
   params: Promise<{ orgSlug: string }>
 }): Promise<Metadata> {
   const { orgSlug } = await params
-  const org = await getOrganizationBySlug(orgSlug)
+  const org = await getWorkspaceBySlug(orgSlug)
 
   if (!org) {
     return {}
   }
 
-  const faviconData = await getOrganizationFaviconData(org.id)
+  const faviconData = await getWorkspaceFaviconData(org.id)
 
   // Build icons metadata
   const icons: Metadata['icons'] = faviconData.faviconUrl
@@ -57,7 +57,7 @@ export default async function PublicLayout({
   const { orgSlug } = await params
 
   const [org, userRole, session] = await Promise.all([
-    getOrganizationBySlug(orgSlug),
+    getWorkspaceBySlug(orgSlug),
     getCurrentUserRoleBySlug(orgSlug),
     getSession(),
   ])
@@ -74,10 +74,10 @@ export default async function PublicLayout({
   const [avatarData, brandingData, brandingResult, portalResult, customCssResult] =
     await Promise.all([
       session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
-      getOrganizationBrandingData(org.id),
-      organizationService.getBrandingConfig(org.id),
-      organizationService.getPublicPortalConfig(orgSlug),
-      organizationService.getCustomCss(org.id),
+      getWorkspaceBrandingData(org.id),
+      workspaceService.getBrandingConfig(org.id),
+      workspaceService.getPublicPortalConfig(orgSlug),
+      workspaceService.getCustomCss(org.id),
     ])
 
   // Generate theme CSS from org config

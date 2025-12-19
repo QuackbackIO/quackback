@@ -50,10 +50,10 @@ interface ThemePreviewProps {
   radius?: string
   fontFamily?: string
   logoUrl?: string | null
-  organizationName?: string
+  workspaceName?: string
   headerLogoUrl?: string | null
   headerDisplayMode?: HeaderDisplayMode
-  /** Custom display name (falls back to organizationName) */
+  /** Custom display name (falls back to workspaceName) */
   headerDisplayName?: string | null
 }
 
@@ -64,13 +64,13 @@ export function ThemePreview({
   radius = '0.625rem',
   fontFamily,
   logoUrl,
-  organizationName = 'Acme Feedback',
+  workspaceName = 'Acme Feedback',
   headerLogoUrl,
   headerDisplayMode = 'logo_and_name',
   headerDisplayName,
 }: ThemePreviewProps) {
   // Use custom display name if provided, otherwise fall back to org name
-  const displayName = headerDisplayName || organizationName
+  const displayName = headerDisplayName || workspaceName
   const vars = previewMode === 'light' ? lightVars : darkVars
 
   // Convert OKLCH to hex for CSS custom properties

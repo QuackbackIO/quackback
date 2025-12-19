@@ -34,13 +34,13 @@ function signState(data: {
  */
 export async function getSlackConnectUrl(orgSlug: string): Promise<string> {
   // Validate user has admin/owner role (this uses the session from tenant subdomain)
-  const { organization, member } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+  const { workspace, member } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
 
   // Generate signed state
   const nonce = randomBytes(16).toString('base64url')
   const timestamp = Date.now()
   const state = signState({
-    orgId: organization.id,
+    orgId: workspace.id,
     memberId: member.id,
     nonce,
     timestamp,

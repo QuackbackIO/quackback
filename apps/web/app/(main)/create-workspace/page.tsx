@@ -2,14 +2,16 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { CreateWorkspaceForm } from '@/components/auth/create-workspace-form'
+import { isCloud } from '@quackback/domain'
 
 /**
  * Create Workspace Page
  *
  * Main domain page for self-service tenant provisioning.
- * Creates a new organization and owner user account.
+ * Creates a new workspace and owner user account.
  */
 export default function CreateWorkspacePage() {
+  const cloudMode = isCloud()
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Subtle gradient overlay */}
@@ -41,7 +43,7 @@ export default function CreateWorkspacePage() {
 
           {/* Form Card */}
           <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-            <CreateWorkspaceForm />
+            <CreateWorkspaceForm isCloud={cloudMode} />
           </div>
 
           {/* Back link */}

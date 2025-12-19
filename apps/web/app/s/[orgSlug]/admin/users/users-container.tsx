@@ -14,13 +14,13 @@ import {
 import type { PortalUserListResult } from '@quackback/domain'
 
 interface UsersContainerProps {
-  organizationId: string
+  workspaceId: string
   initialUsers: PortalUserListResult
   currentMemberRole: string
 }
 
 export function UsersContainer({
-  organizationId,
+  workspaceId,
   initialUsers,
   currentMemberRole,
 }: UsersContainerProps) {
@@ -45,7 +45,7 @@ export function UsersContainer({
     hasNextPage: hasMore,
     fetchNextPage,
   } = usePortalUsers({
-    organizationId,
+    workspaceId,
     filters,
     initialData: initialUsers,
   })
@@ -55,11 +55,11 @@ export function UsersContainer({
   // Server state - Selected user detail
   const { data: selectedUser, isLoading: isLoadingUser } = useUserDetail({
     memberId: selectedUserId,
-    organizationId,
+    workspaceId,
   })
 
   // Mutations
-  const removePortalUser = useRemovePortalUser(organizationId)
+  const removePortalUser = useRemovePortalUser(workspaceId)
 
   // Handlers
   const handleLoadMore = () => {

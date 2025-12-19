@@ -10,11 +10,11 @@ export default async function BoardsSettingsPage({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  const { organization } = await requireAuthenticatedTenantBySlug(orgSlug)
+  const { workspace } = await requireAuthenticatedTenantBySlug(orgSlug)
 
   // Only fetch slug for faster redirect
   const firstBoard = await db.query.boards.findFirst({
-    where: eq(boards.organizationId, organization.id),
+    where: eq(boards.workspaceId, workspace.id),
     orderBy: (boards, { desc }) => [desc(boards.updatedAt)],
     columns: { slug: true },
   })
@@ -50,7 +50,7 @@ export default async function BoardsSettingsPage({
         <p className="text-sm text-muted-foreground mb-6">
           Create your first feedback board to start collecting ideas from your users
         </p>
-        <CreateBoardDialog organizationId={organization.id} />
+        <CreateBoardDialog workspaceId={workspace.id} />
       </div>
     </div>
   )

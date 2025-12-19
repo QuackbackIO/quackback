@@ -18,7 +18,7 @@ interface FeedbackInboxPageProps {
 export default async function FeedbackInboxPage({ params, searchParams }: FeedbackInboxPageProps) {
   const { orgSlug } = await params
   const {
-    organization,
+    workspace,
     user: currentUser,
     serviceContext,
   } = await requireAuthenticatedTenantBySlug(orgSlug)
@@ -81,12 +81,12 @@ export default async function FeedbackInboxPage({ params, searchParams }: Feedba
   const orgStatuses = statusesResult.success ? statusesResult.value : []
 
   // Fetch team members using MemberService (returns TypeIDs directly)
-  const membersResult = await getMemberService().listTeamMembers(organization.id)
+  const membersResult = await getMemberService().listTeamMembers(workspace.id)
   const teamMembers = membersResult.success ? membersResult.value : []
 
   return (
     <InboxContainer
-      organizationId={organization.id}
+      workspaceId={workspace.id}
       initialPosts={initialPosts}
       boards={orgBoards}
       tags={orgTags}

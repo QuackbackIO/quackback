@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { PortalHeader } from '@/components/public/portal-header'
-import { getCurrentOrganization, getCurrentUserRole } from '@/lib/tenant'
-import { getOrganizationLogoData } from '@/lib/organization'
+import { getCurrentWorkspace, getCurrentUserRole } from '@/lib/tenant'
+import { getWorkspaceLogoData } from '@/lib/workspace'
 import { BackButton } from '@/app/back-button'
 
 /**
@@ -13,12 +13,12 @@ import { BackButton } from '@/app/back-button'
 export default async function NotFound() {
   // Try to get org info if on a tenant domain
   const [org, userRole] = await Promise.all([
-    getCurrentOrganization().catch(() => null),
+    getCurrentWorkspace().catch(() => null),
     getCurrentUserRole().catch(() => null),
   ])
 
   // Get logo URL from blob storage for SSR
-  const logoData = org ? await getOrganizationLogoData(org.id) : null
+  const logoData = org ? await getWorkspaceLogoData(org.id) : null
 
   return (
     <div className="min-h-screen bg-background">

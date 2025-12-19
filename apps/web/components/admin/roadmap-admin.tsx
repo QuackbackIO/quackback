@@ -29,13 +29,13 @@ import type { RoadmapPostEntry } from '@quackback/domain'
 import type { StatusId, PostId } from '@quackback/ids'
 
 interface RoadmapAdminProps {
-  organizationId: string
+  workspaceId: string
   statuses: PostStatusEntity[]
 }
 
-export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
+export function RoadmapAdmin({ workspaceId, statuses }: RoadmapAdminProps) {
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null)
-  const { data: roadmaps } = useRoadmaps({ organizationId })
+  const { data: roadmaps } = useRoadmaps({ workspaceId })
 
   // Auto-select first roadmap when loaded
   if (roadmaps && roadmaps.length > 0 && selectedRoadmapId === null) {
@@ -45,7 +45,7 @@ export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
   const selectedRoadmap = roadmaps?.find((r) => r.id === selectedRoadmapId)
 
   // Change post status mutation (updates the post's actual status)
-  const changeStatus = useChangePostStatusId(organizationId)
+  const changeStatus = useChangePostStatusId(workspaceId)
 
   // DnD state
   const [activePost, setActivePost] = useState<RoadmapPostEntry | null>(null)
@@ -157,7 +157,7 @@ export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
     <div className="flex h-[calc(100vh-69px)] bg-background">
       {/* Sidebar */}
       <RoadmapSidebar
-        organizationId={organizationId}
+        workspaceId={workspaceId}
         selectedRoadmapId={selectedRoadmapId}
         onSelectRoadmap={setSelectedRoadmapId}
       />
@@ -190,7 +190,7 @@ export function RoadmapAdmin({ organizationId, statuses }: RoadmapAdminProps) {
                   {statuses.map((status) => (
                     <AdminRoadmapColumn
                       key={status.id}
-                      organizationId={organizationId}
+                      workspaceId={workspaceId}
                       roadmapId={selectedRoadmapId!}
                       statusId={status.id}
                       title={status.name}

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
+import { workspaceService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
 interface AdminSignupPageProps {
@@ -26,7 +26,7 @@ export default async function AdminSignupPage({ params, searchParams }: AdminSig
   }
 
   // Fetch auth config using the service
-  const result = await organizationService.getPublicAuthConfig(orgSlug)
+  const result = await workspaceService.getPublicAuthConfig(orgSlug)
 
   const authConfig = result.success
     ? {

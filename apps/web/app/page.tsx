@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, MessageSquare, BarChart3, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { db, organization, workspaceDomain, eq } from '@/lib/db'
+import { db, workspace, workspaceDomain, eq } from '@/lib/db'
 
 const APP_DOMAIN = process.env.APP_DOMAIN
 
@@ -36,7 +36,7 @@ export default async function RootPage() {
   }
 
   // Query organizations (limit 2 to distinguish between 0, 1, or 2+)
-  const orgs = await db.select().from(organization).limit(2)
+  const orgs = await db.select().from(workspace).limit(2)
 
   // No workspaces exist - show setup page for new installation
   if (orgs.length === 0) {
@@ -49,7 +49,7 @@ export default async function RootPage() {
 
     // Get the primary domain for this workspace
     const domain = await db.query.workspaceDomain.findFirst({
-      where: eq(workspaceDomain.organizationId, singleOrg.id),
+      where: eq(workspaceDomain.workspaceId, singleOrg.id),
       orderBy: (wd, { desc }) => [desc(wd.isPrimary)],
     })
 

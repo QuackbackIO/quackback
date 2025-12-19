@@ -12,7 +12,7 @@ import {
 } from '@/lib/hooks/use-roadmap-posts-query'
 
 interface RoadmapColumnProps {
-  organizationId: string
+  workspaceId: string
   roadmapId: string
   statusId: string
   title: string
@@ -20,7 +20,7 @@ interface RoadmapColumnProps {
 }
 
 export function RoadmapColumn({
-  organizationId,
+  workspaceId,
   roadmapId,
   statusId,
   title,
@@ -30,7 +30,7 @@ export function RoadmapColumn({
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
-      organizationId,
+      workspaceId,
       roadmapId,
       statusId,
     }

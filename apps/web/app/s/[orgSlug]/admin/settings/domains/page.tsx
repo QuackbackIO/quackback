@@ -5,7 +5,7 @@ import { DomainList } from './domain-list'
 export default async function DomainsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   // Only owners and admins can access domain settings
-  const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+  const { workspace } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
 
   // Get CNAME target from server env
   const cnameTarget = process.env.APP_DOMAIN || 'localhost:3000'
@@ -26,7 +26,7 @@ export default async function DomainsPage({ params }: { params: Promise<{ orgSlu
       </div>
 
       {/* Domain List */}
-      <DomainList organizationId={organization.id} cnameTarget={cnameTarget} />
+      <DomainList workspaceId={workspace.id} cnameTarget={cnameTarget} />
     </div>
   )
 }

@@ -10,16 +10,16 @@ import { usePublicRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import type { PostStatusEntity, Roadmap } from '@/lib/db/types'
 
 interface RoadmapBoardProps {
-  organizationId: string
+  workspaceId: string
   statuses: PostStatusEntity[]
   initialRoadmaps?: Roadmap[]
 }
 
-export function RoadmapBoard({ organizationId, statuses, initialRoadmaps }: RoadmapBoardProps) {
+export function RoadmapBoard({ workspaceId, statuses, initialRoadmaps }: RoadmapBoardProps) {
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null)
 
   const { data: roadmaps } = usePublicRoadmaps({
-    organizationId,
+    workspaceId,
     enabled: !initialRoadmaps,
   })
 
@@ -82,7 +82,7 @@ export function RoadmapBoard({ organizationId, statuses, initialRoadmaps }: Road
             {statuses.map((status) => (
               <RoadmapColumn
                 key={status.id}
-                organizationId={organizationId}
+                workspaceId={workspaceId}
                 roadmapId={selectedRoadmapId}
                 statusId={status.id}
                 title={status.name}

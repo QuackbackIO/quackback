@@ -38,7 +38,7 @@ import {
 
 interface WorkspaceDomain {
   id: string
-  organizationId: string
+  workspaceId: string
   domain: string
   domainType: 'subdomain' | 'custom'
   isPrimary: boolean
@@ -61,11 +61,11 @@ interface DomainVerificationStatus {
 }
 
 interface DomainListProps {
-  organizationId: string
+  workspaceId: string
   cnameTarget: string
 }
 
-export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
+export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
   const router = useRouter()
   const [domains, setDomains] = useState<WorkspaceDomain[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +86,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`/api/domains?organizationId=${organizationId}`)
+      const response = await fetch(`/api/domains?workspaceId=${workspaceId}`)
       if (!response.ok) {
         throw new Error('Failed to fetch domains')
       }
@@ -97,7 +97,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
     } finally {
       setLoading(false)
     }
-  }, [organizationId])
+  }, [workspaceId])
 
   useEffect(() => {
     fetchDomains()
@@ -240,7 +240,7 @@ export function DomainList({ organizationId, cnameTarget }: DomainListProps) {
       const response = await fetch('/api/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: newDomain.trim(), organizationId }),
+        body: JSON.stringify({ domain: newDomain.trim(), workspaceId }),
       })
 
       const data = await response.json()

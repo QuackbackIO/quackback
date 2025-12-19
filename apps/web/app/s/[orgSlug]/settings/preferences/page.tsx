@@ -9,7 +9,7 @@ interface PreferencesPageProps {
 
 export default async function PreferencesPage({ params }: PreferencesPageProps) {
   const { orgSlug } = await params
-  const { organization } = await requireTenantBySlug(orgSlug)
+  const { workspace } = await requireTenantBySlug(orgSlug)
 
   return (
     <div className="space-y-6">
@@ -40,7 +40,7 @@ export default async function PreferencesPage({ params }: PreferencesPageProps) 
         <p className="text-sm text-muted-foreground mb-4">
           Manage email notifications for posts you&apos;re subscribed to
         </p>
-        <NotificationPreferencesForm organizationId={organization.id} />
+        <NotificationPreferencesForm workspaceId={workspace.id} />
       </div>
     </div>
   )

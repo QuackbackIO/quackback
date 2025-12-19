@@ -1,4 +1,4 @@
-import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
+import { workspaceService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
 const APP_DOMAIN = process.env.APP_DOMAIN
@@ -26,7 +26,7 @@ export default async function AdminLoginPage({
       : '/admin'
 
   // Fetch org auth config using the service
-  const result = await organizationService.getPublicAuthConfig(orgSlug)
+  const result = await workspaceService.getPublicAuthConfig(orgSlug)
 
   const authConfig = result.success
     ? {

@@ -52,7 +52,7 @@ interface PaymentMethodData {
 }
 
 interface BillingClientProps {
-  organizationId: string
+  workspaceId: string
   subscription: SubscriptionData | null
   usage: UsageCounts
   invoices: SerializedInvoice[]
@@ -91,7 +91,7 @@ const PLAN_FEATURES: Record<PricingTier, string[]> = {
 }
 
 export function BillingClient({
-  organizationId,
+  workspaceId,
   subscription,
   usage,
   invoices,
@@ -143,7 +143,7 @@ export function BillingClient({
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, tier }),
+        body: JSON.stringify({ workspaceId, tier }),
       })
 
       const data = await response.json()
@@ -167,7 +167,7 @@ export function BillingClient({
       const response = await fetch('/api/stripe/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId }),
+        body: JSON.stringify({ workspaceId }),
       })
 
       const data = await response.json()

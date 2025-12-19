@@ -10,7 +10,7 @@ export default async function UsersPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const { orgSlug } = await params
-  const { organization, member } = await requireAuthenticatedTenantBySlug(orgSlug)
+  const { workspace, member } = await requireAuthenticatedTenantBySlug(orgSlug)
   const paramsResolved = await searchParams
 
   const getStringParam = (key: string): string | undefined => {
@@ -27,7 +27,7 @@ export default async function UsersPage({
   const sort = (getStringParam('sort') as 'newest' | 'oldest' | 'most_active' | 'name') || 'newest'
 
   // Fetch initial users with filters from URL
-  const usersResult = await getUserService().listPortalUsers(organization.id, {
+  const usersResult = await getUserService().listPortalUsers(workspace.id, {
     search,
     verified,
     dateFrom: dateFrom ? new Date(dateFrom) : undefined,
@@ -43,7 +43,7 @@ export default async function UsersPage({
 
   return (
     <UsersContainer
-      organizationId={organization.id}
+      workspaceId={workspace.id}
       initialUsers={initialUsers}
       currentMemberRole={member.role}
     />

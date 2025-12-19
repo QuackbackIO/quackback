@@ -31,12 +31,12 @@ import {
 } from '@/components/ui/form'
 
 interface InviteMemberDialogProps {
-  organizationId: string
+  workspaceId: string
   open: boolean
   onClose: () => void
 }
 
-export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemberDialogProps) {
+export function InviteMemberDialog({ workspaceId, open, onClose }: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
@@ -57,7 +57,7 @@ export function InviteMemberDialog({ organizationId, open, onClose }: InviteMemb
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId,
+          workspaceId,
           email: data.email,
           name: data.name || undefined,
           role: data.role,

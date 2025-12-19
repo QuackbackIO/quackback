@@ -42,7 +42,7 @@ import {
 import type { Roadmap } from '@/lib/db/types'
 
 interface RoadmapSidebarProps {
-  organizationId: string
+  workspaceId: string
   selectedRoadmapId: string | null
   onSelectRoadmap: (roadmapId: string | null) => void
 }
@@ -55,7 +55,7 @@ function slugify(name: string): string {
 }
 
 export function RoadmapSidebar({
-  organizationId,
+  workspaceId,
   selectedRoadmapId,
   onSelectRoadmap,
 }: RoadmapSidebarProps) {
@@ -65,10 +65,10 @@ export function RoadmapSidebar({
   const [editingRoadmap, setEditingRoadmap] = useState<Roadmap | null>(null)
   const [deletingRoadmap, setDeletingRoadmap] = useState<Roadmap | null>(null)
 
-  const { data: roadmaps, isLoading } = useRoadmaps({ organizationId })
-  const createRoadmap = useCreateRoadmap(organizationId)
-  const updateRoadmap = useUpdateRoadmap(organizationId)
-  const deleteRoadmap = useDeleteRoadmap(organizationId)
+  const { data: roadmaps, isLoading } = useRoadmaps({ workspaceId })
+  const createRoadmap = useCreateRoadmap(workspaceId)
+  const updateRoadmap = useUpdateRoadmap(workspaceId)
+  const deleteRoadmap = useDeleteRoadmap(workspaceId)
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

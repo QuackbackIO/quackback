@@ -51,7 +51,7 @@ import { cn } from '@/lib/utils'
 
 interface StatusListProps {
   initialStatuses: PostStatusEntity[]
-  organizationId: string
+  workspaceId: string
 }
 
 const CATEGORY_INFO: Record<StatusCategory, { label: string; description: string }> = {
@@ -113,7 +113,7 @@ const PRESET_COLORS = [
   '#a8a29e', // Stone 400
 ]
 
-export function StatusList({ initialStatuses, organizationId }: StatusListProps) {
+export function StatusList({ initialStatuses, workspaceId }: StatusListProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [statuses, setStatuses] = useState(initialStatuses)
@@ -234,7 +234,7 @@ export function StatusList({ initialStatuses, organizationId }: StatusListProps)
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            organizationId,
+            workspaceId,
             showOnRoadmap: status.showOnRoadmap,
             color: status.color,
           }),
@@ -247,7 +247,7 @@ export function StatusList({ initialStatuses, organizationId }: StatusListProps)
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            organizationId,
+            workspaceId,
             category: change.category,
             statusIds: change.statusIds,
           }),
@@ -270,12 +270,9 @@ export function StatusList({ initialStatuses, organizationId }: StatusListProps)
     if (!deleteStatus) return
 
     try {
-      const response = await fetch(
-        `/api/statuses/${deleteStatus.id}?organizationId=${organizationId}`,
-        {
-          method: 'DELETE',
-        }
-      )
+      const response = await fetch(`/api/statuses/${deleteStatus.id}?workspaceId=${workspaceId}`, {
+        method: 'DELETE',
+      })
 
       if (response.ok) {
         setStatuses((prev) => prev.filter((s) => s.id !== deleteStatus.id))
@@ -304,7 +301,7 @@ export function StatusList({ initialStatuses, organizationId }: StatusListProps)
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId,
+          workspaceId,
           ...data,
           position: statusesByCategory[data.category].length,
         }),

@@ -9,10 +9,10 @@ export default async function BoardExportPage({
   params: Promise<{ orgSlug: string; slug: string }>
 }) {
   const { orgSlug, slug } = await params
-  const { organization } = await requireAuthenticatedTenantBySlug(orgSlug)
+  const { workspace } = await requireAuthenticatedTenantBySlug(orgSlug)
 
   const board = await db.query.boards.findFirst({
-    where: and(eq(boards.organizationId, organization.id), eq(boards.slug, slug)),
+    where: and(eq(boards.workspaceId, workspace.id), eq(boards.slug, slug)),
   })
 
   if (!board) {
@@ -30,7 +30,7 @@ export default async function BoardExportPage({
           Download posts from {board.name} as a CSV file
         </p>
       </div>
-      <BoardExportSection organizationId={organization.id} boardId={boardId} />
+      <BoardExportSection workspaceId={workspace.id} boardId={boardId} />
     </div>
   )
 }

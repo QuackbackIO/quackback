@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button'
 import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
 
 interface TeamHeaderProps {
-  organizationId: string
-  organizationName: string
+  workspaceId: string
+  workspaceName: string
 }
 
-export function TeamHeader({ organizationId, organizationName }: TeamHeaderProps) {
+export function TeamHeader({ workspaceId, workspaceName }: TeamHeaderProps) {
   const [showInviteDialog, setShowInviteDialog] = useState(false)
 
   return (
@@ -23,7 +23,7 @@ export function TeamHeader({ organizationId, organizationName }: TeamHeaderProps
           <div>
             <h1 className="text-xl font-semibold text-foreground">Team Members</h1>
             <p className="text-sm text-muted-foreground">
-              Manage who has access to {organizationName}
+              Manage who has access to {workspaceName}
             </p>
           </div>
         </div>
@@ -34,7 +34,7 @@ export function TeamHeader({ organizationId, organizationName }: TeamHeaderProps
       </div>
 
       <InviteMemberDialog
-        organizationId={organizationId}
+        workspaceId={workspaceId}
         open={showInviteDialog}
         onClose={() => setShowInviteDialog(false)}
       />

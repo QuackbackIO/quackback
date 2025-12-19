@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { OrgId, PostId } from '@quackback/ids'
+import type { WorkspaceId, PostId } from '@quackback/ids'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
@@ -67,17 +67,17 @@ export function CommentsSectionSkeleton() {
 
 interface CommentsSectionProps {
   postId: PostId
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   comments: PublicComment[]
 }
 
-export async function CommentsSection({ postId, organizationId, comments }: CommentsSectionProps) {
+export async function CommentsSection({ postId, workspaceId, comments }: CommentsSectionProps) {
   const session = await getSession()
 
   let isMember = false
   if (session?.user) {
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
       columns: { id: true },
     })
     isMember = !!memberRecord

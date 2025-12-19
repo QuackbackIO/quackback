@@ -9,11 +9,11 @@ interface OnboardingPageProps {
 
 export default async function OnboardingPage({ params }: OnboardingPageProps) {
   const { orgSlug } = await params
-  const { organization, user } = await requireTenantBySlug(orgSlug)
+  const { workspace, user } = await requireTenantBySlug(orgSlug)
 
   // Check if org already has boards - if so, skip onboarding
   const existingBoards = await db.query.boards.findFirst({
-    where: eq(boards.organizationId, organization.id),
+    where: eq(boards.workspaceId, workspace.id),
   })
 
   if (existingBoards) {
@@ -28,8 +28,8 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
       <main className="relative flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-lg">
           <OnboardingWizard
-            organizationName={organization.name}
-            organizationId={organization.id}
+            workspaceName={workspace.name}
+            workspaceId={workspace.id}
             userName={user.name}
           />
         </div>

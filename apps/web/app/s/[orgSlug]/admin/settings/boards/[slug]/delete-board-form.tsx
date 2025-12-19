@@ -25,12 +25,12 @@ interface Board {
 
 interface DeleteBoardFormProps {
   board: Board
-  organizationId: string
+  workspaceId: string
 }
 
-export function DeleteBoardForm({ board, organizationId }: DeleteBoardFormProps) {
+export function DeleteBoardForm({ board, workspaceId }: DeleteBoardFormProps) {
   const router = useRouter()
-  const mutation = useDeleteBoard(organizationId)
+  const mutation = useDeleteBoard(workspaceId)
 
   const form = useForm<DeleteBoardInput>({
     resolver: standardSchemaResolver(deleteBoardSchema),

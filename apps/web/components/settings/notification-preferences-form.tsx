@@ -5,7 +5,7 @@ import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-react'
 
 interface NotificationPreferencesFormProps {
-  organizationId: string
+  workspaceId: string
 }
 
 interface Preferences {
@@ -13,7 +13,7 @@ interface Preferences {
   emailNewComment: boolean
 }
 
-export function NotificationPreferencesForm({ organizationId }: NotificationPreferencesFormProps) {
+export function NotificationPreferencesForm({ workspaceId }: NotificationPreferencesFormProps) {
   const [preferences, setPreferences] = useState<Preferences | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -24,7 +24,7 @@ export function NotificationPreferencesForm({ organizationId }: NotificationPref
     async function fetchPreferences() {
       try {
         const response = await fetch(
-          `/api/user/notification-preferences?organizationId=${organizationId}`
+          `/api/user/notification-preferences?workspaceId=${workspaceId}`
         )
         if (!response.ok) {
           throw new Error('Failed to fetch preferences')
@@ -38,7 +38,7 @@ export function NotificationPreferencesForm({ organizationId }: NotificationPref
       }
     }
     fetchPreferences()
-  }, [organizationId])
+  }, [workspaceId])
 
   // Update a single preference
   const updatePreference = useCallback(
@@ -55,7 +55,7 @@ export function NotificationPreferencesForm({ organizationId }: NotificationPref
         const response = await fetch('/api/user/notification-preferences', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId, [key]: value }),
+          body: JSON.stringify({ workspaceId, [key]: value }),
         })
 
         if (!response.ok) {
@@ -72,7 +72,7 @@ export function NotificationPreferencesForm({ organizationId }: NotificationPref
         setSaving(null)
       }
     },
-    [organizationId, preferences]
+    [workspaceId, preferences]
   )
 
   if (loading) {

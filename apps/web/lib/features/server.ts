@@ -7,9 +7,9 @@ import {
   getMinimumTierForFeature,
 } from '@quackback/domain'
 import { getSubscription, isSubscriptionActive } from '../subscription'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
-export interface OrganizationFeatures {
+export interface WorkspaceFeatures {
   /** Current edition */
   edition: 'oss' | 'cloud'
   /** Current pricing tier (null if no active subscription in cloud mode) */
@@ -31,8 +31,8 @@ export interface OrganizationFeatures {
  * Get feature access info for an organization.
  * Cached per request for efficiency.
  */
-export const getOrganizationFeatures = cache(
-  async (organizationId: OrgId): Promise<OrganizationFeatures> => {
+export const getWorkspaceFeatures = cache(
+  async (workspaceId: WorkspaceId): Promise<WorkspaceFeatures> => {
     // OSS (self-hosted): all features enabled, no limits
     if (isSelfHosted()) {
       return {
@@ -50,7 +50,7 @@ export const getOrganizationFeatures = cache(
     }
 
     // Cloud: check subscription
-    const subscription = await getSubscription(organizationId)
+    const subscription = await getSubscription(workspaceId)
 
     if (!subscription || !isSubscriptionActive(subscription)) {
       // No active subscription - no features
@@ -79,21 +79,24 @@ export const getOrganizationFeatures = cache(
 
 /**
  * Check if an organization has a specific feature.
- * Convenience wrapper for getOrganizationFeatures.
+ * Convenience wrapper for getWorkspaceFeatures.
  */
-export async function hasFeature(organizationId: OrgId, feature: Feature): Promise<boolean> {
-  const features = await getOrganizationFeatures(organizationId)
+export async function hasFeature(workspaceId: WorkspaceId, feature: Feature): Promise<boolean> {
+  const features = await getWorkspaceFeatures(workspaceId)
   return features.hasFeature(feature)
 }
 
 /**
  * Check if an organization has at least a certain tier.
  */
-export async function hasTier(organizationId: OrgId, requiredTier: PricingTier): Promise<boolean> {
+export async function hasTier(
+  workspaceId: WorkspaceId,
+  requiredTier: PricingTier
+): Promise<boolean> {
   // OSS always has highest tier
   if (isSelfHosted()) return true
 
-  const features = await getOrganizationFeatures(organizationId)
+  const features = await getWorkspaceFeatures(workspaceId)
   if (!features.tier) return false
 
   const tierOrder: PricingTier[] = ['essentials', 'professional', 'team', 'enterprise']
@@ -111,10 +114,10 @@ export interface FeatureCheckResult {
  * Check feature access and get detailed result for API/UI responses.
  */
 export async function checkFeatureAccess(
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   feature: Feature
 ): Promise<FeatureCheckResult> {
-  const features = await getOrganizationFeatures(organizationId)
+  const features = await getWorkspaceFeatures(workspaceId)
 
   if (features.hasFeature(feature)) {
     return { allowed: true }

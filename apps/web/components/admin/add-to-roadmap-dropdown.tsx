@@ -14,7 +14,7 @@ import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import type { PostStatusEntity } from '@/lib/db/types'
 
 interface AddToRoadmapDropdownProps {
-  organizationId: string
+  workspaceId: string
   postId: string
   currentStatusId: string
   /** List of roadmap IDs this post is already on */
@@ -24,7 +24,7 @@ interface AddToRoadmapDropdownProps {
 }
 
 export function AddToRoadmapDropdown({
-  organizationId,
+  workspaceId,
   postId,
   currentStatusId,
   currentRoadmapIds = [],
@@ -35,7 +35,7 @@ export function AddToRoadmapDropdown({
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
 
   const { data: roadmaps, isLoading: isLoadingRoadmaps } = useRoadmaps({
-    organizationId,
+    workspaceId,
     enabled: isOpen,
   })
 
@@ -48,7 +48,7 @@ export function AddToRoadmapDropdown({
     setPendingRoadmapId(roadmapId)
     try {
       if (isCurrentlyOn) {
-        await fetch(`/api/roadmaps/${roadmapId}/posts?organizationId=${organizationId}`, {
+        await fetch(`/api/roadmaps/${roadmapId}/posts?workspaceId=${workspaceId}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId }),
@@ -60,7 +60,7 @@ export function AddToRoadmapDropdown({
           body: JSON.stringify({
             postId,
             statusId: defaultStatusId,
-            organizationId,
+            workspaceId,
           }),
         })
       }

@@ -21,8 +21,8 @@ export const roadmapPostsKeys = {
   all: ['roadmapPosts'] as const,
   lists: () => [...roadmapPostsKeys.all, 'list'] as const,
   // Legacy: by status slug (used by existing components)
-  list: (organizationId: string, statusSlug: string) =>
-    [...roadmapPostsKeys.lists(), organizationId, statusSlug] as const,
+  list: (workspaceId: string, statusSlug: string) =>
+    [...roadmapPostsKeys.lists(), workspaceId, statusSlug] as const,
   // New: by roadmap ID and status ID
   byRoadmap: (roadmapId: string, statusId?: string) =>
     [...roadmapPostsKeys.all, 'roadmap', roadmapId, statusId ?? 'all'] as const,
@@ -33,12 +33,12 @@ export const roadmapPostsKeys = {
 // ============================================================================
 
 async function fetchRoadmapPosts(
-  organizationId: string,
+  workspaceId: string,
   statusSlug: string,
   page: number
 ): Promise<RoadmapPostListResult> {
   const params = new URLSearchParams({
-    organizationId,
+    workspaceId,
     statusSlug,
     page: page.toString(),
     limit: '10',
@@ -54,19 +54,15 @@ async function fetchRoadmapPosts(
 // ============================================================================
 
 interface UseRoadmapPostsOptions {
-  organizationId: string
+  workspaceId: string
   statusSlug: string
   initialData?: RoadmapPostListResult
 }
 
-export function useRoadmapPosts({
-  organizationId,
-  statusSlug,
-  initialData,
-}: UseRoadmapPostsOptions) {
+export function useRoadmapPosts({ workspaceId, statusSlug, initialData }: UseRoadmapPostsOptions) {
   return useInfiniteQuery({
-    queryKey: roadmapPostsKeys.list(organizationId, statusSlug),
-    queryFn: ({ pageParam }) => fetchRoadmapPosts(organizationId, statusSlug, pageParam),
+    queryKey: roadmapPostsKeys.list(workspaceId, statusSlug),
+    queryFn: ({ pageParam }) => fetchRoadmapPosts(workspaceId, statusSlug, pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     initialData: initialData
@@ -84,13 +80,13 @@ export function useRoadmapPosts({
 // ============================================================================
 
 async function fetchRoadmapPostsByRoadmap(
-  organizationId: string,
+  workspaceId: string,
   roadmapId: string,
   statusId: string | undefined,
   offset: number
 ): Promise<RoadmapPostsListResult> {
   const params = new URLSearchParams({
-    organizationId,
+    workspaceId,
     limit: '20',
     offset: offset.toString(),
   })
@@ -104,7 +100,7 @@ async function fetchRoadmapPostsByRoadmap(
 }
 
 interface UseRoadmapPostsByRoadmapOptions {
-  organizationId: string
+  workspaceId: string
   roadmapId: string
   statusId?: string
   enabled?: boolean
@@ -114,7 +110,7 @@ interface UseRoadmapPostsByRoadmapOptions {
  * Hook to fetch posts for a specific roadmap (optionally filtered by status)
  */
 export function useRoadmapPostsByRoadmap({
-  organizationId,
+  workspaceId,
   roadmapId,
   statusId,
   enabled = true,
@@ -122,7 +118,7 @@ export function useRoadmapPostsByRoadmap({
   return useInfiniteQuery({
     queryKey: roadmapPostsKeys.byRoadmap(roadmapId, statusId),
     queryFn: ({ pageParam }) =>
-      fetchRoadmapPostsByRoadmap(organizationId, roadmapId, statusId, pageParam),
+      fetchRoadmapPostsByRoadmap(workspaceId, roadmapId, statusId, pageParam),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
     enabled,
@@ -136,7 +132,7 @@ export function useRoadmapPostsByRoadmap({
 /**
  * Hook to add a post to a roadmap
  */
-export function useAddPostToRoadmap(organizationId: string, roadmapId: string) {
+export function useAddPostToRoadmap(workspaceId: string, roadmapId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -144,7 +140,7 @@ export function useAddPostToRoadmap(organizationId: string, roadmapId: string) {
       const response = await fetch(`/api/roadmaps/${roadmapId}/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, organizationId }),
+        body: JSON.stringify({ postId, workspaceId }),
       })
       if (!response.ok) {
         const error = await response.json()
@@ -163,19 +159,16 @@ export function useAddPostToRoadmap(organizationId: string, roadmapId: string) {
 /**
  * Hook to remove a post from a roadmap
  */
-export function useRemovePostFromRoadmap(organizationId: string, roadmapId: string) {
+export function useRemovePostFromRoadmap(workspaceId: string, roadmapId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (postId: string): Promise<void> => {
-      const response = await fetch(
-        `/api/roadmaps/${roadmapId}/posts?organizationId=${organizationId}`,
-        {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId }),
-        }
-      )
+      const response = await fetch(`/api/roadmaps/${roadmapId}/posts?workspaceId=${workspaceId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to remove post from roadmap')
@@ -194,13 +187,13 @@ export function useRemovePostFromRoadmap(organizationId: string, roadmapId: stri
 // ============================================================================
 
 async function fetchPublicRoadmapPosts(
-  organizationId: string,
+  workspaceId: string,
   roadmapId: string,
   statusId: string | undefined,
   offset: number
 ): Promise<RoadmapPostsListResult> {
   const params = new URLSearchParams({
-    organizationId,
+    workspaceId,
     limit: '20',
     offset: offset.toString(),
   })
@@ -214,7 +207,7 @@ async function fetchPublicRoadmapPosts(
 }
 
 interface UsePublicRoadmapPostsOptions {
-  organizationId: string
+  workspaceId: string
   roadmapId: string
   statusId?: string
   enabled?: boolean
@@ -224,7 +217,7 @@ interface UsePublicRoadmapPostsOptions {
  * Hook to fetch posts for a public roadmap (no auth required)
  */
 export function usePublicRoadmapPosts({
-  organizationId,
+  workspaceId,
   roadmapId,
   statusId,
   enabled = true,
@@ -232,7 +225,7 @@ export function usePublicRoadmapPosts({
   return useInfiniteQuery({
     queryKey: [...roadmapPostsKeys.all, 'public', roadmapId, statusId ?? 'all'],
     queryFn: ({ pageParam }) =>
-      fetchPublicRoadmapPosts(organizationId, roadmapId, statusId, pageParam),
+      fetchPublicRoadmapPosts(workspaceId, roadmapId, statusId, pageParam),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
     enabled,

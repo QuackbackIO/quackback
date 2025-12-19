@@ -5,7 +5,7 @@ import { SsoProviderList } from './sso-provider-list'
 export default async function SecurityPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   // Only owners and admins can access security settings
-  const { organization } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
+  const { workspace } = await requireTenantRoleBySlug(orgSlug, ['owner', 'admin'])
 
   return (
     <div className="space-y-6">
@@ -17,13 +17,13 @@ export default async function SecurityPage({ params }: { params: Promise<{ orgSl
         <div>
           <h1 className="text-xl font-semibold text-foreground">Authentication</h1>
           <p className="text-sm text-muted-foreground">
-            Manage authentication methods for {organization.name}
+            Manage authentication methods for {workspace.name}
           </p>
         </div>
       </div>
 
       {/* Enterprise SSO */}
-      <SsoProviderList organizationId={organization.id} />
+      <SsoProviderList workspaceId={workspace.id} />
     </div>
   )
 }

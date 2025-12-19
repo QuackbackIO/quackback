@@ -20,13 +20,13 @@ interface Board {
 interface BoardSettingsHeaderProps {
   currentBoard: Board
   allBoards: Board[]
-  organizationId: string
+  workspaceId: string
 }
 
 export function BoardSettingsHeader({
   currentBoard,
   allBoards,
-  organizationId,
+  workspaceId,
 }: BoardSettingsHeaderProps) {
   const router = useRouter()
 
@@ -62,7 +62,7 @@ export function BoardSettingsHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <CreateBoardDialog organizationId={organizationId} />
+        <CreateBoardDialog workspaceId={workspaceId} />
       </div>
       <p className="text-sm text-muted-foreground">
         Configure your feedback board settings and preferences

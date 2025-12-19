@@ -7,7 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Check, Loader2, Info, ChevronDown } from 'lucide-react'
 
 interface CustomCssEditorProps {
-  organizationId: string
+  workspaceId: string
   initialCustomCss: string | null
 }
 
@@ -84,7 +84,7 @@ html:root {
   );
 }`
 
-export function CustomCssEditor({ organizationId, initialCustomCss }: CustomCssEditorProps) {
+export function CustomCssEditor({ workspaceId, initialCustomCss }: CustomCssEditorProps) {
   const [css, setCss] = useState(initialCustomCss || '')
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -97,11 +97,11 @@ export function CustomCssEditor({ organizationId, initialCustomCss }: CustomCssE
     setError(null)
 
     try {
-      const response = await fetch('/api/organization/custom-css', {
+      const response = await fetch('/api/workspace/custom-css', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId,
+          workspaceId,
           customCss: css.trim() || null,
         }),
       })
@@ -118,7 +118,7 @@ export function CustomCssEditor({ organizationId, initialCustomCss }: CustomCssE
     } finally {
       setIsSaving(false)
     }
-  }, [organizationId, css])
+  }, [workspaceId, css])
 
   return (
     <div className="space-y-4">

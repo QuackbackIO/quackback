@@ -4,8 +4,8 @@ import { CreditCard, Server, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { BillingClient } from './billing-client'
-import { getSubscriptionByOrganizationIdAdmin } from '@/lib/db'
-import { getOrganizationUsageCounts } from '@/lib/db'
+import { getSubscriptionByWorkspaceIdAdmin } from '@/lib/db'
+import { getWorkspaceUsageCounts } from '@/lib/db'
 import {
   getCustomerInvoices,
   getDefaultPaymentMethod,
@@ -22,7 +22,7 @@ interface BillingPageProps {
 export default async function BillingPage({ params, searchParams }: BillingPageProps) {
   const { orgSlug } = await params
   const { success, canceled } = await searchParams
-  const { organization } = await requireTenantBySlug(orgSlug)
+  const { workspace } = await requireTenantBySlug(orgSlug)
 
   // Show "not available" message for self-hosted deployments
   if (isSelfHosted()) {
@@ -63,8 +63,8 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
 
   // Fetch subscription and usage data for cloud mode
   const [subscription, usageCounts] = await Promise.all([
-    getSubscriptionByOrganizationIdAdmin(organization.id),
-    getOrganizationUsageCounts(organization.id),
+    getSubscriptionByWorkspaceIdAdmin(workspace.id),
+    getWorkspaceUsageCounts(workspace.id),
   ])
 
   const subscriptionData = subscription
@@ -111,7 +111,7 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
         </div>
         <div>
           <h1 className="text-xl font-semibold text-foreground">Billing</h1>
-          <p className="text-sm text-muted-foreground">Manage billing for {organization.name}</p>
+          <p className="text-sm text-muted-foreground">Manage billing for {workspace.name}</p>
         </div>
       </div>
 
@@ -139,7 +139,7 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
 
       {/* Billing Client Component */}
       <BillingClient
-        organizationId={organization.id}
+        workspaceId={workspace.id}
         subscription={subscriptionData}
         usage={usageCounts}
         invoices={serializedInvoices}

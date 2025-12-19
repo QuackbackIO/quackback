@@ -50,19 +50,16 @@ import {
   type ThemeConfig,
   type ThemeVariables,
 } from '@quackback/domain/theme'
-import {
-  useOrganizationLogo,
-  useOrganizationHeaderLogo,
-} from '@/lib/hooks/use-organization-queries'
+import { useWorkspaceLogo, useWorkspaceHeaderLogo } from '@/lib/hooks/use-workspace-queries'
 import { ThemePreview } from './theme-preview'
 
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
 interface ThemeCustomizerProps {
-  organizationId: string
+  workspaceId: string
   initialThemeConfig: ThemeConfig
   logoUrl?: string | null
-  organizationName?: string
+  workspaceName?: string
   headerLogoUrl?: string | null
   headerDisplayMode?: HeaderDisplayMode
 }
@@ -367,21 +364,21 @@ const ALL_COLOR_KEYS = COLOR_GROUPS.flatMap((g) => g.variables.map((v) => v.key)
 type ColorVariable = (typeof ALL_COLOR_KEYS)[number]
 
 export function ThemeCustomizer({
-  organizationId,
+  workspaceId,
   initialThemeConfig,
   logoUrl: initialLogoUrl,
-  organizationName,
+  workspaceName,
   headerLogoUrl: initialHeaderLogoUrl,
   headerDisplayMode: initialHeaderDisplayMode = 'logo_and_name',
 }: ThemeCustomizerProps) {
   // Fetch logo data reactively so preview stays in sync
   // when LogoUploader component updates the logo
-  const { data: logoData } = useOrganizationLogo(organizationId)
+  const { data: logoData } = useWorkspaceLogo(workspaceId)
   const effectiveLogoUrl = logoData?.logoUrl ?? initialLogoUrl
 
   // Fetch header branding data reactively so preview stays in sync
   // when HeaderBranding component updates settings
-  const { data: headerData } = useOrganizationHeaderLogo(organizationId)
+  const { data: headerData } = useWorkspaceHeaderLogo(workspaceId)
   const effectiveHeaderLogoUrl = headerData?.headerLogoUrl ?? initialHeaderLogoUrl
   const effectiveHeaderDisplayMode =
     (headerData?.headerDisplayMode as HeaderDisplayMode) ?? initialHeaderDisplayMode
@@ -655,11 +652,11 @@ export function ThemeCustomizer({
     try {
       const themeConfig = getCurrentThemeConfig()
 
-      const response = await fetch('/api/organization/theme', {
+      const response = await fetch('/api/workspace/theme', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId,
+          workspaceId,
           brandingConfig: themeConfig,
         }),
       })
@@ -1014,7 +1011,7 @@ ${darkVars}
               radius={`${radius}rem`}
               fontFamily={font}
               logoUrl={effectiveLogoUrl}
-              organizationName={organizationName}
+              workspaceName={workspaceName}
               headerLogoUrl={effectiveHeaderLogoUrl}
               headerDisplayMode={effectiveHeaderDisplayMode}
               headerDisplayName={effectiveHeaderDisplayName}

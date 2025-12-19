@@ -20,7 +20,7 @@ import {
 
 interface SsoProvider {
   id: string
-  organizationId: string
+  workspaceId: string
   issuer: string
   domain: string
   providerId: string
@@ -31,10 +31,10 @@ interface SsoProvider {
 }
 
 interface SsoProviderListProps {
-  organizationId: string
+  workspaceId: string
 }
 
-export function SsoProviderList({ organizationId }: SsoProviderListProps) {
+export function SsoProviderList({ workspaceId }: SsoProviderListProps) {
   const router = useRouter()
   const [providers, setProviders] = useState<SsoProvider[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,9 +46,7 @@ export function SsoProviderList({ organizationId }: SsoProviderListProps) {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(
-        `/api/organization/sso-providers?organizationId=${organizationId}`
-      )
+      const response = await fetch(`/api/workspace/sso-providers?workspaceId=${workspaceId}`)
       if (!response.ok) {
         throw new Error('Failed to fetch SSO providers')
       }
@@ -59,7 +57,7 @@ export function SsoProviderList({ organizationId }: SsoProviderListProps) {
     } finally {
       setLoading(false)
     }
-  }, [organizationId])
+  }, [workspaceId])
 
   useEffect(() => {
     fetchProviders()
@@ -71,7 +69,7 @@ export function SsoProviderList({ organizationId }: SsoProviderListProps) {
     try {
       setDeleting(true)
       const response = await fetch(
-        `/api/organization/sso-providers/${deleteId}?organizationId=${organizationId}`,
+        `/api/workspace/sso-providers/${deleteId}?workspaceId=${workspaceId}`,
         { method: 'DELETE' }
       )
       if (!response.ok) {

@@ -5,10 +5,10 @@ import { getStatusService } from '@/lib/services'
 
 export default async function StatusesPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
-  const { organization } = await requireTenantBySlug(orgSlug)
+  const { workspace } = await requireTenantBySlug(orgSlug)
 
   // Services now return TypeIDs directly
-  const statusesResult = await getStatusService().listPublicStatuses(organization.id)
+  const statusesResult = await getStatusService().listPublicStatuses(workspace.id)
   const statuses = statusesResult.success ? statusesResult.value : []
 
   return (
@@ -26,7 +26,7 @@ export default async function StatusesPage({ params }: { params: Promise<{ orgSl
         </div>
       </div>
 
-      <StatusList initialStatuses={statuses} organizationId={organization.id} />
+      <StatusList initialStatuses={statuses} workspaceId={workspace.id} />
     </div>
   )
 }
