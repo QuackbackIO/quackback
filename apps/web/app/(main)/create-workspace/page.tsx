@@ -12,6 +12,9 @@ import { isCloud } from '@quackback/domain'
  */
 export default function CreateWorkspacePage() {
   const cloudMode = isCloud()
+  // For cloud mode, use TENANT_BASE_DOMAIN (e.g., quackback.io)
+  // This is the domain where tenant subdomains are created (e.g., acme.quackback.io)
+  const tenantBaseDomain = cloudMode ? process.env.TENANT_BASE_DOMAIN : undefined
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Subtle gradient overlay */}
@@ -43,7 +46,7 @@ export default function CreateWorkspacePage() {
 
           {/* Form Card */}
           <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-            <CreateWorkspaceForm isCloud={cloudMode} />
+            <CreateWorkspaceForm isCloud={cloudMode} tenantBaseDomain={tenantBaseDomain} />
           </div>
 
           {/* Back link */}

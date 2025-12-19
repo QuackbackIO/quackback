@@ -19,6 +19,8 @@ import {
 
 interface CreateWorkspaceFormProps {
   isCloud?: boolean
+  /** Base domain for tenant subdomains in cloud mode (e.g., quackback.io) */
+  tenantBaseDomain?: string
 }
 
 /**
@@ -30,13 +32,18 @@ interface CreateWorkspaceFormProps {
  *
  * Note: No password - uses email OTP for subsequent authentication.
  */
-export function CreateWorkspaceForm({ isCloud = false }: CreateWorkspaceFormProps) {
+export function CreateWorkspaceForm({
+  isCloud = false,
+  tenantBaseDomain,
+}: CreateWorkspaceFormProps) {
   const [error, setError] = useState('')
   const [baseDomain, setBaseDomain] = useState('')
 
   useEffect(() => {
-    setBaseDomain(window.location.host)
-  }, [])
+    // In cloud mode, use the provided tenant base domain (e.g., quackback.io)
+    // In OSS mode, use the current host
+    setBaseDomain(tenantBaseDomain ?? window.location.host)
+  }, [tenantBaseDomain])
 
   const form = useForm<CreateWorkspaceInput>({
     resolver: standardSchemaResolver(createWorkspaceSchema),
