@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server'
-import { organizationService, type BrandingConfig } from '@quackback/domain'
+import { workspaceService, type BrandingConfig } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 // Re-export type for consumers
 export type { BrandingConfig } from '@quackback/domain'
 
 /**
- * GET /api/organization/theme?organizationId={id}
+ * GET /api/workspace/theme?workspaceId={id}
  *
  * Get branding/theme configuration for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const result = await organizationService.getBrandingConfig(validation.organization.id)
+    const result = await workspaceService.getBrandingConfig(validation.workspace.id)
 
     if (!result.success) {
       throw new ApiError(result.error.message, 404)
@@ -25,13 +25,13 @@ export const GET = withApiHandler(
 )
 
 /**
- * PATCH /api/organization/theme
+ * PATCH /api/workspace/theme
  *
  * Update branding/theme configuration for an organization.
  * Requires owner or admin role.
  *
  * Body: {
- *   organizationId: string,
+ *   workspaceId: string,
  *   brandingConfig: BrandingConfig
  * }
  */
@@ -45,11 +45,11 @@ export const PATCH = withApiHandler(
       throw new ApiError('Invalid brandingConfig structure', 400)
     }
 
-    const result = await organizationService.updateBrandingConfig(
+    const result = await workspaceService.updateBrandingConfig(
       (brandingConfig || {}) as BrandingConfig,
       {
         userId: validation.user.id,
-        organizationId: validation.organization.id,
+        workspaceId: validation.workspace.id,
         memberId: validation.member.id,
         memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
         userName: validation.user.name ?? '',

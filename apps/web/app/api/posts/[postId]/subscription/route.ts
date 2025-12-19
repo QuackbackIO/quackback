@@ -31,18 +31,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Get post to find organization
     const post = await db.query.posts.findFirst({
       where: eq(posts.id, postId),
-      with: { board: { columns: { organizationId: true } } },
+      with: { board: { columns: { workspaceId: true } } },
     })
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    const organizationId = post.board.organizationId
+    const workspaceId = post.board.workspaceId
 
     // Get member record
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id
-    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, organizationId)
+    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, workspaceId)
 
     return NextResponse.json(status)
   } catch (error) {
@@ -85,18 +85,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Get post to find organization
     const post = await db.query.posts.findFirst({
       where: eq(posts.id, postId),
-      with: { board: { columns: { organizationId: true } } },
+      with: { board: { columns: { workspaceId: true } } },
     })
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    const organizationId = post.board.organizationId
+    const workspaceId = post.board.workspaceId
 
     // Get member record
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id
-    await subscriptionService.subscribeToPost(memberId, postId, reason, organizationId)
+    await subscriptionService.subscribeToPost(memberId, postId, reason, workspaceId)
 
     return NextResponse.json({
       success: true,
@@ -145,18 +145,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Get post to find organization
     const post = await db.query.posts.findFirst({
       where: eq(posts.id, postId),
-      with: { board: { columns: { organizationId: true } } },
+      with: { board: { columns: { workspaceId: true } } },
     })
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    const organizationId = post.board.organizationId
+    const workspaceId = post.board.workspaceId
 
     // Get member record
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -165,7 +165,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id
-    await subscriptionService.unsubscribeFromPost(memberId, postId, organizationId)
+    await subscriptionService.unsubscribeFromPost(memberId, postId, workspaceId)
 
     return NextResponse.json({
       success: true,
@@ -209,18 +209,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Get post to find organization
     const post = await db.query.posts.findFirst({
       where: eq(posts.id, postId),
-      with: { board: { columns: { organizationId: true } } },
+      with: { board: { columns: { workspaceId: true } } },
     })
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    const organizationId = post.board.organizationId
+    const workspaceId = post.board.workspaceId
 
     // Get member record
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -229,10 +229,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id
-    await subscriptionService.setSubscriptionMuted(memberId, postId, body.muted, organizationId)
+    await subscriptionService.setSubscriptionMuted(memberId, postId, body.muted, workspaceId)
 
     // Get updated status
-    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, organizationId)
+    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, workspaceId)
 
     return NextResponse.json({
       success: true,

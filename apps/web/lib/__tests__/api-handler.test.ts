@@ -71,8 +71,8 @@ describe('verifyResourceOwnership', () => {
     }
   })
 
-  it('throws 403 when organizationId does not match', () => {
-    const resource = { organizationId: 'other-org' }
+  it('throws 403 when workspaceId does not match', () => {
+    const resource = { workspaceId: 'other-org' }
     expect(() => verifyResourceOwnership(resource, orgId, 'Status')).toThrow(ApiError)
     try {
       verifyResourceOwnership(resource, orgId, 'Status')
@@ -84,7 +84,7 @@ describe('verifyResourceOwnership', () => {
   })
 
   it('does not throw when resource is valid and org matches', () => {
-    const resource = { organizationId: orgId, name: 'Test Resource' }
+    const resource = { workspaceId: orgId, name: 'Test Resource' }
     expect(() => verifyResourceOwnership(resource, orgId, 'Resource')).not.toThrow()
   })
 

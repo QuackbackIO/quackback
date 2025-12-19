@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@/lib/db'
+import { db, workspace, eq } from '@/lib/db'
 import { signOAuthState } from '@/lib/auth/oauth-state'
 
 /**
@@ -9,13 +9,13 @@ import { signOAuthState } from '@/lib/auth/oauth-state'
  * main domain to use a single callback URL registered with providers.
  *
  * Query params:
- * - org: Organization slug (required)
+ * - workspace: Workspace slug (required)
  * - returnDomain: Domain to redirect to after auth (required)
  * - context: 'team' or 'portal' (default: 'portal')
  * - callbackUrl: Path to redirect to after login (default: '/')
  *
  * Flow:
- * 1. Validate org exists
+ * 1. Validate workspace exists
  * 2. Build OAuth URL with state containing org + returnDomain
  * 3. Redirect to OAuth provider
  */
@@ -53,7 +53,7 @@ export async function GET(
   const { provider } = await params
   const searchParams = request.nextUrl.searchParams
 
-  const orgSlug = searchParams.get('org')
+  const orgSlug = searchParams.get('workspace')
   const returnDomain = searchParams.get('returnDomain')
   const context = searchParams.get('context') || 'portal'
   const callbackUrl = searchParams.get('callbackUrl') || '/'
@@ -62,7 +62,7 @@ export async function GET(
   // Validate required params
   if (!orgSlug || !returnDomain) {
     return NextResponse.json(
-      { error: 'Missing required params: org, returnDomain' },
+      { error: 'Missing required params: workspace, returnDomain' },
       { status: 400 }
     )
   }
@@ -78,18 +78,18 @@ export async function GET(
   }
 
   // Validate org exists
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, orgSlug),
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.slug, orgSlug),
     columns: { id: true },
   })
 
   if (!org) {
-    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
   }
 
-  // Build state with org info (HMAC-signed to prevent tampering)
+  // Build state with workspace info (HMAC-signed to prevent tampering)
   const stateData = {
-    org: orgSlug,
+    workspace: orgSlug,
     returnDomain,
     context,
     callbackUrl,

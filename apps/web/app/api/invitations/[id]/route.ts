@@ -10,11 +10,11 @@ export const DELETE = withApiHandlerParams<{ id: string }>(
   async (request, { validation, params }) => {
     // Parse TypeID to UUID for database query
     const id = parseId(params.id, 'invite')
-    const organizationId = validation.organization.id
+    const workspaceId = validation.workspace.id
 
     // Find the invitation
     const inv = await db.query.invitation.findFirst({
-      where: and(eq(invitation.id, id), eq(invitation.organizationId, organizationId)),
+      where: and(eq(invitation.id, id), eq(invitation.workspaceId, workspaceId)),
     })
 
     if (!inv) {

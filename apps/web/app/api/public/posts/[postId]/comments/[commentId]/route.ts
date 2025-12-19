@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     }
 
-    const { organizationId } = contextResult.value
+    const { workspaceId } = contextResult.value
 
     // Get session (optional)
     const session = await getSession()
@@ -67,12 +67,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (session?.user) {
       // Get member record for this organization
       const memberRecord = await db.query.member.findFirst({
-        where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+        where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
       })
 
       if (memberRecord) {
         const ctx: ServiceContext = {
-          organizationId,
+          workspaceId,
           userId: session.user.id,
           memberId: memberRecord.id as MemberId,
           memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
@@ -141,11 +141,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     }
 
-    const { organizationId } = contextResult.value
+    const { workspaceId } = contextResult.value
 
     // Get member record for this organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -165,7 +165,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Build service context
     const ctx: ServiceContext = {
-      organizationId,
+      workspaceId,
       userId: session.user.id,
       memberId: memberRecord.id as MemberId,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
@@ -221,11 +221,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     }
 
-    const { organizationId } = contextResult.value
+    const { workspaceId } = contextResult.value
 
     // Get member record for this organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -237,7 +237,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Build service context
     const ctx: ServiceContext = {
-      organizationId,
+      workspaceId,
       userId: session.user.id,
       memberId: memberRecord.id as MemberId,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',

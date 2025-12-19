@@ -3,22 +3,22 @@ import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
 import { getPostService, getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
-import { isValidTypeId, type BoardId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type BoardId, type WorkspaceId } from '@quackback/ids'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationIdParam = searchParams.get('organizationId')
+    const workspaceIdParam = searchParams.get('workspaceId')
     const boardIdParam = searchParams.get('boardId')
 
     // Validate organization ID format
-    if (!organizationIdParam || !isValidTypeId(organizationIdParam, 'org')) {
+    if (!workspaceIdParam || !isValidTypeId(workspaceIdParam, 'workspace')) {
       return NextResponse.json({ error: 'Invalid organization ID' }, { status: 400 })
     }
-    const organizationId = organizationIdParam as OrgId
+    const workspaceId = workspaceIdParam as WorkspaceId
 
     // Validate tenant access
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       // Verify board belongs to organization
       const boardResult = await boardService.validateBoardBelongsToOrg(
         boardId,
-        validation.organization.id
+        validation.workspace.id
       )
       if (!boardResult.success) {
         return NextResponse.json({ error: 'Board not found' }, { status: 400 })
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     // Return as downloadable file
     const filename = boardId
       ? `posts-export-${boardId}-${Date.now()}.csv`
-      : `posts-export-${validation.organization.slug}-${Date.now()}.csv`
+      : `posts-export-${validation.workspace.slug}-${Date.now()}.csv`
 
     return new NextResponse(csvContent, {
       headers: {

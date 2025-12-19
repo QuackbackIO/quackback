@@ -3,18 +3,15 @@ import { inviteSchema } from '@/lib/schemas/auth'
 import { db, invitation, user, workspaceDomain, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
 import { generateId } from '@quackback/ids'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 /**
  * Look up the primary workspace domain for an organization.
  * Returns the full URL including protocol.
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (!domain) {
@@ -38,13 +35,13 @@ export const POST = withApiHandler(
     const body = await request.json()
     const { email, name, role } = validateBody(inviteSchema, body)
 
-    const organizationId = validation.organization.id
+    const workspaceId = validation.workspace.id
     const inviterId = validation.user.id
 
     // Check if there's already a pending invitation for this email
     const existingInvitation = await db.query.invitation.findFirst({
       where: and(
-        eq(invitation.organizationId, organizationId),
+        eq(invitation.workspaceId, workspaceId),
         eq(invitation.email, email.toLowerCase()),
         eq(invitation.status, 'pending')
       ),
@@ -56,7 +53,7 @@ export const POST = withApiHandler(
 
     // Check if user with this email already exists in the organization
     const existingUserInOrg = await db.query.user.findFirst({
-      where: and(eq(user.organizationId, organizationId), eq(user.email, email.toLowerCase())),
+      where: and(eq(user.workspaceId, workspaceId), eq(user.email, email.toLowerCase())),
     })
 
     if (existingUserInOrg) {
@@ -70,7 +67,7 @@ export const POST = withApiHandler(
 
     await db.insert(invitation).values({
       id: invitationId,
-      organizationId,
+      workspaceId,
       email: email.toLowerCase(),
       name: name || null,
       role,
@@ -81,7 +78,7 @@ export const POST = withApiHandler(
     })
 
     // Build invitation link using workspace domain
-    const tenantUrl = await getTenantUrl(organizationId)
+    const tenantUrl = await getTenantUrl(workspaceId)
     const inviteLink = `${tenantUrl}/accept-invitation/${invitationId}`
 
     // Send invitation email
@@ -89,7 +86,7 @@ export const POST = withApiHandler(
       to: email,
       invitedByName: validation.user.name,
       inviteeName: name || undefined,
-      organizationName: validation.organization.name,
+      workspaceName: validation.workspace.name,
       inviteLink,
     })
 

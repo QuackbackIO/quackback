@@ -5,14 +5,14 @@ import { createSsoProviderSchema } from '@/lib/schemas/sso-providers'
 import { generateId } from '@quackback/ids'
 
 /**
- * GET /api/organization/sso-providers
+ * GET /api/workspace/sso-providers
  * List all SSO providers for an organization
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
     // Fetch SSO providers for this organization
     const providers = await db.query.ssoProvider.findMany({
-      where: eq(ssoProvider.organizationId, validation.organization.id),
+      where: eq(ssoProvider.workspaceId, validation.workspace.id),
       orderBy: (ssoProvider, { desc }) => [desc(ssoProvider.createdAt)],
     })
 
@@ -29,7 +29,7 @@ export const GET = withApiHandler(
 )
 
 /**
- * POST /api/organization/sso-providers
+ * POST /api/workspace/sso-providers
  * Create a new SSO provider
  */
 export const POST = withApiHandler(
@@ -50,14 +50,14 @@ export const POST = withApiHandler(
     }
 
     // Generate a unique provider ID
-    const providerId = `sso_${validation.organization.slug}_${type}_${Date.now()}`
+    const providerId = `sso_${validation.workspace.slug}_${type}_${Date.now()}`
 
     // Create the SSO provider
     const [created] = await db
       .insert(ssoProvider)
       .values({
         id: generateId('sso_provider'),
-        organizationId: validation.organization.id,
+        workspaceId: validation.workspace.id,
         issuer,
         domain,
         providerId,

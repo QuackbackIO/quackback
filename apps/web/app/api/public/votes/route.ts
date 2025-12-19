@@ -3,26 +3,26 @@ import { getSession } from '@/lib/auth/server'
 import { getPostService } from '@/lib/services'
 import { db, member, eq, and } from '@/lib/db'
 import { getMemberIdentifier } from '@/lib/user-identifier'
-import { isValidTypeId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * GET /api/public/votes
  * Returns all posts the current user has voted on.
  * Query params:
- *   - organizationId: required
+ *   - workspaceId: required
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationIdParam = searchParams.get('organizationId')
+    const workspaceIdParam = searchParams.get('workspaceId')
 
-    if (!organizationIdParam) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    if (!workspaceIdParam) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
     }
-    if (!isValidTypeId(organizationIdParam, 'org')) {
+    if (!isValidTypeId(workspaceIdParam, 'workspace')) {
       return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
     }
-    const organizationId = organizationIdParam as OrgId
+    const workspaceId = workspaceIdParam as WorkspaceId
 
     // Get current user's member ID
     const session = await getSession()
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {

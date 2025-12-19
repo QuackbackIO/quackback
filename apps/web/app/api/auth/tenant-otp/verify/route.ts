@@ -12,9 +12,9 @@ import {
   and,
   gt,
 } from '@/lib/db'
-import { organizationService } from '@quackback/domain'
+import { workspaceService } from '@quackback/domain'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
-import { generateId, type InviteId, type OrgId } from '@quackback/ids'
+import { generateId, type InviteId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * Generate a secure random token
@@ -64,19 +64,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Get organization from host header
+    // Get workspace from host header
     const host = request.headers.get('host')
     if (!host) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    // Look up organization from workspace_domain table
+    // Look up workspace from workspace_domain table
     const domainRecord = await db.query.workspaceDomain.findFirst({
       where: eq(workspaceDomain.domain, host),
-      with: { organization: true },
+      with: { workspace: true },
     })
 
-    const org = domainRecord?.organization
+    const org = domainRecord?.workspace
     if (!org) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user already exists in this org
     const existingUser = await db.query.user.findFirst({
-      where: and(eq(user.email, normalizedEmail), eq(user.organizationId, org.id)),
+      where: and(eq(user.email, normalizedEmail), eq(user.workspaceId, org.id)),
     })
 
     if (existingUser) {
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
       id: InviteId
       role: string | null
       email: string
-      organizationId: OrgId
+      workspaceId: WorkspaceId
     } | null = null
 
     if (invitationId) {
@@ -195,9 +195,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid invitation' }, { status: 400 })
       }
 
-      if (inv.organizationId !== org.id) {
+      if (inv.workspaceId !== org.id) {
         return NextResponse.json(
-          { error: 'This invitation is for a different organization' },
+          { error: 'This invitation is for a different workspace' },
           { status: 400 }
         )
       }
@@ -226,11 +226,11 @@ export async function POST(request: NextRequest) {
       validInvitation = inv
     } else if (context === 'team') {
       // Team signup without invitation requires openSignup to be enabled
-      const authConfigResult = await organizationService.getAuthConfig(org.id)
+      const authConfigResult = await workspaceService.getAuthConfig(org.id)
       const openSignup = authConfigResult.success ? authConfigResult.value.openSignup : false
       if (!openSignup) {
         return NextResponse.json(
-          { error: 'Signup is not enabled for this organization. Contact your administrator.' },
+          { error: 'Signup is not enabled for this workspace. Contact your administrator.' },
           { status: 403 }
         )
       }
@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
       // Create user (org-scoped identity)
       await tx.insert(user).values({
         id: userId,
-        organizationId: org.id,
+        workspaceId: org.id,
         name: name.trim(),
         email: normalizedEmail,
         emailVerified: true, // Verified via OTP
@@ -272,7 +272,7 @@ export async function POST(request: NextRequest) {
       await tx.insert(member).values({
         id: memberId,
         userId,
-        organizationId: org.id,
+        workspaceId: org.id,
         role: memberRole,
         createdAt: new Date(),
       })

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { organizationService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
+import { workspaceService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 
 /**
  * GET /api/auth/org-auth-config?slug={orgSlug}
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'slug is required' }, { status: 400 })
     }
 
-    const result = await organizationService.getPublicAuthConfig(slug)
+    const result = await workspaceService.getPublicAuthConfig(slug)
 
     if (!result.success) {
       // Return default config if org not found (allows login to proceed with defaults)

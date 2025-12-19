@@ -3,29 +3,26 @@ import { z } from 'zod'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { isCloud } from '@quackback/domain/features'
 import { createPortalSession, isStripeConfigured } from '@quackback/ee/billing'
-import { getSubscriptionByOrganizationIdAdmin } from '@/lib/db'
+import { getSubscriptionByWorkspaceIdAdmin } from '@/lib/db'
 import { db, workspaceDomain, eq, and } from '@/lib/db'
-import { isValidTypeId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 const portalSchema = z.object({
-  organizationId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+  workspaceId: z.string().refine((id) => isValidTypeId(id, 'workspace'), {
     message: 'Invalid organization ID format',
-  }) as z.ZodType<OrgId>,
+  }) as z.ZodType<WorkspaceId>,
 })
 
 /**
  * Get the tenant URL for an organization (supports custom domains and subdomains)
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (!domain) {
-    throw new Error(`No primary workspace domain found for organization: ${organizationId}`)
+    throw new Error(`No primary workspace domain found for organization: ${workspaceId}`)
   }
 
   return `https://${domain.domain}`
@@ -60,10 +57,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { organizationId } = result.data
+    const { workspaceId } = result.data
 
     // Validate tenant access (only owners/admins can manage billing)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -73,14 +70,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get subscription to find Stripe customer ID
-    const subscription = await getSubscriptionByOrganizationIdAdmin(organizationId)
+    const subscription = await getSubscriptionByWorkspaceIdAdmin(workspaceId)
 
     if (!subscription?.stripeCustomerId) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
     }
 
     // Build return URL using tenant's primary domain
-    const tenantUrl = await getTenantUrl(organizationId)
+    const tenantUrl = await getTenantUrl(workspaceId)
     const returnUrl = `${tenantUrl}/admin/settings/billing`
 
     // Create portal session

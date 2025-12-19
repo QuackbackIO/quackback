@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@/lib/db'
+import { db, workspace, eq } from '@/lib/db'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 
 /**
- * GET /api/organization/logo?organizationId={id}
+ * GET /api/workspace/logo?workspaceId={id}
  *
  * Get logo data for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, validation.organization.id),
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, validation.workspace.id),
       columns: { logoBlob: true, logoType: true },
     })
 
     if (!org) {
-      throw new ApiError('Organization not found', 404)
+      throw new ApiError('Workspace not found', 404)
     }
 
     const hasCustomLogo = !!org.logoType && !!org.logoBlob
@@ -37,11 +37,11 @@ export const GET = withApiHandler(
 )
 
 /**
- * PATCH /api/organization/logo
+ * PATCH /api/workspace/logo
  *
  * Upload a new logo for the organization.
  * Requires owner or admin role.
- * Accepts multipart/form-data with 'logo' file and 'organizationId' field.
+ * Accepts multipart/form-data with 'logo' file and 'workspaceId' field.
  */
 export const PATCH = withApiHandler(
   async (request: NextRequest, { validation }) => {
@@ -73,12 +73,12 @@ export const PATCH = withApiHandler(
 
     // Update the organization
     await db
-      .update(organization)
+      .update(workspace)
       .set({
         logoBlob: logoBuffer,
         logoType: logoField.type,
       })
-      .where(eq(organization.id, validation.organization.id))
+      .where(eq(workspace.id, validation.workspace.id))
 
     // Return base64 URL for immediate display
     const base64 = logoBuffer.toString('base64')
@@ -90,7 +90,7 @@ export const PATCH = withApiHandler(
 )
 
 /**
- * DELETE /api/organization/logo?organizationId={id}
+ * DELETE /api/workspace/logo?workspaceId={id}
  *
  * Remove the organization's logo.
  * Requires owner or admin role.
@@ -98,12 +98,12 @@ export const PATCH = withApiHandler(
 export const DELETE = withApiHandler(
   async (_request, { validation }) => {
     await db
-      .update(organization)
+      .update(workspace)
       .set({
         logoBlob: null,
         logoType: null,
       })
-      .where(eq(organization.id, validation.organization.id))
+      .where(eq(workspace.id, validation.workspace.id))
 
     return successResponse({ success: true })
   },

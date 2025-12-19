@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, workspaceDomain, organization, eq, and } from '@/lib/db'
+import { db, workspaceDomain, workspace, eq, and } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { z } from 'zod'
-import { generateId, isValidTypeId, type OrgId, type DomainId } from '@quackback/ids'
+import { generateId, isValidTypeId, type WorkspaceId, type DomainId } from '@quackback/ids'
 import { isCloud } from '@quackback/domain/features'
 import {
   isCloudflareConfigured,
@@ -25,9 +25,9 @@ const addDomainSchema = z.object({
     .refine((d) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d), {
       message: 'Invalid domain format',
     }),
-  organizationId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+  workspaceId: z.string().refine((id) => isValidTypeId(id, 'workspace'), {
     message: 'Invalid organization ID format',
-  }) as z.ZodType<OrgId>,
+  }) as z.ZodType<WorkspaceId>,
 })
 
 function getCnameTarget(): string {
@@ -47,15 +47,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const organizationIdParam = request.nextUrl.searchParams.get('organizationId')
-  if (!organizationIdParam || !isValidTypeId(organizationIdParam, 'org')) {
-    return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+  const workspaceIdParam = request.nextUrl.searchParams.get('workspaceId')
+  if (!workspaceIdParam || !isValidTypeId(workspaceIdParam, 'workspace')) {
+    return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
   }
-  const organizationId = organizationIdParam as OrgId
+  const workspaceId = workspaceIdParam as WorkspaceId
 
   // Verify user is admin/owner of this org
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, organizationId),
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.id, workspaceId),
     with: {
       members: {
         where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   })
 
   if (!org) {
-    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
   }
 
   const member = org.members[0]
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
   // Get all domains for this org, ordered by creation date (oldest first)
   const domains = await db.query.workspaceDomain.findMany({
-    where: eq(workspaceDomain.organizationId, organizationId),
+    where: eq(workspaceDomain.workspaceId, workspaceId),
     orderBy: (wd, { asc }) => [asc(wd.createdAt)],
   })
 
@@ -97,11 +97,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result.error.issues[0].message }, { status: 400 })
   }
 
-  const { domain, organizationId } = result.data
+  const { domain, workspaceId } = result.data
 
   // Verify user is admin/owner of this org
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, organizationId),
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.id, workspaceId),
     with: {
       members: {
         where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   })
 
   if (!org) {
-    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
   }
 
   const member = org.members[0]
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
   await db.insert(workspaceDomain).values({
     id: domainId,
-    organizationId,
+    workspaceId,
     domain,
     domainType: 'custom',
     isPrimary: false,
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     try {
       const cfHostname = await createCustomHostname({
         hostname: domain,
-        organizationId,
+        workspaceId,
       })
 
       // Store CF hostname ID and initial status
@@ -215,7 +215,7 @@ export async function PATCH(request: NextRequest) {
   const domain = await db.query.workspaceDomain.findFirst({
     where: eq(workspaceDomain.id, domainId),
     with: {
-      organization: {
+      workspace: {
         with: {
           members: {
             where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
@@ -230,7 +230,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Verify user is admin/owner
-  const member = domain.organization.members[0]
+  const member = domain.workspace.members[0]
   if (!member || !['owner', 'admin'].includes(member.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -248,7 +248,7 @@ export async function PATCH(request: NextRequest) {
     await db
       .update(workspaceDomain)
       .set({ isPrimary: false })
-      .where(eq(workspaceDomain.organizationId, domain.organizationId))
+      .where(eq(workspaceDomain.workspaceId, domain.workspaceId))
 
     await db
       .update(workspaceDomain)
@@ -282,7 +282,7 @@ export async function DELETE(request: NextRequest) {
   const domain = await db.query.workspaceDomain.findFirst({
     where: eq(workspaceDomain.id, domainId),
     with: {
-      organization: {
+      workspace: {
         with: {
           members: {
             where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
@@ -302,7 +302,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   // Verify user is admin/owner
-  const member = domain.organization.members[0]
+  const member = domain.workspace.members[0]
   if (!member || !['owner', 'admin'].includes(member.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -315,7 +315,7 @@ export async function DELETE(request: NextRequest) {
       .set({ isPrimary: true })
       .where(
         and(
-          eq(workspaceDomain.organizationId, domain.organizationId),
+          eq(workspaceDomain.workspaceId, domain.workspaceId),
           eq(workspaceDomain.domainType, 'subdomain')
         )
       )

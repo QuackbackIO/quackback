@@ -14,7 +14,7 @@ export const GET = withApiHandlerParams<RouteParams>(
     // Parse TypeID to UUID for database query
     const memberId = parseId(params.memberId, 'member')
 
-    const result = await getUserService().getPortalUserDetail(memberId, validation.organization.id)
+    const result = await getUserService().getPortalUserDetail(memberId, validation.workspace.id)
 
     if (!result.success) {
       throw new ApiError(result.error.message, 500)
@@ -40,7 +40,7 @@ export const DELETE = withApiHandlerParams<RouteParams>(
     // Parse TypeID to UUID for database query
     const memberId = parseId(params.memberId, 'member')
 
-    const result = await getUserService().removePortalUser(memberId, validation.organization.id)
+    const result = await getUserService().removePortalUser(memberId, validation.workspace.id)
 
     if (!result.success) {
       const error = result.error

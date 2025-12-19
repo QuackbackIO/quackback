@@ -4,7 +4,7 @@ import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getPostService, getMemberService, getRoadmapService } from '@/lib/services'
 import { buildServiceContext, type CommentTreeNode, type PostError } from '@quackback/domain'
-import { isValidTypeId, type PostId, type MemberId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type PostId, type MemberId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
@@ -52,7 +52,7 @@ export async function GET(
   try {
     const { postId: postIdParam } = await params
     const { searchParams } = new URL(request.url)
-    const organizationIdParam = searchParams.get('organizationId')
+    const workspaceIdParam = searchParams.get('workspaceId')
 
     // Validate TypeID formats
     if (!isValidTypeId(postIdParam, 'post')) {
@@ -60,16 +60,16 @@ export async function GET(
     }
     const postId = postIdParam as PostId
 
-    let organizationId: OrgId | null = null
-    if (organizationIdParam) {
-      if (!isValidTypeId(organizationIdParam, 'org')) {
+    let workspaceId: WorkspaceId | null = null
+    if (workspaceIdParam) {
+      if (!isValidTypeId(workspaceIdParam, 'workspace')) {
         return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
       }
-      organizationId = organizationIdParam as OrgId
+      workspaceId = workspaceIdParam as WorkspaceId
     }
 
     // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -153,7 +153,7 @@ export async function PATCH(
   try {
     const { postId: postIdParam } = await params
     const body = await request.json()
-    const { organizationId, status, ownerId, title, content, contentJson } = body
+    const { workspaceId, status, ownerId, title, content, contentJson } = body
 
     // Validate TypeID format
     if (!isValidTypeId(postIdParam, 'post')) {
@@ -162,7 +162,7 @@ export async function PATCH(
     const postId = postIdParam as PostId
 
     // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -195,7 +195,7 @@ export async function PATCH(
       if (ownerId) {
         const ownerMemberResult = await getMemberService().getMemberByUserAndOrg(
           ownerId,
-          validation.organization.id
+          validation.workspace.id
         )
         const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
         // Convert raw member ID to MemberId format
@@ -243,7 +243,7 @@ export async function PATCH(
  * Admin deletes a post (soft or permanent)
  *
  * Body:
- * - organizationId: OrgId (required)
+ * - workspaceId: WorkspaceId (required)
  * - permanent: boolean (optional, default false)
  *   - false: soft delete (sets deletedAt)
  *   - true: permanent delete (removes from database)
@@ -255,7 +255,7 @@ export async function DELETE(
   try {
     const { postId: postIdParam } = await params
     const body = await request.json()
-    const { organizationId, permanent = false } = body
+    const { workspaceId, permanent = false } = body
 
     // Validate TypeID format
     if (!isValidTypeId(postIdParam, 'post')) {
@@ -264,7 +264,7 @@ export async function DELETE(
     const postId = postIdParam as PostId
 
     // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }

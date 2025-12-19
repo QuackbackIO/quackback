@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPostService } from '@/lib/services'
 import type { PostError } from '@quackback/domain'
-import { isValidTypeId, type StatusId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type StatusId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * Map PostError codes to HTTP status codes
@@ -27,7 +27,7 @@ function getHttpStatusFromError(error: PostError): number {
  * Used by the roadmap kanban board for infinite scroll per column.
  *
  * Query params:
- * - organizationId (required): Organization ID
+ * - workspaceId (required): Organization ID
  * - statusId (required): Single status ID to filter by
  * - page (optional, default 1): Page number
  * - limit (optional, default 10): Items per page
@@ -35,17 +35,17 @@ function getHttpStatusFromError(error: PostError): number {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationIdParam = searchParams.get('organizationId')
+    const workspaceIdParam = searchParams.get('workspaceId')
     const statusIdParam = searchParams.get('statusId')
 
-    if (!organizationIdParam) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    if (!workspaceIdParam) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
     }
 
-    if (!isValidTypeId(organizationIdParam, 'org')) {
+    if (!isValidTypeId(workspaceIdParam, 'workspace')) {
       return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
     }
-    const organizationId = organizationIdParam as OrgId
+    const workspaceId = workspaceIdParam as WorkspaceId
 
     if (!statusIdParam) {
       return NextResponse.json({ error: 'statusId is required' }, { status: 400 })
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     const postService = getPostService()
     const result = await postService.getRoadmapPostsPaginated({
-      organizationId,
+      workspaceId,
       statusId,
       page,
       limit,

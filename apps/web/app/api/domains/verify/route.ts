@@ -202,11 +202,11 @@ export async function POST(request: NextRequest) {
   }
   const domainId = domainIdParam as DomainId
 
-  // Get the domain with org membership check
+  // Get the domain with workspace membership check
   const domain = await db.query.workspaceDomain.findFirst({
     where: eq(workspaceDomain.id, domainId),
     with: {
-      organization: {
+      workspace: {
         with: {
           members: {
             where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify user is admin/owner
-  const member = domain.organization.members[0]
+  const member = domain.workspace.members[0]
   if (!member || !['owner', 'admin'].includes(member.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

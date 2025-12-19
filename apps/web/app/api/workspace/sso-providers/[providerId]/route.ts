@@ -7,7 +7,7 @@ import { isValidTypeId, type SsoProviderId } from '@quackback/ids'
 type RouteParams = { providerId: string }
 
 /**
- * PATCH /api/organization/sso-providers/[providerId]
+ * PATCH /api/workspace/sso-providers/[providerId]
  * Update an SSO provider
  */
 export const PATCH = withApiHandlerParams<RouteParams>(
@@ -26,7 +26,7 @@ export const PATCH = withApiHandlerParams<RouteParams>(
     const existingProvider = await db.query.ssoProvider.findFirst({
       where: and(
         eq(ssoProvider.id, providerId),
-        eq(ssoProvider.organizationId, validation.organization.id)
+        eq(ssoProvider.workspaceId, validation.workspace.id)
       ),
     })
 
@@ -87,7 +87,7 @@ export const PATCH = withApiHandlerParams<RouteParams>(
 )
 
 /**
- * DELETE /api/organization/sso-providers/[providerId]
+ * DELETE /api/workspace/sso-providers/[providerId]
  * Delete an SSO provider
  */
 export const DELETE = withApiHandlerParams<RouteParams>(
@@ -104,7 +104,7 @@ export const DELETE = withApiHandlerParams<RouteParams>(
     const existingProvider = await db.query.ssoProvider.findFirst({
       where: and(
         eq(ssoProvider.id, providerId),
-        eq(ssoProvider.organizationId, validation.organization.id)
+        eq(ssoProvider.workspaceId, validation.workspace.id)
       ),
     })
 
@@ -116,10 +116,7 @@ export const DELETE = withApiHandlerParams<RouteParams>(
     await db
       .delete(ssoProvider)
       .where(
-        and(
-          eq(ssoProvider.id, providerId),
-          eq(ssoProvider.organizationId, validation.organization.id)
-        )
+        and(eq(ssoProvider.id, providerId), eq(ssoProvider.workspaceId, validation.workspace.id))
       )
 
     return successResponse({ success: true })

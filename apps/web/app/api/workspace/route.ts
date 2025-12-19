@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, user, member, eq, sessionTransferToken, workspaceDomain } from '@/lib/db'
+import { db, workspace, user, member, eq, sessionTransferToken, workspaceDomain } from '@/lib/db'
 import { createWorkspaceSchema } from '@/lib/schemas/auth'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { getStatusService } from '@/lib/services'
 import { generateId } from '@quackback/ids'
+import { isCloud as checkIsCloud } from '@quackback/domain'
 
 /**
  * Generate a secure token
@@ -19,21 +20,28 @@ function generateSecureToken(): string {
 /**
  * Build domain host string for workspace_domain table
  *
- * Uses the request host as the base domain directly.
- * quackback.ngrok.app -> acme.quackback.ngrok.app
- * localhost:3000 -> acme.localhost:3000
+ * Cloud mode: Creates subdomain (acme.quackback.io)
+ * OSS mode: Uses main domain directly (localhost:3000)
  */
-function buildDomainHost(slug: string, host: string): string {
-  return `${slug}.${host}`
+function buildDomainHost(slug: string, host: string, isCloud: boolean): string {
+  if (isCloud) {
+    return `${slug}.${host}`
+  }
+  // OSS mode: use main domain directly
+  return host
 }
 
 /**
- * Build subdomain URL for redirect
+ * Build redirect URL for after workspace creation
  */
-function buildSubdomainUrl(slug: string, request: NextRequest): string {
+function buildRedirectUrl(slug: string, request: NextRequest, isCloud: boolean): string {
   const host = request.headers.get('host') || 'localhost:3000'
   const protocol = request.headers.get('x-forwarded-proto') || 'http'
-  return `${protocol}://${slug}.${host}`
+  if (isCloud) {
+    return `${protocol}://${slug}.${host}`
+  }
+  // OSS mode: redirect to main domain
+  return `${protocol}://${host}`
 }
 
 /**
@@ -83,9 +91,12 @@ export async function POST(request: NextRequest) {
 
     const { workspaceName, workspaceSlug, name, email } = parsed.data
 
+    // Determine cloud mode from environment, not user input
+    const isCloud = checkIsCloud()
+
     // Check if slug is already taken
-    const existingOrg = await db.query.organization.findFirst({
-      where: eq(organization.slug, workspaceSlug),
+    const existingOrg = await db.query.workspace.findFirst({
+      where: eq(workspace.slug, workspaceSlug),
     })
 
     if (existingOrg) {
@@ -96,7 +107,7 @@ export async function POST(request: NextRequest) {
     // No need to check for existing users globally since each org has isolated user identities.
 
     // Generate IDs
-    const orgId = generateId('org')
+    const orgId = generateId('workspace')
     const userId = generateId('user')
     const memberId = generateId('member')
     const domainId = generateId('domain')
@@ -107,12 +118,12 @@ export async function POST(request: NextRequest) {
 
     // Build domain host from request
     const host = request.headers.get('host') || 'localhost:3000'
-    const domainHost = buildDomainHost(workspaceSlug, host)
+    const domainHost = buildDomainHost(workspaceSlug, host, isCloud)
 
     // Create everything in a transaction (atomic operation)
     await db.transaction(async (tx) => {
       // 1. Create organization first
-      await tx.insert(organization).values({
+      await tx.insert(workspace).values({
         id: orgId,
         name: workspaceName,
         slug: workspaceSlug,
@@ -123,7 +134,7 @@ export async function POST(request: NextRequest) {
       // Users are scoped to a single organization
       await tx.insert(user).values({
         id: userId,
-        organizationId: orgId,
+        workspaceId: orgId,
         name,
         email,
         emailVerified: false,
@@ -135,7 +146,7 @@ export async function POST(request: NextRequest) {
       await tx.insert(member).values({
         id: memberId,
         userId,
-        organizationId: orgId,
+        workspaceId: orgId,
         role: 'owner',
         createdAt: new Date(),
       })
@@ -143,7 +154,7 @@ export async function POST(request: NextRequest) {
       // 4. Create workspace domain record for subdomain
       await tx.insert(workspaceDomain).values({
         id: domainId,
-        organizationId: orgId,
+        workspaceId: orgId,
         domain: domainHost,
         domainType: 'subdomain',
         isPrimary: true,
@@ -152,8 +163,8 @@ export async function POST(request: NextRequest) {
 
       // 5. Create one-time transfer token
       // Compute target domain before inserting (matches workspace_domain table)
-      const subdomainUrl = buildSubdomainUrl(workspaceSlug, request)
-      const targetDomain = new URL(subdomainUrl).host
+      const redirectUrl = buildRedirectUrl(workspaceSlug, request, isCloud)
+      const targetDomain = new URL(redirectUrl).host
 
       await tx.insert(sessionTransferToken).values({
         id: tokenId,
@@ -173,12 +184,12 @@ export async function POST(request: NextRequest) {
       // Continue even if seeding fails - workspace is still created
     }
 
-    // Redirect to subdomain with transfer token
-    const redirectSubdomainUrl = buildSubdomainUrl(workspaceSlug, request)
+    // Redirect to workspace with transfer token
+    const finalRedirectUrl = buildRedirectUrl(workspaceSlug, request, isCloud)
 
     return NextResponse.json({
       success: true,
-      redirectUrl: `${redirectSubdomainUrl}/api/auth/trust-login?token=${transferToken}`,
+      redirectUrl: `${finalRedirectUrl}/api/auth/trust-login?token=${transferToken}`,
     })
   } catch (error) {
     // Check for unique constraint violations

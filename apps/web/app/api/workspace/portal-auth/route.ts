@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
-import { organizationService } from '@quackback/domain'
+import { workspaceService } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 /**
- * GET /api/organization/portal-auth?organizationId={id}
+ * GET /api/workspace/portal-auth?workspaceId={id}
  *
  * Get portal configuration for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const result = await organizationService.getPortalConfig(validation.organization.id)
+    const result = await workspaceService.getPortalConfig(validation.workspace.id)
 
     if (!result.success) {
       throw new ApiError(result.error.message, 404)
@@ -25,13 +25,13 @@ export const GET = withApiHandler(
 )
 
 /**
- * PATCH /api/organization/portal-auth
+ * PATCH /api/workspace/portal-auth
  *
  * Update portal configuration for an organization.
  * Requires owner or admin role.
  *
  * Body: {
- *   organizationId: string,
+ *   workspaceId: string,
  *   oauth?: { google?: boolean, github?: boolean },
  *   features?: { publicView?: boolean, submissions?: boolean, comments?: boolean, voting?: boolean },
  * }
@@ -70,9 +70,9 @@ export const PATCH = withApiHandler(
       throw new ApiError('At least one setting must be provided', 400)
     }
 
-    const result = await organizationService.updatePortalConfig(input, {
+    const result = await workspaceService.updatePortalConfig(input, {
       userId: validation.user.id,
-      organizationId: validation.organization.id,
+      workspaceId: validation.workspace.id,
       memberId: validation.member.id,
       memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: validation.user.name ?? '',

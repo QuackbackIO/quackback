@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRoadmapService } from '@/lib/services'
-import { isValidTypeId, type OrgId, type RoadmapId, type StatusId } from '@quackback/ids'
+import { isValidTypeId, type WorkspaceId, type RoadmapId, type StatusId } from '@quackback/ids'
 
 /**
  * GET /api/public/roadmaps/[roadmapId]/posts
@@ -13,17 +13,17 @@ export async function GET(
   try {
     const { roadmapId: roadmapIdParam } = await params
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    const workspaceId = searchParams.get('workspaceId')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
     }
 
-    // Validate organizationId TypeID format
-    if (!isValidTypeId(organizationId, 'org')) {
+    // Validate workspaceId TypeID format
+    if (!isValidTypeId(workspaceId, 'workspace')) {
       return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
     }
-    const orgId = organizationId as OrgId
+    const orgId = workspaceId as WorkspaceId
 
     // Validate TypeID format
     if (!isValidTypeId(roadmapIdParam, 'roadmap')) {

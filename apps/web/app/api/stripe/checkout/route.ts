@@ -3,30 +3,27 @@ import { z } from 'zod'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { isCloud, type PricingTier } from '@quackback/domain/features'
 import { createCheckoutSession, isStripeConfigured } from '@quackback/ee/billing'
-import { getSubscriptionByOrganizationIdAdmin } from '@/lib/db'
+import { getSubscriptionByWorkspaceIdAdmin } from '@/lib/db'
 import { db, workspaceDomain, eq, and } from '@/lib/db'
-import { isValidTypeId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 const checkoutSchema = z.object({
-  organizationId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+  workspaceId: z.string().refine((id) => isValidTypeId(id, 'workspace'), {
     message: 'Invalid organization ID format',
-  }) as z.ZodType<OrgId>,
+  }) as z.ZodType<WorkspaceId>,
   tier: z.enum(['essentials', 'professional', 'team']),
 })
 
 /**
  * Get the tenant URL for an organization (supports custom domains and subdomains)
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (!domain) {
-    throw new Error(`No primary workspace domain found for organization: ${organizationId}`)
+    throw new Error(`No primary workspace domain found for organization: ${workspaceId}`)
   }
 
   return `https://${domain.domain}`
@@ -61,10 +58,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { organizationId, tier } = result.data
+    const { workspaceId, tier } = result.data
 
     // Validate tenant access (only owners/admins can manage billing)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -74,17 +71,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Get existing subscription to check for existing Stripe customer
-    const existingSubscription = await getSubscriptionByOrganizationIdAdmin(organizationId)
+    const existingSubscription = await getSubscriptionByWorkspaceIdAdmin(workspaceId)
 
     // Build success/cancel URLs using tenant's primary domain
-    const tenantUrl = await getTenantUrl(organizationId)
+    const tenantUrl = await getTenantUrl(workspaceId)
     const successUrl = `${tenantUrl}/admin/settings/billing?success=true`
     const cancelUrl = `${tenantUrl}/admin/settings/billing?canceled=true`
 
     // Create checkout session
     const session = await createCheckoutSession({
-      organizationId,
-      organizationName: validation.organization.name,
+      workspaceId,
+      workspaceName: validation.workspace.name,
       tier: tier as Exclude<PricingTier, 'enterprise'>,
       customerEmail: validation.user.email,
       existingCustomerId: existingSubscription?.stripeCustomerId ?? undefined,

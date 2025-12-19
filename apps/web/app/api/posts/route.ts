@@ -107,7 +107,7 @@ export const POST = withApiHandler(async (request, { validation }) => {
   // Trigger EventWorkflow for integrations and notifications
   const { boardSlug, ...post } = result.value
   const eventData = buildPostCreatedEvent(
-    ctx.organizationId,
+    ctx.workspaceId,
     { type: 'user', userId: ctx.userId, email: ctx.userEmail },
     {
       id: post.id,

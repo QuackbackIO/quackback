@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
-import {
-  db,
-  verification,
-  user,
-  member,
-  organization,
-  workspaceDomain,
-  eq,
-  and,
-  gt,
-} from '@/lib/db'
+import { db, verification, user, member, workspace, workspaceDomain, eq, and, gt } from '@/lib/db'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { generateId } from '@quackback/ids'
 
@@ -89,7 +79,7 @@ export async function POST(request: NextRequest) {
     const usersWithEmail = await db
       .select({
         userId: user.id,
-        organizationId: user.organizationId,
+        workspaceId: user.workspaceId,
       })
       .from(user)
       .where(eq(user.email, normalizedEmail))
@@ -106,20 +96,20 @@ export async function POST(request: NextRequest) {
 
     for (const userRecord of usersWithEmail) {
       // Get organization
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, userRecord.organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, userRecord.workspaceId),
       })
 
       if (!org) continue
 
       // Get primary domain
       const domain = await db.query.workspaceDomain.findFirst({
-        where: and(eq(workspaceDomain.organizationId, org.id), eq(workspaceDomain.isPrimary, true)),
+        where: and(eq(workspaceDomain.workspaceId, org.id), eq(workspaceDomain.isPrimary, true)),
       })
 
       // Get user's role in this org
       const memberRecord = await db.query.member.findFirst({
-        where: and(eq(member.userId, userRecord.userId), eq(member.organizationId, org.id)),
+        where: and(eq(member.userId, userRecord.userId), eq(member.workspaceId, org.id)),
       })
 
       workspaces.push({

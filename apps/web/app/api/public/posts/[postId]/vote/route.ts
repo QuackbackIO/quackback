@@ -88,10 +88,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Get member record for this organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(
-        eq(member.userId, session.user.id),
-        eq(member.organizationId, board.organizationId)
-      ),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, board.workspaceId)),
     })
 
     if (!memberRecord) {
@@ -113,7 +110,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Build service context - memberRecord.id is already a MemberId from TypeID schema
     const memberId = memberRecord.id as MemberId
     const ctx: ServiceContext = {
-      organizationId: board.organizationId,
+      workspaceId: board.workspaceId,
       userId: session.user.id,
       memberId,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',

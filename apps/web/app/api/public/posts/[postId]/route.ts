@@ -62,15 +62,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (session?.user) {
       // Get member record for this organization
       const memberRecord = await db.query.member.findFirst({
-        where: and(
-          eq(member.userId, session.user.id),
-          eq(member.organizationId, board.organizationId)
-        ),
+        where: and(eq(member.userId, session.user.id), eq(member.workspaceId, board.workspaceId)),
       })
 
       if (memberRecord) {
         const ctx: ServiceContext = {
-          organizationId: board.organizationId,
+          workspaceId: board.workspaceId,
           userId: session.user.id,
           memberId: memberRecord.id as MemberId,
           memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
@@ -140,10 +137,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Get member record for this organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(
-        eq(member.userId, session.user.id),
-        eq(member.organizationId, board.organizationId)
-      ),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, board.workspaceId)),
     })
 
     if (!memberRecord) {
@@ -163,7 +157,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Build service context
     const ctx: ServiceContext = {
-      organizationId: board.organizationId,
+      workspaceId: board.workspaceId,
       userId: session.user.id,
       memberId: memberRecord.id as MemberId,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
@@ -219,10 +213,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Get member record for this organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(
-        eq(member.userId, session.user.id),
-        eq(member.organizationId, board.organizationId)
-      ),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, board.workspaceId)),
     })
 
     if (!memberRecord) {
@@ -234,7 +225,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Build service context
     const ctx: ServiceContext = {
-      organizationId: board.organizationId,
+      workspaceId: board.workspaceId,
       userId: session.user.id,
       memberId: memberRecord.id as MemberId,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',

@@ -27,26 +27,26 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Get organization from host header
+    // Get workspace from host header
     const host = request.headers.get('host')
     if (!host) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    // Look up organization from workspace_domain table
+    // Look up workspace from workspace_domain table
     const domainRecord = await db.query.workspaceDomain.findFirst({
       where: (fields, ops) => ops.eq(fields.domain, host),
-      with: { organization: true },
+      with: { workspace: true },
     })
 
-    const org = domainRecord?.organization
+    const org = domainRecord?.workspace
     if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 400 })
     }
 
     // Find user
     const existingUser = await db.query.user.findFirst({
-      where: and(eq(user.email, normalizedEmail), eq(user.organizationId, org.id)),
+      where: and(eq(user.email, normalizedEmail), eq(user.workspaceId, org.id)),
     })
 
     if (!existingUser) {

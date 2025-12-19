@@ -32,7 +32,7 @@ export async function PATCH(
   try {
     const { postId: postIdParam } = await params
     const body = await request.json()
-    const { organizationId, statusId: statusIdParam } = body
+    const { workspaceId, statusId: statusIdParam } = body
 
     // Validate TypeID format
     if (!isValidTypeId(postIdParam, 'post')) {
@@ -41,7 +41,7 @@ export async function PATCH(
     const postId = postIdParam as PostId
 
     // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -71,7 +71,7 @@ export async function PATCH(
     // Trigger EventWorkflow for integrations and notifications
     const { boardSlug, previousStatus, newStatus, ...post } = result.value
     const eventData = buildPostStatusChangedEvent(
-      ctx.organizationId,
+      ctx.workspaceId,
       { type: 'user', userId: ctx.userId, email: ctx.userEmail },
       { id: post.id, title: post.title, boardSlug },
       previousStatus,

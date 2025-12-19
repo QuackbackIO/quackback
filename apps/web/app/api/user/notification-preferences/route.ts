@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and } from '@/lib/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import { isValidTypeId, type MemberId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type MemberId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * GET /api/user/notification-preferences
  *
  * Get the current user's notification preferences for a specific organization.
  * Query params:
- *   - organizationId: Required. The organization context for preferences.
+ *   - workspaceId: Required. The organization context for preferences.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -19,19 +19,19 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const organizationIdParam = searchParams.get('organizationId')
+    const workspaceIdParam = searchParams.get('workspaceId')
 
-    if (!organizationIdParam) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    if (!workspaceIdParam) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
     }
-    if (!isValidTypeId(organizationIdParam, 'org')) {
+    if (!isValidTypeId(workspaceIdParam, 'workspace')) {
       return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
     }
-    const organizationId = organizationIdParam as OrgId
+    const workspaceId = workspaceIdParam as WorkspaceId
 
     // Check membership in the organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -40,10 +40,7 @@ export async function GET(request: NextRequest) {
 
     const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id as MemberId
-    const preferences = await subscriptionService.getNotificationPreferences(
-      memberId,
-      organizationId
-    )
+    const preferences = await subscriptionService.getNotificationPreferences(memberId, workspaceId)
 
     return NextResponse.json(preferences)
   } catch (error) {
@@ -57,7 +54,7 @@ export async function GET(request: NextRequest) {
  *
  * Update the current user's notification preferences for a specific organization.
  * Body (JSON):
- *   - organizationId: Required. The organization context for preferences.
+ *   - workspaceId: Required. The organization context for preferences.
  *   - emailStatusChange: Optional. Boolean to enable/disable status change emails.
  *   - emailNewComment: Optional. Boolean to enable/disable new comment emails.
  *   - emailMuted: Optional. Boolean to mute all notification emails.
@@ -70,24 +67,19 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const {
-      organizationId: organizationIdParam,
-      emailStatusChange,
-      emailNewComment,
-      emailMuted,
-    } = body
+    const { workspaceId: workspaceIdParam, emailStatusChange, emailNewComment, emailMuted } = body
 
-    if (!organizationIdParam) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
+    if (!workspaceIdParam) {
+      return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
     }
-    if (!isValidTypeId(organizationIdParam, 'org')) {
+    if (!isValidTypeId(workspaceIdParam, 'workspace')) {
       return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
     }
-    const organizationId = organizationIdParam as OrgId
+    const workspaceId = workspaceIdParam as WorkspaceId
 
     // Check membership in the organization
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
     })
 
     if (!memberRecord) {
@@ -120,7 +112,7 @@ export async function PATCH(request: NextRequest) {
     const preferences = await subscriptionService.updateNotificationPreferences(
       memberId,
       updates,
-      organizationId
+      workspaceId
     )
 
     return NextResponse.json({

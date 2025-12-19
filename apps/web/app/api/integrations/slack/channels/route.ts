@@ -6,18 +6,18 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, organizationIntegrations, decryptToken, eq, and } from '@/lib/db'
+import { db, member, workspaceIntegrations, decryptToken, eq, and } from '@/lib/db'
 import { listSlackChannels } from '@quackback/integrations'
-import { isValidTypeId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const orgIdParam = searchParams.get('orgId')
 
-  if (!orgIdParam || !isValidTypeId(orgIdParam, 'org')) {
+  if (!orgIdParam || !isValidTypeId(orgIdParam, 'workspace')) {
     return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
   }
-  const orgId = orgIdParam as OrgId
+  const orgId = orgIdParam as WorkspaceId
 
   // Validate session
   const session = await getSession()
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
   // Check user has admin/owner role in org
   const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.organizationId, orgId), eq(member.userId, session.user.id)),
+    where: and(eq(member.workspaceId, orgId), eq(member.userId, session.user.id)),
   })
 
   if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
@@ -35,10 +35,10 @@ export async function GET(request: Request) {
   }
 
   // Get the Slack integration
-  const integration = await db.query.organizationIntegrations.findFirst({
+  const integration = await db.query.workspaceIntegrations.findFirst({
     where: and(
-      eq(organizationIntegrations.organizationId, orgId),
-      eq(organizationIntegrations.integrationType, 'slack')
+      eq(workspaceIntegrations.workspaceId, orgId),
+      eq(workspaceIntegrations.integrationType, 'slack')
     ),
   })
 

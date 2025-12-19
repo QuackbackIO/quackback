@@ -106,7 +106,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Check if user is a member of this organization
     const memberRecord = await db.query.member.findFirst({
       where: (member, { eq, and }) =>
-        and(eq(member.userId, session.user.id), eq(member.organizationId, board.organizationId)),
+        and(eq(member.userId, session.user.id), eq(member.workspaceId, board.workspaceId)),
     })
 
     if (!memberRecord) {
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Build service context
     const ctx: ServiceContext = {
-      organizationId: board.organizationId,
+      workspaceId: board.workspaceId,
       userId: session.user.id,
       memberId: memberRecord.id,
       memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',

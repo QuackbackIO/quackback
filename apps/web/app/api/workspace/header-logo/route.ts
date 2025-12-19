@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, organization, eq } from '@/lib/db'
+import { db, workspace, eq } from '@/lib/db'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 import type { HeaderDisplayMode } from '@quackback/domain'
 
@@ -8,15 +8,15 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 
 /**
- * GET /api/organization/header-logo?organizationId={id}
+ * GET /api/workspace/header-logo?workspaceId={id}
  *
  * Get header logo and display mode for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, validation.organization.id),
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, validation.workspace.id),
       columns: {
         headerLogoBlob: true,
         headerLogoType: true,
@@ -26,7 +26,7 @@ export const GET = withApiHandler(
     })
 
     if (!org) {
-      throw new ApiError('Organization not found', 404)
+      throw new ApiError('Workspace not found', 404)
     }
 
     const hasHeaderLogo = !!org.headerLogoType && !!org.headerLogoBlob
@@ -49,13 +49,13 @@ export const GET = withApiHandler(
 )
 
 /**
- * PATCH /api/organization/header-logo
+ * PATCH /api/workspace/header-logo
  *
  * Upload a new header logo or update display mode.
  * Requires owner or admin role.
  *
- * For logo upload: multipart/form-data with 'headerLogo' file and 'organizationId'
- * For display mode: JSON with { organizationId, headerDisplayMode }
+ * For logo upload: multipart/form-data with 'headerLogo' file and 'workspaceId'
+ * For display mode: JSON with { workspaceId, headerDisplayMode }
  */
 export const PATCH = withApiHandler(
   async (request: NextRequest, { validation }) => {
@@ -88,10 +88,7 @@ export const PATCH = withApiHandler(
         throw new ApiError('No update provided', 400)
       }
 
-      await db
-        .update(organization)
-        .set(updateData)
-        .where(eq(organization.id, validation.organization.id))
+      await db.update(workspace).set(updateData).where(eq(workspace.id, validation.workspace.id))
 
       return successResponse({ success: true, ...updateData })
     }
@@ -141,10 +138,7 @@ export const PATCH = withApiHandler(
     }
 
     // Update the organization
-    await db
-      .update(organization)
-      .set(updateData)
-      .where(eq(organization.id, validation.organization.id))
+    await db.update(workspace).set(updateData).where(eq(workspace.id, validation.workspace.id))
 
     // Return base64 URL for immediate display
     const base64 = logoBuffer.toString('base64')
@@ -160,7 +154,7 @@ export const PATCH = withApiHandler(
 )
 
 /**
- * DELETE /api/organization/header-logo?organizationId={id}
+ * DELETE /api/workspace/header-logo?workspaceId={id}
  *
  * Remove the organization's header logo.
  * Optionally resets display mode to 'logo_and_name'.
@@ -169,14 +163,14 @@ export const PATCH = withApiHandler(
 export const DELETE = withApiHandler(
   async (_request, { validation }) => {
     await db
-      .update(organization)
+      .update(workspace)
       .set({
         headerLogoBlob: null,
         headerLogoType: null,
         // Reset to default mode when removing custom logo
         headerDisplayMode: 'logo_and_name',
       })
-      .where(eq(organization.id, validation.organization.id))
+      .where(eq(workspace.id, validation.workspace.id))
 
     return successResponse({ success: true })
   },

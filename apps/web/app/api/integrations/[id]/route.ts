@@ -6,14 +6,14 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, organizationIntegrations, integrationEventMappings, eq, and } from '@/lib/db'
+import { db, member, workspaceIntegrations, integrationEventMappings, eq, and } from '@/lib/db'
 import { z } from 'zod'
-import { isValidTypeId, type IntegrationId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type IntegrationId, type WorkspaceId } from '@quackback/ids'
 
 const updateSchema = z.object({
-  orgId: z.string().refine((id) => isValidTypeId(id, 'org'), {
+  orgId: z.string().refine((id) => isValidTypeId(id, 'workspace'), {
     message: 'Invalid organization ID format',
-  }) as z.ZodType<OrgId>,
+  }) as z.ZodType<WorkspaceId>,
   enabled: z.boolean().optional(),
   config: z
     .object({
@@ -57,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Check user has admin/owner role in org
   const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.organizationId, orgId), eq(member.userId, session.user.id)),
+    where: and(eq(member.workspaceId, orgId), eq(member.userId, session.user.id)),
   })
 
   if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
@@ -65,10 +65,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // Get the integration
-  const integration = await db.query.organizationIntegrations.findFirst({
+  const integration = await db.query.workspaceIntegrations.findFirst({
     where: and(
-      eq(organizationIntegrations.id, integrationId),
-      eq(organizationIntegrations.organizationId, orgId)
+      eq(workspaceIntegrations.id, integrationId),
+      eq(workspaceIntegrations.workspaceId, orgId)
     ),
   })
 
@@ -77,7 +77,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // Update integration
-  const updates: Partial<typeof organizationIntegrations.$inferInsert> = {
+  const updates: Partial<typeof workspaceIntegrations.$inferInsert> = {
     updatedAt: new Date(),
   }
 
@@ -92,9 +92,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   await db
-    .update(organizationIntegrations)
+    .update(workspaceIntegrations)
     .set(updates)
-    .where(eq(organizationIntegrations.id, integrationId))
+    .where(eq(workspaceIntegrations.id, integrationId))
 
   // Update event mappings if provided
   if (eventMappings && eventMappings.length > 0) {
@@ -136,10 +136,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { searchParams } = new URL(request.url)
   const orgIdParam = searchParams.get('orgId')
 
-  if (!orgIdParam || !isValidTypeId(orgIdParam, 'org')) {
+  if (!orgIdParam || !isValidTypeId(orgIdParam, 'workspace')) {
     return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
   }
-  const orgId = orgIdParam as OrgId
+  const orgId = orgIdParam as WorkspaceId
 
   // Validate session
   const session = await getSession()
@@ -149,7 +149,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   // Check user has admin/owner role in org
   const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.organizationId, orgId), eq(member.userId, session.user.id)),
+    where: and(eq(member.workspaceId, orgId), eq(member.userId, session.user.id)),
   })
 
   if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
@@ -158,14 +158,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   // Verify integration belongs to org and delete
   const result = await db
-    .delete(organizationIntegrations)
+    .delete(workspaceIntegrations)
     .where(
-      and(
-        eq(organizationIntegrations.id, integrationId),
-        eq(organizationIntegrations.organizationId, orgId)
-      )
+      and(eq(workspaceIntegrations.id, integrationId), eq(workspaceIntegrations.workspaceId, orgId))
     )
-    .returning({ id: organizationIntegrations.id })
+    .returning({ id: workspaceIntegrations.id })
 
   if (result.length === 0) {
     return NextResponse.json({ error: 'Integration not found' }, { status: 404 })

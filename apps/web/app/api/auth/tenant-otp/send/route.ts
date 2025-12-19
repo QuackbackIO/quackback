@@ -35,19 +35,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Get organization from host header
+    // Get workspace from host header
     const host = request.headers.get('host')
     if (!host) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    // Look up organization from workspace_domain table
+    // Look up workspace from workspace_domain table
     const domainRecord = await db.query.workspaceDomain.findFirst({
       where: eq(workspaceDomain.domain, host),
-      with: { organization: true },
+      with: { workspace: true },
     })
 
-    const org = domainRecord?.organization
+    const org = domainRecord?.workspace
     if (!org) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }

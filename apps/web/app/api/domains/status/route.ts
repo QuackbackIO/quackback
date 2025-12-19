@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const domain = await db.query.workspaceDomain.findFirst({
     where: eq(workspaceDomain.id, domainId),
     with: {
-      organization: {
+      workspace: {
         with: {
           members: {
             where: (members, { eq }) => eq(members.userId, session.user.id as `user_${string}`),
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Domain not found' }, { status: 404 })
   }
 
-  const member = domain.organization.members[0]
+  const member = domain.workspace.members[0]
   if (!member || !['owner', 'admin'].includes(member.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

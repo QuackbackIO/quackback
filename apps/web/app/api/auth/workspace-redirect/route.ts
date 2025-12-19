@@ -4,7 +4,7 @@ import {
   verification,
   user,
   member,
-  organization,
+  workspace,
   workspaceDomain,
   sessionTransferToken,
   eq,
@@ -12,7 +12,7 @@ import {
   gt,
 } from '@/lib/db'
 import { headers } from 'next/headers'
-import { generateId, isValidTypeId, type OrgId } from '@quackback/ids'
+import { generateId, isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * POST /api/auth/workspace-redirect
@@ -32,10 +32,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    if (!workspaceId || typeof workspaceId !== 'string' || !isValidTypeId(workspaceId, 'org')) {
+    if (
+      !workspaceId ||
+      typeof workspaceId !== 'string' ||
+      !isValidTypeId(workspaceId, 'workspace')
+    ) {
       return NextResponse.json({ error: 'Workspace is required' }, { status: 400 })
     }
-    const orgId = workspaceId as OrgId
+    const orgId = workspaceId as WorkspaceId
 
     // Verify the email token
     const verifiedEmailRecord = await db.query.verification.findFirst({
@@ -55,8 +59,8 @@ export async function POST(request: NextRequest) {
     await db.delete(verification).where(eq(verification.id, verifiedEmailRecord.id))
 
     // Find the user in this workspace
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, orgId),
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, orgId),
     })
 
     if (!org) {
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Find user with this email in this org
     const userRecord = await db.query.user.findFirst({
-      where: and(eq(user.email, email), eq(user.organizationId, org.id)),
+      where: and(eq(user.email, email), eq(user.workspaceId, org.id)),
     })
 
     if (!userRecord) {
@@ -77,12 +81,12 @@ export async function POST(request: NextRequest) {
 
     // Get user's member record to determine role/context
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, userRecord.id), eq(member.organizationId, org.id)),
+      where: and(eq(member.userId, userRecord.id), eq(member.workspaceId, org.id)),
     })
 
     // Get workspace domain
     const domain = await db.query.workspaceDomain.findFirst({
-      where: and(eq(workspaceDomain.organizationId, org.id), eq(workspaceDomain.isPrimary, true)),
+      where: and(eq(workspaceDomain.workspaceId, org.id), eq(workspaceDomain.isPrimary, true)),
     })
 
     if (!domain) {

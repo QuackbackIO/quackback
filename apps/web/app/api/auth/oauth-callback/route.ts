@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   db,
-  organization,
+  workspace,
   user,
   account,
   member,
@@ -21,7 +21,7 @@ import { generateId, type UserId } from '@quackback/ids'
  * with a session transfer token.
  *
  * Flow:
- * 1. Parse state to get provider, org, returnDomain
+ * 1. Parse state to get provider, workspace, returnDomain
  * 2. Exchange code for access token
  * 3. Get user info from provider
  * 4. Find or create org-scoped user
@@ -30,7 +30,7 @@ import { generateId, type UserId } from '@quackback/ids'
  */
 
 interface OAuthState {
-  org: string
+  workspace: string
   returnDomain: string
   context: 'team' | 'portal'
   callbackUrl: string
@@ -284,13 +284,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'auth_expired'))
   }
 
-  // Validate org exists
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.slug, state.org),
+  // Validate workspace exists
+  const org = await db.query.workspace.findFirst({
+    where: eq(workspace.slug, state.workspace),
   })
 
   if (!org) {
-    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'org_not_found'))
+    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'workspace_not_found'))
   }
 
   // Validate return domain is allowed (subdomain of APP_DOMAIN or verified custom domain)
@@ -319,7 +319,7 @@ export async function GET(request: NextRequest) {
   try {
     // Check if user already exists in this org
     const existingUser = await db.query.user.findFirst({
-      where: and(eq(user.email, email), eq(user.organizationId, org.id)),
+      where: and(eq(user.email, email), eq(user.workspaceId, org.id)),
     })
 
     let userId: UserId
@@ -367,7 +367,7 @@ export async function GET(request: NextRequest) {
         // Create user
         await tx.insert(user).values({
           id: userId,
-          organizationId: org.id,
+          workspaceId: org.id,
           name,
           email,
           emailVerified: true, // OAuth emails are verified
@@ -391,7 +391,7 @@ export async function GET(request: NextRequest) {
         await tx.insert(member).values({
           id: memberId,
           userId,
-          organizationId: org.id,
+          workspaceId: org.id,
           role: memberRole,
           createdAt: new Date(),
         })

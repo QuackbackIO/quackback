@@ -3,7 +3,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and } from '@/lib/db'
 import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
-import { isValidTypeId, type OrgId } from '@quackback/ids'
+import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 })
     }
 
-    // Extract and verify organizationId from jobId (format: import-{orgId}-{timestamp})
+    // Extract and verify workspaceId from jobId (format: import-{orgId}-{timestamp})
     // TypeID format: import-org_01h455vb4pex5vsknk084sn02q-1702000000000
     const parts = jobId.split('-')
     if (parts.length !== 3 || parts[0] !== 'import') {
@@ -30,14 +30,14 @@ export async function GET(
     }
 
     // parts[1] is the TypeID (org_...)
-    const orgIdFromJob = parts[1] as OrgId
-    if (!isValidTypeId(orgIdFromJob, 'org')) {
+    const orgIdFromJob = parts[1] as WorkspaceId
+    if (!isValidTypeId(orgIdFromJob, 'workspace')) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
     // Verify user belongs to this organization via member table
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.organizationId, orgIdFromJob)),
+      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, orgIdFromJob)),
     })
 
     if (!memberRecord) {

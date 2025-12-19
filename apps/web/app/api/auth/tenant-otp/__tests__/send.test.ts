@@ -101,17 +101,17 @@ describe('POST /api/auth/tenant-otp/send', () => {
     vi.useRealTimers()
   })
 
-  // Type for workspace domain with organization relation loaded
+  // Type for workspace domain with workspace relation loaded
   type WorkspaceDomainWithOrg = {
     id: string
     createdAt: Date
-    organizationId: string
+    workspaceId: string
     domain: string
     domainType: string
     isPrimary: boolean
     verified: boolean
     verificationToken: string | null
-    organization?: typeof mockOrganization
+    workspace?: typeof mockOrganization
   }
 
   function createMockRequest(body: unknown, headers: Record<string, string> = {}): NextRequest {
@@ -136,17 +136,17 @@ describe('POST /api/auth/tenant-otp/send', () => {
   // Helper type for Drizzle query result with relations
   type DrizzleQueryResult = Awaited<ReturnType<typeof db.query.workspaceDomain.findFirst>>
 
-  function mockDatabaseLookup(organization = mockOrganization) {
+  function mockDatabaseLookup(workspace = mockOrganization) {
     const mockResult: WorkspaceDomainWithOrg = {
       id: 'domain-1',
       domain: 'test-org.localhost:3000',
-      organizationId: organization.id,
+      workspaceId: workspace.id,
       domainType: 'subdomain',
       isPrimary: true,
       verified: true,
       verificationToken: null,
       createdAt: new Date(),
-      organization,
+      workspace,
     }
     vi.mocked(db.query.workspaceDomain.findFirst).mockResolvedValue(
       mockResult as DrizzleQueryResult
@@ -406,7 +406,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       expect(insertCall.identifier).toBe('tenant-otp:org_123:test@example.com')
     })
 
-    it('scopes identifier to organization ID', async () => {
+    it('scopes identifier to workspace ID', async () => {
       mockRateLimitSuccess()
       mockDatabaseLookup({
         ...mockOrganization,
@@ -676,7 +676,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
   })
 
   describe('Organization Lookup from Host Header', () => {
-    it('looks up organization from host header', async () => {
+    it('looks up workspace from host header', async () => {
       mockRateLimitSuccess()
       mockDatabaseLookup()
 
@@ -688,7 +688,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
 
       expect(db.query.workspaceDomain.findFirst).toHaveBeenCalledWith({
         where: expect.anything(),
-        with: { organization: true },
+        with: { workspace: true },
       })
     })
 
@@ -707,7 +707,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       expect(data).toEqual({ error: 'Invalid request' })
     })
 
-    it('rejects request when organization not found', async () => {
+    it('rejects request when workspace not found', async () => {
       mockRateLimitSuccess()
       vi.mocked(db.query.workspaceDomain.findFirst).mockResolvedValue(undefined)
 
@@ -719,18 +719,18 @@ describe('POST /api/auth/tenant-otp/send', () => {
       expect(data).toEqual({ error: 'Invalid request' })
     })
 
-    it('rejects request when domain record has no organization', async () => {
+    it('rejects request when domain record has no workspace', async () => {
       mockRateLimitSuccess()
       const mockResult: WorkspaceDomainWithOrg = {
         id: 'domain-1',
         domain: 'test-org.localhost:3000',
-        organizationId: 'org_123',
+        workspaceId: 'org_123',
         domainType: 'subdomain',
         isPrimary: true,
         verified: true,
         verificationToken: null,
         createdAt: new Date(),
-        organization: undefined,
+        workspace: undefined,
       }
       vi.mocked(db.query.workspaceDomain.findFirst).mockResolvedValue(
         mockResult as DrizzleQueryResult
@@ -749,13 +749,13 @@ describe('POST /api/auth/tenant-otp/send', () => {
       const mockResult: WorkspaceDomainWithOrg = {
         id: 'domain-1',
         domain: 'subdomain.example.com',
-        organizationId: mockOrganization.id,
+        workspaceId: mockOrganization.id,
         domainType: 'custom',
         isPrimary: true,
         verified: true,
         verificationToken: null,
         createdAt: new Date(),
-        organization: mockOrganization,
+        workspace: mockOrganization,
       }
       vi.mocked(db.query.workspaceDomain.findFirst).mockResolvedValue(
         mockResult as DrizzleQueryResult
@@ -905,7 +905,7 @@ describe('POST /api/auth/tenant-otp/send', () => {
       // Verify rate limit check
       expect(checkRateLimit).toHaveBeenCalled()
 
-      // Verify organization lookup
+      // Verify workspace lookup
       expect(db.query.workspaceDomain.findFirst).toHaveBeenCalled()
 
       // Verify old codes deleted
@@ -948,23 +948,23 @@ describe('POST /api/auth/tenant-otp/send', () => {
       expect(new Set(identifiers).size).toBe(3)
     })
 
-    it('handles different organizations separately', async () => {
+    it('handles different workspaces separately', async () => {
       mockRateLimitSuccess()
 
       const mockInsert = vi.fn()
       db.insert.mockReturnValue(createMockInsertBuilder(mockInsert))
 
-      // First organization
+      // First workspace
       const mockResult1: WorkspaceDomainWithOrg = {
         id: 'domain-1',
         domain: 'org1.localhost:3000',
-        organizationId: 'org_111',
+        workspaceId: 'org_111',
         domainType: 'subdomain',
         isPrimary: true,
         verified: true,
         verificationToken: null,
         createdAt: new Date(),
-        organization: { ...mockOrganization, id: 'org_111' },
+        workspace: { ...mockOrganization, id: 'org_111' },
       }
       vi.mocked(db.query.workspaceDomain.findFirst).mockResolvedValueOnce(
         mockResult1 as DrizzleQueryResult
@@ -976,17 +976,17 @@ describe('POST /api/auth/tenant-otp/send', () => {
       )
       await POST(request1)
 
-      // Second organization
+      // Second workspace
       const mockResult2: WorkspaceDomainWithOrg = {
         id: 'domain-2',
         domain: 'org2.localhost:3000',
-        organizationId: 'org_222',
+        workspaceId: 'org_222',
         domainType: 'subdomain',
         isPrimary: true,
         verified: true,
         verificationToken: null,
         createdAt: new Date(),
-        organization: { ...mockOrganization, id: 'org_222' },
+        workspace: { ...mockOrganization, id: 'org_222' },
       }
       vi.mocked(db.query.workspaceDomain.findFirst).mockResolvedValueOnce(
         mockResult2 as DrizzleQueryResult

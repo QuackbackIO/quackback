@@ -2,13 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { POST } from '../verify/route'
 import { NextRequest } from 'next/server'
 
-// Mock organizationService - must be hoisted for vi.mock to access
+// Mock workspaceService - must be hoisted for vi.mock to access
 const { mockGetAuthConfig } = vi.hoisted(() => ({
   mockGetAuthConfig: vi.fn(),
 }))
 
 vi.mock('@quackback/domain', () => ({
-  organizationService: {
+  workspaceService: {
     getAuthConfig: mockGetAuthConfig,
   },
 }))
@@ -52,7 +52,7 @@ vi.mock('@/lib/db', () => ({
   },
   user: {
     email: 'email',
-    organizationId: 'organizationId',
+    workspaceId: 'workspaceId',
     id: 'id',
   },
   account: {
@@ -64,7 +64,7 @@ vi.mock('@/lib/db', () => ({
   invitation: {
     id: 'id',
     status: 'status',
-    organizationId: 'organizationId',
+    workspaceId: 'workspaceId',
   },
   workspaceDomain: {
     domain: 'domain',
@@ -97,7 +97,7 @@ vi.stubGlobal('crypto', {
 
 describe('POST /api/auth/tenant-otp/verify', () => {
   let mockRequest: NextRequest
-  const mockOrgId = 'org-123'
+  const mockWorkspaceId = 'org-123'
   const mockUserId = 'user-123'
   const mockEmail = 'test@example.com'
   const mockCode = '123456'
@@ -127,8 +127,8 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     // Default workspace domain lookup
     mockDb.query.workspaceDomain.findFirst.mockResolvedValue({
       domain: mockHost,
-      organization: {
-        id: mockOrgId,
+      workspace: {
+        id: mockWorkspaceId,
         slug: 'acme',
         name: 'Acme Corp',
       },
@@ -208,7 +208,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: future,
         createdAt: now,
@@ -217,7 +217,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.query.user.findFirst.mockResolvedValue({
         id: mockUserId,
         email: mockEmail,
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         name: 'Test User',
         emailVerified: true,
         createdAt: now,
@@ -316,7 +316,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: future,
         createdAt: now,
@@ -345,7 +345,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       const originalExpiry = new Date(Date.now() + 10 * 60 * 1000)
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: originalExpiry,
         createdAt: new Date(),
@@ -379,7 +379,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: future,
         createdAt: now,
@@ -455,7 +455,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       await POST(mockRequest)
 
       expect(capturedUserValues).toMatchObject({
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         name: 'John Doe',
         email: mockEmail,
         emailVerified: true,
@@ -536,8 +536,8 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     it('should create member with role "member" for team context when openSignup enabled', async () => {
       mockDb.query.workspaceDomain.findFirst.mockResolvedValue({
         domain: mockHost,
-        organization: {
-          id: mockOrgId,
+        workspace: {
+          id: mockWorkspaceId,
           slug: 'acme',
           name: 'Acme Corp',
         },
@@ -640,7 +640,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: '654321', // Different code
         expiresAt: future,
         createdAt: now,
@@ -659,7 +659,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: '123456',
         expiresAt: future,
         createdAt: now,
@@ -673,7 +673,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.query.user.findFirst.mockResolvedValue({
         id: mockUserId,
         email: mockEmail,
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
       })
 
       const mockDeleteChain = {
@@ -724,7 +724,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: future,
         createdAt: now,
@@ -742,7 +742,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.query.invitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         email: mockEmail,
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         role: 'admin',
         status: 'pending',
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -787,7 +787,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.query.invitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         email: mockEmail,
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         role: 'admin',
         status: 'pending',
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -826,11 +826,11 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       expect(capturedUpdateValues!.status).toBe('accepted')
     })
 
-    it('should reject invitation for different organization', async () => {
+    it('should reject invitation for different workspace', async () => {
       mockDb.query.invitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         email: mockEmail,
-        organizationId: 'different-org',
+        workspaceId: 'different-org',
         role: 'admin',
         status: 'pending',
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -847,14 +847,14 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       const data = await response.json()
 
       expect(response.status).toBe(400)
-      expect(data.error).toBe('This invitation is for a different organization')
+      expect(data.error).toBe('This invitation is for a different workspace')
     })
 
     it('should reject non-pending invitation', async () => {
       mockDb.query.invitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         email: mockEmail,
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         role: 'admin',
         status: 'accepted',
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -878,7 +878,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.query.invitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         email: mockEmail,
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         role: 'admin',
         status: 'pending',
         expiresAt: new Date(Date.now() - 1000), // Expired 1 second ago
@@ -902,7 +902,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       mockDb.query.invitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         email: 'different@example.com',
-        organizationId: mockOrgId,
+        workspaceId: mockWorkspaceId,
         role: 'admin',
         status: 'pending',
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -949,7 +949,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: future,
         createdAt: now,
@@ -962,8 +962,8 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     it('should reject team context signup when openSignup is false', async () => {
       mockDb.query.workspaceDomain.findFirst.mockResolvedValue({
         domain: mockHost,
-        organization: {
-          id: mockOrgId,
+        workspace: {
+          id: mockWorkspaceId,
           slug: 'acme',
           name: 'Acme Corp',
         },
@@ -991,15 +991,15 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       expect(response.status).toBe(403)
       expect(data.error).toBe(
-        'Signup is not enabled for this organization. Contact your administrator.'
+        'Signup is not enabled for this workspace. Contact your administrator.'
       )
     })
 
     it('should allow team context signup when openSignup is true', async () => {
       mockDb.query.workspaceDomain.findFirst.mockResolvedValue({
         domain: mockHost,
-        organization: {
-          id: mockOrgId,
+        workspace: {
+          id: mockWorkspaceId,
           slug: 'acme',
           name: 'Acme Corp',
         },
@@ -1051,8 +1051,8 @@ describe('POST /api/auth/tenant-otp/verify', () => {
     it('should allow portal context signup regardless of openSignup', async () => {
       mockDb.query.workspaceDomain.findFirst.mockResolvedValue({
         domain: mockHost,
-        organization: {
-          id: mockOrgId,
+        workspace: {
+          id: mockWorkspaceId,
           slug: 'acme',
           name: 'Acme Corp',
         },
@@ -1108,7 +1108,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
 
       mockDb.query.verification.findFirst.mockResolvedValue({
         id: 'verification-123',
-        identifier: `tenant-otp:${mockOrgId}:${mockEmail}`,
+        identifier: `tenant-otp:${mockWorkspaceId}:${mockEmail}`,
         value: mockCode,
         expiresAt: future,
         createdAt: now,
@@ -1158,7 +1158,7 @@ describe('POST /api/auth/tenant-otp/verify', () => {
       expect(data.error).toBe('Invalid request')
     })
 
-    it('should return 400 when organization not found', async () => {
+    it('should return 400 when workspace not found', async () => {
       mockDb.query.workspaceDomain.findFirst.mockResolvedValue(null)
 
       const response = await POST(mockRequest)

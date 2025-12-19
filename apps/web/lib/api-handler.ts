@@ -15,7 +15,7 @@ import {
   type MemberId,
   type IntegrationId,
   type InviteId,
-  type OrgId,
+  type WorkspaceId,
   type UserId,
 } from '@quackback/ids'
 
@@ -54,7 +54,7 @@ type PrefixToTypeId = {
   member: MemberId
   integration: IntegrationId
   invite: InviteId
-  org: OrgId
+  workspace: WorkspaceId
   user: UserId
 }
 
@@ -94,23 +94,23 @@ export function parseId(value: string, expectedPrefix?: IdPrefix): string {
 }
 
 /**
- * Verify that a resource exists and belongs to the expected organization.
+ * Verify that a resource exists and belongs to the expected workspace.
  * Throws ApiError if resource is not found (404) or doesn't belong to org (403).
  *
  * @example
  * const board = await db.query.boards.findFirst({ where: eq(boards.id, boardId) })
- * verifyResourceOwnership(board, validation.organization.id, 'Board')
+ * verifyResourceOwnership(board, validation.workspace.id, 'Board')
  * // board is now guaranteed to be non-null and belong to the org
  */
-export function verifyResourceOwnership<T extends { organizationId: string }>(
+export function verifyResourceOwnership<T extends { workspaceId: string }>(
   resource: T | null | undefined,
-  expectedOrgId: string,
+  expectedWorkspaceId: string,
   resourceName: string = 'Resource'
 ): asserts resource is T {
   if (!resource) {
     throw new ApiError(`${resourceName} not found`, 404)
   }
-  if (resource.organizationId !== expectedOrgId) {
+  if (resource.workspaceId !== expectedWorkspaceId) {
     throw new ApiError('Forbidden', 403)
   }
 }
@@ -219,12 +219,12 @@ type ApiHandler = (request: NextRequest, context: ApiHandlerContext) => Promise<
 export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions = {}) {
   return async (request: NextRequest): Promise<NextResponse> => {
     try {
-      // Extract organizationId from body or query params
-      let organizationIdParam: string | null = null
+      // Extract workspaceId from body or query params
+      let workspaceIdParam: string | null = null
 
       if (request.method === 'GET') {
         const { searchParams } = new URL(request.url)
-        organizationIdParam = searchParams.get('organizationId')
+        workspaceIdParam = searchParams.get('workspaceId')
       } else {
         // For POST/PATCH/PUT/DELETE, try to parse the body
         // Clone the request so we can read the body twice
@@ -235,34 +235,34 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
           if (contentType.includes('multipart/form-data')) {
             // Handle multipart/form-data (file uploads)
             const formData = await clonedRequest.formData()
-            organizationIdParam = formData.get('organizationId') as string | null
+            workspaceIdParam = formData.get('workspaceId') as string | null
           } else if (contentType.includes('application/json')) {
             // Handle JSON body
             const body = await clonedRequest.json()
-            organizationIdParam = body.organizationId ?? null
+            workspaceIdParam = body.workspaceId ?? null
           }
         } catch {
           // Body might not be JSON/FormData or might be empty
         }
 
         // Fallback to query params if not found in body
-        if (!organizationIdParam) {
+        if (!workspaceIdParam) {
           const { searchParams } = new URL(request.url)
-          organizationIdParam = searchParams.get('organizationId')
+          workspaceIdParam = searchParams.get('workspaceId')
         }
       }
 
-      // Validate organizationId format if provided
-      let organizationId: OrgId | null = null
-      if (organizationIdParam) {
-        if (!isValidTypeId(organizationIdParam, 'org')) {
-          return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+      // Validate workspaceId format if provided
+      let workspaceId: WorkspaceId | null = null
+      if (workspaceIdParam) {
+        if (!isValidTypeId(workspaceIdParam, 'workspace')) {
+          return NextResponse.json({ error: 'Invalid workspace ID format' }, { status: 400 })
         }
-        organizationId = organizationIdParam as OrgId
+        workspaceId = workspaceIdParam as WorkspaceId
       }
 
       // Validate tenant access
-      const validation = await validateApiTenantAccess(organizationId)
+      const validation = await validateApiTenantAccess(workspaceId)
       if (!validation.success) {
         return NextResponse.json({ error: validation.error }, { status: validation.status })
       }
@@ -276,7 +276,7 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
 
       // Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.organization.id, options.feature)
+        const featureCheck = await checkFeatureAccess(validation.workspace.id, options.feature)
         if (!featureCheck.allowed) {
           return NextResponse.json(
             {
@@ -306,7 +306,7 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
  * Returns a function that checks if the member has an allowed role.
  *
  * @example
- * const validation = await validateApiTenantAccess(organizationId)
+ * const validation = await validateApiTenantAccess(workspaceId)
  * if (!validation.success) return errorResponse(validation.error, validation.status)
  *
  * if (!requireRole(validation.member.role, ['owner', 'admin'])) {
@@ -354,12 +354,12 @@ export function withApiHandlerParams<P>(
     try {
       const params = await routeContext.params
 
-      // Extract organizationId from body or query params
-      let organizationIdParam: string | null = null
+      // Extract workspaceId from body or query params
+      let workspaceIdParam: string | null = null
 
       if (request.method === 'GET') {
         const { searchParams } = new URL(request.url)
-        organizationIdParam = searchParams.get('organizationId')
+        workspaceIdParam = searchParams.get('workspaceId')
       } else {
         // For POST/PATCH/PUT/DELETE, try to parse the body
         const clonedRequest = request.clone()
@@ -369,34 +369,34 @@ export function withApiHandlerParams<P>(
           if (contentType.includes('multipart/form-data')) {
             // Handle multipart/form-data (file uploads)
             const formData = await clonedRequest.formData()
-            organizationIdParam = formData.get('organizationId') as string | null
+            workspaceIdParam = formData.get('workspaceId') as string | null
           } else if (contentType.includes('application/json')) {
             // Handle JSON body
             const body = await clonedRequest.json()
-            organizationIdParam = body.organizationId ?? null
+            workspaceIdParam = body.workspaceId ?? null
           }
         } catch {
           // Body might not be JSON/FormData or might be empty
         }
 
         // Fallback to query params if not found in body
-        if (!organizationIdParam) {
+        if (!workspaceIdParam) {
           const { searchParams } = new URL(request.url)
-          organizationIdParam = searchParams.get('organizationId')
+          workspaceIdParam = searchParams.get('workspaceId')
         }
       }
 
-      // Validate organizationId format if provided
-      let organizationId: OrgId | null = null
-      if (organizationIdParam) {
-        if (!isValidTypeId(organizationIdParam, 'org')) {
-          return NextResponse.json({ error: 'Invalid organization ID format' }, { status: 400 })
+      // Validate workspaceId format if provided
+      let workspaceId: WorkspaceId | null = null
+      if (workspaceIdParam) {
+        if (!isValidTypeId(workspaceIdParam, 'workspace')) {
+          return NextResponse.json({ error: 'Invalid workspace ID format' }, { status: 400 })
         }
-        organizationId = organizationIdParam as OrgId
+        workspaceId = workspaceIdParam as WorkspaceId
       }
 
       // Validate tenant access
-      const validation = await validateApiTenantAccess(organizationId)
+      const validation = await validateApiTenantAccess(workspaceId)
       if (!validation.success) {
         return NextResponse.json({ error: validation.error }, { status: validation.status })
       }
@@ -410,7 +410,7 @@ export function withApiHandlerParams<P>(
 
       // Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.organization.id, options.feature)
+        const featureCheck = await checkFeatureAccess(validation.workspace.id, options.feature)
         if (!featureCheck.allowed) {
           return NextResponse.json(
             {

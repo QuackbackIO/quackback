@@ -7,19 +7,16 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { db, encryptToken, organizationIntegrations, workspaceDomain, eq, and } from '@/lib/db'
+import { db, encryptToken, workspaceIntegrations, workspaceDomain, eq, and } from '@/lib/db'
 import { exchangeSlackCode } from '@quackback/integrations'
-import type { MemberId, OrgId } from '@quackback/ids'
+import type { MemberId, WorkspaceId } from '@quackback/ids'
 
 /**
  * Get the tenant URL for an organization using its primary workspace domain.
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string | null> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string | null> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (!domain) {
@@ -123,9 +120,9 @@ export async function GET(request: Request) {
     return redirectWithError('invalid_state', storedState)
   }
 
-  const { orgId: rawOrgId, memberId: rawMemberId } = stateResult.data
+  const { orgId: rawWorkspaceId, memberId: rawMemberId } = stateResult.data
   // IDs from state are already in TypeID format
-  const orgId = rawOrgId as OrgId
+  const orgId = rawWorkspaceId as WorkspaceId
   const memberId = rawMemberId as MemberId
 
   try {
@@ -139,9 +136,9 @@ export async function GET(request: Request) {
 
     // Upsert the integration
     await db
-      .insert(organizationIntegrations)
+      .insert(workspaceIntegrations)
       .values({
-        organizationId: orgId,
+        workspaceId: orgId,
         integrationType: 'slack',
         status: 'active',
         accessTokenEncrypted: encryptedToken,
@@ -152,7 +149,7 @@ export async function GET(request: Request) {
         config: {},
       })
       .onConflictDoUpdate({
-        target: [organizationIntegrations.organizationId, organizationIntegrations.integrationType],
+        target: [workspaceIntegrations.workspaceId, workspaceIntegrations.integrationType],
         set: {
           status: 'active',
           accessTokenEncrypted: encryptedToken,
@@ -193,7 +190,7 @@ async function redirectWithError(error: string, storedState: string | undefined)
       const [payloadB64] = storedState.split('.')
       if (payloadB64) {
         const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'))
-        const tenantUrl = await getTenantUrl(payload.orgId as OrgId)
+        const tenantUrl = await getTenantUrl(payload.orgId as WorkspaceId)
         if (tenantUrl) {
           return NextResponse.redirect(
             `${tenantUrl}/admin/settings/integrations/slack?slack=error&reason=${error}`

@@ -31,7 +31,7 @@ export async function POST(
   try {
     const { postId: postIdParam } = await params
     const body = await request.json()
-    const { organizationId } = body
+    const { workspaceId } = body
 
     // Validate TypeID format
     if (!isValidTypeId(postIdParam, 'post')) {
@@ -40,7 +40,7 @@ export async function POST(
     const postId = postIdParam as PostId
 
     // Validate tenant access (handles auth + org membership check)
-    const validation = await validateApiTenantAccess(organizationId)
+    const validation = await validateApiTenantAccess(workspaceId)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }

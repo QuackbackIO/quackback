@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
-import { organizationService } from '@quackback/domain'
+import { workspaceService } from '@quackback/domain'
 import { withApiHandler, ApiError, successResponse } from '@/lib/api-handler'
 
 /**
- * GET /api/organization/custom-css?organizationId={id}
+ * GET /api/workspace/custom-css?workspaceId={id}
  *
  * Get custom CSS for an organization.
  * Requires owner or admin role.
  */
 export const GET = withApiHandler(
   async (_request, { validation }) => {
-    const result = await organizationService.getCustomCss(validation.organization.id)
+    const result = await workspaceService.getCustomCss(validation.workspace.id)
 
     if (!result.success) {
       throw new ApiError(result.error.message, 404)
@@ -22,13 +22,13 @@ export const GET = withApiHandler(
 )
 
 /**
- * PATCH /api/organization/custom-css
+ * PATCH /api/workspace/custom-css
  *
  * Update custom CSS for an organization.
  * Requires owner or admin role.
  *
  * Body: {
- *   organizationId: string,
+ *   workspaceId: string,
  *   customCss: string | null
  * }
  */
@@ -42,9 +42,9 @@ export const PATCH = withApiHandler(
       throw new ApiError('customCss must be a string or null', 400)
     }
 
-    const result = await organizationService.updateCustomCss(customCss, {
+    const result = await workspaceService.updateCustomCss(customCss, {
       userId: validation.user.id,
-      organizationId: validation.organization.id,
+      workspaceId: validation.workspace.id,
       memberId: validation.member.id,
       memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',
       userName: validation.user.name ?? '',

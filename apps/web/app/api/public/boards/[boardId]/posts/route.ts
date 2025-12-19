@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // 3. Get member record for this organization
   const memberResult = await getMemberService().getMemberByUserAndOrg(
     session.user.id,
-    board.organizationId
+    board.workspaceId
   )
   const memberRecord = memberResult.success ? memberResult.value : null
 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   // 4. Build service context for domain operations
   const ctx: ServiceContext = buildServiceContext({
-    organization: { id: board.organizationId },
+    workspace: { id: board.workspaceId },
     user: {
       id: session.user.id,
       name: session.user.name,
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   // Trigger EventWorkflow for integrations and notifications
   const eventData = buildPostCreatedEvent(
-    ctx.organizationId,
+    ctx.workspaceId,
     { type: 'user', userId: ctx.userId, email: ctx.userEmail },
     {
       id: post.id,

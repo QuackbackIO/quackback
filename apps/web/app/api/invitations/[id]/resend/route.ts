@@ -1,18 +1,15 @@
 import { withApiHandlerParams, ApiError, successResponse, parseId } from '@/lib/api-handler'
 import { db, invitation, workspaceDomain, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 /**
  * Look up the primary workspace domain for an organization.
  * Returns the full URL including protocol.
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (!domain) {
@@ -35,13 +32,13 @@ export const POST = withApiHandlerParams<{ id: string }>(
   async (request, { validation, params }) => {
     // Parse TypeID to UUID for database query
     const id = parseId(params.id, 'invite')
-    const organizationId = validation.organization.id
+    const workspaceId = validation.workspace.id
 
     // Find the invitation
     const inv = await db.query.invitation.findFirst({
       where: and(
         eq(invitation.id, id),
-        eq(invitation.organizationId, organizationId),
+        eq(invitation.workspaceId, workspaceId),
         eq(invitation.status, 'pending')
       ),
     })
@@ -68,7 +65,7 @@ export const POST = withApiHandlerParams<{ id: string }>(
     }
 
     // Build invitation link using workspace domain
-    const tenantUrl = await getTenantUrl(organizationId)
+    const tenantUrl = await getTenantUrl(workspaceId)
     const inviteLink = `${tenantUrl}/accept-invitation/${id}`
 
     // Send invitation email
@@ -76,7 +73,7 @@ export const POST = withApiHandlerParams<{ id: string }>(
       to: inv.email,
       invitedByName: validation.user.name,
       inviteeName: inv.name || undefined,
-      organizationName: validation.organization.name,
+      workspaceName: validation.workspace.name,
       inviteLink,
     })
 
