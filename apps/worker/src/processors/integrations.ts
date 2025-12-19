@@ -5,7 +5,7 @@
 import type { Job } from 'bullmq'
 import {
   withTenantContext,
-  organizationIntegrations,
+  workspaceIntegrations,
   integrationEventMappings,
   integrationSyncLog,
   decryptToken,
@@ -23,7 +23,7 @@ import {
   markAsProcessed,
   type IntegrationContext,
 } from '@quackback/integrations'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 // Lazy-initialized Redis client
 let _redis: ReturnType<typeof createRedisClient> | null = null
@@ -42,7 +42,7 @@ export async function processIntegrationJob(
   job: Job<IntegrationJobData>
 ): Promise<IntegrationJobResult> {
   const startTime = Date.now()
-  const { organizationId, integrationId, integrationType, mappingId, event } = job.data
+  const { workspaceId, integrationId, integrationType, mappingId, event } = job.data
   const redis = getRedis()
 
   // Idempotency check - prevent duplicate processing on retries
@@ -60,11 +60,11 @@ export async function processIntegrationJob(
 
   try {
     // Load integration config from database
-    const { integration, mapping } = await withTenantContext(organizationId, async (db) => {
+    const { integration, mapping } = await withTenantContext(workspaceId, async (db) => {
       const [integration] = await db
         .select()
-        .from(organizationIntegrations)
-        .where(eq(organizationIntegrations.id, integrationId))
+        .from(workspaceIntegrations)
+        .where(eq(workspaceIntegrations.id, integrationId))
         .limit(1)
 
       const [mapping] = await db
@@ -114,11 +114,11 @@ export async function processIntegrationJob(
       }
     }
 
-    const accessToken = decryptToken(integration.accessTokenEncrypted, organizationId)
+    const accessToken = decryptToken(integration.accessTokenEncrypted, workspaceId)
 
     // Build context
     const ctx: IntegrationContext = {
-      organizationId,
+      workspaceId,
       integrationId,
       accessToken,
       config: (integration.config as Record<string, unknown>) || {},
@@ -135,7 +135,7 @@ export async function processIntegrationJob(
 
     // Record result in sync log
     await recordSyncLog(
-      organizationId,
+      workspaceId,
       integrationId,
       event.id,
       event.type,
@@ -171,7 +171,7 @@ export async function processIntegrationJob(
 
     // Record failure in sync log
     await recordSyncLog(
-      organizationId,
+      workspaceId,
       integrationId,
       event.id,
       event.type,
@@ -188,7 +188,7 @@ export async function processIntegrationJob(
  * Records a sync operation in the audit log.
  */
 async function recordSyncLog(
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   integrationId: string,
   eventId: string,
   eventType: string,
@@ -197,7 +197,7 @@ async function recordSyncLog(
   startTime: number
 ): Promise<void> {
   try {
-    await withTenantContext(organizationId, async (db) => {
+    await withTenantContext(workspaceId, async (db) => {
       await db.insert(integrationSyncLog).values({
         integrationId,
         eventId,

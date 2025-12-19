@@ -7,7 +7,7 @@
 
 import {
   withTenantContext,
-  organizationIntegrations,
+  workspaceIntegrations,
   integrationEventMappings,
   integrationSyncLog,
   decryptToken,
@@ -20,21 +20,21 @@ import {
 } from '@quackback/integrations'
 import type { IntegrationJobData, IntegrationJobResult } from '../types'
 import type { StateAdapter } from '../adapters/types'
-import type { OrgId, IntegrationId, EventMappingId } from '@quackback/ids'
+import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
  * Load integration configuration from the database.
  */
 export async function loadIntegrationConfig(
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   integrationId: IntegrationId,
   mappingId: EventMappingId
 ) {
-  return withTenantContext(organizationId, async (db) => {
+  return withTenantContext(workspaceId, async (db) => {
     const [integration] = await db
       .select()
-      .from(organizationIntegrations)
-      .where(eq(organizationIntegrations.id, integrationId))
+      .from(workspaceIntegrations)
+      .where(eq(workspaceIntegrations.id, integrationId))
       .limit(1)
 
     const [mapping] = await db
@@ -51,7 +51,7 @@ export async function loadIntegrationConfig(
  * Record integration sync result in the audit log.
  */
 export async function recordSyncLog(
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   integrationId: IntegrationId,
   eventId: string,
   eventType: string,
@@ -60,7 +60,7 @@ export async function recordSyncLog(
   startTime: number
 ): Promise<void> {
   try {
-    await withTenantContext(organizationId, async (db) => {
+    await withTenantContext(workspaceId, async (db) => {
       await db.insert(integrationSyncLog).values({
         integrationId,
         eventId,
@@ -88,7 +88,7 @@ export async function processIntegration(
   stateAdapter: StateAdapter
 ): Promise<IntegrationJobResult> {
   const startTime = Date.now()
-  const { organizationId, integrationId, integrationType, mappingId, event } = data
+  const { workspaceId, integrationId, integrationType, mappingId, event } = data
 
   // Idempotency check - prevent duplicate processing on retries
   if (await stateAdapter.isProcessed(event.id, integrationId)) {
@@ -105,7 +105,7 @@ export async function processIntegration(
   try {
     // Load integration config from database
     const { integration, mapping } = await loadIntegrationConfig(
-      organizationId,
+      workspaceId,
       integrationId,
       mappingId
     )
@@ -148,11 +148,11 @@ export async function processIntegration(
       }
     }
 
-    const accessToken = decryptToken(integration.accessTokenEncrypted, organizationId)
+    const accessToken = decryptToken(integration.accessTokenEncrypted, workspaceId)
 
     // Build context (without Redis - using state adapter instead)
     const ctx: IntegrationContext = {
-      organizationId,
+      workspaceId,
       integrationId,
       accessToken,
       config: (integration.config as Record<string, unknown>) || {},
@@ -169,7 +169,7 @@ export async function processIntegration(
 
     // Record result in sync log
     await recordSyncLog(
-      organizationId,
+      workspaceId,
       integrationId,
       event.id,
       event.type,
@@ -205,7 +205,7 @@ export async function processIntegration(
 
     // Record failure in sync log
     await recordSyncLog(
-      organizationId,
+      workspaceId,
       integrationId,
       event.id,
       event.type,

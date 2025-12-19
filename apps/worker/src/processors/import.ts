@@ -155,18 +155,18 @@ async function processBatch(
   await withTenantContext(organizationId, async (tx) => {
     // Get default status for the organization
     const defaultStatus = await tx.query.postStatuses.findFirst({
-      where: and(eq(postStatuses.organizationId, organizationId), eq(postStatuses.isDefault, true)),
+      where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.isDefault, true)),
     })
 
     // Get all existing statuses for lookup
     const existingStatuses = await tx.query.postStatuses.findMany({
-      where: eq(postStatuses.organizationId, organizationId),
+      where: eq(postStatuses.workspaceId, organizationId),
     })
     const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
 
     // Get all existing tags for lookup
     const existingTags = await tx.query.tags.findMany({
-      where: eq(tags.organizationId, organizationId),
+      where: eq(tags.workspaceId, organizationId),
     })
     const tagMap = new Map(existingTags.map((t) => [t.name.toLowerCase(), t]))
 

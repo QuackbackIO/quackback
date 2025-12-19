@@ -11,7 +11,7 @@ import { withTenantContext, posts, tags, postTags, postStatuses, eq, and } from 
 import {
   orgIdSchema,
   boardIdSchema,
-  type OrgId,
+  type WorkspaceId,
   type BoardId,
   type PostId,
   type TagId,
@@ -28,7 +28,7 @@ export const BATCH_SIZE = 100
  * Job data validation schema
  */
 export const jobDataSchema = z.object({
-  organizationId: orgIdSchema,
+  workspaceId: orgIdSchema,
   boardId: boardIdSchema,
   csvContent: z.string().min(1, 'CSV content is required'),
   totalRows: z.number().int().positive(),
@@ -131,7 +131,7 @@ export function validateJobData(
  */
 export async function processBatch(
   rows: Record<string, string>[],
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   defaultBoardId: BoardId,
   startIndex: number
 ): Promise<BatchResult> {
@@ -143,21 +143,21 @@ export async function processBatch(
   }
 
   // Use tenant context for RLS
-  await withTenantContext(organizationId, async (tx) => {
+  await withTenantContext(workspaceId, async (tx) => {
     // Get default status for the organization
     const defaultStatus = await tx.query.postStatuses.findFirst({
-      where: and(eq(postStatuses.organizationId, organizationId), eq(postStatuses.isDefault, true)),
+      where: and(eq(postStatuses.workspaceId, workspaceId), eq(postStatuses.isDefault, true)),
     })
 
     // Get all existing statuses for lookup
     const existingStatuses = await tx.query.postStatuses.findMany({
-      where: eq(postStatuses.organizationId, organizationId),
+      where: eq(postStatuses.workspaceId, workspaceId),
     })
     const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
 
     // Get all existing tags for lookup
     const existingTags = await tx.query.tags.findMany({
-      where: eq(tags.organizationId, organizationId),
+      where: eq(tags.workspaceId, workspaceId),
     })
     const tagMap = new Map(existingTags.map((t) => [t.name.toLowerCase(), t]))
 
@@ -246,7 +246,7 @@ export async function processBatch(
     // Create missing tags
     if (tagsToCreate.size > 0) {
       const newTags = Array.from(tagsToCreate).map((name) => ({
-        organizationId,
+        workspaceId,
         name,
         color: '#6b7280', // Default gray color
       }))
@@ -264,7 +264,7 @@ export async function processBatch(
     // Insert posts
     if (validRows.length > 0) {
       const postsToInsert = validRows.map(({ row }) => ({
-        organizationId,
+        workspaceId,
         boardId: row.boardId,
         title: row.title,
         content: row.content,
@@ -333,7 +333,7 @@ export async function processImport(data: ImportJobData): Promise<ImportJobResul
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
-    const batchResult = await processBatch(batch, data.organizationId, data.boardId, i)
+    const batchResult = await processBatch(batch, data.workspaceId, data.boardId, i)
     result = mergeResults(result, batchResult)
   }
 

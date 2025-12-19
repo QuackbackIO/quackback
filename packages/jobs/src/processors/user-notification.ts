@@ -5,15 +5,7 @@
  * extracted to be used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import {
-  withTenantContext,
-  db,
-  eq,
-  and,
-  workspaceDomain,
-  organization,
-  member,
-} from '@quackback/db'
+import { withTenantContext, db, eq, and, workspaceDomain, workspace, member } from '@quackback/db'
 import type {
   UserNotificationJobData,
   UserNotificationJobResult,
@@ -22,7 +14,7 @@ import type {
 } from '../types'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
-import type { OrgId, PostId, UserId } from '@quackback/ids'
+import type { WorkspaceId, PostId, UserId } from '@quackback/ids'
 
 /**
  * Options for processing user notifications.
@@ -40,7 +32,7 @@ export async function processUserNotification(
   data: UserNotificationJobData,
   options: ProcessUserNotificationOptions = {}
 ): Promise<UserNotificationJobResult> {
-  const { eventId, eventType, organizationId, actor, data: eventData } = data
+  const { eventId, eventType, workspaceId, actor, data: eventData } = data
   // Note: appDomain option available but using process.env.APP_DOMAIN for now
   const _options = options
 
@@ -53,18 +45,18 @@ export async function processUserNotification(
 
   try {
     // Get organization details for email content
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, workspaceId),
       columns: { name: true },
     })
 
     if (!org) {
-      console.error(`[UserNotifications] Organization not found: ${organizationId}`)
-      return { emailsSent: 0, skipped: 0, errors: ['Organization not found'] }
+      console.error(`[UserNotifications] Workspace not found: ${workspaceId}`)
+      return { emailsSent: 0, skipped: 0, errors: ['Workspace not found'] }
     }
 
     // Get tenant URL for email links
-    const tenantUrl = await getTenantUrl(organizationId)
+    const tenantUrl = await getTenantUrl(workspaceId)
 
     // Process based on event type
     switch (eventType) {
@@ -73,7 +65,7 @@ export async function processUserNotification(
         const postId = statusData.post.id as PostId
 
         // Get active subscribers for this post
-        const subscribers = await subscriptionService.getActiveSubscribers(postId, organizationId)
+        const subscribers = await subscriptionService.getActiveSubscribers(postId, workspaceId)
         console.log(
           `[UserNotifications] Found ${subscribers.length} subscribers for post ${postId}`
         )
@@ -89,7 +81,7 @@ export async function processUserNotification(
           // Check notification preferences
           const prefs = await subscriptionService.getNotificationPreferences(
             subscriber.memberId,
-            organizationId
+            workspaceId
           )
           if (!prefs.emailStatusChange || prefs.emailMuted) {
             console.log(`[UserNotifications] Preferences disabled for ${subscriber.email}`)
@@ -134,7 +126,7 @@ export async function processUserNotification(
         const postId = commentData.post.id as PostId
 
         // Get active subscribers for this post
-        const subscribers = await subscriptionService.getActiveSubscribers(postId, organizationId)
+        const subscribers = await subscriptionService.getActiveSubscribers(postId, workspaceId)
         console.log(
           `[UserNotifications] Found ${subscribers.length} subscribers for post ${postId}`
         )
@@ -148,7 +140,7 @@ export async function processUserNotification(
           ? await db.query.member.findFirst({
               where: and(
                 eq(member.userId, actor.userId as UserId),
-                eq(member.organizationId, organizationId)
+                eq(member.workspaceId, workspaceId)
               ),
               columns: { role: true },
             })
@@ -156,7 +148,7 @@ export async function processUserNotification(
         const isTeamMember = commenterMember?.role !== 'user'
 
         // Get board slug for URL
-        const boardSlug = await getPostBoardSlug(postId, organizationId)
+        const boardSlug = await getPostBoardSlug(postId, workspaceId)
 
         for (const subscriber of subscribers) {
           // Skip the actor (don't notify about own comments)
@@ -169,7 +161,7 @@ export async function processUserNotification(
           // Check notification preferences
           const prefs = await subscriptionService.getNotificationPreferences(
             subscriber.memberId,
-            organizationId
+            workspaceId
           )
           if (!prefs.emailNewComment || prefs.emailMuted) {
             console.log(`[UserNotifications] Preferences disabled for ${subscriber.email}`)
@@ -252,12 +244,9 @@ function shouldSkipActor(
  * Look up the primary workspace domain for an organization.
  * Returns the full URL including protocol.
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (domain) {
@@ -276,8 +265,8 @@ async function getTenantUrl(organizationId: OrgId): Promise<string> {
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: PostId, organizationId: OrgId): Promise<string | null> {
-  const result = await withTenantContext(organizationId, async (txDb) => {
+async function getPostBoardSlug(postId: PostId, workspaceId: WorkspaceId): Promise<string | null> {
+  const result = await withTenantContext(workspaceId, async (txDb) => {
     const post = await txDb.query.posts.findFirst({
       where: (posts, { eq }) => eq(posts.id, postId),
       columns: { boardId: true },

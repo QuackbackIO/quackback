@@ -87,7 +87,7 @@ export class BullMQJobAdapter implements JobAdapter {
   async addImportJob(data: ImportJobData): Promise<string> {
     const queue = this.getImportQueue()
     const job = await queue.add('import-posts', data, {
-      jobId: `import-${data.organizationId}-${Date.now()}`,
+      jobId: `import-${data.workspaceId}-${Date.now()}`,
     })
     return job.id!
   }
@@ -115,7 +115,7 @@ export class BullMQJobAdapter implements JobAdapter {
   async addEventJob(data: EventJobData): Promise<string> {
     const queue = this.getEventsQueue()
     const job = await queue.add(`event-${data.type}`, data, {
-      jobId: `event-${data.organizationId}-${data.id}`,
+      jobId: `event-${data.workspaceId}-${data.id}`,
     })
     return job.id!
   }

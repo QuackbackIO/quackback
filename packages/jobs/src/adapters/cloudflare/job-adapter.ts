@@ -87,7 +87,7 @@ export class WorkflowJobAdapter implements JobAdapter {
   constructor(private env: CloudflareEnv) {}
 
   async addImportJob(data: ImportJobData): Promise<string> {
-    const id = `import-${data.organizationId}-${Date.now()}`
+    const id = `import-${data.workspaceId}-${Date.now()}`
     await this.env.IMPORT_WORKFLOW.create({ id, params: data })
     return id
   }
@@ -114,7 +114,7 @@ export class WorkflowJobAdapter implements JobAdapter {
   }
 
   async addEventJob(data: EventJobData): Promise<string> {
-    const id = `event-${data.organizationId}-${data.id}`
+    const id = `event-${data.workspaceId}-${data.id}`
     await this.env.EVENT_WORKFLOW.create({ id, params: data })
     return id
   }

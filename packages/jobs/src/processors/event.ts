@@ -5,8 +5,8 @@
  * flow, used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import { db, organizationIntegrations, integrationEventMappings, eq } from '@quackback/db'
-import type { OrgId, IntegrationId, EventMappingId } from '@quackback/ids'
+import { db, workspaceIntegrations, integrationEventMappings, eq } from '@quackback/db'
+import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
 import type { EventJobData, EventJobResult, IntegrationJobData } from '../types'
 import type { StateAdapter } from '../adapters/types'
 import { processIntegration } from './integration'
@@ -44,27 +44,27 @@ export function isNotificationEvent(eventType: string): boolean {
  * This queries the database directly (no caching - caching is done at workflow step level).
  */
 export async function getIntegrationMappings(
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   eventType: string
 ): Promise<IntegrationMapping[]> {
   const mappings = await db
     .select({
-      integrationId: organizationIntegrations.id,
-      integrationType: organizationIntegrations.integrationType,
+      integrationId: workspaceIntegrations.id,
+      integrationType: workspaceIntegrations.integrationType,
       mappingId: integrationEventMappings.id,
       eventType: integrationEventMappings.eventType,
       actionType: integrationEventMappings.actionType,
       actionConfig: integrationEventMappings.actionConfig,
       filters: integrationEventMappings.filters,
       enabled: integrationEventMappings.enabled,
-      status: organizationIntegrations.status,
+      status: workspaceIntegrations.status,
     })
     .from(integrationEventMappings)
     .innerJoin(
-      organizationIntegrations,
-      eq(integrationEventMappings.integrationId, organizationIntegrations.id)
+      workspaceIntegrations,
+      eq(integrationEventMappings.integrationId, workspaceIntegrations.id)
     )
-    .where(eq(organizationIntegrations.organizationId, organizationId))
+    .where(eq(workspaceIntegrations.workspaceId, workspaceId))
 
   // Filter to relevant mappings for this event type
   return mappings.filter(
@@ -83,14 +83,14 @@ export async function processSingleIntegration(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const jobData: IntegrationJobData = {
-      organizationId: event.organizationId,
+      workspaceId: event.workspaceId,
       integrationId: mapping.integrationId,
       integrationType: mapping.integrationType,
       mappingId: mapping.mappingId,
       event: {
         id: event.id,
         type: event.type,
-        organizationId: event.organizationId,
+        workspaceId: event.workspaceId,
         timestamp: event.timestamp,
         actor: event.actor,
         data: event.data,
@@ -121,7 +121,7 @@ export async function processEventNotifications(
     const result = await processUserNotification({
       eventId: event.id,
       eventType: event.type,
-      organizationId: event.organizationId,
+      workspaceId: event.workspaceId,
       timestamp: event.timestamp,
       actor: event.actor,
       data: event.data,
@@ -142,7 +142,7 @@ export async function processEvent(
   data: EventJobData,
   stateAdapter: StateAdapter
 ): Promise<EventJobResult> {
-  console.log(`[Event] Processing ${data.type} event ${data.id} for org ${data.organizationId}`)
+  console.log(`[Event] Processing ${data.type} event ${data.id} for org ${data.workspaceId}`)
 
   const result: EventJobResult = {
     integrationsProcessed: 0,
@@ -152,7 +152,7 @@ export async function processEvent(
   }
 
   // Step 1: Get integration mappings
-  const mappings = await getIntegrationMappings(data.organizationId, data.type)
+  const mappings = await getIntegrationMappings(data.workspaceId, data.type)
   console.log(`[Event] Found ${mappings.length} integration mappings for ${data.type}`)
 
   // Step 2: Process each integration

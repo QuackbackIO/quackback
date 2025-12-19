@@ -7,7 +7,7 @@ import {
   type SubscriptionStatus,
   type SubscriptionTier,
 } from '@quackback/db/queries/subscriptions'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Helpers
@@ -60,14 +60,14 @@ function extractSubscriptionId(
  * Handle checkout.session.completed - New subscription created
  */
 export async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
-  const organizationIdParam = session.metadata?.organizationId
+  const workspaceIdParam = session.metadata?.workspaceId
   const tier = session.metadata?.tier as SubscriptionTier | undefined
 
-  if (!organizationIdParam || !tier) {
+  if (!workspaceIdParam || !tier) {
     console.error('Missing metadata in checkout session:', session.id)
     return
   }
-  const organizationId = organizationIdParam as OrgId
+  const workspaceId = workspaceIdParam as WorkspaceId
 
   const subscriptionId = extractSubscriptionId(session.subscription)
   const customerId = extractCustomerId(session.customer)
@@ -91,7 +91,7 @@ export async function handleCheckoutCompleted(session: Stripe.Checkout.Session):
   }
 
   await upsertSubscription({
-    organizationId,
+    workspaceId,
     tier,
     status: mapStripeStatus(stripeSubscription.status),
     stripeCustomerId: customerId,
@@ -111,7 +111,7 @@ export async function handleCheckoutCompleted(session: Stripe.Checkout.Session):
       : undefined,
   })
 
-  console.log(`Subscription created for org ${organizationId}: ${subscriptionId}`)
+  console.log(`Subscription created for workspace ${workspaceId}: ${subscriptionId}`)
 }
 
 /**
@@ -134,10 +134,10 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
 
   if (!existing) {
     // This might happen if webhook arrives before checkout completion
-    // Try to get org ID from metadata
-    const organizationIdParam = subscription.metadata?.organizationId
-    if (organizationIdParam) {
-      const organizationId = organizationIdParam as OrgId
+    // Try to get workspace ID from metadata
+    const workspaceIdParam = subscription.metadata?.workspaceId
+    if (workspaceIdParam) {
+      const workspaceId = workspaceIdParam as WorkspaceId
       const customerId = extractCustomerId(subscription.customer)
       if (!customerId) {
         console.error('Cannot extract customer ID from subscription:', subscription.id)
@@ -145,7 +145,7 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
       }
 
       await upsertSubscription({
-        organizationId,
+        workspaceId,
         tier: tier ?? 'essentials',
         status: mapStripeStatus(subscription.status),
         stripeCustomerId: customerId,

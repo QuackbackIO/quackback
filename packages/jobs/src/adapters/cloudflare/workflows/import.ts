@@ -42,7 +42,7 @@ export class ImportWorkflow extends WorkflowEntrypoint<ImportWorkflowEnv, Import
     // Configure database connection via Hyperdrive
     configureDb(this.env)
 
-    const { csvContent, organizationId, boardId } = event.payload
+    const { csvContent, workspaceId, boardId } = event.payload
 
     // Step 1: Parse CSV
     const rows = await step.do('parse-csv', async () => {
@@ -76,7 +76,7 @@ export class ImportWorkflow extends WorkflowEntrypoint<ImportWorkflowEnv, Import
           timeout: '30 seconds',
         },
         async () => {
-          return processBatch(batch, organizationId, boardId, startIndex)
+          return processBatch(batch, workspaceId, boardId, startIndex)
         }
       )
 

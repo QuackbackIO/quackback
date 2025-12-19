@@ -3,19 +3,11 @@
  * Sends email notifications to post subscribers when relevant events occur.
  */
 import type { Job } from 'bullmq'
-import {
-  withTenantContext,
-  db,
-  eq,
-  and,
-  workspaceDomain,
-  organization,
-  member,
-} from '@quackback/db'
+import { withTenantContext, db, eq, and, workspaceDomain, workspace, member } from '@quackback/db'
 import type { UserNotificationJobData, UserNotificationJobResult } from '@quackback/jobs'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface StatusChangeEventData {
   post: { id: string; title: string; boardSlug: string }
@@ -46,14 +38,14 @@ export async function processUserNotificationJob(
 
   try {
     // Get organization details for email content
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, organizationId),
       columns: { name: true },
     })
 
     if (!org) {
-      console.error(`[UserNotifications] Organization not found: ${organizationId}`)
-      return { emailsSent: 0, skipped: 0, errors: ['Organization not found'] }
+      console.error(`[UserNotifications] Workspace not found: ${organizationId}`)
+      return { emailsSent: 0, skipped: 0, errors: ['Workspace not found'] }
     }
 
     // Get tenant URL for email links
@@ -139,10 +131,7 @@ export async function processUserNotificationJob(
         // Check if commenter is a team member
         const commenterMember = actor.userId
           ? await db.query.member.findFirst({
-              where: and(
-                eq(member.userId, actor.userId),
-                eq(member.organizationId, organizationId)
-              ),
+              where: and(eq(member.userId, actor.userId), eq(member.workspaceId, organizationId)),
               columns: { role: true },
             })
           : null
@@ -245,12 +234,9 @@ function shouldSkipActor(
  * Look up the primary workspace domain for an organization.
  * Returns the full URL including protocol.
  */
-async function getTenantUrl(organizationId: OrgId): Promise<string> {
+async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
   const domain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.organizationId, organizationId),
-      eq(workspaceDomain.isPrimary, true)
-    ),
+    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
   })
 
   if (domain) {
@@ -269,8 +255,8 @@ async function getTenantUrl(organizationId: OrgId): Promise<string> {
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: string, organizationId: OrgId): Promise<string | null> {
-  const result = await withTenantContext(organizationId, async (txDb) => {
+async function getPostBoardSlug(postId: string, workspaceId: WorkspaceId): Promise<string | null> {
+  const result = await withTenantContext(workspaceId, async (txDb) => {
     const post = await txDb.query.posts.findFirst({
       where: (posts, { eq }) => eq(posts.id, postId),
       columns: { boardId: true },

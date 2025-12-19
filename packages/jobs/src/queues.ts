@@ -50,7 +50,7 @@ export function getImportQueue(): Queue<ImportJobData, ImportJobResult> {
 export async function addImportJob(data: ImportJobData): Promise<string> {
   const queue = getImportQueue()
   const job = await queue.add('import-posts', data, {
-    jobId: `import-${data.organizationId}-${Date.now()}`,
+    jobId: `import-${data.workspaceId}-${Date.now()}`,
   })
   return job.id!
 }

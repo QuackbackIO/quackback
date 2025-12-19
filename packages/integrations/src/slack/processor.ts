@@ -4,7 +4,7 @@
  */
 import { WebClient } from '@slack/web-api'
 import { db, workspaceDomain, eq, and } from '@quackback/db'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 import type {
   PostCreatedPayload,
   PostStatusChangedPayload,
@@ -146,7 +146,7 @@ export class SlackIntegration extends BaseIntegration {
 
   private async buildMessage(event: DomainEvent): Promise<{ text: string; blocks?: unknown[] }> {
     // Look up the primary workspace domain for this organization
-    const tenantUrl = await this.getTenantUrl(event.organizationId)
+    const tenantUrl = await this.getTenantUrl(event.workspaceId)
 
     switch (event.type) {
       case 'post.created': {
@@ -313,13 +313,10 @@ export class SlackIntegration extends BaseIntegration {
    * Look up the primary workspace domain for an organization.
    * Returns the full URL including protocol.
    */
-  private async getTenantUrl(organizationId: OrgId): Promise<string> {
+  private async getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
     // Look up primary workspace domain
     const domain = await db.query.workspaceDomain.findFirst({
-      where: and(
-        eq(workspaceDomain.organizationId, organizationId),
-        eq(workspaceDomain.isPrimary, true)
-      ),
+      where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
     })
 
     if (domain) {

@@ -74,10 +74,10 @@ export class EventWorkflow extends WorkflowEntrypoint<EventWorkflowEnv, EventJob
     configureDb(this.env)
     configureProcessEnv(this.env)
 
-    const { id, type, organizationId } = event.payload
+    const { id, type, workspaceId } = event.payload
     const stateAdapter = new DurableObjectStateAdapter(this.env)
 
-    console.log(`[EventWorkflow] Processing ${type} event ${id} for org ${organizationId}`)
+    console.log(`[EventWorkflow] Processing ${type} event ${id} for org ${workspaceId}`)
 
     // Initialize result
     const result: EventJobResult = {
@@ -90,7 +90,7 @@ export class EventWorkflow extends WorkflowEntrypoint<EventWorkflowEnv, EventJob
     // Step 1: Get integration mappings from database
     // Note: We serialize the mappings because step.do requires Serializable<T>
     const mappingsJson = await step.do('get-mappings', async () => {
-      const mappings = await getIntegrationMappings(organizationId, type)
+      const mappings = await getIntegrationMappings(workspaceId, type)
       return JSON.stringify(mappings)
     })
 
