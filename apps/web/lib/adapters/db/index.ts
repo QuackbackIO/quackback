@@ -10,10 +10,11 @@
 
 import { setDbGetter, createDb, type Database } from '@quackback/db/client'
 
-// Use globalThis to persist across hot reloads in development
-declare global {
-  var __db_initialized: boolean | undefined
+// Track initialization to avoid duplicate setup in hot reload
+let initialized = false
 
+// Use globalThis to persist database instance across hot reloads in development
+declare global {
   var __db_instance: Database | undefined
 }
 
@@ -44,9 +45,8 @@ function isCloudflareWorker(): boolean {
  * Uses globalThis to persist database instance across hot reloads in dev mode.
  */
 export function initializeDb(): void {
-  // Check globalThis to prevent re-initialization across hot reloads
-  if (globalThis.__db_initialized) return
-  globalThis.__db_initialized = true
+  if (initialized) return
+  initialized = true
 
   if (isCloudflareWorker()) {
     // Cloudflare Workers: Use Hyperdrive via lazy getter
