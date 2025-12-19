@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Check, Loader2, Info, ChevronDown } from 'lucide-react'
+import { updateCustomCssAction } from '@/lib/actions/workspace'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface CustomCssEditorProps {
   workspaceId: string
@@ -97,18 +99,13 @@ export function CustomCssEditor({ workspaceId, initialCustomCss }: CustomCssEdit
     setError(null)
 
     try {
-      const response = await fetch('/api/workspace/custom-css', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceId,
-          customCss: css.trim() || null,
-        }),
+      const result = await updateCustomCssAction({
+        workspaceId: workspaceId as WorkspaceId,
+        customCss: css.trim() || null,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to save custom CSS')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
       setSaveSuccess(true)

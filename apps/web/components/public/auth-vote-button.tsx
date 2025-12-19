@@ -2,9 +2,10 @@
 
 import { VoteButton } from './vote-button'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import type { PostId } from '@quackback/ids'
 
 interface AuthVoteButtonProps {
-  postId: string
+  postId: PostId
   initialVoteCount: number
   initialHasVoted: boolean
   /** Whether voting is disabled (user not authenticated) */

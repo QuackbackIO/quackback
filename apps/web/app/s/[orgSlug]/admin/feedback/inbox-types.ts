@@ -51,4 +51,5 @@ export interface PostDetails {
 export interface CurrentUser {
   name: string
   email: string
+  memberId: string
 }

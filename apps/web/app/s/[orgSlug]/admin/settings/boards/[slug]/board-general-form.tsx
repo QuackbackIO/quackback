@@ -15,9 +15,10 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { useUpdateBoard } from '@/lib/hooks/use-board-queries'
+import type { BoardId, WorkspaceId } from '@quackback/ids'
 
 interface Board {
-  id: string
+  id: BoardId
   name: string
   slug: string
   description: string | null
@@ -25,7 +26,7 @@ interface Board {
 
 interface BoardGeneralFormProps {
   board: Board
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) {

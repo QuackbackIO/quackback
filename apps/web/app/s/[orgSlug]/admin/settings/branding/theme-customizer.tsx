@@ -51,7 +51,9 @@ import {
   type ThemeVariables,
 } from '@quackback/domain/theme'
 import { useWorkspaceLogo, useWorkspaceHeaderLogo } from '@/lib/hooks/use-workspace-queries'
+import { updateThemeAction } from '@/lib/actions/workspace'
 import { ThemePreview } from './theme-preview'
+import type { WorkspaceId } from '@quackback/ids'
 
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
@@ -652,16 +654,12 @@ export function ThemeCustomizer({
     try {
       const themeConfig = getCurrentThemeConfig()
 
-      const response = await fetch('/api/workspace/theme', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceId,
-          brandingConfig: themeConfig,
-        }),
+      const result = await updateThemeAction({
+        workspaceId: workspaceId as WorkspaceId,
+        brandingConfig: themeConfig as Record<string, unknown>,
       })
 
-      if (response.ok) {
+      if (result.success) {
         setSaveSuccess(true)
         setTimeout(() => setSaveSuccess(false), 2000)
       }

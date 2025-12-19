@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CreateBoardDialog } from '../create-board-dialog'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface Board {
   id: string
@@ -20,7 +21,7 @@ interface Board {
 interface BoardSettingsHeaderProps {
   currentBoard: Board
   allBoards: Board[]
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 export function BoardSettingsHeader({

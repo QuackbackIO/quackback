@@ -92,7 +92,11 @@ export default async function FeedbackInboxPage({ params, searchParams }: Feedba
       tags={orgTags}
       statuses={orgStatuses}
       members={teamMembers}
-      currentUser={{ name: currentUser.name, email: currentUser.email }}
+      currentUser={{
+        name: currentUser.name,
+        email: currentUser.email,
+        memberId: serviceContext.memberId,
+      }}
     />
   )
 }

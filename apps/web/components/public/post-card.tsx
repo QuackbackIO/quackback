@@ -17,10 +17,10 @@ import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { getInitials } from '@quackback/domain/utils'
 import type { PostStatusEntity } from '@/lib/db/types'
-import type { StatusId } from '@quackback/ids'
+import type { PostId, StatusId } from '@quackback/ids'
 
 interface PostCardProps {
-  id: string
+  id: PostId
   title: string
   content: string
   statusId: StatusId | null

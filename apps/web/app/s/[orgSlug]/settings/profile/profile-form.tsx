@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { useSession, authClient } from '@/lib/auth/client'
+import { updateProfileNameAction, removeAvatarAction } from '@/lib/actions/user'
 
 interface ProfileFormProps {
   user: {
@@ -139,13 +140,10 @@ export function ProfileForm({
     setIsDeletingAvatar(true)
 
     try {
-      const response = await fetch('/api/user/profile', {
-        method: 'DELETE',
-      })
+      const result = await removeAvatarAction()
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to remove avatar')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
       setHasCustomAvatar(false)
@@ -178,17 +176,10 @@ export function ProfileForm({
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('/api/user/profile', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: name.trim() }),
-      })
+      const result = await updateProfileNameAction({ name: name.trim() })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update profile')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
       // Update better-auth session with new name

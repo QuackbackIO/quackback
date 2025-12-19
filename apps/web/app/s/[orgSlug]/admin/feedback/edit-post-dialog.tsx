@@ -19,7 +19,7 @@ import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-e
 import { useUpdatePost, useUpdatePostTags } from '@/lib/hooks/use-inbox-queries'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db/types'
-import type { BoardId, StatusId, TagId } from '@quackback/ids'
+import type { BoardId, PostId, StatusId, TagId, WorkspaceId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 const editPostSchema = z.object({
@@ -40,17 +40,17 @@ interface EditPostInput {
 }
 
 interface PostToEdit {
-  id: string
+  id: PostId
   title: string
   content: string
   contentJson?: unknown
   statusId: StatusId | null
-  board: { id: string; name: string; slug: string }
-  tags: { id: string; name: string; color: string }[]
+  board: { id: BoardId; name: string; slug: string }
+  tags: { id: TagId; name: string; color: string }[]
 }
 
 interface EditPostDialogProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   post: PostToEdit
   boards: Board[]
   tags: Tag[]
@@ -143,7 +143,7 @@ export function EditPostDialog({
     try {
       // Update post using mutation (handles optimistic updates)
       await updatePost.mutateAsync({
-        postId: post.id,
+        postId: post.id as PostId,
         title: data.title,
         content: data.content,
         contentJson,
@@ -155,8 +155,8 @@ export function EditPostDialog({
       const newTagIds = [...data.tagIds].sort()
       if (JSON.stringify(currentTagIds) !== JSON.stringify(newTagIds)) {
         await updateTags.mutateAsync({
-          postId: post.id,
-          tagIds: data.tagIds,
+          postId: post.id as PostId,
+          tagIds: data.tagIds as string[],
           allTags: tags,
         })
       }

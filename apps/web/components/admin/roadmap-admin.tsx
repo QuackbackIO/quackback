@@ -26,10 +26,10 @@ import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { useChangePostStatusId } from '@/lib/hooks/use-inbox-queries'
 import type { PostStatusEntity } from '@/lib/db/types'
 import type { RoadmapPostEntry } from '@quackback/domain'
-import type { StatusId, PostId } from '@quackback/ids'
+import type { StatusId, PostId, WorkspaceId } from '@quackback/ids'
 
 interface RoadmapAdminProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   statuses: PostStatusEntity[]
 }
 
@@ -191,7 +191,7 @@ export function RoadmapAdmin({ workspaceId, statuses }: RoadmapAdminProps) {
                     <AdminRoadmapColumn
                       key={status.id}
                       workspaceId={workspaceId}
-                      roadmapId={selectedRoadmapId!}
+                      roadmapId={selectedRoadmapId! as `roadmap_${string}`}
                       statusId={status.id}
                       title={status.name}
                       color={status.color}

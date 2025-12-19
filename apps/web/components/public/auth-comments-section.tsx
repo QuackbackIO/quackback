@@ -6,6 +6,7 @@ import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useSession } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import type { PostId } from '@quackback/ids'
 
 interface CommentReaction {
   emoji: string
@@ -26,7 +27,7 @@ interface Comment {
 }
 
 interface AuthCommentsSectionProps {
-  postId: string
+  postId: PostId
   comments: Comment[]
   /** Server-determined: user is authenticated member who can comment */
   allowCommenting?: boolean

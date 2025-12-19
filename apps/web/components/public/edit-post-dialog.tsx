@@ -5,10 +5,12 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import { userEditPostAction } from '@/lib/actions/public-posts'
 import type { JSONContent } from '@tiptap/react'
+import type { PostId } from '@quackback/ids'
 
 interface EditPostDialogProps {
-  postId: string
+  postId: PostId
   initialTitle: string
   initialContent: string
   initialContentJson?: JSONContent | null
@@ -61,19 +63,15 @@ export function EditPostDialog({
 
     setIsSubmitting(true)
     try {
-      const response = await fetch(`/api/public/posts/${postId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          content: plainText,
-          contentJson,
-        }),
+      const result = await userEditPostAction({
+        postId,
+        title: title.trim(),
+        content: plainText,
+        contentJson: contentJson as { type: 'doc'; content?: unknown[] } | undefined,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update post')
+      if (!result.success) {
+        throw new Error(result.error.message || 'Failed to update post')
       }
 
       onOpenChange(false)

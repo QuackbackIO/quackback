@@ -11,6 +11,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  getSubscriptionStatusAction,
+  subscribeToPostAction,
+  unsubscribeFromPostAction,
+  muteSubscriptionAction,
+} from '@/lib/actions/subscriptions'
+import type { PostId } from '@quackback/ids'
 
 type SubscriptionLevel = 'all' | 'status_only' | 'none'
 
@@ -21,7 +28,7 @@ interface SubscriptionStatus {
 }
 
 interface SubscriptionBellProps {
-  postId: string
+  postId: PostId
   initialStatus?: SubscriptionStatus
   disabled?: boolean
   onAuthRequired?: () => void
@@ -48,10 +55,9 @@ export function SubscriptionBell({
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch(`/api/posts/${postId}/subscription`)
-      if (response.ok) {
-        const data = await response.json()
-        setStatus(data)
+      const result = await getSubscriptionStatusAction({ postId })
+      if (result.success) {
+        setStatus(result.data)
       }
     } catch (error) {
       console.error('Failed to fetch subscription status:', error)
@@ -68,50 +74,31 @@ export function SubscriptionBell({
 
       setLoading(true)
       try {
-        let response: Response
+        let result: { success: boolean; data?: SubscriptionStatus; error?: { message: string } }
 
         if (level === 'none') {
           // Unsubscribe
-          response = await fetch(`/api/posts/${postId}/subscription`, {
-            method: 'DELETE',
-          })
+          result = await unsubscribeFromPostAction({ postId })
         } else if (level === 'all') {
           // Subscribe to all (unmuted)
           if (!status.subscribed) {
-            response = await fetch(`/api/posts/${postId}/subscription`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason: 'manual' }),
-            })
+            result = await subscribeToPostAction({ postId, reason: 'manual' })
           } else {
             // Already subscribed, just unmute
-            response = await fetch(`/api/posts/${postId}/subscription`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ muted: false }),
-            })
+            result = await muteSubscriptionAction({ postId, muted: false })
           }
         } else {
           // Subscribe to status only (muted)
           if (!status.subscribed) {
             // Subscribe first
-            await fetch(`/api/posts/${postId}/subscription`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason: 'manual' }),
-            })
+            await subscribeToPostAction({ postId, reason: 'manual' })
           }
           // Then mute
-          response = await fetch(`/api/posts/${postId}/subscription`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ muted: true }),
-          })
+          result = await muteSubscriptionAction({ postId, muted: true })
         }
 
-        if (response!.ok) {
-          const data = await response!.json()
-          setStatus(data)
+        if (result!.success && result!.data) {
+          setStatus(result!.data)
         }
       } catch (error) {
         console.error('Failed to update subscription:', error)

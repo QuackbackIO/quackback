@@ -35,21 +35,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-
-interface WorkspaceDomain {
-  id: string
-  workspaceId: string
-  domain: string
-  domainType: 'subdomain' | 'custom'
-  isPrimary: boolean
-  verified: boolean
-  verificationToken: string | null
-  // Cloudflare for SaaS fields (cloud edition only)
-  cloudflareHostnameId: string | null
-  sslStatus: string | null
-  ownershipStatus: string | null
-  createdAt: string
-}
+import {
+  listDomainsAction,
+  addDomainAction,
+  deleteDomainAction,
+  setPrimaryDomainAction,
+  verifyDomainAction,
+  type WorkspaceDomain,
+  type VerifyDomainResult,
+} from '@/lib/actions/domains'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface DomainVerificationStatus {
   checking: boolean
@@ -86,12 +81,11 @@ export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`/api/domains?workspaceId=${workspaceId}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch domains')
+      const result = await listDomainsAction({ workspaceId: workspaceId as WorkspaceId })
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
-      const data = await response.json()
-      setDomains(data.domains)
+      setDomains((result.data as unknown as { domains: WorkspaceDomain[] }).domains)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch domains')
     } finally {
@@ -160,17 +154,17 @@ export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
             }))
           }
         } else {
-          // Self-hosted: use verify endpoint
-          const response = await fetch('/api/domains/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ domainId: domain.id }),
+          // Self-hosted: use verify action
+          const result = await verifyDomainAction({
+            workspaceId: workspaceId as WorkspaceId,
+            domainId: domain.id,
           })
-          const data = await response.json()
 
           if (!isMounted) return
 
-          if (data.verified) {
+          const verifyData = result.success ? (result.data as VerifyDomainResult) : null
+
+          if (result.success && verifyData?.verified) {
             setDomains((prev) =>
               prev.map((d) => (d.id === domain.id ? { ...d, verified: true } : d))
             )
@@ -182,7 +176,7 @@ export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
           } else {
             setVerificationStatus((prev) => ({
               ...prev,
-              [domain.id]: { checking: false, check: data.check },
+              [domain.id]: { checking: false, check: verifyData?.check },
             }))
           }
         }
@@ -237,19 +231,17 @@ export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
     try {
       setAdding(true)
       setAddError(null)
-      const response = await fetch('/api/domains', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: newDomain.trim(), workspaceId }),
+      const result = await addDomainAction({
+        domain: newDomain.trim(),
+        workspaceId: workspaceId as WorkspaceId,
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add domain')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
-      setDomains((prev) => [...prev, data.domain])
+      const addedData = result.data as unknown as { domain: WorkspaceDomain }
+      setDomains((prev) => [...prev, addedData.domain])
       setNewDomain('')
       setShowAddDialog(false)
       router.refresh()
@@ -265,10 +257,12 @@ export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
 
     try {
       setDeleting(true)
-      const response = await fetch(`/api/domains?id=${deleteId}`, { method: 'DELETE' })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete domain')
+      const result = await deleteDomainAction({
+        workspaceId: workspaceId as WorkspaceId,
+        domainId: deleteId,
+      })
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
       setDeleteId(null)
       // Refetch domains to get updated primary status (subdomain may have been auto-promoted)
@@ -284,14 +278,12 @@ export function DomainList({ workspaceId, cnameTarget }: DomainListProps) {
   async function handleSetPrimary(domainId: string) {
     try {
       setSettingPrimary(domainId)
-      const response = await fetch('/api/domains', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domainId, isPrimary: true }),
+      const result = await setPrimaryDomainAction({
+        workspaceId: workspaceId as WorkspaceId,
+        domainId,
       })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to set primary domain')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
       // Update local state
       setDomains((prev) =>

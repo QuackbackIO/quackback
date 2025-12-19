@@ -17,6 +17,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { listSsoProvidersAction, deleteSsoProviderAction } from '@/lib/actions/workspace'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface SsoProvider {
   id: string
@@ -26,12 +28,12 @@ interface SsoProvider {
   providerId: string
   oidcConfig: Record<string, unknown> | null
   samlConfig: Record<string, unknown> | null
-  createdAt: string
-  updatedAt: string
+  createdAt: Date | string
+  updatedAt: Date | string
 }
 
 interface SsoProviderListProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 export function SsoProviderList({ workspaceId }: SsoProviderListProps) {
@@ -46,12 +48,11 @@ export function SsoProviderList({ workspaceId }: SsoProviderListProps) {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`/api/workspace/sso-providers?workspaceId=${workspaceId}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch SSO providers')
+      const result = await listSsoProvidersAction({ workspaceId })
+      if (!result.success) {
+        throw new Error(result.error.message || 'Failed to fetch SSO providers')
       }
-      const data = await response.json()
-      setProviders(data)
+      setProviders(result.data as SsoProvider[])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch SSO providers')
     } finally {
@@ -68,12 +69,12 @@ export function SsoProviderList({ workspaceId }: SsoProviderListProps) {
 
     try {
       setDeleting(true)
-      const response = await fetch(
-        `/api/workspace/sso-providers/${deleteId}?workspaceId=${workspaceId}`,
-        { method: 'DELETE' }
-      )
-      if (!response.ok) {
-        throw new Error('Failed to delete SSO provider')
+      const result = await deleteSsoProviderAction({
+        workspaceId,
+        providerId: deleteId,
+      })
+      if (!result.success) {
+        throw new Error(result.error.message || 'Failed to delete SSO provider')
       }
       setProviders((prev) => prev.filter((p) => p.id !== deleteId))
       setDeleteId(null)

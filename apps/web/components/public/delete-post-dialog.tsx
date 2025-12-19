@@ -12,9 +12,11 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog'
+import { userDeletePostAction } from '@/lib/actions/public-posts'
+import type { PostId } from '@quackback/ids'
 
 interface DeletePostDialogProps {
-  postId: string
+  postId: PostId
   postTitle: string
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -33,13 +35,10 @@ export function DeletePostDialog({
   async function handleDelete() {
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/public/posts/${postId}`, {
-        method: 'DELETE',
-      })
+      const result = await userDeletePostAction({ postId })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete post')
+      if (!result.success) {
+        throw new Error(result.error.message || 'Failed to delete post')
       }
 
       onOpenChange(false)

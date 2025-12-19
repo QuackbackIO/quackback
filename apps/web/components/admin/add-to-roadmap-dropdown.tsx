@@ -11,11 +11,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
+import { addPostToRoadmapAction, removePostFromRoadmapAction } from '@/lib/actions/roadmaps'
 import type { PostStatusEntity } from '@/lib/db/types'
+import type { PostId, RoadmapId, WorkspaceId } from '@quackback/ids'
 
 interface AddToRoadmapDropdownProps {
-  workspaceId: string
-  postId: string
+  workspaceId: WorkspaceId
+  postId: PostId
   currentStatusId: string
   /** List of roadmap IDs this post is already on */
   currentRoadmapIds?: string[]
@@ -40,7 +42,7 @@ export function AddToRoadmapDropdown({
   })
 
   // Get the first status with showOnRoadmap for default placement
-  const defaultStatusId = statuses.find((s) => s.showOnRoadmap)?.id ?? currentStatusId
+  const _defaultStatusId = statuses.find((s) => s.showOnRoadmap)?.id ?? currentStatusId
 
   const isOnRoadmap = (roadmapId: string) => currentRoadmapIds.includes(roadmapId)
 
@@ -48,20 +50,16 @@ export function AddToRoadmapDropdown({
     setPendingRoadmapId(roadmapId)
     try {
       if (isCurrentlyOn) {
-        await fetch(`/api/roadmaps/${roadmapId}/posts?workspaceId=${workspaceId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId }),
+        await removePostFromRoadmapAction({
+          workspaceId,
+          roadmapId: roadmapId as RoadmapId,
+          postId,
         })
       } else {
-        await fetch(`/api/roadmaps/${roadmapId}/posts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            postId,
-            statusId: defaultStatusId,
-            workspaceId,
-          }),
+        await addPostToRoadmapAction({
+          workspaceId,
+          roadmapId: roadmapId as RoadmapId,
+          postId,
         })
       }
       onSuccess?.()

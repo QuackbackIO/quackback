@@ -8,9 +8,10 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePublicRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import type { PostStatusEntity, Roadmap } from '@/lib/db/types'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface RoadmapBoardProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   statuses: PostStatusEntity[]
   initialRoadmaps?: Roadmap[]
 }
@@ -83,7 +84,7 @@ export function RoadmapBoard({ workspaceId, statuses, initialRoadmaps }: Roadmap
               <RoadmapColumn
                 key={status.id}
                 workspaceId={workspaceId}
-                roadmapId={selectedRoadmapId}
+                roadmapId={selectedRoadmapId as `roadmap_${string}`}
                 statusId={status.id}
                 title={status.name}
                 color={status.color}

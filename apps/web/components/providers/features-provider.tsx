@@ -4,9 +4,10 @@ import { createContext, useContext, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@quackback/domain/features'
 import { featuresKeys, type WorkspaceFeaturesData } from '@/lib/hooks/use-features'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface FeaturesContextValue {
-  workspaceId: string
+  workspaceId: WorkspaceId
   edition: 'oss' | 'cloud'
   tier: PricingTier | null
   enabledFeatures: Feature[]
@@ -23,7 +24,7 @@ const FeaturesContext = createContext<FeaturesContextValue | null>(null)
 
 interface FeaturesProviderProps {
   children: ReactNode
-  workspaceId: string
+  workspaceId: WorkspaceId
   /** SSR-fetched features data for hydration */
   initialFeatures: WorkspaceFeaturesData
 }

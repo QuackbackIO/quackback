@@ -11,6 +11,8 @@ import { CommentForm } from './comment-form'
 import { cn } from '@/lib/utils'
 import { getInitials } from '@quackback/domain/utils'
 import { REACTION_EMOJIS } from '@/lib/db/types'
+import { toggleReactionAction } from '@/lib/actions/comments'
+import type { CommentId, PostId } from '@quackback/ids'
 
 interface CommentReaction {
   emoji: string
@@ -31,7 +33,7 @@ interface Comment {
 }
 
 interface CommentThreadProps {
-  postId: string
+  postId: PostId
   comments: Comment[]
   allowCommenting?: boolean
   /** Map of memberId to avatar URL (base64 or external URL) */
@@ -92,7 +94,7 @@ export function CommentThread({
 }
 
 interface CommentItemProps {
-  postId: string
+  postId: PostId
   comment: Comment
   allowCommenting: boolean
   avatarUrls?: Record<string, string | null>
@@ -130,15 +132,13 @@ function CommentItem({
     setShowEmojiPicker(false)
     startTransition(async () => {
       try {
-        const response = await fetch(`/api/public/comments/${comment.id}/reactions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ emoji }),
+        const result = await toggleReactionAction({
+          commentId: comment.id as CommentId,
+          emoji,
         })
 
-        if (response.ok) {
-          const data = await response.json()
-          setReactions(data.reactions)
+        if (result.success) {
+          setReactions(result.data.reactions)
         }
       } catch (error) {
         console.error('Failed to toggle reaction:', error)

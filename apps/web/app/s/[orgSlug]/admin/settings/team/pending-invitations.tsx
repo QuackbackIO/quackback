@@ -5,6 +5,8 @@ import { Mail, RefreshCw, Clock, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { cancelInvitationAction, resendInvitationAction } from '@/lib/actions/admin'
+import type { InviteId, WorkspaceId } from '@quackback/ids'
 
 interface PendingInvitation {
   id: string
@@ -18,7 +20,7 @@ interface PendingInvitation {
 
 interface PendingInvitationsProps {
   invitations: PendingInvitation[]
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
@@ -49,22 +51,20 @@ export function PendingInvitations({
     setError(null)
 
     try {
-      const response = await fetch(`/api/invitations/${invitationId}/resend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+      const result = await resendInvitationAction({
+        workspaceId,
+        invitationId: invitationId as InviteId,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to resend invitation')
+      if (!result.success) {
+        throw new Error(result.error.message || 'Failed to resend invitation')
       }
-
-      const data = await response.json()
 
       // Update the lastSentAt in our local state
       setInvitations((prev) =>
-        prev.map((inv) => (inv.id === invitationId ? { ...inv, lastSentAt: data.lastSentAt } : inv))
+        prev.map((inv) =>
+          inv.id === invitationId ? { ...inv, lastSentAt: new Date().toISOString() } : inv
+        )
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend invitation')
@@ -78,15 +78,13 @@ export function PendingInvitations({
     setError(null)
 
     try {
-      const response = await fetch(`/api/invitations/${invitationId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+      const result = await cancelInvitationAction({
+        workspaceId,
+        invitationId: invitationId as InviteId,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to cancel invitation')
+      if (!result.success) {
+        throw new Error(result.error.message || 'Failed to cancel invitation')
       }
 
       // Remove from local state

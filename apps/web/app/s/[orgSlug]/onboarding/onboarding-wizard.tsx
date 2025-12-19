@@ -16,6 +16,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { createBoardAction } from '@/lib/actions/boards'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface OnboardingWizardProps {
   workspaceName: string
@@ -40,19 +42,14 @@ export function OnboardingWizard({ workspaceName, workspaceId, userName }: Onboa
     setError('')
 
     try {
-      const response = await fetch('/api/boards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: boardName,
-          description: boardDescription,
-          workspaceId,
-        }),
+      const result = await createBoardAction({
+        name: boardName,
+        description: boardDescription,
+        workspaceId: workspaceId as WorkspaceId,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create board')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
       setStep('complete')

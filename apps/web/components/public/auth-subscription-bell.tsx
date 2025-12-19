@@ -2,6 +2,7 @@
 
 import { SubscriptionBell } from './subscription-bell'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import type { PostId } from '@quackback/ids'
 
 interface SubscriptionStatus {
   subscribed: boolean
@@ -10,7 +11,7 @@ interface SubscriptionStatus {
 }
 
 interface AuthSubscriptionBellProps {
-  postId: string
+  postId: PostId
   initialStatus?: SubscriptionStatus
   /** Whether subscription is disabled (user not authenticated) */
   disabled?: boolean

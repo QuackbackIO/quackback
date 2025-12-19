@@ -19,10 +19,11 @@ import { PenSquare } from 'lucide-react'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db/types'
+import type { WorkspaceId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 interface CreatePostDialogProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]

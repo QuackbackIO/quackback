@@ -10,11 +10,12 @@ import {
   usePublicRoadmapPosts,
   flattenRoadmapPostEntries,
 } from '@/lib/hooks/use-roadmap-posts-query'
+import type { RoadmapId, StatusId, WorkspaceId } from '@quackback/ids'
 
 interface RoadmapColumnProps {
-  workspaceId: string
-  roadmapId: string
-  statusId: string
+  workspaceId: WorkspaceId
+  roadmapId: RoadmapId
+  statusId: StatusId
   title: string
   color: string
 }

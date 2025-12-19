@@ -29,9 +29,10 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface CreateBoardDialogProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 export function CreateBoardDialog({ workspaceId }: CreateBoardDialogProps) {

@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/form'
 import { useUpdateBoard } from '@/lib/hooks/use-board-queries'
 import { Globe, Lock } from 'lucide-react'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface BoardAccessFormProps {
   board: Board
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 interface FormValues {

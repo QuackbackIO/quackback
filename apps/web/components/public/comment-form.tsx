@@ -17,19 +17,24 @@ import {
 import { useSession, signOut } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { createCommentAction } from '@/lib/actions/comments'
+import type { PostId } from '@quackback/ids'
 
 interface SubmitCommentParams {
-  postId: string
+  postId: PostId
   content: string
   parentId?: string | null
+  authorName?: string | null
+  authorEmail?: string | null
+  memberId?: string | null
 }
 
 interface CommentFormProps {
-  postId: string
+  postId: PostId
   parentId?: string
   onSuccess?: () => void
   onCancel?: () => void
-  user?: { name: string | null; email: string }
+  user?: { name: string | null; email: string; memberId?: string }
   /** Optional custom submit handler (e.g., TanStack Query mutation) */
   submitComment?: (params: SubmitCommentParams) => Promise<unknown>
   /** External pending state (from mutation) */
@@ -60,10 +65,11 @@ export function CommentForm({
   const authPopover = useAuthPopoverSafe()
 
   // Derive effective user: use server prop during SSR/hydration, client session after
+  // Note: memberId is only available from the server-provided `user` prop, not from client session
   const isSessionLoaded = isHydrated && !isSessionPending
   const effectiveUser = isSessionLoaded
     ? sessionData?.user
-      ? { name: sessionData.user.name, email: sessionData.user.email }
+      ? { name: sessionData.user.name, email: sessionData.user.email, memberId: user?.memberId }
       : null
     : user
 
@@ -89,6 +95,9 @@ export function CommentForm({
       postId,
       content: data.content.trim(),
       parentId: parentId || null,
+      authorName: effectiveUser?.name || null,
+      authorEmail: effectiveUser?.email || null,
+      memberId: effectiveUser?.memberId || null,
     }
 
     // If custom submit handler provided, use it
@@ -104,21 +113,17 @@ export function CommentForm({
       return
     }
 
-    // Otherwise, use default fetch behavior
+    // Otherwise, use default server action behavior
     startTransition(async () => {
       try {
-        const response = await fetch(`/api/public/posts/${postId}/comments`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: submitParams.content,
-            parentId: submitParams.parentId,
-          }),
+        const result = await createCommentAction({
+          postId,
+          content: submitParams.content,
+          parentId: submitParams.parentId,
         })
 
-        if (!response.ok) {
-          const responseData = await response.json()
-          throw new Error(responseData.error || 'Failed to post comment')
+        if (!result.success) {
+          throw new Error(result.error.message || 'Failed to post comment')
         }
 
         form.reset()

@@ -42,18 +42,19 @@ import { getInitials } from '@quackback/domain/utils'
 import { REACTION_EMOJIS } from '@/lib/db/types'
 import type { PostDetails, CommentWithReplies, CurrentUser } from './inbox-types'
 import type { Tag, PostStatusEntity } from '@/lib/db/types'
-import type { TagId, StatusId } from '@quackback/ids'
+import type { CommentId, PostId, TagId, StatusId, WorkspaceId } from '@quackback/ids'
 
 interface SubmitCommentParams {
-  postId: string
+  postId: PostId
   content: string
-  parentId?: string | null
+  parentId?: CommentId | null
   authorName?: string | null
   authorEmail?: string | null
+  memberId?: string | null
 }
 
 interface InboxPostDetailProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   post: PostDetails | null
   isLoading: boolean
   allTags: Tag[]

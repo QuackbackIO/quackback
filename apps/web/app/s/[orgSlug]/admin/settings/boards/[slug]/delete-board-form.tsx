@@ -16,16 +16,17 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import type { BoardId, WorkspaceId } from '@quackback/ids'
 
 interface Board {
-  id: string
+  id: BoardId
   name: string
   slug: string
 }
 
 interface DeleteBoardFormProps {
   board: Board
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 export function DeleteBoardForm({ board, workspaceId }: DeleteBoardFormProps) {

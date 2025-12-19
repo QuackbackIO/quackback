@@ -22,6 +22,8 @@ import {
   buildDiscoveryUrl,
   buildIssuer,
 } from '@/lib/sso-provider-templates'
+import { createSsoProviderAction } from '@/lib/actions/workspace'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface SsoProviderFormProps {
   template: SsoProviderTemplate
@@ -86,18 +88,13 @@ export function SsoProviderForm({
     setError('')
 
     try {
-      const response = await fetch('/api/workspace/sso-providers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          workspaceId,
-        }),
+      const result = await createSsoProviderAction({
+        ...data,
+        workspaceId: workspaceId as WorkspaceId,
       })
 
-      if (!response.ok) {
-        const responseData = await response.json()
-        throw new Error(responseData.error || 'Failed to create SSO provider')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
       router.push('/admin/settings/security')

@@ -6,6 +6,8 @@ import { Loader2, Mail, Lock } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { updatePortalConfigAction } from '@/lib/actions/workspace'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface PortalAuthSettingsProps {
   workspaceId: string
@@ -55,12 +57,11 @@ export function PortalAuthSettings({ workspaceId, initialConfig }: PortalAuthSet
   const saveConfig = async (oauth: { google?: boolean; github?: boolean }) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/workspace/portal-config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId, oauth }),
+      const result = await updatePortalConfigAction({
+        workspaceId: workspaceId as WorkspaceId,
+        oauth,
       })
-      if (res.ok) {
+      if (result.success) {
         startTransition(() => {
           router.refresh()
         })

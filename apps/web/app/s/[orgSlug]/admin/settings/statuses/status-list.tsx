@@ -48,6 +48,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { PostStatusEntity, StatusCategory } from '@/lib/db/types'
 import { cn } from '@/lib/utils'
+import {
+  updateStatusAction,
+  deleteStatusAction,
+  reorderStatusesAction,
+  createStatusAction,
+} from '@/lib/actions/statuses'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface StatusListProps {
   initialStatuses: PostStatusEntity[]
@@ -230,28 +237,26 @@ export function StatusList({ initialStatuses, workspaceId }: StatusListProps) {
 
       // Apply status changes (roadmap and color)
       for (const status of statusChanges) {
-        await fetch(`/api/statuses/${status.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspaceId,
-            showOnRoadmap: status.showOnRoadmap,
-            color: status.color,
-          }),
+        const result = await updateStatusAction({
+          workspaceId: workspaceId as WorkspaceId,
+          id: status.id,
+          showOnRoadmap: status.showOnRoadmap,
+          color: status.color,
         })
+        if (!result.success) {
+          throw new Error(result.error.message)
+        }
       }
 
       // Apply position changes
       for (const change of positionChanges) {
-        await fetch('/api/statuses/reorder', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspaceId,
-            category: change.category,
-            statusIds: change.statusIds,
-          }),
+        const result = await reorderStatusesAction({
+          workspaceId: workspaceId as WorkspaceId,
+          statusIds: change.statusIds,
         })
+        if (!result.success) {
+          throw new Error(result.error.message)
+        }
       }
 
       setSavedStatuses(statuses)
@@ -270,18 +275,18 @@ export function StatusList({ initialStatuses, workspaceId }: StatusListProps) {
     if (!deleteStatus) return
 
     try {
-      const response = await fetch(`/api/statuses/${deleteStatus.id}?workspaceId=${workspaceId}`, {
-        method: 'DELETE',
+      const result = await deleteStatusAction({
+        workspaceId: workspaceId as WorkspaceId,
+        id: deleteStatus.id,
       })
 
-      if (response.ok) {
+      if (result.success) {
         setStatuses((prev) => prev.filter((s) => s.id !== deleteStatus.id))
         startTransition(() => {
           router.refresh()
         })
       } else {
-        const data = await response.json()
-        alert(data.error || 'Failed to delete status')
+        alert(result.error.message || 'Failed to delete status')
       }
     } catch {
       alert('Failed to delete status')
@@ -297,26 +302,20 @@ export function StatusList({ initialStatuses, workspaceId }: StatusListProps) {
     category: StatusCategory
   }) => {
     try {
-      const response = await fetch('/api/statuses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceId,
-          ...data,
-          position: statusesByCategory[data.category].length,
-        }),
+      const result = await createStatusAction({
+        workspaceId: workspaceId as WorkspaceId,
+        ...data,
+        position: statusesByCategory[data.category].length,
       })
 
-      if (response.ok) {
-        const newStatus = await response.json()
-        setStatuses((prev) => [...prev, newStatus])
+      if (result.success) {
+        setStatuses((prev) => [...prev, result.data as PostStatusEntity])
         setCreateDialogOpen(false)
         startTransition(() => {
           router.refresh()
         })
       } else {
-        const error = await response.json()
-        alert(error.error || 'Failed to create status')
+        alert(result.error.message || 'Failed to create status')
       }
     } catch {
       alert('Failed to create status')

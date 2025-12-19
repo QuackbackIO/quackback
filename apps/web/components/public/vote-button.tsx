@@ -3,9 +3,10 @@
 import { ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
+import type { PostId } from '@quackback/ids'
 
 interface VoteButtonProps {
-  postId: string
+  postId: PostId
   initialVoteCount: number
   initialHasVoted: boolean
   disabled?: boolean

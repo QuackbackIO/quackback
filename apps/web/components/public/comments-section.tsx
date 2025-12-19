@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { CommentThread } from './comment-thread'
+import type { PostId } from '@quackback/ids'
 
 interface CommentReaction {
   emoji: string
@@ -22,7 +23,7 @@ interface Comment {
 }
 
 interface CommentsSectionProps {
-  postId: string
+  postId: PostId
   comments: Comment[]
   allowCommenting?: boolean
   /** Map of memberId to avatar URL (base64 or external URL) */

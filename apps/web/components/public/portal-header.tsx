@@ -18,6 +18,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { LogOut, Settings, Shield } from 'lucide-react'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { getUserRoleAction } from '@/lib/actions/user'
 
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
@@ -78,9 +79,12 @@ export function PortalHeader({
   // Fetch role when session changes
   const fetchRole = async () => {
     try {
-      const res = await fetch('/api/user/role')
-      const data = await res.json()
-      setClientRole(data.role)
+      const result = await getUserRoleAction()
+      if (result.success) {
+        setClientRole(result.data.role)
+      } else {
+        setClientRole(null)
+      }
       setIsRoleFetched(true)
     } catch {
       setClientRole(null)

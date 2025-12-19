@@ -40,9 +40,10 @@ import {
   useDeleteRoadmap,
 } from '@/lib/hooks/use-roadmaps-query'
 import type { Roadmap } from '@/lib/db/types'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface RoadmapSidebarProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   selectedRoadmapId: string | null
   onSelectRoadmap: (roadmapId: string | null) => void
 }

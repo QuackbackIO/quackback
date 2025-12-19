@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-react'
+import {
+  getNotificationPreferencesAction,
+  updateNotificationPreferencesAction,
+} from '@/lib/actions/user'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface NotificationPreferencesFormProps {
   workspaceId: string
@@ -23,14 +28,13 @@ export function NotificationPreferencesForm({ workspaceId }: NotificationPrefere
   useEffect(() => {
     async function fetchPreferences() {
       try {
-        const response = await fetch(
-          `/api/user/notification-preferences?workspaceId=${workspaceId}`
-        )
-        if (!response.ok) {
-          throw new Error('Failed to fetch preferences')
+        const result = await getNotificationPreferencesAction({
+          workspaceId: workspaceId as WorkspaceId,
+        })
+        if (!result.success) {
+          throw new Error(result.error.message)
         }
-        const data = await response.json()
-        setPreferences(data)
+        setPreferences(result.data as Preferences)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load preferences')
       } finally {
@@ -52,18 +56,16 @@ export function NotificationPreferencesForm({ workspaceId }: NotificationPrefere
       setPreferences((prev) => (prev ? { ...prev, [key]: value } : prev))
 
       try {
-        const response = await fetch('/api/user/notification-preferences', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspaceId, [key]: value }),
+        const result = await updateNotificationPreferencesAction({
+          workspaceId: workspaceId as WorkspaceId,
+          [key]: value,
         })
 
-        if (!response.ok) {
-          throw new Error('Failed to save preference')
+        if (!result.success) {
+          throw new Error(result.error.message)
         }
 
-        const data = await response.json()
-        setPreferences(data.preferences)
+        setPreferences(result.data as Preferences)
       } catch (err) {
         // Revert on error
         setPreferences((prev) => (prev ? { ...prev, [key]: !value } : prev))

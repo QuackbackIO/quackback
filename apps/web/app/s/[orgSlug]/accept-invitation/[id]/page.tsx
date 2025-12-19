@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/lib/auth/client'
 import { acceptInvitationAction } from '@/lib/actions/invitations'
+import { getProfileAction } from '@/lib/actions/user'
 
 export default function AcceptInvitationPage({
   params,
@@ -30,14 +31,11 @@ export default function AcceptInvitationPage({
 
       try {
         // Check if user is a portal user (portal users can't accept team invitations)
-        const profileRes = await fetch('/api/user/profile')
-        if (profileRes.ok) {
-          const profile = await profileRes.json()
-          if (profile.userType === 'portal') {
-            throw new Error(
-              'Portal users cannot accept team invitations. Please sign up with a team account or contact your administrator.'
-            )
-          }
+        const profileResult = await getProfileAction()
+        if (profileResult.success && profileResult.data.userType === 'portal') {
+          throw new Error(
+            'Portal users cannot accept team invitations. Please sign up with a team account or contact your administrator.'
+          )
         }
 
         const result = await acceptInvitationAction(id)

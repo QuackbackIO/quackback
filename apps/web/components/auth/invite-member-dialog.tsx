@@ -29,6 +29,8 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { sendInvitationAction } from '@/lib/actions/admin'
+import type { WorkspaceId } from '@quackback/ids'
 
 interface InviteMemberDialogProps {
   workspaceId: string
@@ -53,20 +55,15 @@ export function InviteMemberDialog({ workspaceId, open, onClose }: InviteMemberD
     setError('')
 
     try {
-      const response = await fetch('/api/invitations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceId,
-          email: data.email,
-          name: data.name || undefined,
-          role: data.role,
-        }),
+      const result = await sendInvitationAction({
+        workspaceId: workspaceId as WorkspaceId,
+        email: data.email,
+        name: data.name || undefined,
+        role: data.role,
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to send invitation')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
       setSuccess(true)

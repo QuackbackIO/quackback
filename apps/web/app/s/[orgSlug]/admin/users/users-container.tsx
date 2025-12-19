@@ -12,9 +12,10 @@ import {
   flattenUsers,
 } from '@/lib/hooks/use-users-queries'
 import type { PortalUserListResult } from '@quackback/domain'
+import type { MemberId, WorkspaceId } from '@quackback/ids'
 
 interface UsersContainerProps {
-  workspaceId: string
+  workspaceId: WorkspaceId
   initialUsers: PortalUserListResult
   currentMemberRole: string
 }
@@ -54,7 +55,7 @@ export function UsersContainer({
 
   // Server state - Selected user detail
   const { data: selectedUser, isLoading: isLoadingUser } = useUserDetail({
-    memberId: selectedUserId,
+    memberId: selectedUserId as MemberId | null,
     workspaceId,
   })
 
@@ -70,7 +71,7 @@ export function UsersContainer({
 
   const handleRemoveUser = () => {
     if (!selectedUserId) return
-    removePortalUser.mutate(selectedUserId, {
+    removePortalUser.mutate(selectedUserId as MemberId, {
       onSuccess: () => {
         setSelectedUserId(null)
       },

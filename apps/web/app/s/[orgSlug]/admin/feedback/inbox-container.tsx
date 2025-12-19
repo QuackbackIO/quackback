@@ -22,7 +22,7 @@ import {
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
-import type { StatusId, WorkspaceId } from '@quackback/ids'
+import type { CommentId, PostId, StatusId, WorkspaceId } from '@quackback/ids'
 import type { CurrentUser } from './inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db/types'
 import type { TeamMember } from '@quackback/domain'
@@ -110,7 +110,7 @@ export function InboxContainer({
 
   // Server state - Selected post detail
   const { data: selectedPost, isLoading: isLoadingPost } = usePostDetail({
-    postId: selectedPostId,
+    postId: selectedPostId as PostId | null,
     workspaceId,
   })
 
@@ -131,27 +131,31 @@ export function InboxContainer({
 
   const handleStatusChange = async (statusId: StatusId) => {
     if (!selectedPostId) return
-    updateStatus.mutate({ postId: selectedPostId, statusId })
+    updateStatus.mutate({ postId: selectedPostId as PostId, statusId })
   }
 
   const handleTagsChange = async (tagIds: string[]) => {
     if (!selectedPostId) return
-    updateTags.mutate({ postId: selectedPostId, tagIds, allTags: tags })
+    updateTags.mutate({ postId: selectedPostId as PostId, tagIds, allTags: tags })
   }
 
   const handleOfficialResponseChange = async (response: string | null) => {
     if (!selectedPostId) return
-    updateOfficialResponse.mutate({ postId: selectedPostId, response })
+    updateOfficialResponse.mutate({ postId: selectedPostId as PostId, response })
   }
 
   const handleReaction = (commentId: string, emoji: string) => {
     if (!selectedPostId) return
-    toggleReaction.mutate({ postId: selectedPostId, commentId, emoji })
+    toggleReaction.mutate({
+      postId: selectedPostId as PostId,
+      commentId: commentId as CommentId,
+      emoji,
+    })
   }
 
   const handleVote = () => {
     if (!selectedPostId) return
-    votePost.mutate(selectedPostId)
+    votePost.mutate(selectedPostId as PostId)
   }
 
   const refetchPosts = () => {
@@ -218,11 +222,20 @@ export function InboxContainer({
             onRoadmapChange={() => {
               if (selectedPostId) {
                 queryClient.invalidateQueries({
-                  queryKey: inboxKeys.detail(selectedPostId, workspaceId),
+                  queryKey: inboxKeys.detail(selectedPostId as PostId, workspaceId),
                 })
               }
             }}
-            submitComment={addComment.mutateAsync}
+            submitComment={
+              addComment.mutateAsync as (params: {
+                postId: PostId
+                content: string
+                parentId?: CommentId | null
+                authorName?: string | null
+                authorEmail?: string | null
+                memberId?: string | null
+              }) => Promise<unknown>
+            }
             isCommentPending={addComment.isPending}
             onReaction={handleReaction}
             isReactionPending={toggleReaction.isPending}
