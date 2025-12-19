@@ -17,11 +17,11 @@ import type {
   MemberId,
   PostId,
   RoadmapId,
-  OrgId,
+  WorkspaceId,
   UserId,
   DomainId,
 } from '@quackback/ids'
-import { user, organization, member, workspaceDomain } from './schema/auth'
+import { user, workspace, member, workspaceDomain } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
@@ -231,9 +231,9 @@ async function seed() {
 
   await verifyMigrationsApplied()
 
-  // Create organization
-  const orgId: OrgId = generateId('org')
-  await db.insert(organization).values({
+  // Create workspace
+  const orgId: WorkspaceId = generateId('workspace')
+  await db.insert(workspace).values({
     id: orgId,
     name: DEMO_ORG.name,
     slug: DEMO_ORG.slug,
@@ -243,13 +243,13 @@ async function seed() {
   const domainId: DomainId = generateId('domain')
   await db.insert(workspaceDomain).values({
     id: domainId,
-    organizationId: orgId,
+    workspaceId: orgId,
     domain: `${DEMO_ORG.slug}.localhost:3000`,
     domainType: 'subdomain',
     isPrimary: true,
     verified: true,
   })
-  console.log('Created organization: Acme Corp')
+  console.log('Created workspace: Acme Corp')
 
   // Create statuses
   const statusMap = new Map<string, StatusId>()
@@ -257,7 +257,7 @@ async function seed() {
     const result = await db
       .insert(postStatuses)
       .values({
-        organizationId: orgId,
+        workspaceId: orgId,
         ...status,
       })
       .returning()
@@ -270,7 +270,7 @@ async function seed() {
   const demoMemberId: MemberId = generateId('member')
   await db.insert(user).values({
     id: demoUserId,
-    organizationId: orgId,
+    workspaceId: orgId,
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     emailVerified: true,
@@ -279,7 +279,7 @@ async function seed() {
   })
   await db.insert(member).values({
     id: demoMemberId,
-    organizationId: orgId,
+    workspaceId: orgId,
     userId: demoUserId,
     role: 'owner',
     createdAt: new Date(),
@@ -297,7 +297,7 @@ async function seed() {
 
     await db.insert(user).values({
       id: userId,
-      organizationId: orgId,
+      workspaceId: orgId,
       name,
       email,
       emailVerified: true,
@@ -306,7 +306,7 @@ async function seed() {
     })
     await db.insert(member).values({
       id: memberId,
-      organizationId: orgId,
+      workspaceId: orgId,
       userId: userId,
       role: i < 3 ? 'admin' : 'user', // First 3 are admins
       createdAt: randomDate(90),
@@ -321,7 +321,7 @@ async function seed() {
     const tagId = generateId('tag')
     await db.insert(tags).values({
       id: tagId,
-      organizationId: orgId,
+      workspaceId: orgId,
       name: t.name,
       color: t.color,
     })
@@ -335,7 +335,7 @@ async function seed() {
     const boardId = generateId('board')
     await db.insert(boards).values({
       id: boardId,
-      organizationId: orgId,
+      workspaceId: orgId,
       slug: b.slug,
       name: b.name,
       description: b.description,
@@ -353,7 +353,7 @@ async function seed() {
     const roadmapId = generateId('roadmap')
     await db.insert(roadmaps).values({
       id: roadmapId,
-      organizationId: orgId,
+      workspaceId: orgId,
       slug: r.slug,
       name: r.name,
       description: r.description,
@@ -386,7 +386,7 @@ async function seed() {
 
     postInserts.push({
       id: postId,
-      organizationId: orgId,
+      workspaceId: orgId,
       boardId,
       title,
       content,
@@ -464,7 +464,7 @@ async function seed() {
     const numVotes = Math.min(post.voteCount, 10) // Cap at 10 actual vote records per post
     for (let v = 0; v < numVotes; v++) {
       voteInserts.push({
-        organizationId: orgId,
+        workspaceId: orgId,
         postId: post.id,
         userIdentifier: `user:${uuid()}`,
         createdAt: randomDate(60),
@@ -484,7 +484,7 @@ async function seed() {
     for (let c = 0; c < numComments; c++) {
       const author = pick(members)
       commentInserts.push({
-        organizationId: orgId,
+        workspaceId: orgId,
         postId: post.id,
         memberId: author.id,
         authorName: author.name,

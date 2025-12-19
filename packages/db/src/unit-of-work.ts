@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db, type Database } from './client'
-import { toUuid, type OrgId } from '@quackback/ids'
+import { toUuid, type WorkspaceId } from '@quackback/ids'
 import {
   PostRepository,
   BoardRepository,
@@ -97,13 +97,13 @@ export class UnitOfWork {
 
 /**
  * Executes a callback within a Unit of Work transaction with tenant context.
- * Sets up RLS by configuring the app.organization_id session variable
+ * Sets up RLS by configuring the app.workspace_id session variable
  * and switching to the app_user role.
  *
- * @param organizationId - The organization ID for tenant isolation
+ * @param workspaceId - The workspace ID for tenant isolation
  * @param callback - Async function that receives the UnitOfWork instance
  * @returns The result of the callback
- * @throws Error if organizationId is invalid or transaction fails
+ * @throws Error if workspaceId is invalid or transaction fails
  *
  * @example
  * ```typescript
@@ -120,7 +120,7 @@ export class UnitOfWork {
  * ```
  */
 export async function withUnitOfWork<T>(
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   callback: (uow: UnitOfWork) => Promise<T>
 ): Promise<T> {
   // Convert TypeID to raw UUID for RLS policy
@@ -131,7 +131,7 @@ export async function withUnitOfWork<T>(
     // Set up tenant context for RLS
     // Note: SET LOCAL doesn't support parameterized queries in PostgreSQL,
     // so we use sql.raw() with validated UUID to prevent SQL injection
-    await tx.execute(sql.raw(`SET LOCAL app.organization_id = '${uuid}'`))
+    await tx.execute(sql.raw(`SET LOCAL app.workspace_id = '${uuid}'`))
     await tx.execute(sql`SET LOCAL ROLE app_user`)
 
     // Create UnitOfWork instance and execute callback

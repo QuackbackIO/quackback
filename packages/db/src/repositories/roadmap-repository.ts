@@ -1,5 +1,5 @@
 import { eq, and, asc, sql } from 'drizzle-orm'
-import type { RoadmapId, PostId, StatusId, BoardId, OrgId } from '@quackback/ids'
+import type { RoadmapId, PostId, StatusId, BoardId, WorkspaceId } from '@quackback/ids'
 import type { Database } from '../client'
 import { roadmaps, boards } from '../schema/boards'
 import { postRoadmaps, posts } from '../schema/posts'
@@ -32,9 +32,9 @@ export class RoadmapRepository {
   /**
    * Find a roadmap by slug within an organization
    */
-  async findBySlug(organizationId: OrgId, slug: string): Promise<Roadmap | null> {
+  async findBySlug(organizationId: WorkspaceId, slug: string): Promise<Roadmap | null> {
     const roadmap = await this.db.query.roadmaps.findFirst({
-      where: and(eq(roadmaps.organizationId, organizationId), eq(roadmaps.slug, slug)),
+      where: and(eq(roadmaps.workspaceId, organizationId), eq(roadmaps.slug, slug)),
     })
     return roadmap ?? null
   }
@@ -42,9 +42,9 @@ export class RoadmapRepository {
   /**
    * Find all roadmaps for an organization, ordered by position
    */
-  async findAll(organizationId: OrgId): Promise<Roadmap[]> {
+  async findAll(organizationId: WorkspaceId): Promise<Roadmap[]> {
     return this.db.query.roadmaps.findMany({
-      where: eq(roadmaps.organizationId, organizationId),
+      where: eq(roadmaps.workspaceId, organizationId),
       orderBy: [asc(roadmaps.position)],
     })
   }
@@ -52,9 +52,9 @@ export class RoadmapRepository {
   /**
    * Find all public roadmaps for an organization
    */
-  async findPublic(organizationId: OrgId): Promise<Roadmap[]> {
+  async findPublic(organizationId: WorkspaceId): Promise<Roadmap[]> {
     return this.db.query.roadmaps.findMany({
-      where: and(eq(roadmaps.organizationId, organizationId), eq(roadmaps.isPublic, true)),
+      where: and(eq(roadmaps.workspaceId, organizationId), eq(roadmaps.isPublic, true)),
       orderBy: [asc(roadmaps.position)],
     })
   }
@@ -105,11 +105,11 @@ export class RoadmapRepository {
   /**
    * Get the next position for a new roadmap in an organization
    */
-  async getNextPosition(organizationId: OrgId): Promise<number> {
+  async getNextPosition(organizationId: WorkspaceId): Promise<number> {
     const result = await this.db
       .select({ maxPosition: sql<number>`COALESCE(MAX(${roadmaps.position}), -1)` })
       .from(roadmaps)
-      .where(eq(roadmaps.organizationId, organizationId))
+      .where(eq(roadmaps.workspaceId, organizationId))
 
     return (result[0]?.maxPosition ?? -1) + 1
   }

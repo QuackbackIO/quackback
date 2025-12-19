@@ -53,22 +53,22 @@ const bytea = customType<{ data: Buffer | null; notNull: false; default: false }
 })
 
 /**
- * User table - Organization-scoped user identities
+ * User table - Workspace-scoped user identities
  *
- * Each user belongs to exactly one organization. The same email can exist
- * in multiple organizations as separate user records with separate credentials.
+ * Each user belongs to exactly one workspace. The same email can exist
+ * in multiple workspaces as separate user records with separate credentials.
  *
- * This enables true multi-tenant isolation where each organization has
+ * This enables true multi-tenant isolation where each workspace has
  * completely independent authentication.
  */
 export const user = pgTable(
   'user',
   {
     id: typeIdWithDefault('user')('id').primaryKey(),
-    // Organization this user belongs to - enables org-scoped email uniqueness
-    organizationId: typeIdColumn('org')('organization_id')
+    // Workspace this user belongs to - enables workspace-scoped email uniqueness
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     email: text('email').notNull(),
     emailVerified: boolean('email_verified').default(false).notNull(),
@@ -85,9 +85,9 @@ export const user = pgTable(
     metadata: text('metadata'),
   },
   (table) => [
-    // Email is unique per organization (not globally)
-    uniqueIndex('user_email_org_idx').on(table.organizationId, table.email),
-    index('user_org_id_idx').on(table.organizationId),
+    // Email is unique per workspace (not globally)
+    uniqueIndex('user_email_workspace_idx').on(table.workspaceId, table.email),
+    index('user_workspace_id_idx').on(table.workspaceId),
   ]
 )
 
@@ -107,7 +107,7 @@ export const session = pgTable(
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    activeOrganizationId: typeIdColumnNullable('org')('active_organization_id'),
+    activeWorkspaceId: typeIdColumnNullable('workspace')('active_workspace_id'),
   },
   (table) => [index('session_userId_idx').on(table.userId)]
 )
@@ -153,8 +153,8 @@ export const verification = pgTable(
   (table) => [index('verification_identifier_idx').on(table.identifier)]
 )
 
-export const organization = pgTable('organization', {
-  id: typeIdWithDefault('org')('id').primaryKey(),
+export const workspace = pgTable('workspace', {
+  id: typeIdWithDefault('workspace')('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   logo: text('logo'),
@@ -168,19 +168,19 @@ export const organization = pgTable('organization', {
   metadata: text('metadata'),
   /**
    * Team authentication configuration (JSON)
-   * @see AuthConfig in organization.types.ts
+   * @see AuthConfig in workspace.types.ts
    * Structure: { oauth: { google, github, microsoft }, ssoRequired, openSignup }
    */
   authConfig: text('auth_config'),
   /**
    * Portal configuration (JSON)
-   * @see PortalConfig in organization.types.ts
+   * @see PortalConfig in workspace.types.ts
    * Structure: { oauth: { google, github }, features: { publicView, submissions, comments, voting } }
    */
   portalConfig: text('portal_config'),
   /**
    * Branding/theme configuration (JSON)
-   * @see BrandingConfig in organization.types.ts
+   * @see BrandingConfig in workspace.types.ts
    * Structure: { preset?, light?: ThemeColors, dark?: ThemeColors }
    */
   brandingConfig: text('branding_config'),
@@ -197,14 +197,14 @@ export const organization = pgTable('organization', {
   headerLogoType: text('header_logo_type'), // MIME type: image/png, image/jpeg, image/svg+xml, etc.
   /**
    * Header display mode - how the brand appears in portal navigation
-   * - 'logo_and_name': Square logo + organization name (default)
+   * - 'logo_and_name': Square logo + workspace name (default)
    * - 'logo_only': Just the square logo
    * - 'custom_logo': Use headerLogoBlob (horizontal wordmark)
    */
   headerDisplayMode: text('header_display_mode').default('logo_and_name'),
   /**
    * Custom display name for the header (used in 'logo_and_name' mode)
-   * Falls back to organization.name when not set
+   * Falls back to workspace.name when not set
    */
   headerDisplayName: text('header_display_name'),
 })
@@ -213,7 +213,7 @@ export const organization = pgTable('organization', {
  * Member table - Unified membership for all user types
  *
  * All users (team members and portal users) have a member record with a role:
- * - 'owner': Full administrative access, can manage billing and delete org
+ * - 'owner': Full administrative access, can manage billing and delete workspace
  * - 'admin': Administrative access, can manage team and settings
  * - 'member': Team member access, can manage feedback
  * - 'user': Portal user access only, can vote/comment on public portal
@@ -225,9 +225,9 @@ export const member = pgTable(
   'member',
   {
     id: typeIdWithDefault('member')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -237,12 +237,12 @@ export const member = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   },
   (table) => [
-    index('member_organizationId_idx').on(table.organizationId),
+    index('member_workspaceId_idx').on(table.workspaceId),
     index('member_userId_idx').on(table.userId),
-    // Ensure one member record per user per org
-    uniqueIndex('member_user_org_idx').on(table.userId, table.organizationId),
+    // Ensure one member record per user per workspace
+    uniqueIndex('member_user_workspace_idx').on(table.userId, table.workspaceId),
     // Composite index for portal user listings filtered by role
-    index('member_org_role_idx').on(table.organizationId, table.role),
+    index('member_workspace_role_idx').on(table.workspaceId, table.role),
   ]
 )
 
@@ -250,9 +250,9 @@ export const invitation = pgTable(
   'invitation',
   {
     id: typeIdWithDefault('invite')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     name: text('name'),
     role: text('role'),
@@ -265,17 +265,17 @@ export const invitation = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
   },
   (table) => [
-    index('invitation_organizationId_idx').on(table.organizationId),
+    index('invitation_workspaceId_idx').on(table.workspaceId),
     index('invitation_email_idx').on(table.email),
     // Composite index for duplicate invitation checks
-    index('invitation_org_email_status_idx').on(table.organizationId, table.email, table.status),
+    index('invitation_workspace_email_status_idx').on(table.workspaceId, table.email, table.status),
   ]
 )
 
 /**
  * SSO Provider table for Better-Auth SSO plugin
  *
- * Stores SAML and OIDC provider configurations per organization.
+ * Stores SAML and OIDC provider configurations per workspace.
  * Used by the SSO plugin to authenticate users via enterprise identity providers.
  *
  * @see https://www.better-auth.com/docs/plugins/sso
@@ -284,9 +284,9 @@ export const ssoProvider = pgTable(
   'sso_provider',
   {
     id: typeIdWithDefault('sso_provider')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     // Issuer identifier (e.g., "https://accounts.google.com" or SAML entityId)
     issuer: text('issuer').notNull(),
     // Domain for email-based provider routing (e.g., "acme.com")
@@ -304,9 +304,9 @@ export const ssoProvider = pgTable(
       .notNull(),
   },
   (table) => [
-    index('sso_provider_org_id_idx').on(table.organizationId),
-    // Domain is unique per organization (not globally) - same domain can be used by different orgs
-    uniqueIndex('sso_provider_org_domain_idx').on(table.organizationId, table.domain),
+    index('sso_provider_workspace_id_idx').on(table.workspaceId),
+    // Domain is unique per workspace (not globally) - same domain can be used by different workspaces
+    uniqueIndex('sso_provider_workspace_domain_idx').on(table.workspaceId, table.domain),
     // Index for SSO detection by email domain
     index('sso_provider_domain_idx').on(table.domain),
   ]
@@ -314,9 +314,9 @@ export const ssoProvider = pgTable(
 
 // Relations for Drizzle relational queries (enables experimental joins)
 export const userRelations = relations(user, ({ one, many }) => ({
-  organization: one(organization, {
-    fields: [user.organizationId],
-    references: [organization.id],
+  workspace: one(workspace, {
+    fields: [user.workspaceId],
+    references: [workspace.id],
   }),
   sessions: many(session),
   accounts: many(account),
@@ -339,7 +339,7 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }))
 
-export const organizationRelations = relations(organization, ({ many }) => ({
+export const workspaceRelations = relations(workspace, ({ many }) => ({
   users: many(user),
   members: many(member),
   invitations: many(invitation),
@@ -348,9 +348,9 @@ export const organizationRelations = relations(organization, ({ many }) => ({
 }))
 
 export const memberRelations = relations(member, ({ one }) => ({
-  organization: one(organization, {
-    fields: [member.organizationId],
-    references: [organization.id],
+  workspace: one(workspace, {
+    fields: [member.workspaceId],
+    references: [workspace.id],
   }),
   user: one(user, {
     fields: [member.userId],
@@ -359,9 +359,9 @@ export const memberRelations = relations(member, ({ one }) => ({
 }))
 
 export const invitationRelations = relations(invitation, ({ one }) => ({
-  organization: one(organization, {
-    fields: [invitation.organizationId],
-    references: [organization.id],
+  workspace: one(workspace, {
+    fields: [invitation.workspaceId],
+    references: [workspace.id],
   }),
   inviter: one(user, {
     fields: [invitation.inviterId],
@@ -370,9 +370,9 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
 }))
 
 export const ssoProviderRelations = relations(ssoProvider, ({ one }) => ({
-  organization: one(organization, {
-    fields: [ssoProvider.organizationId],
-    references: [organization.id],
+  workspace: one(workspace, {
+    fields: [ssoProvider.workspaceId],
+    references: [workspace.id],
   }),
 }))
 
@@ -419,15 +419,15 @@ export const sessionTransferTokenRelations = relations(sessionTransferToken, ({ 
  * - Auto-generated subdomain (e.g., acme.quackback.io)
  * - Custom domains (e.g., feedback.acme.com)
  *
- * The proxy uses this table to resolve which organization a request belongs to.
+ * The proxy uses this table to resolve which workspace a request belongs to.
  */
 export const workspaceDomain = pgTable(
   'workspace_domain',
   {
     id: typeIdWithDefault('domain')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     domain: text('domain').notNull().unique(),
     domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
     isPrimary: boolean('is_primary').default(false).notNull(),
@@ -440,7 +440,7 @@ export const workspaceDomain = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('workspace_domain_org_id_idx').on(table.organizationId),
+    index('workspace_domain_workspace_id_idx').on(table.workspaceId),
     // Index for tenant resolution by domain (critical path for every request)
     index('workspace_domain_domain_idx').on(table.domain),
     // Index for Cloudflare webhook lookups by hostname ID
@@ -449,8 +449,8 @@ export const workspaceDomain = pgTable(
 )
 
 export const workspaceDomainRelations = relations(workspaceDomain, ({ one }) => ({
-  organization: one(organization, {
-    fields: [workspaceDomain.organizationId],
-    references: [organization.id],
+  workspace: one(workspace, {
+    fields: [workspaceDomain.workspaceId],
+    references: [workspace.id],
   }),
 }))

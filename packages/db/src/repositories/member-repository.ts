@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm'
 import type { Database } from '../client'
 import { member } from '../schema/auth'
 import type { Member } from '../types'
-import type { MemberId, UserId, OrgId } from '@quackback/ids'
+import type { MemberId, UserId, WorkspaceId } from '@quackback/ids'
 
 /**
  * MemberRepository - Data access layer for organization members
@@ -27,9 +27,9 @@ export class MemberRepository {
   /**
    * Find a member by user ID and organization ID
    */
-  async findByUserAndOrg(userId: UserId, organizationId: OrgId): Promise<Member | null> {
+  async findByUserAndOrg(userId: UserId, organizationId: WorkspaceId): Promise<Member | null> {
     const result = await this.db.query.member.findFirst({
-      where: and(eq(member.userId, userId), eq(member.organizationId, organizationId)),
+      where: and(eq(member.userId, userId), eq(member.workspaceId, organizationId)),
     })
     return result ?? null
   }
@@ -37,9 +37,9 @@ export class MemberRepository {
   /**
    * Find all members for an organization
    */
-  async findByOrganization(organizationId: OrgId): Promise<Member[]> {
+  async findByOrganization(organizationId: WorkspaceId): Promise<Member[]> {
     return this.db.query.member.findMany({
-      where: eq(member.organizationId, organizationId),
+      where: eq(member.workspaceId, organizationId),
     })
   }
 

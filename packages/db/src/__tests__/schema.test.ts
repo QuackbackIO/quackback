@@ -3,9 +3,9 @@ import { getTableName, getTableColumns } from 'drizzle-orm'
 import { posts, votes, comments, postTags, postRoadmaps, commentReactions } from '../schema/posts'
 import { REACTION_EMOJIS } from '../types'
 import { boards, roadmaps, tags } from '../schema/boards'
-import { organizationIntegrations } from '../schema/integrations'
+import { workspaceIntegrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'
-import { user, session, organization, member, invitation } from '../schema/auth'
+import { user, session, workspace, member, invitation } from '../schema/auth'
 
 describe('Schema definitions', () => {
   describe('boards schema', () => {
@@ -16,7 +16,7 @@ describe('Schema definitions', () => {
     it('has required columns', () => {
       const columns = Object.keys(getTableColumns(boards))
       expect(columns).toContain('id')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('slug')
       expect(columns).toContain('name')
       expect(columns).toContain('description')
@@ -40,7 +40,7 @@ describe('Schema definitions', () => {
     it('has required columns', () => {
       const columns = Object.keys(getTableColumns(roadmaps))
       expect(columns).toContain('id')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('slug')
       expect(columns).toContain('name')
       expect(columns).toContain('description')
@@ -58,7 +58,7 @@ describe('Schema definitions', () => {
     it('has required columns', () => {
       const columns = Object.keys(getTableColumns(tags))
       expect(columns).toContain('id')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('name')
       expect(columns).toContain('color')
       expect(columns).toContain('createdAt')
@@ -80,7 +80,7 @@ describe('Schema definitions', () => {
       expect(columns).toContain('authorName')
       expect(columns).toContain('authorEmail')
       expect(columns).toContain('statusId')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('ownerId')
       expect(columns).toContain('estimated')
       expect(columns).toContain('voteCount')
@@ -90,8 +90,8 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      // 22 business columns + 1 searchVector (generated column for full-text search)
-      expect(columns.length).toBe(23)
+      // 22 business columns + 1 searchVector (generated column for full-text search) + 2 soft delete columns (deletedAt, deletedByMemberId)
+      expect(columns.length).toBe(25)
     })
   })
 
@@ -198,15 +198,15 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('organizationIntegrations schema', () => {
+  describe('workspaceIntegrations schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(organizationIntegrations)).toBe('organization_integrations')
+      expect(getTableName(workspaceIntegrations)).toBe('workspace_integrations')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(organizationIntegrations))
+      const columns = Object.keys(getTableColumns(workspaceIntegrations))
       expect(columns).toContain('id')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('integrationType')
       expect(columns).toContain('status')
       expect(columns).toContain('config')
@@ -270,13 +270,13 @@ describe('Auth schema definitions', () => {
     })
   })
 
-  describe('organization schema', () => {
+  describe('workspace schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(organization)).toBe('organization')
+      expect(getTableName(workspace)).toBe('workspace')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(organization))
+      const columns = Object.keys(getTableColumns(workspace))
       expect(columns).toContain('id')
       expect(columns).toContain('name')
       expect(columns).toContain('slug')
@@ -284,7 +284,7 @@ describe('Auth schema definitions', () => {
     })
 
     it('has slug for URL-friendly names', () => {
-      const columns = Object.keys(getTableColumns(organization))
+      const columns = Object.keys(getTableColumns(workspace))
       expect(columns).toContain('slug')
     })
   })
@@ -298,7 +298,7 @@ describe('Auth schema definitions', () => {
       const columns = Object.keys(getTableColumns(member))
       expect(columns).toContain('id')
       expect(columns).toContain('userId')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('role')
       expect(columns).toContain('createdAt')
     })
@@ -318,7 +318,7 @@ describe('Auth schema definitions', () => {
       const columns = Object.keys(getTableColumns(invitation))
       expect(columns).toContain('id')
       expect(columns).toContain('email')
-      expect(columns).toContain('organizationId')
+      expect(columns).toContain('workspaceId')
       expect(columns).toContain('status')
       expect(columns).toContain('expiresAt')
     })

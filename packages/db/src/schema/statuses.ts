@@ -12,7 +12,7 @@ export const postStatuses = pgTable(
   'post_statuses',
   {
     id: typeIdWithDefault('status')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id').notNull(),
+    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     color: text('color').notNull().default('#6b7280'),
@@ -23,21 +23,21 @@ export const postStatuses = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('post_statuses_org_slug_idx').on(table.organizationId, table.slug),
-    index('post_statuses_org_id_idx').on(table.organizationId),
-    index('post_statuses_position_idx').on(table.organizationId, table.category, table.position),
+    uniqueIndex('post_statuses_workspace_slug_idx').on(table.workspaceId, table.slug),
+    index('post_statuses_workspace_id_idx').on(table.workspaceId),
+    index('post_statuses_position_idx').on(table.workspaceId, table.category, table.position),
     pgPolicy('post_statuses_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
+      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
 
 // Relations are defined in posts.ts to avoid circular dependency
 
-// Default statuses to seed for new organizations
+// Default statuses to seed for new workspaces
 export const DEFAULT_STATUSES: Array<{
   name: string
   slug: string

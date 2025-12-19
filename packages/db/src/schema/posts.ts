@@ -14,7 +14,7 @@ import { pgPolicy } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
-import { member, organization } from './auth'
+import { member, workspace } from './auth'
 import { appUser } from './rls'
 
 // Custom tsvector type for full-text search
@@ -24,17 +24,17 @@ const tsvector = customType<{ data: string }>({
   },
 })
 
-// Simplified RLS check - direct organization_id column comparison
-const directOrgCheck = sql`organization_id = current_setting('app.organization_id', true)::uuid`
+// Simplified RLS check - direct workspace_id column comparison
+const directWorkspaceCheck = sql`workspace_id = current_setting('app.workspace_id', true)::uuid`
 
 export const posts = pgTable(
   'posts',
   {
     id: typeIdWithDefault('post')('id').primaryKey(),
     // Denormalized for RLS performance - avoids join to boards table
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     boardId: typeIdColumn('board')('board_id')
       .notNull()
       .references(() => boards.id, { onDelete: 'cascade' }),
@@ -43,7 +43,7 @@ export const posts = pgTable(
     // Rich content stored as TipTap JSON (optional, for rich text support)
     contentJson: jsonb('content_json'),
     // Member-scoped identity (Hub-and-Spoke model)
-    // memberId links to the organization-scoped member record
+    // memberId links to the workspace-scoped member record
     // For anonymous posts, memberId is null and authorName/authorEmail are used
     memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
       onDelete: 'set null',
@@ -88,8 +88,8 @@ export const posts = pgTable(
     ),
   },
   (table) => [
-    // Organization index for RLS performance
-    index('posts_org_id_idx').on(table.organizationId),
+    // Workspace index for RLS performance
+    index('posts_workspace_id_idx').on(table.workspaceId),
     index('posts_board_id_idx').on(table.boardId),
     index('posts_status_id_idx').on(table.statusId),
     index('posts_member_id_idx').on(table.memberId),
@@ -104,9 +104,9 @@ export const posts = pgTable(
     index('posts_board_status_id_idx').on(table.boardId, table.statusId),
     // Composite index for user activity pages (posts by author)
     index('posts_member_created_at_idx').on(table.memberId, table.createdAt),
-    // Composite index for org-scoped post listings (replaces board-based RLS lookups)
-    index('posts_org_board_vote_created_idx').on(
-      table.organizationId,
+    // Composite index for workspace-scoped post listings (replaces board-based RLS lookups)
+    index('posts_workspace_board_vote_created_idx').on(
+      table.workspaceId,
       table.boardId,
       table.voteCount
     ),
@@ -121,15 +121,15 @@ export const posts = pgTable(
     pgPolicy('posts_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: directOrgCheck,
-      withCheck: directOrgCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
 
-// RLS check via posts table (single join to posts.organization_id)
-const postTagsOrgCheck = sql`post_id IN (
-  SELECT id FROM posts WHERE organization_id = current_setting('app.organization_id', true)::uuid
+// RLS check via posts table (single join to posts.workspace_id)
+const postTagsWorkspaceCheck = sql`post_id IN (
+  SELECT id FROM posts WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
 )`
 
 export const postTags = pgTable(
@@ -149,8 +149,8 @@ export const postTags = pgTable(
     pgPolicy('post_tags_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postTagsOrgCheck,
-      withCheck: postTagsOrgCheck,
+      using: postTagsWorkspaceCheck,
+      withCheck: postTagsWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -174,8 +174,8 @@ export const postRoadmaps = pgTable(
     pgPolicy('post_roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postTagsOrgCheck,
-      withCheck: postTagsOrgCheck,
+      using: postTagsWorkspaceCheck,
+      withCheck: postTagsWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -185,9 +185,9 @@ export const votes = pgTable(
   {
     id: typeIdWithDefault('vote')('id').primaryKey(),
     // Denormalized for RLS performance
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -200,7 +200,7 @@ export const votes = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('votes_org_id_idx').on(table.organizationId),
+    index('votes_workspace_id_idx').on(table.workspaceId),
     index('votes_post_id_idx').on(table.postId),
     uniqueIndex('votes_unique_idx').on(table.postId, table.userIdentifier),
     index('votes_member_id_idx').on(table.memberId),
@@ -208,8 +208,8 @@ export const votes = pgTable(
     pgPolicy('votes_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: directOrgCheck,
-      withCheck: directOrgCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -219,9 +219,9 @@ export const comments = pgTable(
   {
     id: typeIdWithDefault('comment')('id').primaryKey(),
     // Denormalized for RLS performance
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -239,7 +239,7 @@ export const comments = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    index('comments_org_id_idx').on(table.organizationId),
+    index('comments_workspace_id_idx').on(table.workspaceId),
     index('comments_post_id_idx').on(table.postId),
     index('comments_parent_id_idx').on(table.parentId),
     index('comments_member_id_idx').on(table.memberId),
@@ -248,15 +248,15 @@ export const comments = pgTable(
     pgPolicy('comments_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: directOrgCheck,
-      withCheck: directOrgCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
 
-// RLS check via comments table (single join to comments.organization_id)
-const commentReactionsOrgCheck = sql`comment_id IN (
-  SELECT id FROM comments WHERE organization_id = current_setting('app.organization_id', true)::uuid
+// RLS check via comments table (single join to comments.workspace_id)
+const commentReactionsWorkspaceCheck = sql`comment_id IN (
+  SELECT id FROM comments WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
 )`
 
 export const commentReactions = pgTable(
@@ -280,8 +280,8 @@ export const commentReactions = pgTable(
     pgPolicy('comment_reactions_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: commentReactionsOrgCheck,
-      withCheck: commentReactionsOrgCheck,
+      using: commentReactionsWorkspaceCheck,
+      withCheck: commentReactionsWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -291,9 +291,9 @@ export const postEditHistory = pgTable(
   'post_edit_history',
   {
     id: typeIdWithDefault('pedit')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -307,13 +307,13 @@ export const postEditHistory = pgTable(
   },
   (table) => [
     index('post_edit_history_post_id_idx').on(table.postId),
-    index('post_edit_history_org_id_idx').on(table.organizationId),
+    index('post_edit_history_workspace_id_idx').on(table.workspaceId),
     index('post_edit_history_created_at_idx').on(table.createdAt),
     pgPolicy('post_edit_history_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: directOrgCheck,
-      withCheck: directOrgCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -322,9 +322,9 @@ export const commentEditHistory = pgTable(
   'comment_edit_history',
   {
     id: typeIdWithDefault('cedit')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     commentId: typeIdColumn('comment')('comment_id')
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
@@ -336,13 +336,13 @@ export const commentEditHistory = pgTable(
   },
   (table) => [
     index('comment_edit_history_comment_id_idx').on(table.commentId),
-    index('comment_edit_history_org_id_idx').on(table.organizationId),
+    index('comment_edit_history_workspace_id_idx').on(table.workspaceId),
     index('comment_edit_history_created_at_idx').on(table.createdAt),
     pgPolicy('comment_edit_history_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: directOrgCheck,
-      withCheck: directOrgCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()

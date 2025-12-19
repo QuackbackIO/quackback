@@ -30,7 +30,7 @@ export async function getInboxPostList(params: InboxPostListParams): Promise<Inb
     ? boardIds
     : (
         await db.query.boards.findMany({
-          where: eq(boards.organizationId, organizationId),
+          where: eq(boards.workspaceId, organizationId),
           columns: { id: true },
         })
       ).map((b) => b.id)

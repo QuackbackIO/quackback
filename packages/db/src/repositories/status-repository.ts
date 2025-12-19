@@ -1,5 +1,5 @@
 import { eq, and, asc, sql } from 'drizzle-orm'
-import type { StatusId, OrgId } from '@quackback/ids'
+import type { StatusId, WorkspaceId } from '@quackback/ids'
 import type { Database } from '../client'
 import { postStatuses } from '../schema/statuses'
 import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../types'
@@ -65,9 +65,9 @@ export class StatusRepository {
   /**
    * Find a status by slug within an organization
    */
-  async findBySlug(organizationId: OrgId, slug: string): Promise<PostStatusEntity | null> {
+  async findBySlug(organizationId: WorkspaceId, slug: string): Promise<PostStatusEntity | null> {
     const status = await this.db.query.postStatuses.findFirst({
-      where: and(eq(postStatuses.organizationId, organizationId), eq(postStatuses.slug, slug)),
+      where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.slug, slug)),
     })
     return status ?? null
   }
@@ -139,17 +139,17 @@ export class StatusRepository {
    * Set a status as the default for new posts
    * This will unset any other default status in the organization
    */
-  async setDefault(organizationId: OrgId, statusId: StatusId): Promise<void> {
+  async setDefault(organizationId: WorkspaceId, statusId: StatusId): Promise<void> {
     // First, unset all defaults for this organization
     await this.db
       .update(postStatuses)
       .set({ isDefault: false })
-      .where(eq(postStatuses.organizationId, organizationId))
+      .where(eq(postStatuses.workspaceId, organizationId))
 
     // Then set the new default
     await this.db
       .update(postStatuses)
       .set({ isDefault: true })
-      .where(and(eq(postStatuses.id, statusId), eq(postStatuses.organizationId, organizationId)))
+      .where(and(eq(postStatuses.id, statusId), eq(postStatuses.workspaceId, organizationId)))
   }
 }

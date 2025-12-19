@@ -5,9 +5,9 @@ import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { boards } from './boards'
 import { appUser } from './rls'
 
-const changelogOrgCheck = sql`board_id IN (
+const changelogWorkspaceCheck = sql`board_id IN (
   SELECT id FROM boards
-  WHERE organization_id = current_setting('app.organization_id', true)::uuid
+  WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
 )`
 
 export const changelogEntries = pgTable(
@@ -29,8 +29,8 @@ export const changelogEntries = pgTable(
     pgPolicy('changelog_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: changelogOrgCheck,
-      withCheck: changelogOrgCheck,
+      using: changelogWorkspaceCheck,
+      withCheck: changelogWorkspaceCheck,
     }),
   ]
 ).enableRLS()

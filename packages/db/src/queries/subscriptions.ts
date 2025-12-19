@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db, adminDb } from '../tenant-context'
 import { subscription } from '../schema/subscriptions'
-import { generateId, type OrgId } from '@quackback/ids'
+import { generateId, type WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -11,7 +11,7 @@ export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled'
 export type SubscriptionTier = 'essentials' | 'professional' | 'team' | 'enterprise'
 
 export interface CreateSubscriptionData {
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   tier: SubscriptionTier
   status?: SubscriptionStatus
   stripeCustomerId?: string
@@ -44,11 +44,11 @@ export interface UpdateSubscriptionData {
 // ============================================================================
 
 /**
- * Get subscription for an organization (uses RLS)
+ * Get subscription for a workspace (uses RLS)
  */
-export async function getSubscriptionByOrganizationId(organizationId: OrgId) {
+export async function getSubscriptionByWorkspaceId(workspaceId: WorkspaceId) {
   return db.query.subscription.findFirst({
-    where: eq(subscription.organizationId, organizationId),
+    where: eq(subscription.workspaceId, workspaceId),
   })
 }
 
@@ -75,11 +75,11 @@ export async function getSubscriptionByStripeSubscriptionId(stripeSubscriptionId
 }
 
 /**
- * Get subscription by organization ID (admin - bypasses RLS for webhooks)
+ * Get subscription by workspace ID (admin - bypasses RLS for webhooks)
  */
-export async function getSubscriptionByOrganizationIdAdmin(organizationId: OrgId) {
+export async function getSubscriptionByWorkspaceIdAdmin(workspaceId: WorkspaceId) {
   return adminDb.query.subscription.findFirst({
-    where: eq(subscription.organizationId, organizationId),
+    where: eq(subscription.workspaceId, workspaceId),
   })
 }
 
@@ -95,7 +95,7 @@ export async function createSubscription(data: CreateSubscriptionData) {
     .insert(subscription)
     .values({
       id: generateId('subscription'),
-      organizationId: data.organizationId,
+      workspaceId: data.workspaceId,
       tier: data.tier,
       status: data.status ?? 'trialing',
       stripeCustomerId: data.stripeCustomerId,
@@ -112,16 +112,16 @@ export async function createSubscription(data: CreateSubscriptionData) {
 }
 
 /**
- * Update a subscription by organization ID (admin - bypasses RLS)
+ * Update a subscription by workspace ID (admin - bypasses RLS)
  */
-export async function updateSubscriptionByOrganizationId(
-  organizationId: OrgId,
+export async function updateSubscriptionByWorkspaceId(
+  workspaceId: WorkspaceId,
   data: UpdateSubscriptionData
 ) {
   const [result] = await adminDb
     .update(subscription)
     .set(data)
-    .where(eq(subscription.organizationId, organizationId))
+    .where(eq(subscription.workspaceId, workspaceId))
     .returning()
 
   return result
@@ -144,7 +144,7 @@ export async function updateSubscriptionByStripeId(
 }
 
 /**
- * Upsert subscription - create or update based on organization ID (admin - bypasses RLS)
+ * Upsert subscription - create or update based on workspace ID (admin - bypasses RLS)
  * Uses onConflictDoUpdate to avoid race conditions with concurrent webhooks.
  */
 export async function upsertSubscription(data: CreateSubscriptionData) {
@@ -152,7 +152,7 @@ export async function upsertSubscription(data: CreateSubscriptionData) {
     .insert(subscription)
     .values({
       id: generateId('subscription'),
-      organizationId: data.organizationId,
+      workspaceId: data.workspaceId,
       tier: data.tier,
       status: data.status ?? 'trialing',
       stripeCustomerId: data.stripeCustomerId,
@@ -166,7 +166,7 @@ export async function upsertSubscription(data: CreateSubscriptionData) {
       trialEnd: data.trialEnd,
     })
     .onConflictDoUpdate({
-      target: subscription.organizationId,
+      target: subscription.workspaceId,
       set: {
         tier: data.tier,
         status: data.status ?? 'trialing',

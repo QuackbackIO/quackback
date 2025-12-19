@@ -17,7 +17,7 @@ export const boards = pgTable(
   'boards',
   {
     id: typeIdWithDefault('board')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id').notNull(),
+    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
@@ -27,13 +27,13 @@ export const boards = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('boards_org_slug_idx').on(table.organizationId, table.slug),
-    index('boards_org_id_idx').on(table.organizationId),
+    uniqueIndex('boards_workspace_slug_idx').on(table.workspaceId, table.slug),
+    index('boards_workspace_id_idx').on(table.workspaceId),
     pgPolicy('boards_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
+      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
@@ -42,7 +42,7 @@ export const roadmaps = pgTable(
   'roadmaps',
   {
     id: typeIdWithDefault('roadmap')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id').notNull(),
+    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
@@ -52,14 +52,14 @@ export const roadmaps = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('roadmaps_org_slug_idx').on(table.organizationId, table.slug),
-    index('roadmaps_org_id_idx').on(table.organizationId),
-    index('roadmaps_position_idx').on(table.organizationId, table.position),
+    uniqueIndex('roadmaps_workspace_slug_idx').on(table.workspaceId, table.slug),
+    index('roadmaps_workspace_id_idx').on(table.workspaceId),
+    index('roadmaps_position_idx').on(table.workspaceId, table.position),
     pgPolicy('roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
+      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
@@ -68,19 +68,19 @@ export const tags = pgTable(
   'tags',
   {
     id: typeIdWithDefault('tag')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id').notNull(),
+    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
     name: text('name').notNull(),
     color: text('color').default('#6b7280').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('tags_org_name_idx').on(table.organizationId, table.name),
-    index('tags_org_id_idx').on(table.organizationId),
+    uniqueIndex('tags_workspace_name_idx').on(table.workspaceId, table.name),
+    index('tags_workspace_id_idx').on(table.workspaceId),
     pgPolicy('tags_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
+      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
     }),
   ]
 ).enableRLS()

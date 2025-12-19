@@ -1,5 +1,5 @@
 import { eq, and, asc, sql } from 'drizzle-orm'
-import type { StatusId, OrgId } from '@quackback/ids'
+import type { StatusId, WorkspaceId } from '@quackback/ids'
 import { db } from '../tenant-context'
 import { postStatuses, DEFAULT_STATUSES } from '../schema/statuses'
 import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../types'
@@ -8,10 +8,10 @@ import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../t
  * Get all statuses for an organization, ordered by category and position
  */
 export async function getStatusesByOrganization(
-  organizationId: OrgId
+  organizationId: WorkspaceId
 ): Promise<PostStatusEntity[]> {
   return db.query.postStatuses.findMany({
-    where: eq(postStatuses.organizationId, organizationId),
+    where: eq(postStatuses.workspaceId, organizationId),
     orderBy: [
       // Order by category (active, complete, closed) then position
       sql`CASE
@@ -28,14 +28,11 @@ export async function getStatusesByOrganization(
  * Get statuses by category for an organization
  */
 export async function getStatusesByCategory(
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   category: StatusCategory
 ): Promise<PostStatusEntity[]> {
   return db.query.postStatuses.findMany({
-    where: and(
-      eq(postStatuses.organizationId, organizationId),
-      eq(postStatuses.category, category)
-    ),
+    where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.category, category)),
     orderBy: [asc(postStatuses.position)],
   })
 }
@@ -43,12 +40,9 @@ export async function getStatusesByCategory(
 /**
  * Get roadmap statuses (showOnRoadmap = true)
  */
-export async function getRoadmapStatuses(organizationId: OrgId): Promise<PostStatusEntity[]> {
+export async function getRoadmapStatuses(organizationId: WorkspaceId): Promise<PostStatusEntity[]> {
   return db.query.postStatuses.findMany({
-    where: and(
-      eq(postStatuses.organizationId, organizationId),
-      eq(postStatuses.showOnRoadmap, true)
-    ),
+    where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.showOnRoadmap, true)),
     orderBy: [
       sql`CASE
         WHEN ${postStatuses.category} = 'active' THEN 0
@@ -73,11 +67,11 @@ export async function getStatusById(id: StatusId): Promise<PostStatusEntity | un
  * Get a status by slug within an organization
  */
 export async function getStatusBySlug(
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   slug: string
 ): Promise<PostStatusEntity | undefined> {
   return db.query.postStatuses.findFirst({
-    where: and(eq(postStatuses.organizationId, organizationId), eq(postStatuses.slug, slug)),
+    where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.slug, slug)),
   })
 }
 
@@ -85,10 +79,10 @@ export async function getStatusBySlug(
  * Get the default status for new posts in an organization
  */
 export async function getDefaultStatus(
-  organizationId: OrgId
+  organizationId: WorkspaceId
 ): Promise<PostStatusEntity | undefined> {
   return db.query.postStatuses.findFirst({
-    where: and(eq(postStatuses.organizationId, organizationId), eq(postStatuses.isDefault, true)),
+    where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.isDefault, true)),
   })
 }
 
@@ -128,7 +122,7 @@ export async function deleteStatus(id: StatusId): Promise<void> {
  * Takes an array of status IDs in the desired order and updates their positions
  */
 export async function reorderStatuses(
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   category: StatusCategory,
   statusIds: StatusId[]
 ): Promise<void> {
@@ -141,7 +135,7 @@ export async function reorderStatuses(
         .where(
           and(
             eq(postStatuses.id, id),
-            eq(postStatuses.organizationId, organizationId),
+            eq(postStatuses.workspaceId, organizationId),
             eq(postStatuses.category, category)
           )
         )
@@ -153,25 +147,30 @@ export async function reorderStatuses(
  * Set a status as the default for new posts
  * This will unset any other default status in the organization
  */
-export async function setDefaultStatus(organizationId: OrgId, statusId: StatusId): Promise<void> {
+export async function setDefaultStatus(
+  organizationId: WorkspaceId,
+  statusId: StatusId
+): Promise<void> {
   // First, unset all defaults for this organization
   await db
     .update(postStatuses)
     .set({ isDefault: false })
-    .where(eq(postStatuses.organizationId, organizationId))
+    .where(eq(postStatuses.workspaceId, organizationId))
 
   // Then set the new default
   await db
     .update(postStatuses)
     .set({ isDefault: true })
-    .where(and(eq(postStatuses.id, statusId), eq(postStatuses.organizationId, organizationId)))
+    .where(and(eq(postStatuses.id, statusId), eq(postStatuses.workspaceId, organizationId)))
 }
 
 /**
  * Seed default statuses for a new organization
  * Call this when a new organization is created
  */
-export async function seedDefaultStatuses(organizationId: OrgId): Promise<PostStatusEntity[]> {
+export async function seedDefaultStatuses(
+  organizationId: WorkspaceId
+): Promise<PostStatusEntity[]> {
   const statusesToCreate = DEFAULT_STATUSES.map((status) => ({
     ...status,
     organizationId,
@@ -186,9 +185,9 @@ export async function seedDefaultStatuses(organizationId: OrgId): Promise<PostSt
  * Check if an organization has any statuses
  * Useful to determine if default statuses need to be seeded
  */
-export async function hasStatuses(organizationId: OrgId): Promise<boolean> {
+export async function hasStatuses(organizationId: WorkspaceId): Promise<boolean> {
   const result = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.organizationId, organizationId),
+    where: eq(postStatuses.workspaceId, organizationId),
     columns: { id: true },
   })
   return !!result

@@ -7,20 +7,20 @@ import { member } from './auth'
 import { appUser } from './rls'
 
 /**
- * RLS check for post_subscriptions via post -> board -> organization
+ * RLS check for post_subscriptions via post -> board -> workspace
  */
-const subscriptionsOrgCheck = sql`post_id IN (
+const subscriptionsWorkspaceCheck = sql`post_id IN (
   SELECT p.id FROM posts p
   JOIN boards b ON p.board_id = b.id
-  WHERE b.organization_id = current_setting('app.organization_id', true)::uuid
+  WHERE b.workspace_id = current_setting('app.workspace_id', true)::uuid
 )`
 
 /**
- * RLS check for notification_preferences via member -> organization
+ * RLS check for notification_preferences via member -> workspace
  */
-const preferencesOrgCheck = sql`member_id IN (
+const preferencesWorkspaceCheck = sql`member_id IN (
   SELECT id FROM member
-  WHERE organization_id = current_setting('app.organization_id', true)::uuid
+  WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
 )`
 
 /**
@@ -53,15 +53,15 @@ export const postSubscriptions = pgTable(
     pgPolicy('post_subscriptions_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: subscriptionsOrgCheck,
-      withCheck: subscriptionsOrgCheck,
+      using: subscriptionsWorkspaceCheck,
+      withCheck: subscriptionsWorkspaceCheck,
     }),
   ]
 ).enableRLS()
 
 /**
  * Notification preferences - per-member email notification settings.
- * Each member has one preferences record per organization.
+ * Each member has one preferences record per workspace.
  */
 export const notificationPreferences = pgTable(
   'notification_preferences',
@@ -82,8 +82,8 @@ export const notificationPreferences = pgTable(
     pgPolicy('notification_preferences_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: preferencesOrgCheck,
-      withCheck: preferencesOrgCheck,
+      using: preferencesWorkspaceCheck,
+      withCheck: preferencesWorkspaceCheck,
     }),
   ]
 ).enableRLS()

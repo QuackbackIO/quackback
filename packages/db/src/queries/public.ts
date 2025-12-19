@@ -1,5 +1,13 @@
 import { eq, and, desc, asc, sql, inArray, isNull } from 'drizzle-orm'
-import type { BoardId, PostId, TagId, CommentId, MemberId, StatusId, OrgId } from '@quackback/ids'
+import type {
+  BoardId,
+  PostId,
+  TagId,
+  CommentId,
+  MemberId,
+  StatusId,
+  WorkspaceId,
+} from '@quackback/ids'
 import { db } from '../tenant-context'
 import { boards, tags } from '../schema/boards'
 import { posts, votes, comments, postTags, commentReactions } from '../schema/posts'
@@ -36,7 +44,7 @@ export interface PublicPostListItem {
 }
 
 export interface AllBoardsPostListParams {
-  organizationId: OrgId
+  organizationId: WorkspaceId
   boardSlug?: string
   search?: string
   statusIds?: StatusId[]
@@ -102,7 +110,9 @@ export interface RoadmapPost {
 /**
  * Get public boards with post counts for an organization
  */
-export async function getPublicBoardsWithStats(organizationId: OrgId): Promise<BoardWithStats[]> {
+export async function getPublicBoardsWithStats(
+  organizationId: WorkspaceId
+): Promise<BoardWithStats[]> {
   // Count only non-deleted posts
   const result = await db
     .select({
@@ -111,7 +121,7 @@ export async function getPublicBoardsWithStats(organizationId: OrgId): Promise<B
     })
     .from(boards)
     .leftJoin(posts, eq(posts.boardId, boards.id))
-    .where(and(eq(boards.organizationId, organizationId), eq(boards.isPublic, true)))
+    .where(and(eq(boards.workspaceId, organizationId), eq(boards.isPublic, true)))
     .groupBy(boards.id)
     .orderBy(asc(boards.name))
 
@@ -125,12 +135,12 @@ export async function getPublicBoardsWithStats(organizationId: OrgId): Promise<B
  * Get a single public board by slug
  */
 export async function getPublicBoardBySlug(
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   slug: string
 ): Promise<Board | undefined> {
   return db.query.boards.findFirst({
     where: and(
-      eq(boards.organizationId, organizationId),
+      eq(boards.workspaceId, organizationId),
       eq(boards.slug, slug),
       eq(boards.isPublic, true)
     ),
@@ -277,7 +287,7 @@ export async function getPublicPostListAllBoards(
   // Build where conditions
   // Exclude soft-deleted posts
   const conditions = [
-    eq(boards.organizationId, organizationId),
+    eq(boards.workspaceId, organizationId),
     eq(boards.isPublic, true),
     isNull(posts.deletedAt),
   ]
@@ -499,7 +509,7 @@ export async function getPublicPostDetail(
  * @param statusIds - Array of status IDs to filter by
  */
 export async function getRoadmapPosts(
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   statusIds: StatusId[]
 ): Promise<RoadmapPost[]> {
   if (statusIds.length === 0) {
@@ -520,7 +530,7 @@ export async function getRoadmapPosts(
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(
       and(
-        eq(boards.organizationId, organizationId),
+        eq(boards.workspaceId, organizationId),
         eq(boards.isPublic, true),
         inArray(posts.statusId, statusIds),
         isNull(posts.deletedAt)
@@ -588,7 +598,7 @@ export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Se
 export async function togglePublicVote(
   postId: PostId,
   userIdentifier: string,
-  organizationId: OrgId
+  organizationId: WorkspaceId
 ): Promise<{ voted: boolean; newCount: number }> {
   // Check if vote exists
   const existingVote = await db.query.votes.findFirst({
@@ -655,7 +665,7 @@ export async function addPublicComment(
   content: string,
   authorName: string | null,
   authorEmail: string | null,
-  organizationId: OrgId,
+  organizationId: WorkspaceId,
   parentId?: CommentId,
   memberId?: MemberId
 ): Promise<PublicComment> {

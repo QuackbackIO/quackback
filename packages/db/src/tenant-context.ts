@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db, getDb, type Database } from './client'
-import { toUuid, type OrgId } from '@quackback/ids'
+import { toUuid, type WorkspaceId } from '@quackback/ids'
 
 // Re-export db and Database type for consumers
 export { db, getDb, type Database }
@@ -25,20 +25,20 @@ function validateUuid(uuid: string): void {
 
 /**
  * Creates a tenant-scoped database transaction.
- * Sets the app.organization_id session variable before executing queries.
- * All RLS policies will automatically filter by this organization.
+ * Sets the app.workspace_id session variable before executing queries.
+ * All RLS policies will automatically filter by this workspace.
  */
 export async function withTenantContext<T>(
-  organizationId: OrgId,
+  workspaceId: WorkspaceId,
   callback: (tx: Database) => Promise<T>
 ): Promise<T> {
   // Convert TypeID to raw UUID for RLS policy
-  const uuid = toUuid(organizationId)
+  const uuid = toUuid(workspaceId)
   validateUuid(uuid)
   return db.transaction(async (tx) => {
     // Note: SET LOCAL doesn't support parameterized queries in PostgreSQL,
     // so we use sql.raw() with validated UUID to prevent SQL injection
-    await tx.execute(sql.raw(`SET LOCAL app.organization_id = '${uuid}'`))
+    await tx.execute(sql.raw(`SET LOCAL app.workspace_id = '${uuid}'`))
     await tx.execute(sql`SET LOCAL ROLE app_user`)
     return callback(tx as unknown as Database)
   })
@@ -48,13 +48,13 @@ export async function withTenantContext<T>(
  * Sets tenant context for a single query (when not using transactions).
  * Prefer withTenantContext for multiple queries.
  */
-export async function setTenantContext(organizationId: OrgId): Promise<void> {
+export async function setTenantContext(workspaceId: WorkspaceId): Promise<void> {
   // Convert TypeID to raw UUID for RLS policy
-  const uuid = toUuid(organizationId)
+  const uuid = toUuid(workspaceId)
   validateUuid(uuid)
   // Note: SET doesn't support parameterized queries in PostgreSQL,
   // so we use sql.raw() with validated UUID to prevent SQL injection
-  await db.execute(sql.raw(`SET app.organization_id = '${uuid}'`))
+  await db.execute(sql.raw(`SET app.workspace_id = '${uuid}'`))
   await db.execute(sql`SET ROLE app_user`)
 }
 
@@ -63,6 +63,6 @@ export async function setTenantContext(organizationId: OrgId): Promise<void> {
  * Use after setTenantContext if you need to run admin queries.
  */
 export async function clearTenantContext(): Promise<void> {
-  await db.execute(sql`RESET app.organization_id`)
+  await db.execute(sql`RESET app.workspace_id`)
   await db.execute(sql`RESET ROLE`)
 }

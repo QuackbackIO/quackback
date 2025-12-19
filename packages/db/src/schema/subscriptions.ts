@@ -3,10 +3,10 @@ import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { appUser } from './rls'
-import { organization } from './auth'
+import { workspace } from './auth'
 
 /**
- * Subscription table - Tracks organization subscription state for cloud deployments
+ * Subscription table - Tracks workspace subscription state for cloud deployments
  *
  * Only used when DEPLOYMENT_MODE=cloud. Self-hosted deployments don't need subscriptions
  * as all features are enabled by default.
@@ -22,9 +22,9 @@ export const subscription = pgTable(
   'subscription',
   {
     id: typeIdWithDefault('subscription')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id')
+    workspaceId: typeIdColumn('workspace')('workspace_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     // Pricing tier determines feature access
     tier: text('tier').notNull(), // 'essentials' | 'professional' | 'team' | 'enterprise'
     // Subscription status (mirrors Stripe statuses)
@@ -54,8 +54,8 @@ export const subscription = pgTable(
       .notNull(),
   },
   (table) => [
-    // One subscription per organization
-    uniqueIndex('subscription_org_id_idx').on(table.organizationId),
+    // One subscription per workspace
+    uniqueIndex('subscription_workspace_id_idx').on(table.workspaceId),
     // Lookup by Stripe customer
     index('subscription_stripe_customer_idx').on(table.stripeCustomerId),
     // Lookup by Stripe subscription
@@ -64,15 +64,15 @@ export const subscription = pgTable(
     pgPolicy('subscription_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
+      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
 
 export const subscriptionRelations = relations(subscription, ({ one }) => ({
-  organization: one(organization, {
-    fields: [subscription.organizationId],
-    references: [organization.id],
+  workspace: one(workspace, {
+    fields: [subscription.workspaceId],
+    references: [workspace.id],
   }),
 }))

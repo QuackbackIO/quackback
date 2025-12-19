@@ -18,14 +18,14 @@ import { appUser } from './rls'
 import { member } from './auth'
 
 /**
- * Organization-level integration configurations.
+ * Workspace-level integration configurations.
  * Stores OAuth tokens (encrypted), connection status, and integration-specific config.
  */
-export const organizationIntegrations = pgTable(
-  'organization_integrations',
+export const workspaceIntegrations = pgTable(
+  'workspace_integrations',
   {
     id: typeIdWithDefault('integration')('id').primaryKey(),
-    organizationId: typeIdColumn('org')('organization_id').notNull(),
+    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
 
@@ -55,14 +55,14 @@ export const organizationIntegrations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique('org_integration_unique').on(table.organizationId, table.integrationType),
-    index('idx_org_integrations_org').on(table.organizationId),
-    index('idx_org_integrations_type_status').on(table.integrationType, table.status),
-    pgPolicy('org_integrations_isolation', {
+    unique('workspace_integration_unique').on(table.workspaceId, table.integrationType),
+    index('idx_workspace_integrations_workspace').on(table.workspaceId),
+    index('idx_workspace_integrations_type_status').on(table.integrationType, table.status),
+    pgPolicy('workspace_integrations_isolation', {
       for: 'all',
       to: appUser,
-      using: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
-      withCheck: sql`organization_id = current_setting('app.organization_id', true)::uuid`,
+      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
+      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
     }),
   ]
 ).enableRLS()
@@ -88,7 +88,7 @@ export const integrationEventMappings = pgTable(
     foreignKey({
       name: 'event_mappings_integration_fk',
       columns: [table.integrationId],
-      foreignColumns: [organizationIntegrations.id],
+      foreignColumns: [workspaceIntegrations.id],
     }).onDelete('cascade'),
     unique('mapping_unique').on(table.integrationId, table.eventType, table.actionType),
     index('idx_event_mappings_lookup').on(table.integrationId, table.eventType, table.enabled),
@@ -116,7 +116,7 @@ export const integrationLinkedEntities = pgTable(
     foreignKey({
       name: 'linked_entities_integration_fk',
       columns: [table.integrationId],
-      foreignColumns: [organizationIntegrations.id],
+      foreignColumns: [workspaceIntegrations.id],
     }).onDelete('cascade'),
     unique('linked_entity_unique').on(table.integrationId, table.entityType, table.entityId),
     index('idx_linked_entities_lookup').on(table.integrationId, table.entityType, table.entityId),
@@ -144,7 +144,7 @@ export const integrationSyncLog = pgTable(
     foreignKey({
       name: 'sync_log_integration_fk',
       columns: [table.integrationId],
-      foreignColumns: [organizationIntegrations.id],
+      foreignColumns: [workspaceIntegrations.id],
     }).onDelete('cascade'),
     index('idx_sync_log_integration_created').on(table.integrationId, table.createdAt),
   ]
