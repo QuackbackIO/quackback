@@ -19,6 +19,8 @@ export const ID_PREFIXES = {
   tag: 'tag',
   status: 'status',
   reaction: 'reaction',
+  pedit: 'pedit', // post edit history
+  cedit: 'cedit', // comment edit history
 
   // Planning domain
   roadmap: 'roadmap',

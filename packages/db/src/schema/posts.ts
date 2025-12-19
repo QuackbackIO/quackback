@@ -75,6 +75,12 @@ export const posts = pgTable(
     officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedByMemberId: typeIdColumnNullable('member')('deleted_by_member_id').references(
+      () => member.id,
+      { onDelete: 'set null' }
+    ),
     // Full-text search vector (generated column, auto-computed from title and content)
     // Title has weight 'A' (highest), content has weight 'B'
     searchVector: tsvector('search_vector').generatedAlwaysAs(
@@ -110,6 +116,8 @@ export const posts = pgTable(
       .where(sql`status_id IS NOT NULL`),
     // GIN index for full-text search
     index('posts_search_vector_idx').using('gin', table.searchVector),
+    // Index for filtering deleted posts
+    index('posts_deleted_at_idx').on(table.deletedAt),
     pgPolicy('posts_tenant_isolation', {
       for: 'all',
       to: appUser,
@@ -227,6 +235,8 @@ export const comments = pgTable(
     content: text('content').notNull(),
     isTeamMember: boolean('is_team_member').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     index('comments_org_id_idx').on(table.organizationId),
@@ -272,6 +282,67 @@ export const commentReactions = pgTable(
       to: appUser,
       using: commentReactionsOrgCheck,
       withCheck: commentReactionsOrgCheck,
+    }),
+  ]
+).enableRLS()
+
+// Edit history tables for tracking post and comment changes
+export const postEditHistory = pgTable(
+  'post_edit_history',
+  {
+    id: typeIdWithDefault('pedit')('id').primaryKey(),
+    organizationId: typeIdColumn('org')('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    postId: typeIdColumn('post')('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    editorMemberId: typeIdColumn('member')('editor_member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'set null' }),
+    previousTitle: text('previous_title').notNull(),
+    previousContent: text('previous_content').notNull(),
+    previousContentJson: jsonb('previous_content_json'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('post_edit_history_post_id_idx').on(table.postId),
+    index('post_edit_history_org_id_idx').on(table.organizationId),
+    index('post_edit_history_created_at_idx').on(table.createdAt),
+    pgPolicy('post_edit_history_tenant_isolation', {
+      for: 'all',
+      to: appUser,
+      using: directOrgCheck,
+      withCheck: directOrgCheck,
+    }),
+  ]
+).enableRLS()
+
+export const commentEditHistory = pgTable(
+  'comment_edit_history',
+  {
+    id: typeIdWithDefault('cedit')('id').primaryKey(),
+    organizationId: typeIdColumn('org')('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    commentId: typeIdColumn('comment')('comment_id')
+      .notNull()
+      .references(() => comments.id, { onDelete: 'cascade' }),
+    editorMemberId: typeIdColumn('member')('editor_member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'set null' }),
+    previousContent: text('previous_content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('comment_edit_history_comment_id_idx').on(table.commentId),
+    index('comment_edit_history_org_id_idx').on(table.organizationId),
+    index('comment_edit_history_created_at_idx').on(table.createdAt),
+    pgPolicy('comment_edit_history_tenant_isolation', {
+      for: 'all',
+      to: appUser,
+      using: directOrgCheck,
+      withCheck: directOrgCheck,
     }),
   ]
 ).enableRLS()
@@ -370,4 +441,29 @@ export const postTagsRelations = relations(postTags, ({ one }) => ({
 // Post statuses relations (defined here to avoid circular dependency with statuses.ts)
 export const postStatusesRelations = relations(postStatuses, ({ many }) => ({
   posts: many(posts),
+}))
+
+// Edit history relations
+export const postEditHistoryRelations = relations(postEditHistory, ({ one }) => ({
+  post: one(posts, {
+    fields: [postEditHistory.postId],
+    references: [posts.id],
+  }),
+  editor: one(member, {
+    fields: [postEditHistory.editorMemberId],
+    references: [member.id],
+    relationName: 'postEditHistoryEditor',
+  }),
+}))
+
+export const commentEditHistoryRelations = relations(commentEditHistory, ({ one }) => ({
+  comment: one(comments, {
+    fields: [commentEditHistory.commentId],
+    references: [comments.id],
+  }),
+  editor: one(member, {
+    fields: [commentEditHistory.editorMemberId],
+    references: [member.id],
+    relationName: 'commentEditHistoryEditor',
+  }),
 }))
