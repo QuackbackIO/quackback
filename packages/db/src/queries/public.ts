@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
+import { eq, and, desc, asc, sql, inArray, isNull } from 'drizzle-orm'
 import type { BoardId, PostId, TagId, CommentId, MemberId, StatusId, OrgId } from '@quackback/ids'
 import { db } from '../tenant-context'
 import { boards, tags } from '../schema/boards'
@@ -103,10 +103,11 @@ export interface RoadmapPost {
  * Get public boards with post counts for an organization
  */
 export async function getPublicBoardsWithStats(organizationId: OrgId): Promise<BoardWithStats[]> {
+  // Count only non-deleted posts
   const result = await db
     .select({
       board: boards,
-      postCount: sql<number>`count(${posts.id})::int`,
+      postCount: sql<number>`count(${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NULL)::int`,
     })
     .from(boards)
     .leftJoin(posts, eq(posts.boardId, boards.id))
@@ -156,7 +157,8 @@ export async function getPublicPostList(
   const offset = (page - 1) * limit
 
   // Build where conditions
-  const conditions = [eq(posts.boardId, boardId)]
+  // Exclude soft-deleted posts
+  const conditions = [eq(posts.boardId, boardId), isNull(posts.deletedAt)]
 
   if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
@@ -204,6 +206,7 @@ export async function getPublicPostList(
   const postIds = postsResult.map((p) => p.id)
 
   // Get comment counts for all posts (batch query instead of N+1)
+  // Exclude deleted comments from count
   const commentCounts =
     postIds.length > 0
       ? await db
@@ -212,7 +215,7 @@ export async function getPublicPostList(
             count: sql<number>`count(*)`.as('count'),
           })
           .from(comments)
-          .where(inArray(comments.postId, postIds))
+          .where(and(inArray(comments.postId, postIds), isNull(comments.deletedAt)))
           .groupBy(comments.postId)
       : []
   const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
@@ -272,7 +275,12 @@ export async function getPublicPostListAllBoards(
   const offset = (page - 1) * limit
 
   // Build where conditions
-  const conditions = [eq(boards.organizationId, organizationId), eq(boards.isPublic, true)]
+  // Exclude soft-deleted posts
+  const conditions = [
+    eq(boards.organizationId, organizationId),
+    eq(boards.isPublic, true),
+    isNull(posts.deletedAt),
+  ]
 
   if (boardSlug) {
     conditions.push(eq(boards.slug, boardSlug))
@@ -330,6 +338,7 @@ export async function getPublicPostListAllBoards(
   const postIds = postsResult.map((p) => p.id)
 
   // Get comment counts for all posts (batch query instead of N+1)
+  // Exclude deleted comments from count
   const commentCounts =
     postIds.length > 0
       ? await db
@@ -338,7 +347,7 @@ export async function getPublicPostListAllBoards(
             count: sql<number>`count(*)`.as('count'),
           })
           .from(comments)
-          .where(inArray(comments.postId, postIds))
+          .where(and(inArray(comments.postId, postIds), isNull(comments.deletedAt)))
           .groupBy(comments.postId)
       : []
   const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
@@ -398,9 +407,9 @@ export async function getPublicPostDetail(
   postId: PostId,
   userIdentifier?: string
 ): Promise<PublicPostDetail | null> {
-  // Get post with board
+  // Get post with board (exclude deleted posts)
   const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
+    where: and(eq(posts.id, postId), isNull(posts.deletedAt)),
     with: {
       board: true,
     },
@@ -421,7 +430,7 @@ export async function getPublicPostDetail(
     .innerJoin(tags, eq(tags.id, postTags.tagId))
     .where(eq(postTags.postId, postId))
 
-  // Get comments with reactions
+  // Get comments with reactions (include deleted comments with placeholder)
   const commentsResult = await db.query.comments.findMany({
     where: eq(comments.postId, postId),
     with: {
@@ -430,8 +439,18 @@ export async function getPublicPostDetail(
     orderBy: asc(comments.createdAt),
   })
 
+  // Filter out deleted comments content (but keep in tree for thread integrity)
+  const processedComments = commentsResult.map((comment) => ({
+    ...comment,
+    // Replace content with placeholder for deleted comments
+    content: comment.deletedAt ? '[This comment has been deleted]' : comment.content,
+    // Clear author info for deleted comments
+    authorName: comment.deletedAt ? null : comment.authorName,
+    memberId: comment.deletedAt ? null : comment.memberId,
+  }))
+
   // Build nested comment tree using shared helper
-  const commentTree = buildCommentTree(commentsResult, userIdentifier)
+  const commentTree = buildCommentTree(processedComments, userIdentifier)
 
   // Map to PublicComment format
   const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => ({
@@ -503,7 +522,8 @@ export async function getRoadmapPosts(
       and(
         eq(boards.organizationId, organizationId),
         eq(boards.isPublic, true),
-        inArray(posts.statusId, statusIds)
+        inArray(posts.statusId, statusIds),
+        isNull(posts.deletedAt)
       )
     )
     .orderBy(desc(posts.voteCount))

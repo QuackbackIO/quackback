@@ -14,7 +14,10 @@ import {
   Pencil,
   Trash2,
   Plus,
+  RotateCcw,
+  AlertTriangle,
 } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -70,6 +73,10 @@ interface InboxPostDetailProps {
   isReactionPending: boolean
   onVote: () => void
   isVotePending: boolean
+  /** Callback to restore a soft-deleted post */
+  onRestore?: () => Promise<void>
+  /** Callback to permanently delete a post */
+  onPermanentDelete?: () => Promise<void>
 }
 
 function formatDate(date: Date): string {
@@ -329,11 +336,15 @@ export function InboxPostDetail({
   isReactionPending,
   onVote,
   isVotePending,
+  onRestore,
+  onPermanentDelete,
 }: InboxPostDetailProps) {
   const [isUpdating, setIsUpdating] = useState(false)
   const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false)
   const [isEditingResponse, setIsEditingResponse] = useState(false)
   const [responseText, setResponseText] = useState('')
+  const [isRestoring, setIsRestoring] = useState(false)
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false)
 
   if (isLoading) {
     return (
@@ -409,6 +420,66 @@ export function InboxPostDetail({
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Deleted post alert banner */}
+      {post.deletedAt && (
+        <Alert variant="destructive" className="mx-4 mt-4 rounded-lg">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              This post was deleted
+              {post.deletedByMemberName ? ` by ${post.deletedByMemberName}` : ''}
+              {' on '}
+              {formatDate(new Date(post.deletedAt))}.
+            </span>
+            <div className="flex items-center gap-2 ml-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!onRestore) return
+                  setIsRestoring(true)
+                  try {
+                    await onRestore()
+                  } finally {
+                    setIsRestoring(false)
+                  }
+                }}
+                disabled={isRestoring || isPermanentlyDeleting || !onRestore}
+                className="bg-background hover:bg-muted"
+              >
+                {isRestoring ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Restore
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={async () => {
+                  if (!onPermanentDelete) return
+                  setIsPermanentlyDeleting(true)
+                  try {
+                    await onPermanentDelete()
+                  } finally {
+                    setIsPermanentlyDeleting(false)
+                  }
+                }}
+                disabled={isRestoring || isPermanentlyDeleting || !onPermanentDelete}
+              >
+                {isPermanentlyDeleting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Delete Permanently
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Main content area - two column layout like public view */}
       <div className="flex border-b border-border/30">

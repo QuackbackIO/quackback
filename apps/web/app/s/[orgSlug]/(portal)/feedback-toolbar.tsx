@@ -1,28 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, Clock, Flame, Search, Plus } from 'lucide-react'
+import { TrendingUp, Clock, Flame, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { SubmitPostDialog } from '@/components/public/submit-post-dialog'
 import { FilterDropdown } from './filter-dropdown'
 import { cn } from '@/lib/utils'
 import type { PostStatusEntity, Tag } from '@/lib/db/types'
-
-interface BoardOption {
-  id: string
-  name: string
-  slug: string
-}
 
 interface FeedbackToolbarProps {
   currentSort: 'top' | 'new' | 'trending'
   currentSearch?: string
   onSortChange: (sort: 'top' | 'new' | 'trending') => void
   onSearchChange: (search: string) => void
-  boards: BoardOption[]
-  defaultBoardId?: string
   statuses: PostStatusEntity[]
   tags: Tag[]
   selectedStatuses: string[]
@@ -31,8 +22,6 @@ interface FeedbackToolbarProps {
   onTagChange: (tagIds: string[]) => void
   onClearFilters: () => void
   activeFilterCount: number
-  /** User info if authenticated */
-  user?: { name: string | null; email: string } | null
 }
 
 const sortOptions = [
@@ -46,8 +35,6 @@ export function FeedbackToolbar({
   currentSearch,
   onSortChange,
   onSearchChange,
-  boards,
-  defaultBoardId,
   statuses,
   tags,
   selectedStatuses,
@@ -56,7 +43,6 @@ export function FeedbackToolbar({
   onTagChange,
   onClearFilters,
   activeFilterCount,
-  user,
 }: FeedbackToolbarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
@@ -143,25 +129,6 @@ export function FeedbackToolbar({
           onClearFilters={onClearFilters}
           activeCount={activeFilterCount}
         />
-
-        {/* Create Post */}
-        {boards.length > 0 && (
-          <SubmitPostDialog
-            key={defaultBoardId}
-            boards={boards}
-            defaultBoardId={defaultBoardId}
-            user={user}
-            trigger={
-              <Button
-                size="sm"
-                className="portal-submit-button gap-1.5 bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Create post</span>
-              </Button>
-            }
-          />
-        )}
       </div>
     </div>
   )

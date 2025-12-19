@@ -213,15 +213,25 @@ export function FeedbackContainer({
     <div className="py-6">
       <div className="flex gap-8">
         <div className="flex-1 min-w-0">
-          <FeedbackHeader organizationName={organizationName} />
+          <FeedbackHeader
+            organizationName={organizationName}
+            boards={boards}
+            defaultBoardId={boardIdForCreate}
+            user={effectiveUser}
+            onPostCreated={(postId) => {
+              // Scroll to the new post after a short delay to allow the DOM to update
+              setTimeout(() => {
+                const postElement = document.querySelector(`[data-post-id="${postId}"]`)
+                postElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }, 100)
+            }}
+          />
 
           <FeedbackToolbar
             currentSort={activeSort}
             currentSearch={activeSearch}
             onSortChange={handleSortChange}
             onSearchChange={handleSearchChange}
-            boards={boards}
-            defaultBoardId={boardIdForCreate}
             statuses={statuses}
             tags={tags}
             selectedStatuses={activeStatuses}
@@ -230,7 +240,6 @@ export function FeedbackContainer({
             onTagChange={handleTagChange}
             onClearFilters={handleClearFilters}
             activeFilterCount={activeFilterCount}
-            user={effectiveUser}
           />
 
           <div className="mt-3">

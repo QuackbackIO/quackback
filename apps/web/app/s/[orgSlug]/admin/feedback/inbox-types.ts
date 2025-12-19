@@ -42,6 +42,10 @@ export interface PostDetails {
   avatarUrls?: Record<string, string | null>
   /** IDs of roadmaps this post belongs to */
   roadmapIds?: string[]
+  /** When the post was soft-deleted (null if not deleted) */
+  deletedAt?: Date | null
+  /** Name of the member who deleted the post */
+  deletedByMemberName?: string | null
 }
 
 export interface CurrentUser {

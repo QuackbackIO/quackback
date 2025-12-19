@@ -1,11 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import { ChevronUp, MessageSquare } from 'lucide-react'
+import { ChevronUp, MessageSquare, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { getInitials } from '@quackback/domain/utils'
@@ -32,6 +39,20 @@ interface PostCardProps {
   onVoteChange?: (postId: string, voted: boolean) => void
   /** Whether the user is authenticated (shows login dialog on vote if false) */
   isAuthenticated?: boolean
+  /** Whether the current user is the author of this post */
+  isCurrentUserAuthor?: boolean
+  /** Whether the user can edit this post */
+  canEdit?: boolean
+  /** Whether the user can delete this post */
+  canDelete?: boolean
+  /** Reason why editing is not allowed (shown in tooltip) */
+  editReason?: string
+  /** Reason why deletion is not allowed (shown in tooltip) */
+  deleteReason?: string
+  /** Callback when user clicks edit */
+  onEdit?: () => void
+  /** Callback when user clicks delete */
+  onDelete?: () => void
 }
 
 export function PostCard({
@@ -51,6 +72,13 @@ export function PostCard({
   hasVoted = false,
   onVoteChange,
   isAuthenticated = true,
+  isCurrentUserAuthor = false,
+  canEdit = false,
+  canDelete = false,
+  editReason,
+  deleteReason,
+  onEdit,
+  onDelete,
 }: PostCardProps) {
   const { openAuthPopover } = useAuthPopover()
   const currentStatus = statuses.find((s) => s.id === statusId)
@@ -69,6 +97,7 @@ export function PostCard({
   return (
     <Link
       href={`/b/${boardSlug}/posts/${id}`}
+      data-post-id={id}
       className="post-card flex transition-colors bg-[var(--post-card-background)] hover:bg-[var(--post-card-background)]/80"
     >
       {/* Vote section - left column */}
@@ -155,6 +184,72 @@ export function PostCard({
             <Badge variant="secondary" className="text-[11px] font-normal bg-muted/50">
               {boardName}
             </Badge>
+          )}
+          {/* Edit/Delete dropdown - only show for authors */}
+          {isCurrentUserAuthor && (
+            <TooltipProvider>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => e.preventDefault()}
+                    className="p-1 -m-1 rounded hover:bg-muted/50 transition-colors"
+                    aria-label="Post options"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
+                  {canEdit ? (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault()
+                        onEdit?.()
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuItem disabled>
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        <p>{editReason || 'Edit not allowed'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {canDelete ? (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        onDelete?.()
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuItem disabled>
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        <p>{deleteReason || 'Delete not allowed'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TooltipProvider>
           )}
         </div>
       </div>
