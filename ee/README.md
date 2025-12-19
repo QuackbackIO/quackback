@@ -7,7 +7,7 @@ This directory contains enterprise-only features for Quackback.
 The code in this directory is proprietary and requires a valid Enterprise license.
 See [LICENSE](./LICENSE) for details.
 
-The main Quackback codebase is licensed under BSL-1.1.
+The main Quackback codebase is licensed under AGPL-3.0.
 
 ## Enterprise Features
 

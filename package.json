@@ -1,11 +1,13 @@
 {
   "name": "quackback",
   "private": true,
+  "license": "AGPL-3.0",
   "type": "module",
   "packageManager": "bun@1.3.4",
   "workspaces": [
     "apps/*",
     "packages/*",
+    "scripts/*",
     "ee"
   ],
   "scripts": {

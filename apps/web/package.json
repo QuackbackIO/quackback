@@ -2,6 +2,7 @@
   "name": "@quackback/web",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0",
   "scripts": {
     "dev": "fuser -k 3000/tcp 2>/dev/null; rm -f .next/dev/lock && dotenv -e ../../.env -- next dev --turbopack",
     "build": "dotenv -e ../../.env -- next build",

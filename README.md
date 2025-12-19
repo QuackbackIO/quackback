@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-BSL--1.1-blue" alt="License" />
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" />
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
 </p>
 
@@ -118,11 +118,17 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for deta
 
 ## License
 
-Quackback is licensed under the [Business Source License 1.1](LICENSE).
+Quackback core (`apps/`, `packages/`) is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
 
-**TL;DR:** Free to use for internal feedback management. Commercial use (offering as a managed service) requires a commercial license.
+Enterprise features (`ee/`) are proprietary and require a commercial license. See [ee/LICENSE](ee/LICENSE) for details.
 
-Each version converts to Apache 2.0 four years after its release.
+**What this means:**
+
+- **Self-hosting**: Free and fully functional. You can run, modify, and deploy Quackback for your own use
+- **Modifications**: If you modify and distribute Quackback (or run it as a service), you must open-source your changes under AGPL-3.0
+- **Commercial license**: Available for organizations that need proprietary modifications or enterprise features. Contact sales@quackback.io
+
+Contributions require signing our [Contributor License Agreement](CLA.md).
 
 ---
 

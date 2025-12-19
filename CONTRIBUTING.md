@@ -137,30 +137,35 @@ bun run test packages/db/src/foo.test.ts
 cd apps/web && bun run test:e2e
 ```
 
-## Developer Certificate of Origin
+## Contributor License Agreement
 
-We use the [Developer Certificate of Origin (DCO)](https://developercertificate.org/) for contributions. By submitting a pull request, you certify that you wrote the code or have the right to submit it.
+We require all contributors to sign our [Contributor License Agreement (CLA)](CLA.md) before we can accept contributions.
 
-Sign your commits with:
+**Why a CLA?**
 
-```bash
-git commit -s -m "Your commit message"
-```
+The CLA allows Quackback to:
 
-This adds a `Signed-off-by` line to your commit. If you forget, you can amend:
+- Offer the software under dual licenses (AGPL-3.0 for open source, commercial for enterprise)
+- Defend the project against legal issues
+- Ensure clean IP ownership for all contributions
 
-```bash
-git commit --amend -s
-```
+**How it works:**
+
+1. Submit your pull request
+2. A CLA assistant bot will check if you've signed the CLA
+3. If not, the bot will prompt you to sign by commenting on the PR
+4. Once signed, your signature applies to all future contributions
+
+The CLA is based on the Apache Individual Contributor License Agreement and grants Quackback the right to use your contributions under any license terms.
 
 ## Pull Request Process
 
 1. Fork the repository
-2. Create a feature branch from `master`
+2. Create a feature branch from `main`
 3. Make your changes
-4. Sign your commits (see above)
-5. Ensure all tests pass
-6. Submit a pull request
+4. Ensure all tests pass
+5. Submit a pull request
+6. Sign the CLA when prompted by the bot
 
 ### PR Guidelines
 
@@ -185,4 +190,4 @@ When reporting bugs, include:
 
 ## License
 
-Quackback is licensed under BSL-1.1. See [LICENSE](LICENSE) for details.
+Quackback core is licensed under AGPL-3.0. See [LICENSE](LICENSE) for details.

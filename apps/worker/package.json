@@ -2,6 +2,7 @@
   "name": "@quackback/worker",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
     "dev": "dotenv -e ../../.env -- bun run --watch src/index.ts",
