@@ -94,6 +94,7 @@ export async function acceptInvitationAction(
         userId,
         workspaceId,
         role,
+        createdAt: new Date(),
       })
     }
 
