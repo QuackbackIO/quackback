@@ -35,7 +35,11 @@ function getHttpStatusFromError(error: PostError): number {
     case 'UNAUTHORIZED':
       return 403
     case 'VALIDATION_ERROR':
+    case 'EDIT_NOT_ALLOWED':
+    case 'DELETE_NOT_ALLOWED':
       return 400
+    case 'ALREADY_DELETED':
+      return 410 // Gone
     default:
       return 500
   }
@@ -230,6 +234,64 @@ export async function PATCH(
     return NextResponse.json(result.value)
   } catch (error) {
     console.error('Error updating post:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/posts/[postId]
+ * Admin deletes a post (soft or permanent)
+ *
+ * Body:
+ * - organizationId: OrgId (required)
+ * - permanent: boolean (optional, default false)
+ *   - false: soft delete (sets deletedAt)
+ *   - true: permanent delete (removes from database)
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ postId: string }> }
+) {
+  try {
+    const { postId: postIdParam } = await params
+    const body = await request.json()
+    const { organizationId, permanent = false } = body
+
+    // Validate TypeID format
+    if (!isValidTypeId(postIdParam, 'post')) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 })
+    }
+    const postId = postIdParam as PostId
+
+    // Validate tenant access (handles auth + org membership check)
+    const validation = await validateApiTenantAccess(organizationId)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
+    }
+
+    // Only admins and owners can delete posts
+    if (!['admin', 'owner'].includes(validation.member.role)) {
+      return NextResponse.json({ error: 'Only admins can delete posts' }, { status: 403 })
+    }
+
+    // Build service context from validation
+    const ctx = buildServiceContext(validation)
+
+    const postService = getPostService()
+
+    // Permanent delete or soft delete
+    const result = permanent
+      ? await postService.permanentDeletePost(postId, ctx)
+      : await postService.softDeletePost(postId, ctx)
+
+    if (!result.success) {
+      const status = getHttpStatusFromError(result.error)
+      return NextResponse.json({ error: result.error.message }, { status })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting post:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
