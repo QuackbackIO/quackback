@@ -145,13 +145,18 @@ function MenuBar({
     if (!editor) return
 
     const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('URL', previousUrl)
+    let url = window.prompt('URL', previousUrl)
 
     if (url === null) return
 
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
       return
+    }
+
+    // Auto-prefix https:// if no protocol specified
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`
     }
 
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
