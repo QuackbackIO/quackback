@@ -40,6 +40,9 @@ async function getTrustedOrigins(request: Request): Promise<string[]> {
   }
 
   const appDomain = process.env.APP_DOMAIN
+  // TENANT_BASE_DOMAIN is the base for tenant subdomains (e.g., quackback.io)
+  // When APP_DOMAIN=app.quackback.io, tenants are *.quackback.io
+  const tenantBaseDomain = process.env.TENANT_BASE_DOMAIN
 
   // Development fallback
   if (!appDomain) {
@@ -49,8 +52,18 @@ async function getTrustedOrigins(request: Request): Promise<string[]> {
     return []
   }
 
-  // Check if origin matches main domain or any subdomain
-  if (originHost === appDomain || originHost.endsWith(`.${appDomain}`)) {
+  // Check if origin matches main domain
+  if (originHost === appDomain) {
+    return [origin]
+  }
+
+  // Check if origin is a subdomain of the tenant base domain
+  if (tenantBaseDomain && originHost.endsWith(`.${tenantBaseDomain}`)) {
+    return [origin]
+  }
+
+  // Fallback: check subdomain of APP_DOMAIN (for simpler setups)
+  if (originHost.endsWith(`.${appDomain}`)) {
     return [origin]
   }
 

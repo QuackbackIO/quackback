@@ -88,6 +88,8 @@
     "EDITION": "cloud",
     // Production domain (without protocol)
     "APP_DOMAIN": "app.quackback.io",
+    // Base domain for tenant subdomains (e.g., *.quackback.io)
+    "TENANT_BASE_DOMAIN": "quackback.io",
     // Auth URL - main app entry point (with protocol)
     "BETTER_AUTH_URL": "https://app.quackback.io",
     // Email settings (use real address for better deliverability)

@@ -46,9 +46,12 @@
     // Edition: "cloud" for SaaS with billing, "oss" for self-hosted
     "EDITION": "cloud",
     // Production domain (without protocol)
-    "APP_DOMAIN": "your-domain.com",
+    "APP_DOMAIN": "app.your-domain.com",
+    // Base domain for tenant subdomains (e.g., if tenants are *.your-domain.com)
+    // Only needed if APP_DOMAIN is a subdomain (e.g., app.your-domain.com)
+    "TENANT_BASE_DOMAIN": "your-domain.com",
     // Auth URL (with protocol)
-    "BETTER_AUTH_URL": "https://your-domain.com",
+    "BETTER_AUTH_URL": "https://app.your-domain.com",
     // Email settings
     "EMAIL_FROM": "Quackback <noreply@your-domain.com>"
     // Add secrets via wrangler:
