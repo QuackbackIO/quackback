@@ -2,6 +2,8 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@quackback/domain/features'
+import type { WorkspaceId } from '@quackback/ids'
+import { getWorkspaceFeaturesAction } from '@/lib/actions/workspace'
 
 // ============================================================================
 // Query Key Factory
@@ -9,7 +11,7 @@ import { Feature, type PricingTier } from '@quackback/domain/features'
 
 export const featuresKeys = {
   all: ['features'] as const,
-  organization: (workspaceId: string) => [...featuresKeys.all, workspaceId] as const,
+  organization: (workspaceId: WorkspaceId) => [...featuresKeys.all, workspaceId] as const,
 }
 
 // ============================================================================
@@ -36,13 +38,15 @@ export interface WorkspaceFeaturesData {
  * Query hook to fetch organization features.
  * Uses SSR-provided initial data when available to prevent flash.
  */
-export function useWorkspaceFeatures(workspaceId: string) {
+export function useWorkspaceFeatures(workspaceId: WorkspaceId) {
   return useQuery({
     queryKey: featuresKeys.organization(workspaceId),
     queryFn: async (): Promise<WorkspaceFeaturesData> => {
-      const response = await fetch(`/api/workspace/features?workspaceId=${workspaceId}`)
-      if (!response.ok) throw new Error('Failed to fetch features')
-      return response.json()
+      const result = await getWorkspaceFeaturesAction({ workspaceId })
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data as WorkspaceFeaturesData
     },
     staleTime: 5 * 60 * 1000, // 5 minutes - features don't change often
   })
@@ -52,7 +56,7 @@ export function useWorkspaceFeatures(workspaceId: string) {
  * Hook to check if a specific feature is enabled.
  * Returns { enabled, isLoading, tier, edition } for conditional rendering.
  */
-export function useFeature(workspaceId: string, feature: Feature) {
+export function useFeature(workspaceId: WorkspaceId, feature: Feature) {
   const { data, isLoading, error } = useWorkspaceFeatures(workspaceId)
 
   return {
@@ -68,7 +72,10 @@ export function useFeature(workspaceId: string, feature: Feature) {
  * Hook to hydrate features from SSR data.
  * Call this in a client component that receives SSR features data.
  */
-export function useHydrateFeatures(workspaceId: string, initialData: WorkspaceFeaturesData | null) {
+export function useHydrateFeatures(
+  workspaceId: WorkspaceId,
+  initialData: WorkspaceFeaturesData | null
+) {
   const queryClient = useQueryClient()
 
   // Hydrate cache if initial data is provided and not already cached

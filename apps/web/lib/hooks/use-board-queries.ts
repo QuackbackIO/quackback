@@ -2,7 +2,8 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Board, BoardSettings } from '@/lib/db/types'
-import type { CreateBoardInput } from '@/lib/schemas/boards'
+import type { WorkspaceId, BoardId } from '@quackback/ids'
+import { createBoardAction, updateBoardAction, deleteBoardAction } from '@/lib/actions/boards'
 
 // ============================================================================
 // Query Key Factory
@@ -20,35 +21,33 @@ export const boardKeys = {
 // Types
 // ============================================================================
 
-type CreateBoardResponse = Board
-
-type UpdateBoardResponse = Board
-
-interface DeleteBoardResponse {
-  success: boolean
+interface CreateBoardInput {
+  name: string
+  description?: string
+  isPublic?: boolean
 }
 
 // ============================================================================
 // Mutation Hooks
 // ============================================================================
 
-export function useCreateBoard(workspaceId: string) {
+export function useCreateBoard(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreateBoardInput): Promise<CreateBoardResponse> => {
-      const response = await fetch('/api/boards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, workspaceId }),
+    mutationFn: async (input: CreateBoardInput): Promise<Board> => {
+      const result = await createBoardAction({
+        workspaceId,
+        name: input.name,
+        description: input.description,
+        isPublic: input.isPublic ?? true,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create board')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
-      return response.json()
+      return result.data as Board
     },
     onSuccess: () => {
       // Invalidate board lists to refetch
@@ -58,33 +57,32 @@ export function useCreateBoard(workspaceId: string) {
 }
 
 interface UpdateBoardInput_Full {
-  boardId: string
+  boardId: BoardId
   name?: string
   description?: string | null
   isPublic?: boolean
   settings?: BoardSettings
 }
 
-export function useUpdateBoard(workspaceId: string) {
+export function useUpdateBoard(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({
-      boardId,
-      ...input
-    }: UpdateBoardInput_Full): Promise<UpdateBoardResponse> => {
-      const response = await fetch(`/api/boards/${boardId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, workspaceId }),
+    mutationFn: async ({ boardId, ...input }: UpdateBoardInput_Full): Promise<Board> => {
+      const result = await updateBoardAction({
+        workspaceId,
+        id: boardId,
+        name: input.name,
+        description: input.description,
+        isPublic: input.isPublic,
+        settings: input.settings as Record<string, unknown> | undefined,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update board')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
-      return response.json()
+      return result.data as Board
     },
     onSuccess: (data, { boardId }) => {
       // Update the specific board in cache
@@ -95,21 +93,21 @@ export function useUpdateBoard(workspaceId: string) {
   })
 }
 
-export function useDeleteBoard(workspaceId: string) {
+export function useDeleteBoard(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (boardId: string): Promise<DeleteBoardResponse> => {
-      const response = await fetch(`/api/boards/${boardId}?workspaceId=${workspaceId}`, {
-        method: 'DELETE',
+    mutationFn: async (boardId: BoardId): Promise<{ id: string }> => {
+      const result = await deleteBoardAction({
+        workspaceId,
+        id: boardId,
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete board')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
-      return response.json()
+      return result.data
     },
     onSuccess: (_data, boardId) => {
       // Remove board from cache

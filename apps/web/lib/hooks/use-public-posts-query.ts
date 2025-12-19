@@ -8,9 +8,19 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
+import {
+  listPublicPostsAction,
+  toggleVoteAction,
+  createPublicPostAction,
+  getVotedPostsAction,
+  getPostPermissionsAction,
+  userEditPostAction,
+  userDeletePostAction,
+} from '@/lib/actions/public-posts'
+import type { ActionError } from '@/lib/actions/types'
 import type { PublicFeedbackFilters } from '@/app/s/[orgSlug]/(portal)/use-public-filters'
 import type { PublicPostListItem } from '@quackback/domain'
-import type { PostId, BoardId, StatusId } from '@quackback/ids'
+import type { PostId, BoardId, StatusId, TagId, WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -29,39 +39,52 @@ interface PublicPostListResult {
 export const publicPostsKeys = {
   all: ['publicPosts'] as const,
   lists: () => [...publicPostsKeys.all, 'list'] as const,
-  list: (workspaceId: string, filters: PublicFeedbackFilters) =>
+  list: (workspaceId: WorkspaceId, filters: PublicFeedbackFilters) =>
     [...publicPostsKeys.lists(), workspaceId, filters] as const,
 }
 
 export const votedPostsKeys = {
   all: ['votedPosts'] as const,
-  byOrg: (workspaceId: string) => [...votedPostsKeys.all, workspaceId] as const,
+  byOrg: (workspaceId: WorkspaceId) => [...votedPostsKeys.all, workspaceId] as const,
 }
 
 // ============================================================================
-// Fetch Function
+// Fetch Function (using server action)
 // ============================================================================
 
 async function fetchPublicPosts(
-  workspaceId: string,
+  workspaceId: WorkspaceId,
   filters: PublicFeedbackFilters,
   page: number
 ): Promise<PublicPostListResult> {
-  const params = new URLSearchParams({
+  // Parse status filters - can be TypeIDs or slugs
+  const statusIds: string[] = []
+  const statusSlugs: string[] = []
+  for (const s of filters.status || []) {
+    if (s.startsWith('status_')) {
+      statusIds.push(s)
+    } else {
+      statusSlugs.push(s)
+    }
+  }
+
+  const result = await listPublicPostsAction({
     workspaceId,
-    page: page.toString(),
-    limit: '20',
+    boardSlug: filters.board,
+    search: filters.search,
+    statusIds: statusIds.length > 0 ? (statusIds as StatusId[]) : undefined,
+    statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
+    tagIds: filters.tagIds as TagId[] | undefined,
+    sort: filters.sort || 'top',
+    page,
+    limit: 20,
   })
 
-  if (filters.board) params.set('board', filters.board)
-  if (filters.search) params.set('search', filters.search)
-  if (filters.sort) params.set('sort', filters.sort)
-  filters.status?.forEach((s) => params.append('status', s))
-  filters.tagIds?.forEach((t) => params.append('tagIds', t))
+  if (!result.success) {
+    throw new Error(result.error.message)
+  }
 
-  const response = await fetch(`/api/public/posts?${params.toString()}`)
-  if (!response.ok) throw new Error('Failed to fetch posts')
-  return response.json()
+  return result.data as PublicPostListResult
 }
 
 // ============================================================================
@@ -69,7 +92,7 @@ async function fetchPublicPosts(
 // ============================================================================
 
 interface UsePublicPostsOptions {
-  workspaceId: string
+  workspaceId: WorkspaceId
   filters: PublicFeedbackFilters
   initialData?: PublicPostListResult
 }
@@ -99,7 +122,7 @@ export function flattenPublicPosts(
 }
 
 // ============================================================================
-// Vote Mutation
+// Vote Mutation (using server action)
 // ============================================================================
 
 interface VoteResponse {
@@ -115,13 +138,12 @@ export function useVoteMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (postId: string): Promise<VoteResponse> => {
-      const response = await fetch(`/api/public/posts/${postId}/vote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      if (!response.ok) throw new Error('Failed to vote')
-      return response.json()
+    mutationFn: async (postId: PostId): Promise<VoteResponse> => {
+      const result = await toggleVoteAction({ postId })
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
     },
     onMutate: async (_postId): Promise<VoteMutationContext> => {
       // Cancel any outgoing refetches for all public post lists
@@ -171,7 +193,7 @@ export function useVoteMutation() {
 }
 
 // ============================================================================
-// Create Post Mutation (for public portal)
+// Create Post Mutation (using server action)
 // ============================================================================
 
 interface CreatePostInput {
@@ -188,7 +210,7 @@ interface CreatePostResponse {
   statusId: StatusId | null
   voteCount: number
   createdAt: string
-  board: { id: string; name: string; slug: string }
+  board: { id: BoardId; name: string; slug: string }
 }
 
 export function useCreatePublicPost() {
@@ -201,35 +223,18 @@ export function useCreatePublicPost() {
       content,
       contentJson,
     }: CreatePostInput): Promise<CreatePostResponse> => {
-      const response = await fetch(`/api/public/boards/${boardId}/posts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, contentJson }),
+      const result = await createPublicPostAction({
+        boardId,
+        title,
+        content,
+        contentJson: contentJson as { type: 'doc'; content?: unknown[] },
       })
 
-      // Get response text first to debug empty responses
-      const text = await response.text()
-
-      if (!response.ok) {
-        // Try to parse error message from response
-        try {
-          const data = JSON.parse(text)
-          throw new Error(data.error || 'Failed to create post')
-        } catch {
-          throw new Error(`Failed to create post (status ${response.status})`)
-        }
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
 
-      // Parse successful response
-      if (!text) {
-        throw new Error('Server returned empty response')
-      }
-
-      try {
-        return JSON.parse(text)
-      } catch {
-        throw new Error(`Invalid JSON response: ${text.slice(0, 100)}`)
-      }
+      return result.data as CreatePostResponse
     },
     onSuccess: (newPost) => {
       // Add new post to the beginning of all list queries
@@ -278,25 +283,20 @@ export function useCreatePublicPost() {
 }
 
 // ============================================================================
-// Voted Posts Query Hook
+// Voted Posts Query Hook (using server action)
 // ============================================================================
 
-interface VotedPostsResponse {
-  votedPostIds: string[]
-}
-
-async function fetchVotedPosts(workspaceId: string): Promise<Set<string>> {
-  const response = await fetch(`/api/public/votes?workspaceId=${workspaceId}`)
-  if (!response.ok) {
+async function fetchVotedPosts(workspaceId: WorkspaceId): Promise<Set<string>> {
+  const result = await getVotedPostsAction({ workspaceId })
+  if (!result.success) {
     return new Set()
   }
-  const data: VotedPostsResponse = await response.json()
-  return new Set(data.votedPostIds)
+  return new Set(result.data.votedPostIds)
 }
 
 interface UseVotedPostsOptions {
   initialVotedIds: string[]
-  workspaceId: string
+  workspaceId: WorkspaceId
 }
 
 /**
@@ -362,4 +362,151 @@ export function useVotedPosts({ initialVotedIds, workspaceId }: UseVotedPostsOpt
     () => ({ hasVoted, toggleVote, refetchVotedPosts }),
     [hasVoted, toggleVote, refetchVotedPosts]
   )
+}
+
+// ============================================================================
+// Post Permissions Query
+// ============================================================================
+
+export const postPermissionsKeys = {
+  all: ['postPermissions'] as const,
+  detail: (postId: PostId) => [...postPermissionsKeys.all, postId] as const,
+}
+
+interface PostPermissions {
+  canEdit: boolean
+  canDelete: boolean
+  editReason?: string
+  deleteReason?: string
+}
+
+interface UsePostPermissionsOptions {
+  postId: PostId
+  enabled?: boolean
+}
+
+/**
+ * Hook to get edit/delete permissions for a post.
+ */
+export function usePostPermissions({ postId, enabled = true }: UsePostPermissionsOptions) {
+  return useQuery({
+    queryKey: postPermissionsKeys.detail(postId),
+    queryFn: async (): Promise<PostPermissions> => {
+      const result = await getPostPermissionsAction({ postId })
+      if (!result.success) {
+        return { canEdit: false, canDelete: false }
+      }
+      return result.data
+    },
+    enabled,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+}
+
+// ============================================================================
+// User Edit Post Mutation
+// ============================================================================
+
+interface UserEditPostInput {
+  postId: PostId
+  title: string
+  content: string
+  contentJson?: { type: 'doc'; content?: unknown[] }
+}
+
+interface UseUserEditPostOptions {
+  onSuccess?: (post: unknown) => void
+  onError?: (error: ActionError) => void
+}
+
+/**
+ * Hook for a user to edit their own post.
+ */
+export function useUserEditPost({ onSuccess, onError }: UseUserEditPostOptions = {}) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: UserEditPostInput) => {
+      const result = await userEditPostAction(input)
+      if (!result.success) {
+        throw result.error
+      }
+      return result.data
+    },
+    onSuccess: (data, variables) => {
+      // Update post in all list queries
+      queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
+        { queryKey: publicPostsKeys.lists() },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((post) =>
+                post.id === variables.postId
+                  ? { ...post, title: variables.title, content: variables.content }
+                  : post
+              ),
+            })),
+          }
+        }
+      )
+      // Invalidate permissions as they may have changed
+      queryClient.invalidateQueries({ queryKey: postPermissionsKeys.detail(variables.postId) })
+      onSuccess?.(data)
+    },
+    onError: (error: ActionError) => {
+      onError?.(error)
+    },
+  })
+}
+
+// ============================================================================
+// User Delete Post Mutation
+// ============================================================================
+
+interface UseUserDeletePostOptions {
+  onSuccess?: () => void
+  onError?: (error: ActionError) => void
+}
+
+/**
+ * Hook for a user to soft-delete their own post.
+ */
+export function useUserDeletePost({ onSuccess, onError }: UseUserDeletePostOptions = {}) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (postId: PostId) => {
+      const result = await userDeletePostAction({ postId })
+      if (!result.success) {
+        throw result.error
+      }
+      return result.data
+    },
+    onSuccess: (_, postId) => {
+      // Remove post from all list queries
+      queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
+        { queryKey: publicPostsKeys.lists() },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((post) => post.id !== postId),
+              total: page.total - 1,
+            })),
+          }
+        }
+      )
+      // Invalidate to get fresh data
+      queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
+      onSuccess?.()
+    },
+    onError: (error: ActionError) => {
+      onError?.(error)
+    },
+  })
 }

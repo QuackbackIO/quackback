@@ -2,16 +2,25 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Roadmap } from '@/lib/db/types'
+import type { WorkspaceId, RoadmapId } from '@quackback/ids'
+import {
+  listRoadmapsAction,
+  createRoadmapAction,
+  updateRoadmapAction,
+  deleteRoadmapAction,
+  reorderRoadmapsAction,
+} from '@/lib/actions/roadmaps'
+import { listPublicRoadmapsAction } from '@/lib/actions/public-posts'
 
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
-  list: (workspaceId: string) => [...roadmapsKeys.all, 'list', workspaceId] as const,
-  publicList: (workspaceId: string) => [...roadmapsKeys.all, 'public', workspaceId] as const,
-  detail: (roadmapId: string) => [...roadmapsKeys.all, 'detail', roadmapId] as const,
+  list: (workspaceId: WorkspaceId) => [...roadmapsKeys.all, 'list', workspaceId] as const,
+  publicList: (workspaceId: WorkspaceId) => [...roadmapsKeys.all, 'public', workspaceId] as const,
+  detail: (roadmapId: RoadmapId) => [...roadmapsKeys.all, 'detail', roadmapId] as const,
 }
 
 interface UseRoadmapsOptions {
-  workspaceId: string
+  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
@@ -22,11 +31,11 @@ export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions)
   return useQuery({
     queryKey: roadmapsKeys.list(workspaceId),
     queryFn: async (): Promise<Roadmap[]> => {
-      const response = await fetch(`/api/roadmaps?workspaceId=${encodeURIComponent(workspaceId)}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch roadmaps')
+      const result = await listRoadmapsAction({ workspaceId })
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
-      return response.json()
+      return result.data as Roadmap[]
     },
     enabled,
   })
@@ -39,13 +48,11 @@ export function usePublicRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOp
   return useQuery({
     queryKey: roadmapsKeys.publicList(workspaceId),
     queryFn: async (): Promise<Roadmap[]> => {
-      const response = await fetch(
-        `/api/public/roadmaps?workspaceId=${encodeURIComponent(workspaceId)}`
-      )
-      if (!response.ok) {
-        throw new Error('Failed to fetch public roadmaps')
+      const result = await listPublicRoadmapsAction({ workspaceId })
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
-      return response.json()
+      return result.data as Roadmap[]
     },
     enabled,
   })
@@ -61,21 +68,22 @@ interface CreateRoadmapInput {
 /**
  * Hook to create a new roadmap
  */
-export function useCreateRoadmap(workspaceId: string) {
+export function useCreateRoadmap(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (input: CreateRoadmapInput): Promise<Roadmap> => {
-      const response = await fetch('/api/roadmaps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, workspaceId }),
+      const result = await createRoadmapAction({
+        workspaceId,
+        name: input.name,
+        slug: input.slug,
+        description: input.description,
+        isPublic: input.isPublic,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to create roadmap')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
-      return response.json()
+      return result.data as Roadmap
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
@@ -92,7 +100,7 @@ interface UpdateRoadmapInput {
 /**
  * Hook to update a roadmap
  */
-export function useUpdateRoadmap(workspaceId: string) {
+export function useUpdateRoadmap(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -100,19 +108,20 @@ export function useUpdateRoadmap(workspaceId: string) {
       roadmapId,
       input,
     }: {
-      roadmapId: string
+      roadmapId: RoadmapId
       input: UpdateRoadmapInput
     }): Promise<Roadmap> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}?workspaceId=${workspaceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, workspaceId }),
+      const result = await updateRoadmapAction({
+        workspaceId,
+        id: roadmapId,
+        name: input.name,
+        description: input.description,
+        isPublic: input.isPublic,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to update roadmap')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
-      return response.json()
+      return result.data as Roadmap
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
@@ -123,17 +132,17 @@ export function useUpdateRoadmap(workspaceId: string) {
 /**
  * Hook to delete a roadmap
  */
-export function useDeleteRoadmap(workspaceId: string) {
+export function useDeleteRoadmap(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (roadmapId: string): Promise<void> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}?workspaceId=${workspaceId}`, {
-        method: 'DELETE',
+    mutationFn: async (roadmapId: RoadmapId): Promise<void> => {
+      const result = await deleteRoadmapAction({
+        workspaceId,
+        id: roadmapId,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to delete roadmap')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
     },
     onSuccess: () => {
@@ -145,19 +154,17 @@ export function useDeleteRoadmap(workspaceId: string) {
 /**
  * Hook to reorder roadmaps
  */
-export function useReorderRoadmaps(workspaceId: string) {
+export function useReorderRoadmaps(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (roadmapIds: string[]): Promise<void> => {
-      const response = await fetch('/api/roadmaps/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roadmapIds, workspaceId }),
+      const result = await reorderRoadmapsAction({
+        workspaceId,
+        roadmapIds,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to reorder roadmaps')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
     },
     onSuccess: () => {

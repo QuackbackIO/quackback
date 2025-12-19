@@ -12,6 +12,16 @@ import type {
   RoadmapPostsListResult,
   RoadmapPostEntry,
 } from '@quackback/domain'
+import type { WorkspaceId, RoadmapId, StatusId, PostId } from '@quackback/ids'
+import {
+  getRoadmapPostsAction,
+  addPostToRoadmapAction,
+  removePostFromRoadmapAction,
+} from '@/lib/actions/roadmaps'
+import {
+  getPublicRoadmapPostsAction,
+  getRoadmapPostsByStatusAction,
+} from '@/lib/actions/public-posts'
 
 // ============================================================================
 // Query Key Factory
@@ -20,49 +30,39 @@ import type {
 export const roadmapPostsKeys = {
   all: ['roadmapPosts'] as const,
   lists: () => [...roadmapPostsKeys.all, 'list'] as const,
-  // Legacy: by status slug (used by existing components)
-  list: (workspaceId: string, statusSlug: string) =>
-    [...roadmapPostsKeys.lists(), workspaceId, statusSlug] as const,
+  // Legacy: by status ID (used by existing components)
+  list: (workspaceId: WorkspaceId, statusId: StatusId) =>
+    [...roadmapPostsKeys.lists(), workspaceId, statusId] as const,
   // New: by roadmap ID and status ID
-  byRoadmap: (roadmapId: string, statusId?: string) =>
+  byRoadmap: (roadmapId: RoadmapId, statusId?: StatusId) =>
     [...roadmapPostsKeys.all, 'roadmap', roadmapId, statusId ?? 'all'] as const,
 }
 
 // ============================================================================
-// Legacy Fetch Function (by status slug)
-// ============================================================================
-
-async function fetchRoadmapPosts(
-  workspaceId: string,
-  statusSlug: string,
-  page: number
-): Promise<RoadmapPostListResult> {
-  const params = new URLSearchParams({
-    workspaceId,
-    statusSlug,
-    page: page.toString(),
-    limit: '10',
-  })
-
-  const response = await fetch(`/api/public/roadmap/posts?${params.toString()}`)
-  if (!response.ok) throw new Error('Failed to fetch roadmap posts')
-  return response.json()
-}
-
-// ============================================================================
-// Legacy Query Hook (by status slug)
+// Legacy Query Hook (by status ID)
 // ============================================================================
 
 interface UseRoadmapPostsOptions {
-  workspaceId: string
-  statusSlug: string
+  workspaceId: WorkspaceId
+  statusId: StatusId
   initialData?: RoadmapPostListResult
 }
 
-export function useRoadmapPosts({ workspaceId, statusSlug, initialData }: UseRoadmapPostsOptions) {
+export function useRoadmapPosts({ workspaceId, statusId, initialData }: UseRoadmapPostsOptions) {
   return useInfiniteQuery({
-    queryKey: roadmapPostsKeys.list(workspaceId, statusSlug),
-    queryFn: ({ pageParam }) => fetchRoadmapPosts(workspaceId, statusSlug, pageParam),
+    queryKey: roadmapPostsKeys.list(workspaceId, statusId),
+    queryFn: async ({ pageParam }): Promise<RoadmapPostListResult> => {
+      const result = await getRoadmapPostsByStatusAction({
+        workspaceId,
+        statusId,
+        page: pageParam,
+        limit: 10,
+      })
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data as RoadmapPostListResult
+    },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     initialData: initialData
@@ -76,33 +76,13 @@ export function useRoadmapPosts({ workspaceId, statusSlug, initialData }: UseRoa
 }
 
 // ============================================================================
-// New: Fetch posts by roadmap ID
+// Admin: Fetch posts by roadmap ID
 // ============================================================================
 
-async function fetchRoadmapPostsByRoadmap(
-  workspaceId: string,
-  roadmapId: string,
-  statusId: string | undefined,
-  offset: number
-): Promise<RoadmapPostsListResult> {
-  const params = new URLSearchParams({
-    workspaceId,
-    limit: '20',
-    offset: offset.toString(),
-  })
-  if (statusId) {
-    params.append('statusId', statusId)
-  }
-
-  const response = await fetch(`/api/roadmaps/${roadmapId}/posts?${params.toString()}`)
-  if (!response.ok) throw new Error('Failed to fetch roadmap posts')
-  return response.json()
-}
-
 interface UseRoadmapPostsByRoadmapOptions {
-  workspaceId: string
-  roadmapId: string
-  statusId?: string
+  workspaceId: WorkspaceId
+  roadmapId: RoadmapId
+  statusId?: StatusId
   enabled?: boolean
 }
 
@@ -117,8 +97,19 @@ export function useRoadmapPostsByRoadmap({
 }: UseRoadmapPostsByRoadmapOptions) {
   return useInfiniteQuery({
     queryKey: roadmapPostsKeys.byRoadmap(roadmapId, statusId),
-    queryFn: ({ pageParam }) =>
-      fetchRoadmapPostsByRoadmap(workspaceId, roadmapId, statusId, pageParam),
+    queryFn: async ({ pageParam }): Promise<RoadmapPostsListResult> => {
+      const result = await getRoadmapPostsAction({
+        workspaceId,
+        roadmapId,
+        statusId,
+        limit: 20,
+        offset: pageParam,
+      })
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data as RoadmapPostsListResult
+    },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
     enabled,
@@ -132,19 +123,18 @@ export function useRoadmapPostsByRoadmap({
 /**
  * Hook to add a post to a roadmap
  */
-export function useAddPostToRoadmap(workspaceId: string, roadmapId: string) {
+export function useAddPostToRoadmap(workspaceId: WorkspaceId, roadmapId: RoadmapId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (postId: string): Promise<void> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}/posts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, workspaceId }),
+    mutationFn: async (postId: PostId): Promise<void> => {
+      const result = await addPostToRoadmapAction({
+        workspaceId,
+        roadmapId,
+        postId,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to add post to roadmap')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
     },
     onSuccess: () => {
@@ -159,19 +149,18 @@ export function useAddPostToRoadmap(workspaceId: string, roadmapId: string) {
 /**
  * Hook to remove a post from a roadmap
  */
-export function useRemovePostFromRoadmap(workspaceId: string, roadmapId: string) {
+export function useRemovePostFromRoadmap(workspaceId: WorkspaceId, roadmapId: RoadmapId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (postId: string): Promise<void> => {
-      const response = await fetch(`/api/roadmaps/${roadmapId}/posts?workspaceId=${workspaceId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId }),
+    mutationFn: async (postId: PostId): Promise<void> => {
+      const result = await removePostFromRoadmapAction({
+        workspaceId,
+        roadmapId,
+        postId,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to remove post from roadmap')
+      if (!result.success) {
+        throw new Error(result.error.message)
       }
     },
     onSuccess: () => {
@@ -186,30 +175,10 @@ export function useRemovePostFromRoadmap(workspaceId: string, roadmapId: string)
 // Public: Fetch posts by roadmap ID (no auth required)
 // ============================================================================
 
-async function fetchPublicRoadmapPosts(
-  workspaceId: string,
-  roadmapId: string,
-  statusId: string | undefined,
-  offset: number
-): Promise<RoadmapPostsListResult> {
-  const params = new URLSearchParams({
-    workspaceId,
-    limit: '20',
-    offset: offset.toString(),
-  })
-  if (statusId) {
-    params.append('statusId', statusId)
-  }
-
-  const response = await fetch(`/api/public/roadmaps/${roadmapId}/posts?${params.toString()}`)
-  if (!response.ok) throw new Error('Failed to fetch public roadmap posts')
-  return response.json()
-}
-
 interface UsePublicRoadmapPostsOptions {
-  workspaceId: string
-  roadmapId: string
-  statusId?: string
+  workspaceId: WorkspaceId
+  roadmapId: RoadmapId
+  statusId?: StatusId
   enabled?: boolean
 }
 
@@ -224,8 +193,19 @@ export function usePublicRoadmapPosts({
 }: UsePublicRoadmapPostsOptions) {
   return useInfiniteQuery({
     queryKey: [...roadmapPostsKeys.all, 'public', roadmapId, statusId ?? 'all'],
-    queryFn: ({ pageParam }) =>
-      fetchPublicRoadmapPosts(workspaceId, roadmapId, statusId, pageParam),
+    queryFn: async ({ pageParam }): Promise<RoadmapPostsListResult> => {
+      const result = await getPublicRoadmapPostsAction({
+        workspaceId,
+        roadmapId,
+        statusId,
+        limit: 20,
+        offset: pageParam,
+      })
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data as RoadmapPostsListResult
+    },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
     enabled,

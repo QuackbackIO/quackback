@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useVoteMutation } from './use-public-posts-query'
+import type { PostId } from '@quackback/ids'
 
 interface UsePostVoteOptions {
-  postId: string
+  postId: PostId
   initialVoteCount: number
   initialHasVoted: boolean
   /** Callback when vote state changes - used to sync parent state */
