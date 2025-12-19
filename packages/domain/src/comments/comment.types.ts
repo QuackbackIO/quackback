@@ -107,3 +107,11 @@ export interface CommentContext {
   }
   organizationId: OrgId
 }
+
+/**
+ * Result of checking edit/delete permission
+ */
+export interface CommentPermissionCheckResult {
+  allowed: boolean
+  reason?: string
+}

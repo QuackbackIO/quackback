@@ -106,8 +106,8 @@ describe('CommentService', () => {
   let mockContext: ServiceContext
 
   // Test data
-  const mockOrgId = 'org-123'
-  const mockUserId = 'user-123'
+  const mockOrgId = 'org_123'
+  const mockUserId = 'user_123'
   const mockMemberId = 'member_123'
   const mockPostId = 'post_123'
   const mockBoardId = 'board_123'
@@ -115,12 +115,12 @@ describe('CommentService', () => {
 
   const mockPost: Post = {
     id: mockPostId,
+    organizationId: mockOrgId,
     boardId: mockBoardId,
     title: 'Test Post',
     content: 'Test content',
     contentJson: null,
     statusId: null,
-    status: 'open',
     memberId: mockMemberId,
     authorId: null,
     authorName: 'Test User',
@@ -134,6 +134,9 @@ describe('CommentService', () => {
     officialResponseAuthorId: null,
     officialResponseAuthorName: null,
     officialResponseAt: null,
+    deletedAt: null,
+    deletedByMemberId: null,
+    searchVector: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }
@@ -152,6 +155,7 @@ describe('CommentService', () => {
 
   const mockComment: Comment = {
     id: mockCommentId,
+    organizationId: mockOrgId,
     postId: mockPostId,
     parentId: null,
     memberId: mockMemberId,
@@ -161,6 +165,7 @@ describe('CommentService', () => {
     content: 'Test comment',
     isTeamMember: false,
     createdAt: new Date(),
+    deletedAt: null,
   }
 
   beforeEach(async () => {

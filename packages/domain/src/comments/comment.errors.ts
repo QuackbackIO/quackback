@@ -9,6 +9,9 @@ export type CommentErrorCode =
   | 'UNAUTHORIZED'
   | 'VALIDATION_ERROR'
   | 'INVALID_PARENT'
+  | 'EDIT_NOT_ALLOWED'
+  | 'DELETE_NOT_ALLOWED'
+  | 'ALREADY_DELETED'
 
 /**
  * Domain error type for Comment operations
@@ -46,5 +49,22 @@ export const CommentError = {
     message: parentId
       ? `Parent comment with ID ${parentId} not found or invalid`
       : 'Invalid parent comment',
+  }),
+
+  editNotAllowed: (reason: string): CommentError => ({
+    code: 'EDIT_NOT_ALLOWED',
+    message: reason,
+  }),
+
+  deleteNotAllowed: (reason: string): CommentError => ({
+    code: 'DELETE_NOT_ALLOWED',
+    message: reason,
+  }),
+
+  alreadyDeleted: (id?: string): CommentError => ({
+    code: 'ALREADY_DELETED',
+    message: id
+      ? `Comment with ID ${id} has already been deleted`
+      : 'Comment has already been deleted',
   }),
 }

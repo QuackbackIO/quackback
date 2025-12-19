@@ -18,8 +18,10 @@ import {
   eq,
   and,
   asc,
+  isNull,
   comments,
   commentReactions,
+  commentEditHistory,
   type Comment,
   type UnitOfWork,
 } from '@quackback/db'
@@ -35,6 +37,7 @@ import type {
   CommentThread,
   ReactionResult,
   CommentContext,
+  CommentPermissionCheckResult,
 } from './comment.types'
 import { buildCommentTree, aggregateReactions } from '../shared/comment-tree'
 
@@ -646,6 +649,234 @@ export class CommentService {
 
       return ok({ added, reactions: aggregatedReactions })
     })
+  }
+
+  // ============================================================================
+  // User Edit/Delete Methods
+  // ============================================================================
+
+  /**
+   * Check if a user can edit a comment
+   * User can edit if: they are the author AND no team member has replied
+   *
+   * @param commentId - Comment ID to check
+   * @param ctx - Service context with user/org information
+   * @returns Result containing permission check result
+   */
+  async canEditComment(
+    commentId: CommentId,
+    ctx: ServiceContext
+  ): Promise<Result<CommentPermissionCheckResult, CommentError>> {
+    // Get the comment
+    const comment = await db.query.comments.findFirst({
+      where: eq(comments.id, commentId),
+    })
+
+    if (!comment) {
+      return err(CommentError.notFound(commentId))
+    }
+
+    // Check if comment is deleted
+    if (comment.deletedAt) {
+      return ok({ allowed: false, reason: 'Cannot edit a deleted comment' })
+    }
+
+    // Team members (owner, admin, member) can always edit
+    if (ctx.memberRole && ['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      return ok({ allowed: true })
+    }
+
+    // Must be the author
+    if (comment.memberId !== ctx.memberId) {
+      return ok({ allowed: false, reason: 'You can only edit your own comments' })
+    }
+
+    // Check if any team member has replied to this comment
+    const hasTeamReply = await this.hasTeamMemberReply(commentId)
+    if (hasTeamReply) {
+      return ok({
+        allowed: false,
+        reason: 'Cannot edit comments that have received team member replies',
+      })
+    }
+
+    return ok({ allowed: true })
+  }
+
+  /**
+   * Check if a user can delete a comment
+   * User can delete if: they are the author AND no team member has replied
+   *
+   * @param commentId - Comment ID to check
+   * @param ctx - Service context with user/org information
+   * @returns Result containing permission check result
+   */
+  async canDeleteComment(
+    commentId: CommentId,
+    ctx: ServiceContext
+  ): Promise<Result<CommentPermissionCheckResult, CommentError>> {
+    // Get the comment
+    const comment = await db.query.comments.findFirst({
+      where: eq(comments.id, commentId),
+    })
+
+    if (!comment) {
+      return err(CommentError.notFound(commentId))
+    }
+
+    // Check if comment is already deleted
+    if (comment.deletedAt) {
+      return ok({ allowed: false, reason: 'Comment has already been deleted' })
+    }
+
+    // Team members (owner, admin, member) can always delete
+    if (ctx.memberRole && ['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      return ok({ allowed: true })
+    }
+
+    // Must be the author
+    if (comment.memberId !== ctx.memberId) {
+      return ok({ allowed: false, reason: 'You can only delete your own comments' })
+    }
+
+    // Check if any team member has replied to this comment
+    const hasTeamReply = await this.hasTeamMemberReply(commentId)
+    if (hasTeamReply) {
+      return ok({
+        allowed: false,
+        reason: 'Cannot delete comments that have received team member replies',
+      })
+    }
+
+    return ok({ allowed: true })
+  }
+
+  /**
+   * User edits their own comment
+   * Validates permissions and updates content only (not timestamps)
+   *
+   * @param commentId - Comment ID to edit
+   * @param content - New content
+   * @param ctx - Service context with user/org information
+   * @returns Result containing updated comment or error
+   */
+  async userEditComment(
+    commentId: CommentId,
+    content: string,
+    ctx: ServiceContext
+  ): Promise<Result<Comment, CommentError>> {
+    // Check permission first
+    const permResult = await this.canEditComment(commentId, ctx)
+    if (!permResult.success) {
+      return err(permResult.error)
+    }
+    if (!permResult.value.allowed) {
+      return err(CommentError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
+    }
+
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const commentRepo = new CommentRepository(uow.db)
+
+      // Get the existing comment
+      const existingComment = await commentRepo.findById(commentId)
+      if (!existingComment) {
+        return err(CommentError.notFound(commentId))
+      }
+
+      // Validate input
+      if (!content?.trim()) {
+        return err(CommentError.validationError('Content is required'))
+      }
+      if (content.length > 5000) {
+        return err(CommentError.validationError('Content must be 5,000 characters or less'))
+      }
+
+      // Record edit history (always record for comments)
+      if (ctx.memberId) {
+        await uow.db.insert(commentEditHistory).values({
+          organizationId: ctx.organizationId,
+          commentId: commentId,
+          editorMemberId: ctx.memberId,
+          previousContent: existingComment.content,
+        })
+      }
+
+      // Update the comment (content only, not timestamps per PRD)
+      const updatedComment = await commentRepo.update(commentId, {
+        content: content.trim(),
+      })
+
+      if (!updatedComment) {
+        return err(CommentError.notFound(commentId))
+      }
+
+      return ok(updatedComment)
+    })
+  }
+
+  /**
+   * Soft delete a comment
+   * Sets deletedAt timestamp, shows placeholder text in threads
+   *
+   * @param commentId - Comment ID to delete
+   * @param ctx - Service context with user/org information
+   * @returns Result indicating success or error
+   */
+  async softDeleteComment(
+    commentId: CommentId,
+    ctx: ServiceContext
+  ): Promise<Result<void, CommentError>> {
+    // Check permission first
+    const permResult = await this.canDeleteComment(commentId, ctx)
+    if (!permResult.success) {
+      return err(permResult.error)
+    }
+    if (!permResult.value.allowed) {
+      return err(CommentError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
+    }
+
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const commentRepo = new CommentRepository(uow.db)
+
+      // Set deletedAt
+      const updatedComment = await commentRepo.update(commentId, {
+        deletedAt: new Date(),
+      })
+
+      if (!updatedComment) {
+        return err(CommentError.notFound(commentId))
+      }
+
+      return ok(undefined)
+    })
+  }
+
+  // ============================================================================
+  // Helper Methods
+  // ============================================================================
+
+  /**
+   * Check if a comment has any reply from a team member
+   * Recursively checks all descendants
+   */
+  private async hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
+    // Find direct replies that are from team members and not deleted
+    const replies = await db.query.comments.findMany({
+      where: and(eq(comments.parentId, commentId), isNull(comments.deletedAt)),
+    })
+
+    for (const reply of replies) {
+      if (reply.isTeamMember) {
+        return true
+      }
+      // Recursively check replies
+      const hasNestedTeamReply = await this.hasTeamMemberReply(reply.id)
+      if (hasNestedTeamReply) {
+        return true
+      }
+    }
+
+    return false
   }
 }
 
