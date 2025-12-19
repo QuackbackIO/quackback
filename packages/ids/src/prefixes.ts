@@ -41,7 +41,7 @@ export const ID_PREFIXES = {
   // Auth Entities (Better-auth, text primary keys)
   // ============================================
 
-  org: 'org',
+  workspace: 'workspace',
   user: 'user',
   member: 'member',
   session: 'session',

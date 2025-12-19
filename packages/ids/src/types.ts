@@ -74,8 +74,8 @@ export type UnsubTokenId = TypeId<'unsub_token'>
 // Auth Entity IDs (Better-auth)
 // ============================================
 
-/** Organization ID - e.g., org_01h455vb4pex5vsknk084sn02q */
-export type OrgId = TypeId<'org'>
+/** Workspace ID - e.g., workspace_01h455vb4pex5vsknk084sn02q */
+export type WorkspaceId = TypeId<'workspace'>
 
 /** User ID - e.g., user_01h455vb4pex5vsknk084sn02q */
 export type UserId = TypeId<'user'>
@@ -140,7 +140,7 @@ export interface EntityIdMap {
   post_subscription: PostSubscriptionId
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId
-  org: OrgId
+  workspace: WorkspaceId
   user: UserId
   member: MemberId
   session: SessionId
