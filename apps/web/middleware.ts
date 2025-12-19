@@ -4,13 +4,15 @@ import type { NextRequest } from 'next/server'
 /**
  * Unified Middleware for Quackback
  *
- * Routing mode is auto-detected based on runtime environment:
- * - Cloudflare Workers: Multi-tenant routing with subdomain + custom domain support
- * - Node.js / Local dev: Single-tenant routing, rewrites all to /s/[DEFAULT_ORG_SLUG]/
+ * Routes requests to the appropriate workspace based on domain.
+ * Both local dev and cloud deployments use the internal API to look up
+ * the workspace from the workspace_domain table.
+ *
+ * Main domain (APP_DOMAIN): Shows landing page or redirects to workspace
+ * Workspace domains: Rewrites to /s/[workspaceSlug]/path
  */
 
 const APP_DOMAIN = process.env.APP_DOMAIN
-const DEFAULT_ORG_SLUG = process.env.DEFAULT_ORG_SLUG || 'default'
 
 /** Auto-detect Cloudflare Workers runtime */
 function isCloudflareWorker(): boolean {
@@ -26,17 +28,17 @@ function isCloudflareWorker(): boolean {
   }
 }
 
-/** Public routes on main domain (cloud only) */
+/** Public routes on main domain */
 const mainDomainPublicRoutes = ['/', '/create-workspace', '/accept-invitation', '/api/']
 
-/** Auth routes on tenant domains */
-const tenantAuthRoutes = ['/login', '/signup', '/sso', '/admin/login', '/admin/signup']
+/** Auth routes on workspace domains */
+const workspaceAuthRoutes = ['/login', '/signup', '/sso', '/admin/login', '/admin/signup']
 
-/** Public routes on tenant domains */
-const tenantPublicRoutes = ['/', '/roadmap', '/accept-invitation']
+/** Public routes on workspace domains */
+const workspacePublicRoutes = ['/', '/roadmap', '/accept-invitation']
 
-/** Routes that should NOT be rewritten to /s/[orgSlug]/ (global pages) */
-const globalRoutes = ['/workspace-not-found']
+/** Routes that should NOT be rewritten to /s/[workspaceSlug]/ (global pages) */
+const globalRoutes = ['/workspace-not-found', '/create-workspace']
 
 function isPublicPostRoute(pathname: string): boolean {
   return /^\/b\/[^/]+\/posts\/[^/]+$/.test(pathname)
@@ -46,48 +48,72 @@ function getProtocol(request: NextRequest): string {
   return request.headers.get('x-forwarded-proto') || 'https'
 }
 
-// Store the last error for debugging (cloud only)
+// Store the last error for debugging
 let lastDomainLookupError: string | null = null
 
+// In-memory cache for domain → slug mappings in middleware
+// This avoids HTTP calls for repeated requests to the same domain
+const middlewareCache = new Map<string, { slug: string | null; expiresAt: number }>()
+const MIDDLEWARE_CACHE_TTL_MS = 30_000 // 30 seconds
+
 /**
- * Look up org slug from domain via service binding (cloud only).
- * Uses WORKER_SELF_REFERENCE to call internal API route without external network hop.
- * This handles both subdomains and custom domains via the workspace_domains table.
+ * Look up workspace slug from domain via internal API.
+ * - Cloudflare Workers: Uses WORKER_SELF_REFERENCE service binding
+ * - Local dev: Uses direct fetch to the internal API endpoint
+ * Results are cached in middleware memory for 30 seconds.
  */
-async function getOrgSlugFromDomain(host: string): Promise<string | null> {
+async function getWorkspaceSlugFromDomain(
+  host: string,
+  request: NextRequest
+): Promise<string | null> {
   lastDomainLookupError = null
 
-  // Skip domain lookup during local dev (no Cloudflare context)
-  if (!isCloudflareWorker()) {
-    lastDomainLookupError = 'Domain lookup not available in local dev'
-    return null
+  // Check middleware cache first
+  const cached = middlewareCache.get(host)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.slug
   }
 
   try {
-    // Dynamic import to avoid loading @opennextjs/cloudflare in Node.js
-    const { getCloudflareContext } = await import('@opennextjs/cloudflare')
-    const ctx = getCloudflareContext()
+    let response: Response
 
-    if (ctx?.env?.WORKER_SELF_REFERENCE) {
-      const response = await ctx.env.WORKER_SELF_REFERENCE.fetch(
+    if (isCloudflareWorker()) {
+      // Cloudflare Workers: Use service binding for internal call
+      const { getCloudflareContext } = await import('@opennextjs/cloudflare')
+      const ctx = getCloudflareContext()
+
+      if (!ctx?.env?.WORKER_SELF_REFERENCE) {
+        lastDomainLookupError = 'No WORKER_SELF_REFERENCE binding found'
+        return null
+      }
+
+      response = await ctx.env.WORKER_SELF_REFERENCE.fetch(
         `https://internal/api/internal/resolve-domain?domain=${encodeURIComponent(host)}`,
         { method: 'GET' }
       )
+    } else {
+      // Local dev: Use direct fetch to internal API
+      const protocol = request.headers.get('x-forwarded-proto') || 'http'
+      const internalUrl = `${protocol}://${APP_DOMAIN}/api/internal/resolve-domain?domain=${encodeURIComponent(host)}`
+      response = await fetch(internalUrl, { method: 'GET' })
+    }
 
-      if (response.ok) {
-        const data = (await response.json()) as { slug?: string | null; error?: string }
-        if (data.slug) {
-          return data.slug
-        }
-        if (data.error) {
-          lastDomainLookupError = data.error
-          return null
-        }
-      } else {
-        lastDomainLookupError = `Service binding returned ${response.status}`
+    if (response.ok) {
+      const data = (await response.json()) as { slug?: string | null; error?: string }
+      const slug = data.slug ?? null
+
+      // Cache the result
+      middlewareCache.set(host, { slug, expiresAt: Date.now() + MIDDLEWARE_CACHE_TTL_MS })
+
+      if (slug) {
+        return slug
+      }
+      if (data.error) {
+        lastDomainLookupError = data.error
+        return null
       }
     } else {
-      lastDomainLookupError = 'No WORKER_SELF_REFERENCE binding found'
+      lastDomainLookupError = `API returned ${response.status}`
     }
 
     lastDomainLookupError = lastDomainLookupError || `No domain found for: ${host}`
@@ -100,31 +126,48 @@ async function getOrgSlugFromDomain(host: string): Promise<string | null> {
 }
 
 // ============================================================================
-// SINGLE-TENANT ROUTING (OSS)
+// LOCAL ROUTING (Node.js / OSS Edition)
 // ============================================================================
 
-function handleSingleTenant(request: NextRequest, pathname: string): NextResponse {
+async function handleLocalRouting(request: NextRequest, pathname: string): Promise<NextResponse> {
+  const host = request.headers.get('host')
+
   // .well-known routes - serve from root
   if (pathname.startsWith('/.well-known')) {
     return NextResponse.next()
   }
 
-  // Global routes that shouldn't be rewritten
+  // Global routes that shouldn't be rewritten (error pages, create-workspace, etc.)
   if (globalRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
     return NextResponse.next()
   }
 
-  // Rewrite all routes to /s/[DEFAULT_ORG_SLUG]/
-  const url = request.nextUrl.clone()
-  url.pathname = `/s/${DEFAULT_ORG_SLUG}${pathname}`
-  return NextResponse.rewrite(url)
+  // Look up workspace slug from domain (same as cloud mode)
+  // In OSS mode, there's typically one workspace with domain matching APP_DOMAIN
+  if (host) {
+    const workspaceSlug = await getWorkspaceSlugFromDomain(host, request)
+
+    if (workspaceSlug) {
+      const url = request.nextUrl.clone()
+      url.pathname = `/s/${workspaceSlug}${pathname}`
+      return NextResponse.rewrite(url)
+    }
+  }
+
+  // Fallback: No workspace found - redirect to create workspace
+  // This handles the case where no workspace has been created yet
+  if (pathname !== '/create-workspace') {
+    return NextResponse.redirect(new URL('/create-workspace', request.url))
+  }
+
+  return NextResponse.next()
 }
 
 // ============================================================================
-// MULTI-TENANT ROUTING (CLOUD)
+// CLOUD ROUTING (Cloudflare Workers)
 // ============================================================================
 
-async function handleMultiTenant(request: NextRequest, pathname: string): Promise<NextResponse> {
+async function handleCloudRouting(request: NextRequest, pathname: string): Promise<NextResponse> {
   const host = request.headers.get('host')
 
   if (!host) {
@@ -147,17 +190,17 @@ async function handleMultiTenant(request: NextRequest, pathname: string): Promis
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  // === TENANT DOMAIN ===
+  // === WORKSPACE DOMAIN ===
 
   // Global routes that shouldn't be rewritten (error pages, etc.)
   if (globalRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
     return NextResponse.next()
   }
 
-  // Look up org slug from workspace_domains table
-  const orgSlug = await getOrgSlugFromDomain(host)
+  // Look up workspace slug from workspace_domain table
+  const workspaceSlug = await getWorkspaceSlugFromDomain(host, request)
 
-  if (!orgSlug) {
+  if (!workspaceSlug) {
     const url = request.nextUrl.clone()
     url.pathname = '/workspace-not-found'
     return NextResponse.rewrite(url)
@@ -165,12 +208,12 @@ async function handleMultiTenant(request: NextRequest, pathname: string): Promis
 
   const rewriteToSlug = (path: string = pathname) => {
     const url = request.nextUrl.clone()
-    url.pathname = `/s/${orgSlug}${path}`
+    url.pathname = `/s/${workspaceSlug}${path}`
     return NextResponse.rewrite(url)
   }
 
   // Auth routes - rewrite without session check
-  if (tenantAuthRoutes.some((route) => pathname.startsWith(route))) {
+  if (workspaceAuthRoutes.some((route) => pathname.startsWith(route))) {
     return rewriteToSlug()
   }
 
@@ -181,7 +224,7 @@ async function handleMultiTenant(request: NextRequest, pathname: string): Promis
 
   // Public routes - no auth, just rewrite
   if (
-    tenantPublicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
+    workspacePublicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
     isPublicPostRoute(pathname)
   ) {
     return rewriteToSlug()
@@ -211,37 +254,25 @@ export async function middleware(request: NextRequest) {
 
   // Debug endpoint
   if (pathname === '/__debug-middleware') {
-    const isCloud = isCloudflareWorker()
-    if (isCloud) {
-      const orgSlug = host ? await getOrgSlugFromDomain(host) : null
-      return NextResponse.json({
-        timestamp: new Date().toISOString(),
-        runtime: 'cloudflare-workers',
-        mode: 'multi-tenant',
-        host,
-        pathname,
-        appDomain: APP_DOMAIN,
-        isMain: host === APP_DOMAIN,
-        orgSlug,
-        domainLookupError: lastDomainLookupError,
-      })
-    }
-
+    const workspaceSlug = host ? await getWorkspaceSlugFromDomain(host, request) : null
     return NextResponse.json({
       timestamp: new Date().toISOString(),
-      runtime: 'node',
-      mode: 'single-tenant',
+      runtime: isCloudflareWorker() ? 'cloudflare-workers' : 'node',
+      host,
       pathname,
-      orgSlug: DEFAULT_ORG_SLUG,
+      appDomain: APP_DOMAIN,
+      isMainDomain: host === APP_DOMAIN,
+      workspaceSlug,
+      domainLookupError: lastDomainLookupError,
     })
   }
 
   // Route based on runtime environment
   if (isCloudflareWorker()) {
-    return handleMultiTenant(request, pathname)
+    return await handleCloudRouting(request, pathname)
   }
 
-  return handleSingleTenant(request, pathname)
+  return await handleLocalRouting(request, pathname)
 }
 
 export const config = {
