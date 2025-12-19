@@ -18,6 +18,7 @@ import {
   desc,
   asc,
   sql,
+  isNull,
   votes,
   postStatuses,
   posts,
@@ -25,6 +26,7 @@ import {
   postTags,
   tags,
   comments,
+  postEditHistory,
   type Post,
   type UnitOfWork,
 } from '@quackback/db'
@@ -40,6 +42,7 @@ import {
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'
+import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '../organizations/organization.types'
 import { SubscriptionService } from '../subscriptions'
 import { buildCommentTree, type CommentTreeNode } from '../shared/comment-tree'
 import type {
@@ -55,6 +58,9 @@ import type {
   RoadmapPostListResult,
   PublicPostDetail,
   PublicComment,
+  PermissionCheckResult,
+  UserEditPostInput,
+  PostEditHistoryEntry,
 } from './post.types'
 
 /**
@@ -1319,6 +1325,455 @@ export class PostService {
 
       return ok({ fixed: result.length })
     })
+  }
+
+  // ============================================================================
+  // User Edit/Delete Methods
+  // ============================================================================
+
+  /**
+   * Check if a user can edit a post
+   *
+   * @param postId - Post ID to check
+   * @param ctx - Service context with user/org information
+   * @param portalConfig - Optional portal config (will fetch if not provided)
+   * @returns Result containing permission check result
+   */
+  async canEditPost(
+    postId: PostId,
+    ctx: ServiceContext,
+    portalConfig?: PortalConfig
+  ): Promise<Result<PermissionCheckResult, PostError>> {
+    const { db } = await import('@quackback/db')
+
+    // Get the post
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+    })
+
+    if (!post) {
+      return err(PostError.notFound(postId))
+    }
+
+    // Check if post is deleted
+    if (post.deletedAt) {
+      return ok({ allowed: false, reason: 'Cannot edit a deleted post' })
+    }
+
+    // Team members (owner, admin, member) can always edit
+    if (ctx.memberRole && ['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      return ok({ allowed: true })
+    }
+
+    // Must be the author
+    if (post.memberId !== ctx.memberId) {
+      return ok({ allowed: false, reason: 'You can only edit your own posts' })
+    }
+
+    // Get portal config if not provided
+    const config = portalConfig ?? (await this.getPortalConfig(ctx.organizationId))
+
+    // Check if status is default (Open)
+    const isDefaultStatus = await this.isDefaultStatus(post.statusId, ctx.organizationId)
+    if (!isDefaultStatus && !config.features.allowEditAfterEngagement) {
+      return ok({ allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' })
+    }
+
+    // Check for engagement (votes, comments from others)
+    if (!config.features.allowEditAfterEngagement) {
+      if (post.voteCount > 0) {
+        return ok({ allowed: false, reason: 'Cannot edit posts that have received votes' })
+      }
+
+      const hasOtherComments = await this.hasCommentsFromOthers(postId, ctx.memberId)
+      if (hasOtherComments) {
+        return ok({
+          allowed: false,
+          reason: 'Cannot edit posts that have comments from other users',
+        })
+      }
+    }
+
+    return ok({ allowed: true })
+  }
+
+  /**
+   * Check if a user can delete a post
+   *
+   * @param postId - Post ID to check
+   * @param ctx - Service context with user/org information
+   * @param portalConfig - Optional portal config (will fetch if not provided)
+   * @returns Result containing permission check result
+   */
+  async canDeletePost(
+    postId: PostId,
+    ctx: ServiceContext,
+    portalConfig?: PortalConfig
+  ): Promise<Result<PermissionCheckResult, PostError>> {
+    const { db } = await import('@quackback/db')
+
+    // Get the post
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+    })
+
+    if (!post) {
+      return err(PostError.notFound(postId))
+    }
+
+    // Check if post is already deleted
+    if (post.deletedAt) {
+      return ok({ allowed: false, reason: 'Post has already been deleted' })
+    }
+
+    // Team members (owner, admin, member) can always delete
+    if (ctx.memberRole && ['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      return ok({ allowed: true })
+    }
+
+    // Must be the author
+    if (post.memberId !== ctx.memberId) {
+      return ok({ allowed: false, reason: 'You can only delete your own posts' })
+    }
+
+    // Get portal config if not provided
+    const config = portalConfig ?? (await this.getPortalConfig(ctx.organizationId))
+
+    // Check if status is default (Open)
+    const isDefaultStatus = await this.isDefaultStatus(post.statusId, ctx.organizationId)
+    if (!isDefaultStatus && !config.features.allowDeleteAfterEngagement) {
+      return ok({
+        allowed: false,
+        reason: 'Cannot delete posts that have been reviewed by the team',
+      })
+    }
+
+    // Check for engagement (votes, comments)
+    if (!config.features.allowDeleteAfterEngagement) {
+      if (post.voteCount > 0) {
+        return ok({ allowed: false, reason: 'Cannot delete posts that have received votes' })
+      }
+
+      // Check for any comments (not just from others)
+      const commentCount = await this.getCommentCount(postId)
+      if (commentCount > 0) {
+        return ok({ allowed: false, reason: 'Cannot delete posts that have comments' })
+      }
+    }
+
+    return ok({ allowed: true })
+  }
+
+  /**
+   * User edits their own post
+   * Validates permissions and records edit history if enabled
+   *
+   * @param postId - Post ID to edit
+   * @param input - Edit data (title, content, contentJson)
+   * @param ctx - Service context with user/org information
+   * @returns Result containing updated post or error
+   */
+  async userEditPost(
+    postId: PostId,
+    input: UserEditPostInput,
+    ctx: ServiceContext
+  ): Promise<Result<Post, PostError>> {
+    // Check permission first
+    const permResult = await this.canEditPost(postId, ctx)
+    if (!permResult.success) {
+      return err(permResult.error)
+    }
+    if (!permResult.value.allowed) {
+      return err(PostError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
+    }
+
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const postRepo = new PostRepository(uow.db)
+
+      // Get the existing post
+      const existingPost = await postRepo.findById(postId)
+      if (!existingPost) {
+        return err(PostError.notFound(postId))
+      }
+
+      // Validate input
+      if (!input.title?.trim()) {
+        return err(PostError.validationError('Title is required'))
+      }
+      if (!input.content?.trim()) {
+        return err(PostError.validationError('Content is required'))
+      }
+      if (input.title.length > 200) {
+        return err(PostError.validationError('Title must be 200 characters or less'))
+      }
+      if (input.content.length > 10000) {
+        return err(PostError.validationError('Content must be 10,000 characters or less'))
+      }
+
+      // Get portal config to check if edit history is enabled
+      const config = await this.getPortalConfig(ctx.organizationId)
+
+      // Record edit history if enabled
+      if (config.features.showPublicEditHistory && ctx.memberId) {
+        await uow.db.insert(postEditHistory).values({
+          organizationId: ctx.organizationId,
+          postId: postId,
+          editorMemberId: ctx.memberId,
+          previousTitle: existingPost.title,
+          previousContent: existingPost.content,
+          previousContentJson: existingPost.contentJson,
+        })
+      }
+
+      // Update the post
+      const updatedPost = await postRepo.update(postId, {
+        title: input.title.trim(),
+        content: input.content.trim(),
+        contentJson: input.contentJson,
+        updatedAt: new Date(),
+      })
+
+      if (!updatedPost) {
+        return err(PostError.notFound(postId))
+      }
+
+      return ok(updatedPost)
+    })
+  }
+
+  /**
+   * Soft delete a post
+   * Sets deletedAt timestamp, hiding from public views
+   *
+   * @param postId - Post ID to delete
+   * @param ctx - Service context with user/org information
+   * @returns Result indicating success or error
+   */
+  async softDeletePost(postId: PostId, ctx: ServiceContext): Promise<Result<void, PostError>> {
+    // Check permission first
+    const permResult = await this.canDeletePost(postId, ctx)
+    if (!permResult.success) {
+      return err(permResult.error)
+    }
+    if (!permResult.value.allowed) {
+      return err(PostError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
+    }
+
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const postRepo = new PostRepository(uow.db)
+
+      // Set deletedAt and deletedByMemberId
+      const updatedPost = await postRepo.update(postId, {
+        deletedAt: new Date(),
+        deletedByMemberId: ctx.memberId,
+      })
+
+      if (!updatedPost) {
+        return err(PostError.notFound(postId))
+      }
+
+      return ok(undefined)
+    })
+  }
+
+  /**
+   * Restore a soft-deleted post (admin only)
+   *
+   * @param postId - Post ID to restore
+   * @param ctx - Service context with user/org information
+   * @returns Result containing restored post or error
+   */
+  async restorePost(postId: PostId, ctx: ServiceContext): Promise<Result<Post, PostError>> {
+    // Only team members can restore
+    if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      return err(PostError.unauthorized('restore this post'))
+    }
+
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const postRepo = new PostRepository(uow.db)
+
+      // Get the post
+      const existingPost = await postRepo.findById(postId)
+      if (!existingPost) {
+        return err(PostError.notFound(postId))
+      }
+
+      if (!existingPost.deletedAt) {
+        return err(PostError.validationError('Post is not deleted'))
+      }
+
+      // Clear deletedAt and deletedByMemberId
+      const restoredPost = await postRepo.update(postId, {
+        deletedAt: null,
+        deletedByMemberId: null,
+      })
+
+      if (!restoredPost) {
+        return err(PostError.notFound(postId))
+      }
+
+      return ok(restoredPost)
+    })
+  }
+
+  /**
+   * Permanently delete a post (admin only)
+   * This is a hard delete and cannot be undone
+   *
+   * @param postId - Post ID to permanently delete
+   * @param ctx - Service context with user/org information
+   * @returns Result indicating success or error
+   */
+  async permanentDeletePost(postId: PostId, ctx: ServiceContext): Promise<Result<void, PostError>> {
+    // Only team members can permanently delete
+    if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
+      return err(PostError.unauthorized('permanently delete this post'))
+    }
+
+    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+      const postRepo = new PostRepository(uow.db)
+
+      const deleted = await postRepo.delete(postId)
+      if (!deleted) {
+        return err(PostError.notFound(postId))
+      }
+
+      return ok(undefined)
+    })
+  }
+
+  /**
+   * Get edit history for a post
+   *
+   * @param postId - Post ID to get history for
+   * @param ctx - Service context with user/org information
+   * @returns Result containing array of edit history entries
+   */
+  async getPostEditHistory(
+    postId: PostId,
+    _ctx: ServiceContext
+  ): Promise<Result<PostEditHistoryEntry[], PostError>> {
+    const { db } = await import('@quackback/db')
+
+    const history = await db
+      .select({
+        id: postEditHistory.id,
+        postId: postEditHistory.postId,
+        editorMemberId: postEditHistory.editorMemberId,
+        previousTitle: postEditHistory.previousTitle,
+        previousContent: postEditHistory.previousContent,
+        previousContentJson: postEditHistory.previousContentJson,
+        createdAt: postEditHistory.createdAt,
+      })
+      .from(postEditHistory)
+      .where(eq(postEditHistory.postId, postId))
+      .orderBy(desc(postEditHistory.createdAt))
+
+    // Map to the expected type
+    const entries: PostEditHistoryEntry[] = history.map((h) => ({
+      id: h.id,
+      postId: h.postId,
+      editorMemberId: h.editorMemberId,
+      editorName: null, // We'd need to join to user table for name
+      previousTitle: h.previousTitle,
+      previousContent: h.previousContent,
+      previousContentJson: h.previousContentJson,
+      createdAt: h.createdAt,
+    }))
+
+    return ok(entries)
+  }
+
+  // ============================================================================
+  // Helper Methods
+  // ============================================================================
+
+  /**
+   * Check if a status is the default "open" status
+   */
+  private async isDefaultStatus(
+    statusId: StatusId | null,
+    _organizationId: OrgId
+  ): Promise<boolean> {
+    if (!statusId) return true // No status = treat as default
+
+    const { db } = await import('@quackback/db')
+
+    const status = await db.query.postStatuses.findFirst({
+      where: and(eq(postStatuses.id, statusId), eq(postStatuses.isDefault, true)),
+    })
+
+    return !!status
+  }
+
+  /**
+   * Check if a post has comments from users other than the author
+   */
+  private async hasCommentsFromOthers(
+    postId: PostId,
+    authorMemberId: MemberId | null | undefined
+  ): Promise<boolean> {
+    if (!authorMemberId) return false // Anonymous author can't have "other" comments
+
+    const { db } = await import('@quackback/db')
+
+    // Find any comment not from the author and not deleted
+    const otherComment = await db.query.comments.findFirst({
+      where: and(
+        eq(comments.postId, postId),
+        sql`${comments.memberId} != ${authorMemberId}`,
+        isNull(comments.deletedAt)
+      ),
+    })
+
+    return !!otherComment
+  }
+
+  /**
+   * Get the count of comments on a post (excluding deleted)
+   */
+  private async getCommentCount(postId: PostId): Promise<number> {
+    const { db } = await import('@quackback/db')
+
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(comments)
+      .where(and(eq(comments.postId, postId), isNull(comments.deletedAt)))
+
+    return result[0]?.count ?? 0
+  }
+
+  /**
+   * Get portal config for an organization
+   */
+  private async getPortalConfig(organizationId: OrgId): Promise<PortalConfig> {
+    const { db, organization } = await import('@quackback/db')
+
+    const org = await db.query.organization.findFirst({
+      where: eq(organization.id, organizationId),
+    })
+
+    if (!org?.portalConfig) {
+      return DEFAULT_PORTAL_CONFIG
+    }
+
+    // Parse the JSON string from database
+    let config: Partial<PortalConfig>
+    try {
+      config = JSON.parse(org.portalConfig) as Partial<PortalConfig>
+    } catch {
+      return DEFAULT_PORTAL_CONFIG
+    }
+
+    // Merge with defaults to ensure all fields exist
+    return {
+      ...DEFAULT_PORTAL_CONFIG,
+      ...config,
+      features: {
+        ...DEFAULT_PORTAL_CONFIG.features,
+        ...(config?.features ?? {}),
+      },
+    }
   }
 }
 

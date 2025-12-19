@@ -70,6 +70,12 @@ export interface PortalFeatures {
   comments: boolean
   /** Whether portal users can vote on posts */
   voting: boolean
+  /** Allow users to edit posts even after receiving votes/comments */
+  allowEditAfterEngagement: boolean
+  /** Allow users to delete posts even after receiving votes/comments */
+  allowDeleteAfterEngagement: boolean
+  /** Show public edit history on posts */
+  showPublicEditHistory: boolean
 }
 
 /**
@@ -96,6 +102,9 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     submissions: true,
     comments: true,
     voting: true,
+    allowEditAfterEngagement: false,
+    allowDeleteAfterEngagement: false,
+    showPublicEditHistory: false,
   },
 }
 

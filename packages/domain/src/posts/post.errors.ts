@@ -11,6 +11,9 @@ export type PostErrorCode =
   | 'UNAUTHORIZED'
   | 'ALREADY_VOTED'
   | 'VALIDATION_ERROR'
+  | 'EDIT_NOT_ALLOWED'
+  | 'DELETE_NOT_ALLOWED'
+  | 'ALREADY_DELETED'
 
 /**
  * Domain error type for Post operations
@@ -56,5 +59,20 @@ export const PostError = {
   validationError: (message: string): PostError => ({
     code: 'VALIDATION_ERROR',
     message,
+  }),
+
+  editNotAllowed: (reason: string): PostError => ({
+    code: 'EDIT_NOT_ALLOWED',
+    message: reason,
+  }),
+
+  deleteNotAllowed: (reason: string): PostError => ({
+    code: 'DELETE_NOT_ALLOWED',
+    message: reason,
+  }),
+
+  alreadyDeleted: (id?: string): PostError => ({
+    code: 'ALREADY_DELETED',
+    message: id ? `Post with ID ${id} has already been deleted` : 'Post has already been deleted',
   }),
 }

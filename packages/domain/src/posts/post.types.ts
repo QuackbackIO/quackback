@@ -217,3 +217,34 @@ export interface PublicPostDetail {
   comments: PublicComment[]
   officialResponse: OfficialResponse | null
 }
+
+/**
+ * Result of checking edit/delete permission
+ */
+export interface PermissionCheckResult {
+  allowed: boolean
+  reason?: string
+}
+
+/**
+ * Input for user editing their own post
+ */
+export interface UserEditPostInput {
+  title: string
+  content: string
+  contentJson?: unknown
+}
+
+/**
+ * Post edit history entry
+ */
+export interface PostEditHistoryEntry {
+  id: string
+  postId: PostId
+  editorMemberId: MemberId
+  editorName?: string | null
+  previousTitle: string
+  previousContent: string
+  previousContentJson?: unknown
+  createdAt: Date
+}
