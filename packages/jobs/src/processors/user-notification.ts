@@ -14,21 +14,15 @@ import {
   organization,
   member,
 } from '@quackback/db'
-import type { UserNotificationJobData, UserNotificationJobResult } from '../types'
+import type {
+  UserNotificationJobData,
+  UserNotificationJobResult,
+  PostStatusChangedPayload,
+  CommentCreatedPayload,
+} from '../types'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
 import type { OrgId, PostId, UserId } from '@quackback/ids'
-
-interface StatusChangeEventData {
-  post: { id: PostId; title: string; boardSlug: string }
-  previousStatus: string
-  newStatus: string
-}
-
-interface CommentCreatedEventData {
-  comment: { id: string; content: string; authorEmail?: string }
-  post: { id: PostId; title: string }
-}
 
 /**
  * Options for processing user notifications.
@@ -75,8 +69,8 @@ export async function processUserNotification(
     // Process based on event type
     switch (eventType) {
       case 'post.status_changed': {
-        const statusData = eventData as StatusChangeEventData
-        const postId = statusData.post.id
+        const statusData = eventData as PostStatusChangedPayload
+        const postId = statusData.post.id as PostId
 
         // Get active subscribers for this post
         const subscribers = await subscriptionService.getActiveSubscribers(postId, organizationId)
@@ -136,8 +130,8 @@ export async function processUserNotification(
       }
 
       case 'comment.created': {
-        const commentData = eventData as CommentCreatedEventData
-        const postId = commentData.post.id
+        const commentData = eventData as CommentCreatedPayload
+        const postId = commentData.post.id as PostId
 
         // Get active subscribers for this post
         const subscribers = await subscriptionService.getActiveSubscribers(postId, organizationId)

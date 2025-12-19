@@ -168,28 +168,173 @@ export interface UserNotificationJobResult {
 export type EventType = 'post.created' | 'post.status_changed' | 'comment.created'
 
 /**
- * Event job data - sent when a domain event needs processing.
- * Consolidates integration and notification processing into a single workflow.
+ * Actor information for events.
+ * Identifies who or what triggered the event.
  */
-export interface EventJobData {
+export interface EventActor {
+  /** Whether this is a user action or system-triggered */
+  type: 'user' | 'system'
+  /** User ID if triggered by a user */
+  userId?: string
+  /** Email of the user who triggered the event */
+  email?: string
+  /** Service name if triggered by system (e.g., 'import-processor') */
+  service?: string
+}
+
+// ============================================================================
+// Event Payload Types
+// ============================================================================
+
+/**
+ * Post data included in post-related events
+ */
+export interface EventPostData {
+  /** Post ID */
+  id: string
+  /** Post title */
+  title: string
+  /** Post content (HTML) */
+  content: string
+  /** Board ID the post belongs to */
+  boardId: string
+  /** Board slug for URL generation */
+  boardSlug: string
+  /** Email of the post author */
+  authorEmail?: string
+  /** Current vote count */
+  voteCount: number
+}
+
+/**
+ * Minimal post reference used in status change and comment events
+ */
+export interface EventPostRef {
+  /** Post ID */
+  id: string
+  /** Post title */
+  title: string
+  /** Board slug for URL generation */
+  boardSlug: string
+}
+
+/**
+ * Comment data included in comment.created events
+ */
+export interface EventCommentData {
+  /** Comment ID */
+  id: string
+  /** Comment content (HTML) */
+  content: string
+  /** Email of the comment author */
+  authorEmail?: string
+}
+
+/**
+ * Payload for post.created events
+ */
+export interface PostCreatedPayload {
+  /** The created post */
+  post: EventPostData
+}
+
+/**
+ * Payload for post.status_changed events
+ */
+export interface PostStatusChangedPayload {
+  /** The post that was updated */
+  post: EventPostRef
+  /** Status before the change (e.g., "Open") */
+  previousStatus: string
+  /** Status after the change (e.g., "In Progress") */
+  newStatus: string
+}
+
+/**
+ * Payload for comment.created events
+ */
+export interface CommentCreatedPayload {
+  /** The created comment */
+  comment: EventCommentData
+  /** The post the comment was added to */
+  post: Omit<EventPostRef, 'boardSlug'>
+}
+
+/**
+ * Maps event types to their payload types
+ */
+export interface EventPayloadMap {
+  'post.created': PostCreatedPayload
+  'post.status_changed': PostStatusChangedPayload
+  'comment.created': CommentCreatedPayload
+}
+
+// ============================================================================
+// Event Job Data (Discriminated Union)
+// ============================================================================
+
+/**
+ * Base fields shared by all event job data
+ */
+interface EventJobDataBase<T extends EventType> {
   /** Unique event ID for idempotency */
   id: string
   /** Event type */
-  type: EventType
+  type: T
   /** Organization ID for tenant isolation */
   organizationId: OrgId
   /** ISO timestamp of when the event occurred */
   timestamp: string
   /** Actor who triggered the event */
-  actor: {
-    type: 'user' | 'system'
-    userId?: string
-    email?: string
-    service?: string
-  }
-  /** Event-specific payload data */
-  data: unknown
+  actor: EventActor
 }
+
+/**
+ * Event job data for post.created events
+ */
+export interface PostCreatedEventJobData extends EventJobDataBase<'post.created'> {
+  data: PostCreatedPayload
+}
+
+/**
+ * Event job data for post.status_changed events
+ */
+export interface PostStatusChangedEventJobData extends EventJobDataBase<'post.status_changed'> {
+  data: PostStatusChangedPayload
+}
+
+/**
+ * Event job data for comment.created events
+ */
+export interface CommentCreatedEventJobData extends EventJobDataBase<'comment.created'> {
+  data: CommentCreatedPayload
+}
+
+/**
+ * Event job data - discriminated union of all event types.
+ * Consolidates integration and notification processing into a single workflow.
+ *
+ * Use type narrowing to access event-specific data:
+ * @example
+ * if (event.type === 'post.created') {
+ *   // event.data is PostCreatedPayload
+ *   console.log(event.data.post.title)
+ * }
+ */
+export type EventJobData =
+  | PostCreatedEventJobData
+  | PostStatusChangedEventJobData
+  | CommentCreatedEventJobData
+
+/**
+ * Helper type to extract the payload type for a given event type
+ */
+export type EventPayloadFor<T extends EventType> = EventPayloadMap[T]
+
+/**
+ * Helper type to extract the full event job data for a given event type
+ */
+export type EventJobDataFor<T extends EventType> = Extract<EventJobData, { type: T }>
 
 /**
  * Event job result - returned when workflow completes
