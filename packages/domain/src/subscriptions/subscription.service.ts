@@ -21,7 +21,7 @@ import {
   user,
   type Database,
 } from '@quackback/db'
-import type { MemberId, PostId, PostSubscriptionId, OrgId } from '@quackback/ids'
+import type { MemberId, PostId, PostSubscriptionId, WorkspaceId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
 
 export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual'
@@ -50,7 +50,7 @@ export interface NotificationPreferencesData {
 }
 
 interface SubscribeOptions {
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   /** Optional: pass an existing transaction to run within the same context */
   db?: Database
 }
@@ -71,11 +71,11 @@ export class SubscriptionService {
     memberId: MemberId,
     postId: PostId,
     reason: SubscriptionReason,
-    options: SubscribeOptions | OrgId
+    options: SubscribeOptions | WorkspaceId
   ): Promise<void> {
-    // Support both old signature (OrgId directly) and new signature (options object)
-    const { organizationId, db: existingDb } =
-      typeof options === 'string' ? { organizationId: options as OrgId, db: undefined } : options
+    // Support both old signature (WorkspaceId directly) and new signature (options object)
+    const { workspaceId, db: existingDb } =
+      typeof options === 'string' ? { workspaceId: options as WorkspaceId, db: undefined } : options
 
     if (existingDb) {
       // Use existing transaction - no need to create new tenant context
@@ -89,7 +89,7 @@ export class SubscriptionService {
         .onConflictDoNothing()
     } else {
       // Create new tenant context
-      await withTenantContext(organizationId, async (txDb) => {
+      await withTenantContext(workspaceId, async (txDb) => {
         await txDb
           .insert(postSubscriptions)
           .values({
@@ -108,9 +108,9 @@ export class SubscriptionService {
   async unsubscribeFromPost(
     memberId: MemberId,
     postId: PostId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<void> {
-    await withTenantContext(organizationId, async (txDb) => {
+    await withTenantContext(workspaceId, async (txDb) => {
       await txDb
         .delete(postSubscriptions)
         .where(and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)))
@@ -124,9 +124,9 @@ export class SubscriptionService {
     memberId: MemberId,
     postId: PostId,
     muted: boolean,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<void> {
-    await withTenantContext(organizationId, async (txDb) => {
+    await withTenantContext(workspaceId, async (txDb) => {
       await txDb
         .update(postSubscriptions)
         .set({ muted, updatedAt: new Date() })
@@ -141,9 +141,9 @@ export class SubscriptionService {
   async getSubscriptionStatus(
     memberId: MemberId,
     postId: PostId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<{ subscribed: boolean; muted: boolean; reason: SubscriptionReason | null }> {
-    return await withTenantContext(organizationId, async (txDb) => {
+    return await withTenantContext(workspaceId, async (txDb) => {
       const subscription = await txDb.query.postSubscriptions.findFirst({
         where: and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)),
       })
@@ -163,8 +163,8 @@ export class SubscriptionService {
   /**
    * Get all active (non-muted) subscribers for a post
    */
-  async getActiveSubscribers(postId: PostId, organizationId: OrgId): Promise<Subscriber[]> {
-    return await withTenantContext(organizationId, async (txDb) => {
+  async getActiveSubscribers(postId: PostId, workspaceId: WorkspaceId): Promise<Subscriber[]> {
+    return await withTenantContext(workspaceId, async (txDb) => {
       // Single query with 3-way JOIN to avoid N+1 problem
       const rows = await txDb
         .select({
@@ -192,8 +192,11 @@ export class SubscriptionService {
   /**
    * Get all subscriptions for a member
    */
-  async getMemberSubscriptions(memberId: MemberId, organizationId: OrgId): Promise<Subscription[]> {
-    return await withTenantContext(organizationId, async (txDb) => {
+  async getMemberSubscriptions(
+    memberId: MemberId,
+    workspaceId: WorkspaceId
+  ): Promise<Subscription[]> {
+    return await withTenantContext(workspaceId, async (txDb) => {
       const rows = await txDb
         .select({
           id: postSubscriptions.id,
@@ -223,9 +226,9 @@ export class SubscriptionService {
    */
   async getNotificationPreferences(
     memberId: MemberId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<NotificationPreferencesData> {
-    return await withTenantContext(organizationId, async (txDb) => {
+    return await withTenantContext(workspaceId, async (txDb) => {
       const prefs = await txDb.query.notificationPreferences.findFirst({
         where: eq(notificationPreferences.memberId, memberId),
       })
@@ -253,9 +256,9 @@ export class SubscriptionService {
   async updateNotificationPreferences(
     memberId: MemberId,
     preferences: Partial<NotificationPreferencesData>,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<NotificationPreferencesData> {
-    return await withTenantContext(organizationId, async (txDb) => {
+    return await withTenantContext(workspaceId, async (txDb) => {
       const existing = await txDb.query.notificationPreferences.findFirst({
         where: eq(notificationPreferences.memberId, memberId),
       })
@@ -327,7 +330,7 @@ export class SubscriptionService {
     memberId: MemberId
     postId: PostId | null
     post?: { title: string; boardSlug: string }
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   } | null> {
     // Use db directly (no tenant context needed)
     const tokenRecord = await db.query.unsubscribeTokens.findFirst({
@@ -381,7 +384,7 @@ export class SubscriptionService {
           await this.unsubscribeFromPost(
             tokenRecord.memberId,
             tokenRecord.postId,
-            memberRecord.organizationId
+            memberRecord.workspaceId
           )
         }
         break
@@ -391,7 +394,7 @@ export class SubscriptionService {
             tokenRecord.memberId,
             tokenRecord.postId,
             true,
-            memberRecord.organizationId
+            memberRecord.workspaceId
           )
         }
         break
@@ -399,7 +402,7 @@ export class SubscriptionService {
         await this.updateNotificationPreferences(
           tokenRecord.memberId,
           { emailMuted: true },
-          memberRecord.organizationId
+          memberRecord.workspaceId
         )
         break
     }
@@ -409,7 +412,7 @@ export class SubscriptionService {
       memberId: tokenRecord.memberId,
       postId: tokenRecord.postId,
       post: postDetails,
-      organizationId: memberRecord.organizationId,
+      workspaceId: memberRecord.workspaceId,
     }
   }
 }

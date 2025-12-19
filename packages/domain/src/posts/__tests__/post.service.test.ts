@@ -1038,7 +1038,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        organizationId: TEST_IDS.ORG_ID,
+        workspaceId: TEST_IDS.ORG_ID,
       })
 
       expect(result.success).toBe(true)
@@ -1075,7 +1075,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        organizationId: TEST_IDS.ORG_ID,
+        workspaceId: TEST_IDS.ORG_ID,
         boardSlug: 'test-board',
       })
 
@@ -1112,7 +1112,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        organizationId: TEST_IDS.ORG_ID,
+        workspaceId: TEST_IDS.ORG_ID,
         search: 'bug fix',
         statusSlugs: ['open'],
         sort: 'new',

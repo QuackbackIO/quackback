@@ -1,10 +1,10 @@
 /**
- * Organization domain module exports
+ * Workspace domain module exports
  */
 
-export { OrganizationService, organizationService } from './organization.service'
-export { OrgError } from './organization.errors'
-export type { OrgErrorCode } from './organization.errors'
+export { WorkspaceService, workspaceService } from './workspace.service'
+export { WorkspaceError } from './workspace.errors'
+export type { WorkspaceErrorCode } from './workspace.errors'
 
 // Config types
 export type {
@@ -27,11 +27,11 @@ export type {
   PublicAuthConfig,
   PublicPortalConfig,
   SsoCheckResult,
-} from './organization.types'
+} from './workspace.types'
 
 // Default config values
 export {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_HEADER_DISPLAY_MODE,
-} from './organization.types'
+} from './workspace.types'

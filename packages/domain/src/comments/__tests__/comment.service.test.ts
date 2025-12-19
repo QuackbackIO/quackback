@@ -106,7 +106,7 @@ describe('CommentService', () => {
   let mockContext: ServiceContext
 
   // Test data
-  const mockOrgId = 'org_123'
+  const mockWorkspaceId = 'org_123'
   const mockUserId = 'user_123'
   const mockMemberId = 'member_123'
   const mockPostId = 'post_123'
@@ -115,7 +115,7 @@ describe('CommentService', () => {
 
   const mockPost: Post = {
     id: mockPostId,
-    organizationId: mockOrgId,
+    workspaceId: mockWorkspaceId,
     boardId: mockBoardId,
     title: 'Test Post',
     content: 'Test content',
@@ -143,7 +143,7 @@ describe('CommentService', () => {
 
   const mockBoard: Board = {
     id: mockBoardId,
-    organizationId: mockOrgId,
+    workspaceId: mockWorkspaceId,
     name: 'Test Board',
     slug: 'test-board',
     description: null,
@@ -155,7 +155,7 @@ describe('CommentService', () => {
 
   const mockComment: Comment = {
     id: mockCommentId,
-    organizationId: mockOrgId,
+    workspaceId: mockWorkspaceId,
     postId: mockPostId,
     parentId: null,
     memberId: mockMemberId,
@@ -185,7 +185,7 @@ describe('CommentService', () => {
 
     // Default mock context (team member)
     mockContext = {
-      organizationId: mockOrgId,
+      workspaceId: mockWorkspaceId,
       userId: mockUserId,
       memberId: mockMemberId,
       memberRole: 'member',
@@ -885,7 +885,7 @@ describe('CommentService', () => {
         expect(result.value.comment.id).toBe(mockCommentId)
         expect(result.value.post.id).toBe(mockPostId)
         expect(result.value.board.id).toBe(mockBoardId)
-        expect(result.value.organizationId).toBe(mockOrgId)
+        expect(result.value.workspaceId).toBe(mockWorkspaceId)
       }
     })
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { OrganizationService } from '../organization.service'
+import { WorkspaceService } from '../workspace.service'
 import type {
   UpdateAuthConfigInput,
   UpdatePortalConfigInput,
@@ -7,14 +7,14 @@ import type {
   CreateSsoProviderInput,
   UpdateSsoProviderInput,
   OidcConfig,
-} from '../organization.types'
-import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '../organization.types'
+} from '../workspace.types'
+import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '../workspace.types'
 import type { ServiceContext } from '../../shared/service-context'
 
 // Mock database - must be hoisted for vi.mock to access
 const mockDb = vi.hoisted(() => ({
   query: {
-    organization: {
+    workspace: {
       findFirst: vi.fn(),
     },
     ssoProvider: {
@@ -35,31 +35,31 @@ vi.mock('@quackback/db', () => ({
   eq: vi.fn((...args) => ({ eq: args })),
   and: vi.fn((...args) => ({ and: args })),
   desc: vi.fn((field) => ({ desc: field })),
-  organization: {
+  workspace: {
     id: 'id',
     slug: 'slug',
   },
   ssoProvider: {
     id: 'id',
-    organizationId: 'organizationId',
+    workspaceId: 'workspaceId',
     domain: 'domain',
   },
   member: {
     userId: 'userId',
-    organizationId: 'organizationId',
+    workspaceId: 'workspaceId',
   },
 }))
 
-describe('OrganizationService', () => {
-  let orgService: OrganizationService
+describe('WorkspaceService', () => {
+  let workspaceService: WorkspaceService
   let mockContext: ServiceContext
 
   beforeEach(() => {
     vi.clearAllMocks()
-    orgService = new OrganizationService()
+    workspaceService = new WorkspaceService()
 
     mockContext = {
-      organizationId: 'org-123',
+      workspaceId: 'org-123',
       userId: 'user-123',
       memberId: 'member_123',
       memberRole: 'admin',
@@ -81,9 +81,9 @@ describe('OrganizationService', () => {
         authConfig: JSON.stringify(authConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getAuthConfig('org-123')
+      const result = await workspaceService.getAuthConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -99,9 +99,9 @@ describe('OrganizationService', () => {
         authConfig: null,
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getAuthConfig('org-123')
+      const result = await workspaceService.getAuthConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -110,20 +110,20 @@ describe('OrganizationService', () => {
     })
 
     it('should return error when organization not found', async () => {
-      mockDb.query.organization.findFirst.mockResolvedValue(null)
+      mockDb.query.workspace.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getAuthConfig('org-nonexistent')
+      const result = await workspaceService.getAuthConfig('org-nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.code).toBe('ORGANIZATION_NOT_FOUND')
+        expect(result.error.code).toBe('WORKSPACE_NOT_FOUND')
       }
     })
 
     it('should handle database errors', async () => {
-      mockDb.query.organization.findFirst.mockRejectedValue(new Error('Database error'))
+      mockDb.query.workspace.findFirst.mockRejectedValue(new Error('Database error'))
 
-      const result = await orgService.getAuthConfig('org-123')
+      const result = await workspaceService.getAuthConfig('org-123')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -145,7 +145,7 @@ describe('OrganizationService', () => {
         authConfig: JSON.stringify(existingConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
       const input: UpdateAuthConfigInput = {
         oauth: { google: false },
@@ -169,7 +169,7 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updateAuthConfig(input, mockContext)
+      const result = await workspaceService.updateAuthConfig(input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -187,7 +187,7 @@ describe('OrganizationService', () => {
         oauth: { google: false },
       }
 
-      const result = await orgService.updateAuthConfig(input, memberContext)
+      const result = await workspaceService.updateAuthConfig(input, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -208,7 +208,7 @@ describe('OrganizationService', () => {
         authConfig: JSON.stringify(existingConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
       const input: UpdateAuthConfigInput = {
         oauth: { google: false },
@@ -232,7 +232,7 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updateAuthConfig(input, ownerContext)
+      const result = await workspaceService.updateAuthConfig(input, ownerContext)
 
       expect(result.success).toBe(true)
     })
@@ -250,9 +250,9 @@ describe('OrganizationService', () => {
         portalConfig: JSON.stringify(portalConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getPortalConfig('org-123')
+      const result = await workspaceService.getPortalConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -267,9 +267,9 @@ describe('OrganizationService', () => {
         portalConfig: null,
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getPortalConfig('org-123')
+      const result = await workspaceService.getPortalConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -278,13 +278,13 @@ describe('OrganizationService', () => {
     })
 
     it('should return error when organization not found', async () => {
-      mockDb.query.organization.findFirst.mockResolvedValue(null)
+      mockDb.query.workspace.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPortalConfig('org-nonexistent')
+      const result = await workspaceService.getPortalConfig('org-nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.code).toBe('ORGANIZATION_NOT_FOUND')
+        expect(result.error.code).toBe('WORKSPACE_NOT_FOUND')
       }
     })
   })
@@ -298,7 +298,7 @@ describe('OrganizationService', () => {
         portalConfig: JSON.stringify(existingConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
       const input: UpdatePortalConfigInput = {
         oauth: { google: true },
@@ -322,7 +322,7 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updatePortalConfig(input, mockContext)
+      const result = await workspaceService.updatePortalConfig(input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -340,7 +340,7 @@ describe('OrganizationService', () => {
         oauth: { google: true },
       }
 
-      const result = await orgService.updatePortalConfig(input, memberContext)
+      const result = await workspaceService.updatePortalConfig(input, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -364,9 +364,9 @@ describe('OrganizationService', () => {
         brandingConfig: JSON.stringify(brandingConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getBrandingConfig('org-123')
+      const result = await workspaceService.getBrandingConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -381,9 +381,9 @@ describe('OrganizationService', () => {
         brandingConfig: null,
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getBrandingConfig('org-123')
+      const result = await workspaceService.getBrandingConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -392,13 +392,13 @@ describe('OrganizationService', () => {
     })
 
     it('should return error when organization not found', async () => {
-      mockDb.query.organization.findFirst.mockResolvedValue(null)
+      mockDb.query.workspace.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getBrandingConfig('org-nonexistent')
+      const result = await workspaceService.getBrandingConfig('org-nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.code).toBe('ORGANIZATION_NOT_FOUND')
+        expect(result.error.code).toBe('WORKSPACE_NOT_FOUND')
       }
     })
 
@@ -408,9 +408,9 @@ describe('OrganizationService', () => {
         brandingConfig: 'invalid json{',
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getBrandingConfig('org-123')
+      const result = await workspaceService.getBrandingConfig('org-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -441,7 +441,7 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updateBrandingConfig(brandingConfig, mockContext)
+      const result = await workspaceService.updateBrandingConfig(brandingConfig, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -459,7 +459,7 @@ describe('OrganizationService', () => {
         preset: 'ocean',
       }
 
-      const result = await orgService.updateBrandingConfig(brandingConfig, memberContext)
+      const result = await workspaceService.updateBrandingConfig(brandingConfig, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -473,7 +473,7 @@ describe('OrganizationService', () => {
       const mockProviders = [
         {
           id: 'provider-1',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           providerId: 'sso_1234567890',
           issuer: 'Okta',
           domain: 'example.com',
@@ -490,7 +490,7 @@ describe('OrganizationService', () => {
 
       mockDb.query.ssoProvider.findMany.mockResolvedValue(mockProviders)
 
-      const result = await orgService.listSsoProviders(mockContext)
+      const result = await workspaceService.listSsoProviders(mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -506,7 +506,7 @@ describe('OrganizationService', () => {
         memberRole: 'member',
       }
 
-      const result = await orgService.listSsoProviders(memberContext)
+      const result = await workspaceService.listSsoProviders(memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -517,7 +517,7 @@ describe('OrganizationService', () => {
     it('should return empty array when no providers exist', async () => {
       mockDb.query.ssoProvider.findMany.mockResolvedValue([])
 
-      const result = await orgService.listSsoProviders(mockContext)
+      const result = await workspaceService.listSsoProviders(mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -529,7 +529,7 @@ describe('OrganizationService', () => {
       const mockProviders = [
         {
           id: 'provider-1',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           providerId: 'sso_1234567890',
           issuer: 'Okta',
           domain: 'example.com',
@@ -546,7 +546,7 @@ describe('OrganizationService', () => {
 
       mockDb.query.ssoProvider.findMany.mockResolvedValue(mockProviders)
 
-      const result = await orgService.listSsoProviders(mockContext)
+      const result = await workspaceService.listSsoProviders(mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -560,7 +560,7 @@ describe('OrganizationService', () => {
     it('should return SSO provider when found', async () => {
       const mockProvider = {
         id: 'provider-1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -575,7 +575,7 @@ describe('OrganizationService', () => {
 
       mockDb.query.ssoProvider.findFirst.mockResolvedValue(mockProvider)
 
-      const result = await orgService.getSsoProvider('provider-1', mockContext)
+      const result = await workspaceService.getSsoProvider('provider-1', mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -587,7 +587,7 @@ describe('OrganizationService', () => {
     it('should return error when provider not found', async () => {
       mockDb.query.ssoProvider.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getSsoProvider('provider-nonexistent', mockContext)
+      const result = await workspaceService.getSsoProvider('provider-nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -601,7 +601,7 @@ describe('OrganizationService', () => {
         memberRole: 'member',
       }
 
-      const result = await orgService.getSsoProvider('provider-1', memberContext)
+      const result = await workspaceService.getSsoProvider('provider-1', memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -627,7 +627,7 @@ describe('OrganizationService', () => {
 
       const mockCreated = {
         id: 'provider-new',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -644,7 +644,7 @@ describe('OrganizationService', () => {
 
       mockDb.insert.mockReturnValue(mockInsertChain)
 
-      const result = await orgService.createSsoProvider(input, mockContext)
+      const result = await workspaceService.createSsoProvider(input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -664,7 +664,7 @@ describe('OrganizationService', () => {
         },
       }
 
-      const result = await orgService.createSsoProvider(input, mockContext)
+      const result = await workspaceService.createSsoProvider(input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -689,7 +689,7 @@ describe('OrganizationService', () => {
         domain: 'example.com',
       })
 
-      const result = await orgService.createSsoProvider(input, mockContext)
+      const result = await workspaceService.createSsoProvider(input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -713,7 +713,7 @@ describe('OrganizationService', () => {
         },
       }
 
-      const result = await orgService.createSsoProvider(input, memberContext)
+      const result = await workspaceService.createSsoProvider(input, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -736,7 +736,7 @@ describe('OrganizationService', () => {
 
       const mockCreated = {
         id: 'provider-new',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -753,7 +753,7 @@ describe('OrganizationService', () => {
 
       mockDb.insert.mockReturnValue(mockInsertChain)
 
-      const result = await orgService.createSsoProvider(input, mockContext)
+      const result = await workspaceService.createSsoProvider(input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -766,7 +766,7 @@ describe('OrganizationService', () => {
     it('should update SSO provider successfully', async () => {
       const existingProvider = {
         id: 'provider-1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -804,7 +804,7 @@ describe('OrganizationService', () => {
 
       mockDb.update.mockReturnValue(mockUpdateChain)
 
-      const result = await orgService.updateSsoProvider('provider-1', input, mockContext)
+      const result = await workspaceService.updateSsoProvider('provider-1', input, mockContext)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -819,7 +819,11 @@ describe('OrganizationService', () => {
         issuer: 'Updated',
       }
 
-      const result = await orgService.updateSsoProvider('provider-nonexistent', input, mockContext)
+      const result = await workspaceService.updateSsoProvider(
+        'provider-nonexistent',
+        input,
+        mockContext
+      )
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -830,7 +834,7 @@ describe('OrganizationService', () => {
     it('should return error when domain format is invalid', async () => {
       const existingProvider = {
         id: 'provider-1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -844,7 +848,7 @@ describe('OrganizationService', () => {
         domain: 'invalid domain!',
       }
 
-      const result = await orgService.updateSsoProvider('provider-1', input, mockContext)
+      const result = await workspaceService.updateSsoProvider('provider-1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -856,7 +860,7 @@ describe('OrganizationService', () => {
     it('should return error when duplicate domain exists', async () => {
       const existingProvider = {
         id: 'provider-1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -875,7 +879,7 @@ describe('OrganizationService', () => {
         domain: 'another-example.com',
       }
 
-      const result = await orgService.updateSsoProvider('provider-1', input, mockContext)
+      const result = await workspaceService.updateSsoProvider('provider-1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -886,7 +890,7 @@ describe('OrganizationService', () => {
     it('should return error when no fields provided', async () => {
       const existingProvider = {
         id: 'provider-1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -898,7 +902,7 @@ describe('OrganizationService', () => {
 
       const input: UpdateSsoProviderInput = {}
 
-      const result = await orgService.updateSsoProvider('provider-1', input, mockContext)
+      const result = await workspaceService.updateSsoProvider('provider-1', input, mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -917,7 +921,7 @@ describe('OrganizationService', () => {
         issuer: 'Updated',
       }
 
-      const result = await orgService.updateSsoProvider('provider-1', input, memberContext)
+      const result = await workspaceService.updateSsoProvider('provider-1', input, memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -930,7 +934,7 @@ describe('OrganizationService', () => {
     it('should delete SSO provider successfully', async () => {
       const existingProvider = {
         id: 'provider-1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         providerId: 'sso_1234567890',
         issuer: 'Okta',
         domain: 'example.com',
@@ -944,7 +948,7 @@ describe('OrganizationService', () => {
 
       mockDb.delete.mockReturnValue(mockDeleteChain)
 
-      const result = await orgService.deleteSsoProvider('provider-1', mockContext)
+      const result = await workspaceService.deleteSsoProvider('provider-1', mockContext)
 
       expect(result.success).toBe(true)
     })
@@ -952,7 +956,7 @@ describe('OrganizationService', () => {
     it('should return error when provider not found', async () => {
       mockDb.query.ssoProvider.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.deleteSsoProvider('provider-nonexistent', mockContext)
+      const result = await workspaceService.deleteSsoProvider('provider-nonexistent', mockContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -966,7 +970,7 @@ describe('OrganizationService', () => {
         memberRole: 'member',
       }
 
-      const result = await orgService.deleteSsoProvider('provider-1', memberContext)
+      const result = await workspaceService.deleteSsoProvider('provider-1', memberContext)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -997,10 +1001,10 @@ describe('OrganizationService', () => {
         },
       ]
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
       mockDb.query.ssoProvider.findMany.mockResolvedValue(mockProviders)
 
-      const result = await orgService.getPublicAuthConfig('acme')
+      const result = await workspaceService.getPublicAuthConfig('acme')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1012,13 +1016,13 @@ describe('OrganizationService', () => {
     })
 
     it('should return error when organization not found', async () => {
-      mockDb.query.organization.findFirst.mockResolvedValue(null)
+      mockDb.query.workspace.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPublicAuthConfig('board_nonexistent')
+      const result = await workspaceService.getPublicAuthConfig('board_nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.code).toBe('ORGANIZATION_NOT_FOUND')
+        expect(result.error.code).toBe('WORKSPACE_NOT_FOUND')
       }
     })
   })
@@ -1036,9 +1040,9 @@ describe('OrganizationService', () => {
         portalConfig: JSON.stringify(portalConfig),
       }
 
-      mockDb.query.organization.findFirst.mockResolvedValue(mockOrg)
+      mockDb.query.workspace.findFirst.mockResolvedValue(mockOrg)
 
-      const result = await orgService.getPublicPortalConfig('acme')
+      const result = await workspaceService.getPublicPortalConfig('acme')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1048,13 +1052,13 @@ describe('OrganizationService', () => {
     })
 
     it('should return error when organization not found', async () => {
-      mockDb.query.organization.findFirst.mockResolvedValue(null)
+      mockDb.query.workspace.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.getPublicPortalConfig('board_nonexistent')
+      const result = await workspaceService.getPublicPortalConfig('board_nonexistent')
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.code).toBe('ORGANIZATION_NOT_FOUND')
+        expect(result.error.code).toBe('WORKSPACE_NOT_FOUND')
       }
     })
   })
@@ -1069,7 +1073,7 @@ describe('OrganizationService', () => {
 
       mockDb.query.ssoProvider.findFirst.mockResolvedValue(mockProvider)
 
-      const result = await orgService.checkSsoByDomain('user@example.com')
+      const result = await workspaceService.checkSsoByDomain('user@example.com')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1082,7 +1086,7 @@ describe('OrganizationService', () => {
     it('should return null when no SSO configured for domain', async () => {
       mockDb.query.ssoProvider.findFirst.mockResolvedValue(null)
 
-      const result = await orgService.checkSsoByDomain('user@example.com')
+      const result = await workspaceService.checkSsoByDomain('user@example.com')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1091,7 +1095,7 @@ describe('OrganizationService', () => {
     })
 
     it('should return error when email format is invalid', async () => {
-      const result = await orgService.checkSsoByDomain('invalid-email')
+      const result = await workspaceService.checkSsoByDomain('invalid-email')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1103,7 +1107,7 @@ describe('OrganizationService', () => {
     it('should extract domain correctly from email', async () => {
       mockDb.query.ssoProvider.findFirst.mockResolvedValue(null)
 
-      await orgService.checkSsoByDomain('user@subdomain.example.com')
+      await workspaceService.checkSsoByDomain('user@subdomain.example.com')
 
       expect(mockDb.query.ssoProvider.findFirst).toHaveBeenCalled()
     })

@@ -1,18 +1,18 @@
 /**
- * OrganizationService - Business logic for organization settings
+ * WorkspaceService - Business logic for workspace settings
  *
- * This service handles all organization-related business logic including:
+ * This service handles all workspace-related business logic including:
  * - Auth configuration (team sign-in settings)
  * - Portal configuration (public portal settings)
  * - Branding configuration (theme/colors)
  * - SSO provider management
  */
 
-import { db, eq, and, desc, organization, ssoProvider } from '@quackback/db'
-import { generateId, type OrgId, type SsoProviderId } from '@quackback/ids'
+import { db, eq, and, desc, workspace, ssoProvider } from '@quackback/db'
+import { generateId, type WorkspaceId, type SsoProviderId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
-import { OrgError } from './organization.errors'
+import { WorkspaceError } from './workspace.errors'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -27,8 +27,8 @@ import type {
   SsoCheckResult,
   OidcConfig,
   SamlConfig,
-} from './organization.types'
-import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './organization.types'
+} from './workspace.types'
+import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './workspace.types'
 
 /**
  * Generate a unique provider ID for SSO providers
@@ -101,32 +101,32 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
 }
 
 /**
- * Service class for organization domain operations
+ * Service class for workspace domain operations
  */
-export class OrganizationService {
+export class WorkspaceService {
   // ============================================
   // AUTH CONFIGURATION (Team sign-in)
   // ============================================
 
   /**
-   * Get auth configuration for an organization
+   * Get auth configuration for a workspace
    * Public method - no auth required
    */
-  async getAuthConfig(organizationId: OrgId): Promise<Result<AuthConfig, OrgError>> {
+  async getAuthConfig(workspaceId: WorkspaceId): Promise<Result<AuthConfig, WorkspaceError>> {
     try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, workspaceId),
       })
 
       if (!org) {
-        return err(OrgError.notFound(organizationId))
+        return err(WorkspaceError.notFound(workspaceId))
       }
 
       const config = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
       return ok(config)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to fetch auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -134,26 +134,26 @@ export class OrganizationService {
   }
 
   /**
-   * Update auth configuration for an organization
+   * Update auth configuration for a workspace
    * Requires owner or admin role
    */
   async updateAuthConfig(
     input: UpdateAuthConfigInput,
     ctx: ServiceContext
-  ): Promise<Result<AuthConfig, OrgError>> {
+  ): Promise<Result<AuthConfig, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update auth config'))
+      return err(WorkspaceError.unauthorized('update auth config'))
     }
 
     try {
       // Get existing config
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, ctx.organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, ctx.workspaceId),
       })
 
       if (!org) {
-        return err(OrgError.notFound(ctx.organizationId))
+        return err(WorkspaceError.notFound(ctx.workspaceId))
       }
 
       const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
@@ -162,19 +162,19 @@ export class OrganizationService {
       const updated = deepMerge(existing, input as Partial<AuthConfig>)
 
       const [result] = await db
-        .update(organization)
+        .update(workspace)
         .set({ authConfig: JSON.stringify(updated) })
-        .where(eq(organization.id, ctx.organizationId))
+        .where(eq(workspace.id, ctx.workspaceId))
         .returning()
 
       if (!result) {
-        return err(OrgError.notFound(ctx.organizationId))
+        return err(WorkspaceError.notFound(ctx.workspaceId))
       }
 
       return ok(updated)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to update auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -186,24 +186,24 @@ export class OrganizationService {
   // ============================================
 
   /**
-   * Get portal configuration for an organization
+   * Get portal configuration for a workspace
    * Public method - no auth required
    */
-  async getPortalConfig(organizationId: OrgId): Promise<Result<PortalConfig, OrgError>> {
+  async getPortalConfig(workspaceId: WorkspaceId): Promise<Result<PortalConfig, WorkspaceError>> {
     try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, workspaceId),
       })
 
       if (!org) {
-        return err(OrgError.notFound(organizationId))
+        return err(WorkspaceError.notFound(workspaceId))
       }
 
       const config = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
       return ok(config)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -211,26 +211,26 @@ export class OrganizationService {
   }
 
   /**
-   * Update portal configuration for an organization
+   * Update portal configuration for a workspace
    * Requires owner or admin role
    */
   async updatePortalConfig(
     input: UpdatePortalConfigInput,
     ctx: ServiceContext
-  ): Promise<Result<PortalConfig, OrgError>> {
+  ): Promise<Result<PortalConfig, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update portal config'))
+      return err(WorkspaceError.unauthorized('update portal config'))
     }
 
     try {
       // Get existing config
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, ctx.organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, ctx.workspaceId),
       })
 
       if (!org) {
-        return err(OrgError.notFound(ctx.organizationId))
+        return err(WorkspaceError.notFound(ctx.workspaceId))
       }
 
       const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
@@ -239,19 +239,19 @@ export class OrganizationService {
       const updated = deepMerge(existing, input as Partial<PortalConfig>)
 
       const [result] = await db
-        .update(organization)
+        .update(workspace)
         .set({ portalConfig: JSON.stringify(updated) })
-        .where(eq(organization.id, ctx.organizationId))
+        .where(eq(workspace.id, ctx.workspaceId))
         .returning()
 
       if (!result) {
-        return err(OrgError.notFound(ctx.organizationId))
+        return err(WorkspaceError.notFound(ctx.workspaceId))
       }
 
       return ok(updated)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to update portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -263,24 +263,26 @@ export class OrganizationService {
   // ============================================
 
   /**
-   * Get branding configuration for an organization
+   * Get branding configuration for a workspace
    * Public method - no auth required
    */
-  async getBrandingConfig(organizationId: OrgId): Promise<Result<BrandingConfig, OrgError>> {
+  async getBrandingConfig(
+    workspaceId: WorkspaceId
+  ): Promise<Result<BrandingConfig, WorkspaceError>> {
     try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, workspaceId),
       })
 
       if (!org) {
-        return err(OrgError.notFound(organizationId))
+        return err(WorkspaceError.notFound(workspaceId))
       }
 
       const config = parseJsonConfigNullable<BrandingConfig>(org.brandingConfig) || {}
       return ok(config)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to fetch branding config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -288,33 +290,33 @@ export class OrganizationService {
   }
 
   /**
-   * Update branding configuration for an organization
+   * Update branding configuration for a workspace
    * Requires owner or admin role
    */
   async updateBrandingConfig(
     config: BrandingConfig,
     ctx: ServiceContext
-  ): Promise<Result<BrandingConfig, OrgError>> {
+  ): Promise<Result<BrandingConfig, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update branding config'))
+      return err(WorkspaceError.unauthorized('update branding config'))
     }
 
     try {
       const [updated] = await db
-        .update(organization)
+        .update(workspace)
         .set({ brandingConfig: JSON.stringify(config) })
-        .where(eq(organization.id, ctx.organizationId))
+        .where(eq(workspace.id, ctx.workspaceId))
         .returning()
 
       if (!updated) {
-        return err(OrgError.notFound(ctx.organizationId))
+        return err(WorkspaceError.notFound(ctx.workspaceId))
       }
 
       return ok(config)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to update branding config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -326,24 +328,24 @@ export class OrganizationService {
   // ============================================
 
   /**
-   * Get custom CSS for an organization
+   * Get custom CSS for a workspace
    * Public method - no auth required
    */
-  async getCustomCss(organizationId: OrgId): Promise<Result<string | null, OrgError>> {
+  async getCustomCss(workspaceId: WorkspaceId): Promise<Result<string | null, WorkspaceError>> {
     try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.id, workspaceId),
         columns: { customCss: true },
       })
 
       if (!org) {
-        return err(OrgError.notFound(organizationId))
+        return err(WorkspaceError.notFound(workspaceId))
       }
 
       return ok(org.customCss)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to fetch custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -351,16 +353,16 @@ export class OrganizationService {
   }
 
   /**
-   * Update custom CSS for an organization
+   * Update custom CSS for a workspace
    * Requires owner or admin role
    */
   async updateCustomCss(
     css: string | null,
     ctx: ServiceContext
-  ): Promise<Result<string | null, OrgError>> {
+  ): Promise<Result<string | null, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update custom CSS'))
+      return err(WorkspaceError.unauthorized('update custom CSS'))
     }
 
     try {
@@ -377,19 +379,19 @@ export class OrganizationService {
       }
 
       const [updated] = await db
-        .update(organization)
+        .update(workspace)
         .set({ customCss: sanitized })
-        .where(eq(organization.id, ctx.organizationId))
-        .returning({ customCss: organization.customCss })
+        .where(eq(workspace.id, ctx.workspaceId))
+        .returning({ customCss: workspace.customCss })
 
       if (!updated) {
-        return err(OrgError.notFound(ctx.organizationId))
+        return err(WorkspaceError.notFound(ctx.workspaceId))
       }
 
       return ok(updated.customCss)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to update custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -401,24 +403,26 @@ export class OrganizationService {
   // ============================================
 
   /**
-   * List all SSO providers for an organization
+   * List all SSO providers for a workspace
    * Requires owner or admin role
    */
-  async listSsoProviders(ctx: ServiceContext): Promise<Result<SsoProviderResponse[], OrgError>> {
+  async listSsoProviders(
+    ctx: ServiceContext
+  ): Promise<Result<SsoProviderResponse[], WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('list SSO providers'))
+      return err(WorkspaceError.unauthorized('list SSO providers'))
     }
 
     try {
       const providers = await db.query.ssoProvider.findMany({
-        where: eq(ssoProvider.organizationId, ctx.organizationId),
+        where: eq(ssoProvider.workspaceId, ctx.workspaceId),
         orderBy: desc(ssoProvider.createdAt),
       })
 
       const response: SsoProviderResponse[] = providers.map((p) => ({
         id: p.id,
-        organizationId: p.organizationId,
+        workspaceId: p.workspaceId,
         providerId: p.providerId,
         issuer: p.issuer,
         domain: p.domain,
@@ -431,7 +435,7 @@ export class OrganizationService {
       return ok(response)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to list SSO providers: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -445,27 +449,24 @@ export class OrganizationService {
   async getSsoProvider(
     providerId: SsoProviderId,
     ctx: ServiceContext
-  ): Promise<Result<SsoProviderResponse, OrgError>> {
+  ): Promise<Result<SsoProviderResponse, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('view SSO provider'))
+      return err(WorkspaceError.unauthorized('view SSO provider'))
     }
 
     try {
       const provider = await db.query.ssoProvider.findFirst({
-        where: and(
-          eq(ssoProvider.id, providerId),
-          eq(ssoProvider.organizationId, ctx.organizationId)
-        ),
+        where: and(eq(ssoProvider.id, providerId), eq(ssoProvider.workspaceId, ctx.workspaceId)),
       })
 
       if (!provider) {
-        return err(OrgError.ssoProviderNotFound(providerId))
+        return err(WorkspaceError.ssoProviderNotFound(providerId))
       }
 
       return ok({
         id: provider.id,
-        organizationId: provider.organizationId,
+        workspaceId: provider.workspaceId,
         providerId: provider.providerId,
         issuer: provider.issuer,
         domain: provider.domain,
@@ -476,7 +477,7 @@ export class OrganizationService {
       })
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to get SSO provider: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -490,29 +491,29 @@ export class OrganizationService {
   async createSsoProvider(
     input: CreateSsoProviderInput,
     ctx: ServiceContext
-  ): Promise<Result<SsoProviderResponse, OrgError>> {
+  ): Promise<Result<SsoProviderResponse, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('create SSO provider'))
+      return err(WorkspaceError.unauthorized('create SSO provider'))
     }
 
     // Validate domain format
     const domainRegex = /^[a-z0-9]+([-.][a-z0-9]+)*\.[a-z]{2,}$/
     if (!domainRegex.test(input.domain.toLowerCase())) {
-      return err(OrgError.validationError('Invalid domain format'))
+      return err(WorkspaceError.validationError('Invalid domain format'))
     }
 
     try {
       // Check for duplicate domain within this organization
       const existingDomain = await db.query.ssoProvider.findFirst({
         where: and(
-          eq(ssoProvider.organizationId, ctx.organizationId),
+          eq(ssoProvider.workspaceId, ctx.workspaceId),
           eq(ssoProvider.domain, input.domain.toLowerCase())
         ),
       })
 
       if (existingDomain) {
-        return err(OrgError.duplicateDomain(input.domain))
+        return err(WorkspaceError.duplicateDomain(input.domain))
       }
 
       const providerId = generateProviderId()
@@ -522,7 +523,7 @@ export class OrganizationService {
         .insert(ssoProvider)
         .values({
           id,
-          organizationId: ctx.organizationId,
+          workspaceId: ctx.workspaceId,
           providerId,
           issuer: input.issuer,
           domain: input.domain.toLowerCase(),
@@ -533,7 +534,7 @@ export class OrganizationService {
 
       return ok({
         id: created.id,
-        organizationId: created.organizationId,
+        workspaceId: created.workspaceId,
         providerId: created.providerId,
         issuer: created.issuer,
         domain: created.domain,
@@ -544,7 +545,7 @@ export class OrganizationService {
       })
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to create SSO provider: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -559,41 +560,38 @@ export class OrganizationService {
     providerId: SsoProviderId,
     input: UpdateSsoProviderInput,
     ctx: ServiceContext
-  ): Promise<Result<SsoProviderResponse, OrgError>> {
+  ): Promise<Result<SsoProviderResponse, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('update SSO provider'))
+      return err(WorkspaceError.unauthorized('update SSO provider'))
     }
 
     try {
       // Get existing provider
       const existing = await db.query.ssoProvider.findFirst({
-        where: and(
-          eq(ssoProvider.id, providerId),
-          eq(ssoProvider.organizationId, ctx.organizationId)
-        ),
+        where: and(eq(ssoProvider.id, providerId), eq(ssoProvider.workspaceId, ctx.workspaceId)),
       })
 
       if (!existing) {
-        return err(OrgError.ssoProviderNotFound(providerId))
+        return err(WorkspaceError.ssoProviderNotFound(providerId))
       }
 
       // Check domain uniqueness within org if changing
       if (input.domain && input.domain.toLowerCase() !== existing.domain) {
         const domainRegex = /^[a-z0-9]+([-.][a-z0-9]+)*\.[a-z]{2,}$/
         if (!domainRegex.test(input.domain.toLowerCase())) {
-          return err(OrgError.validationError('Invalid domain format'))
+          return err(WorkspaceError.validationError('Invalid domain format'))
         }
 
         const existingDomain = await db.query.ssoProvider.findFirst({
           where: and(
-            eq(ssoProvider.organizationId, ctx.organizationId),
+            eq(ssoProvider.workspaceId, ctx.workspaceId),
             eq(ssoProvider.domain, input.domain.toLowerCase())
           ),
         })
 
         if (existingDomain) {
-          return err(OrgError.duplicateDomain(input.domain))
+          return err(WorkspaceError.duplicateDomain(input.domain))
         }
       }
 
@@ -621,7 +619,7 @@ export class OrganizationService {
       }
 
       if (Object.keys(updates).length === 0) {
-        return err(OrgError.validationError('No fields provided to update'))
+        return err(WorkspaceError.validationError('No fields provided to update'))
       }
 
       const [updated] = await db
@@ -632,7 +630,7 @@ export class OrganizationService {
 
       return ok({
         id: updated.id,
-        organizationId: updated.organizationId,
+        workspaceId: updated.workspaceId,
         providerId: updated.providerId,
         issuer: updated.issuer,
         domain: updated.domain,
@@ -643,7 +641,7 @@ export class OrganizationService {
       })
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to update SSO provider: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -657,23 +655,20 @@ export class OrganizationService {
   async deleteSsoProvider(
     providerId: SsoProviderId,
     ctx: ServiceContext
-  ): Promise<Result<void, OrgError>> {
+  ): Promise<Result<void, WorkspaceError>> {
     // Authorization check
     if (!['owner', 'admin'].includes(ctx.memberRole)) {
-      return err(OrgError.unauthorized('delete SSO provider'))
+      return err(WorkspaceError.unauthorized('delete SSO provider'))
     }
 
     try {
       // Verify provider exists and belongs to org
       const existing = await db.query.ssoProvider.findFirst({
-        where: and(
-          eq(ssoProvider.id, providerId),
-          eq(ssoProvider.organizationId, ctx.organizationId)
-        ),
+        where: and(eq(ssoProvider.id, providerId), eq(ssoProvider.workspaceId, ctx.workspaceId)),
       })
 
       if (!existing) {
-        return err(OrgError.ssoProviderNotFound(providerId))
+        return err(WorkspaceError.ssoProviderNotFound(providerId))
       }
 
       await db.delete(ssoProvider).where(eq(ssoProvider.id, providerId))
@@ -681,7 +676,7 @@ export class OrganizationService {
       return ok(undefined)
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to delete SSO provider: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -696,21 +691,23 @@ export class OrganizationService {
    * Get public auth configuration for login forms
    * No authentication required - returns only non-sensitive information
    */
-  async getPublicAuthConfig(organizationSlug: string): Promise<Result<PublicAuthConfig, OrgError>> {
+  async getPublicAuthConfig(
+    organizationSlug: string
+  ): Promise<Result<PublicAuthConfig, WorkspaceError>> {
     try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.slug, organizationSlug),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.slug, organizationSlug),
       })
 
       if (!org) {
-        return err(OrgError.notFound())
+        return err(WorkspaceError.notFound())
       }
 
       const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
       // Get SSO providers (without secrets)
       const providers = await db.query.ssoProvider.findMany({
-        where: eq(ssoProvider.organizationId, org.id),
+        where: eq(ssoProvider.workspaceId, org.id),
       })
 
       return ok({
@@ -724,7 +721,7 @@ export class OrganizationService {
       })
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to fetch public auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -737,14 +734,14 @@ export class OrganizationService {
    */
   async getPublicPortalConfig(
     organizationSlug: string
-  ): Promise<Result<PublicPortalConfig, OrgError>> {
+  ): Promise<Result<PublicPortalConfig, WorkspaceError>> {
     try {
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.slug, organizationSlug),
+      const org = await db.query.workspace.findFirst({
+        where: eq(workspace.slug, organizationSlug),
       })
 
       if (!org) {
-        return err(OrgError.notFound())
+        return err(WorkspaceError.notFound())
       }
 
       const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
@@ -755,7 +752,7 @@ export class OrganizationService {
       })
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -766,12 +763,12 @@ export class OrganizationService {
    * Check if an email domain has SSO configured
    * No authentication required
    */
-  async checkSsoByDomain(email: string): Promise<Result<SsoCheckResult | null, OrgError>> {
+  async checkSsoByDomain(email: string): Promise<Result<SsoCheckResult | null, WorkspaceError>> {
     try {
       // Extract domain from email
       const atIndex = email.lastIndexOf('@')
       if (atIndex === -1) {
-        return err(OrgError.validationError('Invalid email address'))
+        return err(WorkspaceError.validationError('Invalid email address'))
       }
       const domain = email.slice(atIndex + 1).toLowerCase()
 
@@ -791,7 +788,7 @@ export class OrganizationService {
       })
     } catch (error) {
       return err(
-        OrgError.validationError(
+        WorkspaceError.validationError(
           `Failed to check SSO: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       )
@@ -800,6 +797,6 @@ export class OrganizationService {
 }
 
 /**
- * Singleton instance of OrganizationService
+ * Singleton instance of WorkspaceService
  */
-export const organizationService = new OrganizationService()
+export const workspaceService = new WorkspaceService()

@@ -6,7 +6,7 @@
 
 import { db, MemberRepository, eq, and, sql, member, user } from '@quackback/db'
 import type { Member } from '@quackback/db'
-import type { MemberId, OrgId, UserId } from '@quackback/ids'
+import type { MemberId, WorkspaceId, UserId } from '@quackback/ids'
 import { Result, ok, err } from '../shared/result'
 
 export type MemberError = {
@@ -33,11 +33,11 @@ export class MemberService {
    */
   async getMemberByUserAndOrg(
     userId: UserId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<Result<Member | null, MemberError>> {
     try {
       const memberRepo = new MemberRepository(db)
-      const member = await memberRepo.findByUserAndOrg(userId, organizationId)
+      const member = await memberRepo.findByUserAndOrg(userId, workspaceId)
       return ok(member)
     } catch (error) {
       console.error('Error looking up member:', error)
@@ -71,7 +71,7 @@ export class MemberService {
    * Returns user info (id, name, email, image) for all members of the organization.
    * Used for member assignment dropdowns and team lists.
    */
-  async listTeamMembers(organizationId: OrgId): Promise<Result<TeamMember[], MemberError>> {
+  async listTeamMembers(workspaceId: WorkspaceId): Promise<Result<TeamMember[], MemberError>> {
     try {
       const teamMembers = await db
         .select({
@@ -82,7 +82,7 @@ export class MemberService {
         })
         .from(member)
         .innerJoin(user, eq(member.userId, user.id))
-        .where(eq(member.organizationId, organizationId))
+        .where(eq(member.workspaceId, workspaceId))
 
       return ok(teamMembers)
     } catch (error) {
@@ -99,12 +99,12 @@ export class MemberService {
    *
    * Used by getting-started page.
    */
-  async countMembersByOrg(organizationId: OrgId): Promise<Result<number, MemberError>> {
+  async countMembersByOrg(workspaceId: WorkspaceId): Promise<Result<number, MemberError>> {
     try {
       const result = await db
         .select({ count: sql<number>`count(*)`.as('count') })
         .from(member)
-        .where(eq(member.organizationId, organizationId))
+        .where(eq(member.workspaceId, workspaceId))
 
       return ok(Number(result[0]?.count ?? 0))
     } catch (error) {
@@ -123,11 +123,11 @@ export class MemberService {
    */
   async checkMembership(
     userId: UserId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<Result<{ isMember: boolean; member?: Member }, MemberError>> {
     try {
       const foundMember = await db.query.member.findFirst({
-        where: and(eq(member.userId, userId), eq(member.organizationId, organizationId)),
+        where: and(eq(member.userId, userId), eq(member.workspaceId, workspaceId)),
       })
 
       if (foundMember) {

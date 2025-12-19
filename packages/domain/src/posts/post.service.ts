@@ -37,12 +37,12 @@ import {
   type StatusId,
   type TagId,
   type MemberId,
-  type OrgId,
+  type WorkspaceId,
 } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'
-import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '../organizations/organization.types'
+import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '../workspaces/workspace.types'
 import { SubscriptionService } from '../subscriptions'
 import { buildCommentTree, type CommentTreeNode } from '../shared/comment-tree'
 import type {
@@ -80,7 +80,7 @@ export class PostService {
    * @returns Result containing the created post or an error
    */
   async createPost(input: CreatePostInput, ctx: ServiceContext): Promise<Result<Post, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
 
@@ -128,7 +128,7 @@ export class PostService {
       // Create the post with member-scoped identity
       // Convert member TypeID back to raw UUID for database foreign key
       const post = await postRepo.create({
-        organizationId: ctx.organizationId,
+        workspaceId: ctx.workspaceId,
         boardId: input.boardId,
         title: input.title.trim(),
         content: input.content.trim(),
@@ -148,7 +148,7 @@ export class PostService {
       if (ctx.memberId) {
         const subscriptionService = new SubscriptionService()
         await subscriptionService.subscribeToPost(ctx.memberId, post.id, 'author', {
-          organizationId: ctx.organizationId,
+          workspaceId: ctx.workspaceId,
           db: uow.db,
         })
       }
@@ -176,7 +176,7 @@ export class PostService {
     input: UpdatePostInput,
     ctx: ServiceContext
   ): Promise<Result<Post, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -278,7 +278,7 @@ export class PostService {
     ctx: ServiceContext,
     options?: { memberId?: MemberId; ipHash?: string }
   ): Promise<Result<VoteResult, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -298,7 +298,7 @@ export class PostService {
       // Uses existing unique index on (post_id, user_identifier)
       // Convert TypeIDs to UUIDs for raw SQL query
       const postUuid = toUuid(postId)
-      const orgUuid = toUuid(ctx.organizationId)
+      const orgUuid = toUuid(ctx.workspaceId)
       // Convert memberId TypeID to UUID for raw SQL
       const memberUuid = options?.memberId ? toUuid(options.memberId) : null
       const result = await uow.db.execute<{ vote_count: number; voted: boolean }>(sql`
@@ -315,7 +315,7 @@ export class PostService {
         ),
         insert_vote AS (
           -- Only insert if no existing vote was found (and thus not deleted)
-          INSERT INTO votes (id, organization_id, post_id, user_identifier, member_id, ip_hash, updated_at)
+          INSERT INTO votes (id, workspace_id, post_id, user_identifier, member_id, ip_hash, updated_at)
           SELECT gen_random_uuid(), ${orgUuid}, ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
           WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
           RETURNING id, true AS is_new_vote
@@ -341,7 +341,7 @@ export class PostService {
       if (voted && options?.memberId) {
         const subscriptionService = new SubscriptionService()
         await subscriptionService.subscribeToPost(options.memberId, postId, 'vote', {
-          organizationId: ctx.organizationId,
+          workspaceId: ctx.workspaceId,
           db: uow.db,
         })
       }
@@ -371,7 +371,7 @@ export class PostService {
     statusId: StatusId,
     ctx: ServiceContext
   ): Promise<Result<Post, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -435,7 +435,7 @@ export class PostService {
    * @returns Result containing the post with details or an error
    */
   async getPostById(postId: PostId, ctx: ServiceContext): Promise<Result<Post, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -465,7 +465,7 @@ export class PostService {
     postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<PostWithDetails, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -506,7 +506,7 @@ export class PostService {
           id: board.id,
           name: board.name,
           slug: board.slug,
-          organizationId: board.organizationId,
+          workspaceId: board.workspaceId,
         },
         tags: postTagsResult,
         commentCount,
@@ -529,7 +529,7 @@ export class PostService {
     userIdentifier: string,
     ctx: ServiceContext
   ): Promise<Result<CommentTreeNode[], PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -563,11 +563,11 @@ export class PostService {
   /**
    * List posts for public portal (no authentication required)
    *
-   * @param params - Query parameters including organizationId, boardSlug, search, statusIds/statusSlugs, sort, pagination
+   * @param params - Query parameters including workspaceId, boardSlug, search, statusIds/statusSlugs, sort, pagination
    * @returns Result containing public post list or an error
    */
   async listPublicPosts(params: {
-    organizationId: OrgId
+    workspaceId: WorkspaceId
     boardSlug?: string
     search?: string
     /** Filter by status IDs (legacy, prefer statusSlugs) */
@@ -580,8 +580,8 @@ export class PostService {
     limit?: number
   }): Promise<Result<PublicPostListResult, PostError>> {
     // Note: This is a PUBLIC method, no auth context needed
-    // We use organizationId directly in withUnitOfWork
-    return withUnitOfWork(params.organizationId, async (uow: UnitOfWork) => {
+    // We use workspaceId directly in withUnitOfWork
+    return withUnitOfWork(params.workspaceId, async (uow: UnitOfWork) => {
       const {
         boardSlug,
         search,
@@ -595,10 +595,7 @@ export class PostService {
       const offset = (page - 1) * limit
 
       // Build where conditions - only include posts from public boards
-      const conditions = [
-        eq(boards.organizationId, params.organizationId),
-        eq(boards.isPublic, true),
-      ]
+      const conditions = [eq(boards.workspaceId, params.workspaceId), eq(boards.isPublic, true)]
 
       if (boardSlug) {
         conditions.push(eq(boards.slug, boardSlug))
@@ -741,7 +738,7 @@ export class PostService {
     params: InboxPostListParams,
     ctx: ServiceContext
   ): Promise<Result<InboxPostListResult, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const {
         boardIds,
         statusIds,
@@ -765,7 +762,7 @@ export class PostService {
         ? boardIds
         : (
             await uow.db.query.boards.findMany({
-              where: eq(boards.organizationId, ctx.organizationId),
+              where: eq(boards.workspaceId, ctx.workspaceId),
               columns: { id: true },
             })
           ).map((b) => b.id)
@@ -912,7 +909,7 @@ export class PostService {
     boardId: BoardId | undefined,
     ctx: ServiceContext
   ): Promise<Result<PostForExport[], PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       // Build conditions
       const conditions = []
 
@@ -921,7 +918,7 @@ export class PostService {
         ? [boardId]
         : (
             await uow.db.query.boards.findMany({
-              where: eq(boards.organizationId, ctx.organizationId),
+              where: eq(boards.workspaceId, ctx.workspaceId),
               columns: { id: true },
             })
           ).map((b) => b.id)
@@ -1085,12 +1082,12 @@ export class PostService {
    * Get posts for roadmap view across all public boards
    * No authentication required
    *
-   * @param organizationId - Organization ID
+   * @param workspaceId - Organization ID
    * @param statusIds - Array of status IDs to filter by
    * @returns Result containing roadmap posts
    */
   async getRoadmapPosts(
-    organizationId: OrgId,
+    workspaceId: WorkspaceId,
     statusIds: StatusId[]
   ): Promise<Result<RoadmapPost[], PostError>> {
     if (statusIds.length === 0) {
@@ -1113,7 +1110,7 @@ export class PostService {
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(
         and(
-          eq(boards.organizationId, organizationId),
+          eq(boards.workspaceId, workspaceId),
           eq(boards.isPublic, true),
           inArray(posts.statusId, statusIds)
         )
@@ -1143,12 +1140,12 @@ export class PostService {
    * @returns Result containing paginated roadmap posts
    */
   async getRoadmapPostsPaginated(params: {
-    organizationId: OrgId
+    workspaceId: WorkspaceId
     statusId: StatusId
     page?: number
     limit?: number
   }): Promise<Result<RoadmapPostListResult, PostError>> {
-    const { organizationId, statusId, page = 1, limit = 10 } = params
+    const { workspaceId, statusId, page = 1, limit = 10 } = params
     const offset = (page - 1) * limit
 
     const { db } = await import('@quackback/db')
@@ -1160,7 +1157,7 @@ export class PostService {
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(
         and(
-          eq(boards.organizationId, organizationId),
+          eq(boards.workspaceId, workspaceId),
           eq(boards.isPublic, true),
           eq(posts.statusId, statusId)
         )
@@ -1183,7 +1180,7 @@ export class PostService {
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(
         and(
-          eq(boards.organizationId, organizationId),
+          eq(boards.workspaceId, workspaceId),
           eq(boards.isPublic, true),
           eq(posts.statusId, statusId)
         )
@@ -1304,7 +1301,7 @@ export class PostService {
    * @returns Result with number of posts fixed
    */
   async reconcileVoteCounts(ctx: ServiceContext): Promise<Result<{ fixed: number }, PostError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       // Find and fix posts with mismatched counts in a single query
       const result = await uow.db.execute<{ id: string }>(sql`
         WITH mismatched AS (
@@ -1312,7 +1309,7 @@ export class PostService {
           FROM posts p
           INNER JOIN boards b ON p.board_id = b.id
           LEFT JOIN votes v ON v.post_id = p.id
-          WHERE b.organization_id = ${ctx.organizationId}
+          WHERE b.workspace_id = ${ctx.workspaceId}
           GROUP BY p.id
           HAVING p.vote_count != COUNT(v.id)
         )
@@ -1371,10 +1368,10 @@ export class PostService {
     }
 
     // Get portal config if not provided
-    const config = portalConfig ?? (await this.getPortalConfig(ctx.organizationId))
+    const config = portalConfig ?? (await this.getPortalConfig(ctx.workspaceId))
 
     // Check if status is default (Open)
-    const isDefaultStatus = await this.isDefaultStatus(post.statusId, ctx.organizationId)
+    const isDefaultStatus = await this.isDefaultStatus(post.statusId, ctx.workspaceId)
     if (!isDefaultStatus && !config.features.allowEditAfterEngagement) {
       return ok({ allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' })
     }
@@ -1437,10 +1434,10 @@ export class PostService {
     }
 
     // Get portal config if not provided
-    const config = portalConfig ?? (await this.getPortalConfig(ctx.organizationId))
+    const config = portalConfig ?? (await this.getPortalConfig(ctx.workspaceId))
 
     // Check if status is default (Open)
-    const isDefaultStatus = await this.isDefaultStatus(post.statusId, ctx.organizationId)
+    const isDefaultStatus = await this.isDefaultStatus(post.statusId, ctx.workspaceId)
     if (!isDefaultStatus && !config.features.allowDeleteAfterEngagement) {
       return ok({
         allowed: false,
@@ -1487,7 +1484,7 @@ export class PostService {
       return err(PostError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
 
       // Get the existing post
@@ -1511,12 +1508,12 @@ export class PostService {
       }
 
       // Get portal config to check if edit history is enabled
-      const config = await this.getPortalConfig(ctx.organizationId)
+      const config = await this.getPortalConfig(ctx.workspaceId)
 
       // Record edit history if enabled
       if (config.features.showPublicEditHistory && ctx.memberId) {
         await uow.db.insert(postEditHistory).values({
-          organizationId: ctx.organizationId,
+          workspaceId: ctx.workspaceId,
           postId: postId,
           editorMemberId: ctx.memberId,
           previousTitle: existingPost.title,
@@ -1559,7 +1556,7 @@ export class PostService {
       return err(PostError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
 
       // Set deletedAt and deletedByMemberId
@@ -1589,7 +1586,7 @@ export class PostService {
       return err(PostError.unauthorized('restore this post'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
 
       // Get the post
@@ -1630,7 +1627,7 @@ export class PostService {
       return err(PostError.unauthorized('permanently delete this post'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
 
       const deleted = await postRepo.delete(postId)
@@ -1693,7 +1690,7 @@ export class PostService {
    */
   private async isDefaultStatus(
     statusId: StatusId | null,
-    _organizationId: OrgId
+    _workspaceId: WorkspaceId
   ): Promise<boolean> {
     if (!statusId) return true // No status = treat as default
 
@@ -1746,11 +1743,11 @@ export class PostService {
   /**
    * Get portal config for an organization
    */
-  private async getPortalConfig(organizationId: OrgId): Promise<PortalConfig> {
-    const { db, organization } = await import('@quackback/db')
+  private async getPortalConfig(workspaceId: WorkspaceId): Promise<PortalConfig> {
+    const { db, workspace } = await import('@quackback/db')
 
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
+    const org = await db.query.workspace.findFirst({
+      where: eq(workspace.id, workspaceId),
     })
 
     if (!org?.portalConfig) {

@@ -28,7 +28,7 @@ vi.mock('@quackback/db', () => ({
   sql: vi.fn((strings, ...values) => ({ sql: { strings, values }, as: vi.fn() })),
   member: {
     userId: 'userId',
-    organizationId: 'organizationId',
+    workspaceId: 'workspaceId',
   },
   user: {
     id: 'id',
@@ -52,7 +52,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_123',
         userId: 'user-123',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         role: 'admin',
         createdAt: new Date(),
       }
@@ -95,7 +95,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_456',
         userId: 'user-456',
-        organizationId: 'org-456',
+        workspaceId: 'org-456',
         role: 'member',
         createdAt: new Date(),
       }
@@ -107,7 +107,7 @@ describe('MemberService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value?.userId).toBe('user-456')
-        expect(result.value?.organizationId).toBe('org-456')
+        expect(result.value?.workspaceId).toBe('org-456')
       }
     })
   })
@@ -117,7 +117,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_123',
         userId: 'user-123',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         role: 'admin',
         createdAt: new Date(),
       }
@@ -342,7 +342,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_123',
         userId: 'user-123',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         role: 'admin',
         createdAt: new Date(),
       }
@@ -386,7 +386,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_456',
         userId: 'user-456',
-        organizationId: 'org-456',
+        workspaceId: 'org-456',
         role: 'member',
         createdAt: new Date(),
       }
@@ -406,7 +406,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_789',
         userId: 'user-789',
-        organizationId: 'org-789',
+        workspaceId: 'org-789',
         role: 'owner',
         createdAt: new Date(),
       }
@@ -426,7 +426,7 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_999',
         userId: 'user-999',
-        organizationId: 'org-999',
+        workspaceId: 'org-999',
         role: 'member',
         createdAt: new Date(),
       }

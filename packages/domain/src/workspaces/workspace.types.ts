@@ -1,11 +1,11 @@
 /**
- * Organization configuration types
+ * Workspace configuration types
  *
  * Configuration is stored as JSON in the database for flexibility.
  * This allows adding new settings without migrations.
  */
 
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -223,7 +223,7 @@ export interface SamlConfig {
  */
 export interface SsoProvider {
   id: string
-  organizationId: OrgId
+  workspaceId: WorkspaceId
   providerId: string
   issuer: string
   domain: string

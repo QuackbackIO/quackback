@@ -15,7 +15,7 @@ import {
   type Tag,
   type UnitOfWork,
 } from '@quackback/db'
-import type { TagId, BoardId, OrgId } from '@quackback/ids'
+import type { TagId, BoardId, WorkspaceId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { TagError } from './tag.errors'
@@ -38,7 +38,7 @@ export class TagService {
    * @returns Result containing the created tag or an error
    */
   async createTag(input: CreateTagInput, ctx: ServiceContext): Promise<Result<Tag, TagError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       // Authorization check - only team members (owner, admin, member) can create tags
       // Portal users don't have member records, so memberRole would be undefined
       if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
@@ -74,7 +74,7 @@ export class TagService {
 
       // Create the tag
       const tag = await tagRepo.create({
-        organizationId: ctx.organizationId,
+        workspaceId: ctx.workspaceId,
         name: trimmedName,
         color,
       })
@@ -101,7 +101,7 @@ export class TagService {
     input: UpdateTagInput,
     ctx: ServiceContext
   ): Promise<Result<Tag, TagError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       // Authorization check - only team members (owner, admin, member) can update tags
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(TagError.unauthorized('update tags'))
@@ -170,7 +170,7 @@ export class TagService {
    * @returns Result containing void or an error
    */
   async deleteTag(id: TagId, ctx: ServiceContext): Promise<Result<void, TagError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       // Authorization check - only team members (owner, admin, member) can delete tags
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(TagError.unauthorized('delete tags'))
@@ -202,7 +202,7 @@ export class TagService {
    * @returns Result containing the tag or an error
    */
   async getTagById(id: TagId, ctx: ServiceContext): Promise<Result<Tag, TagError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const tagRepo = new TagRepository(uow.db)
 
       const tag = await tagRepo.findById(id)
@@ -221,7 +221,7 @@ export class TagService {
    * @returns Result containing array of tags or an error
    */
   async listTags(ctx: ServiceContext): Promise<Result<Tag[], TagError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const tagRepo = new TagRepository(uow.db)
 
       const tags = await tagRepo.findAll()
@@ -240,7 +240,7 @@ export class TagService {
    * @returns Result containing array of tags or an error
    */
   async getTagsByBoard(boardId: BoardId, ctx: ServiceContext): Promise<Result<Tag[], TagError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
       const tagRepo = new TagRepository(uow.db)
 
@@ -263,15 +263,15 @@ export class TagService {
    * Returns tags ordered by name.
    * This method is used for public endpoints like feedback portal filtering.
    *
-   * @param organizationId - Organization ID
+   * @param workspaceId - Organization ID
    * @returns Result containing array of tags or an error
    */
-  async listPublicTags(organizationId: OrgId): Promise<Result<Tag[], TagError>> {
+  async listPublicTags(workspaceId: WorkspaceId): Promise<Result<Tag[], TagError>> {
     try {
       const { db, tags, asc, eq } = await import('@quackback/db')
 
       const tagList = await db.query.tags.findMany({
-        where: eq(tags.organizationId, organizationId),
+        where: eq(tags.workspaceId, workspaceId),
         orderBy: [asc(tags.name)],
       })
 

@@ -55,7 +55,7 @@ vi.mock('@quackback/db', () => {
         },
       },
     },
-    tags: { organizationId: 'organizationId' },
+    tags: { workspaceId: 'workspaceId' },
     asc: vi.fn((col: unknown) => col),
     eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
   }
@@ -96,7 +96,7 @@ describe('TagService', () => {
         expect(result.value.color).toBe('#ff0000')
       }
       expect(mockTagRepoInstance.create).toHaveBeenCalledWith({
-        organizationId: ctx.organizationId,
+        workspaceId: ctx.workspaceId,
         name: 'Bug',
         color: '#ff0000',
       })

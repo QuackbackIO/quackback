@@ -15,7 +15,7 @@ import {
   type Roadmap,
   type UnitOfWork,
 } from '@quackback/db'
-import type { RoadmapId, PostId, OrgId } from '@quackback/ids'
+import type { RoadmapId, PostId, WorkspaceId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { RoadmapError } from './roadmap.errors'
@@ -66,21 +66,21 @@ export class RoadmapService {
       )
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Check for duplicate slug
-      const existing = await roadmapRepo.findBySlug(ctx.organizationId, input.slug)
+      const existing = await roadmapRepo.findBySlug(ctx.workspaceId, input.slug)
       if (existing) {
         return err(RoadmapError.duplicateSlug(input.slug))
       }
 
       // Get next position
-      const position = await roadmapRepo.getNextPosition(ctx.organizationId)
+      const position = await roadmapRepo.getNextPosition(ctx.workspaceId)
 
       // Create the roadmap
       const roadmap = await roadmapRepo.create({
-        organizationId: ctx.organizationId,
+        workspaceId: ctx.workspaceId,
         name: input.name.trim(),
         slug: input.slug.trim(),
         description: input.description?.trim() || null,
@@ -113,7 +113,7 @@ export class RoadmapService {
       return err(RoadmapError.validationError('Name must be 100 characters or less'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Check roadmap exists
@@ -123,7 +123,7 @@ export class RoadmapService {
       }
 
       // Update the roadmap
-      const updateData: Partial<Omit<Roadmap, 'id' | 'organizationId' | 'createdAt'>> = {}
+      const updateData: Partial<Omit<Roadmap, 'id' | 'workspaceId' | 'createdAt'>> = {}
       if (input.name !== undefined) updateData.name = input.name.trim()
       if (input.description !== undefined)
         updateData.description = input.description?.trim() || null
@@ -147,7 +147,7 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('delete roadmaps'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Check roadmap exists
@@ -167,7 +167,7 @@ export class RoadmapService {
    * Get a roadmap by ID
    */
   async getRoadmap(id: RoadmapId, ctx: ServiceContext): Promise<Result<Roadmap, RoadmapError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       const roadmap = await roadmapRepo.findById(id)
 
@@ -186,9 +186,9 @@ export class RoadmapService {
     slug: string,
     ctx: ServiceContext
   ): Promise<Result<Roadmap, RoadmapError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmap = await roadmapRepo.findBySlug(ctx.organizationId, slug)
+      const roadmap = await roadmapRepo.findBySlug(ctx.workspaceId, slug)
 
       if (!roadmap) {
         return err(RoadmapError.notFound())
@@ -202,9 +202,9 @@ export class RoadmapService {
    * List all roadmaps for the organization (admin view)
    */
   async listRoadmaps(ctx: ServiceContext): Promise<Result<Roadmap[], RoadmapError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmaps = await roadmapRepo.findAll(ctx.organizationId)
+      const roadmaps = await roadmapRepo.findAll(ctx.workspaceId)
       return ok(roadmaps)
     })
   }
@@ -212,10 +212,10 @@ export class RoadmapService {
   /**
    * List public roadmaps (for portal view)
    */
-  async listPublicRoadmaps(organizationId: OrgId): Promise<Result<Roadmap[], RoadmapError>> {
-    return withUnitOfWork(organizationId, async (uow: UnitOfWork) => {
+  async listPublicRoadmaps(workspaceId: WorkspaceId): Promise<Result<Roadmap[], RoadmapError>> {
+    return withUnitOfWork(workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmaps = await roadmapRepo.findPublic(organizationId)
+      const roadmaps = await roadmapRepo.findPublic(workspaceId)
       return ok(roadmaps)
     })
   }
@@ -232,7 +232,7 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('reorder roadmaps'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       await roadmapRepo.reorder(roadmapIds)
       return ok(undefined)
@@ -255,7 +255,7 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('add posts to roadmaps'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
 
@@ -304,7 +304,7 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('remove posts from roadmaps'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Check if post is in roadmap
@@ -332,7 +332,7 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('reorder posts in roadmaps'))
     }
 
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Verify roadmap exists
@@ -360,7 +360,7 @@ export class RoadmapService {
     options: RoadmapPostsQueryOptions,
     ctx: ServiceContext
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Verify roadmap exists
@@ -404,11 +404,11 @@ export class RoadmapService {
    * Get public roadmap posts (no auth required)
    */
   async getPublicRoadmapPosts(
-    organizationId: OrgId,
+    workspaceId: WorkspaceId,
     roadmapId: RoadmapId,
     options: RoadmapPostsQueryOptions
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {
-    return withUnitOfWork(organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
 
       // Verify roadmap exists and is public
@@ -456,7 +456,7 @@ export class RoadmapService {
     postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<Roadmap[], RoadmapError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const roadmapRepo = new RoadmapRepository(uow.db)
       const roadmaps = await roadmapRepo.getPostRoadmaps(postId)
       return ok(roadmaps)

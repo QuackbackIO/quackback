@@ -10,7 +10,7 @@
  */
 
 import { withUnitOfWork, StatusRepository, eq, sql, posts, type UnitOfWork } from '@quackback/db'
-import type { StatusId, OrgId } from '@quackback/ids'
+import type { StatusId, WorkspaceId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { StatusError } from './status.errors'
@@ -36,7 +36,7 @@ export class StatusService {
     input: CreateStatusInput,
     ctx: ServiceContext
   ): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       // Authorization check - only team members can create statuses
@@ -68,14 +68,14 @@ export class StatusService {
       }
 
       // Check if slug already exists for this organization
-      const existingStatus = await statusRepo.findBySlug(ctx.organizationId, input.slug)
+      const existingStatus = await statusRepo.findBySlug(ctx.workspaceId, input.slug)
       if (existingStatus) {
         return err(StatusError.duplicateSlug(input.slug))
       }
 
       // Create the status
       const status = await statusRepo.create({
-        organizationId: ctx.organizationId,
+        workspaceId: ctx.workspaceId,
         name: input.name.trim(),
         slug: input.slug.trim(),
         color: input.color,
@@ -87,7 +87,7 @@ export class StatusService {
 
       // If this is marked as default, ensure only one default exists
       if (input.isDefault) {
-        await statusRepo.setDefault(ctx.organizationId, status.id)
+        await statusRepo.setDefault(ctx.workspaceId, status.id)
       }
 
       return ok(status)
@@ -112,7 +112,7 @@ export class StatusService {
     input: UpdateStatusInput,
     ctx: ServiceContext
   ): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       // Authorization check - only team members can update statuses
@@ -146,7 +146,7 @@ export class StatusService {
 
       // If setting as default, use the special function
       if (input.isDefault === true) {
-        await statusRepo.setDefault(ctx.organizationId, id)
+        await statusRepo.setDefault(ctx.workspaceId, id)
       }
 
       // Build update data
@@ -180,7 +180,7 @@ export class StatusService {
    * @returns Result containing void or an error
    */
   async deleteStatus(id: StatusId, ctx: ServiceContext): Promise<Result<void, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       // Authorization check - only team members can delete statuses
@@ -225,7 +225,7 @@ export class StatusService {
    * @returns Result containing the status or an error
    */
   async getStatusById(id: StatusId, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       const status = await statusRepo.findById(id)
@@ -246,7 +246,7 @@ export class StatusService {
    * @returns Result containing array of statuses or an error
    */
   async listStatuses(ctx: ServiceContext): Promise<Result<Status[], StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       const statuses = await statusRepo.findAll()
@@ -269,7 +269,7 @@ export class StatusService {
    * @returns Result containing void or an error
    */
   async reorderStatuses(ids: StatusId[], ctx: ServiceContext): Promise<Result<void, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       // Authorization check - only team members can reorder statuses
@@ -303,7 +303,7 @@ export class StatusService {
    * @returns Result containing the updated status or an error
    */
   async setDefaultStatus(id: StatusId, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       // Authorization check - only team members can set default status
@@ -318,7 +318,7 @@ export class StatusService {
       }
 
       // Set as default
-      await statusRepo.setDefault(ctx.organizationId, id)
+      await statusRepo.setDefault(ctx.workspaceId, id)
 
       // Fetch and return the updated status
       const updatedStatus = await statusRepo.findById(id)
@@ -339,7 +339,7 @@ export class StatusService {
    * @returns Result containing the default status, null if not found, or an error
    */
   async getDefaultStatus(ctx: ServiceContext): Promise<Result<Status | null, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
       const defaultStatus = await statusRepo.findDefault()
@@ -358,10 +358,10 @@ export class StatusService {
    * @returns Result containing the status or an error
    */
   async getStatusBySlug(slug: string, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(ctx.organizationId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const statusRepo = new StatusRepository(uow.db)
 
-      const status = await statusRepo.findBySlug(ctx.organizationId, slug)
+      const status = await statusRepo.findBySlug(ctx.workspaceId, slug)
       if (!status) {
         return err(StatusError.notFound(slug))
       }
@@ -378,16 +378,16 @@ export class StatusService {
    * This is a public method that doesn't require ServiceContext since it's used
    * during initial setup before the user has auth context for the new org.
    *
-   * @param organizationId - Organization ID to seed statuses for
+   * @param workspaceId - Organization ID to seed statuses for
    * @returns Result containing the created statuses or an error
    */
-  async seedDefaultStatuses(organizationId: OrgId): Promise<Result<Status[], StatusError>> {
+  async seedDefaultStatuses(workspaceId: WorkspaceId): Promise<Result<Status[], StatusError>> {
     try {
       const { db, postStatuses, DEFAULT_STATUSES } = await import('@quackback/db')
 
       const statusesToCreate = DEFAULT_STATUSES.map((status) => ({
         ...status,
-        organizationId,
+        workspaceId,
       }))
 
       const inserted = await db.insert(postStatuses).values(statusesToCreate).returning()
@@ -408,15 +408,15 @@ export class StatusService {
    * Returns statuses ordered by category (active, complete, closed) and position.
    * This method is used for public endpoints like roadmap and post detail pages.
    *
-   * @param organizationId - Organization ID
+   * @param workspaceId - Organization ID
    * @returns Result containing array of statuses or an error
    */
-  async listPublicStatuses(organizationId: OrgId): Promise<Result<Status[], StatusError>> {
+  async listPublicStatuses(workspaceId: WorkspaceId): Promise<Result<Status[], StatusError>> {
     try {
       const { db, postStatuses, asc } = await import('@quackback/db')
 
       const statuses = await db.query.postStatuses.findMany({
-        where: eq(postStatuses.organizationId, organizationId),
+        where: eq(postStatuses.workspaceId, workspaceId),
         orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
       })
 

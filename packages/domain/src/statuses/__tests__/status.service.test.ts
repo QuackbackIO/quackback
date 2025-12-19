@@ -81,7 +81,7 @@ describe('StatusService', () => {
 
     // Setup mock context
     mockContext = {
-      organizationId: 'org-123',
+      workspaceId: 'org-123',
       userId: 'user-123',
       memberId: 'member_123',
       memberRole: 'admin',
@@ -119,7 +119,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'In Progress',
         slug: 'in_progress',
         color: '#f59e0b',
@@ -272,7 +272,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Test',
         slug: 'valid_slug_123',
         color: '#3b82f6',
@@ -369,7 +369,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Test',
         slug: 'test',
         color: '#3b82f6',
@@ -398,7 +398,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Test',
         slug: 'test',
         color: '#3B82F6',
@@ -427,7 +427,7 @@ describe('StatusService', () => {
 
       const existingStatus: Status = {
         id: 'status_existing',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Existing Status',
         slug: 'existing_slug',
         color: '#ef4444',
@@ -476,7 +476,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Test',
         slug: 'test',
         color: '#3b82f6',
@@ -510,7 +510,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Default Status',
         slug: 'default_status',
         color: '#3b82f6',
@@ -542,7 +542,7 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Roadmap Status',
         slug: 'roadmap_status',
         color: '#3b82f6',
@@ -569,7 +569,7 @@ describe('StatusService', () => {
   describe('updateStatus', () => {
     const existingStatus: Status = {
       id: 'status_1',
-      organizationId: 'org-123',
+      workspaceId: 'org-123',
       name: 'Original Name',
       slug: 'original_name',
       color: '#3b82f6',
@@ -793,7 +793,7 @@ describe('StatusService', () => {
   describe('deleteStatus', () => {
     const existingStatus: Status = {
       id: 'status_1',
-      organizationId: 'org-123',
+      workspaceId: 'org-123',
       name: 'Status to Delete',
       slug: 'status_to_delete',
       color: '#3b82f6',
@@ -883,7 +883,7 @@ describe('StatusService', () => {
     it('should return status when found', async () => {
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Test Status',
         slug: 'test_status',
         color: '#3b82f6',
@@ -922,7 +922,7 @@ describe('StatusService', () => {
       const mockStatuses: Status[] = [
         {
           id: 'status_1',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           name: 'Open',
           slug: 'open',
           color: '#3b82f6',
@@ -934,7 +934,7 @@ describe('StatusService', () => {
         },
         {
           id: 'status_2',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           name: 'Complete',
           slug: 'complete',
           color: '#10b981',
@@ -1013,7 +1013,7 @@ describe('StatusService', () => {
   describe('setDefaultStatus', () => {
     const existingStatus: Status = {
       id: 'status_1',
-      organizationId: 'org-123',
+      workspaceId: 'org-123',
       name: 'Status',
       slug: 'status',
       color: '#3b82f6',
@@ -1074,7 +1074,7 @@ describe('StatusService', () => {
     it('should return default status when it exists', async () => {
       const defaultStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Open',
         slug: 'open',
         color: '#3b82f6',
@@ -1111,7 +1111,7 @@ describe('StatusService', () => {
     it('should return status when found by slug', async () => {
       const mockStatus: Status = {
         id: 'status_1',
-        organizationId: 'org-123',
+        workspaceId: 'org-123',
         name: 'Test Status',
         slug: 'test_status',
         color: '#3b82f6',
@@ -1149,7 +1149,7 @@ describe('StatusService', () => {
       const mockStatuses: Status[] = [
         {
           id: 'status_1',
-          organizationId: 'org-new',
+          workspaceId: 'org-new',
           name: 'Open',
           slug: 'open',
           color: '#3b82f6',
@@ -1173,7 +1173,7 @@ describe('StatusService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toHaveLength(1)
-        expect(result.value[0].organizationId).toBe('org-new')
+        expect(result.value[0].workspaceId).toBe('org-new')
       }
     })
 
@@ -1200,7 +1200,7 @@ describe('StatusService', () => {
       const mockStatuses: Status[] = [
         {
           id: 'status_1',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           name: 'Open',
           slug: 'open',
           color: '#3b82f6',
@@ -1212,7 +1212,7 @@ describe('StatusService', () => {
         },
         {
           id: 'status_2',
-          organizationId: 'org-123',
+          workspaceId: 'org-123',
           name: 'Complete',
           slug: 'complete',
           color: '#10b981',

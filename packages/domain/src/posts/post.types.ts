@@ -3,7 +3,7 @@
  */
 
 import type { Post, Board, Tag } from '@quackback/db/types'
-import type { PostId, BoardId, TagId, StatusId, MemberId, OrgId } from '@quackback/ids'
+import type { PostId, BoardId, TagId, StatusId, MemberId, WorkspaceId } from '@quackback/ids'
 import type { CommentReactionCount } from '../comments/comment.types'
 
 /**
@@ -60,7 +60,7 @@ export interface PostWithDetails extends Post {
     id: BoardId
     name: string
     slug: string
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   }
   tags: Array<{
     id: TagId
@@ -98,7 +98,7 @@ export interface PublicPostListResult {
 
 /**
  * Parameters for inbox post list query
- * Note: organizationId comes from ServiceContext, not these params
+ * Note: workspaceId comes from ServiceContext, not these params
  */
 export interface InboxPostListParams {
   boardIds?: BoardId[]

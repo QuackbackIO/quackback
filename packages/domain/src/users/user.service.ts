@@ -30,7 +30,7 @@ import {
   postStatuses,
   type Database,
 } from '@quackback/db'
-import type { MemberId, OrgId } from '@quackback/ids'
+import type { MemberId, WorkspaceId } from '@quackback/ids'
 import { ok, err, type Result } from '../shared/result'
 import { UserError } from './user.errors'
 import type {
@@ -54,14 +54,14 @@ export class UserService {
    * using the indexed member_id columns on posts, comments, and votes tables.
    */
   async listPortalUsers(
-    organizationId: OrgId,
+    workspaceId: WorkspaceId,
     params: PortalUserListParams = {}
   ): Promise<Result<PortalUserListResult, UserError>> {
     try {
       const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20 } = params
 
       // Use withTenantContext for RLS-protected tables (posts, comments, votes)
-      const { rawUsers, total } = await withTenantContext(organizationId, async (tx: Database) => {
+      const { rawUsers, total } = await withTenantContext(workspaceId, async (tx: Database) => {
         // Pre-aggregate activity counts in subqueries (executed once, not per-row)
         // These use the indexed member_id columns for efficient lookups
         // Note: We join with boards to satisfy RLS policy (posts are filtered by board's org)
@@ -73,7 +73,7 @@ export class UserService {
           })
           .from(posts)
           .innerJoin(boards, eq(posts.boardId, boards.id))
-          .where(eq(boards.organizationId, organizationId))
+          .where(eq(boards.workspaceId, workspaceId))
           .groupBy(posts.memberId)
           .as('post_counts')
 
@@ -86,7 +86,7 @@ export class UserService {
           .from(comments)
           .innerJoin(posts, eq(comments.postId, posts.id))
           .innerJoin(boards, eq(posts.boardId, boards.id))
-          .where(eq(boards.organizationId, organizationId))
+          .where(eq(boards.workspaceId, workspaceId))
           .groupBy(comments.memberId)
           .as('comment_counts')
 
@@ -100,12 +100,12 @@ export class UserService {
           .from(votes)
           .innerJoin(posts, eq(votes.postId, posts.id))
           .innerJoin(boards, eq(posts.boardId, boards.id))
-          .where(eq(boards.organizationId, organizationId))
+          .where(eq(boards.workspaceId, workspaceId))
           .groupBy(votes.memberId)
           .as('vote_counts')
 
         // Build conditions array - filter for role='user' (portal users only)
-        const conditions = [eq(member.organizationId, organizationId), eq(member.role, 'user')]
+        const conditions = [eq(member.workspaceId, workspaceId), eq(member.role, 'user')]
 
         // Search filter (name or email)
         if (search) {
@@ -215,7 +215,7 @@ export class UserService {
    */
   async getPortalUserDetail(
     memberId: MemberId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<Result<PortalUserDetail | null, UserError>> {
     try {
       // Get member with user details (filter for role='user')
@@ -233,11 +233,7 @@ export class UserService {
         .from(member)
         .innerJoin(user, eq(member.userId, user.id))
         .where(
-          and(
-            eq(member.id, memberId),
-            eq(member.organizationId, organizationId),
-            eq(member.role, 'user')
-          )
+          and(eq(member.id, memberId), eq(member.workspaceId, workspaceId), eq(member.role, 'user'))
         )
         .limit(1)
 
@@ -250,7 +246,7 @@ export class UserService {
       const memberIdForQuery = memberData.memberId
 
       // Use withTenantContext for RLS-protected queries (posts, comments, votes)
-      const engagementData = await withTenantContext(organizationId, async (tx: Database) => {
+      const engagementData = await withTenantContext(workspaceId, async (tx: Database) => {
         // Run independent queries in parallel for better performance
         const [authoredPosts, commentedPostIds, votedPostIds] = await Promise.all([
           // Get posts authored by this user (via memberId)
@@ -476,14 +472,14 @@ export class UserService {
    */
   async removePortalUser(
     memberId: MemberId,
-    organizationId: OrgId
+    workspaceId: WorkspaceId
   ): Promise<Result<void, UserError>> {
     try {
       // Verify member exists, belongs to this org, and has role='user'
       const existingMember = await db.query.member.findFirst({
         where: and(
           eq(member.id, memberId),
-          eq(member.organizationId, organizationId),
+          eq(member.workspaceId, workspaceId),
           eq(member.role, 'user')
         ),
       })
