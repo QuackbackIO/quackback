@@ -1,5 +1,5 @@
 {
-  "id": "885ed2c9-d18a-488b-919a-c3ba8be082cc",
+  "id": "0f75d7e6-4523-42ab-a8fd-c943f5261298",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1114,6 +1114,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cloudflare_hostname_id": {
+          "name": "cloudflare_hostname_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ssl_status": {
+          "name": "ssl_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ownership_status": {
+          "name": "ownership_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1143,6 +1161,21 @@
           "columns": [
             {
               "expression": "domain",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "workspace_domain_cf_hostname_id_idx": {
+          "name": "workspace_domain_cf_hostname_id_idx",
+          "columns": [
+            {
+              "expression": "cloudflare_hostname_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1675,6 +1708,139 @@
       "checkConstraints": {},
       "isRLSEnabled": true
     },
+    "public.comment_edit_history": {
+      "name": "comment_edit_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment_id": {
+          "name": "comment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "editor_member_id": {
+          "name": "editor_member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_content": {
+          "name": "previous_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "comment_edit_history_comment_id_idx": {
+          "name": "comment_edit_history_comment_id_idx",
+          "columns": [
+            {
+              "expression": "comment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "comment_edit_history_org_id_idx": {
+          "name": "comment_edit_history_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "comment_edit_history_created_at_idx": {
+          "name": "comment_edit_history_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "comment_edit_history_organization_id_organization_id_fk": {
+          "name": "comment_edit_history_organization_id_organization_id_fk",
+          "tableFrom": "comment_edit_history",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "comment_edit_history_comment_id_comments_id_fk": {
+          "name": "comment_edit_history_comment_id_comments_id_fk",
+          "tableFrom": "comment_edit_history",
+          "tableTo": "comments",
+          "columnsFrom": ["comment_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "comment_edit_history_editor_member_id_member_id_fk": {
+          "name": "comment_edit_history_editor_member_id_member_id_fk",
+          "tableFrom": "comment_edit_history",
+          "tableTo": "member",
+          "columnsFrom": ["editor_member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "comment_edit_history_tenant_isolation": {
+          "name": "comment_edit_history_tenant_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["app_user"],
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
     "public.comment_reactions": {
       "name": "comment_reactions",
       "schema": "",
@@ -1852,6 +2018,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1986,6 +2158,151 @@
       "policies": {
         "comments_tenant_isolation": {
           "name": "comments_tenant_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["app_user"],
+          "using": "organization_id = current_setting('app.organization_id', true)::uuid",
+          "withCheck": "organization_id = current_setting('app.organization_id', true)::uuid"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.post_edit_history": {
+      "name": "post_edit_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "editor_member_id": {
+          "name": "editor_member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_title": {
+          "name": "previous_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_content": {
+          "name": "previous_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_content_json": {
+          "name": "previous_content_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "post_edit_history_post_id_idx": {
+          "name": "post_edit_history_post_id_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "post_edit_history_org_id_idx": {
+          "name": "post_edit_history_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "post_edit_history_created_at_idx": {
+          "name": "post_edit_history_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "post_edit_history_organization_id_organization_id_fk": {
+          "name": "post_edit_history_organization_id_organization_id_fk",
+          "tableFrom": "post_edit_history",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "post_edit_history_post_id_posts_id_fk": {
+          "name": "post_edit_history_post_id_posts_id_fk",
+          "tableFrom": "post_edit_history",
+          "tableTo": "posts",
+          "columnsFrom": ["post_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "post_edit_history_editor_member_id_member_id_fk": {
+          "name": "post_edit_history_editor_member_id_member_id_fk",
+          "tableFrom": "post_edit_history",
+          "tableTo": "member",
+          "columnsFrom": ["editor_member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "post_edit_history_tenant_isolation": {
+          "name": "post_edit_history_tenant_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["app_user"],
@@ -2373,6 +2690,18 @@
           "notNull": true,
           "default": "now()"
         },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_by_member_id": {
+          "name": "deleted_by_member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "search_vector": {
           "name": "search_vector",
           "type": "tsvector",
@@ -2652,6 +2981,21 @@
           "concurrently": false,
           "method": "gin",
           "with": {}
+        },
+        "posts_deleted_at_idx": {
+          "name": "posts_deleted_at_idx",
+          "columns": [
+            {
+              "expression": "deleted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2705,6 +3049,15 @@
           "tableFrom": "posts",
           "tableTo": "member",
           "columnsFrom": ["official_response_member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "posts_deleted_by_member_id_member_id_fk": {
+          "name": "posts_deleted_by_member_id_member_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "member",
+          "columnsFrom": ["deleted_by_member_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"

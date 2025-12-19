@@ -127,6 +127,9 @@ CREATE TABLE "workspace_domain" (
 	"is_primary" boolean DEFAULT false NOT NULL,
 	"verified" boolean DEFAULT true NOT NULL,
 	"verification_token" text,
+	"cloudflare_hostname_id" text,
+	"ssl_status" text,
+	"ownership_status" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "workspace_domain_domain_unique" UNIQUE("domain")
 );
@@ -200,7 +203,8 @@ CREATE TABLE "comments" (
 	"author_email" text,
 	"content" text NOT NULL,
 	"is_team_member" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
 ALTER TABLE "comments" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -240,6 +244,8 @@ CREATE TABLE "posts" (
 	"official_response_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	"deleted_by_member_id" uuid,
 	"search_vector" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')) STORED
 );
 --> statement-breakpoint
@@ -256,6 +262,28 @@ CREATE TABLE "votes" (
 );
 --> statement-breakpoint
 ALTER TABLE "votes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "comment_edit_history" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"comment_id" uuid NOT NULL,
+	"editor_member_id" uuid NOT NULL,
+	"previous_content" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "comment_edit_history" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "post_edit_history" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"post_id" uuid NOT NULL,
+	"editor_member_id" uuid NOT NULL,
+	"previous_title" text NOT NULL,
+	"previous_content" text NOT NULL,
+	"previous_content_json" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "post_edit_history" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "integration_event_mappings" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"integration_id" uuid NOT NULL,
@@ -420,6 +448,13 @@ ALTER TABLE "post_subscriptions" ADD CONSTRAINT "post_subscriptions_member_id_me
 ALTER TABLE "unsubscribe_tokens" ADD CONSTRAINT "unsubscribe_tokens_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "unsubscribe_tokens" ADD CONSTRAINT "unsubscribe_tokens_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "subscription" ADD CONSTRAINT "subscription_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comment_edit_history" ADD CONSTRAINT "comment_edit_history_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comment_edit_history" ADD CONSTRAINT "comment_edit_history_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comment_edit_history" ADD CONSTRAINT "comment_edit_history_editor_member_id_member_id_fk" FOREIGN KEY ("editor_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_edit_history" ADD CONSTRAINT "post_edit_history_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_edit_history" ADD CONSTRAINT "post_edit_history_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_edit_history" ADD CONSTRAINT "post_edit_history_editor_member_id_member_id_fk" FOREIGN KEY ("editor_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_deleted_by_member_id_member_id_fk" FOREIGN KEY ("deleted_by_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "invitation_organizationId_idx" ON "invitation" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
@@ -438,6 +473,7 @@ CREATE INDEX "user_org_id_idx" ON "user" USING btree ("organization_id");--> sta
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint
 CREATE INDEX "workspace_domain_org_id_idx" ON "workspace_domain" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "workspace_domain_domain_idx" ON "workspace_domain" USING btree ("domain");--> statement-breakpoint
+CREATE INDEX "workspace_domain_cf_hostname_id_idx" ON "workspace_domain" USING btree ("cloudflare_hostname_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "boards_org_slug_idx" ON "boards" USING btree ("organization_id","slug");--> statement-breakpoint
 CREATE INDEX "boards_org_id_idx" ON "boards" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "roadmaps_org_slug_idx" ON "roadmaps" USING btree ("organization_id","slug");--> statement-breakpoint
@@ -478,6 +514,7 @@ CREATE INDEX "posts_member_created_at_idx" ON "posts" USING btree ("member_id","
 CREATE INDEX "posts_org_board_vote_created_idx" ON "posts" USING btree ("organization_id","board_id","vote_count");--> statement-breakpoint
 CREATE INDEX "posts_with_status_idx" ON "posts" USING btree ("status_id","vote_count") WHERE status_id IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "posts_search_vector_idx" ON "posts" USING gin ("search_vector");--> statement-breakpoint
+CREATE INDEX "posts_deleted_at_idx" ON "posts" USING btree ("deleted_at");--> statement-breakpoint
 CREATE INDEX "votes_org_id_idx" ON "votes" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "votes_post_id_idx" ON "votes" USING btree ("post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "votes_unique_idx" ON "votes" USING btree ("post_id","user_identifier");--> statement-breakpoint
@@ -500,6 +537,12 @@ CREATE INDEX "unsubscribe_tokens_member_idx" ON "unsubscribe_tokens" USING btree
 CREATE UNIQUE INDEX "subscription_org_id_idx" ON "subscription" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "subscription_stripe_customer_idx" ON "subscription" USING btree ("stripe_customer_id");--> statement-breakpoint
 CREATE INDEX "subscription_stripe_sub_idx" ON "subscription" USING btree ("stripe_subscription_id");--> statement-breakpoint
+CREATE INDEX "comment_edit_history_comment_id_idx" ON "comment_edit_history" USING btree ("comment_id");--> statement-breakpoint
+CREATE INDEX "comment_edit_history_org_id_idx" ON "comment_edit_history" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "comment_edit_history_created_at_idx" ON "comment_edit_history" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "post_edit_history_post_id_idx" ON "post_edit_history" USING btree ("post_id");--> statement-breakpoint
+CREATE INDEX "post_edit_history_org_id_idx" ON "post_edit_history" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "post_edit_history_created_at_idx" ON "post_edit_history" USING btree ("created_at");--> statement-breakpoint
 CREATE POLICY "boards_tenant_isolation" ON "boards" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 CREATE POLICY "roadmaps_tenant_isolation" ON "roadmaps" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 CREATE POLICY "tags_tenant_isolation" ON "tags" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
@@ -547,6 +590,8 @@ CREATE POLICY "post_subscriptions_tenant_isolation" ON "post_subscriptions" AS P
   WHERE b.organization_id = current_setting('app.organization_id', true)::uuid
 ));--> statement-breakpoint
 CREATE POLICY "subscription_tenant_isolation" ON "subscription" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "comment_edit_history_tenant_isolation" ON "comment_edit_history" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
+CREATE POLICY "post_edit_history_tenant_isolation" ON "post_edit_history" AS PERMISSIVE FOR ALL TO "app_user" USING (organization_id = current_setting('app.organization_id', true)::uuid) WITH CHECK (organization_id = current_setting('app.organization_id', true)::uuid);--> statement-breakpoint
 GRANT USAGE ON SCHEMA public TO app_user;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;--> statement-breakpoint
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;--> statement-breakpoint
