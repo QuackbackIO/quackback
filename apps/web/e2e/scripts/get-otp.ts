@@ -22,18 +22,18 @@ async function main() {
   const normalizedEmail = email.toLowerCase().trim()
 
   try {
-    // Look up organization from workspace_domain table
+    // Look up workspace from workspace_domain table
     const domainRecord = await db.query.workspaceDomain.findFirst({
       where: eq(workspaceDomain.domain, host),
-      with: { organization: true },
+      with: { workspace: true },
     })
 
-    if (!domainRecord?.organization) {
-      console.error(`Organization not found for host: ${host}`)
+    if (!domainRecord?.workspace) {
+      console.error(`Workspace not found for host: ${host}`)
       process.exit(1)
     }
 
-    const org = domainRecord.organization
+    const org = domainRecord.workspace
     const identifier = `tenant-otp:${org.id}:${normalizedEmail}`
 
     // Find the most recent verification record

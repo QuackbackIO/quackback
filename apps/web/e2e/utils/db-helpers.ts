@@ -15,7 +15,7 @@ import { resolve } from 'path'
  * ensuring proper environment variables are loaded.
  *
  * @param email - The email address to get the OTP for
- * @param host - The host (domain) to resolve the organization
+ * @param host - The host (domain) to resolve the workspace
  * @returns The OTP code or throws if not found/expired
  */
 export function getOtpCode(email: string, host: string): string {
