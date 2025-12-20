@@ -979,12 +979,12 @@ describe('PostService', () => {
           authorName: mockPost.authorName,
           memberId: mockPost.memberId,
           createdAt: mockPost.createdAt,
-          commentCount: 5,
           boardId: mockBoard.id,
           boardName: mockBoard.name,
           boardSlug: mockBoard.slug,
         },
       ]
+      const mockCommentCountsResult = [{ postId: mockPost.id, count: 5 }]
       const mockTagsResult: Array<{
         postId: string
         tagId: string
@@ -992,10 +992,11 @@ describe('PostService', () => {
         tagColor: string
       }> = []
 
-      // The method makes 3 select() calls:
+      // The method makes 4 select() calls:
       // 1. Count query
       // 2. Posts query
-      // 3. Tags query
+      // 3. Comment counts query (parallel with tags)
+      // 4. Tags query (parallel with comment counts)
       const mockSelect = vi.fn()
 
       // First call - count
@@ -1022,7 +1023,16 @@ describe('PostService', () => {
         }),
       })
 
-      // Third call - tags
+      // Third call - comment counts
+      mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            groupBy: vi.fn().mockResolvedValue(mockCommentCountsResult),
+          }),
+        }),
+      })
+
+      // Fourth call - tags
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
           innerJoin: vi.fn().mockReturnValue({

@@ -657,7 +657,7 @@ export class PostService {
             ? sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
             : desc(posts.voteCount) // 'top' is default
 
-      // Get posts with board info
+      // Get posts with board info (without comment count - fetched separately)
       const postsResult = await uow.db
         .select({
           id: posts.id,
@@ -668,9 +668,6 @@ export class PostService {
           authorName: posts.authorName,
           memberId: posts.memberId,
           createdAt: posts.createdAt,
-          commentCount: sql<number>`(
-            SELECT count(*)::int FROM comments WHERE comments.post_id = ${posts.id}
-          )`,
           boardId: boards.id,
           boardName: boards.name,
           boardSlug: boards.slug,
@@ -682,11 +679,22 @@ export class PostService {
         .limit(limit)
         .offset(offset)
 
-      // Get tags for all posts
       const postIds = postsResult.map((p) => p.id)
-      const tagsResult =
+
+      // Batch fetch comment counts and tags in parallel
+      const [commentCountsResult, tagsResult] = await Promise.all([
         postIds.length > 0
-          ? await uow.db
+          ? uow.db
+              .select({
+                postId: comments.postId,
+                count: sql<number>`count(*)::int`,
+              })
+              .from(comments)
+              .where(inArray(comments.postId, postIds))
+              .groupBy(comments.postId)
+          : Promise.resolve([]),
+        postIds.length > 0
+          ? uow.db
               .select({
                 postId: postTags.postId,
                 id: tags.id,
@@ -696,9 +704,15 @@ export class PostService {
               .from(postTags)
               .innerJoin(tags, eq(tags.id, postTags.tagId))
               .where(inArray(postTags.postId, postIds))
-          : []
+          : Promise.resolve([]),
+      ])
 
-      // Group tags by post
+      // Build lookup maps
+      const commentCountByPost = new Map<PostId, number>()
+      for (const row of commentCountsResult) {
+        commentCountByPost.set(row.postId, row.count)
+      }
+
       const tagsByPost = new Map<PostId, Array<{ id: TagId; name: string; color: string }>>()
       for (const row of tagsResult) {
         const existing = tagsByPost.get(row.postId) || []
@@ -715,7 +729,7 @@ export class PostService {
         authorName: post.authorName,
         memberId: post.memberId,
         createdAt: post.createdAt,
-        commentCount: post.commentCount,
+        commentCount: commentCountByPost.get(post.id) || 0,
         tags: tagsByPost.get(post.id) || [],
         board: {
           id: post.boardId,
