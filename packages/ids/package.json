@@ -21,11 +21,11 @@
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.30.0",
-    "zod": ">=3.0.0"
+    "zod": ">=4.0.0"
   },
   "devDependencies": {
     "drizzle-orm": "^0.45.0",
     "vitest": "^4.0.15",
-    "zod": "^3.24.0"
+    "zod": "^4.1.13"
   }
 }
