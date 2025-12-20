@@ -61,6 +61,8 @@ import type {
   PermissionCheckResult,
   UserEditPostInput,
   PostEditHistoryEntry,
+  CreatePostResult,
+  ChangeStatusResult,
 } from './post.types'
 
 /**
@@ -79,7 +81,10 @@ export class PostService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the created post or an error
    */
-  async createPost(input: CreatePostInput, ctx: ServiceContext): Promise<Result<Post, PostError>> {
+  async createPost(
+    input: CreatePostInput,
+    ctx: ServiceContext
+  ): Promise<Result<CreatePostResult, PostError>> {
     return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
@@ -370,7 +375,7 @@ export class PostService {
     postId: PostId,
     statusId: StatusId,
     ctx: ServiceContext
-  ): Promise<Result<Post, PostError>> {
+  ): Promise<Result<ChangeStatusResult, PostError>> {
     return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)

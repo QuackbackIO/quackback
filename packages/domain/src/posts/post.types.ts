@@ -248,3 +248,19 @@ export interface PostEditHistoryEntry {
   previousContentJson?: unknown
   createdAt: Date
 }
+
+/**
+ * Result of creating a post - includes board slug for event building
+ */
+export interface CreatePostResult extends Post {
+  boardSlug: string
+}
+
+/**
+ * Result of changing post status - includes status info for event building
+ */
+export interface ChangeStatusResult extends Post {
+  boardSlug: string
+  previousStatus: string
+  newStatus: string
+}

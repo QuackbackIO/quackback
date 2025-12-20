@@ -22,4 +22,6 @@ export type {
   InboxPostListResult,
   PostListItem,
   PostForExport,
+  CreatePostResult,
+  ChangeStatusResult,
 } from './post.types'
