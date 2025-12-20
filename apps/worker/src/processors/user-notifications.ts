@@ -100,7 +100,7 @@ export async function processUserNotificationJob(
               postUrl,
               previousStatus: eventData.previousStatus,
               newStatus: eventData.newStatus,
-              organizationName: org.name,
+              workspaceName: org.name,
               unsubscribeUrl,
             })
             emailsSent++
@@ -180,7 +180,7 @@ export async function processUserNotificationJob(
               commenterName,
               commentPreview,
               isTeamMember,
-              organizationName: org.name,
+              workspaceName: org.name,
               unsubscribeUrl,
             })
             emailsSent++

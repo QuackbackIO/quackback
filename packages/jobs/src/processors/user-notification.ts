@@ -107,7 +107,7 @@ export async function processUserNotification(
               postUrl,
               previousStatus: statusData.previousStatus,
               newStatus: statusData.newStatus,
-              organizationName: org.name,
+              workspaceName: org.name,
               unsubscribeUrl,
             })
             emailsSent++
@@ -190,7 +190,7 @@ export async function processUserNotification(
               commenterName,
               commentPreview,
               isTeamMember,
-              organizationName: org.name,
+              workspaceName: org.name,
               unsubscribeUrl,
             })
             emailsSent++

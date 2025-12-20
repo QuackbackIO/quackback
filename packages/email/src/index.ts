@@ -59,12 +59,12 @@ interface SendInvitationParams {
   to: string
   invitedByName: string
   inviteeName?: string
-  organizationName: string
+  workspaceName: string
   inviteLink: string
 }
 
 export async function sendInvitationEmail(params: SendInvitationParams) {
-  const { to, invitedByName, inviteeName, organizationName, inviteLink } = params
+  const { to, invitedByName, inviteeName, workspaceName, inviteLink } = params
 
   if (shouldLogToConsole()) {
     console.log('\n┌────────────────────────────────────────────────────────────')
@@ -73,7 +73,7 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
     console.log(`│ To: ${to}`)
     console.log(`│ Invitee name: ${inviteeName || '(not provided)'}`)
     console.log(`│ Invited by: ${invitedByName}`)
-    console.log(`│ Organization: ${organizationName}`)
+    console.log(`│ Workspace: ${workspaceName}`)
     console.log(`│ Invite link: ${inviteLink}`)
     console.log('└────────────────────────────────────────────────────────────\n')
     return
@@ -82,13 +82,13 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
   const html = interpolate(templates.invitation, {
     invitedByName,
     inviteeName: inviteeName || '',
-    organizationName,
+    organizationName: workspaceName,
     inviteLink,
   })
 
   await sendEmail({
     to,
-    subject: `You've been invited to join ${organizationName} on Quackback`,
+    subject: `You've been invited to join ${workspaceName} on Quackback`,
     html,
   })
 }
@@ -173,12 +173,12 @@ interface SendStatusChangeParams {
   postUrl: string
   previousStatus: string
   newStatus: string
-  organizationName: string
+  workspaceName: string
   unsubscribeUrl: string
 }
 
 export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
-  const { to, postTitle, postUrl, previousStatus, newStatus, organizationName, unsubscribeUrl } =
+  const { to, postTitle, postUrl, previousStatus, newStatus, workspaceName, unsubscribeUrl } =
     params
 
   if (shouldLogToConsole()) {
@@ -201,7 +201,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
     postUrl,
     previousStatus: previousStatus.replace(/_/g, ' '),
     newStatus: formattedStatus,
-    organizationName,
+    organizationName: workspaceName,
     unsubscribeUrl,
   })
 
@@ -223,7 +223,7 @@ interface SendNewCommentParams {
   commenterName: string
   commentPreview: string
   isTeamMember: boolean
-  organizationName: string
+  workspaceName: string
   unsubscribeUrl: string
 }
 
@@ -235,7 +235,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     commenterName,
     commentPreview,
     isTeamMember,
-    organizationName,
+    workspaceName,
     unsubscribeUrl,
   } = params
 
@@ -261,7 +261,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     postUrl,
     commenterName,
     commentPreview,
-    organizationName,
+    organizationName: workspaceName,
     unsubscribeUrl,
   })
 
