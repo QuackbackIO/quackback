@@ -241,7 +241,6 @@ export function FeedbackHeader({
             lineHeight: expanded ? '1.75rem' : '1.5rem',
           }}
           transition={{ duration: 0.2 }}
-          autoFocus
         />
       </div>
 

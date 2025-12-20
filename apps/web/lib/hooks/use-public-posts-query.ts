@@ -109,7 +109,8 @@ export function usePublicPosts({ workspaceId, filters, initialData }: UsePublicP
           pageParams: [1],
         }
       : undefined,
-    refetchOnMount: !initialData,
+    // Keep showing previous data while loading new filter results
+    placeholderData: (previousData) => previousData,
   })
 }
 
