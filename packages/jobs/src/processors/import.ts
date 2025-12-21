@@ -280,7 +280,7 @@ export async function processBatch(
       const insertedPosts = await tx.insert(posts).values(postsToInsert).returning({ id: posts.id })
 
       // Insert post tags
-      const postTagsToInsert: { postId: PostId; tagId: TagId }[] = []
+      const postTagsToInsert: { workspaceId: WorkspaceId; postId: PostId; tagId: TagId }[] = []
 
       for (let i = 0; i < validRows.length; i++) {
         const { row } = validRows[i]
@@ -289,7 +289,7 @@ export async function processBatch(
         for (const tagName of row.tagNames) {
           const tag = tagMap.get(tagName.toLowerCase())
           if (tag) {
-            postTagsToInsert.push({ postId, tagId: tag.id as TagId })
+            postTagsToInsert.push({ workspaceId, postId, tagId: tag.id as TagId })
           }
         }
       }

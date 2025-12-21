@@ -288,7 +288,7 @@ async function processBatch(
       const insertedPosts = await tx.insert(posts).values(postsToInsert).returning({ id: posts.id })
 
       // Insert post tags
-      const postTagsToInsert: { postId: string; tagId: string }[] = []
+      const postTagsToInsert: { workspaceId: WorkspaceId; postId: string; tagId: string }[] = []
 
       for (let i = 0; i < validRows.length; i++) {
         const { row } = validRows[i]
@@ -297,7 +297,7 @@ async function processBatch(
         for (const tagName of row.tagNames) {
           const tag = tagMap.get(tagName.toLowerCase())
           if (tag) {
-            postTagsToInsert.push({ postId, tagId: tag.id })
+            postTagsToInsert.push({ workspaceId, postId, tagId: tag.id })
           }
         }
       }

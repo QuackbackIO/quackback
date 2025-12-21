@@ -86,7 +86,8 @@ export async function processUserNotificationJob(
           const unsubscribeToken = await subscriptionService.generateUnsubscribeToken(
             subscriber.memberId,
             postId,
-            'unsubscribe_post'
+            'unsubscribe_post',
+            organizationId
           )
 
           // Build URLs
@@ -163,7 +164,8 @@ export async function processUserNotificationJob(
           const unsubscribeToken = await subscriptionService.generateUnsubscribeToken(
             subscriber.memberId,
             postId,
-            'unsubscribe_post'
+            'unsubscribe_post',
+            organizationId
           )
 
           // Build URLs

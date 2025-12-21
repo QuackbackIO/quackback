@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
-import type { PostId, BoardId, TagId } from '@quackback/ids'
+import type { PostId, BoardId, TagId, WorkspaceId } from '@quackback/ids'
 import type { Database } from '../client'
 import { posts, postTags } from '../schema/posts'
 import type { Post, NewPost } from '../types'
@@ -103,13 +103,13 @@ export class PostRepository {
   /**
    * Set tags for a post (replaces all existing tags)
    */
-  async setTags(postId: PostId, tagIds: TagId[]): Promise<void> {
+  async setTags(postId: PostId, tagIds: TagId[], workspaceId: WorkspaceId): Promise<void> {
     // Remove all existing tags
     await this.db.delete(postTags).where(eq(postTags.postId, postId))
 
     // Add new tags if any
     if (tagIds.length > 0) {
-      await this.db.insert(postTags).values(tagIds.map((tagId) => ({ postId, tagId })))
+      await this.db.insert(postTags).values(tagIds.map((tagId) => ({ postId, tagId, workspaceId })))
     }
   }
 }

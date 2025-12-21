@@ -62,6 +62,7 @@ export async function recordSyncLog(
   try {
     await withTenantContext(workspaceId, async (db) => {
       await db.insert(integrationSyncLog).values({
+        workspaceId,
         integrationId,
         eventId,
         eventType,

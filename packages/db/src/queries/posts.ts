@@ -1,6 +1,6 @@
 import { eq, and, desc, asc, sql, inArray, gte, lte, isNull } from 'drizzle-orm'
 import { db } from '../tenant-context'
-import { posts, comments, postTags } from '../schema/posts'
+import { posts, postTags } from '../schema/posts'
 import { boards } from '../schema/boards'
 import type { InboxPostListParams, PostListItem, InboxPostListResult, Post } from '../types'
 
@@ -122,28 +122,12 @@ export async function getInboxPostList(params: InboxPostListParams): Promise<Inb
       .where(whereClause),
   ])
 
-  // Get comment counts for all posts
-  const postIds = rawPosts.map((p) => p.id)
-  const commentCounts =
-    postIds.length > 0
-      ? await db
-          .select({
-            postId: comments.postId,
-            count: sql<number>`count(*)`.as('count'),
-          })
-          .from(comments)
-          .where(inArray(comments.postId, postIds))
-          .groupBy(comments.postId)
-      : []
-
-  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
-
-  // Transform to PostListItem format
+  // Transform to PostListItem format (use denormalized commentCount from posts)
   const items: PostListItem[] = rawPosts.map((post) => ({
     ...post,
     board: post.board,
     tags: post.tags.map((pt) => pt.tag),
-    commentCount: commentCountMap.get(post.id) ?? 0,
+    commentCount: post.commentCount,
   }))
 
   const total = Number(countResult[0].count)

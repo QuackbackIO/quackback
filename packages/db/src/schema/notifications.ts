@@ -1,27 +1,13 @@
 import { pgTable, text, timestamp, boolean, index, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { pgPolicy } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { posts } from './posts'
-import { member } from './auth'
+import { member, workspace } from './auth'
 import { appUser } from './rls'
 
-/**
- * RLS check for post_subscriptions via post -> board -> workspace
- */
-const subscriptionsWorkspaceCheck = sql`post_id IN (
-  SELECT p.id FROM posts p
-  JOIN boards b ON p.board_id = b.id
-  WHERE b.workspace_id = current_setting('app.workspace_id', true)::uuid
-)`
-
-/**
- * RLS check for notification_preferences via member -> workspace
- */
-const preferencesWorkspaceCheck = sql`member_id IN (
-  SELECT id FROM member
-  WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
-)`
+// Direct workspace_id check for RLS performance
+const directWorkspaceCheck = sql`workspace_id = current_setting('app.workspace_id', true)::uuid`
 
 /**
  * Post subscriptions - tracks which users are subscribed to which posts.
@@ -31,6 +17,10 @@ export const postSubscriptions = pgTable(
   'post_subscriptions',
   {
     id: typeIdWithDefault('post_sub')('id').primaryKey(),
+    // Denormalized workspace_id for RLS performance
+    workspaceId: typeIdColumn('workspace')('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -43,7 +33,13 @@ export const postSubscriptions = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('post_subscriptions_unique').on(table.postId, table.memberId),
+    // Workspace-prefixed unique constraint for tenant isolation
+    uniqueIndex('post_subscriptions_workspace_unique').on(
+      table.workspaceId,
+      table.postId,
+      table.memberId
+    ),
+    index('post_subscriptions_workspace_id_idx').on(table.workspaceId),
     index('post_subscriptions_member_idx').on(table.memberId),
     index('post_subscriptions_post_idx').on(table.postId),
     // Partial index for active (non-muted) subscriber lookups
@@ -53,8 +49,8 @@ export const postSubscriptions = pgTable(
     pgPolicy('post_subscriptions_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: subscriptionsWorkspaceCheck,
-      withCheck: subscriptionsWorkspaceCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -67,6 +63,10 @@ export const notificationPreferences = pgTable(
   'notification_preferences',
   {
     id: typeIdWithDefault('notif_pref')('id').primaryKey(),
+    // Denormalized workspace_id for RLS performance
+    workspaceId: typeIdColumn('workspace')('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     memberId: typeIdColumn('member')('member_id')
       .notNull()
       .unique()
@@ -78,12 +78,13 @@ export const notificationPreferences = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    index('notification_preferences_workspace_id_idx').on(table.workspaceId),
     index('notification_preferences_member_idx').on(table.memberId),
     pgPolicy('notification_preferences_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: preferencesWorkspaceCheck,
-      withCheck: preferencesWorkspaceCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -96,6 +97,10 @@ export const unsubscribeTokens = pgTable(
   'unsubscribe_tokens',
   {
     id: typeIdWithDefault('unsub_token')('id').primaryKey(),
+    // Denormalized workspace_id for RLS performance
+    workspaceId: typeIdColumn('workspace')('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     token: text('token').notNull().unique(),
     memberId: typeIdColumn('member')('member_id')
       .notNull()
@@ -109,7 +114,56 @@ export const unsubscribeTokens = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    index('unsubscribe_tokens_workspace_id_idx').on(table.workspaceId),
     index('unsubscribe_tokens_token_idx').on(table.token),
     index('unsubscribe_tokens_member_idx').on(table.memberId),
+    pgPolicy('unsubscribe_tokens_tenant_isolation', {
+      for: 'all',
+      to: appUser,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
+    }),
   ]
-)
+).enableRLS()
+
+// Relations
+export const postSubscriptionsRelations = relations(postSubscriptions, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [postSubscriptions.workspaceId],
+    references: [workspace.id],
+  }),
+  post: one(posts, {
+    fields: [postSubscriptions.postId],
+    references: [posts.id],
+  }),
+  member: one(member, {
+    fields: [postSubscriptions.memberId],
+    references: [member.id],
+  }),
+}))
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [notificationPreferences.workspaceId],
+    references: [workspace.id],
+  }),
+  member: one(member, {
+    fields: [notificationPreferences.memberId],
+    references: [member.id],
+  }),
+}))
+
+export const unsubscribeTokensRelations = relations(unsubscribeTokens, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [unsubscribeTokens.workspaceId],
+    references: [workspace.id],
+  }),
+  member: one(member, {
+    fields: [unsubscribeTokens.memberId],
+    references: [member.id],
+  }),
+  post: one(posts, {
+    fields: [unsubscribeTokens.postId],
+    references: [posts.id],
+  }),
+}))

@@ -407,6 +407,7 @@ export class CommentService {
       if (!existingReaction) {
         // Add reaction
         await uow.db.insert(commentReactions).values({
+          workspaceId: ctx.workspaceId,
           commentId,
           userIdentifier,
           emoji,
@@ -627,6 +628,7 @@ export class CommentService {
       } else {
         // Add new reaction
         await uow.db.insert(commentReactions).values({
+          workspaceId: ctx.workspaceId,
           commentId,
           userIdentifier,
           emoji,

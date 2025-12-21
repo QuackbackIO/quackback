@@ -173,7 +173,7 @@ export async function seedDefaultStatuses(
 ): Promise<PostStatusEntity[]> {
   const statusesToCreate = DEFAULT_STATUSES.map((status) => ({
     ...status,
-    organizationId,
+    workspaceId: organizationId,
   }))
 
   const inserted = await db.insert(postStatuses).values(statusesToCreate).returning()

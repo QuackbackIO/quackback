@@ -63,6 +63,8 @@ export const posts = pgTable(
     ownerId: text('owner_id'), // Legacy, kept for migration
     estimated: text('estimated'),
     voteCount: integer('vote_count').default(0).notNull(),
+    // Denormalized comment count for performance (updated via trigger)
+    commentCount: integer('comment_count').default(0).notNull(),
     // Official team response (member-scoped)
     officialResponse: text('official_response'),
     officialResponseMemberId: typeIdColumnNullable('member')(
@@ -97,13 +99,21 @@ export const posts = pgTable(
     index('posts_owner_id_idx').on(table.ownerId), // Legacy index
     index('posts_created_at_idx').on(table.createdAt),
     index('posts_vote_count_idx').on(table.voteCount),
-    // Composite indexes for public post listings sorted by "top" and "new"
-    index('posts_board_vote_count_idx').on(table.boardId, table.voteCount),
-    index('posts_board_created_at_idx').on(table.boardId, table.createdAt),
-    // Composite index for admin inbox filtering by status
-    index('posts_board_status_id_idx').on(table.boardId, table.statusId),
-    // Composite index for user activity pages (posts by author)
-    index('posts_member_created_at_idx').on(table.memberId, table.createdAt),
+    // Workspace-prefixed composite indexes for public post listings sorted by "top" and "new"
+    index('posts_workspace_board_vote_idx').on(table.workspaceId, table.boardId, table.voteCount),
+    index('posts_workspace_board_created_at_idx').on(
+      table.workspaceId,
+      table.boardId,
+      table.createdAt
+    ),
+    // Workspace-prefixed composite index for admin inbox filtering by status
+    index('posts_workspace_board_status_idx').on(table.workspaceId, table.boardId, table.statusId),
+    // Workspace-prefixed composite index for user activity pages (posts by author)
+    index('posts_workspace_member_created_at_idx').on(
+      table.workspaceId,
+      table.memberId,
+      table.createdAt
+    ),
     // Composite index for workspace-scoped post listings (replaces board-based RLS lookups)
     index('posts_workspace_board_vote_created_idx').on(
       table.workspaceId,
@@ -127,14 +137,13 @@ export const posts = pgTable(
   ]
 ).enableRLS()
 
-// RLS check via posts table (single join to posts.workspace_id)
-const postTagsWorkspaceCheck = sql`post_id IN (
-  SELECT id FROM posts WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
-)`
-
 export const postTags = pgTable(
   'post_tags',
   {
+    // Denormalized workspace_id for RLS performance
+    workspaceId: typeIdColumn('workspace')('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -144,13 +153,14 @@ export const postTags = pgTable(
   },
   (table) => [
     uniqueIndex('post_tags_pk').on(table.postId, table.tagId),
+    index('post_tags_workspace_id_idx').on(table.workspaceId),
     index('post_tags_post_id_idx').on(table.postId),
     index('post_tags_tag_id_idx').on(table.tagId),
     pgPolicy('post_tags_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postTagsWorkspaceCheck,
-      withCheck: postTagsWorkspaceCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -158,6 +168,10 @@ export const postTags = pgTable(
 export const postRoadmaps = pgTable(
   'post_roadmaps',
   {
+    // Denormalized workspace_id for RLS performance
+    workspaceId: typeIdColumn('workspace')('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -168,14 +182,15 @@ export const postRoadmaps = pgTable(
   },
   (table) => [
     uniqueIndex('post_roadmaps_pk').on(table.postId, table.roadmapId),
+    index('post_roadmaps_workspace_id_idx').on(table.workspaceId),
     index('post_roadmaps_post_id_idx').on(table.postId),
     index('post_roadmaps_roadmap_id_idx').on(table.roadmapId),
     index('post_roadmaps_position_idx').on(table.roadmapId, table.position),
     pgPolicy('post_roadmaps_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: postTagsWorkspaceCheck,
-      withCheck: postTagsWorkspaceCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -202,7 +217,12 @@ export const votes = pgTable(
   (table) => [
     index('votes_workspace_id_idx').on(table.workspaceId),
     index('votes_post_id_idx').on(table.postId),
-    uniqueIndex('votes_unique_idx').on(table.postId, table.userIdentifier),
+    // Workspace-prefixed unique constraint for tenant isolation
+    uniqueIndex('votes_workspace_unique_idx').on(
+      table.workspaceId,
+      table.postId,
+      table.userIdentifier
+    ),
     index('votes_member_id_idx').on(table.memberId),
     index('votes_member_created_at_idx').on(table.memberId, table.createdAt),
     pgPolicy('votes_tenant_isolation', {
@@ -244,7 +264,12 @@ export const comments = pgTable(
     index('comments_parent_id_idx').on(table.parentId),
     index('comments_member_id_idx').on(table.memberId),
     index('comments_created_at_idx').on(table.createdAt),
-    index('comments_post_created_at_idx').on(table.postId, table.createdAt),
+    // Workspace-prefixed index for comment listings
+    index('comments_workspace_post_created_at_idx').on(
+      table.workspaceId,
+      table.postId,
+      table.createdAt
+    ),
     pgPolicy('comments_tenant_isolation', {
       for: 'all',
       to: appUser,
@@ -254,15 +279,14 @@ export const comments = pgTable(
   ]
 ).enableRLS()
 
-// RLS check via comments table (single join to comments.workspace_id)
-const commentReactionsWorkspaceCheck = sql`comment_id IN (
-  SELECT id FROM comments WHERE workspace_id = current_setting('app.workspace_id', true)::uuid
-)`
-
 export const commentReactions = pgTable(
   'comment_reactions',
   {
     id: typeIdWithDefault('reaction')('id').primaryKey(),
+    // Denormalized workspace_id for RLS performance
+    workspaceId: typeIdColumn('workspace')('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
     commentId: typeIdColumn('comment')('comment_id')
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
@@ -271,6 +295,7 @@ export const commentReactions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    index('comment_reactions_workspace_id_idx').on(table.workspaceId),
     index('comment_reactions_comment_id_idx').on(table.commentId),
     uniqueIndex('comment_reactions_unique_idx').on(
       table.commentId,
@@ -280,8 +305,8 @@ export const commentReactions = pgTable(
     pgPolicy('comment_reactions_tenant_isolation', {
       for: 'all',
       to: appUser,
-      using: commentReactionsWorkspaceCheck,
-      withCheck: commentReactionsWorkspaceCheck,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
     }),
   ]
 ).enableRLS()
@@ -383,6 +408,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
 }))
 
 export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [postRoadmaps.workspaceId],
+    references: [workspace.id],
+  }),
   post: one(posts, {
     fields: [postRoadmaps.postId],
     references: [posts.id],
@@ -421,6 +450,10 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
 }))
 
 export const commentReactionsRelations = relations(commentReactions, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [commentReactions.workspaceId],
+    references: [workspace.id],
+  }),
   comment: one(comments, {
     fields: [commentReactions.commentId],
     references: [comments.id],
@@ -428,6 +461,10 @@ export const commentReactionsRelations = relations(commentReactions, ({ one }) =
 }))
 
 export const postTagsRelations = relations(postTags, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [postTags.workspaceId],
+    references: [workspace.id],
+  }),
   post: one(posts, {
     fields: [postTags.postId],
     references: [posts.id],

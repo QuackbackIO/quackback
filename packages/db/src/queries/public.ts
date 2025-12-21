@@ -202,6 +202,7 @@ export async function getPublicPostList(
       content: posts.content,
       statusId: posts.statusId,
       voteCount: posts.voteCount,
+      commentCount: posts.commentCount,
       authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
@@ -214,21 +215,6 @@ export async function getPublicPostList(
 
   // Get post IDs for batch queries
   const postIds = postsResult.map((p) => p.id)
-
-  // Get comment counts for all posts (batch query instead of N+1)
-  // Exclude deleted comments from count
-  const commentCounts =
-    postIds.length > 0
-      ? await db
-          .select({
-            postId: comments.postId,
-            count: sql<number>`count(*)`.as('count'),
-          })
-          .from(comments)
-          .where(and(inArray(comments.postId, postIds), isNull(comments.deletedAt)))
-          .groupBy(comments.postId)
-      : []
-  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
 
   // Get tags for all posts
   const tagsResult =
@@ -255,7 +241,6 @@ export async function getPublicPostList(
 
   const items: PublicPostListItem[] = postsResult.map((post) => ({
     ...post,
-    commentCount: commentCountMap.get(post.id) ?? 0,
     tags: tagsByPost.get(post.id) || [],
   }))
 
@@ -330,6 +315,7 @@ export async function getPublicPostListAllBoards(
       content: posts.content,
       statusId: posts.statusId,
       voteCount: posts.voteCount,
+      commentCount: posts.commentCount,
       authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
@@ -346,21 +332,6 @@ export async function getPublicPostListAllBoards(
 
   // Get post IDs for batch queries
   const postIds = postsResult.map((p) => p.id)
-
-  // Get comment counts for all posts (batch query instead of N+1)
-  // Exclude deleted comments from count
-  const commentCounts =
-    postIds.length > 0
-      ? await db
-          .select({
-            postId: comments.postId,
-            count: sql<number>`count(*)`.as('count'),
-          })
-          .from(comments)
-          .where(and(inArray(comments.postId, postIds), isNull(comments.deletedAt)))
-          .groupBy(comments.postId)
-      : []
-  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
 
   // Get tags for all posts
   const tagsResult =
@@ -391,10 +362,10 @@ export async function getPublicPostListAllBoards(
     content: post.content,
     statusId: post.statusId,
     voteCount: post.voteCount,
+    commentCount: post.commentCount,
     authorName: post.authorName,
     memberId: post.memberId,
     createdAt: post.createdAt,
-    commentCount: commentCountMap.get(post.id) ?? 0,
     tags: tagsByPost.get(post.id) || [],
     board: {
       id: post.boardId,
@@ -581,13 +552,24 @@ export async function getUserVotedPostIds(
 }
 
 /**
- * Get all post IDs a user has voted on (for the current tenant via RLS)
+ * Get all post IDs a user has voted on for a specific workspace.
+ * Workspace scoping ensures only votes within the current tenant are returned.
  */
-export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Set<PostId>> {
+export async function getAllUserVotedPostIds(
+  userIdentifier: string,
+  workspaceId?: WorkspaceId
+): Promise<Set<PostId>> {
+  const conditions = [eq(votes.userIdentifier, userIdentifier)]
+
+  // Scope to workspace if provided (recommended for performance)
+  if (workspaceId) {
+    conditions.push(eq(votes.workspaceId, workspaceId))
+  }
+
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
-    .where(eq(votes.userIdentifier, userIdentifier))
+    .where(and(...conditions))
 
   return new Set(result.map((r) => r.postId))
 }
@@ -621,7 +603,7 @@ export async function togglePublicVote(
     return { voted: false, newCount: updated?.voteCount || 0 }
   } else {
     // Add vote
-    await db.insert(votes).values({ postId, userIdentifier, organizationId })
+    await db.insert(votes).values({ postId, userIdentifier, workspaceId: organizationId })
 
     // Increment vote count
     const [updated] = await db
@@ -676,7 +658,7 @@ export async function addPublicComment(
       content,
       authorName,
       authorEmail,
-      organizationId,
+      workspaceId: organizationId,
       parentId: parentId || null,
       memberId: memberId || null,
     })
@@ -701,7 +683,8 @@ export async function addPublicComment(
 export async function toggleCommentReaction(
   commentId: CommentId,
   userIdentifier: string,
-  emoji: string
+  emoji: string,
+  workspaceId: WorkspaceId
 ): Promise<{ added: boolean; reactions: CommentReactionCount[] }> {
   // Check if reaction exists
   const existing = await db.query.commentReactions.findFirst({
@@ -717,7 +700,7 @@ export async function toggleCommentReaction(
     await db.delete(commentReactions).where(eq(commentReactions.id, existing.id))
   } else {
     // Add reaction
-    await db.insert(commentReactions).values({ commentId, userIdentifier, emoji })
+    await db.insert(commentReactions).values({ workspaceId, commentId, userIdentifier, emoji })
   }
 
   // Get updated reaction counts using shared helper

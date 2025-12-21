@@ -6,7 +6,7 @@
  *
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   pgTable,
   text,
@@ -15,8 +15,13 @@ import {
   index,
   uniqueIndex,
   customType,
+  pgPolicy,
 } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
+import { appUser } from './rls'
+
+// Direct workspace_id check for RLS performance
+const directWorkspaceCheck = sql`workspace_id = current_setting('app.workspace_id', true)::uuid`
 
 // Custom type for PostgreSQL bytea (binary data)
 const bytea = customType<{ data: Buffer | null; notNull: false; default: false }>({
@@ -243,8 +248,14 @@ export const member = pgTable(
     uniqueIndex('member_user_workspace_idx').on(table.userId, table.workspaceId),
     // Composite index for portal user listings filtered by role
     index('member_workspace_role_idx').on(table.workspaceId, table.role),
+    pgPolicy('member_tenant_isolation', {
+      for: 'all',
+      to: appUser,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
+    }),
   ]
-)
+).enableRLS()
 
 export const invitation = pgTable(
   'invitation',
@@ -269,8 +280,14 @@ export const invitation = pgTable(
     index('invitation_email_idx').on(table.email),
     // Composite index for duplicate invitation checks
     index('invitation_workspace_email_status_idx').on(table.workspaceId, table.email, table.status),
+    pgPolicy('invitation_tenant_isolation', {
+      for: 'all',
+      to: appUser,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
+    }),
   ]
-)
+).enableRLS()
 
 /**
  * SSO Provider table for Better-Auth SSO plugin
@@ -309,8 +326,14 @@ export const ssoProvider = pgTable(
     uniqueIndex('sso_provider_workspace_domain_idx').on(table.workspaceId, table.domain),
     // Index for SSO detection by email domain
     index('sso_provider_domain_idx').on(table.domain),
+    pgPolicy('sso_provider_tenant_isolation', {
+      for: 'all',
+      to: appUser,
+      using: directWorkspaceCheck,
+      withCheck: directWorkspaceCheck,
+    }),
   ]
-)
+).enableRLS()
 
 // Relations for Drizzle relational queries (enables experimental joins)
 export const userRelations = relations(user, ({ one, many }) => ({

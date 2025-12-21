@@ -408,7 +408,7 @@ async function seed() {
       const tagId = pick(tagIds)
       if (!usedTags.has(tagId)) {
         usedTags.add(tagId)
-        postTagInserts.push({ postId, tagId })
+        postTagInserts.push({ workspaceId: orgId, postId, tagId })
       }
     }
   }
@@ -443,6 +443,7 @@ async function seed() {
           usedRoadmaps.add(roadmapId)
           const position = roadmapPositions.get(roadmapId) ?? 0
           postRoadmapInserts.push({
+            workspaceId: orgId,
             postId: post.id,
             roadmapId,
             position,

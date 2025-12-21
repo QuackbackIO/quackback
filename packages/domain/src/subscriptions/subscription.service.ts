@@ -82,6 +82,7 @@ export class SubscriptionService {
       await existingDb
         .insert(postSubscriptions)
         .values({
+          workspaceId,
           postId,
           memberId,
           reason,
@@ -93,6 +94,7 @@ export class SubscriptionService {
         await txDb
           .insert(postSubscriptions)
           .values({
+            workspaceId,
             postId,
             memberId,
             reason,
@@ -282,6 +284,7 @@ export class SubscriptionService {
         const [created] = await txDb
           .insert(notificationPreferences)
           .values({
+            workspaceId,
             memberId,
             emailStatusChange: preferences.emailStatusChange ?? true,
             emailNewComment: preferences.emailNewComment ?? true,
@@ -304,13 +307,15 @@ export class SubscriptionService {
   async generateUnsubscribeToken(
     memberId: MemberId,
     postId: PostId | null,
-    action: 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
+    action: 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post',
+    workspaceId: WorkspaceId
   ): Promise<string> {
     const token = randomUUID()
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
     // Use db directly (no tenant context needed for tokens)
     await db.insert(unsubscribeTokens).values({
+      workspaceId,
       token,
       memberId,
       postId,

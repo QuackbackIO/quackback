@@ -103,6 +103,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await db
         .insert(integrationEventMappings)
         .values({
+          workspaceId: orgId,
           integrationId,
           eventType: mapping.eventType,
           actionType: 'send_message', // Default action for now

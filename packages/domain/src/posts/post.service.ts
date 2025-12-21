@@ -146,7 +146,7 @@ export class PostService {
 
       // Add tags if provided
       if (input.tagIds && input.tagIds.length > 0) {
-        await postRepo.setTags(post.id, input.tagIds)
+        await postRepo.setTags(post.id, input.tagIds, ctx.workspaceId)
       }
 
       // Auto-subscribe the author to their own post (within the same transaction)
@@ -256,7 +256,7 @@ export class PostService {
 
       // Update tags if provided
       if (input.tagIds !== undefined) {
-        await postRepo.setTags(id, input.tagIds)
+        await postRepo.setTags(id, input.tagIds, ctx.workspaceId)
       }
 
       return ok(updatedPost)
