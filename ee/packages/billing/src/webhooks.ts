@@ -146,7 +146,7 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
 
       await upsertSubscription({
         workspaceId,
-        tier: tier ?? 'essentials',
+        tier: tier ?? 'pro',
         status: mapStripeStatus(subscription.status),
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,

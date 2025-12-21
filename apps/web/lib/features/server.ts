@@ -2,8 +2,10 @@ import { cache } from 'react'
 import {
   Feature,
   type PricingTier,
+  type TierLimits,
   isSelfHosted,
   TIER_CONFIG,
+  TIER_ORDER,
   getMinimumTierForFeature,
 } from '@quackback/domain'
 import { getSubscription, isSubscriptionActive } from '../subscription'
@@ -12,19 +14,14 @@ import type { WorkspaceId } from '@quackback/ids'
 export interface WorkspaceFeatures {
   /** Current edition */
   edition: 'oss' | 'cloud'
-  /** Current pricing tier (null if no active subscription in cloud mode) */
-  tier: PricingTier | null
+  /** Current pricing tier */
+  tier: PricingTier
   /** All features available to this organization */
   enabledFeatures: Feature[]
   /** Check if a specific feature is enabled */
   hasFeature: (feature: Feature) => boolean
   /** Get tier limits */
-  limits: {
-    boards: number | 'unlimited'
-    posts: number | 'unlimited'
-    teamMembers: number | 'unlimited'
-    apiRequests: number | 'unlimited'
-  } | null
+  limits: TierLimits
 }
 
 /**
@@ -42,9 +39,9 @@ export const getWorkspaceFeatures = cache(
         hasFeature: () => true,
         limits: {
           boards: 'unlimited',
+          roadmaps: 'unlimited',
+          seats: 'unlimited',
           posts: 'unlimited',
-          teamMembers: 'unlimited',
-          apiRequests: 'unlimited',
         },
       }
     }
@@ -52,18 +49,19 @@ export const getWorkspaceFeatures = cache(
     // Cloud: check subscription
     const subscription = await getSubscription(workspaceId)
 
+    // No active subscription = Free tier
     if (!subscription || !isSubscriptionActive(subscription)) {
-      // No active subscription - no features
+      const freeTierConfig = TIER_CONFIG['free']
       return {
         edition: 'cloud',
-        tier: null,
-        enabledFeatures: [],
-        hasFeature: () => false,
-        limits: null,
+        tier: 'free',
+        enabledFeatures: freeTierConfig.features,
+        hasFeature: (feature: Feature) => freeTierConfig.features.includes(feature),
+        limits: freeTierConfig.limits,
       }
     }
 
-    const tier = subscription.tier
+    const tier = subscription.tier as PricingTier
     const tierConfig = TIER_CONFIG[tier]
     const enabledFeatures = tierConfig.features
 
@@ -97,10 +95,7 @@ export async function hasTier(
   if (isSelfHosted()) return true
 
   const features = await getWorkspaceFeatures(workspaceId)
-  if (!features.tier) return false
-
-  const tierOrder: PricingTier[] = ['essentials', 'professional', 'team', 'enterprise']
-  return tierOrder.indexOf(features.tier) >= tierOrder.indexOf(requiredTier)
+  return TIER_ORDER.indexOf(features.tier) >= TIER_ORDER.indexOf(requiredTier)
 }
 
 export interface FeatureCheckResult {

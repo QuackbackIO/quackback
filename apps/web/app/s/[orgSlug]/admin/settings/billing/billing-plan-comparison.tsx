@@ -13,37 +13,37 @@ interface PlanComparisonProps {
 }
 
 const PLAN_FEATURES: Record<PricingTier, string[]> = {
-  essentials: [
+  free: [
     '1 feedback board',
     'Up to 100 posts',
+    '1 admin seat',
     'Public voting & comments',
-    'Basic roadmap',
-    'Changelog',
+    'Roadmap & changelog',
   ],
-  professional: [
-    '3 feedback boards',
+  pro: [
+    '5 feedback boards',
     'Up to 1,000 posts',
-    'Custom domain',
-    'Webhooks & API access',
-    'Custom branding',
+    '2 seats included (+$15/seat)',
+    'Custom domain & branding',
+    'Custom statuses',
   ],
   team: [
-    '10 feedback boards',
+    'Unlimited boards',
     'Up to 10,000 posts',
-    'SSO/SAML authentication',
-    'Audit logs',
-    'All integrations',
+    '5 seats included (+$20/seat)',
+    'Slack, Linear & Jira integrations',
+    'CSV import/export',
   ],
   enterprise: [
     'Unlimited boards & posts',
-    'Extended audit logs',
-    'White-label option',
-    'Dedicated support',
-    'Custom SLA',
+    '10 seats included (+$30/seat)',
+    'SSO/SAML & SCIM',
+    'Audit logs & API access',
+    'White-label & dedicated support',
   ],
 }
 
-const TIER_ORDER: PricingTier[] = ['essentials', 'professional', 'team', 'enterprise']
+const TIER_ORDER: PricingTier[] = ['free', 'pro', 'team', 'enterprise']
 
 export function BillingPlanComparison({ currentTier, onUpgrade, isLoading }: PlanComparisonProps) {
   const [isExpanded, setIsExpanded] = useState(false)
@@ -77,7 +77,7 @@ export function BillingPlanComparison({ currentTier, onUpgrade, isLoading }: Pla
               const features = PLAN_FEATURES[tier]
               const isCurrent = tier === currentTier
               const isUpgrade = index > currentTierIndex
-              const price = config.price === 'custom' ? 'Custom' : `$${config.price}`
+              const price = `$${config.price}`
 
               return (
                 <div
@@ -101,9 +101,7 @@ export function BillingPlanComparison({ currentTier, onUpgrade, isLoading }: Pla
                     </div>
                     <div className="mt-1">
                       <span className="text-2xl font-bold">{price}</span>
-                      {config.price !== 'custom' && (
-                        <span className="text-sm text-muted-foreground">/mo</span>
-                      )}
+                      <span className="text-sm text-muted-foreground">/mo</span>
                     </div>
                   </div>
 
@@ -129,7 +127,7 @@ export function BillingPlanComparison({ currentTier, onUpgrade, isLoading }: Pla
                     </Button>
                   ) : isUpgrade ? (
                     <Button
-                      variant={tier === 'professional' ? 'default' : 'outline'}
+                      variant={tier === 'pro' ? 'default' : 'outline'}
                       className="w-full"
                       onClick={onUpgrade}
                       disabled={isLoading}

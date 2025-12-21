@@ -25,8 +25,9 @@ export interface WorkspaceFeaturesData {
   limits: {
     boards: number | 'unlimited'
     posts: number | 'unlimited'
-    teamMembers: number | 'unlimited'
-    apiRequests: number | 'unlimited'
+    /** Included seats (owner + admin roles). Additional seats are billed per-seat. */
+    seats: number | 'unlimited'
+    roadmaps: number | 'unlimited'
   } | null
 }
 

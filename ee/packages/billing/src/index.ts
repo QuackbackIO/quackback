@@ -12,14 +12,21 @@ export {
   getStripe,
   isStripeConfigured,
   getTierPriceIds,
+  getSeatPriceIds,
   getTierFromPriceId,
   getPriceIdForTier,
+  getSeatPriceIdForTier,
   createCheckoutSession,
   createPortalSession,
   getStripeSubscription,
   cancelSubscriptionAtPeriodEnd,
   reactivateSubscription,
+  updateSubscriptionSeats,
+  getSubscriptionSeatInfo,
+  calculateExtraSeats,
   constructWebhookEvent,
+  INCLUDED_SEATS,
+  type PaidTier,
   type CreateCheckoutSessionParams,
   type CreatePortalSessionParams,
   type Stripe,
@@ -44,3 +51,6 @@ export {
   type InvoiceListItem,
   type PaymentMethodInfo,
 } from './customer'
+
+// Seat sync (call after member changes)
+export { syncWorkspaceSeats, isBillableRole, type SeatSyncResult } from './seat-sync'

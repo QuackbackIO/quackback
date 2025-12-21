@@ -3,6 +3,7 @@
 import { db, invitation, member, eq, and } from '@/lib/db'
 import { generateId } from '@quackback/ids'
 import { getSession } from '@/lib/auth/server'
+import { syncWorkspaceSeats, isBillableRole } from '@quackback/ee/billing'
 import type { InviteId, MemberId, WorkspaceId, UserId } from '@quackback/ids'
 
 export type AcceptInvitationResult = {
@@ -103,6 +104,14 @@ export async function acceptInvitationAction(
       .update(invitation)
       .set({ status: 'accepted' })
       .where(eq(invitation.id, invitationId as InviteId))
+
+    // Sync seat count to Stripe if this is a billable role (owner/admin)
+    if (isBillableRole(role)) {
+      // Fire and forget - don't block invitation acceptance on Stripe sync
+      syncWorkspaceSeats(workspaceId).catch((error) => {
+        console.error('Failed to sync seats after invitation acceptance:', error)
+      })
+    }
 
     return { success: true }
   } catch (error) {

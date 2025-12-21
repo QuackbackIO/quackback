@@ -22,7 +22,8 @@ interface SubscriptionData {
 interface UsageCounts {
   boards: number
   posts: number
-  teamMembers: number
+  /** Billable seats (owner + admin roles only) */
+  seats: number
 }
 
 interface SerializedInvoice {
@@ -60,33 +61,33 @@ interface BillingClientProps {
 }
 
 const PLAN_FEATURES: Record<PricingTier, string[]> = {
-  essentials: [
+  free: [
     '1 feedback board',
     'Up to 100 posts',
+    '1 admin seat',
     'Public voting & comments',
-    'Basic roadmap',
-    'Changelog',
+    'Roadmap & changelog',
   ],
-  professional: [
-    '3 feedback boards',
+  pro: [
+    '5 feedback boards',
     'Up to 1,000 posts',
-    'Custom domain',
-    'Webhooks & API access',
-    'Custom branding',
+    '2 seats included (+$15/seat)',
+    'Custom domain & branding',
+    'Custom statuses',
   ],
   team: [
-    '10 feedback boards',
+    'Unlimited boards',
     'Up to 10,000 posts',
-    'SSO/SAML authentication',
-    'Audit logs',
-    'All integrations',
+    '5 seats included (+$20/seat)',
+    'Slack, Linear & Jira integrations',
+    'CSV import/export',
   ],
   enterprise: [
     'Unlimited boards & posts',
-    'Extended audit logs',
-    'White-label option',
-    'Dedicated support',
-    'Custom SLA',
+    '10 seats included (+$30/seat)',
+    'SSO/SAML & SCIM',
+    'Audit logs & API access',
+    'White-label & dedicated support',
   ],
 }
 
@@ -114,7 +115,7 @@ export function BillingClient({
     const percentages = [
       limits.boards !== 'unlimited' ? (usage.boards / limits.boards) * 100 : 0,
       limits.posts !== 'unlimited' ? (usage.posts / limits.posts) * 100 : 0,
-      limits.teamMembers !== 'unlimited' ? (usage.teamMembers / limits.teamMembers) * 100 : 0,
+      // Note: seats can exceed limit (just billed extra), so we don't count towards critical usage
     ]
     const maxUsage = Math.max(...percentages)
     if (maxUsage >= 95) return 'critical'
@@ -341,16 +342,33 @@ export function BillingClient({
       {/* ===== INVOICE HISTORY ===== */}
       {invoices.length > 0 && <BillingInvoiceHistory invoices={invoices} />}
 
-      {/* ===== STATE: NO SUBSCRIPTION ===== */}
-      {/* Plans grid for new users */}
+      {/* ===== STATE: NO SUBSCRIPTION (FREE TIER) ===== */}
+      {/* Plans grid for free users to upgrade */}
       {!hasSubscription && (
         <div>
-          <h2 className="font-medium text-lg mb-4">Choose a Plan</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(['essentials', 'professional', 'team', 'enterprise'] as PricingTier[]).map((tier) => {
+          {/* Show current free tier info */}
+          <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="font-medium text-lg">Current Plan</h2>
+                  <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                    Free
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Free • $0/month • 1 board, 100 posts, 1 seat
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h2 className="font-medium text-lg mb-4">Upgrade Your Plan</h2>
+          <div className="grid md:grid-cols-3 gap-4">
+            {(['pro', 'team', 'enterprise'] as PricingTier[]).map((tier) => {
               const config = TIER_CONFIG[tier]
               const features = PLAN_FEATURES[tier]
-              const price = config.price === 'custom' ? 'Custom' : `$${config.price}`
+              const price = `$${config.price}`
 
               return (
                 <div
@@ -361,9 +379,7 @@ export function BillingClient({
                     <h3 className="font-semibold text-base">{config.name}</h3>
                     <div className="mt-1">
                       <span className="text-2xl font-bold">{price}</span>
-                      {config.price !== 'custom' && (
-                        <span className="text-sm text-muted-foreground">/mo</span>
-                      )}
+                      <span className="text-sm text-muted-foreground">/mo</span>
                     </div>
                   </div>
 
@@ -377,7 +393,7 @@ export function BillingClient({
                   </ul>
 
                   <Button
-                    variant={tier === 'professional' ? 'default' : 'outline'}
+                    variant={tier === 'pro' ? 'default' : 'outline'}
                     className="w-full"
                     onClick={() => handleCheckout(tier)}
                     disabled={loading !== null}
@@ -399,7 +415,7 @@ export function BillingClient({
           </div>
 
           <p className="text-sm text-muted-foreground text-center mt-6">
-            All plans include a 14-day free trial. Credit card required at checkout.
+            All paid plans include a 14-day free trial. Credit card required at checkout.
           </p>
         </div>
       )}

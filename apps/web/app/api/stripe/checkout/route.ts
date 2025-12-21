@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { validateApiTenantAccess } from '@/lib/tenant'
-import { isCloud, type PricingTier } from '@quackback/domain/features'
-import { createCheckoutSession, isStripeConfigured } from '@quackback/ee/billing'
+import { isCloud } from '@quackback/domain/features'
+import { createCheckoutSession, isStripeConfigured, type PaidTier } from '@quackback/ee/billing'
 import { getSubscriptionByWorkspaceIdAdmin } from '@/lib/db'
 import { db, workspaceDomain, eq, and } from '@/lib/db'
 import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
@@ -11,7 +11,7 @@ const checkoutSchema = z.object({
   workspaceId: z.string().refine((id) => isValidTypeId(id, 'workspace'), {
     message: 'Invalid organization ID format',
   }) as z.ZodType<WorkspaceId>,
-  tier: z.enum(['essentials', 'professional', 'team']),
+  tier: z.enum(['pro', 'team']), // Free and enterprise not available via self-service checkout
 })
 
 /**
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     const session = await createCheckoutSession({
       workspaceId,
       workspaceName: validation.workspace.name,
-      tier: tier as Exclude<PricingTier, 'enterprise'>,
+      tier: tier as PaidTier,
       customerEmail: validation.user.email,
       existingCustomerId: existingSubscription?.stripeCustomerId ?? undefined,
       successUrl,

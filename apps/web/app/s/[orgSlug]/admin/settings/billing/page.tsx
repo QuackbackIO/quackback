@@ -69,7 +69,7 @@ export default async function BillingPage({ params, searchParams }: BillingPageP
 
   const subscriptionData = subscription
     ? {
-        tier: subscription.tier as 'essentials' | 'professional' | 'team' | 'enterprise',
+        tier: subscription.tier as 'free' | 'pro' | 'team' | 'enterprise',
         status: subscription.status,
         currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,

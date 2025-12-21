@@ -1,4 +1,4 @@
-import { eq, sql, and, ne } from 'drizzle-orm'
+import { eq, sql, and, inArray } from 'drizzle-orm'
 import { adminDb } from '../tenant-context'
 import { boards } from '../schema/boards'
 import { posts } from '../schema/posts'
@@ -12,7 +12,8 @@ import type { WorkspaceId } from '@quackback/ids'
 export interface UsageCounts {
   boards: number
   posts: number
-  teamMembers: number
+  /** Billable seats (owner + admin roles only) */
+  seats: number
 }
 
 // ============================================================================
@@ -37,15 +38,15 @@ export async function getWorkspaceUsageCounts(organizationId: WorkspaceId): Prom
     .from(posts)
     .where(eq(posts.workspaceId, organizationId))
 
-  // Count team members (exclude 'user' role - those are portal users, not team members)
-  const [memberResult] = await adminDb
+  // Count billable seats (owner + admin only - not 'member' or 'user' roles)
+  const [seatResult] = await adminDb
     .select({ count: sql<number>`count(*)::int` })
     .from(member)
-    .where(and(eq(member.workspaceId, organizationId), ne(member.role, 'user')))
+    .where(and(eq(member.workspaceId, organizationId), inArray(member.role, ['owner', 'admin'])))
 
   return {
     boards: boardResult?.count ?? 0,
     posts: postResult?.count ?? 0,
-    teamMembers: memberResult?.count ?? 0,
+    seats: seatResult?.count ?? 0,
   }
 }

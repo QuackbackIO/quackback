@@ -1,18 +1,21 @@
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
+import { SEAT_PRICING, type PricingTier } from '@quackback/domain/features'
 
 interface UsageDashboardProps {
   usage: {
     boards: number
     posts: number
-    teamMembers: number
+    /** Billable seats (owner + admin roles only) */
+    seats: number
   }
   limits: {
     boards: number | 'unlimited'
     posts: number | 'unlimited'
-    teamMembers: number | 'unlimited'
+    seats: number | 'unlimited'
+    roadmaps?: number | 'unlimited'
   }
-  tier: string
+  tier: PricingTier
 }
 
 interface UsageRowProps {
@@ -58,7 +61,13 @@ function UsageRow({ label, current, limit }: UsageRowProps) {
   )
 }
 
-export function BillingUsageDashboard({ usage, limits }: UsageDashboardProps) {
+export function BillingUsageDashboard({ usage, limits, tier }: UsageDashboardProps) {
+  // Calculate extra seats for paid tiers
+  const includedSeats = limits.seats === 'unlimited' ? Infinity : limits.seats
+  const extraSeats = Math.max(0, usage.seats - includedSeats)
+  const seatPrice = tier !== 'free' ? SEAT_PRICING[tier as Exclude<PricingTier, 'free'>] : 0
+  const extraSeatsCost = extraSeats * seatPrice
+
   return (
     <div className="rounded-xl border border-border/50 bg-card shadow-sm">
       <div className="px-6 py-4 border-b border-border/50">
@@ -67,8 +76,19 @@ export function BillingUsageDashboard({ usage, limits }: UsageDashboardProps) {
       <div className="px-6 divide-y divide-border/50">
         <UsageRow label="Boards" current={usage.boards} limit={limits.boards} />
         <UsageRow label="Posts" current={usage.posts} limit={limits.posts} />
-        <UsageRow label="Team Members" current={usage.teamMembers} limit={limits.teamMembers} />
+        <UsageRow label="Seats" current={usage.seats} limit={limits.seats} />
       </div>
+      {/* Show extra seat charges if applicable */}
+      {extraSeats > 0 && tier !== 'free' && (
+        <div className="px-6 py-4 border-t border-border/50 bg-muted/30">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Extra seats: {extraSeats} × ${seatPrice}/seat/mo
+            </span>
+            <span className="font-medium">+${extraSeatsCost}/mo</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

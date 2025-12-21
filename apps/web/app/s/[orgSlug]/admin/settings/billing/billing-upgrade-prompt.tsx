@@ -9,34 +9,40 @@ interface UpgradePromptProps {
   usage: {
     boards: number
     posts: number
-    teamMembers: number
+    /** Billable seats (owner + admin roles only) */
+    seats: number
   }
   limits: {
     boards: number | 'unlimited'
     posts: number | 'unlimited'
-    teamMembers: number | 'unlimited'
+    seats: number | 'unlimited'
   }
   onUpgrade: () => void
   isLoading: boolean
 }
 
-const TIER_ORDER: PricingTier[] = ['essentials', 'professional', 'team', 'enterprise']
+const TIER_ORDER: PricingTier[] = ['free', 'pro', 'team', 'enterprise']
 
 const UPGRADE_FEATURES: Record<PricingTier, string[]> = {
-  essentials: [], // No upgrade from nothing
-  professional: [
-    '3 feedback boards (vs 1)',
+  free: [], // No upgrade from nothing
+  pro: [
+    '5 feedback boards (vs 1)',
     '1,000 posts (vs 100)',
-    'Custom domain',
-    'API access & webhooks',
+    '2 seats included (+$15/seat)',
+    'Custom domain & branding',
   ],
   team: [
-    '10 feedback boards',
+    'Unlimited feedback boards',
     '10,000 posts',
-    'SSO/SAML authentication',
-    'Slack, Discord & GitHub integrations',
+    '5 seats included (+$20/seat)',
+    'Slack, Linear & Jira integrations',
   ],
-  enterprise: ['Unlimited everything', 'Dedicated support', 'Custom SLA', 'White-label option'],
+  enterprise: [
+    'Unlimited everything',
+    '10 seats included (+$30/seat)',
+    'SSO/SAML & SCIM',
+    'White-label & dedicated support',
+  ],
 }
 
 function getUsagePercentage(current: number, limit: number | 'unlimited'): number {
@@ -51,10 +57,7 @@ function getHighestUsageMetric(
   const metrics = [
     { metric: 'boards', percentage: getUsagePercentage(usage.boards, limits.boards) },
     { metric: 'posts', percentage: getUsagePercentage(usage.posts, limits.posts) },
-    {
-      metric: 'team members',
-      percentage: getUsagePercentage(usage.teamMembers, limits.teamMembers),
-    },
+    // Note: seats can exceed limit (just billed extra), so we check boards/posts for limits
   ]
   return metrics.reduce((a, b) => (a.percentage > b.percentage ? a : b))
 }
@@ -137,12 +140,8 @@ export function BillingUpgradePrompt({
         {/* Right: Price and CTA */}
         <div className="lg:text-right lg:min-w-[180px]">
           <div className="mb-3">
-            <div className="text-3xl font-bold">
-              {nextTierConfig.price === 'custom' ? 'Custom' : `$${nextTierConfig.price}`}
-            </div>
-            {nextTierConfig.price !== 'custom' && (
-              <div className="text-sm text-muted-foreground">per month</div>
-            )}
+            <div className="text-3xl font-bold">${nextTierConfig.price}</div>
+            <div className="text-sm text-muted-foreground">per month</div>
           </div>
 
           <Button

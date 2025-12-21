@@ -8,7 +8,7 @@ import { generateId, type WorkspaceId } from '@quackback/ids'
 // ============================================================================
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
-export type SubscriptionTier = 'essentials' | 'professional' | 'team' | 'enterprise'
+export type SubscriptionTier = 'free' | 'pro' | 'team' | 'enterprise'
 
 export interface CreateSubscriptionData {
   workspaceId: WorkspaceId

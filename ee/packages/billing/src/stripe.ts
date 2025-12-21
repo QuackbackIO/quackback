@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import type { PricingTier } from '@quackback/domain/features'
-import type { OrgId } from '@quackback/ids'
+import type { WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Stripe Client
@@ -41,22 +41,55 @@ export function isStripeConfigured(): boolean {
 // ============================================================================
 
 /**
- * Map pricing tiers to Stripe price IDs from environment variables.
+ * Paid tiers that have Stripe prices (excludes free)
  */
-export function getTierPriceIds(): Record<Exclude<PricingTier, 'enterprise'>, string | undefined> {
+export type PaidTier = 'pro' | 'team' | 'enterprise'
+
+/**
+ * Map pricing tiers to base subscription Stripe price IDs.
+ */
+export function getTierPriceIds(): Record<PaidTier, string | undefined> {
   return {
-    essentials: process.env.STRIPE_PRICE_ESSENTIALS,
-    professional: process.env.STRIPE_PRICE_PROFESSIONAL,
+    pro: process.env.STRIPE_PRICE_PRO,
     team: process.env.STRIPE_PRICE_TEAM,
+    enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
   }
 }
 
 /**
+ * Map pricing tiers to per-seat add-on Stripe price IDs.
+ */
+export function getSeatPriceIds(): Record<PaidTier, string | undefined> {
+  return {
+    pro: process.env.STRIPE_PRICE_PRO_SEAT,
+    team: process.env.STRIPE_PRICE_TEAM_SEAT,
+    enterprise: process.env.STRIPE_PRICE_ENTERPRISE_SEAT,
+  }
+}
+
+/**
+ * Included seats per tier (seats included in base price).
+ */
+export const INCLUDED_SEATS: Record<PaidTier, number> = {
+  pro: 2,
+  team: 5,
+  enterprise: 10,
+}
+
+/**
  * Reverse mapping: Stripe price ID to pricing tier.
+ * Checks both base and seat price IDs.
  */
 export function getTierFromPriceId(priceId: string): PricingTier | null {
-  const priceIds = getTierPriceIds()
-  for (const [tier, id] of Object.entries(priceIds)) {
+  const basePriceIds = getTierPriceIds()
+  for (const [tier, id] of Object.entries(basePriceIds)) {
+    if (id === priceId) {
+      return tier as PricingTier
+    }
+  }
+  // Also check seat prices
+  const seatPriceIds = getSeatPriceIds()
+  for (const [tier, id] of Object.entries(seatPriceIds)) {
     if (id === priceId) {
       return tier as PricingTier
     }
@@ -65,14 +98,25 @@ export function getTierFromPriceId(priceId: string): PricingTier | null {
 }
 
 /**
- * Get price ID for a tier.
+ * Get base price ID for a tier.
  */
 export function getPriceIdForTier(tier: PricingTier): string | null {
-  if (tier === 'enterprise') {
-    return null // Enterprise is custom pricing
+  if (tier === 'free') {
+    return null // Free is $0
   }
   const priceIds = getTierPriceIds()
   return priceIds[tier] ?? null
+}
+
+/**
+ * Get seat price ID for a tier.
+ */
+export function getSeatPriceIdForTier(tier: PricingTier): string | null {
+  if (tier === 'free') {
+    return null
+  }
+  const seatPriceIds = getSeatPriceIds()
+  return seatPriceIds[tier] ?? null
 }
 
 // ============================================================================
@@ -80,9 +124,9 @@ export function getPriceIdForTier(tier: PricingTier): string | null {
 // ============================================================================
 
 export interface CreateCheckoutSessionParams {
-  organizationId: OrgId
-  organizationName: string
-  tier: Exclude<PricingTier, 'enterprise'>
+  workspaceId: WorkspaceId
+  workspaceName: string
+  tier: PaidTier
   customerEmail: string
   existingCustomerId?: string
   successUrl: string
@@ -103,8 +147,8 @@ export interface CreatePortalSessionParams {
  * Create a Stripe Checkout session for a new subscription.
  */
 export async function createCheckoutSession({
-  organizationId,
-  organizationName,
+  workspaceId,
+  workspaceName,
   tier,
   customerEmail,
   existingCustomerId,
@@ -132,14 +176,14 @@ export async function createCheckoutSession({
     cancel_url: cancelUrl,
     subscription_data: {
       metadata: {
-        organizationId,
-        organizationName,
+        workspaceId,
+        workspaceName,
         tier,
       },
       trial_period_days: trialDays,
     },
     metadata: {
-      organizationId,
+      workspaceId,
       tier,
     },
     allow_promotion_codes: true,
@@ -208,6 +252,89 @@ export async function reactivateSubscription(subscriptionId: string): Promise<St
   return stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: false,
   })
+}
+
+// ============================================================================
+// Seat Management
+// ============================================================================
+
+/**
+ * Calculate how many additional seats need to be billed.
+ * Returns 0 if seats are within the included limit.
+ */
+export function calculateExtraSeats(tier: PaidTier, totalSeats: number): number {
+  const included = INCLUDED_SEATS[tier]
+  return Math.max(0, totalSeats - included)
+}
+
+/**
+ * Update the seat quantity on a subscription.
+ * Adds or updates the seat line item based on current seat count.
+ */
+export async function updateSubscriptionSeats(
+  subscriptionId: string,
+  tier: PaidTier,
+  totalSeats: number
+): Promise<Stripe.Subscription> {
+  const stripe = getStripe()
+  const extraSeats = calculateExtraSeats(tier, totalSeats)
+  const seatPriceId = getSeatPriceIdForTier(tier)
+
+  if (!seatPriceId) {
+    throw new Error(`No seat price configured for tier: ${tier}`)
+  }
+
+  // Get current subscription to find seat line item
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const seatItem = subscription.items.data.find((item) => item.price.id === seatPriceId)
+
+  if (extraSeats === 0) {
+    // No extra seats needed - remove seat line item if it exists
+    if (seatItem) {
+      return stripe.subscriptions.update(subscriptionId, {
+        items: [{ id: seatItem.id, deleted: true }],
+        proration_behavior: 'create_prorations',
+      })
+    }
+    return subscription
+  }
+
+  if (seatItem) {
+    // Update existing seat line item quantity
+    return stripe.subscriptions.update(subscriptionId, {
+      items: [{ id: seatItem.id, quantity: extraSeats }],
+      proration_behavior: 'create_prorations',
+    })
+  }
+
+  // Add new seat line item
+  return stripe.subscriptions.update(subscriptionId, {
+    items: [{ price: seatPriceId, quantity: extraSeats }],
+    proration_behavior: 'create_prorations',
+  })
+}
+
+/**
+ * Get the current seat count from a subscription.
+ * Returns { included, extra, total }.
+ */
+export async function getSubscriptionSeatInfo(
+  subscriptionId: string,
+  tier: PaidTier
+): Promise<{ included: number; extra: number; total: number }> {
+  const stripe = getStripe()
+  const seatPriceId = getSeatPriceIdForTier(tier)
+  const included = INCLUDED_SEATS[tier]
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const seatItem = subscription.items.data.find((item) => item.price.id === seatPriceId)
+
+  const extra = seatItem?.quantity ?? 0
+  return {
+    included,
+    extra,
+    total: included + extra,
+  }
 }
 
 // ============================================================================
