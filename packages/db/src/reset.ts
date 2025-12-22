@@ -26,31 +26,40 @@ async function reset() {
   console.log('Starting fresh containers...')
   await $`docker compose up -d postgres dragonfly`
 
-  // Wait for postgres to be ready
+  // Wait for postgres to be ready using Docker healthcheck
   console.log('Waiting for PostgreSQL to be ready...')
   let postgresReady = false
   for (let i = 0; i < 60; i++) {
-    const result = await $`docker compose exec postgres psql -U postgres -d quackback -c "SELECT 1"`
+    const result = await $`docker inspect --format='{{.State.Health.Status}}' quackback-db`
       .quiet()
       .nothrow()
-    if (result.exitCode === 0) {
+    const status = result.stdout.toString().trim()
+    if (status === 'healthy') {
       postgresReady = true
       break
+    }
+    // Show progress every 5 seconds
+    if (i > 0 && i % 10 === 0) {
+      console.log(`  Still waiting... (${i / 2}s, status: ${status})`)
     }
     await Bun.sleep(500)
   }
 
   if (!postgresReady) {
-    console.error('PostgreSQL did not become ready in time')
+    console.error('PostgreSQL did not become healthy in time')
+    console.error('Check container logs: docker compose logs postgres')
     process.exit(1)
   }
 
-  // Wait for dragonfly to be ready
+  // Wait for dragonfly to be ready using Docker healthcheck
   console.log('Waiting for Dragonfly to be ready...')
   let dragonflyReady = false
   for (let i = 0; i < 30; i++) {
-    const result = await $`docker compose exec dragonfly redis-cli ping`.quiet().nothrow()
-    if (result.exitCode === 0) {
+    const result = await $`docker inspect --format='{{.State.Health.Status}}' quackback-dragonfly`
+      .quiet()
+      .nothrow()
+    const status = result.stdout.toString().trim()
+    if (status === 'healthy') {
       dragonflyReady = true
       break
     }
@@ -58,7 +67,7 @@ async function reset() {
   }
 
   if (!dragonflyReady) {
-    console.error('Dragonfly did not become ready in time')
+    console.error('Dragonfly did not become healthy in time')
     process.exit(1)
   }
 

@@ -15,6 +15,13 @@
       "when": 1766413543447,
       "tag": "0001_noisy_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1766423052124,
+      "tag": "0002_brainy_kid_colt",
+      "breakpoints": true
     }
   ]
 }

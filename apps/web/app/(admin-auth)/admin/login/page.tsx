@@ -2,6 +2,16 @@ import { redirect } from 'next/navigation'
 import { workspaceService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 import { getSettings } from '@/lib/tenant'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle } from 'lucide-react'
+
+// Error messages for trust-login failures
+const errorMessages: Record<string, string> = {
+  invalid_token: 'Your login link is invalid or has been tampered with. Please try again.',
+  token_expired: 'Your login link has expired. Please request a new one.',
+  trust_login_not_configured: 'Single sign-on is not configured for this workspace.',
+  trust_login_not_supported: 'Single sign-on is not supported in this mode.',
+}
 
 /**
  * Admin Login Page
@@ -12,14 +22,17 @@ import { getSettings } from '@/lib/tenant'
 export default async function AdminLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>
+  searchParams: Promise<{ callbackUrl?: string; error?: string }>
 }) {
   const settings = await getSettings()
   if (!settings) {
     redirect('/workspace-not-found')
   }
 
-  const { callbackUrl } = await searchParams
+  const { callbackUrl, error } = await searchParams
+
+  // Get error message if present
+  const errorMessage = error && errorMessages[error]
 
   // Validate callbackUrl is a relative path to prevent open redirects
   const safeCallbackUrl =
@@ -47,6 +60,12 @@ export default async function AdminLoginPage({
           <h1 className="text-2xl font-bold">Team Sign In</h1>
           <p className="mt-2 text-muted-foreground">Sign in to access the admin dashboard</p>
         </div>
+        {errorMessage && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
         <OTPAuthForm
           mode="login"
           authConfig={authConfig}

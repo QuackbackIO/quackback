@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   jsonb,
   customType,
+  check,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -103,6 +104,11 @@ export const posts = pgTable(
     index('posts_search_vector_idx').using('gin', table.searchVector),
     // Index for filtering deleted posts
     index('posts_deleted_at_idx').on(table.deletedAt),
+    // Composite index for soft-delete queries (e.g., active posts by board)
+    index('posts_board_deleted_at_idx').on(table.boardId, table.deletedAt),
+    // CHECK constraints to ensure counts are never negative
+    check('vote_count_non_negative', sql`vote_count >= 0`),
+    check('comment_count_non_negative', sql`comment_count >= 0`),
   ]
 )
 

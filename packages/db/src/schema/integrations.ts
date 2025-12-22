@@ -10,8 +10,9 @@ import {
   varchar,
   unique,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { member } from './auth'
 
@@ -23,7 +24,7 @@ export const integrations = pgTable(
   'integrations',
   {
     id: typeIdWithDefault('integration')('id').primaryKey(),
-    integrationType: varchar('integration_type', { length: 50 }).notNull().unique(),
+    integrationType: varchar('integration_type', { length: 50 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
 
     // OAuth tokens (encrypted with AES-256-GCM)
@@ -54,6 +55,8 @@ export const integrations = pgTable(
   (table) => [
     unique('integration_type_unique').on(table.integrationType),
     index('idx_integrations_type_status').on(table.integrationType, table.status),
+    // CHECK constraint to ensure error count is never negative
+    check('error_count_non_negative', sql`error_count >= 0`),
   ]
 )
 
