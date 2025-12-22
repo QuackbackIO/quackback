@@ -1,7 +1,7 @@
 import { Job } from 'bullmq'
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { withTenantContext, posts, tags, postTags, postStatuses, eq, and } from '@quackback/db'
+import { db, posts, tags, postTags, postStatuses, eq, and } from '@quackback/db'
 import type { ImportJobData, ImportJobResult, ImportRowError } from '@quackback/jobs'
 import { workspaceIdSchema, boardIdSchema, type WorkspaceId, type BoardId } from '@quackback/ids'
 
@@ -151,8 +151,8 @@ async function processBatch(
     createdTags: [],
   }
 
-  // Use tenant context for RLS
-  await withTenantContext(workspaceId, async (tx) => {
+  // Use transaction for batch atomicity
+  await db.transaction(async (tx) => {
     // Get default status for the workspace
     const defaultStatus = await tx.query.postStatuses.findFirst({
       where: and(eq(postStatuses.workspaceId, workspaceId), eq(postStatuses.isDefault, true)),

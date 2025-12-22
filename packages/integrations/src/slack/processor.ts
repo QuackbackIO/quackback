@@ -3,7 +3,7 @@
  * Sends notifications to Slack channels when domain events occur.
  */
 import { WebClient } from '@slack/web-api'
-import { db, workspaceDomain, eq, and } from '@quackback/db'
+import { db, settings, eq } from '@quackback/db'
 import type { WorkspaceId } from '@quackback/ids'
 import type {
   PostCreatedPayload,
@@ -55,7 +55,7 @@ export class SlackIntegration extends BaseIntegration {
     }
 
     try {
-      const message = await this.buildMessage(event)
+      const message = this.buildMessage(event)
 
       const result = await this.postMessageWithAutoJoin(client, channelId, message)
 
@@ -144,14 +144,14 @@ export class SlackIntegration extends BaseIntegration {
     return undefined
   }
 
-  private async buildMessage(event: DomainEvent): Promise<{ text: string; blocks?: unknown[] }> {
-    // Look up the primary workspace domain for this organization
-    const tenantUrl = await this.getTenantUrl(event.workspaceId)
+  private buildMessage(event: DomainEvent): { text: string; blocks?: unknown[] } {
+    // Get the root URL for links
+    const rootUrl = this.getRootUrl()
 
     switch (event.type) {
       case 'post.created': {
         const { post } = event.data as PostCreatedPayload
-        const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
+        const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
         const content = this.stripHtml(post.content)
         const author = post.authorEmail || 'Anonymous'
 
@@ -179,7 +179,7 @@ export class SlackIntegration extends BaseIntegration {
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `in <${tenantUrl}/?board=${post.boardSlug}|${post.boardSlug}>`,
+                  text: `in <${rootUrl}/?board=${post.boardSlug}|${post.boardSlug}>`,
                 },
               ],
             },
@@ -189,7 +189,7 @@ export class SlackIntegration extends BaseIntegration {
 
       case 'post.status_changed': {
         const { post, previousStatus, newStatus } = event.data as PostStatusChangedPayload
-        const postUrl = `${tenantUrl}/b/${post.boardSlug}/posts/${post.id}`
+        const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
         const emoji = this.getStatusEmoji(newStatus)
         const actor = event.actor.email || 'System'
 
@@ -219,7 +219,7 @@ export class SlackIntegration extends BaseIntegration {
       case 'comment.created': {
         const { comment, post } = event.data as CommentCreatedPayload
         // Note: comment events don't have boardSlug yet, use generic URL
-        const postUrl = `${tenantUrl}/posts/${post.id}`
+        const postUrl = `${rootUrl}/posts/${post.id}`
         const content = this.stripHtml(comment.content)
         const author = comment.authorEmail || 'Anonymous'
 
@@ -248,7 +248,7 @@ export class SlackIntegration extends BaseIntegration {
 
       case 'changelog.published': {
         const { changelog } = event.data as ChangelogPublishedPayload
-        const changelogUrl = `${tenantUrl}/changelog/${changelog.slug}`
+        const changelogUrl = `${rootUrl}/changelog/${changelog.slug}`
         const content = this.stripHtml(changelog.content)
         const actor = event.actor.email || 'System'
 
@@ -310,26 +310,15 @@ export class SlackIntegration extends BaseIntegration {
   }
 
   /**
-   * Look up the primary workspace domain for an organization.
-   * Returns the full URL including protocol.
+   * Get the root URL for links in notifications.
+   * Requires ROOT_URL environment variable.
    */
-  private async getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
-    // Look up primary workspace domain
-    const domain = await db.query.workspaceDomain.findFirst({
-      where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
-    })
-
-    if (domain) {
-      const isLocalhost = domain.domain.includes('localhost')
-      const protocol = isLocalhost ? 'http' : 'https'
-      return `${protocol}://${domain.domain}`
+  private getRootUrl(): string {
+    const url = process.env.ROOT_URL
+    if (!url) {
+      throw new Error('ROOT_URL environment variable is required for Slack notifications')
     }
-
-    // Fallback: use APP_DOMAIN with org slug (shouldn't happen in practice)
-    const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
-    const isLocalhost = appDomain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    return `${protocol}://${appDomain}`
+    return url
   }
 
   async testConnection(ctx: IntegrationContext): Promise<{ ok: boolean; error?: string }> {

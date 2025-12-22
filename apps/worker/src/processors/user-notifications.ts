@@ -3,7 +3,7 @@
  * Sends email notifications to post subscribers when relevant events occur.
  */
 import type { Job } from 'bullmq'
-import { withTenantContext, db, eq, and, workspaceDomain, workspace, member } from '@quackback/db'
+import { db, eq, and, settings, member, posts } from '@quackback/db'
 import type { UserNotificationJobData, UserNotificationJobResult } from '@quackback/jobs'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
@@ -38,8 +38,8 @@ export async function processUserNotificationJob(
 
   try {
     // Get organization details for email content
-    const org = await db.query.workspace.findFirst({
-      where: eq(workspace.id, organizationId),
+    const org = await db.query.settings.findFirst({
+      where: eq(settings.id, organizationId),
       columns: { name: true },
     })
 
@@ -49,7 +49,7 @@ export async function processUserNotificationJob(
     }
 
     // Get tenant URL for email links
-    const tenantUrl = await getTenantUrl(organizationId)
+    const rootUrl = getRootUrl()
 
     // Process based on event type
     switch (eventType) {
@@ -91,8 +91,8 @@ export async function processUserNotificationJob(
           )
 
           // Build URLs
-          const postUrl = `${tenantUrl}/b/${eventData.post.boardSlug}/posts/${postId}`
-          const unsubscribeUrl = `${tenantUrl}/unsubscribe?token=${unsubscribeToken}`
+          const postUrl = `${rootUrl}/b/${eventData.post.boardSlug}/posts/${postId}`
+          const unsubscribeUrl = `${rootUrl}/unsubscribe?token=${unsubscribeToken}`
 
           try {
             await sendStatusChangeEmail({
@@ -170,9 +170,9 @@ export async function processUserNotificationJob(
 
           // Build URLs
           const postUrl = boardSlug
-            ? `${tenantUrl}/b/${boardSlug}/posts/${postId}`
-            : `${tenantUrl}/posts/${postId}`
-          const unsubscribeUrl = `${tenantUrl}/unsubscribe?token=${unsubscribeToken}`
+            ? `${rootUrl}/b/${boardSlug}/posts/${postId}`
+            : `${rootUrl}/posts/${postId}`
+          const unsubscribeUrl = `${rootUrl}/unsubscribe?token=${unsubscribeToken}`
 
           try {
             await sendNewCommentEmail({
@@ -233,44 +233,31 @@ function shouldSkipActor(
 }
 
 /**
- * Look up the primary workspace domain for an organization.
- * Returns the full URL including protocol.
+ * Get the root URL for email links.
+ * Requires ROOT_URL environment variable to be set.
  */
-async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
-  const domain = await db.query.workspaceDomain.findFirst({
-    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
-  })
-
-  if (domain) {
-    const isLocalhost = domain.domain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    return `${protocol}://${domain.domain}`
+function getRootUrl(): string {
+  const url = process.env.ROOT_URL
+  if (!url) {
+    throw new Error('ROOT_URL environment variable is required for email notifications')
   }
-
-  // Fallback: use APP_DOMAIN
-  const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
-  const isLocalhost = appDomain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${appDomain}`
+  return url
 }
 
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: string, workspaceId: WorkspaceId): Promise<string | null> {
-  const result = await withTenantContext(workspaceId, async (txDb) => {
-    const post = await txDb.query.posts.findFirst({
-      where: (posts, { eq }) => eq(posts.id, postId),
-      columns: { boardId: true },
-      with: {
-        board: {
-          columns: { slug: true },
-        },
+async function getPostBoardSlug(postId: string, _workspaceId: WorkspaceId): Promise<string | null> {
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    columns: { boardId: true },
+    with: {
+      board: {
+        columns: { slug: true },
       },
-    })
-    return post?.board?.slug || null
+    },
   })
-  return result
+  return post?.board?.slug || null
 }
 
 /**

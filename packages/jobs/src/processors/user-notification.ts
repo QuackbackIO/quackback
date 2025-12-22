@@ -5,7 +5,7 @@
  * extracted to be used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import { withTenantContext, db, eq, and, workspaceDomain, workspace, member } from '@quackback/db'
+import { db, eq, and, settings, member, posts } from '@quackback/db'
 import type {
   UserNotificationJobData,
   UserNotificationJobResult,
@@ -33,7 +33,6 @@ export async function processUserNotification(
   options: ProcessUserNotificationOptions = {}
 ): Promise<UserNotificationJobResult> {
   const { eventId, eventType, workspaceId, actor, data: eventData } = data
-  // Note: appDomain option available but using process.env.APP_DOMAIN for now
   const _options = options
 
   console.log(`[UserNotifications] Processing ${eventType} event ${eventId}`)
@@ -45,8 +44,8 @@ export async function processUserNotification(
 
   try {
     // Get organization details for email content
-    const org = await db.query.workspace.findFirst({
-      where: eq(workspace.id, workspaceId),
+    const org = await db.query.settings.findFirst({
+      where: eq(settings.id, workspaceId),
       columns: { name: true },
     })
 
@@ -55,8 +54,8 @@ export async function processUserNotification(
       return { emailsSent: 0, skipped: 0, errors: ['Workspace not found'] }
     }
 
-    // Get tenant URL for email links
-    const tenantUrl = await getTenantUrl(workspaceId)
+    // Get root URL for email links
+    const rootUrl = getRootUrl()
 
     // Process based on event type
     switch (eventType) {
@@ -65,7 +64,7 @@ export async function processUserNotification(
         const postId = statusData.post.id as PostId
 
         // Get active subscribers for this post
-        const subscribers = await subscriptionService.getActiveSubscribers(postId, workspaceId)
+        const subscribers = await subscriptionService.getActiveSubscribers(postId)
         console.log(
           `[UserNotifications] Found ${subscribers.length} subscribers for post ${postId}`
         )
@@ -79,10 +78,7 @@ export async function processUserNotification(
           }
 
           // Check notification preferences
-          const prefs = await subscriptionService.getNotificationPreferences(
-            subscriber.memberId,
-            workspaceId
-          )
+          const prefs = await subscriptionService.getNotificationPreferences(subscriber.memberId)
           if (!prefs.emailStatusChange || prefs.emailMuted) {
             console.log(`[UserNotifications] Preferences disabled for ${subscriber.email}`)
             skipped++
@@ -93,13 +89,12 @@ export async function processUserNotification(
           const unsubscribeToken = await subscriptionService.generateUnsubscribeToken(
             subscriber.memberId,
             postId,
-            'unsubscribe_post',
-            workspaceId
+            'unsubscribe_post'
           )
 
           // Build URLs
-          const postUrl = `${tenantUrl}/b/${statusData.post.boardSlug}/posts/${postId}`
-          const unsubscribeUrl = `${tenantUrl}/unsubscribe?token=${unsubscribeToken}`
+          const postUrl = `${rootUrl}/b/${statusData.post.boardSlug}/posts/${postId}`
+          const unsubscribeUrl = `${rootUrl}/unsubscribe?token=${unsubscribeToken}`
 
           try {
             await sendStatusChangeEmail({
@@ -127,7 +122,7 @@ export async function processUserNotification(
         const postId = commentData.post.id as PostId
 
         // Get active subscribers for this post
-        const subscribers = await subscriptionService.getActiveSubscribers(postId, workspaceId)
+        const subscribers = await subscriptionService.getActiveSubscribers(postId)
         console.log(
           `[UserNotifications] Found ${subscribers.length} subscribers for post ${postId}`
         )
@@ -139,10 +134,7 @@ export async function processUserNotification(
         // Check if commenter is a team member
         const commenterMember = actor.userId
           ? await db.query.member.findFirst({
-              where: and(
-                eq(member.userId, actor.userId as UserId),
-                eq(member.workspaceId, workspaceId)
-              ),
+              where: eq(member.userId, actor.userId as UserId),
               columns: { role: true },
             })
           : null
@@ -160,10 +152,7 @@ export async function processUserNotification(
           }
 
           // Check notification preferences
-          const prefs = await subscriptionService.getNotificationPreferences(
-            subscriber.memberId,
-            workspaceId
-          )
+          const prefs = await subscriptionService.getNotificationPreferences(subscriber.memberId)
           if (!prefs.emailNewComment || prefs.emailMuted) {
             console.log(`[UserNotifications] Preferences disabled for ${subscriber.email}`)
             skipped++
@@ -174,15 +163,14 @@ export async function processUserNotification(
           const unsubscribeToken = await subscriptionService.generateUnsubscribeToken(
             subscriber.memberId,
             postId,
-            'unsubscribe_post',
-            workspaceId
+            'unsubscribe_post'
           )
 
           // Build URLs
           const postUrl = boardSlug
-            ? `${tenantUrl}/b/${boardSlug}/posts/${postId}`
-            : `${tenantUrl}/posts/${postId}`
-          const unsubscribeUrl = `${tenantUrl}/unsubscribe?token=${unsubscribeToken}`
+            ? `${rootUrl}/b/${boardSlug}/posts/${postId}`
+            : `${rootUrl}/posts/${postId}`
+          const unsubscribeUrl = `${rootUrl}/unsubscribe?token=${unsubscribeToken}`
 
           try {
             await sendNewCommentEmail({
@@ -243,44 +231,31 @@ function shouldSkipActor(
 }
 
 /**
- * Look up the primary workspace domain for an organization.
- * Returns the full URL including protocol.
+ * Get the root URL for email links.
+ * Requires ROOT_URL environment variable to be set.
  */
-async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
-  const domain = await db.query.workspaceDomain.findFirst({
-    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
-  })
-
-  if (domain) {
-    const isLocalhost = domain.domain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    return `${protocol}://${domain.domain}`
+function getRootUrl(): string {
+  const url = process.env.ROOT_URL
+  if (!url) {
+    throw new Error('ROOT_URL environment variable is required for email notifications')
   }
-
-  // Fallback: use APP_DOMAIN
-  const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
-  const isLocalhost = appDomain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${appDomain}`
+  return url
 }
 
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: PostId, workspaceId: WorkspaceId): Promise<string | null> {
-  const result = await withTenantContext(workspaceId, async (txDb) => {
-    const post = await txDb.query.posts.findFirst({
-      where: (posts, { eq }) => eq(posts.id, postId),
-      columns: { boardId: true },
-      with: {
-        board: {
-          columns: { slug: true },
-        },
+async function getPostBoardSlug(postId: PostId, _workspaceId: WorkspaceId): Promise<string | null> {
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    columns: { boardId: true },
+    with: {
+      board: {
+        columns: { slug: true },
       },
-    })
-    return post?.board?.slug || null
+    },
   })
-  return result
+  return post?.board?.slug || null
 }
 
 /**

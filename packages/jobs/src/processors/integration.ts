@@ -6,8 +6,8 @@
  */
 
 import {
-  withTenantContext,
-  workspaceIntegrations,
+  db,
+  integrations,
   integrationEventMappings,
   integrationSyncLog,
   decryptToken,
@@ -26,32 +26,30 @@ import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
  * Load integration configuration from the database.
  */
 export async function loadIntegrationConfig(
-  workspaceId: WorkspaceId,
+  _workspaceId: WorkspaceId,
   integrationId: IntegrationId,
   mappingId: EventMappingId
 ) {
-  return withTenantContext(workspaceId, async (db) => {
-    const [integration] = await db
-      .select()
-      .from(workspaceIntegrations)
-      .where(eq(workspaceIntegrations.id, integrationId))
-      .limit(1)
+  const [integration] = await db
+    .select()
+    .from(integrations)
+    .where(eq(integrations.id, integrationId))
+    .limit(1)
 
-    const [mapping] = await db
-      .select()
-      .from(integrationEventMappings)
-      .where(eq(integrationEventMappings.id, mappingId))
-      .limit(1)
+  const [mapping] = await db
+    .select()
+    .from(integrationEventMappings)
+    .where(eq(integrationEventMappings.id, mappingId))
+    .limit(1)
 
-    return { integration, mapping }
-  })
+  return { integration, mapping }
 }
 
 /**
  * Record integration sync result in the audit log.
  */
 export async function recordSyncLog(
-  workspaceId: WorkspaceId,
+  _workspaceId: WorkspaceId,
   integrationId: IntegrationId,
   eventId: string,
   eventType: string,
@@ -60,17 +58,14 @@ export async function recordSyncLog(
   startTime: number
 ): Promise<void> {
   try {
-    await withTenantContext(workspaceId, async (db) => {
-      await db.insert(integrationSyncLog).values({
-        workspaceId,
-        integrationId,
-        eventId,
-        eventType,
-        actionType,
-        status: result.success ? 'success' : 'failed',
-        errorMessage: result.error,
-        durationMs: Date.now() - startTime,
-      })
+    await db.insert(integrationSyncLog).values({
+      integrationId,
+      eventId,
+      eventType,
+      actionType,
+      status: result.success ? 'success' : 'failed',
+      errorMessage: result.error,
+      durationMs: Date.now() - startTime,
     })
   } catch (err) {
     // Don't fail the job if sync log fails

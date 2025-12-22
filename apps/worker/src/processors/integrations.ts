@@ -4,8 +4,8 @@
  */
 import type { Job } from 'bullmq'
 import {
-  withTenantContext,
-  workspaceIntegrations,
+  db,
+  integrations,
   integrationEventMappings,
   integrationSyncLog,
   decryptToken,
@@ -60,21 +60,17 @@ export async function processIntegrationJob(
 
   try {
     // Load integration config from database
-    const { integration, mapping } = await withTenantContext(workspaceId, async (db) => {
-      const [integration] = await db
-        .select()
-        .from(workspaceIntegrations)
-        .where(eq(workspaceIntegrations.id, integrationId))
-        .limit(1)
+    const [integration] = await db
+      .select()
+      .from(integrations)
+      .where(eq(integrations.id, integrationId))
+      .limit(1)
 
-      const [mapping] = await db
-        .select()
-        .from(integrationEventMappings)
-        .where(eq(integrationEventMappings.id, mappingId))
-        .limit(1)
-
-      return { integration, mapping }
-    })
+    const [mapping] = await db
+      .select()
+      .from(integrationEventMappings)
+      .where(eq(integrationEventMappings.id, mappingId))
+      .limit(1)
 
     if (!integration || !mapping) {
       console.error(`[Integration] Integration or mapping not found: ${integrationId}/${mappingId}`)
@@ -197,17 +193,15 @@ async function recordSyncLog(
   startTime: number
 ): Promise<void> {
   try {
-    await withTenantContext(workspaceId, async (db) => {
-      await db.insert(integrationSyncLog).values({
-        workspaceId,
-        integrationId,
-        eventId,
-        eventType,
-        actionType,
-        status: result.success ? 'success' : 'failed',
-        errorMessage: result.error,
-        durationMs: Date.now() - startTime,
-      })
+    await db.insert(integrationSyncLog).values({
+      workspaceId,
+      integrationId,
+      eventId,
+      eventType,
+      actionType,
+      status: result.success ? 'success' : 'failed',
+      errorMessage: result.error,
+      durationMs: Date.now() - startTime,
     })
   } catch (err) {
     // Don't fail the job if sync log fails

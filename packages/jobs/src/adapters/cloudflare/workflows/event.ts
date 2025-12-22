@@ -32,7 +32,7 @@ export interface EventWorkflowEnv {
   // Secrets needed for integration processing
   INTEGRATION_ENCRYPTION_KEY: string
   RESEND_API_KEY: string
-  APP_DOMAIN: string
+  ROOT_URL: string
 }
 
 /**
@@ -55,8 +55,8 @@ function configureProcessEnv(env: EventWorkflowEnv): void {
   if (env.RESEND_API_KEY) {
     process.env.RESEND_API_KEY = env.RESEND_API_KEY
   }
-  if (env.APP_DOMAIN) {
-    process.env.APP_DOMAIN = env.APP_DOMAIN
+  if (env.ROOT_URL) {
+    process.env.ROOT_URL = env.ROOT_URL
   }
 }
 

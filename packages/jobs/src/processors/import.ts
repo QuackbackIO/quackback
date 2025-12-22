@@ -7,7 +7,7 @@
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { withTenantContext, posts, tags, postTags, postStatuses, eq, and } from '@quackback/db'
+import { db, posts, tags, postTags, postStatuses, eq } from '@quackback/db'
 import {
   workspaceIdSchema,
   boardIdSchema,
@@ -142,23 +142,19 @@ export async function processBatch(
     createdTags: [],
   }
 
-  // Use tenant context for RLS
-  await withTenantContext(workspaceId, async (tx) => {
+  // Use transaction for batch atomicity
+  await db.transaction(async (tx) => {
     // Get default status for the organization
     const defaultStatus = await tx.query.postStatuses.findFirst({
-      where: and(eq(postStatuses.workspaceId, workspaceId), eq(postStatuses.isDefault, true)),
+      where: eq(postStatuses.isDefault, true),
     })
 
     // Get all existing statuses for lookup
-    const existingStatuses = await tx.query.postStatuses.findMany({
-      where: eq(postStatuses.workspaceId, workspaceId),
-    })
+    const existingStatuses = await tx.query.postStatuses.findMany()
     const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
 
     // Get all existing tags for lookup
-    const existingTags = await tx.query.tags.findMany({
-      where: eq(tags.workspaceId, workspaceId),
-    })
+    const existingTags = await tx.query.tags.findMany()
     const tagMap = new Map(existingTags.map((t) => [t.name.toLowerCase(), t]))
 
     // Collect all unique tag names that need to be created

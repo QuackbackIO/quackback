@@ -7,7 +7,7 @@
  * @see https://opennext.js.org/cloudflare/howtos/custom-worker
  */
 
-// @ts-expect-error - Generated file
+// @ts-ignore - Generated file
 import { default as openNextHandler } from './.open-next/worker.js'
 
 // Re-export the OpenNext handler with explicit fetch binding
@@ -22,5 +22,5 @@ export { ImportWorkflow, EventWorkflow } from '@quackback/jobs/adapters/cloudfla
 export { IntegrationStateDO } from '@quackback/jobs/adapters/cloudflare'
 
 // Re-export OpenNext Durable Objects for queue and tag cache
-// @ts-expect-error - Generated file
+// @ts-ignore - Generated file
 export { DOQueueHandler, DOShardedTagCache, BucketCachePurge } from './.open-next/worker.js'

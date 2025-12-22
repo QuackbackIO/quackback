@@ -84,19 +84,11 @@
     }
   ],
   "vars": {
-    // Edition: "cloud" for SaaS with billing, "oss" for self-hosted
-    "EDITION": "cloud",
-    // Production domain (without protocol)
-    "APP_DOMAIN": "app.quackback.io",
-    // Base domain for tenant subdomains (e.g., *.quackback.io)
-    "TENANT_BASE_DOMAIN": "quackback.io",
-    // Auth URL - main app entry point (with protocol)
+    // Root URL (for absolute URLs in emails, OAuth callbacks, etc.)
+    "ROOT_URL": "https://app.quackback.io",
+    // Auth URL - same as root URL
     "BETTER_AUTH_URL": "https://app.quackback.io",
     // Email settings (use real address for better deliverability)
-    "EMAIL_FROM": "Quackback <hello@quackback.io>",
-    // Stripe price IDs (cloud edition)
-    "STRIPE_PRICE_ESSENTIALS": "price_1SejMoRbu1DLQxj3ro9gmpL6",
-    "STRIPE_PRICE_PROFESSIONAL": "price_1SejMqRbu1DLQxj3fccjQnhz",
-    "STRIPE_PRICE_TEAM": "price_1SejMsRbu1DLQxj3kTcbzIbn"
+    "EMAIL_FROM": "Quackback <hello@quackback.io>"
   }
 }

@@ -5,7 +5,7 @@
  * flow, used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import { db, workspaceIntegrations, integrationEventMappings, eq } from '@quackback/db'
+import { db, integrations, integrationEventMappings, eq } from '@quackback/db'
 import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
 import type { EventJobData, EventJobResult, IntegrationJobData } from '../types'
 import type { StateAdapter } from '../adapters/types'
@@ -47,24 +47,25 @@ export async function getIntegrationMappings(
   workspaceId: WorkspaceId,
   eventType: string
 ): Promise<IntegrationMapping[]> {
+  // Note: workspaceId parameter kept for API compatibility but not used in single-tenant mode
+  const _workspaceId = workspaceId
   const mappings = await db
     .select({
-      integrationId: workspaceIntegrations.id,
-      integrationType: workspaceIntegrations.integrationType,
+      integrationId: integrations.id,
+      integrationType: integrations.integrationType,
       mappingId: integrationEventMappings.id,
       eventType: integrationEventMappings.eventType,
       actionType: integrationEventMappings.actionType,
       actionConfig: integrationEventMappings.actionConfig,
       filters: integrationEventMappings.filters,
       enabled: integrationEventMappings.enabled,
-      status: workspaceIntegrations.status,
+      status: integrations.status,
     })
     .from(integrationEventMappings)
     .innerJoin(
-      workspaceIntegrations,
-      eq(integrationEventMappings.integrationId, workspaceIntegrations.id)
+      integrations,
+      eq(integrationEventMappings.integrationId, integrations.id)
     )
-    .where(eq(workspaceIntegrations.workspaceId, workspaceId))
 
   // Filter to relevant mappings for this event type
   return mappings.filter(
