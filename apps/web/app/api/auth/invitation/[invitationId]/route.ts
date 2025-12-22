@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, invitation, workspaceDomain, eq } from '@/lib/db'
+import { db, invitation, eq } from '@/lib/db'
 import { checkRateLimit, rateLimits, getClientIp, createRateLimitHeaders } from '@/lib/rate-limit'
 import { isValidTypeId, type InviteId } from '@quackback/ids'
 
@@ -38,42 +38,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Get workspace from host header
-    const host = request.headers.get('host')
-    if (!host) {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
-    }
-
-    // Look up workspace from workspace_domain table
-    const domainRecord = await db.query.workspaceDomain.findFirst({
-      where: eq(workspaceDomain.domain, host),
-      with: { workspace: true },
-    })
-
-    const org = domainRecord?.workspace
+    // Get app settings
+    const org = await db.query.settings.findFirst()
     if (!org) {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+      return NextResponse.json({ error: 'App not configured' }, { status: 500 })
     }
 
     // Find the invitation
     const inv = await db.query.invitation.findFirst({
       where: eq(invitation.id, invitationId),
       with: {
-        workspace: true,
         inviter: true,
       },
     })
 
     if (!inv) {
       return NextResponse.json({ error: 'Invitation not found' }, { status: 404 })
-    }
-
-    // Verify invitation belongs to this workspace
-    if (inv.workspaceId !== org.id) {
-      return NextResponse.json(
-        { error: 'This invitation is for a different workspace' },
-        { status: 400 }
-      )
     }
 
     // Check invitation status
@@ -99,7 +79,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       email: inv.email,
       name: inv.name || null,
       role: inv.role,
-      workspaceName: inv.workspace.name,
+      workspaceName: org.name,
       inviterName: inv.inviter?.name || null,
     })
   } catch (error) {

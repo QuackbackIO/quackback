@@ -1,96 +1,43 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { customSession } from 'better-auth/plugins'
-import { sso } from '@better-auth/sso'
+import { customSession, emailOTP } from 'better-auth/plugins'
 import {
   db,
-  workspaceDomain,
   user as userTable,
   session as sessionTable,
   account as accountTable,
   verification as verificationTable,
-  workspace as workspaceTable,
+  settings as settingsTable,
   member as memberTable,
   invitation as invitationTable,
   eq,
-  and,
 } from '@/lib/db'
-import type { UserId } from '@quackback/ids'
+import type { UserId, MemberId } from '@quackback/ids'
+import { generateId } from '@quackback/ids'
 import { trustLogin } from './plugins/trust-login'
+import { sendSigninCodeEmail } from '@quackback/email'
 
 /**
- * Build trusted origins dynamically for CSRF protection.
- *
- * Trusted origins include:
- * 1. Main app domain and all subdomains (e.g., *.quackback.io)
- * 2. Verified custom domains from the workspace_domain table
- *
- * Returns the origin if trusted, empty array if not.
+ * Build trusted origins for CSRF protection.
+ * Accepts same-origin requests based on request host.
  */
 async function getTrustedOrigins(request: Request): Promise<string[]> {
   const origin = request.headers.get('origin')
   if (!origin) return []
 
-  // Parse the origin to extract the hostname
-  let originHost: string
   try {
-    originHost = new URL(origin).hostname
+    const originHost = new URL(origin).host
+    const requestHost = request.headers.get('host')
+
+    // Trust if origin matches request host
+    if (requestHost && originHost === requestHost) {
+      return [origin]
+    }
   } catch {
     return []
   }
 
-  const appDomain = process.env.APP_DOMAIN
-  // TENANT_BASE_DOMAIN is the base for tenant subdomains (e.g., quackback.io)
-  // When APP_DOMAIN=app.quackback.io, tenants are *.quackback.io
-  const tenantBaseDomain = process.env.TENANT_BASE_DOMAIN
-
-  // Development fallback
-  if (!appDomain) {
-    if (originHost === 'localhost' || originHost.endsWith('.localhost')) {
-      return [origin]
-    }
-    return []
-  }
-
-  // Check if origin matches main domain
-  if (originHost === appDomain) {
-    return [origin]
-  }
-
-  // Check if origin is a subdomain of the tenant base domain
-  if (tenantBaseDomain && originHost.endsWith(`.${tenantBaseDomain}`)) {
-    return [origin]
-  }
-
-  // Fallback: check subdomain of APP_DOMAIN (for simpler setups)
-  if (originHost.endsWith(`.${appDomain}`)) {
-    return [origin]
-  }
-
-  // Check if origin is a verified custom domain
-  const customDomain = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.domain, originHost),
-      eq(workspaceDomain.domainType, 'custom'),
-      eq(workspaceDomain.verified, true)
-    ),
-    columns: { id: true },
-  })
-
-  return customDomain ? [origin] : []
-}
-
-/**
- * Build the base URL for Better-Auth
- * Uses APP_DOMAIN env var with appropriate protocol
- */
-function buildBaseURL(): string | undefined {
-  const domain = process.env.APP_DOMAIN
-  if (!domain) return undefined
-
-  const isLocalhost = domain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${domain}`
+  return []
 }
 
 export const auth = betterAuth({
@@ -102,41 +49,31 @@ export const auth = betterAuth({
       session: sessionTable,
       account: accountTable,
       verification: verificationTable,
-      workspace: workspaceTable,
+      // Better-Auth expects 'workspace' name for organization-like table
+      workspace: settingsTable,
       member: memberTable,
       invitation: invitationTable,
     },
   }),
 
-  // Base URL for OAuth callbacks when running behind a proxy (e.g., ngrok)
-  baseURL: buildBaseURL(),
+  // Base URL derived from request (no hardcoded URL needed)
+  baseURL: process.env.BETTER_AUTH_URL,
 
   // Password auth disabled - users sign in via OTP email codes
   emailAndPassword: {
     enabled: false,
   },
 
-  // Include workspaceId in user object for tenant validation
-  // This enables the proxy to verify the session belongs to the correct tenant
-  user: {
-    additionalFields: {
-      workspaceId: {
-        type: 'string',
-        required: true,
-      },
-    },
-  },
-
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // Update session every 24 hours
-    // Enable cookie caching with JWT encoding for stateless session validation
-    // This allows the proxy to validate sessions without DB queries
-    cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes - re-validate from DB periodically
-      encoding: 'jwt', // JWT encoding allows signature verification without DB
-    },
+    // Cookie caching disabled - causes issues with manual session creation
+    // during onboarding. TODO: Re-enable once onboarding uses proper auth flow.
+    // cookieCache: {
+    //   enabled: true,
+    //   maxAge: 60 * 5, // 5 minutes - re-validate from DB periodically
+    //   encoding: 'jwt', // JWT encoding allows signature verification without DB
+    // },
   },
 
   // Trusted origins for CSRF protection
@@ -144,8 +81,16 @@ export const auth = betterAuth({
   trustedOrigins: getTrustedOrigins,
 
   advanced: {
-    // Disable Better-auth's ID generation - Drizzle schema handles TypeID generation
-    generateId: false,
+    // Use TypeID format for user IDs to match our schema
+    database: {
+      generateId: ({ model }) => {
+        if (model === 'user') {
+          return generateId('user')
+        }
+        // For session, verification, account - use crypto random (they use text columns)
+        return crypto.randomUUID()
+      },
+    },
     // Disable cross-subdomain cookies for tenant isolation
     // Each subdomain has its own session cookie
     crossSubDomainCookies: {
@@ -153,12 +98,46 @@ export const auth = betterAuth({
     },
     defaultCookieAttributes: {
       sameSite: 'lax',
-      // Secure cookies for HTTPS (production or ngrok)
-      secure: !process.env.APP_DOMAIN?.includes('localhost'),
+      // Secure cookies in production
+      secure: process.env.NODE_ENV === 'production',
+    },
+  },
+
+  // Database hooks to auto-create owner member for first user
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          // Check if any owner exists
+          const existingOwner = await db.query.member.findFirst({
+            where: eq(memberTable.role, 'owner'),
+          })
+
+          if (!existingOwner) {
+            // First user becomes owner
+            await db.insert(memberTable).values({
+              id: generateId('member') as MemberId,
+              userId: user.id as UserId,
+              role: 'owner',
+              createdAt: new Date(),
+            })
+          }
+        },
+      },
     },
   },
 
   plugins: [
+    // Email OTP plugin for passwordless authentication
+    emailOTP({
+      async sendVerificationOTP({ email, otp, type: _type }) {
+        // We use the same email template for all OTP types
+        await sendSigninCodeEmail({ to: email, code: otp })
+      },
+      otpLength: 6,
+      expiresIn: 600, // 10 minutes
+    }),
+
     // Trust login plugin for cross-domain session transfer
     trustLogin(),
 
@@ -196,13 +175,6 @@ export const auth = betterAuth({
         },
         session,
       }
-    }),
-
-    // SSO plugin for enterprise SAML/OIDC authentication
-    // Uses automatic email-based account linking (no email salting)
-    // Note: Member provisioning is handled by trust-login plugin during session transfer
-    sso({
-      disableImplicitSignUp: false,
     }),
   ],
 })

@@ -1,31 +1,23 @@
 /**
  * Trust Login Plugin for Better-Auth
  *
- * This plugin provides a secure way to create sessions for users who have
- * been authenticated through a trusted flow (e.g., workspace creation, OAuth callback, SSO).
+ * This plugin provides cross-domain session transfer for Cloud edition.
+ * In OSS edition, this endpoint returns an error since there's no external
+ * auth flow to transfer sessions from.
  *
- * It exposes a `/trust-login` endpoint that:
- * 1. Validates a one-time transfer token from the database
- * 2. Validates target domain matches current host (prevents token theft)
- * 3. Deletes token (one-time use)
- * 4. Creates member record if needed (role based on context: portal='user', team='member')
- * 5. Creates a proper session using Better-Auth's internal adapter
- * 6. Sets the session cookie correctly
- * 7. Redirects to the callback URL
+ * Cloud flow (handled by website):
+ * 1. User authenticates on main domain
+ * 2. Website creates transfer token and redirects to tenant subdomain
+ * 3. Tenant app validates token and creates local session
  *
- * This approach ensures sessions are created in the exact format Better-Auth expects,
- * avoiding issues with manual session insertion.
+ * OSS mode:
+ * - Users authenticate directly with the app
+ * - No transfer tokens needed
  */
 
 import { createAuthEndpoint } from 'better-auth/api'
 import type { BetterAuthPlugin } from 'better-auth'
 import { z } from 'zod'
-import { db, sessionTransferToken, member, workspaceDomain, eq, and, gt } from '@/lib/db'
-import { generateId } from '@quackback/ids'
-
-function normalizeHost(host: string): string {
-  return host.trim().toLowerCase()
-}
 
 export const trustLogin = () => {
   return {
@@ -40,109 +32,9 @@ export const trustLogin = () => {
           }),
         },
         async (ctx) => {
-          const { token } = ctx.query
-
-          const currentHost = normalizeHost(ctx.request?.headers?.get('host') || '')
-          if (!currentHost) {
-            return ctx.redirect('/login?error=invalid_domain')
-          }
-
-          // 1-3. Atomically consume transfer token (one-time use)
-          // Prevents race conditions where multiple requests could redeem the same token.
-          const transfer = await db.transaction(async (tx) => {
-            const [consumed] = await tx
-              .delete(sessionTransferToken)
-              .where(
-                and(
-                  eq(sessionTransferToken.token, token),
-                  gt(sessionTransferToken.expiresAt, new Date())
-                )
-              )
-              .returning()
-            return consumed
-          })
-
-          // 2. Validate target domain matches current host (prevents token theft)
-          if (!transfer) {
-            return ctx.redirect('/login?error=invalid_token')
-          }
-
-          if (currentHost !== normalizeHost(transfer.targetDomain)) {
-            return ctx.redirect('/login?error=invalid_domain')
-          }
-
-          // 4. Ensure member record exists for the user
-          // This handles: portal OAuth/SSO, team SSO, and any other auth flows
-          // OAuth signup creates user but member may not exist for SSO users
-          // Look up organization from target domain
-          const domainRecord = await db.query.workspaceDomain.findFirst({
-            where: eq(workspaceDomain.domain, transfer.targetDomain),
-            columns: { workspaceId: true },
-          })
-
-          if (domainRecord) {
-            // Check if member record already exists
-            const existingMember = await db.query.member.findFirst({
-              where: and(
-                eq(member.userId, transfer.userId),
-                eq(member.workspaceId, domainRecord.workspaceId)
-              ),
-            })
-
-            // Create member record if it doesn't exist
-            // Role is based on context: portal → 'user', team/sso → 'member'
-            if (!existingMember) {
-              const memberRole = transfer.context === 'portal' ? 'user' : 'member'
-              await db.insert(member).values({
-                id: generateId('member'),
-                userId: transfer.userId,
-                workspaceId: domainRecord.workspaceId,
-                role: memberRole,
-                createdAt: new Date(),
-              })
-            }
-          }
-
-          // 5. Create session using Better-Auth's internal adapter
-          // All users (team + portal) have member records with unified roles
-          const session = await ctx.context.internalAdapter.createSession(
-            transfer.userId,
-            false // dontRememberMe
-          )
-
-          if (!session) {
-            return ctx.redirect('/login?error=session_error')
-          }
-
-          // 6. Set the session cookie
-          await ctx.setSignedCookie(
-            ctx.context.authCookies.sessionToken.name,
-            session.token,
-            ctx.context.secret,
-            ctx.context.authCookies.sessionToken.options
-          )
-
-          // 7. Redirect based on context and popup mode
-          // Check if this is a popup window that should redirect to auth-complete
-          const requestUrl = new URL(ctx.request?.url || 'http://localhost')
-          const isPopup = requestUrl.searchParams.get('popup') === 'true'
-
-          if (isPopup) {
-            // Popup mode: redirect to auth-complete page which broadcasts success
-            return ctx.redirect('/auth-complete')
-          }
-
-          // Normal mode: use callbackUrl from transfer token
-          // The callbackUrl is validated to be a relative path (starts with /)
-          // and was set during the OTP/OAuth flow, so it's safe to use
-          let redirectUrl = transfer.callbackUrl || (transfer.context === 'portal' ? '/' : '/admin')
-
-          // Security: ensure redirectUrl is a relative path to prevent open redirects
-          if (!redirectUrl.startsWith('/') || redirectUrl.startsWith('//')) {
-            redirectUrl = transfer.context === 'portal' ? '/' : '/admin'
-          }
-
-          return ctx.redirect(redirectUrl)
+          // In OSS mode, trust-login is not supported
+          // Users should authenticate directly via the login page
+          return ctx.redirect('/login?error=trust_login_not_supported')
         }
       ),
     },

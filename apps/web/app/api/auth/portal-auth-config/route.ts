@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { workspaceService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
+import { settingsService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 
 /**
  * GET /api/auth/portal-auth-config?slug={orgSlug}
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'slug is required' }, { status: 400 })
     }
 
-    const result = await workspaceService.getPublicPortalConfig(slug)
+    const result = await settingsService.getPublicPortalConfig()
 
     if (!result.success) {
       // Return default config if org not found

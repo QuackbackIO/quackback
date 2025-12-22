@@ -1,32 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  db,
-  workspace,
-  user,
-  account,
-  member,
-  sessionTransferToken,
-  workspaceDomain,
-  eq,
-  and,
-} from '@/lib/db'
+import { db, settings, user, account, member, session, eq, and } from '@/lib/db'
 import { verifyOAuthState } from '@/lib/auth/oauth-state'
 import { generateId, type UserId } from '@quackback/ids'
 
 /**
- * OAuth Callback Handler
+ * OAuth Callback Handler (OSS Edition)
  *
- * Handles OAuth callbacks from GitHub and Google. This route runs on the main
- * domain and creates org-scoped users, then redirects to the tenant domain
- * with a session transfer token.
+ * Handles OAuth callbacks from GitHub and Google. For single-tenant OSS deployments,
+ * this creates the user directly and establishes a session without domain transfers.
  *
  * Flow:
- * 1. Parse state to get provider, workspace, returnDomain
+ * 1. Parse and verify OAuth state
  * 2. Exchange code for access token
  * 3. Get user info from provider
- * 4. Find or create org-scoped user
- * 5. Create session transfer token
- * 6. Redirect to returnDomain/api/auth/trust-login?token=xxx
+ * 4. Find or create user + member record
+ * 5. Create session and set cookie
+ * 6. Redirect to callback URL
  */
 
 interface OAuthState {
@@ -46,28 +35,16 @@ interface OAuthUserInfo {
   providerAccountId: string
 }
 
-function generateSecureToken(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-function getProtocol(): string {
-  const domain = process.env.APP_DOMAIN
-  return domain?.includes('localhost') ? 'http' : 'https'
-}
-
-function buildCallbackUrl(): string {
-  const domain = process.env.APP_DOMAIN
-  if (!domain) throw new Error('APP_DOMAIN is required')
-  return `${getProtocol()}://${domain}/api/auth/oauth-callback`
+function buildCallbackUrl(request: NextRequest): string {
+  const proto = request.headers.get('x-forwarded-proto') || 'http'
+  const host = request.headers.get('host')
+  return `${proto}://${host}/api/auth/oauth-callback`
 }
 
 async function exchangeCodeForToken(
   provider: string,
-  code: string
+  code: string,
+  redirectUri: string
 ): Promise<{ accessToken: string } | { error: string }> {
   if (provider === 'github') {
     const response = await fetch('https://github.com/login/oauth/access_token', {
@@ -80,7 +57,7 @@ async function exchangeCodeForToken(
         client_id: process.env.GITHUB_CLIENT_ID,
         client_secret: process.env.GITHUB_CLIENT_SECRET,
         code,
-        redirect_uri: buildCallbackUrl(),
+        redirect_uri: redirectUri,
       }),
     })
 
@@ -109,7 +86,7 @@ async function exchangeCodeForToken(
         client_id: process.env.GOOGLE_CLIENT_ID || '',
         client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
         code,
-        redirect_uri: buildCallbackUrl(),
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }),
     })
@@ -228,22 +205,8 @@ async function getUserInfo(
   return { error: 'Unsupported provider' }
 }
 
-function buildErrorRedirect(returnDomain: string, error: string): string {
-  const protocol = getProtocol()
-  return `${protocol}://${returnDomain}/login?error=${encodeURIComponent(error)}`
-}
-
-/**
- * Validate that the return domain is allowed by checking workspace_domain table.
- * This is more flexible than suffix-based validation and handles both
- * subdomain and custom domain types.
- */
-async function isValidReturnDomain(domain: string): Promise<boolean> {
-  const domainRecord = await db.query.workspaceDomain.findFirst({
-    where: and(eq(workspaceDomain.domain, domain), eq(workspaceDomain.verified, true)),
-  })
-
-  return !!domainRecord
+function buildErrorRedirect(callbackUrl: string, error: string): string {
+  return `${callbackUrl}?error=${encodeURIComponent(error)}`
 }
 
 export async function GET(request: NextRequest) {
@@ -281,45 +244,39 @@ export async function GET(request: NextRequest) {
 
   // Validate state timestamp (5 minute expiry)
   if (Date.now() - state.ts > 5 * 60 * 1000) {
-    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'auth_expired'))
+    return NextResponse.redirect(buildErrorRedirect(state.callbackUrl, 'auth_expired'))
   }
 
-  // Validate workspace exists
-  const org = await db.query.workspace.findFirst({
-    where: eq(workspace.slug, state.workspace),
+  // Validate settings exists (OSS mode: single tenant)
+  const org = await db.query.settings.findFirst({
+    where: eq(settings.slug, state.workspace),
   })
 
   if (!org) {
-    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'workspace_not_found'))
-  }
-
-  // Validate return domain is allowed (subdomain of APP_DOMAIN or verified custom domain)
-  const validDomain = await isValidReturnDomain(state.returnDomain)
-  if (!validDomain) {
-    console.error('Invalid return domain:', state.returnDomain)
-    return NextResponse.json({ error: 'Invalid return domain' }, { status: 400 })
+    return NextResponse.redirect(buildErrorRedirect(state.callbackUrl, 'settings_not_found'))
   }
 
   // Exchange code for token
-  const tokenResult = await exchangeCodeForToken(provider, code)
+  const redirectUri = buildCallbackUrl(request)
+  const tokenResult = await exchangeCodeForToken(provider, code, redirectUri)
   if ('error' in tokenResult) {
     console.error('Token exchange error:', tokenResult.error)
-    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'token_exchange_failed'))
+    return NextResponse.redirect(buildErrorRedirect(state.callbackUrl, 'token_exchange_failed'))
   }
 
   // Get user info
   const userInfoResult = await getUserInfo(provider, tokenResult.accessToken)
   if ('error' in userInfoResult) {
     console.error('User info error:', userInfoResult.error)
-    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'user_info_failed'))
+    return NextResponse.redirect(buildErrorRedirect(state.callbackUrl, 'user_info_failed'))
   }
 
   const { email, name, image, providerId, providerAccountId } = userInfoResult
 
   try {
-    // Check if user already exists in this org
+    // Check if user already exists by email (OSS: no workspace scoping needed)
     const existingUser = await db.query.user.findFirst({
-      where: and(eq(user.email, email), eq(user.workspaceId, org.id)),
+      where: eq(user.email, email),
     })
 
     let userId: UserId
@@ -364,10 +321,9 @@ export async function GET(request: NextRequest) {
       const memberRole = state.context === 'team' ? 'member' : 'user'
 
       await db.transaction(async (tx) => {
-        // Create user
+        // Create user (no workspaceId - removed for OSS)
         await tx.insert(user).values({
           id: userId,
-          workspaceId: org.id,
           name,
           email,
           emailVerified: true, // OAuth emails are verified
@@ -391,40 +347,44 @@ export async function GET(request: NextRequest) {
         await tx.insert(member).values({
           id: memberId,
           userId,
-          workspaceId: org.id,
           role: memberRole,
           createdAt: new Date(),
         })
       })
     }
 
-    // Create session transfer token
-    const transferTokenId = generateId('transfer_token')
-    const transferToken = generateSecureToken()
+    // Create session directly (OSS: no transfer token needed)
+    // Better-auth uses crypto.randomUUID() for session IDs
+    const sessionId = crypto.randomUUID()
+    const sessionToken = crypto.randomUUID()
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
-    await db.insert(sessionTransferToken).values({
-      id: transferTokenId,
-      token: transferToken,
+    await db.insert(session).values({
+      id: sessionId,
       userId,
-      targetDomain: state.returnDomain,
-      callbackUrl: state.callbackUrl,
-      context: state.context,
-      expiresAt: new Date(Date.now() + 30000), // 30 seconds
+      token: sessionToken,
+      expiresAt,
+      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
+      userAgent: request.headers.get('user-agent'),
       createdAt: new Date(),
+      updatedAt: new Date(),
     })
 
-    // Redirect to tenant domain with transfer token
-    const protocol = getProtocol()
-    let redirectUrl = `${protocol}://${state.returnDomain}/api/auth/trust-login?token=${transferToken}`
+    // Set session cookie
+    const response = NextResponse.redirect(new URL(state.callbackUrl, request.url))
+    const isSecure = request.headers.get('x-forwarded-proto') === 'https'
 
-    // Pass popup param if this was initiated from a popup window
-    if (state.popup) {
-      redirectUrl += '&popup=true'
-    }
+    response.cookies.set('better-auth.session_token', sessionToken, {
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: '/',
+    })
 
-    return NextResponse.redirect(redirectUrl)
+    return response
   } catch (error) {
     console.error('OAuth callback error:', error)
-    return NextResponse.redirect(buildErrorRedirect(state.returnDomain, 'signup_failed'))
+    return NextResponse.redirect(buildErrorRedirect(state.callbackUrl, 'signup_failed'))
   }
 }

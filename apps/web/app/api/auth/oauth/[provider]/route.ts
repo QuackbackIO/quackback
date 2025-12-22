@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, workspace, eq } from '@/lib/db'
+import { db, settings, eq } from '@/lib/db'
 import { signOAuthState } from '@/lib/auth/oauth-state'
 
 /**
@@ -39,11 +39,10 @@ const OAUTH_CONFIGS: Record<string, OAuthConfig | undefined> = {
   },
 }
 
-function buildCallbackUrl(): string {
-  const domain = process.env.APP_DOMAIN
-  if (!domain) throw new Error('APP_DOMAIN is required')
-  const protocol = domain.includes('localhost') ? 'http' : 'https'
-  return `${protocol}://${domain}/api/auth/oauth-callback`
+function buildCallbackUrl(request: NextRequest): string {
+  const proto = request.headers.get('x-forwarded-proto') || 'http'
+  const host = request.headers.get('host')
+  return `${proto}://${host}/api/auth/oauth-callback`
 }
 
 export async function GET(
@@ -77,14 +76,14 @@ export async function GET(
     return NextResponse.json({ error: `${provider} OAuth is not configured` }, { status: 500 })
   }
 
-  // Validate org exists
-  const org = await db.query.workspace.findFirst({
-    where: eq(workspace.slug, orgSlug),
+  // Validate settings exists
+  const org = await db.query.settings.findFirst({
+    where: eq(settings.slug, orgSlug),
     columns: { id: true },
   })
 
   if (!org) {
-    return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Settings not found' }, { status: 404 })
   }
 
   // Build state with workspace info (HMAC-signed to prevent tampering)
@@ -101,7 +100,7 @@ export async function GET(
   // Build OAuth URL
   const oauthUrl = new URL(config.authUrl)
   oauthUrl.searchParams.set('client_id', config.clientId)
-  oauthUrl.searchParams.set('redirect_uri', buildCallbackUrl())
+  oauthUrl.searchParams.set('redirect_uri', buildCallbackUrl(request))
   oauthUrl.searchParams.set('scope', config.scope)
   oauthUrl.searchParams.set('state', `${provider}:${signedState}`)
 
