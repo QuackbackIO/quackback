@@ -1,5 +1,6 @@
 'use client'
 
+import type { BoardId } from '@quackback/ids'
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -110,7 +111,7 @@ export function SubmitPostDialog({
 
     try {
       const result = await createPost.mutateAsync({
-        boardId: selectedBoardId,
+        boardId: selectedBoardId as BoardId,
         title: title.trim(),
         content: plainText,
         contentJson,

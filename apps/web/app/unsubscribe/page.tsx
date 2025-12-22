@@ -2,8 +2,6 @@ import { redirect } from 'next/navigation'
 import { XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import { db, eq, and, workspaceDomain } from '@/lib/db'
-import type { WorkspaceId } from '@quackback/ids'
 
 interface UnsubscribePageProps {
   searchParams: Promise<{ token?: string }>
@@ -24,17 +22,14 @@ export default async function UnsubscribePage({ searchParams }: UnsubscribePageP
       return <ErrorPage error="invalid" />
     }
 
-    // Get the primary workspace domain for redirect
-    const tenantUrl = await getTenantUrl(result.workspaceId as WorkspaceId)
-
-    // Redirect to the post
+    // Redirect to the post (single-tenant mode - no domain lookup needed)
     if (result.postId && result.post) {
-      const postUrl = `${tenantUrl}/b/${result.post.boardSlug}/posts/${result.postId}?unsubscribed=true`
+      const postUrl = `/b/${result.post.boardSlug}/posts/${result.postId}?unsubscribed=true`
       redirect(postUrl)
     }
 
-    // Fallback to tenant home if no post info
-    redirect(tenantUrl)
+    // Fallback to home if no post info
+    redirect('/')
   } catch (error) {
     console.error('Error processing unsubscribe:', error)
     return <ErrorPage error="failed" />
@@ -94,21 +89,4 @@ function getErrorContent(error: string): { title: string; message: string } {
         message: 'This unsubscribe link is not valid. Please use the link from your email.',
       }
   }
-}
-
-async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
-  const domain = await db.query.workspaceDomain.findFirst({
-    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
-  })
-
-  if (domain) {
-    const isLocalhost = domain.domain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
-    return `${protocol}://${domain.domain}`
-  }
-
-  const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
-  const isLocalhost = appDomain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${appDomain}`
 }

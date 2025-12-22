@@ -7,18 +7,12 @@ import {
   getNotificationPreferencesAction,
   updateNotificationPreferencesAction,
 } from '@/lib/actions/user'
-import type { WorkspaceId } from '@quackback/ids'
-
-interface NotificationPreferencesFormProps {
-  workspaceId: string
-}
-
 interface Preferences {
   emailStatusChange: boolean
   emailNewComment: boolean
 }
 
-export function NotificationPreferencesForm({ workspaceId }: NotificationPreferencesFormProps) {
+export function NotificationPreferencesForm() {
   const [preferences, setPreferences] = useState<Preferences | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -28,9 +22,7 @@ export function NotificationPreferencesForm({ workspaceId }: NotificationPrefere
   useEffect(() => {
     async function fetchPreferences() {
       try {
-        const result = await getNotificationPreferencesAction({
-          workspaceId: workspaceId as WorkspaceId,
-        })
+        const result = await getNotificationPreferencesAction({})
         if (!result.success) {
           throw new Error(result.error.message)
         }
@@ -42,7 +34,7 @@ export function NotificationPreferencesForm({ workspaceId }: NotificationPrefere
       }
     }
     fetchPreferences()
-  }, [workspaceId])
+  }, [])
 
   // Update a single preference
   const updatePreference = useCallback(
@@ -57,7 +49,6 @@ export function NotificationPreferencesForm({ workspaceId }: NotificationPrefere
 
       try {
         const result = await updateNotificationPreferencesAction({
-          workspaceId: workspaceId as WorkspaceId,
           [key]: value,
         })
 
@@ -74,7 +65,7 @@ export function NotificationPreferencesForm({ workspaceId }: NotificationPrefere
         setSaving(null)
       }
     },
-    [workspaceId, preferences]
+    [preferences]
   )
 
   if (loading) {

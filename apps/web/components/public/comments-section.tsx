@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { CommentThread } from './comment-thread'
-import type { PostId } from '@quackback/ids'
+import type { PostId, CommentId } from '@quackback/ids'
 
 interface CommentReaction {
   emoji: string
@@ -11,7 +11,7 @@ interface CommentReaction {
 }
 
 interface Comment {
-  id: string
+  id: CommentId
   content: string
   authorName: string | null
   memberId: string | null

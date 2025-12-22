@@ -6,7 +6,7 @@ import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useSession } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import type { PostId } from '@quackback/ids'
+import type { PostId, CommentId } from '@quackback/ids'
 
 interface CommentReaction {
   emoji: string
@@ -15,7 +15,7 @@ interface CommentReaction {
 }
 
 interface Comment {
-  id: string
+  id: CommentId
   content: string
   authorName: string | null
   memberId: string | null

@@ -11,12 +11,6 @@ import { OTPAuthFormInline } from './otp-auth-form-inline'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 
-interface SsoProviderInfo {
-  providerId: string
-  issuer: string
-  domain: string
-}
-
 interface OrgAuthConfig {
   found: boolean
   oauth: {
@@ -25,12 +19,10 @@ interface OrgAuthConfig {
     microsoft?: boolean
   }
   openSignup?: boolean
-  ssoProviders?: SsoProviderInfo[]
 }
 
 interface AuthDialogProps {
   authConfig?: OrgAuthConfig | null
-  appDomain: string
   orgSlug: string
 }
 
@@ -41,7 +33,7 @@ interface AuthDialogProps {
  * Opens when triggered via useAuthPopover context.
  * Listens for auth success via BroadcastChannel.
  */
-export function AuthDialog({ authConfig, appDomain, orgSlug }: AuthDialogProps) {
+export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
 
   // Listen for auth success broadcasts from popup windows
@@ -70,7 +62,6 @@ export function AuthDialog({ authConfig, appDomain, orgSlug }: AuthDialogProps) 
         <OTPAuthFormInline
           mode={mode}
           authConfig={authConfig}
-          appDomain={appDomain}
           orgSlug={orgSlug}
           onModeSwitch={handleModeSwitch}
         />

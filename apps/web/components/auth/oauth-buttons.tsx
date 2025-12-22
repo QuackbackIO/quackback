@@ -4,11 +4,8 @@ import { Button } from '@/components/ui/button'
 
 interface OAuthButtonsProps {
   orgSlug: string
-  appDomain: string
   callbackUrl?: string
   context?: 'team' | 'portal'
-  /** Custom domain to return to after OAuth (if on custom domain) */
-  returnDomain?: string
   /** Whether to show GitHub sign-in button (default: true) */
   showGitHub?: boolean
   /** Whether to show Google sign-in button (default: true) */
@@ -18,35 +15,26 @@ interface OAuthButtonsProps {
 /**
  * OAuth Buttons Component
  *
- * Renders GitHub and Google sign-in buttons. OAuth flows go through the main
- * domain and redirect back to the tenant domain after authentication.
+ * Renders GitHub and Google sign-in buttons.
  */
 export function OAuthButtons({
   orgSlug,
-  appDomain,
   callbackUrl = '/',
   context = 'portal',
-  returnDomain,
   showGitHub = true,
   showGoogle = true,
 }: OAuthButtonsProps) {
-  const protocol = appDomain.includes('localhost') ? 'http' : 'https'
-
-  // Determine the return domain (current host if not specified)
-  const targetDomain =
-    returnDomain ||
-    (typeof window !== 'undefined' ? window.location.host : `${orgSlug}.${appDomain}`)
-
   function handleOAuthLogin(provider: 'github' | 'google') {
+    const returnDomain = window.location.host
     const params = new URLSearchParams({
       workspace: orgSlug,
-      returnDomain: targetDomain,
+      returnDomain,
       context,
       callbackUrl,
     })
 
-    const oauthUrl = `${protocol}://${appDomain}/api/auth/oauth/${provider}?${params}`
-    window.location.href = oauthUrl
+    // Use relative URL - OAuth route is on same origin
+    window.location.href = `/api/auth/oauth/${provider}?${params}`
   }
 
   // Don't render anything if both providers are disabled

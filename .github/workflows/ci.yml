@@ -12,9 +12,8 @@ env:
   # Auth
   BETTER_AUTH_SECRET: test-secret-for-ci-only-must-be-at-least-32-characters
   BETTER_AUTH_URL: http://localhost:3000
-  # App
-  NEXT_PUBLIC_APP_URL: http://localhost:3000
-  APP_DOMAIN: localhost:3000
+  # Root URL (for absolute URLs in emails, OAuth callbacks, etc.)
+  ROOT_URL: http://localhost:3000
 
 jobs:
   lint:

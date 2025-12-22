@@ -23,8 +23,7 @@ Open http://localhost:3000
 | ----------------- | ---------------------------------------------- |
 | **Framework**     | Next.js 16 (App Router)                        |
 | **Database**      | PostgreSQL with Drizzle ORM                    |
-| **Auth**          | Better-auth with organizations plugin          |
-| **Multi-tenancy** | Subdomain-based with Better-auth organizations |
+| **Auth**          | Better-auth with emailOTP plugin               |
 | **Runtime**       | Bun 1.3.3+                                     |
 | **Styling**       | Tailwind CSS v4                                |
 | **UI Components** | shadcn/ui                                      |
@@ -49,37 +48,19 @@ quackback/
 └── docker-compose.yml     # Local PostgreSQL
 ```
 
-## Multi-tenancy Model
+## Workspace Model
 
-The routing mode is determined by the `EDITION` environment variable:
+Quackback uses a single-workspace model:
 
-### Single-Tenant (EDITION=oss, default)
-
-- All routes rewrite to `/s/[DEFAULT_ORG_SLUG]/`
-- No subdomain routing required
-- Ideal for self-hosted single-organization deployments
-
-### Multi-Tenant (EDITION=cloud)
-
-- Uses **Better-auth organizations plugin** with full tenant isolation
-- **Main domain**: `localhost:3000` (dev) / `quackback.io` (prod)
-- **Tenant subdomains**: `{org-slug}.localhost:3000` (dev) / `{org-slug}.quackback.io` (prod)
-- **Custom domains**: Uses `workspace_domain` table + Cloudflare service binding for resolution
-- Per-subdomain session cookies (no cross-subdomain session sharing)
-- OAuth flows through main domain with one-time DB token transfer via `trustLogin` plugin
-
-### Common
-
-- Users are scoped to a single organization (`organizationId` on user table)
-- Data tables reference `organization_id` for isolation
-- RLS policies enforce tenant isolation at database level
-- Team roles: `owner` > `admin` > `member`; Portal users have role `user`
+- One workspace per installation
+- Team members have roles: `owner` > `admin` > `member`
+- Portal users (public feedback submitters) have role `user`
+- Fresh installations show an onboarding wizard to create the owner account and workspace
 
 ## Next.js 16 Notes
 
 - Uses `proxy.ts` instead of `middleware.ts` (Next.js 16 feature)
 - The proxy handles route protection and redirects
-- Domain-to-organization resolution happens in `lib/tenant.ts` via database lookup
 
 ## Commands
 
@@ -93,10 +74,10 @@ bun run test <file>   # Run single test file (e.g., bun run test packages/db/src
 
 # Database
 bun run db:generate   # Generate migrations from schema changes
-bun run db:migrate    # Run migrations (creates tables, RLS policies, permissions)
+bun run db:migrate    # Run migrations (creates tables)
 bun run db:studio     # Open Drizzle Studio
 bun run db:seed       # Seed demo data (requires migrations first)
-bun run db:reset      # Reset database (destructive, then run db:migrate + db:seed)
+bun run db:reset      # Reset database (destructive, then run db:migrate)
 
 # Cloudflare Workers Deployment
 cd apps/web
@@ -105,33 +86,20 @@ bun run preview:cf    # Build and preview locally with wrangler
 bun run deploy:cf     # Build and deploy to Cloudflare
 ```
 
-## Deployment Options
+## Deployment
 
-The codebase supports multiple deployment targets via the `EDITION` environment variable:
-
-### Self-Hosted (Default)
+Single-tenant deployment using standard Next.js:
 
 ```bash
-EDITION="oss"                    # All features enabled, no billing
-DEFAULT_ORG_SLUG="default"       # Single-tenant routing
-DATABASE_URL="postgresql://..."  # Standard PostgreSQL
+DATABASE_URL="postgresql://..."          # PostgreSQL connection
+ROOT_URL="https://your-domain.com"       # Required for absolute URLs (emails, OAuth)
+BETTER_AUTH_SECRET="..."                 # Auth secret (generate with: openssl rand -base64 32)
+BETTER_AUTH_URL="https://your-domain.com"
 ```
 
 - Uses standard `next build` output
-- Routes all traffic to `/s/[DEFAULT_ORG_SLUG]/`
 - Deploy via Docker, Vercel, or any Node.js host
-
-### Cloudflare Workers
-
-```bash
-EDITION="cloud"                  # Feature tiers + billing
-APP_DOMAIN="your-domain.com"     # Multi-tenant subdomain routing
-```
-
-- Uses OpenNext adapter for Cloudflare Workers
-- Database via Cloudflare Hyperdrive
-- Multi-tenant routing with subdomain + custom domain support
-- See `apps/web/wrangler.jsonc.example` for configuration template
+- On first visit, you'll be guided through onboarding to create your account and workspace
 
 ## Key Conventions
 
@@ -139,44 +107,37 @@ APP_DOMAIN="your-domain.com"     # Multi-tenant subdomain routing
 - **Components**: PascalCase (`UserProfile`)
 - **Functions**: camelCase (`getUserProfile`)
 - **Database tables**: snake_case (`feedback_items`)
-- **Multi-tenancy**: `organization_id` on all data tables
 - **Server Components by default**, `'use client'` only when needed
 
 ## App Route Groups
 
 Routes in `apps/web/app/` are organized by route groups:
 
-- `(main)/` - Main domain routes (landing, create-workspace, accept-invitation)
-- `(tenant)/` - Tenant subdomain routes
-  - `(public)/` - Public portal (feedback boards, roadmap)
-  - `admin/` - Admin dashboard (requires team role)
-  - `onboarding/` - User onboarding flow
-- `(auth)/` - Auth-related pages
-- `api/` - API routes (public and authenticated)
+- `(portal)/` - Public portal (feedback boards, roadmap)
+- `(auth)/` - Portal user auth (login, signup)
+- `(admin-auth)/` - Team member auth (admin login/signup)
+- `admin/` - Admin dashboard (requires team role)
+- `onboarding/` - User onboarding flow
+- `settings/` - User settings
+- `api/` - API routes
 
 ## Database Notes
 
 - Drizzle ORM for type-safe database access
-- Better-auth tables: `user`, `session`, `account`, `organization`, `member`, `invitation`
+- Better-auth tables: `user`, `session`, `account`, `settings`, `member`, `invitation`
 - Application tables: `boards`, `posts`, `comments`, `votes`, `tags`, `roadmaps`, `changelog_entries`, `statuses`
-- RLS policies use `app.organization_id` session variable for tenant isolation
 
-## RLS and Tenant Context
+## Auth and Tenant Context
 
-Database queries requiring tenant isolation use `withTenantContext` or `withAuthenticatedTenant`:
+Database queries use `requireAuth` or `requireTenantRole` helpers:
 
 ```typescript
-// In API routes - validates auth and sets RLS context
-const result = await withApiTenantContext(organizationId, async ({ db }) => {
-  return db.query.posts.findMany() // RLS auto-filters by org
-})
+// Require authenticated user
+const { session, user } = await requireAuth()
 
-// In server components - redirects on auth failure
-const { withRLS } = await requireAuthenticatedTenant()
-const posts = await withRLS((db) => db.query.posts.findMany())
+// Require team member role
+const { settings, member } = await requireTenantRole(['owner', 'admin'])
 ```
-
-The tenant context (`packages/db/src/tenant-context.ts`) sets PostgreSQL session variables and switches to the `app_user` role for RLS policy enforcement.
 
 ## Environment Variables
 
@@ -185,23 +146,20 @@ See `.env.example` for all available variables. Key ones:
 | Variable              | Description                           |
 | --------------------- | ------------------------------------- |
 | `DATABASE_URL`        | PostgreSQL connection string          |
-| `BETTER_AUTH_SECRET`  | Auth secret (auto-generated by setup) |
-| `NEXT_PUBLIC_APP_URL` | Public app URL                        |
+| `BETTER_AUTH_SECRET`  | Auth secret (generate with openssl)   |
+| `BETTER_AUTH_URL`     | Base URL for auth (same as ROOT_URL)  |
+| `ROOT_URL`            | Public app URL (for emails, OAuth)    |
 
 ## Local Development
 
-The app uses `*.localhost` subdomains which resolve automatically in modern browsers:
-
 - Main app: `http://localhost:3000`
-- Tenant portals: `http://{org-slug}.localhost:3000`
 
 ## Demo Credentials
 
 After running `bun run db:seed`:
 
 - Email: `demo@example.com`
-- Password: `demo1234`
-- Organization: Acme Corp (`http://acme.localhost:3000`)
+- Uses email OTP authentication (code sent to email, logged to console in dev)
 
 ## Git Commits
 

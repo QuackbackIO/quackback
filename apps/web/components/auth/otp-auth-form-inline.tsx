@@ -4,14 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, InfoIcon, Mail, ArrowLeft, Github, KeyRound } from 'lucide-react'
+import { Loader2, InfoIcon, Mail, ArrowLeft, Github } from 'lucide-react'
 import { openAuthPopup, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
-
-interface SsoProviderInfo {
-  providerId: string
-  issuer: string
-  domain: string
-}
 
 interface OrgAuthConfig {
   found: boolean
@@ -21,7 +15,6 @@ interface OrgAuthConfig {
     microsoft?: boolean
   }
   openSignup?: boolean
-  ssoProviders?: SsoProviderInfo[]
 }
 
 interface InvitationInfo {
@@ -36,8 +29,6 @@ interface OTPAuthFormInlineProps {
   mode: 'login' | 'signup'
   authConfig?: OrgAuthConfig | null
   invitationId?: string | null
-  /** APP_DOMAIN from server for building OAuth URLs */
-  appDomain: string
   /** Organization slug for OAuth */
   orgSlug: string
   /** Called when auth completes (popup broadcasts success) - handled by parent via BroadcastChannel */
@@ -60,7 +51,6 @@ export function OTPAuthFormInline({
   mode,
   authConfig,
   invitationId,
-  appDomain,
   orgSlug,
   onModeSwitch,
 }: OTPAuthFormInlineProps) {
@@ -71,7 +61,7 @@ export function OTPAuthFormInline({
   const [error, setError] = useState('')
   // Track which specific action is loading (null = not loading)
   const [loadingAction, setLoadingAction] = useState<
-    'email' | 'code' | 'name' | 'google' | 'github' | 'microsoft' | `sso:${string}` | null
+    'email' | 'code' | 'name' | 'google' | 'github' | 'microsoft' | null
   >(null)
   const [_codeSent, setCodeSent] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
@@ -273,52 +263,23 @@ export function OTPAuthFormInline({
       return
     }
 
-    // Build OAuth URL using server-provided appDomain
-    const isLocalhost = appDomain.includes('localhost')
-    const protocol = isLocalhost ? 'http' : 'https'
     const returnDomain = window.location.host
+    const params = new URLSearchParams({
+      workspace: orgSlug,
+      returnDomain,
+      context: 'portal',
+      callbackUrl: '/',
+      popup: 'true',
+    })
 
-    const oauthUrl = new URL(`${protocol}://${appDomain}/api/auth/oauth/${provider}`)
-    oauthUrl.searchParams.set('workspace', orgSlug)
-    oauthUrl.searchParams.set('returnDomain', returnDomain)
-    oauthUrl.searchParams.set('context', 'portal')
-    oauthUrl.searchParams.set('callbackUrl', '/')
-    oauthUrl.searchParams.set('popup', 'true')
+    // Use relative URL - OAuth route is on same origin
+    const oauthUrl = `/api/auth/oauth/${provider}?${params}`
 
     setError('')
     setLoadingAction(provider)
     setPopupBlocked(false)
 
-    const popup = openAuthPopup(oauthUrl.toString())
-    if (!popup) {
-      setPopupBlocked(true)
-      setLoadingAction(null)
-      return
-    }
-
-    trackPopup(popup)
-  }
-
-  /**
-   * Open SSO in popup window
-   */
-  const initiateSsoPopup = (providerId: string) => {
-    if (hasPopup()) {
-      focusPopup()
-      return
-    }
-
-    // Build SSO URL - Better-Auth's SSO endpoint
-    const ssoUrl = new URL('/api/auth/sign-in/sso', window.location.origin)
-    ssoUrl.searchParams.set('providerId', providerId)
-    // SSO callback will need to handle popup mode
-    // For now, this may not fully work - SSO might need additional backend changes
-
-    setError('')
-    setLoadingAction(`sso:${providerId}`)
-    setPopupBlocked(false)
-
-    const popup = openAuthPopup(ssoUrl.toString())
+    const popup = openAuthPopup(oauthUrl)
     if (!popup) {
       setPopupBlocked(true)
       setLoadingAction(null)
@@ -333,8 +294,6 @@ export function OTPAuthFormInline({
   const showGithub = authConfig?.oauth?.github ?? true
   const showMicrosoft = authConfig?.oauth?.microsoft ?? false
   const showOAuth = showGoogle || showGithub || showMicrosoft
-  const ssoProviders = authConfig?.ssoProviders ?? []
-  const showSso = ssoProviders.length > 0
 
   // Loading invitation
   if (loadingInvitation) {
@@ -389,43 +348,6 @@ export function OTPAuthFormInline({
             </div>
           </div>
         </div>
-      )}
-
-      {/* SSO Providers - only show on initial email step for non-invitation flow */}
-      {showSso && step === 'email' && !invitation && (
-        <>
-          <div className="space-y-3">
-            {ssoProviders.map((provider) => {
-              const isLoading = loadingAction === `sso:${provider.providerId}`
-              return (
-                <Button
-                  key={provider.providerId}
-                  onClick={() => initiateSsoPopup(provider.providerId)}
-                  variant="outline"
-                  className="w-full"
-                  disabled={loadingAction !== null}
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <KeyRound className="h-4 w-4" />
-                  )}
-                  Sign in with {provider.issuer}
-                </Button>
-              )
-            })}
-          </div>
-          {showOAuth && (
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-              </div>
-            </div>
-          )}
-        </>
       )}
 
       {/* OAuth Buttons - only show on initial email step for non-invitation flow */}

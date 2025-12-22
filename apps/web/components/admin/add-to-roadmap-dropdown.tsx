@@ -51,13 +51,11 @@ export function AddToRoadmapDropdown({
     try {
       if (isCurrentlyOn) {
         await removePostFromRoadmapAction({
-          workspaceId,
           roadmapId: roadmapId as RoadmapId,
           postId,
         })
       } else {
         await addPostToRoadmapAction({
-          workspaceId,
           roadmapId: roadmapId as RoadmapId,
           postId,
         })

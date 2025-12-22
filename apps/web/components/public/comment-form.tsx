@@ -18,12 +18,12 @@ import { useSession, signOut } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { createCommentAction } from '@/lib/actions/comments'
-import type { PostId } from '@quackback/ids'
+import type { PostId, CommentId } from '@quackback/ids'
 
 interface SubmitCommentParams {
   postId: PostId
   content: string
-  parentId?: string | null
+  parentId?: CommentId | null
   authorName?: string | null
   authorEmail?: string | null
   memberId?: string | null
@@ -31,7 +31,7 @@ interface SubmitCommentParams {
 
 interface CommentFormProps {
   postId: PostId
-  parentId?: string
+  parentId?: CommentId
   onSuccess?: () => void
   onCancel?: () => void
   user?: { name: string | null; email: string; memberId?: string }

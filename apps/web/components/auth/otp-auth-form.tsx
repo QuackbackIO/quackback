@@ -1,23 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { SsoLoginButton } from './sso-login-button'
 import { OAuthButtons } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, InfoIcon, Mail, ArrowLeft } from 'lucide-react'
 
-interface SsoProviderInfo {
-  providerId: string
-  issuer: string
-  domain: string
-}
-
 interface OrgAuthConfig {
   found: boolean
   openSignup?: boolean
-  ssoProviders?: SsoProviderInfo[]
 }
 
 interface InvitationInfo {
@@ -43,8 +35,6 @@ interface OTPAuthFormProps {
   context?: 'team' | 'portal'
   /** Organization slug for OAuth flows */
   orgSlug?: string
-  /** App domain for OAuth flows (passed from server) */
-  appDomain?: string
   /** Whether to show OAuth buttons (GitHub, Google) */
   showOAuth?: boolean
   /** OAuth provider configuration (which providers are enabled) */
@@ -69,7 +59,6 @@ export function OTPAuthForm({
   callbackUrl = '/',
   context = 'portal',
   orgSlug,
-  appDomain,
   showOAuth = false,
   oauthConfig,
 }: OTPAuthFormProps) {
@@ -243,10 +232,6 @@ export function OTPAuthForm({
     }
   }
 
-  // Determine which SSO providers to show
-  const ssoProviders = authConfig?.ssoProviders ?? []
-  const showSso = ssoProviders.length > 0
-
   // Loading invitation
   if (loadingInvitation) {
     return (
@@ -307,14 +292,12 @@ export function OTPAuthForm({
       {/* OAuth Providers (GitHub, Google) - show on initial email step for non-invitation flow */}
       {/* If oauthConfig is provided, use it; otherwise fall back to showOAuth for backward compatibility */}
       {orgSlug &&
-        appDomain &&
         step === 'email' &&
         !invitation &&
         (oauthConfig ? oauthConfig.github || oauthConfig.google : showOAuth) && (
           <>
             <OAuthButtons
               orgSlug={orgSlug}
-              appDomain={appDomain}
               callbackUrl={callbackUrl}
               context={context}
               showGitHub={oauthConfig?.github ?? showOAuth}
@@ -332,34 +315,6 @@ export function OTPAuthForm({
             </div>
           </>
         )}
-
-      {/* SSO Providers (Enterprise SAML/OIDC) - only show on initial email step for non-invitation flow */}
-      {showSso && step === 'email' && !invitation && (
-        <>
-          <div className="space-y-3">
-            {ssoProviders.map((provider) => (
-              <SsoLoginButton
-                key={provider.providerId}
-                providerId={provider.providerId}
-                issuer={provider.issuer}
-                callbackUrl={callbackUrl}
-              />
-            ))}
-          </div>
-          {!showOAuth && (
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with email
-                </span>
-              </div>
-            </div>
-          )}
-        </>
-      )}
 
       {/* Step 1: Email Input */}
       {step === 'email' && (

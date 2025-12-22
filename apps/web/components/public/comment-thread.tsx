@@ -21,7 +21,7 @@ interface CommentReaction {
 }
 
 interface Comment {
-  id: string
+  id: CommentId
   content: string
   authorName: string | null
   memberId: string | null
@@ -133,7 +133,7 @@ function CommentItem({
     startTransition(async () => {
       try {
         const result = await toggleReactionAction({
-          commentId: comment.id as CommentId,
+          commentId: comment.id,
           emoji,
         })
 

@@ -30,15 +30,13 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { sendInvitationAction } from '@/lib/actions/admin'
-import type { WorkspaceId } from '@quackback/ids'
 
 interface InviteMemberDialogProps {
-  workspaceId: string
   open: boolean
   onClose: () => void
 }
 
-export function InviteMemberDialog({ workspaceId, open, onClose }: InviteMemberDialogProps) {
+export function InviteMemberDialog({ open, onClose }: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
@@ -56,7 +54,6 @@ export function InviteMemberDialog({ workspaceId, open, onClose }: InviteMemberD
 
     try {
       const result = await sendInvitationAction({
-        workspaceId: workspaceId as WorkspaceId,
         email: data.email,
         name: data.name || undefined,
         role: data.role,

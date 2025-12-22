@@ -21,7 +21,6 @@ initializeDb()
 export * from '@/lib/adapters/db'
 
 // Re-export query helpers
-export * from '@quackback/db/queries/subscriptions'
 export * from '@quackback/db/queries/usage'
 
 // Export async database getter for Cloudflare ISR/SSG routes
