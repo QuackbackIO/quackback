@@ -28,6 +28,7 @@ const systemThemeScript = `
 `
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Settings validation and onboarding redirect handled by individual layouts/pages
   const cookieStore = await cookies()
   const themeCookie = cookieStore.get(THEME_COOKIE_NAME)?.value as Theme | undefined
   const theme = themeCookie || 'system'
