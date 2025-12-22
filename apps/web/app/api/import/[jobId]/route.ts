@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getSession } from '@/lib/auth/server'
-import { db, member, eq, and } from '@/lib/db'
+import { validateApiTenantAccess } from '@/lib/tenant'
 import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
-import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    // Verify user is authenticated
-    const session = await getSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Validate tenant access
+    const validation = await validateApiTenantAccess()
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
 
     const { jobId } = await params
@@ -22,25 +20,16 @@ export async function GET(
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 })
     }
 
-    // Extract and verify workspaceId from jobId (format: import-{orgId}-{timestamp})
-    // TypeID format: import-org_01h455vb4pex5vsknk084sn02q-1702000000000
+    // Extract workspaceId from jobId (format: import-{workspaceId}-{timestamp})
+    // Example: import-workspace_01h455vb4pex5vsknk084sn02q-1702000000000
     const parts = jobId.split('-')
-    if (parts.length !== 3 || parts[0] !== 'import') {
+    if (parts.length < 3 || parts[0] !== 'import') {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
-    // parts[1] is the TypeID (org_...)
-    const orgIdFromJob = parts[1] as WorkspaceId
-    if (!isValidTypeId(orgIdFromJob, 'workspace')) {
-      return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
-    }
-
-    // Verify user belongs to this organization via member table
-    const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, orgIdFromJob)),
-    })
-
-    if (!memberRecord) {
+    // parts[1] is the workspace TypeID - verify it matches the user's organization
+    const workspaceIdFromJob = parts.slice(1, -1).join('-') // Handle TypeIDs that may contain dashes
+    if (workspaceIdFromJob !== validation.settings.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

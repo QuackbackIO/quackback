@@ -6,28 +6,19 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, workspaceIntegrations, decryptToken, eq, and } from '@/lib/db'
+import { db, member, integrations, decryptToken, eq } from '@/lib/db'
 import { listSlackChannels } from '@quackback/integrations'
-import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const orgIdParam = searchParams.get('orgId')
-
-  if (!orgIdParam || !isValidTypeId(orgIdParam, 'workspace')) {
-    return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
-  }
-  const orgId = orgIdParam as WorkspaceId
-
+export async function GET() {
   // Validate session
   const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Check user has admin/owner role in org
+  // Check user has admin/owner role
   const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.workspaceId, orgId), eq(member.userId, session.user.id)),
+    where: eq(member.userId, session.user.id),
   })
 
   if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
@@ -35,11 +26,8 @@ export async function GET(request: Request) {
   }
 
   // Get the Slack integration
-  const integration = await db.query.workspaceIntegrations.findFirst({
-    where: and(
-      eq(workspaceIntegrations.workspaceId, orgId),
-      eq(workspaceIntegrations.integrationType, 'slack')
-    ),
+  const integration = await db.query.integrations.findFirst({
+    where: eq(integrations.integrationType, 'slack'),
   })
 
   if (!integration || integration.status !== 'active') {
@@ -51,8 +39,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Decrypt token and fetch channels
-    const accessToken = decryptToken(integration.accessTokenEncrypted, orgId)
+    // Decrypt token and fetch channels (pass empty string for single-tenant)
+    const accessToken = decryptToken(integration.accessTokenEncrypted, '')
     const channels = await listSlackChannels(accessToken)
 
     return NextResponse.json({ channels })

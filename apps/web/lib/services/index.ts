@@ -11,8 +11,8 @@ import {
   type TagService,
   memberService,
   type MemberService,
-  workspaceService,
-  type WorkspaceService,
+  settingsService,
+  type SettingsService,
   userService,
   type UserService,
   roadmapService,
@@ -77,10 +77,10 @@ export function getMemberService(): MemberService {
 }
 
 /**
- * Get the WorkspaceService instance
+ * Get the SettingsService instance
  */
-export function getWorkspaceService(): WorkspaceService {
-  return workspaceService
+export function getSettingsService(): SettingsService {
+  return settingsService
 }
 
 /**
@@ -119,8 +119,8 @@ export const services = {
   get members(): MemberService {
     return getMemberService()
   },
-  get organizations(): WorkspaceService {
-    return getWorkspaceService()
+  get settings(): SettingsService {
+    return getSettingsService()
   },
   get users(): UserService {
     return getUserService()

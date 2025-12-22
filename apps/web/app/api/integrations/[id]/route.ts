@@ -6,14 +6,11 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, workspaceIntegrations, integrationEventMappings, eq, and } from '@/lib/db'
+import { db, member, integrations, integrationEventMappings, eq, and } from '@/lib/db'
 import { z } from 'zod'
-import { isValidTypeId, type IntegrationId, type WorkspaceId } from '@quackback/ids'
+import { isValidTypeId, type IntegrationId } from '@quackback/ids'
 
 const updateSchema = z.object({
-  orgId: z.string().refine((id) => isValidTypeId(id, 'workspace'), {
-    message: 'Invalid organization ID format',
-  }) as z.ZodType<WorkspaceId>,
   enabled: z.boolean().optional(),
   config: z
     .object({
@@ -47,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { orgId, enabled, config, eventMappings } = body
+  const { enabled, config, eventMappings } = body
 
   // Validate session
   const session = await getSession()
@@ -55,9 +52,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Check user has admin/owner role in org
+  // Check user has admin/owner role
   const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.workspaceId, orgId), eq(member.userId, session.user.id)),
+    where: eq(member.userId, session.user.id),
   })
 
   if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
@@ -65,11 +62,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // Get the integration
-  const integration = await db.query.workspaceIntegrations.findFirst({
-    where: and(
-      eq(workspaceIntegrations.id, integrationId),
-      eq(workspaceIntegrations.workspaceId, orgId)
-    ),
+  const integration = await db.query.integrations.findFirst({
+    where: eq(integrations.id, integrationId),
   })
 
   if (!integration) {
@@ -77,7 +71,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // Update integration
-  const updates: Partial<typeof workspaceIntegrations.$inferInsert> = {
+  const updates: Partial<typeof integrations.$inferInsert> = {
     updatedAt: new Date(),
   }
 
@@ -92,9 +86,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   await db
-    .update(workspaceIntegrations)
+    .update(integrations)
     .set(updates)
-    .where(eq(workspaceIntegrations.id, integrationId))
+    .where(eq(integrations.id, integrationId))
 
   // Update event mappings if provided
   if (eventMappings && eventMappings.length > 0) {
@@ -103,7 +97,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await db
         .insert(integrationEventMappings)
         .values({
-          workspaceId: orgId,
           integrationId,
           eventType: mapping.eventType,
           actionType: 'send_message', // Default action for now
@@ -134,36 +127,26 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
   const integrationId = integrationIdParam as IntegrationId
 
-  const { searchParams } = new URL(request.url)
-  const orgIdParam = searchParams.get('orgId')
-
-  if (!orgIdParam || !isValidTypeId(orgIdParam, 'workspace')) {
-    return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
-  }
-  const orgId = orgIdParam as WorkspaceId
-
   // Validate session
   const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Check user has admin/owner role in org
+  // Check user has admin/owner role
   const memberRecord = await db.query.member.findFirst({
-    where: and(eq(member.workspaceId, orgId), eq(member.userId, session.user.id)),
+    where: eq(member.userId, session.user.id),
   })
 
   if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
     return NextResponse.json({ error: 'Forbidden - admin role required' }, { status: 403 })
   }
 
-  // Verify integration belongs to org and delete
+  // Delete integration
   const result = await db
-    .delete(workspaceIntegrations)
-    .where(
-      and(eq(workspaceIntegrations.id, integrationId), eq(workspaceIntegrations.workspaceId, orgId))
-    )
-    .returning({ id: workspaceIntegrations.id })
+    .delete(integrations)
+    .where(eq(integrations.id, integrationId))
+    .returning({ id: integrations.id })
 
   if (result.length === 0) {
     return NextResponse.json({ error: 'Integration not found' }, { status: 404 })

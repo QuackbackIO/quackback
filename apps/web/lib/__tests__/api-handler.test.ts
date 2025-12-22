@@ -21,7 +21,7 @@ vi.mock('next/server', () => ({
 
 import {
   ApiError,
-  verifyResourceOwnership,
+  verifyResourceExists,
   validateBody,
   hasMinimumRole,
   isAllowedRole,
@@ -46,13 +46,11 @@ describe('ApiError', () => {
   })
 })
 
-describe('verifyResourceOwnership', () => {
-  const orgId = 'org-123'
-
+describe('verifyResourceExists', () => {
   it('throws 404 when resource is null', () => {
-    expect(() => verifyResourceOwnership(null, orgId, 'Board')).toThrow(ApiError)
+    expect(() => verifyResourceExists(null, 'Board')).toThrow(ApiError)
     try {
-      verifyResourceOwnership(null, orgId, 'Board')
+      verifyResourceExists(null, 'Board')
     } catch (e) {
       expect(e).toBeInstanceOf(ApiError)
       expect((e as ApiError).status).toBe(404)
@@ -61,9 +59,9 @@ describe('verifyResourceOwnership', () => {
   })
 
   it('throws 404 when resource is undefined', () => {
-    expect(() => verifyResourceOwnership(undefined, orgId, 'Post')).toThrow(ApiError)
+    expect(() => verifyResourceExists(undefined, 'Post')).toThrow(ApiError)
     try {
-      verifyResourceOwnership(undefined, orgId, 'Post')
+      verifyResourceExists(undefined, 'Post')
     } catch (e) {
       expect(e).toBeInstanceOf(ApiError)
       expect((e as ApiError).status).toBe(404)
@@ -71,26 +69,14 @@ describe('verifyResourceOwnership', () => {
     }
   })
 
-  it('throws 403 when workspaceId does not match', () => {
-    const resource = { workspaceId: 'other-org' }
-    expect(() => verifyResourceOwnership(resource, orgId, 'Status')).toThrow(ApiError)
-    try {
-      verifyResourceOwnership(resource, orgId, 'Status')
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiError)
-      expect((e as ApiError).status).toBe(403)
-      expect((e as ApiError).message).toBe('Forbidden')
-    }
-  })
-
-  it('does not throw when resource is valid and org matches', () => {
-    const resource = { workspaceId: orgId, name: 'Test Resource' }
-    expect(() => verifyResourceOwnership(resource, orgId, 'Resource')).not.toThrow()
+  it('does not throw when resource exists', () => {
+    const resource = { name: 'Test Resource' }
+    expect(() => verifyResourceExists(resource, 'Resource')).not.toThrow()
   })
 
   it('uses default resource name when not provided', () => {
     try {
-      verifyResourceOwnership(null, orgId)
+      verifyResourceExists(null)
     } catch (e) {
       expect((e as ApiError).message).toBe('Resource not found')
     }

@@ -7,31 +7,32 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { db, encryptToken, workspaceIntegrations, workspaceDomain, eq, and } from '@/lib/db'
+import { db, encryptToken, integrations } from '@/lib/db'
 import { exchangeSlackCode } from '@quackback/integrations'
-import type { MemberId, WorkspaceId } from '@quackback/ids'
+import type { MemberId } from '@quackback/ids'
 
 /**
- * Get the tenant URL for an organization using its primary workspace domain.
+ * Build URL from request headers.
  */
-async function getTenantUrl(workspaceId: WorkspaceId): Promise<string | null> {
-  const domain = await db.query.workspaceDomain.findFirst({
-    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
-  })
-
-  if (!domain) {
-    return null
-  }
-
-  const isLocalhost = domain.domain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${domain.domain}`
+function buildBaseUrl(request: Request): string {
+  const proto = request.headers.get('x-forwarded-proto') || 'http'
+  const host = request.headers.get('host')
+  return `${proto}://${host}`
 }
 
-// Cookie name - use __Secure- prefix for HTTPS
-const APP_DOMAIN = process.env.APP_DOMAIN || 'localhost:3000'
-const IS_SECURE = !APP_DOMAIN.includes('localhost')
-const STATE_COOKIE_NAME = IS_SECURE ? '__Secure-slack_oauth_state' : 'slack_oauth_state'
+/**
+ * Determine if request is secure.
+ */
+function isSecureRequest(request: Request): boolean {
+  return request.headers.get('x-forwarded-proto') === 'https'
+}
+
+/**
+ * Get the state cookie name based on whether request is secure.
+ */
+function getStateCookieName(request: Request): string {
+  return isSecureRequest(request) ? '__Secure-slack_oauth_state' : 'slack_oauth_state'
+}
 const STATE_EXPIRY_MS = 5 * 60 * 1000 // 5 minutes
 
 function getHmacSecret(): string {
@@ -45,7 +46,7 @@ function getHmacSecret(): string {
 function verifyState(
   state: string
 ):
-  | { valid: true; data: { orgId: string; memberId: string; nonce: string; timestamp: number } }
+  | { valid: true; data: { memberId: string; nonce: string; timestamp: number } }
   | { valid: false } {
   try {
     const [payloadB64, signature] = state.split('.')
@@ -89,56 +90,54 @@ export async function GET(request: Request) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
 
-  // Get the org slug for redirect (we'll need to look it up)
+  const baseUrl = buildBaseUrl(request)
+  const cookieName = getStateCookieName(request)
   const cookieStore = await cookies()
-  const storedState = cookieStore.get(STATE_COOKIE_NAME)?.value
+  const storedState = cookieStore.get(cookieName)?.value
 
   // Clear the state cookie
-  cookieStore.delete(STATE_COOKIE_NAME)
+  cookieStore.delete(cookieName)
 
   // Check for Slack error
   if (error) {
     console.error('[Slack OAuth] Error from Slack:', error)
-    return redirectWithError('slack_denied', storedState)
+    return redirectWithError(baseUrl, 'slack_denied')
   }
 
   if (!code || !state) {
     console.error('[Slack OAuth] Missing code or state')
-    return redirectWithError('invalid_request', storedState)
+    return redirectWithError(baseUrl, 'invalid_request')
   }
 
   // Verify state cookie matches URL state
   if (!storedState || state !== storedState) {
     console.error('[Slack OAuth] State mismatch')
-    return redirectWithError('state_mismatch', storedState)
+    return redirectWithError(baseUrl, 'state_mismatch')
   }
 
   // Verify state signature and expiry
   const stateResult = verifyState(state)
   if (!stateResult.valid) {
     console.error('[Slack OAuth] Invalid state signature or expired')
-    return redirectWithError('invalid_state', storedState)
+    return redirectWithError(baseUrl, 'invalid_state')
   }
 
-  const { orgId: rawWorkspaceId, memberId: rawMemberId } = stateResult.data
+  const { memberId: rawMemberId } = stateResult.data
   // IDs from state are already in TypeID format
-  const orgId = rawWorkspaceId as WorkspaceId
   const memberId = rawMemberId as MemberId
 
   try {
     // Exchange code for token
-    const appUrl = process.env.BETTER_AUTH_URL || 'http://localhost:3000'
-    const redirectUri = `${appUrl}/api/integrations/slack/callback`
+    const redirectUri = `${baseUrl}/api/integrations/slack/callback`
     const { accessToken, teamId, teamName } = await exchangeSlackCode(code, redirectUri)
 
-    // Encrypt the token
-    const encryptedToken = encryptToken(accessToken, orgId)
+    // Encrypt the token (pass empty string for single-tenant)
+    const encryptedToken = encryptToken(accessToken, '')
 
     // Upsert the integration
     await db
-      .insert(workspaceIntegrations)
+      .insert(integrations)
       .values({
-        workspaceId: orgId,
         integrationType: 'slack',
         status: 'active',
         accessTokenEncrypted: encryptedToken,
@@ -149,7 +148,7 @@ export async function GET(request: Request) {
         config: {},
       })
       .onConflictDoUpdate({
-        target: [workspaceIntegrations.workspaceId, workspaceIntegrations.integrationType],
+        target: [integrations.integrationType],
         set: {
           status: 'active',
           accessTokenEncrypted: encryptedToken,
@@ -164,44 +163,16 @@ export async function GET(request: Request) {
         },
       })
 
-    // Get tenant URL for redirect (uses workspace_domains)
-    const tenantUrl = await getTenantUrl(orgId)
-
-    if (!tenantUrl) {
-      return redirectWithError('domain_not_found', storedState)
-    }
-
     // Redirect to Slack detail page with success
-    return NextResponse.redirect(`${tenantUrl}/admin/settings/integrations/slack?slack=connected`)
+    return NextResponse.redirect(`${baseUrl}/admin/settings/integrations/slack?slack=connected`)
   } catch (err) {
     console.error('[Slack OAuth] Exchange error:', err)
-    return redirectWithError('exchange_failed', storedState)
+    return redirectWithError(baseUrl, 'exchange_failed')
   }
 }
 
-async function redirectWithError(error: string, storedState: string | undefined) {
-  const appDomain = process.env.APP_DOMAIN || 'localhost:3000'
-  const isLocalhost = appDomain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-
-  // Try to extract orgId from stored state to redirect to correct org
-  if (storedState) {
-    try {
-      const [payloadB64] = storedState.split('.')
-      if (payloadB64) {
-        const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'))
-        const tenantUrl = await getTenantUrl(payload.orgId as WorkspaceId)
-        if (tenantUrl) {
-          return NextResponse.redirect(
-            `${tenantUrl}/admin/settings/integrations/slack?slack=error&reason=${error}`
-          )
-        }
-      }
-    } catch {
-      // Fall through to default redirect
-    }
-  }
-
-  // Fallback redirect to main domain
-  return NextResponse.redirect(`${protocol}://${appDomain}?slack_error=${error}`)
+function redirectWithError(baseUrl: string, error: string) {
+  return NextResponse.redirect(
+    `${baseUrl}/admin/settings/integrations/slack?slack=error&reason=${error}`
+  )
 }

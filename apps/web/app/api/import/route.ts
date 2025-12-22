@@ -7,7 +7,7 @@ import { getJobAdapter, isCloudflareWorker, type ImportJobData } from '@quackbac
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
 import { getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
-import { isValidTypeId, type BoardId, type WorkspaceId } from '@quackback/ids'
+import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_ROWS = 10000
@@ -18,16 +18,9 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const boardIdParam = formData.get('boardId') as string | null
-    const workspaceIdParam = formData.get('workspaceId') as string | null
-
-    // Validate organization ID format
-    if (!workspaceIdParam || !isValidTypeId(workspaceIdParam, 'workspace')) {
-      return NextResponse.json({ error: 'Invalid organization ID' }, { status: 400 })
-    }
-    const workspaceId = workspaceIdParam as WorkspaceId
 
     // Validate tenant access
-    const validation = await validateApiTenantAccess(workspaceId)
+    const validation = await validateApiTenantAccess()
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
@@ -63,13 +56,10 @@ export async function POST(request: NextRequest) {
       boardId = boardIdParam as BoardId
     }
 
-    // Validate board exists and belongs to organization
+    // Validate board exists
     let targetBoardId: BoardId | null = boardId
     if (boardId) {
-      const boardResult = await boardService.validateBoardBelongsToOrg(
-        boardId,
-        validation.workspace.id
-      )
+      const boardResult = await boardService.getBoardById(boardId, ctx)
       if (!boardResult.success) {
         return NextResponse.json({ error: 'Board not found' }, { status: 400 })
       }
@@ -136,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     // Create job data
     const jobData: ImportJobData = {
-      workspaceId: validation.workspace.id,
+      workspaceId: validation.settings.id,
       boardId: targetBoardId!,
       csvContent,
       totalRows,

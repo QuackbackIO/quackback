@@ -15,7 +15,6 @@ import {
   type MemberId,
   type IntegrationId,
   type InviteId,
-  type WorkspaceId,
   type UserId,
 } from '@quackback/ids'
 
@@ -54,7 +53,6 @@ type PrefixToTypeId = {
   member: MemberId
   integration: IntegrationId
   invite: InviteId
-  workspace: WorkspaceId
   user: UserId
 }
 
@@ -94,24 +92,20 @@ export function parseId(value: string, expectedPrefix?: IdPrefix): string {
 }
 
 /**
- * Verify that a resource exists and belongs to the expected workspace.
- * Throws ApiError if resource is not found (404) or doesn't belong to org (403).
+ * Verify that a resource exists.
+ * Throws ApiError if resource is not found (404).
  *
  * @example
  * const board = await db.query.boards.findFirst({ where: eq(boards.id, boardId) })
- * verifyResourceOwnership(board, validation.workspace.id, 'Board')
- * // board is now guaranteed to be non-null and belong to the org
+ * verifyResourceExists(board, 'Board')
+ * // board is now guaranteed to be non-null
  */
-export function verifyResourceOwnership<T extends { workspaceId: string }>(
+export function verifyResourceExists<T>(
   resource: T | null | undefined,
-  expectedWorkspaceId: string,
   resourceName: string = 'Resource'
 ): asserts resource is T {
   if (!resource) {
     throw new ApiError(`${resourceName} not found`, 404)
-  }
-  if (resource.workspaceId !== expectedWorkspaceId) {
-    throw new ApiError('Forbidden', 403)
   }
 }
 
@@ -219,50 +213,8 @@ type ApiHandler = (request: NextRequest, context: ApiHandlerContext) => Promise<
 export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions = {}) {
   return async (request: NextRequest): Promise<NextResponse> => {
     try {
-      // Extract workspaceId from body or query params
-      let workspaceIdParam: string | null = null
-
-      if (request.method === 'GET') {
-        const { searchParams } = new URL(request.url)
-        workspaceIdParam = searchParams.get('workspaceId')
-      } else {
-        // For POST/PATCH/PUT/DELETE, try to parse the body
-        // Clone the request so we can read the body twice
-        const clonedRequest = request.clone()
-        const contentType = request.headers.get('content-type') || ''
-
-        try {
-          if (contentType.includes('multipart/form-data')) {
-            // Handle multipart/form-data (file uploads)
-            const formData = await clonedRequest.formData()
-            workspaceIdParam = formData.get('workspaceId') as string | null
-          } else if (contentType.includes('application/json')) {
-            // Handle JSON body
-            const body = await clonedRequest.json()
-            workspaceIdParam = body.workspaceId ?? null
-          }
-        } catch {
-          // Body might not be JSON/FormData or might be empty
-        }
-
-        // Fallback to query params if not found in body
-        if (!workspaceIdParam) {
-          const { searchParams } = new URL(request.url)
-          workspaceIdParam = searchParams.get('workspaceId')
-        }
-      }
-
-      // Validate workspaceId format if provided
-      let workspaceId: WorkspaceId | null = null
-      if (workspaceIdParam) {
-        if (!isValidTypeId(workspaceIdParam, 'workspace')) {
-          return NextResponse.json({ error: 'Invalid workspace ID format' }, { status: 400 })
-        }
-        workspaceId = workspaceIdParam as WorkspaceId
-      }
-
       // Validate tenant access
-      const validation = await validateApiTenantAccess(workspaceId)
+      const validation = await validateApiTenantAccess()
       if (!validation.success) {
         return NextResponse.json({ error: validation.error }, { status: validation.status })
       }
@@ -276,7 +228,7 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
 
       // Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.workspace.id, options.feature)
+        const featureCheck = await checkFeatureAccess(validation.settings.id, options.feature)
         if (!featureCheck.allowed) {
           return NextResponse.json(
             {
@@ -306,7 +258,7 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
  * Returns a function that checks if the member has an allowed role.
  *
  * @example
- * const validation = await validateApiTenantAccess(workspaceId)
+ * const validation = await validateApiTenantAccess()
  * if (!validation.success) return errorResponse(validation.error, validation.status)
  *
  * if (!requireRole(validation.member.role, ['owner', 'admin'])) {
@@ -354,49 +306,8 @@ export function withApiHandlerParams<P>(
     try {
       const params = await routeContext.params
 
-      // Extract workspaceId from body or query params
-      let workspaceIdParam: string | null = null
-
-      if (request.method === 'GET') {
-        const { searchParams } = new URL(request.url)
-        workspaceIdParam = searchParams.get('workspaceId')
-      } else {
-        // For POST/PATCH/PUT/DELETE, try to parse the body
-        const clonedRequest = request.clone()
-        const contentType = request.headers.get('content-type') || ''
-
-        try {
-          if (contentType.includes('multipart/form-data')) {
-            // Handle multipart/form-data (file uploads)
-            const formData = await clonedRequest.formData()
-            workspaceIdParam = formData.get('workspaceId') as string | null
-          } else if (contentType.includes('application/json')) {
-            // Handle JSON body
-            const body = await clonedRequest.json()
-            workspaceIdParam = body.workspaceId ?? null
-          }
-        } catch {
-          // Body might not be JSON/FormData or might be empty
-        }
-
-        // Fallback to query params if not found in body
-        if (!workspaceIdParam) {
-          const { searchParams } = new URL(request.url)
-          workspaceIdParam = searchParams.get('workspaceId')
-        }
-      }
-
-      // Validate workspaceId format if provided
-      let workspaceId: WorkspaceId | null = null
-      if (workspaceIdParam) {
-        if (!isValidTypeId(workspaceIdParam, 'workspace')) {
-          return NextResponse.json({ error: 'Invalid workspace ID format' }, { status: 400 })
-        }
-        workspaceId = workspaceIdParam as WorkspaceId
-      }
-
       // Validate tenant access
-      const validation = await validateApiTenantAccess(workspaceId)
+      const validation = await validateApiTenantAccess()
       if (!validation.success) {
         return NextResponse.json({ error: validation.error }, { status: validation.status })
       }
@@ -410,7 +321,7 @@ export function withApiHandlerParams<P>(
 
       // Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.workspace.id, options.feature)
+        const featureCheck = await checkFeatureAccess(validation.settings.id, options.feature)
         if (!featureCheck.allowed) {
           return NextResponse.json(
             {
