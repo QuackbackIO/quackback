@@ -1,6 +1,6 @@
 {
-  "id": "4b1388b4-4ce4-4170-8310-b6bde5334e67",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "94a40c9b-5b98-4171-932d-5e607b3f50c5",
+  "prevId": "4b1388b4-4ce4-4170-8310-b6bde5334e67",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -448,12 +448,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "logo": {
-          "name": "logo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "logo_blob": {
           "name": "logo_blob",
           "type": "bytea",
@@ -474,6 +468,18 @@
         },
         "favicon_type": {
           "name": "favicon_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_logo_blob": {
+          "name": "header_logo_blob",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_logo_type": {
+          "name": "header_logo_type",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -510,18 +516,6 @@
         },
         "custom_css": {
           "name": "custom_css",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_logo_blob": {
-          "name": "header_logo_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_logo_type": {
-          "name": "header_logo_type",
           "type": "text",
           "primaryKey": false,
           "notNull": false

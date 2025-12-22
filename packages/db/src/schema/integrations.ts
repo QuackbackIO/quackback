@@ -11,25 +11,19 @@ import {
   unique,
   foreignKey,
 } from 'drizzle-orm/pg-core'
-import { relations, sql } from 'drizzle-orm'
-import { pgPolicy } from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { appUser } from './rls'
-import { member, workspace } from './auth'
-
-// Direct workspace_id check for RLS performance
-const directWorkspaceCheck = sql`workspace_id = current_setting('app.workspace_id', true)::uuid`
+import { member } from './auth'
 
 /**
- * Workspace-level integration configurations.
+ * Integration configurations.
  * Stores OAuth tokens (encrypted), connection status, and integration-specific config.
  */
-export const workspaceIntegrations = pgTable(
-  'workspace_integrations',
+export const integrations = pgTable(
+  'integrations',
   {
     id: typeIdWithDefault('integration')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
-    integrationType: varchar('integration_type', { length: 50 }).notNull(),
+    integrationType: varchar('integration_type', { length: 50 }).notNull().unique(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
 
     // OAuth tokens (encrypted with AES-256-GCM)
@@ -40,7 +34,7 @@ export const workspaceIntegrations = pgTable(
     // Configuration (channel IDs, team IDs, etc.)
     config: jsonb('config').notNull().default({}),
 
-    // External workspace info
+    // External workspace info (for Slack team, GitHub org, etc.)
     externalWorkspaceId: varchar('external_workspace_id', { length: 255 }),
     externalWorkspaceName: varchar('external_workspace_name', { length: 255 }),
 
@@ -58,17 +52,10 @@ export const workspaceIntegrations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique('workspace_integration_unique').on(table.workspaceId, table.integrationType),
-    index('idx_workspace_integrations_workspace').on(table.workspaceId),
-    index('idx_workspace_integrations_type_status').on(table.integrationType, table.status),
-    pgPolicy('workspace_integrations_isolation', {
-      for: 'all',
-      to: appUser,
-      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-    }),
+    unique('integration_type_unique').on(table.integrationType),
+    index('idx_integrations_type_status').on(table.integrationType, table.status),
   ]
-).enableRLS()
+)
 
 /**
  * Event-to-action mappings for integrations.
@@ -78,10 +65,6 @@ export const integrationEventMappings = pgTable(
   'integration_event_mappings',
   {
     id: typeIdWithDefault('event_mapping')('id').primaryKey(),
-    // Denormalized workspace_id for RLS performance
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
     integrationId: typeIdColumn('integration')('integration_id').notNull(),
     eventType: varchar('event_type', { length: 100 }).notNull(),
     actionType: varchar('action_type', { length: 50 }).notNull(),
@@ -95,19 +78,12 @@ export const integrationEventMappings = pgTable(
     foreignKey({
       name: 'event_mappings_integration_fk',
       columns: [table.integrationId],
-      foreignColumns: [workspaceIntegrations.id],
+      foreignColumns: [integrations.id],
     }).onDelete('cascade'),
     unique('mapping_unique').on(table.integrationId, table.eventType, table.actionType),
-    index('idx_event_mappings_workspace').on(table.workspaceId),
     index('idx_event_mappings_lookup').on(table.integrationId, table.eventType, table.enabled),
-    pgPolicy('integration_event_mappings_isolation', {
-      for: 'all',
-      to: appUser,
-      using: directWorkspaceCheck,
-      withCheck: directWorkspaceCheck,
-    }),
   ]
-).enableRLS()
+)
 
 /**
  * Links local entities to external entities for two-way sync tracking.
@@ -117,10 +93,6 @@ export const integrationLinkedEntities = pgTable(
   'integration_linked_entities',
   {
     id: typeIdWithDefault('linked_entity')('id').primaryKey(),
-    // Denormalized workspace_id for RLS performance
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
     integrationId: typeIdColumn('integration')('integration_id').notNull(),
     entityType: varchar('entity_type', { length: 50 }).notNull(),
     entityId: uuid('entity_id').notNull(),
@@ -134,19 +106,12 @@ export const integrationLinkedEntities = pgTable(
     foreignKey({
       name: 'linked_entities_integration_fk',
       columns: [table.integrationId],
-      foreignColumns: [workspaceIntegrations.id],
+      foreignColumns: [integrations.id],
     }).onDelete('cascade'),
     unique('linked_entity_unique').on(table.integrationId, table.entityType, table.entityId),
-    index('idx_linked_entities_workspace').on(table.workspaceId),
     index('idx_linked_entities_lookup').on(table.integrationId, table.entityType, table.entityId),
-    pgPolicy('integration_linked_entities_isolation', {
-      for: 'all',
-      to: appUser,
-      using: directWorkspaceCheck,
-      withCheck: directWorkspaceCheck,
-    }),
   ]
-).enableRLS()
+)
 
 /**
  * Audit log for integration sync operations.
@@ -156,10 +121,6 @@ export const integrationSyncLog = pgTable(
   'integration_sync_log',
   {
     id: typeIdWithDefault('sync_log')('id').primaryKey(),
-    // Denormalized workspace_id for RLS performance
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
     integrationId: typeIdColumn('integration')('integration_id').notNull(),
     eventId: uuid('event_id'),
     eventType: varchar('event_type', { length: 100 }).notNull(),
@@ -173,27 +134,16 @@ export const integrationSyncLog = pgTable(
     foreignKey({
       name: 'sync_log_integration_fk',
       columns: [table.integrationId],
-      foreignColumns: [workspaceIntegrations.id],
+      foreignColumns: [integrations.id],
     }).onDelete('cascade'),
-    index('idx_sync_log_workspace').on(table.workspaceId),
     index('idx_sync_log_integration_created').on(table.integrationId, table.createdAt),
-    pgPolicy('integration_sync_log_isolation', {
-      for: 'all',
-      to: appUser,
-      using: directWorkspaceCheck,
-      withCheck: directWorkspaceCheck,
-    }),
   ]
-).enableRLS()
+)
 
 // Relations
-export const workspaceIntegrationsRelations = relations(workspaceIntegrations, ({ one, many }) => ({
-  workspace: one(workspace, {
-    fields: [workspaceIntegrations.workspaceId],
-    references: [workspace.id],
-  }),
+export const integrationsRelations = relations(integrations, ({ one, many }) => ({
   connectedBy: one(member, {
-    fields: [workspaceIntegrations.connectedByMemberId],
+    fields: [integrations.connectedByMemberId],
     references: [member.id],
   }),
   eventMappings: many(integrationEventMappings),
@@ -202,37 +152,25 @@ export const workspaceIntegrationsRelations = relations(workspaceIntegrations, (
 }))
 
 export const integrationEventMappingsRelations = relations(integrationEventMappings, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [integrationEventMappings.workspaceId],
-    references: [workspace.id],
-  }),
-  integration: one(workspaceIntegrations, {
+  integration: one(integrations, {
     fields: [integrationEventMappings.integrationId],
-    references: [workspaceIntegrations.id],
+    references: [integrations.id],
   }),
 }))
 
 export const integrationLinkedEntitiesRelations = relations(
   integrationLinkedEntities,
   ({ one }) => ({
-    workspace: one(workspace, {
-      fields: [integrationLinkedEntities.workspaceId],
-      references: [workspace.id],
-    }),
-    integration: one(workspaceIntegrations, {
+    integration: one(integrations, {
       fields: [integrationLinkedEntities.integrationId],
-      references: [workspaceIntegrations.id],
+      references: [integrations.id],
     }),
   })
 )
 
 export const integrationSyncLogRelations = relations(integrationSyncLog, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [integrationSyncLog.workspaceId],
-    references: [workspace.id],
-  }),
-  integration: one(workspaceIntegrations, {
+  integration: one(integrations, {
     fields: [integrationSyncLog.integrationId],
-    references: [workspaceIntegrations.id],
+    references: [integrations.id],
   }),
 }))

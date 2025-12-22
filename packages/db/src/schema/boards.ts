@@ -8,17 +8,14 @@ import {
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core'
-import { relations, sql } from 'drizzle-orm'
-import { pgPolicy } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
-import { appUser } from './rls'
+import { relations } from 'drizzle-orm'
+import { typeIdWithDefault } from '@quackback/ids/drizzle'
 
 export const boards = pgTable(
   'boards',
   {
     id: typeIdWithDefault('board')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
-    slug: text('slug').notNull(),
+    slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
     isPublic: boolean('is_public').default(true).notNull(),
@@ -26,24 +23,14 @@ export const boards = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [
-    uniqueIndex('boards_workspace_slug_idx').on(table.workspaceId, table.slug),
-    index('boards_workspace_id_idx').on(table.workspaceId),
-    pgPolicy('boards_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-    }),
-  ]
-).enableRLS()
+  (table) => [uniqueIndex('boards_slug_idx').on(table.slug)]
+)
 
 export const roadmaps = pgTable(
   'roadmaps',
   {
     id: typeIdWithDefault('roadmap')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
-    slug: text('slug').notNull(),
+    slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
     isPublic: boolean('is_public').default(true).notNull(),
@@ -52,38 +39,21 @@ export const roadmaps = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('roadmaps_workspace_slug_idx').on(table.workspaceId, table.slug),
-    index('roadmaps_workspace_id_idx').on(table.workspaceId),
-    index('roadmaps_position_idx').on(table.workspaceId, table.position),
-    pgPolicy('roadmaps_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-    }),
+    uniqueIndex('roadmaps_slug_idx').on(table.slug),
+    index('roadmaps_position_idx').on(table.position),
   ]
-).enableRLS()
+)
 
 export const tags = pgTable(
   'tags',
   {
     id: typeIdWithDefault('tag')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
-    name: text('name').notNull(),
+    name: text('name').notNull().unique(),
     color: text('color').default('#6b7280').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [
-    uniqueIndex('tags_workspace_name_idx').on(table.workspaceId, table.name),
-    index('tags_workspace_id_idx').on(table.workspaceId),
-    pgPolicy('tags_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-    }),
-  ]
-).enableRLS()
+  (table) => [uniqueIndex('tags_name_idx').on(table.name)]
+)
 
 // Relations - defined after posts import to avoid circular dependency
 import { posts, postRoadmaps } from './posts'

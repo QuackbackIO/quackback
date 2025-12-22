@@ -70,6 +70,12 @@ export type NotifPrefId = TypeId<'notif_pref'>
 /** Unsubscribe token ID - e.g., unsub_token_01h455vb4pex5vsknk084sn02q */
 export type UnsubTokenId = TypeId<'unsub_token'>
 
+/** Post edit history ID - e.g., post_edit_01h455vb4pex5vsknk084sn02q */
+export type PostEditId = TypeId<'post_edit'>
+
+/** Comment edit history ID - e.g., comment_edit_01h455vb4pex5vsknk084sn02q */
+export type CommentEditId = TypeId<'comment_edit'>
+
 // ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
@@ -94,9 +100,6 @@ export type InviteId = TypeId<'invite'>
 
 /** Verification ID - e.g., verification_01h455vb4pex5vsknk084sn02q */
 export type VerificationId = TypeId<'verification'>
-
-/** SSO Provider ID - e.g., sso_provider_01h455vb4pex5vsknk084sn02q */
-export type SsoProviderId = TypeId<'sso_provider'>
 
 /** Domain ID - e.g., domain_01h455vb4pex5vsknk084sn02q */
 export type DomainId = TypeId<'domain'>
@@ -131,6 +134,8 @@ export interface EntityIdMap {
   tag: TagId
   status: StatusId
   reaction: ReactionId
+  post_edit: PostEditId
+  comment_edit: CommentEditId
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId
@@ -147,7 +152,6 @@ export interface EntityIdMap {
   account: AccountId
   invite: InviteId
   verification: VerificationId
-  sso_provider: SsoProviderId
   domain: DomainId
   transfer_token: TransferTokenId
   subscription: SubscriptionId

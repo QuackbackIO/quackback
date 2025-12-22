@@ -1,8 +1,5 @@
 import { pgTable, text, timestamp, boolean, integer, uniqueIndex, index } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
-import { pgPolicy } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
-import { appUser } from './rls'
+import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import { STATUS_CATEGORIES, type StatusCategory } from '../types'
 
 // Re-export for convenience (canonical source is ../types.ts)
@@ -12,9 +9,8 @@ export const postStatuses = pgTable(
   'post_statuses',
   {
     id: typeIdWithDefault('status')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id').notNull(),
     name: text('name').notNull(),
-    slug: text('slug').notNull(),
+    slug: text('slug').notNull().unique(),
     color: text('color').notNull().default('#6b7280'),
     category: text('category', { enum: STATUS_CATEGORIES }).notNull().default('active'),
     position: integer('position').notNull().default(0),
@@ -23,17 +19,10 @@ export const postStatuses = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('post_statuses_workspace_slug_idx').on(table.workspaceId, table.slug),
-    index('post_statuses_workspace_id_idx').on(table.workspaceId),
-    index('post_statuses_position_idx').on(table.workspaceId, table.category, table.position),
-    pgPolicy('post_statuses_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-      withCheck: sql`workspace_id = current_setting('app.workspace_id', true)::uuid`,
-    }),
+    uniqueIndex('post_statuses_slug_idx').on(table.slug),
+    index('post_statuses_position_idx').on(table.category, table.position),
   ]
-).enableRLS()
+)
 
 // Relations are defined in posts.ts to avoid circular dependency
 

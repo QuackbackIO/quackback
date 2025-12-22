@@ -10,6 +10,8 @@
     ".": "./index.ts",
     "./client": "./src/client.ts",
     "./schema": "./src/schema/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./tenant": "./src/tenant/index.ts",
     "./queries/public": "./src/queries/public.ts",
     "./queries/subscriptions": "./src/queries/subscriptions.ts",
     "./queries/usage": "./src/queries/usage.ts",
@@ -18,11 +20,15 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
+    "db:generate:catalog": "drizzle-kit generate --config=drizzle-catalog.config.ts",
+    "db:generate:tenant": "drizzle-kit generate --config=drizzle-tenant.config.ts",
     "db:migrate": "bun run src/migrate.ts",
     "db:migrate:cli": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun src/seed.ts",
-    "db:reset": "bun src/reset.ts"
+    "db:reset": "bun src/reset.ts",
+    "db:migrate-tenants": "bun run src/scripts/migrate-to-tenant-dbs.ts",
+    "db:migrate-tenants:dry-run": "bun run src/scripts/migrate-to-tenant-dbs.ts --dry-run"
   },
   "dependencies": {
     "@quackback/ids": "workspace:*",

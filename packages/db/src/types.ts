@@ -1,5 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
-import type { BoardId, TagId, StatusId, WorkspaceId } from '@quackback/ids'
+import type { BoardId, TagId, StatusId } from '@quackback/ids'
 import type { boards, roadmaps, tags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
@@ -10,7 +10,7 @@ import type {
   comments,
   commentReactions,
 } from './schema/posts'
-import type { workspaceIntegrations } from './schema/integrations'
+import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
 import type { member } from './schema/auth'
 
@@ -76,10 +76,10 @@ export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 // Integration types
-export type WorkspaceIntegration = InferSelectModel<typeof workspaceIntegrations>
-export type NewWorkspaceIntegration = InferInsertModel<typeof workspaceIntegrations>
+export type Integration = InferSelectModel<typeof integrations>
+export type NewIntegration = InferInsertModel<typeof integrations>
 export type IntegrationType = 'slack' | 'discord' | 'linear' | 'jira' | 'github'
-export type IntegrationStatus = WorkspaceIntegration['status']
+export type IntegrationStatus = Integration['status']
 
 // Changelog types
 export type ChangelogEntry = InferSelectModel<typeof changelogEntries>
@@ -122,7 +122,6 @@ export type BoardWithRoadmaps = Board & {
 
 // Inbox query types
 export interface InboxPostListParams {
-  organizationId: WorkspaceId
   boardIds?: BoardId[]
   statusIds?: StatusId[]
   tagIds?: TagId[]

@@ -19,8 +19,8 @@ export const ID_PREFIXES = {
   tag: 'tag',
   status: 'status',
   reaction: 'reaction',
-  pedit: 'pedit', // post edit history
-  cedit: 'cedit', // comment edit history
+  post_edit: 'post_edit',
+  comment_edit: 'comment_edit',
 
   // Planning domain
   roadmap: 'roadmap',
@@ -48,7 +48,6 @@ export const ID_PREFIXES = {
   account: 'account',
   invite: 'invite',
   verification: 'verification',
-  sso_provider: 'sso_provider',
   domain: 'domain',
   transfer_token: 'transfer_token',
 

@@ -6,7 +6,7 @@
  *
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
-import { relations, sql } from 'drizzle-orm'
+import { relations } from 'drizzle-orm'
 import {
   pgTable,
   text,
@@ -15,13 +15,8 @@ import {
   index,
   uniqueIndex,
   customType,
-  pgPolicy,
 } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { appUser } from './rls'
-
-// Direct workspace_id check for RLS performance
-const directWorkspaceCheck = sql`workspace_id = current_setting('app.workspace_id', true)::uuid`
+import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 
 // Custom type for PostgreSQL bytea (binary data)
 const bytea = customType<{ data: Buffer | null; notNull: false; default: false }>({
@@ -36,7 +31,7 @@ const bytea = customType<{ data: Buffer | null; notNull: false; default: false }
       return null
     }
     if (Buffer.isBuffer(value)) {
-      return value
+      return value as Buffer
     }
     if (value instanceof Uint8Array) {
       return Buffer.from(value)
@@ -58,22 +53,12 @@ const bytea = customType<{ data: Buffer | null; notNull: false; default: false }
 })
 
 /**
- * User table - Workspace-scoped user identities
- *
- * Each user belongs to exactly one workspace. The same email can exist
- * in multiple workspaces as separate user records with separate credentials.
- *
- * This enables true multi-tenant isolation where each workspace has
- * completely independent authentication.
+ * User table - User identities for the application
  */
 export const user = pgTable(
   'user',
   {
     id: typeIdWithDefault('user')('id').primaryKey(),
-    // Workspace this user belongs to - enables workspace-scoped email uniqueness
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     email: text('email').notNull(),
     emailVerified: boolean('email_verified').default(false).notNull(),
@@ -90,9 +75,8 @@ export const user = pgTable(
     metadata: text('metadata'),
   },
   (table) => [
-    // Email is unique per workspace (not globally)
-    uniqueIndex('user_email_workspace_idx').on(table.workspaceId, table.email),
-    index('user_workspace_id_idx').on(table.workspaceId),
+    // Email is unique globally
+    uniqueIndex('user_email_idx').on(table.email),
   ]
 )
 
@@ -112,7 +96,6 @@ export const session = pgTable(
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    activeWorkspaceId: typeIdColumnNullable('workspace')('active_workspace_id'),
   },
   (table) => [index('session_userId_idx').on(table.userId)]
 )
@@ -158,34 +141,40 @@ export const verification = pgTable(
   (table) => [index('verification_identifier_idx').on(table.identifier)]
 )
 
-export const workspace = pgTable('workspace', {
-  id: typeIdWithDefault('workspace')('id').primaryKey(),
+/**
+ * Settings table - Application settings and branding configuration
+ *
+ * For single-tenant OSS deployments, this table has one row containing
+ * all application settings. The id, name, and slug are kept for display
+ * and branding purposes.
+ */
+export const settings = pgTable('settings', {
+  id: typeIdWithDefault('workspace')('id').primaryKey(), // Keep workspace prefix for TypeID compatibility
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
-  logo: text('logo'),
-  // Logo stored as blob (alternative to URL in 'logo' field)
+  // Logo stored as blob with MIME type
   logoBlob: bytea('logo_blob'),
   logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
   // Favicon stored as blob
   faviconBlob: bytea('favicon_blob'),
   faviconType: text('favicon_type'), // MIME type: image/x-icon, image/png, etc.
+  // Header logo stored as blob (horizontal wordmark/lockup)
+  headerLogoBlob: bytea('header_logo_blob'),
+  headerLogoType: text('header_logo_type'), // MIME type: image/png, image/jpeg, etc.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   /**
    * Team authentication configuration (JSON)
-   * @see AuthConfig in workspace.types.ts
    * Structure: { oauth: { google, github, microsoft }, ssoRequired, openSignup }
    */
   authConfig: text('auth_config'),
   /**
    * Portal configuration (JSON)
-   * @see PortalConfig in workspace.types.ts
    * Structure: { oauth: { google, github }, features: { publicView, submissions, comments, voting } }
    */
   portalConfig: text('portal_config'),
   /**
    * Branding/theme configuration (JSON)
-   * @see BrandingConfig in workspace.types.ts
    * Structure: { preset?, light?: ThemeColors, dark?: ThemeColors }
    */
   brandingConfig: text('branding_config'),
@@ -195,21 +184,15 @@ export const workspace = pgTable('workspace', {
    */
   customCss: text('custom_css'),
   /**
-   * Header logo blob (horizontal wordmark/lockup for custom header branding)
-   * Used when headerDisplayMode is 'custom_logo'
-   */
-  headerLogoBlob: bytea('header_logo_blob'),
-  headerLogoType: text('header_logo_type'), // MIME type: image/png, image/jpeg, image/svg+xml, etc.
-  /**
    * Header display mode - how the brand appears in portal navigation
-   * - 'logo_and_name': Square logo + workspace name (default)
+   * - 'logo_and_name': Square logo + name (default)
    * - 'logo_only': Just the square logo
-   * - 'custom_logo': Use headerLogoBlob (horizontal wordmark)
+   * - 'custom_logo': Use headerLogoUrl (horizontal wordmark)
    */
   headerDisplayMode: text('header_display_mode').default('logo_and_name'),
   /**
    * Custom display name for the header (used in 'logo_and_name' mode)
-   * Falls back to workspace.name when not set
+   * Falls back to settings.name when not set
    */
   headerDisplayName: text('header_display_name'),
 })
@@ -217,8 +200,8 @@ export const workspace = pgTable('workspace', {
 /**
  * Member table - Unified membership for all user types
  *
- * All users (team members and portal users) have a member record with a role:
- * - 'owner': Full administrative access, can manage billing and delete workspace
+ * All users have a member record with a role:
+ * - 'owner': Full administrative access, can manage settings
  * - 'admin': Administrative access, can manage team and settings
  * - 'member': Team member access, can manage feedback
  * - 'user': Portal user access only, can vote/comment on public portal
@@ -230,9 +213,6 @@ export const member = pgTable(
   'member',
   {
     id: typeIdWithDefault('member')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
@@ -242,28 +222,18 @@ export const member = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   },
   (table) => [
-    index('member_workspaceId_idx').on(table.workspaceId),
     index('member_userId_idx').on(table.userId),
-    // Ensure one member record per user per workspace
-    uniqueIndex('member_user_workspace_idx').on(table.userId, table.workspaceId),
-    // Composite index for portal user listings filtered by role
-    index('member_workspace_role_idx').on(table.workspaceId, table.role),
-    pgPolicy('member_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: directWorkspaceCheck,
-      withCheck: directWorkspaceCheck,
-    }),
+    // Ensure one member record per user
+    uniqueIndex('member_user_idx').on(table.userId),
+    // Index for user listings filtered by role
+    index('member_role_idx').on(table.role),
   ]
-).enableRLS()
+)
 
 export const invitation = pgTable(
   'invitation',
   {
     id: typeIdWithDefault('invite')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     name: text('name'),
     role: text('role'),
@@ -276,76 +246,18 @@ export const invitation = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
   },
   (table) => [
-    index('invitation_workspaceId_idx').on(table.workspaceId),
     index('invitation_email_idx').on(table.email),
-    // Composite index for duplicate invitation checks
-    index('invitation_workspace_email_status_idx').on(table.workspaceId, table.email, table.status),
-    pgPolicy('invitation_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: directWorkspaceCheck,
-      withCheck: directWorkspaceCheck,
-    }),
+    // Index for duplicate invitation checks
+    index('invitation_email_status_idx').on(table.email, table.status),
   ]
-).enableRLS()
-
-/**
- * SSO Provider table for Better-Auth SSO plugin
- *
- * Stores SAML and OIDC provider configurations per workspace.
- * Used by the SSO plugin to authenticate users via enterprise identity providers.
- *
- * @see https://www.better-auth.com/docs/plugins/sso
- */
-export const ssoProvider = pgTable(
-  'sso_provider',
-  {
-    id: typeIdWithDefault('sso_provider')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
-    // Issuer identifier (e.g., "https://accounts.google.com" or SAML entityId)
-    issuer: text('issuer').notNull(),
-    // Domain for email-based provider routing (e.g., "acme.com")
-    domain: text('domain').notNull(),
-    // Unique provider identifier used in login URLs
-    providerId: text('provider_id').notNull().unique(),
-    // OIDC configuration (JSON): { clientId, clientSecret, discoveryUrl, ... }
-    oidcConfig: text('oidc_config'),
-    // SAML configuration (JSON): { ssoUrl, certificate, signRequest, ... }
-    samlConfig: text('saml_config'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index('sso_provider_workspace_id_idx').on(table.workspaceId),
-    // Domain is unique per workspace (not globally) - same domain can be used by different workspaces
-    uniqueIndex('sso_provider_workspace_domain_idx').on(table.workspaceId, table.domain),
-    // Index for SSO detection by email domain
-    index('sso_provider_domain_idx').on(table.domain),
-    pgPolicy('sso_provider_tenant_isolation', {
-      for: 'all',
-      to: appUser,
-      using: directWorkspaceCheck,
-      withCheck: directWorkspaceCheck,
-    }),
-  ]
-).enableRLS()
+)
 
 // Relations for Drizzle relational queries (enables experimental joins)
-export const userRelations = relations(user, ({ one, many }) => ({
-  workspace: one(workspace, {
-    fields: [user.workspaceId],
-    references: [workspace.id],
-  }),
+export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   members: many(member),
   invitations: many(invitation),
-  sessionTransferTokens: many(sessionTransferToken),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -362,19 +274,10 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }))
 
-export const workspaceRelations = relations(workspace, ({ many }) => ({
-  users: many(user),
-  members: many(member),
-  invitations: many(invitation),
-  ssoProviders: many(ssoProvider),
-  domains: many(workspaceDomain),
-}))
+// Settings is a singleton table in single-tenant mode, no relations needed
+export const settingsRelations = relations(settings, () => ({}))
 
 export const memberRelations = relations(member, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [member.workspaceId],
-    references: [workspace.id],
-  }),
   user: one(user, {
     fields: [member.userId],
     references: [user.id],
@@ -382,98 +285,8 @@ export const memberRelations = relations(member, ({ one }) => ({
 }))
 
 export const invitationRelations = relations(invitation, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [invitation.workspaceId],
-    references: [workspace.id],
-  }),
   inviter: one(user, {
     fields: [invitation.inviterId],
     references: [user.id],
-  }),
-}))
-
-export const ssoProviderRelations = relations(ssoProvider, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [ssoProvider.workspaceId],
-    references: [workspace.id],
-  }),
-}))
-
-/**
- * Session Transfer Token table for per-subdomain session creation
- *
- * When auth flows happen on the main domain but sessions need to be
- * created on tenant subdomains, this table stores one-time tokens
- * that are exchanged for session cookies on the target subdomain.
- *
- * Used by:
- * - OAuth callbacks (main domain -> subdomain)
- * - Workspace creation (main domain -> new subdomain)
- */
-export const sessionTransferToken = pgTable(
-  'session_transfer_token',
-  {
-    id: typeIdWithDefault('transfer_token')('id').primaryKey(),
-    token: text('token').notNull().unique(),
-    userId: typeIdColumn('user')('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    targetDomain: text('target_domain').notNull(),
-    callbackUrl: text('callback_url').notNull(),
-    /** Context for post-login redirect: 'team' -> /admin, 'portal' -> / */
-    context: text('context').default('team').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [index('session_transfer_token_token_idx').on(table.token)]
-)
-
-export const sessionTransferTokenRelations = relations(sessionTransferToken, ({ one }) => ({
-  user: one(user, {
-    fields: [sessionTransferToken.userId],
-    references: [user.id],
-  }),
-}))
-
-/**
- * Workspace Domain table for multi-domain support
- *
- * Each workspace can have multiple domains:
- * - Auto-generated subdomain (e.g., acme.quackback.io)
- * - Custom domains (e.g., feedback.acme.com)
- *
- * The proxy uses this table to resolve which workspace a request belongs to.
- */
-export const workspaceDomain = pgTable(
-  'workspace_domain',
-  {
-    id: typeIdWithDefault('domain')('id').primaryKey(),
-    workspaceId: typeIdColumn('workspace')('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
-    domain: text('domain').notNull().unique(),
-    domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
-    isPrimary: boolean('is_primary').default(false).notNull(),
-    verified: boolean('verified').default(true).notNull(),
-    verificationToken: text('verification_token'),
-    // Cloudflare for SaaS fields (cloud edition only)
-    cloudflareHostnameId: text('cloudflare_hostname_id'),
-    sslStatus: text('ssl_status'), // CF SSL status: initializing, pending_validation, active, etc.
-    ownershipStatus: text('ownership_status'), // CF ownership: pending, active, blocked
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index('workspace_domain_workspace_id_idx').on(table.workspaceId),
-    // Index for tenant resolution by domain (critical path for every request)
-    index('workspace_domain_domain_idx').on(table.domain),
-    // Index for Cloudflare webhook lookups by hostname ID
-    index('workspace_domain_cf_hostname_id_idx').on(table.cloudflareHostnameId),
-  ]
-)
-
-export const workspaceDomainRelations = relations(workspaceDomain, ({ one }) => ({
-  workspace: one(workspace, {
-    fields: [workspaceDomain.workspaceId],
-    references: [workspace.id],
   }),
 }))
