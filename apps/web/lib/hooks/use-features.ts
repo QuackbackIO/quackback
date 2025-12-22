@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@quackback/domain/features'
 import type { WorkspaceId } from '@quackback/ids'
-import { getWorkspaceFeaturesAction } from '@/lib/actions/workspace'
+import { getWorkspaceFeaturesAction } from '@/lib/actions/settings'
 
 // ============================================================================
 // Query Key Factory
@@ -43,7 +43,7 @@ export function useWorkspaceFeatures(workspaceId: WorkspaceId) {
   return useQuery({
     queryKey: featuresKeys.organization(workspaceId),
     queryFn: async (): Promise<WorkspaceFeaturesData> => {
-      const result = await getWorkspaceFeaturesAction({ workspaceId })
+      const result = await getWorkspaceFeaturesAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }

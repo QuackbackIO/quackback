@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { checkFeatureAccess } from '@/lib/features/server'
 import { buildServiceContext, type ServiceContext } from '@quackback/domain'
-import { isValidTypeId, type WorkspaceId } from '@quackback/ids'
 import type { ActionResult, ActionContext, ActionOptions, Role } from './types'
 import { actionErr } from './types'
 
@@ -28,8 +27,7 @@ type ActionHandler<TInput, TOutput> = (
 /**
  * Server action wrapper with authentication, authorization, and standardized error handling.
  *
- * This wrapper mirrors the behavior of `withApiHandler` but for server actions.
- * It provides:
+ * This wrapper provides:
  * - Input validation with Zod schemas
  * - Authentication via Better-auth session
  * - Role-based access control
@@ -48,7 +46,7 @@ type ActionHandler<TInput, TOutput> = (
  *   { roles: ['owner', 'admin', 'member'] }
  * )
  */
-export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, TOutput>(
+export function withAction<TSchema extends z.ZodType, TOutput>(
   schema: TSchema,
   handler: ActionHandler<z.infer<TSchema>, TOutput>,
   options: ActionOptions = {}
@@ -75,17 +73,8 @@ export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, 
 
       const input = parseResult.data as TInput
 
-      // 2. Validate workspaceId format
-      if (!isValidTypeId(input.workspaceId as string, 'workspace')) {
-        return actionErr({
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid workspace ID format',
-          status: 400,
-        })
-      }
-
-      // 3. Validate tenant access (auth + member check)
-      const validation = await validateApiTenantAccess(input.workspaceId as WorkspaceId)
+      // 2. Validate tenant access (auth + member check)
+      const validation = await validateApiTenantAccess()
       if (!validation.success) {
         return actionErr({
           code: validation.status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN',
@@ -94,7 +83,7 @@ export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, 
         })
       }
 
-      // 4. Check role if required
+      // 3. Check role if required
       if (options.roles && options.roles.length > 0) {
         if (!isAllowedRole(validation.member.role, options.roles)) {
           return actionErr({
@@ -105,9 +94,9 @@ export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, 
         }
       }
 
-      // 5. Check feature access if required
+      // 4. Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.workspace.id, options.feature)
+        const featureCheck = await checkFeatureAccess(validation.settings.id, options.feature)
         if (!featureCheck.allowed) {
           return actionErr({
             code: 'PAYMENT_REQUIRED',
@@ -119,12 +108,12 @@ export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, 
         }
       }
 
-      // 6. Build contexts
+      // 5. Build contexts
       const ctx: ActionContext = {
-        workspace: {
-          id: validation.workspace.id,
-          slug: validation.workspace.slug,
-          name: validation.workspace.name,
+        settings: {
+          id: validation.settings.id,
+          slug: validation.settings.slug,
+          name: validation.settings.name,
         },
         user: {
           id: validation.user.id,
@@ -140,7 +129,7 @@ export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, 
 
       const serviceContext = buildServiceContext(validation)
 
-      // 7. Execute handler
+      // 6. Execute handler
       return await handler(input, ctx, serviceContext)
     } catch (error) {
       console.error('Action error:', error)
@@ -154,8 +143,8 @@ export function withAction<TSchema extends z.ZodType<{ workspaceId: unknown }>, 
 }
 
 /**
- * Lightweight action wrapper for actions that don't require workspaceId.
- * Use this for user-scoped actions like profile updates.
+ * Lightweight action wrapper for actions that don't require authentication.
+ * Use this for public actions like fetching organization ID.
  *
  * @example
  * export const getProfileAction = withAuthAction(

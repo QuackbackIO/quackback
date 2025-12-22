@@ -31,7 +31,7 @@ export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions)
   return useQuery({
     queryKey: roadmapsKeys.list(workspaceId),
     queryFn: async (): Promise<Roadmap[]> => {
-      const result = await listRoadmapsAction({ workspaceId })
+      const result = await listRoadmapsAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -48,7 +48,7 @@ export function usePublicRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOp
   return useQuery({
     queryKey: roadmapsKeys.publicList(workspaceId),
     queryFn: async (): Promise<Roadmap[]> => {
-      const result = await listPublicRoadmapsAction({ workspaceId })
+      const result = await listPublicRoadmapsAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -74,7 +74,6 @@ export function useCreateRoadmap(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (input: CreateRoadmapInput): Promise<Roadmap> => {
       const result = await createRoadmapAction({
-        workspaceId,
         name: input.name,
         slug: input.slug,
         description: input.description,
@@ -112,7 +111,6 @@ export function useUpdateRoadmap(workspaceId: WorkspaceId) {
       input: UpdateRoadmapInput
     }): Promise<Roadmap> => {
       const result = await updateRoadmapAction({
-        workspaceId,
         id: roadmapId,
         name: input.name,
         description: input.description,
@@ -138,7 +136,6 @@ export function useDeleteRoadmap(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (roadmapId: RoadmapId): Promise<void> => {
       const result = await deleteRoadmapAction({
-        workspaceId,
         id: roadmapId,
       })
       if (!result.success) {
@@ -160,7 +157,6 @@ export function useReorderRoadmaps(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (roadmapIds: string[]): Promise<void> => {
       const result = await reorderRoadmapsAction({
-        workspaceId,
         roadmapIds,
       })
       if (!result.success) {

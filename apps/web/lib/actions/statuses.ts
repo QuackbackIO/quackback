@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
 import { getStatusService } from '@/lib/services'
-import { workspaceIdSchema, statusIdSchema, isValidTypeId, type StatusId } from '@quackback/ids'
+import { statusIdSchema, isValidTypeId, type StatusId } from '@quackback/ids'
 
 // ============================================
 // Schemas
@@ -12,12 +12,9 @@ import { workspaceIdSchema, statusIdSchema, isValidTypeId, type StatusId } from 
 
 const statusCategorySchema = z.enum(['active', 'complete', 'closed'])
 
-const listStatusesSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const listStatusesSchema = z.object({})
 
 const createStatusSchema = z.object({
-  workspaceId: workspaceIdSchema,
   name: z.string().min(1, 'Name is required').max(50, 'Name must be 50 characters or less'),
   slug: z
     .string()
@@ -32,12 +29,10 @@ const createStatusSchema = z.object({
 })
 
 const getStatusSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: statusIdSchema,
 })
 
 const updateStatusSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: statusIdSchema,
   name: z.string().min(1).max(50).optional(),
   color: z
@@ -49,12 +44,10 @@ const updateStatusSchema = z.object({
 })
 
 const deleteStatusSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: statusIdSchema,
 })
 
 const reorderStatusesSchema = z.object({
-  workspaceId: workspaceIdSchema,
   statusIds: z.array(z.string()).min(1, 'At least one status ID is required'),
 })
 

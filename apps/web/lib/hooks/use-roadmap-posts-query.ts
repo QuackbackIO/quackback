@@ -53,7 +53,6 @@ export function useRoadmapPosts({ workspaceId, statusId, initialData }: UseRoadm
     queryKey: roadmapPostsKeys.list(workspaceId, statusId),
     queryFn: async ({ pageParam }): Promise<RoadmapPostListResult> => {
       const result = await getRoadmapPostsByStatusAction({
-        workspaceId,
         statusId,
         page: pageParam,
         limit: 10,
@@ -99,7 +98,6 @@ export function useRoadmapPostsByRoadmap({
     queryKey: roadmapPostsKeys.byRoadmap(roadmapId, statusId),
     queryFn: async ({ pageParam }): Promise<RoadmapPostsListResult> => {
       const result = await getRoadmapPostsAction({
-        workspaceId,
         roadmapId,
         statusId,
         limit: 20,
@@ -129,7 +127,6 @@ export function useAddPostToRoadmap(workspaceId: WorkspaceId, roadmapId: Roadmap
   return useMutation({
     mutationFn: async (postId: PostId): Promise<void> => {
       const result = await addPostToRoadmapAction({
-        workspaceId,
         roadmapId,
         postId,
       })
@@ -155,7 +152,6 @@ export function useRemovePostFromRoadmap(workspaceId: WorkspaceId, roadmapId: Ro
   return useMutation({
     mutationFn: async (postId: PostId): Promise<void> => {
       const result = await removePostFromRoadmapAction({
-        workspaceId,
         roadmapId,
         postId,
       })
@@ -195,7 +191,6 @@ export function usePublicRoadmapPosts({
     queryKey: [...roadmapPostsKeys.all, 'public', roadmapId, statusId ?? 'all'],
     queryFn: async ({ pageParam }): Promise<RoadmapPostsListResult> => {
       const result = await getPublicRoadmapPostsAction({
-        workspaceId,
         roadmapId,
         statusId,
         limit: 20,

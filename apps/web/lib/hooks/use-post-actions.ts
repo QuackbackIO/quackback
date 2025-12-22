@@ -94,7 +94,6 @@ export function useInboxPosts({
     queryKey: postKeys.list(workspaceId, filters),
     queryFn: async () => {
       const result = await listInboxPostsAction({
-        workspaceId,
         boardIds,
         statusIds,
         statusSlugs,
@@ -132,7 +131,6 @@ export function usePostDetails({ workspaceId, postId, enabled = true }: UsePostD
     queryKey: postKeys.detail(postId),
     queryFn: async () => {
       const result = await getPostWithDetailsAction({
-        workspaceId,
         id: postId,
       })
       if (!result.success) {

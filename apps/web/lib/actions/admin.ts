@@ -4,14 +4,12 @@ import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
 import { getUserService } from '@/lib/services'
-import { db, invitation, user, workspaceDomain, eq, and } from '@/lib/db'
+import { db, invitation, user, eq, and } from '@/lib/db'
 import { sendInvitationEmail } from '@quackback/email'
 import {
-  workspaceIdSchema,
   memberIdSchema,
   inviteIdSchema,
   generateId,
-  type WorkspaceId,
   type MemberId,
   type InviteId,
 } from '@quackback/ids'
@@ -21,7 +19,6 @@ import {
 // ============================================
 
 const listPortalUsersSchema = z.object({
-  workspaceId: workspaceIdSchema,
   search: z.string().optional(),
   verified: z.boolean().optional(),
   dateFrom: z.string().optional(),
@@ -32,29 +29,24 @@ const listPortalUsersSchema = z.object({
 })
 
 const getPortalUserSchema = z.object({
-  workspaceId: workspaceIdSchema,
   memberId: memberIdSchema,
 })
 
 const deletePortalUserSchema = z.object({
-  workspaceId: workspaceIdSchema,
   memberId: memberIdSchema,
 })
 
 const sendInvitationSchema = z.object({
-  workspaceId: workspaceIdSchema,
   email: z.string().email(),
   name: z.string().optional(),
   role: z.enum(['admin', 'member']),
 })
 
 const cancelInvitationSchema = z.object({
-  workspaceId: workspaceIdSchema,
   invitationId: inviteIdSchema,
 })
 
 const resendInvitationSchema = z.object({
-  workspaceId: workspaceIdSchema,
   invitationId: inviteIdSchema,
 })
 
@@ -74,20 +66,15 @@ export type ResendInvitationInput = z.infer<typeof resendInvitationSchema>
 // ============================================
 
 /**
- * Get the primary workspace domain URL
+ * Get the root URL for email links.
+ * Requires ROOT_URL environment variable.
  */
-async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
-  const domain = await db.query.workspaceDomain.findFirst({
-    where: and(eq(workspaceDomain.workspaceId, workspaceId), eq(workspaceDomain.isPrimary, true)),
-  })
-
-  if (!domain) {
-    throw new Error('No primary workspace domain configured')
+function getRootUrl(): string {
+  const url = process.env.ROOT_URL
+  if (!url) {
+    throw new Error('ROOT_URL environment variable is required for sending invitation emails')
   }
-
-  const isLocalhost = domain.domain.includes('localhost')
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${domain.domain}`
+  return url
 }
 
 // ============================================
@@ -100,7 +87,7 @@ async function getTenantUrl(workspaceId: WorkspaceId): Promise<string> {
 export const listPortalUsersAction = withAction(
   listPortalUsersSchema,
   async (input, ctx) => {
-    const result = await getUserService().listPortalUsers(ctx.workspace.id, {
+    const result = await getUserService().listPortalUsers({
       search: input.search,
       verified: input.verified,
       dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
@@ -126,8 +113,7 @@ export const getPortalUserAction = withAction(
   getPortalUserSchema,
   async (input, ctx) => {
     const result = await getUserService().getPortalUserDetail(
-      input.memberId as MemberId,
-      ctx.workspace.id
+      input.memberId as MemberId
     )
 
     if (!result.success) {
@@ -146,8 +132,7 @@ export const deletePortalUserAction = withAction(
   deletePortalUserSchema,
   async (input, ctx) => {
     const result = await getUserService().removePortalUser(
-      input.memberId as MemberId,
-      ctx.workspace.id
+      input.memberId as MemberId
     )
 
     if (!result.success) {
@@ -165,13 +150,11 @@ export const deletePortalUserAction = withAction(
 export const sendInvitationAction = withAction(
   sendInvitationSchema,
   async (input, ctx) => {
-    const workspaceId = ctx.workspace.id
     const email = input.email.toLowerCase()
 
     // Check if there's already a pending invitation for this email
     const existingInvitation = await db.query.invitation.findFirst({
       where: and(
-        eq(invitation.workspaceId, workspaceId),
         eq(invitation.email, email),
         eq(invitation.status, 'pending')
       ),
@@ -185,15 +168,15 @@ export const sendInvitationAction = withAction(
       })
     }
 
-    // Check if user with this email already exists in the organization
-    const existingUserInOrg = await db.query.user.findFirst({
-      where: and(eq(user.workspaceId, workspaceId), eq(user.email, email)),
+    // Check if user with this email already exists
+    const existingUser = await db.query.user.findFirst({
+      where: eq(user.email, email),
     })
 
-    if (existingUserInOrg) {
+    if (existingUser) {
       return actionErr({
         code: 'CONFLICT',
-        message: 'A user with this email already exists in this organization',
+        message: 'A user with this email already exists',
         status: 409,
       })
     }
@@ -205,7 +188,6 @@ export const sendInvitationAction = withAction(
 
     await db.insert(invitation).values({
       id: invitationId,
-      workspaceId,
       email,
       name: input.name || null,
       role: input.role,
@@ -215,16 +197,16 @@ export const sendInvitationAction = withAction(
       inviterId: ctx.user.id,
     })
 
-    // Build invitation link using workspace domain
-    const tenantUrl = await getTenantUrl(workspaceId)
-    const inviteLink = `${tenantUrl}/accept-invitation/${invitationId}`
+    // Build invitation link
+    const rootUrl = getRootUrl()
+    const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
 
     // Send invitation email
     await sendInvitationEmail({
       to: email,
       invitedByName: ctx.user.name,
       inviteeName: input.name || undefined,
-      workspaceName: ctx.workspace.name,
+      workspaceName: ctx.settings.name,
       inviteLink,
     })
 
@@ -248,7 +230,6 @@ export const cancelInvitationAction = withAction(
     const invitationRecord = await db.query.invitation.findFirst({
       where: and(
         eq(invitation.id, invitationId),
-        eq(invitation.workspaceId, ctx.workspace.id),
         eq(invitation.status, 'pending')
       ),
     })
@@ -279,7 +260,6 @@ export const resendInvitationAction = withAction(
     const invitationRecord = await db.query.invitation.findFirst({
       where: and(
         eq(invitation.id, invitationId),
-        eq(invitation.workspaceId, ctx.workspace.id),
         eq(invitation.status, 'pending')
       ),
     })
@@ -292,9 +272,9 @@ export const resendInvitationAction = withAction(
       })
     }
 
-    // Build invitation link using workspace domain
-    const tenantUrl = await getTenantUrl(ctx.workspace.id)
-    const inviteLink = `${tenantUrl}/accept-invitation/${invitationId}`
+    // Build invitation link
+    const rootUrl = getRootUrl()
+    const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
 
     // Update last sent timestamp
     await db
@@ -307,7 +287,7 @@ export const resendInvitationAction = withAction(
       to: invitationRecord.email,
       invitedByName: ctx.user.name,
       inviteeName: invitationRecord.name || undefined,
-      workspaceName: ctx.workspace.name,
+      workspaceName: ctx.settings.name,
       inviteLink,
     })
 

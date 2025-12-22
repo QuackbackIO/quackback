@@ -54,7 +54,7 @@ export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions)
   return useQuery({
     queryKey: roadmapKeys.list(workspaceId),
     queryFn: async () => {
-      const result = await listRoadmapsAction({ workspaceId })
+      const result = await listRoadmapsAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -89,7 +89,6 @@ export function useRoadmapPosts({
     queryKey: roadmapKeys.postsFiltered(roadmapId, statusId),
     queryFn: async () => {
       const result = await getRoadmapPostsAction({
-        workspaceId,
         roadmapId,
         statusId,
         limit,
@@ -128,7 +127,6 @@ export function useCreateRoadmap({ workspaceId, onSuccess, onError }: UseCreateR
     onOptimisticUpdate: (input) => {
       const optimisticRoadmap: Roadmap = {
         id: `roadmap_temp_${Date.now()}` as Roadmap['id'],
-        workspaceId: input.workspaceId as Roadmap['workspaceId'],
         name: input.name,
         slug: input.slug,
         description: input.description ?? null,

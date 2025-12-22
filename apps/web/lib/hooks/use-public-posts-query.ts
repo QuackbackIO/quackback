@@ -18,7 +18,7 @@ import {
   userDeletePostAction,
 } from '@/lib/actions/public-posts'
 import type { ActionError } from '@/lib/actions/types'
-import type { PublicFeedbackFilters } from '@/app/s/[orgSlug]/(portal)/use-public-filters'
+import type { PublicFeedbackFilters } from '@/app/(portal)/use-public-filters'
 import type { PublicPostListItem } from '@quackback/domain'
 import type { PostId, BoardId, StatusId, TagId, WorkspaceId } from '@quackback/ids'
 
@@ -39,13 +39,13 @@ interface PublicPostListResult {
 export const publicPostsKeys = {
   all: ['publicPosts'] as const,
   lists: () => [...publicPostsKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId, filters: PublicFeedbackFilters) =>
-    [...publicPostsKeys.lists(), workspaceId, filters] as const,
+  list: (organizationId: string, filters: PublicFeedbackFilters) =>
+    [...publicPostsKeys.lists(), organizationId, filters] as const,
 }
 
 export const votedPostsKeys = {
   all: ['votedPosts'] as const,
-  byOrg: (workspaceId: WorkspaceId) => [...votedPostsKeys.all, workspaceId] as const,
+  byOrg: (organizationId: string) => [...votedPostsKeys.all, organizationId] as const,
 }
 
 // ============================================================================
@@ -53,7 +53,7 @@ export const votedPostsKeys = {
 // ============================================================================
 
 async function fetchPublicPosts(
-  workspaceId: WorkspaceId,
+  organizationId: string,
   filters: PublicFeedbackFilters,
   page: number
 ): Promise<PublicPostListResult> {
@@ -69,7 +69,6 @@ async function fetchPublicPosts(
   }
 
   const result = await listPublicPostsAction({
-    workspaceId,
     boardSlug: filters.board,
     search: filters.search,
     statusIds: statusIds.length > 0 ? (statusIds as StatusId[]) : undefined,
@@ -92,15 +91,28 @@ async function fetchPublicPosts(
 // ============================================================================
 
 interface UsePublicPostsOptions {
-  workspaceId: WorkspaceId
+  organizationId: string | null
   filters: PublicFeedbackFilters
   initialData?: PublicPostListResult
+  enabled?: boolean
 }
 
-export function usePublicPosts({ workspaceId, filters, initialData }: UsePublicPostsOptions) {
+export function usePublicPosts({
+  organizationId,
+  filters,
+  initialData,
+  enabled = true,
+}: UsePublicPostsOptions) {
   return useInfiniteQuery({
-    queryKey: publicPostsKeys.list(workspaceId, filters),
-    queryFn: ({ pageParam }) => fetchPublicPosts(workspaceId, filters, pageParam),
+    queryKey: organizationId
+      ? publicPostsKeys.list(organizationId, filters)
+      : ['publicPosts', 'disabled'],
+    queryFn: ({ pageParam }) => {
+      if (!organizationId) {
+        throw new Error('organizationId is required')
+      }
+      return fetchPublicPosts(organizationId, filters, pageParam)
+    },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     initialData: initialData
@@ -111,6 +123,7 @@ export function usePublicPosts({ workspaceId, filters, initialData }: UsePublicP
       : undefined,
     // Keep showing previous data while loading new filter results
     placeholderData: (previousData) => previousData,
+    enabled: enabled && !!organizationId,
   })
 }
 
@@ -198,7 +211,7 @@ export function useVoteMutation() {
 // ============================================================================
 
 interface CreatePostInput {
-  boardId: string
+  boardId: BoardId
   title: string
   content: string
   contentJson: unknown
@@ -287,8 +300,8 @@ export function useCreatePublicPost() {
 // Voted Posts Query Hook (using server action)
 // ============================================================================
 
-async function fetchVotedPosts(workspaceId: WorkspaceId): Promise<Set<string>> {
-  const result = await getVotedPostsAction({ workspaceId })
+async function fetchVotedPosts(organizationId: string): Promise<Set<string>> {
+  const result = await getVotedPostsAction({})
   if (!result.success) {
     return new Set()
   }
@@ -297,7 +310,8 @@ async function fetchVotedPosts(workspaceId: WorkspaceId): Promise<Set<string>> {
 
 interface UseVotedPostsOptions {
   initialVotedIds: string[]
-  workspaceId: WorkspaceId
+  organizationId: string | null
+  enabled?: boolean
 }
 
 /**
@@ -305,7 +319,11 @@ interface UseVotedPostsOptions {
  * Uses React Query for server state with local optimistic updates.
  * Call refetch() after auth to sync with server state.
  */
-export function useVotedPosts({ initialVotedIds, workspaceId }: UseVotedPostsOptions) {
+export function useVotedPosts({
+  initialVotedIds,
+  organizationId,
+  enabled = true,
+}: UseVotedPostsOptions) {
   const queryClient = useQueryClient()
 
   // Local state for optimistic updates (immediate UI feedback)
@@ -313,10 +331,16 @@ export function useVotedPosts({ initialVotedIds, workspaceId }: UseVotedPostsOpt
 
   // React Query for server state
   const { data: serverVotedIds, refetch } = useQuery({
-    queryKey: votedPostsKeys.byOrg(workspaceId),
-    queryFn: () => fetchVotedPosts(workspaceId),
+    queryKey: organizationId ? votedPostsKeys.byOrg(organizationId) : ['votedPosts', 'disabled'],
+    queryFn: () => {
+      if (!organizationId) {
+        return new Set<string>()
+      }
+      return fetchVotedPosts(organizationId)
+    },
     initialData: new Set(initialVotedIds),
     staleTime: Infinity, // Don't auto-refetch, we control when to refetch
+    enabled: enabled && !!organizationId,
   })
 
   // Sync local state when server data changes (e.g., after refetch)
@@ -341,18 +365,20 @@ export function useVotedPosts({ initialVotedIds, workspaceId }: UseVotedPostsOpt
         return next
       })
       // Also update the query cache for consistency
-      queryClient.setQueryData<Set<string>>(votedPostsKeys.byOrg(workspaceId), (old) => {
-        if (!old) return new Set([postId])
-        const next = new Set(old)
-        if (voted) {
-          next.add(postId)
-        } else {
-          next.delete(postId)
-        }
-        return next
-      })
+      if (organizationId) {
+        queryClient.setQueryData<Set<string>>(votedPostsKeys.byOrg(organizationId), (old) => {
+          if (!old) return new Set([postId])
+          const next = new Set(old)
+          if (voted) {
+            next.add(postId)
+          } else {
+            next.delete(postId)
+          }
+          return next
+        })
+      }
     },
-    [workspaceId, queryClient]
+    [organizationId, queryClient]
   )
 
   const refetchVotedPosts = useCallback(() => {

@@ -2,10 +2,10 @@
 
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
-import { db, user, member, eq, and } from '@/lib/db'
+import { db, user, member, eq } from '@/lib/db'
 import { getCurrentUserRole } from '@/lib/tenant'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import { workspaceIdSchema, type WorkspaceId, type MemberId } from '@quackback/ids'
+import { type MemberId, type UserId } from '@quackback/ids'
 import { actionOk, actionErr, type ActionResult } from './types'
 
 // ============================================
@@ -16,12 +16,9 @@ const updateProfileNameSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
 })
 
-const getNotificationPreferencesSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const getNotificationPreferencesSchema = z.object({})
 
 const updateNotificationPreferencesSchema = z.object({
-  workspaceId: workspaceIdSchema,
   emailStatusChange: z.boolean().optional(),
   emailNewComment: z.boolean().optional(),
   emailMuted: z.boolean().optional(),
@@ -77,12 +74,6 @@ export async function getProfileAction(): Promise<ActionResult<UserProfile>> {
         email: true,
         image: true,
         imageType: true,
-        organizationId: true,
-      },
-      with: {
-        members: {
-          limit: 1,
-        },
       },
     })
 
@@ -90,9 +81,15 @@ export async function getProfileAction(): Promise<ActionResult<UserProfile>> {
       return actionErr({ code: 'NOT_FOUND', message: 'User not found', status: 404 })
     }
 
+    // Get member record to determine userType
+    const memberRecord = await db.query.member.findFirst({
+      where: eq(member.userId, session.user.id as UserId),
+      columns: { role: true },
+    })
+
     // Determine userType based on member role
     // Portal users have role 'user', team members have 'owner', 'admin', or 'member'
-    const memberRole = userRecord.members?.[0]?.role
+    const memberRole = memberRecord?.role
     const userType: 'team' | 'portal' | undefined = memberRole
       ? memberRole === 'user'
         ? 'portal'
@@ -235,7 +232,7 @@ export async function getUserRoleAction(): Promise<
 }
 
 /**
- * Get notification preferences for a workspace.
+ * Get notification preferences.
  */
 export async function getNotificationPreferencesAction(
   rawInput: GetNotificationPreferencesInput
@@ -250,8 +247,6 @@ export async function getNotificationPreferencesAction(
       })
     }
 
-    const workspaceId = parseResult.data.workspaceId as WorkspaceId
-
     const session = await getSession()
     if (!session?.user) {
       return actionErr({
@@ -263,21 +258,20 @@ export async function getNotificationPreferencesAction(
 
     // Check membership
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
+      where: eq(member.userId, session.user.id as UserId),
     })
 
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace',
+        message: 'You must be a member',
         status: 403,
       })
     }
 
     const subscriptionService = new SubscriptionService()
     const preferences = await subscriptionService.getNotificationPreferences(
-      memberRecord.id as MemberId,
-      workspaceId
+      memberRecord.id as MemberId
     )
 
     return actionOk(preferences)
@@ -292,7 +286,7 @@ export async function getNotificationPreferencesAction(
 }
 
 /**
- * Update notification preferences for a workspace.
+ * Update notification preferences.
  */
 export async function updateNotificationPreferencesAction(
   rawInput: UpdateNotificationPreferencesInput
@@ -308,12 +302,10 @@ export async function updateNotificationPreferencesAction(
     }
 
     const {
-      workspaceId: workspaceIdRaw,
       emailStatusChange,
       emailNewComment,
       emailMuted,
     } = parseResult.data
-    const workspaceId = workspaceIdRaw as WorkspaceId
 
     const session = await getSession()
     if (!session?.user) {
@@ -326,13 +318,13 @@ export async function updateNotificationPreferencesAction(
 
     // Check membership
     const memberRecord = await db.query.member.findFirst({
-      where: and(eq(member.userId, session.user.id), eq(member.workspaceId, workspaceId)),
+      where: eq(member.userId, session.user.id as UserId),
     })
 
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace',
+        message: 'You must be a member',
         status: 403,
       })
     }
@@ -365,8 +357,7 @@ export async function updateNotificationPreferencesAction(
     const subscriptionService = new SubscriptionService()
     const preferences = await subscriptionService.updateNotificationPreferences(
       memberRecord.id as MemberId,
-      updates,
-      workspaceId
+      updates
     )
 
     return actionOk(preferences)

@@ -44,7 +44,7 @@ export function useStatuses({ workspaceId, enabled = true }: UseStatusesOptions)
   return useQuery({
     queryKey: statusKeys.list(workspaceId),
     queryFn: async () => {
-      const result = await listStatusesAction({ workspaceId })
+      const result = await listStatusesAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -98,7 +98,6 @@ export function useCreateStatus({ workspaceId, onSuccess, onError }: UseCreateSt
       // Create optimistic status with temp ID
       const optimisticStatus: PostStatusEntity = {
         id: `status_temp_${Date.now()}` as PostStatusEntity['id'],
-        workspaceId: input.workspaceId as PostStatusEntity['workspaceId'],
         name: input.name,
         slug: input.slug,
         color: input.color,

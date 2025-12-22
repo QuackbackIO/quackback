@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type { UsersFilters } from '@/app/s/[orgSlug]/admin/users/use-users-filters'
+import type { UsersFilters } from '@/app/admin/users/use-users-filters'
 import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@quackback/domain'
 import type { WorkspaceId, MemberId } from '@quackback/ids'
 import {
@@ -55,7 +55,6 @@ export function usePortalUsers({ workspaceId, filters, initialData }: UsePortalU
     queryKey: usersKeys.list(workspaceId, filters),
     queryFn: async ({ pageParam }): Promise<PortalUserListResult> => {
       const result = await listPortalUsersAction({
-        workspaceId,
         search: filters.search,
         verified: filters.verified,
         dateFrom: filters.dateFrom,
@@ -100,7 +99,6 @@ export function useUserDetail({ memberId, workspaceId, enabled = true }: UseUser
     queryKey: usersKeys.detail(memberId!, workspaceId),
     queryFn: async (): Promise<PortalUserDetail> => {
       const result = await getPortalUserAction({
-        workspaceId,
         memberId: memberId!,
       })
       if (!result.success) {
@@ -127,7 +125,6 @@ export function useRemovePortalUser(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (memberId: MemberId) => {
       const result = await deletePortalUserAction({
-        workspaceId,
         memberId,
       })
       if (!result.success) {

@@ -42,7 +42,7 @@ export function useBoards({ workspaceId, enabled = true }: UseBoardsOptions) {
   return useQuery({
     queryKey: boardKeys.list(workspaceId),
     queryFn: async () => {
-      const result = await listBoardsAction({ workspaceId })
+      const result = await listBoardsAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -91,7 +91,6 @@ export function useCreateBoard({ workspaceId, onSuccess, onError }: UseCreateBoa
       // Create optimistic board with temp ID
       const optimisticBoard: Board = {
         id: `board_temp_${Date.now()}` as Board['id'],
-        workspaceId: input.workspaceId as Board['workspaceId'],
         name: input.name,
         slug: input.name.toLowerCase().replace(/\s+/g, '-'),
         description: input.description ?? null,
@@ -139,16 +138,14 @@ export function useUpdateBoard({ workspaceId, onSuccess, onError }: UseUpdateBoa
     invalidateKeys: [boardKeys.lists()],
     onOptimisticUpdate: (input) => {
       const helper = createListOptimisticUpdate<Board>(queryClient, listKey)
-      const previous = helper.update(
-        input.id as string,
-        {
-          name: input.name,
-          description: input.description,
-          isPublic: input.isPublic,
-          settings: input.settings,
-          updatedAt: new Date(),
-        } as Partial<Board>
-      )
+      // Only update fields that are actually changed
+      const updates: Partial<Board> = { updatedAt: new Date() }
+      if (input.name !== undefined) updates.name = input.name
+      if (input.description !== undefined) updates.description = input.description
+      if (input.isPublic !== undefined) updates.isPublic = input.isPublic
+      if (input.settings !== undefined) updates.settings = input.settings as Record<string, unknown>
+
+      const previous = helper.update(input.id as string, updates)
       return { previous }
     },
     onRollback: ({ previous }) => {

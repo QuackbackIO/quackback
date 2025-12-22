@@ -42,7 +42,7 @@ export function useTags({ workspaceId, enabled = true }: UseTagsOptions) {
   return useQuery({
     queryKey: tagKeys.list(workspaceId),
     queryFn: async () => {
-      const result = await listTagsAction({ workspaceId })
+      const result = await listTagsAction({})
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -86,7 +86,6 @@ export function useCreateTag({ workspaceId, onSuccess, onError }: UseCreateTagOp
       // Create optimistic tag with temp ID
       const optimisticTag: Tag = {
         id: `tag_temp_${Date.now()}` as Tag['id'],
-        workspaceId: input.workspaceId as Tag['workspaceId'],
         name: input.name,
         color: input.color || '#6b7280',
         createdAt: new Date(),

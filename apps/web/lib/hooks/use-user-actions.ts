@@ -89,7 +89,7 @@ export function useNotificationPreferences({
   return useQuery({
     queryKey: userKeys.notificationPrefs(workspaceId),
     queryFn: async (): Promise<NotificationPreferences> => {
-      const result = await getNotificationPreferencesAction({ workspaceId })
+      const result = await getNotificationPreferencesAction({})
       if (!result.success) {
         // Return default preferences on error
         return {
@@ -190,7 +190,6 @@ export function useUpdateNotificationPreferences({
       emailMuted?: boolean
     }) => {
       const result = await updateNotificationPreferencesAction({
-        workspaceId,
         ...updates,
       })
       if (!result.success) {

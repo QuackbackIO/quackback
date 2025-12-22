@@ -11,7 +11,6 @@ import type { CommentTreeNode } from '@quackback/domain'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
 import {
-  workspaceIdSchema,
   postIdSchema,
   boardIdSchema,
   statusIdSchema,
@@ -57,7 +56,6 @@ const tiptapContentSchema = z.object({
 })
 
 const listInboxPostsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   boardIds: z.array(boardIdSchema).optional(),
   statusIds: z.array(statusIdSchema).optional(),
   statusSlugs: z.array(z.string()).optional(),
@@ -73,7 +71,6 @@ const listInboxPostsSchema = z.object({
 })
 
 const createPostSchema = z.object({
-  workspaceId: workspaceIdSchema,
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Description is required').max(10000),
   contentJson: tiptapContentSchema.optional(),
@@ -83,12 +80,10 @@ const createPostSchema = z.object({
 })
 
 const getPostSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: postIdSchema,
 })
 
 const updatePostSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: postIdSchema,
   title: z.string().min(1).max(200).optional(),
   content: z.string().max(10000).optional(),
@@ -98,25 +93,21 @@ const updatePostSchema = z.object({
 })
 
 const deletePostSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: postIdSchema,
   permanent: z.boolean().optional().default(false),
 })
 
 const changeStatusSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: postIdSchema,
   statusId: statusIdSchema,
 })
 
 const updateTagsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: postIdSchema,
   tagIds: z.array(z.string()),
 })
 
 const restorePostSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: postIdSchema,
 })
 
@@ -191,7 +182,7 @@ export const createPostAction = withAction(
     // Trigger EventWorkflow for integrations and notifications
     const { boardSlug, ...post } = result.value
     const eventData = buildPostCreatedEvent(
-      serviceCtx.workspaceId,
+      ctx.settings.id,
       { type: 'user', userId: serviceCtx.userId, email: serviceCtx.userEmail },
       {
         id: post.id,
@@ -304,9 +295,8 @@ export const updatePostAction = withAction(
     if (input.ownerId !== undefined) {
       updateInput.ownerId = input.ownerId
       if (input.ownerId) {
-        const ownerMemberResult = await getMemberService().getMemberByUserAndOrg(
-          input.ownerId as UserId,
-          ctx.workspace.id
+        const ownerMemberResult = await getMemberService().getMemberByUser(
+          input.ownerId as UserId
         )
         const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
         updateInput.ownerMemberId = ownerMember ? ownerMember.id : null
@@ -375,7 +365,7 @@ export const changePostStatusAction = withAction(
     // Trigger EventWorkflow for integrations and notifications
     const { boardSlug, previousStatus, newStatus, ...post } = result.value
     const eventData = buildPostStatusChangedEvent(
-      serviceCtx.workspaceId,
+      _ctx.settings.id,
       { type: 'user', userId: serviceCtx.userId, email: serviceCtx.userEmail },
       { id: post.id, title: post.title, boardSlug },
       previousStatus,

@@ -4,18 +4,15 @@ import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
 import { getBoardService } from '@/lib/services'
-import { workspaceIdSchema, boardIdSchema, type BoardId } from '@quackback/ids'
+import { boardIdSchema, type BoardId } from '@quackback/ids'
 
 // ============================================
 // Schemas
 // ============================================
 
-const listBoardsSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const listBoardsSchema = z.object({})
 
 const createBoardSchema = z.object({
-  workspaceId: workspaceIdSchema,
   name: z
     .string()
     .min(1, 'Board name is required')
@@ -25,12 +22,10 @@ const createBoardSchema = z.object({
 })
 
 const getBoardSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: boardIdSchema,
 })
 
 const updateBoardSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: boardIdSchema,
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
@@ -39,7 +34,6 @@ const updateBoardSchema = z.object({
 })
 
 const deleteBoardSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: boardIdSchema,
 })
 

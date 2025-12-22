@@ -16,12 +16,12 @@ import {
   createPostAction,
 } from '@/lib/actions/posts'
 import { toggleVoteAction, createCommentAction, toggleReactionAction } from '@/lib/actions'
-import type { InboxFilters } from '@/app/s/[orgSlug]/admin/feedback/use-inbox-filters'
+import type { InboxFilters } from '@/app/admin/feedback/use-inbox-filters'
 import type {
   PostDetails,
   CommentReaction,
   CommentWithReplies,
-} from '@/app/s/[orgSlug]/admin/feedback/inbox-types'
+} from '@/app/admin/feedback/inbox-types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db/types'
 import type {
   BoardId,
@@ -57,7 +57,6 @@ async function fetchInboxPosts(
   page: number
 ): Promise<InboxPostListResult> {
   const result = await listInboxPostsAction({
-    workspaceId,
     boardIds: filters.board as BoardId[] | undefined,
     statusIds: filters.status as StatusId[] | undefined,
     tagIds: filters.tags as TagId[] | undefined,
@@ -80,7 +79,6 @@ async function fetchInboxPosts(
 
 async function fetchPostDetail(postId: PostId, workspaceId: WorkspaceId): Promise<PostDetails> {
   const result = await getPostWithDetailsAction({
-    workspaceId,
     id: postId,
   })
 
@@ -162,7 +160,6 @@ export function useChangePostStatusId(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async ({ postId, statusId }: { postId: PostId; statusId: StatusId }) => {
       const result = await changePostStatusAction({
-        workspaceId,
         id: postId,
         statusId,
       })
@@ -185,7 +182,6 @@ export function useUpdatePostOwner(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async ({ postId, ownerId }: { postId: PostId; ownerId: MemberId | null }) => {
       const result = await updatePostAction({
-        workspaceId,
         id: postId,
         ownerId,
       })
@@ -259,7 +255,6 @@ export function useUpdatePostTags(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async ({ postId, tagIds }: UpdateTagsInput) => {
       const result = await updatePostTagsAction({
-        workspaceId,
         id: postId,
         tagIds,
       })
@@ -334,7 +329,6 @@ export function useUpdateOfficialResponse(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async ({ postId, response }: { postId: PostId; response: string | null }) => {
       const result = await updatePostAction({
-        workspaceId,
         id: postId,
         officialResponse: response,
       })
@@ -356,8 +350,10 @@ export function useUpdateOfficialResponse(workspaceId: WorkspaceId) {
           officialResponse: typedData.officialResponse
             ? {
                 content: typedData.officialResponse,
-                authorName: typedData.officialResponseAuthorName,
-                respondedAt: typedData.officialResponseAt,
+                authorName: typedData.officialResponseAuthorName ?? null,
+                respondedAt: typedData.officialResponseAt
+                  ? new Date(typedData.officialResponseAt)
+                  : new Date(),
               }
             : null,
         }
@@ -526,7 +522,6 @@ export function useUpdatePost(workspaceId: WorkspaceId) {
       contentJson,
     }: UpdatePostInput): Promise<UpdatePostResponse> => {
       const result = await updatePostAction({
-        workspaceId,
         id: postId,
         title,
         content,
@@ -769,7 +764,6 @@ export function useAddComment(workspaceId: WorkspaceId) {
       const optimisticComment: CommentWithReplies = {
         id: `comment_temp${Date.now()}` as CommentId,
         postId: postId as PostId,
-        workspaceId,
         content,
         authorId: null,
         authorName: authorName || null,
@@ -858,7 +852,6 @@ export function useCreatePost(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (input: CreatePostInput): Promise<CreatePostResponse> => {
       const result = await createPostAction({
-        workspaceId,
         title: input.title,
         content: input.content,
         contentJson: input.contentJson as { type: 'doc'; content?: unknown[] },

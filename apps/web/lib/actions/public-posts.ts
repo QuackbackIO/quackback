@@ -16,14 +16,12 @@ import { buildServiceContext, buildPostCreatedEvent, type ServiceContext } from 
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
 import {
-  workspaceIdSchema,
   postIdSchema,
   boardIdSchema,
   statusIdSchema,
   tagIdSchema,
   roadmapIdSchema,
   type PostId,
-  type WorkspaceId,
   type BoardId,
   type StatusId,
   type TagId,
@@ -44,7 +42,6 @@ const tiptapContentSchema = z.object({
 })
 
 const listPublicPostsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   boardSlug: z.string().optional(),
   search: z.string().optional(),
   statusIds: z.array(statusIdSchema).optional(),
@@ -82,16 +79,11 @@ const createPublicPostSchema = z.object({
   contentJson: tiptapContentSchema.optional(),
 })
 
-const getVotedPostsSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const getVotedPostsSchema = z.object({})
 
-const listPublicRoadmapsSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const listPublicRoadmapsSchema = z.object({})
 
 const getPublicRoadmapPostsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   roadmapId: roadmapIdSchema,
   statusId: statusIdSchema.optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
@@ -99,11 +91,12 @@ const getPublicRoadmapPostsSchema = z.object({
 })
 
 const getRoadmapPostsByStatusSchema = z.object({
-  workspaceId: workspaceIdSchema,
   statusId: statusIdSchema,
   page: z.number().int().min(1).optional().default(1),
   limit: z.number().int().min(1).max(100).optional().default(10),
 })
+
+const getOrganizationIdSchema = z.object({})
 
 // ============================================
 // Type Exports
@@ -119,17 +112,18 @@ export type GetVotedPostsInput = z.infer<typeof getVotedPostsSchema>
 export type ListPublicRoadmapsInput = z.infer<typeof listPublicRoadmapsSchema>
 export type GetPublicRoadmapPostsInput = z.infer<typeof getPublicRoadmapPostsSchema>
 export type GetRoadmapPostsByStatusInput = z.infer<typeof getRoadmapPostsByStatusSchema>
+export type GetOrganizationIdInput = z.infer<typeof getOrganizationIdSchema>
 
 // ============================================
 // Helper Functions
 // ============================================
 
 /**
- * Get member record for a user in a workspace
+ * Get member record for a user
  */
-async function getMemberRecord(userId: UserId, workspaceId: WorkspaceId) {
+async function getMemberRecord(userId: UserId) {
   return db.query.member.findFirst({
-    where: and(eq(member.userId, userId), eq(member.workspaceId, workspaceId)),
+    where: eq(member.userId, userId),
   })
 }
 
@@ -138,11 +132,9 @@ async function getMemberRecord(userId: UserId, workspaceId: WorkspaceId) {
  */
 function buildCtx(
   session: { user: { id: string; email: string; name: string | null } },
-  workspaceId: WorkspaceId,
   memberRecord: { id: string; role: string }
 ): ServiceContext {
   return buildServiceContext({
-    workspace: { id: workspaceId },
     user: {
       id: session.user.id as UserId,
       name: session.user.name,
@@ -177,8 +169,18 @@ export async function listPublicPostsAction(
 
     const input = parseResult.data
 
+    // Get organizationId from settings
+    const { getSettings } = await import('@/lib/tenant')
+    const settings = await getSettings()
+    if (!settings) {
+      return actionErr({
+        code: 'NOT_FOUND',
+        message: 'Organization not found',
+        status: 404,
+      })
+    }
+
     const result = await getPostService().listPublicPosts({
-      workspaceId: input.workspaceId as WorkspaceId,
       boardSlug: input.boardSlug,
       search: input.search,
       statusIds: input.statusIds as StatusId[] | undefined,
@@ -227,13 +229,6 @@ export async function getPostPermissionsAction(rawInput: GetPostPermissionsInput
 
     const postId = parseResult.data.postId as PostId
 
-    // Get the board to find workspace
-    const boardResult = await getPostService().getBoardByPostId(postId)
-    if (!boardResult.success || !boardResult.value) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
-    }
-    const board = boardResult.value
-
     // Check session (optional)
     const session = await getSession()
     if (!session?.user) {
@@ -241,12 +236,12 @@ export async function getPostPermissionsAction(rawInput: GetPostPermissionsInput
     }
 
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, board.workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionOk({ canEdit: false, canDelete: false })
     }
 
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
     const postService = getPostService()
 
     // Check permissions
@@ -300,24 +295,17 @@ export async function userEditPostAction(
       })
     }
 
-    // Get board to find workspace
-    const boardResult = await getPostService().getBoardByPostId(postId)
-    if (!boardResult.success || !boardResult.value) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
-    }
-    const board = boardResult.value
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, board.workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to edit posts.',
+        message: 'You must be a member to edit posts.',
         status: 403,
       })
     }
 
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
 
     const result = await getPostService().userEditPost(postId, { title, content, contentJson }, ctx)
     if (!result.success) {
@@ -363,24 +351,17 @@ export async function userDeletePostAction(
       })
     }
 
-    // Get board to find workspace
-    const boardResult = await getPostService().getBoardByPostId(postId)
-    if (!boardResult.success || !boardResult.value) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
-    }
-    const board = boardResult.value
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, board.workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to delete posts.',
+        message: 'You must be a member to delete posts.',
         status: 403,
       })
     }
 
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
 
     const result = await getPostService().softDeletePost(postId, ctx)
     if (!result.success) {
@@ -427,32 +408,19 @@ export async function toggleVoteAction(
       })
     }
 
-    // Get board to find workspace
-    const boardResult = await getPostService().getBoardByPostId(postId)
-    if (!boardResult.success || !boardResult.value) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
-    }
-    const board = boardResult.value
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, board.workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to vote.',
+        message: 'You must be a member to vote.',
         status: 403,
       })
     }
 
-    // Team members can vote on any board; portal users only on public boards
-    const isTeamMember = ['owner', 'admin', 'member'].includes(memberRecord.role)
-    if (!board.isPublic && !isTeamMember) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
-    }
-
     const memberId = memberRecord.id as MemberId
     const userIdentifier = getMemberIdentifier(memberId)
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
 
     // Generate IP hash if not provided (for privacy-preserving storage)
     const ipHash =
@@ -515,20 +483,19 @@ export async function createPublicPostAction(
     }
 
     // Get member record
-    const memberResult = await getMemberService().getMemberByUserAndOrg(
-      session.user.id,
-      board.workspaceId
+    const memberResult = await getMemberService().getMemberByUser(
+      session.user.id as UserId
     )
     if (!memberResult.success || !memberResult.value) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to submit feedback.',
+        message: 'You must be a member to submit feedback.',
         status: 403,
       })
     }
     const memberRecord = memberResult.value
 
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
 
     // Get default status
     const defaultStatusResult = await getStatusService().getDefaultStatus(ctx)
@@ -559,9 +526,20 @@ export async function createPublicPostAction(
 
     const post = createResult.value
 
+    // Get organizationId from settings for event
+    const { getSettings } = await import('@/lib/tenant')
+    const settings = await getSettings()
+    if (!settings) {
+      return actionErr({
+        code: 'INTERNAL_ERROR',
+        message: 'Organization settings not found',
+        status: 500,
+      })
+    }
+
     // Trigger EventWorkflow for integrations and notifications
     const eventData = buildPostCreatedEvent(
-      ctx.workspaceId,
+      settings.id,
       { type: 'user', userId: ctx.userId, email: ctx.userEmail },
       {
         id: post.id,
@@ -616,8 +594,6 @@ export async function getVotedPostsAction(
       })
     }
 
-    const workspaceId = parseResult.data.workspaceId as WorkspaceId
-
     // Optional auth - return empty if not authenticated
     const session = await getSession()
     if (!session?.user) {
@@ -625,7 +601,7 @@ export async function getVotedPostsAction(
     }
 
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionOk({ votedPostIds: [] })
     }
@@ -664,9 +640,18 @@ export async function listPublicRoadmapsAction(
       })
     }
 
-    const workspaceId = parseResult.data.workspaceId as WorkspaceId
+    // Get organizationId from settings
+    const { getSettings } = await import('@/lib/tenant')
+    const settings = await getSettings()
+    if (!settings) {
+      return actionErr({
+        code: 'NOT_FOUND',
+        message: 'Organization not found',
+        status: 404,
+      })
+    }
 
-    const result = await getRoadmapService().listPublicRoadmaps(workspaceId)
+    const result = await getRoadmapService().listPublicRoadmaps()
     if (!result.success) {
       return actionErr({
         code: 'INTERNAL_ERROR',
@@ -702,10 +687,20 @@ export async function getPublicRoadmapPostsAction(
       })
     }
 
-    const { workspaceId, roadmapId, statusId, limit, offset } = parseResult.data
+    const { roadmapId, statusId, limit, offset } = parseResult.data
+
+    // Get organizationId from settings
+    const { getSettings } = await import('@/lib/tenant')
+    const settings = await getSettings()
+    if (!settings) {
+      return actionErr({
+        code: 'NOT_FOUND',
+        message: 'Organization not found',
+        status: 404,
+      })
+    }
 
     const result = await getRoadmapService().getPublicRoadmapPosts(
-      workspaceId as WorkspaceId,
       roadmapId as RoadmapId,
       {
         statusId: statusId as StatusId | undefined,
@@ -750,10 +745,20 @@ export async function getRoadmapPostsByStatusAction(
       })
     }
 
-    const { workspaceId, statusId, page, limit } = parseResult.data
+    const { statusId, page, limit } = parseResult.data
+
+    // Get organizationId from settings
+    const { getSettings } = await import('@/lib/tenant')
+    const settings = await getSettings()
+    if (!settings) {
+      return actionErr({
+        code: 'NOT_FOUND',
+        message: 'Organization not found',
+        status: 404,
+      })
+    }
 
     const result = await getPostService().getRoadmapPostsPaginated({
-      workspaceId: workspaceId as WorkspaceId,
       statusId: statusId as StatusId,
       page,
       limit,
@@ -766,6 +771,36 @@ export async function getRoadmapPostsByStatusAction(
     return actionOk(result.value)
   } catch (error) {
     console.error('Error fetching roadmap posts by status:', error)
+    return actionErr({
+      code: 'INTERNAL_ERROR',
+      message: 'An unexpected error occurred',
+      status: 500,
+    })
+  }
+}
+
+/**
+ * Get the current organization ID from settings (no auth required).
+ * In single-tenant mode, this returns the singleton organization ID.
+ */
+export async function getOrganizationIdAction(
+  _rawInput?: GetOrganizationIdInput
+): Promise<ActionResult<{ organizationId: string }>> {
+  try {
+    const { getSettings } = await import('@/lib/tenant')
+    const settings = await getSettings()
+
+    if (!settings) {
+      return actionErr({
+        code: 'NOT_FOUND',
+        message: 'Organization settings not found',
+        status: 404,
+      })
+    }
+
+    return actionOk({ organizationId: settings.id })
+  } catch (error) {
+    console.error('Error fetching organization ID:', error)
     return actionErr({
       code: 'INTERNAL_ERROR',
       message: 'An unexpected error occurred',

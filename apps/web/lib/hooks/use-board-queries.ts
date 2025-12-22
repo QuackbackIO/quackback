@@ -37,7 +37,6 @@ export function useCreateBoard(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (input: CreateBoardInput): Promise<Board> => {
       const result = await createBoardAction({
-        workspaceId,
         name: input.name,
         description: input.description,
         isPublic: input.isPublic ?? true,
@@ -70,7 +69,6 @@ export function useUpdateBoard(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async ({ boardId, ...input }: UpdateBoardInput_Full): Promise<Board> => {
       const result = await updateBoardAction({
-        workspaceId,
         id: boardId,
         name: input.name,
         description: input.description,
@@ -99,7 +97,6 @@ export function useDeleteBoard(workspaceId: WorkspaceId) {
   return useMutation({
     mutationFn: async (boardId: BoardId): Promise<{ id: string }> => {
       const result = await deleteBoardAction({
-        workspaceId,
         id: boardId,
       })
 

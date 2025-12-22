@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and, commentReactions, REACTION_EMOJIS } from '@/lib/db'
 import { getCommentService, getPostService } from '@/lib/services'
 import { getMemberIdentifier } from '@/lib/user-identifier'
+import { getSettings } from '@/lib/tenant'
 import { buildCommentCreatedEvent, type ServiceContext } from '@quackback/domain'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
@@ -14,7 +15,6 @@ import {
   isValidTypeId,
   type PostId,
   type CommentId,
-  type WorkspaceId,
   type MemberId,
   type UserId,
 } from '@quackback/ids'
@@ -64,11 +64,11 @@ export type ToggleReactionInput = z.infer<typeof toggleReactionSchema>
 // ============================================
 
 /**
- * Get member record for a user in a workspace
+ * Get member record for a user
  */
-async function getMemberRecord(userId: UserId, workspaceId: WorkspaceId) {
+async function getMemberRecord(userId: UserId) {
   return db.query.member.findFirst({
-    where: and(eq(member.userId, userId), eq(member.workspaceId, workspaceId)),
+    where: eq(member.userId, userId),
   })
 }
 
@@ -77,11 +77,9 @@ async function getMemberRecord(userId: UserId, workspaceId: WorkspaceId) {
  */
 function buildCtx(
   session: { user: { id: string; email: string; name: string | null } },
-  workspaceId: WorkspaceId,
   memberRecord: { id: string; role: string }
 ): ServiceContext {
   return {
-    workspaceId,
     userId: session.user.id as UserId,
     memberId: memberRecord.id as MemberId,
     memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
@@ -123,22 +121,22 @@ export async function createCommentAction(
       })
     }
 
-    // Get board to find workspace
+    // Get member record
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
+    if (!memberRecord) {
+      return actionErr({
+        code: 'FORBIDDEN',
+        message: 'You must be a member to comment.',
+        status: 403,
+      })
+    }
+
+    // Get board to check permissions
     const boardResult = await getPostService().getBoardByPostId(postId)
     if (!boardResult.success || !boardResult.value) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
     const board = boardResult.value
-
-    // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, board.workspaceId)
-    if (!memberRecord) {
-      return actionErr({
-        code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to comment.',
-        status: 403,
-      })
-    }
 
     // Team members can comment on any board; portal users only on public boards
     const isTeamMember = ['owner', 'admin', 'member'].includes(memberRecord.role)
@@ -159,7 +157,7 @@ export async function createCommentAction(
       parentIdTypeId = parentId as CommentId
     }
 
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
 
     const serviceResult = await getCommentService().createComment(
       {
@@ -178,15 +176,18 @@ export async function createCommentAction(
 
     // Trigger EventWorkflow for integrations and notifications
     const { comment, post } = serviceResult.value
-    const eventData = buildCommentCreatedEvent(
-      ctx.workspaceId,
-      { type: 'user', userId: ctx.userId, email: ctx.userEmail },
-      { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
-      { id: post.id, title: post.title }
-    )
-    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-    const jobAdapter = getJobAdapter(env)
-    await jobAdapter.addEventJob(eventData)
+    const settings = await getSettings()
+    if (settings) {
+      const eventData = buildCommentCreatedEvent(
+        settings.id,
+        { type: 'user', userId: ctx.userId, email: ctx.userEmail },
+        { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
+        { id: post.id, title: post.title }
+      )
+      const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
+      const jobAdapter = getJobAdapter(env)
+      await jobAdapter.addEventJob(eventData)
+    }
 
     return actionOk(comment)
   } catch (error) {
@@ -222,15 +223,6 @@ export async function getCommentPermissionsAction(rawInput: GetCommentPermission
 
     const commentId = parseResult.data.commentId as CommentId
 
-    // Get comment context to find workspace
-    const commentService = getCommentService()
-    const contextResult = await commentService.resolveCommentContext(commentId)
-    if (!contextResult.success) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Comment not found', status: 404 })
-    }
-
-    const { workspaceId } = contextResult.value
-
     // Check session (optional)
     const session = await getSession()
     if (!session?.user) {
@@ -238,12 +230,13 @@ export async function getCommentPermissionsAction(rawInput: GetCommentPermission
     }
 
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionOk({ canEdit: false, canDelete: false })
     }
 
-    const ctx = buildCtx(session, workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
+    const commentService = getCommentService()
 
     // Check permissions
     const [editResult, deleteResult] = await Promise.all([
@@ -296,26 +289,18 @@ export async function userEditCommentAction(
       })
     }
 
-    // Get comment context to find workspace
-    const commentService = getCommentService()
-    const contextResult = await commentService.resolveCommentContext(commentId)
-    if (!contextResult.success) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Comment not found', status: 404 })
-    }
-
-    const { workspaceId } = contextResult.value
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to edit comments.',
+        message: 'You must be a member to edit comments.',
         status: 403,
       })
     }
 
-    const ctx = buildCtx(session, workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
+    const commentService = getCommentService()
 
     const result = await commentService.userEditComment(commentId, content, ctx)
     if (!result.success) {
@@ -361,26 +346,18 @@ export async function userDeleteCommentAction(
       })
     }
 
-    // Get comment context to find workspace
-    const commentService = getCommentService()
-    const contextResult = await commentService.resolveCommentContext(commentId)
-    if (!contextResult.success) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Comment not found', status: 404 })
-    }
-
-    const { workspaceId } = contextResult.value
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to delete comments.',
+        message: 'You must be a member to delete comments.',
         status: 403,
       })
     }
 
-    const ctx = buildCtx(session, workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
+    const commentService = getCommentService()
 
     const result = await commentService.softDeleteComment(commentId, ctx)
     if (!result.success) {
@@ -457,25 +434,18 @@ export async function toggleReactionAction(
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
 
-    const board = await db.query.boards.findFirst({
-      where: (boards, { eq }) => eq(boards.id, post.boardId),
-    })
-    if (!board) {
-      return actionErr({ code: 'NOT_FOUND', message: 'Board not found', status: 404 })
-    }
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id as UserId, board.workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace to react.',
+        message: 'You must be a member to react.',
         status: 403,
       })
     }
 
     const userIdentifier = getMemberIdentifier(memberRecord.id)
-    const ctx = buildCtx(session, board.workspaceId, memberRecord)
+    const ctx = buildCtx(session, memberRecord)
 
     // Check if reaction already exists
     const existingReaction = await db.query.commentReactions.findFirst({

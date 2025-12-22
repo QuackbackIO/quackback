@@ -50,7 +50,7 @@ export interface ActionError {
  * Similar to ApiHandlerContext but for server actions.
  */
 export interface ActionContext {
-  workspace: {
+  settings: {
     id: WorkspaceId
     slug: string
     name: string

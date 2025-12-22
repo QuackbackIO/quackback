@@ -4,18 +4,15 @@ import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
 import { getTagService } from '@/lib/services'
-import { workspaceIdSchema, tagIdSchema, type TagId } from '@quackback/ids'
+import { tagIdSchema, type TagId } from '@quackback/ids'
 
 // ============================================
 // Schemas
 // ============================================
 
-const listTagsSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const listTagsSchema = z.object({})
 
 const createTagSchema = z.object({
-  workspaceId: workspaceIdSchema,
   name: z.string().min(1, 'Name is required').max(50, 'Name must be 50 characters or less'),
   color: z
     .string()
@@ -25,12 +22,10 @@ const createTagSchema = z.object({
 })
 
 const getTagSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: tagIdSchema,
 })
 
 const updateTagSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: tagIdSchema,
   name: z.string().min(1).max(50).optional(),
   color: z
@@ -40,7 +35,6 @@ const updateTagSchema = z.object({
 })
 
 const deleteTagSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: tagIdSchema,
 })
 

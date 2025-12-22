@@ -7,7 +7,6 @@ import { SubscriptionService } from '@quackback/domain/subscriptions'
 import {
   postIdSchema,
   type PostId,
-  type WorkspaceId,
   type MemberId,
   type UserId,
 } from '@quackback/ids'
@@ -55,21 +54,20 @@ export interface SubscriptionStatus {
 // ============================================
 
 /**
- * Get post with workspace info
+ * Get post
  */
-async function getPostWithWorkspace(postId: PostId) {
+async function getPost(postId: PostId) {
   return db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    with: { board: { columns: { workspaceId: true } } },
   })
 }
 
 /**
- * Get member record for a user in a workspace
+ * Get member record for a user
  */
-async function getMemberRecord(userId: UserId, workspaceId: WorkspaceId) {
+async function getMemberRecord(userId: UserId) {
   return db.query.member.findFirst({
-    where: and(eq(member.userId, userId), eq(member.workspaceId, workspaceId)),
+    where: eq(member.userId, userId),
   })
 }
 
@@ -105,20 +103,18 @@ export async function getSubscriptionStatusAction(
       })
     }
 
-    // Get post to find workspace
-    const post = await getPostWithWorkspace(postId)
+    // Get post
+    const post = await getPost(postId)
     if (!post) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
 
-    const workspaceId = post.board.workspaceId
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace',
+        message: 'You must be a member',
         status: 403,
       })
     }
@@ -126,8 +122,7 @@ export async function getSubscriptionStatusAction(
     const subscriptionService = new SubscriptionService()
     const status = await subscriptionService.getSubscriptionStatus(
       memberRecord.id as MemberId,
-      postId,
-      workspaceId
+      postId
     )
 
     return actionOk(status)
@@ -170,20 +165,18 @@ export async function subscribeToPostAction(
       })
     }
 
-    // Get post to find workspace
-    const post = await getPostWithWorkspace(postId)
+    // Get post
+    const post = await getPost(postId)
     if (!post) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
 
-    const workspaceId = post.board.workspaceId
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace',
+        message: 'You must be a member',
         status: 403,
       })
     }
@@ -192,8 +185,7 @@ export async function subscribeToPostAction(
     await subscriptionService.subscribeToPost(
       memberRecord.id as MemberId,
       postId,
-      reason,
-      workspaceId
+      reason
     )
 
     return actionOk({
@@ -239,26 +231,24 @@ export async function unsubscribeFromPostAction(
       })
     }
 
-    // Get post to find workspace
-    const post = await getPostWithWorkspace(postId)
+    // Get post
+    const post = await getPost(postId)
     if (!post) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
 
-    const workspaceId = post.board.workspaceId
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace',
+        message: 'You must be a member',
         status: 403,
       })
     }
 
     const subscriptionService = new SubscriptionService()
-    await subscriptionService.unsubscribeFromPost(memberRecord.id as MemberId, postId, workspaceId)
+    await subscriptionService.unsubscribeFromPost(memberRecord.id as MemberId, postId)
 
     return actionOk({
       subscribed: false,
@@ -304,30 +294,28 @@ export async function muteSubscriptionAction(
       })
     }
 
-    // Get post to find workspace
-    const post = await getPostWithWorkspace(postId)
+    // Get post
+    const post = await getPost(postId)
     if (!post) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
 
-    const workspaceId = post.board.workspaceId
-
     // Get member record
-    const memberRecord = await getMemberRecord(session.user.id, workspaceId)
+    const memberRecord = await getMemberRecord(session.user.id as UserId)
     if (!memberRecord) {
       return actionErr({
         code: 'FORBIDDEN',
-        message: 'You must be a member of this workspace',
+        message: 'You must be a member',
         status: 403,
       })
     }
 
     const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id as MemberId
-    await subscriptionService.setSubscriptionMuted(memberId, postId, muted, workspaceId)
+    await subscriptionService.setSubscriptionMuted(memberId, postId, muted)
 
     // Get updated status
-    const status = await subscriptionService.getSubscriptionStatus(memberId, postId, workspaceId)
+    const status = await subscriptionService.getSubscriptionStatus(memberId, postId)
 
     return actionOk(status)
   } catch (error) {

@@ -5,7 +5,6 @@ import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
 import { getRoadmapService } from '@/lib/services'
 import {
-  workspaceIdSchema,
   roadmapIdSchema,
   postIdSchema,
   statusIdSchema,
@@ -19,12 +18,9 @@ import {
 // Schemas
 // ============================================
 
-const listRoadmapsSchema = z.object({
-  workspaceId: workspaceIdSchema,
-})
+const listRoadmapsSchema = z.object({})
 
 const createRoadmapSchema = z.object({
-  workspaceId: workspaceIdSchema,
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
   slug: z
     .string()
@@ -36,12 +32,10 @@ const createRoadmapSchema = z.object({
 })
 
 const getRoadmapSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: roadmapIdSchema,
 })
 
 const updateRoadmapSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: roadmapIdSchema,
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
@@ -49,17 +43,14 @@ const updateRoadmapSchema = z.object({
 })
 
 const deleteRoadmapSchema = z.object({
-  workspaceId: workspaceIdSchema,
   id: roadmapIdSchema,
 })
 
 const reorderRoadmapsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   roadmapIds: z.array(z.string()).min(1, 'At least one roadmap ID is required'),
 })
 
 const getRoadmapPostsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   roadmapId: roadmapIdSchema,
   statusId: statusIdSchema.optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
@@ -67,19 +58,16 @@ const getRoadmapPostsSchema = z.object({
 })
 
 const addPostToRoadmapSchema = z.object({
-  workspaceId: workspaceIdSchema,
   roadmapId: roadmapIdSchema,
   postId: postIdSchema,
 })
 
 const removePostFromRoadmapSchema = z.object({
-  workspaceId: workspaceIdSchema,
   roadmapId: roadmapIdSchema,
   postId: postIdSchema,
 })
 
 const reorderRoadmapPostsSchema = z.object({
-  workspaceId: workspaceIdSchema,
   roadmapId: roadmapIdSchema,
   postIds: z.array(z.string()).min(1, 'At least one post ID is required'),
 })

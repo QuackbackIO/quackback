@@ -4,7 +4,7 @@ import { db, invitation, member, eq, and } from '@/lib/db'
 import { generateId } from '@quackback/ids'
 import { getSession } from '@/lib/auth/server'
 import { syncWorkspaceSeats, isBillableRole } from '@quackback/ee/billing'
-import type { InviteId, MemberId, WorkspaceId, UserId } from '@quackback/ids'
+import type { InviteId, MemberId, UserId } from '@quackback/ids'
 
 export type AcceptInvitationResult = {
   success: boolean
@@ -68,12 +68,11 @@ export async function acceptInvitationAction(
       }
     }
 
-    const workspaceId = inv.workspaceId as WorkspaceId
     const role = inv.role || 'member'
 
     // Check if member record already exists
     const existingMember = await db.query.member.findFirst({
-      where: and(eq(member.userId, userId), eq(member.workspaceId, workspaceId)),
+      where: eq(member.userId, userId),
     })
 
     if (existingMember) {
@@ -93,7 +92,6 @@ export async function acceptInvitationAction(
       await db.insert(member).values({
         id: generateId('member'),
         userId,
-        workspaceId,
         role,
         createdAt: new Date(),
       })
@@ -104,14 +102,6 @@ export async function acceptInvitationAction(
       .update(invitation)
       .set({ status: 'accepted' })
       .where(eq(invitation.id, invitationId as InviteId))
-
-    // Sync seat count to Stripe if this is a billable role (owner/admin)
-    if (isBillableRole(role)) {
-      // Fire and forget - don't block invitation acceptance on Stripe sync
-      syncWorkspaceSeats(workspaceId).catch((error) => {
-        console.error('Failed to sync seats after invitation acceptance:', error)
-      })
-    }
 
     return { success: true }
   } catch (error) {
