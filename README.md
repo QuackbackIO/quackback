@@ -43,7 +43,6 @@ Feedback tools should be simple. Quackback focuses on the essentials: voting, ro
 - **Your choice:** Use our managed cloud or self-host on your own infrastructure.
 - **Own your data:** No vendor lock-in. Export anytime, or run it yourself.
 - **Modern Stack:** Built with Next.js 16, RSC, and Tailwind. Fast by default.
-- **Customizable:** It's code. Tweak the logic, style the UI, and make it yours.
 
 ## Features
 
@@ -67,7 +66,7 @@ Quackback can be deployed anywhere that supports Docker or Node.js.
 ### Production (Docker)
 
 ```bash
-git clone https://github.com/your-org/quackback.git
+git clone https://github.com/QuackbackIO/quackback.git
 cd quackback
 cp .env.example .env   # Edit with your configuration
 docker build -t quackback .
@@ -81,23 +80,22 @@ You'll need to provide your own PostgreSQL database. Set `DATABASE_URL` in your 
 Prerequisites: [Bun](https://bun.sh/) v1.3.3+ and [Docker](https://docker.com/)
 
 ```bash
-git clone https://github.com/your-org/quackback.git
+git clone https://github.com/QuackbackIO/quackback.git
 cd quackback
 bun run setup          # Install deps, create .env
 docker-compose up -d   # Start local PostgreSQL
-bun run db:push        # Push schema
+bun run db:migrate     # Run migrations
 bun run db:seed        # (Optional) Seed demo data
 bun run dev            # Start dev server
 ```
 
-Visit [http://acme.localhost:3000](http://acme.localhost:3000) and log in with `demo@example.com` / `demo1234`.
+Visit [http://localhost:3000](http://localhost:3000) and log in with `demo@example.com` (OTP code appears in console).
 
 ## Roadmap
 
 - [x] Public feedback boards with voting
 - [x] Admin inbox with filtering
 - [x] Nested comments with reactions
-- [x] Multi-organization support
 - [x] Official responses
 - [ ] Public changelog
 - [ ] Email notifications
@@ -106,7 +104,7 @@ Visit [http://acme.localhost:3000](http://acme.localhost:3000) and log in with `
 - [ ] Jira / Linear integration
 - [ ] Zapier integration
 - [ ] Webhooks & API keys
-- [ ] Custom domains per organization
+- [ ] Custom domains
 - [ ] SSO (Okta, Azure AD)
 
 ## Contributing
