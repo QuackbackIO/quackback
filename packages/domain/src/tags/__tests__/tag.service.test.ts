@@ -40,11 +40,9 @@ vi.mock('@quackback/db', () => {
   }
 
   return {
-    withUnitOfWork: vi.fn(
-      async (_orgId: string, callback: (uow: { db: unknown }) => Promise<unknown>) => {
-        return callback({ db: {} })
-      }
-    ),
+    withUnitOfWork: vi.fn(async (callback: (uow: { db: unknown }) => Promise<unknown>) => {
+      return callback({ db: {} })
+    }),
     TagRepository: MockTagRepository,
     BoardRepository: MockBoardRepository,
     // For listPublicTags method which uses dynamic import
@@ -55,7 +53,9 @@ vi.mock('@quackback/db', () => {
         },
       },
     },
-    tags: { workspaceId: 'workspaceId' },
+    tags: {
+      name: 'name',
+    },
     asc: vi.fn((col: unknown) => col),
     eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
   }
@@ -96,7 +96,6 @@ describe('TagService', () => {
         expect(result.value.color).toBe('#ff0000')
       }
       expect(mockTagRepoInstance.create).toHaveBeenCalledWith({
-        workspaceId: ctx.workspaceId,
         name: 'Bug',
         color: '#ff0000',
       })
@@ -599,7 +598,7 @@ describe('TagService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.tags.findMany).mockResolvedValue(mockTags)
 
-      const result = await tagService.listPublicTags('org-123')
+      const result = await tagService.listPublicTags()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -613,7 +612,7 @@ describe('TagService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.tags.findMany).mockResolvedValue([])
 
-      const result = await tagService.listPublicTags('org-123')
+      const result = await tagService.listPublicTags()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -625,7 +624,7 @@ describe('TagService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.tags.findMany).mockRejectedValue(new Error('Database error'))
 
-      const result = await tagService.listPublicTags('org-123')
+      const result = await tagService.listPublicTags()
 
       expect(result.success).toBe(false)
       if (!result.success) {

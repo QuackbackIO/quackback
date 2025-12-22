@@ -1,13 +1,14 @@
-import { eq } from 'drizzle-orm'
-import type { WorkspaceId } from '@quackback/ids'
-import { db } from '../tenant-context'
-import { tags } from '../schema/boards'
+import { db } from '../client'
 import type { Tag } from '../types'
 
-// Tag query
-export async function getTagsByOrganization(organizationId: WorkspaceId): Promise<Tag[]> {
+/**
+ * Get all tags, ordered by name
+ */
+export async function getTags(): Promise<Tag[]> {
   return db.query.tags.findMany({
-    where: eq(tags.workspaceId, organizationId),
     orderBy: (tags, { asc }) => [asc(tags.name)],
   })
 }
+
+// Backwards compatibility alias
+export const getTagsByOrganization = getTags

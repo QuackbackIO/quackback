@@ -61,7 +61,7 @@ export class CommentService {
     input: CreateCommentInput,
     ctx: ServiceContext
   ): Promise<Result<CreateCommentResult, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -105,7 +105,6 @@ export class CommentService {
       // Create the comment with member-scoped identity
       // Convert member TypeID back to raw UUID for database foreign key
       const comment = await commentRepo.create({
-        workspaceId: ctx.workspaceId,
         postId: input.postId,
         content: input.content.trim(),
         parentId: input.parentId || null,
@@ -119,7 +118,6 @@ export class CommentService {
       if (ctx.memberId) {
         const subscriptionService = new SubscriptionService()
         await subscriptionService.subscribeToPost(ctx.memberId, input.postId, 'comment', {
-          workspaceId: ctx.workspaceId,
           db: uow.db,
         })
       }
@@ -147,7 +145,7 @@ export class CommentService {
     input: UpdateCommentInput,
     ctx: ServiceContext
   ): Promise<Result<Comment, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -215,7 +213,7 @@ export class CommentService {
    * @returns Result indicating success or an error
    */
   async deleteComment(id: CommentId, ctx: ServiceContext): Promise<Result<void, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -262,8 +260,11 @@ export class CommentService {
    * @param ctx - Service context with user/org information
    * @returns Result containing the comment or an error
    */
-  async getCommentById(id: CommentId, ctx: ServiceContext): Promise<Result<Comment, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+  async getCommentById(
+    id: CommentId,
+    _ctx: ServiceContext
+  ): Promise<Result<Comment, CommentError>> {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -302,7 +303,7 @@ export class CommentService {
     postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<CommentThread[], CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
 
@@ -369,7 +370,7 @@ export class CommentService {
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -407,7 +408,6 @@ export class CommentService {
       if (!existingReaction) {
         // Add reaction
         await uow.db.insert(commentReactions).values({
-          workspaceId: ctx.workspaceId,
           commentId,
           userIdentifier,
           emoji,
@@ -447,7 +447,7 @@ export class CommentService {
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -556,11 +556,9 @@ export class CommentService {
         },
         board: {
           id: comment.post.board.id,
-          workspaceId: comment.post.board.workspaceId,
           name: comment.post.board.name,
           slug: comment.post.board.slug,
         },
-        workspaceId: comment.post.board.workspaceId,
       })
     } catch (error) {
       return err(
@@ -586,7 +584,7 @@ export class CommentService {
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
       const boardRepo = new BoardRepository(uow.db)
@@ -628,7 +626,6 @@ export class CommentService {
       } else {
         // Add new reaction
         await uow.db.insert(commentReactions).values({
-          workspaceId: ctx.workspaceId,
           commentId,
           userIdentifier,
           emoji,
@@ -776,7 +773,7 @@ export class CommentService {
       return err(CommentError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
     }
 
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
 
       // Get the existing comment
@@ -796,7 +793,6 @@ export class CommentService {
       // Record edit history (always record for comments)
       if (ctx.memberId) {
         await uow.db.insert(commentEditHistory).values({
-          workspaceId: ctx.workspaceId,
           commentId: commentId,
           editorMemberId: ctx.memberId,
           previousContent: existingComment.content,
@@ -837,7 +833,7 @@ export class CommentService {
       return err(CommentError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
     }
 
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
 
       // Set deletedAt

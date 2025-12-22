@@ -3,27 +3,25 @@
  *
  * This module defines the core types for the service layer execution context.
  * ServiceContext captures all necessary information about the authenticated user
- * and their workspace for service operations.
+ * for service operations in single-tenant mode.
  */
 
-import type { MemberId, WorkspaceId, UserId } from '@quackback/ids'
+import type { MemberId, UserId } from '@quackback/ids'
 
 /**
  * Execution context for service layer operations.
- * Contains authenticated user and workspace information.
+ * Contains authenticated user information.
  *
  * All authenticated users have member records with unified roles:
  * - owner/admin/member: Team members with admin dashboard access
  * - user: Portal users with public portal access only
  */
 export interface ServiceContext {
-  /** Workspace ID for multi-tenant isolation (TypeID format: workspace_xxx) */
-  workspaceId: WorkspaceId
   /** User ID of the authenticated user (TypeID format: user_xxx) */
   userId: UserId
   /** Member ID - all authenticated users have member records now (TypeID format: member_xxx) */
   memberId: MemberId
-  /** Member's role in the workspace (unified: owner/admin/member/user) */
+  /** Member's role (unified: owner/admin/member/user) */
   memberRole: 'owner' | 'admin' | 'member' | 'user'
   /** User's display name */
   userName: string
@@ -40,9 +38,6 @@ export interface ServiceContext {
  * All authenticated users have member records in the unified model.
  */
 export interface AuthValidation {
-  workspace: {
-    id: WorkspaceId
-  }
   user: {
     id: UserId
     name: string | null
@@ -57,12 +52,11 @@ export interface AuthValidation {
 /**
  * Builds a ServiceContext from auth validation result.
  *
- * @param validation - Auth validation result containing workspace, user, and member data
+ * @param validation - Auth validation result containing user and member data
  * @returns ServiceContext ready for service layer operations
  */
 export function buildServiceContext(validation: AuthValidation): ServiceContext {
   return {
-    workspaceId: validation.workspace.id,
     userId: validation.user.id,
     memberId: validation.member.id,
     memberRole: validation.member.role as 'owner' | 'admin' | 'member' | 'user',

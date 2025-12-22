@@ -16,13 +16,12 @@ import {
   type BoardSettings,
   db,
   eq,
-  and,
   sql,
   inArray,
   boards,
   posts,
 } from '@quackback/db'
-import type { BoardId, PostId, WorkspaceId } from '@quackback/ids'
+import type { BoardId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { BoardError } from './board.errors'
@@ -55,18 +54,18 @@ export class BoardService {
    * Validates that:
    * - User has permission to create boards (team members only)
    * - Board name is valid
-   * - Generated/provided slug is unique within the organization
+   * - Generated/provided slug is unique
    * - Input data is valid
    *
    * @param input - Board creation data
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing the created board or an error
    */
   async createBoard(
     input: CreateBoardInput,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       // Authorization check - only team members (owner, admin, member) can create boards
@@ -110,7 +109,6 @@ export class BoardService {
 
       // Create the board
       const board = await boardRepo.create({
-        workspaceId: ctx.workspaceId,
         name: input.name.trim(),
         slug,
         description: input.description?.trim() || null,
@@ -126,14 +124,14 @@ export class BoardService {
    * Update an existing board
    *
    * Validates that:
-   * - Board exists and belongs to the organization
+   * - Board exists
    * - User has permission to update the board (team members only)
    * - Update data is valid
    * - New slug (if provided) is unique
    *
    * @param id - Board ID to update
    * @param input - Update data
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing the updated board or an error
    */
   async updateBoard(
@@ -141,7 +139,7 @@ export class BoardService {
     input: UpdateBoardInput,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       // Get existing board
@@ -220,15 +218,15 @@ export class BoardService {
    * Delete a board
    *
    * Validates that:
-   * - Board exists and belongs to the organization
+   * - Board exists
    * - User has permission to delete the board (owner/admin only)
    *
    * @param id - Board ID to delete
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing void or an error
    */
   async deleteBoard(id: BoardId, ctx: ServiceContext): Promise<Result<void, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       // Get existing board
@@ -256,11 +254,11 @@ export class BoardService {
    * Get a board by ID
    *
    * @param id - Board ID to fetch
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing the board or an error
    */
-  async getBoardById(id: BoardId, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+  async getBoardById(id: BoardId, _ctx: ServiceContext): Promise<Result<Board, BoardError>> {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       const board = await boardRepo.findById(id)
@@ -276,11 +274,11 @@ export class BoardService {
    * Get a board by slug
    *
    * @param slug - Board slug to fetch
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing the board or an error
    */
-  async getBoardBySlug(slug: string, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+  async getBoardBySlug(slug: string, _ctx: ServiceContext): Promise<Result<Board, BoardError>> {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       const board = await boardRepo.findBySlug(slug)
@@ -293,13 +291,13 @@ export class BoardService {
   }
 
   /**
-   * List all boards in the organization
+   * List all boards
    *
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing array of boards or an error
    */
-  async listBoards(ctx: ServiceContext): Promise<Result<Board[], BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+  async listBoards(_ctx: ServiceContext): Promise<Result<Board[], BoardError>> {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       const boards = await boardRepo.findAll()
@@ -310,13 +308,13 @@ export class BoardService {
   /**
    * List all boards with post counts
    *
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing array of boards with details or an error
    */
   async listBoardsWithDetails(
-    ctx: ServiceContext
+    _ctx: ServiceContext
   ): Promise<Result<BoardWithDetails[], BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       const boards = await boardRepo.findWithPostCount()
@@ -328,12 +326,12 @@ export class BoardService {
    * Update board settings
    *
    * Validates that:
-   * - Board exists and belongs to the organization
+   * - Board exists
    * - User has permission to update settings (team members only)
    *
    * @param id - Board ID to update
    * @param settings - New settings to merge with existing settings
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing the updated board or an error
    */
   async updateBoardSettings(
@@ -341,7 +339,7 @@ export class BoardService {
     settings: BoardSettings,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       // Get existing board
@@ -376,7 +374,6 @@ export class BoardService {
    * Get a public board by ID (no authentication required)
    *
    * This method is used for public endpoints like post creation.
-   * It does NOT use RLS or require authentication.
    *
    * @param boardId - Board ID to fetch
    * @returns Result containing the board or an error
@@ -402,21 +399,18 @@ export class BoardService {
   }
 
   /**
-   * List all public boards with post counts for an organization
+   * List all public boards with post counts
    *
    * This method is used for public endpoints and does not require authentication.
    * Only returns boards where isPublic = true.
    *
-   * @param workspaceId - Organization ID to filter boards
    * @returns Result containing array of public boards with stats or an error
    */
-  async listPublicBoardsWithStats(
-    workspaceId: WorkspaceId
-  ): Promise<Result<BoardWithStats[], BoardError>> {
+  async listPublicBoardsWithStats(): Promise<Result<BoardWithStats[], BoardError>> {
     try {
-      // Fetch all public boards for the organization
+      // Fetch all public boards
       const publicBoards = await db.query.boards.findMany({
-        where: and(eq(boards.workspaceId, workspaceId), eq(boards.isPublic, true)),
+        where: eq(boards.isPublic, true),
         orderBy: (boards, { asc }) => [asc(boards.name)],
       })
 
@@ -458,21 +452,13 @@ export class BoardService {
    *
    * Only returns boards where isPublic = true.
    *
-   * @param workspaceId - Organization ID
    * @param slug - Board slug to fetch
    * @returns Result containing the board or null if not found/not public
    */
-  async getPublicBoardBySlug(
-    workspaceId: WorkspaceId,
-    slug: string
-  ): Promise<Result<Board | null, BoardError>> {
+  async getPublicBoardBySlug(slug: string): Promise<Result<Board | null, BoardError>> {
     try {
       const board = await db.query.boards.findFirst({
-        where: and(
-          eq(boards.workspaceId, workspaceId),
-          eq(boards.slug, slug),
-          eq(boards.isPublic, true)
-        ),
+        where: (boards, { and, eq }) => and(eq(boards.slug, slug), eq(boards.isPublic, true)),
       })
 
       return ok(board || null)
@@ -489,14 +475,14 @@ export class BoardService {
    * Get a board by post ID
    *
    * Finds the post and returns its associated board.
-   * Requires authentication and proper tenant context.
+   * Requires authentication context.
    *
    * @param postId - Post ID to lookup
-   * @param ctx - Service context with user/org information
+   * @param ctx - Service context with user information
    * @returns Result containing the board or an error
    */
-  async getBoardByPostId(postId: PostId, ctx: ServiceContext): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(ctx.workspaceId, async (uow: UnitOfWork) => {
+  async getBoardByPostId(postId: PostId, _ctx: ServiceContext): Promise<Result<Board, BoardError>> {
+    return withUnitOfWork(async (uow: UnitOfWork) => {
       const boardRepo = new BoardRepository(uow.db)
 
       // Find the post first
@@ -519,19 +505,15 @@ export class BoardService {
   }
 
   /**
-   * Count boards for an organization (no auth required)
+   * Count boards (no auth required)
    *
    * Used by onboarding/getting-started pages.
    *
-   * @param workspaceId - Organization ID
    * @returns Result containing the board count
    */
-  async countBoardsByOrg(workspaceId: WorkspaceId): Promise<Result<number, BoardError>> {
+  async countBoards(): Promise<Result<number, BoardError>> {
     try {
-      const result = await db
-        .select({ count: sql<number>`count(*)`.as('count') })
-        .from(boards)
-        .where(eq(boards.workspaceId, workspaceId))
+      const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(boards)
 
       return ok(Number(result[0]?.count ?? 0))
     } catch (error) {
@@ -544,30 +526,21 @@ export class BoardService {
   }
 
   /**
-   * Validate that a board belongs to an organization
+   * Validate that a board exists
    *
    * This is a lightweight validation method used for import/export operations.
-   * Does not require full authentication context, just validates the relationship.
    *
    * @param boardId - Board ID to validate
-   * @param workspaceId - Organization ID to check against
    * @returns Result containing the board if valid, or an error
    */
-  async validateBoardBelongsToOrg(
-    boardId: BoardId,
-    workspaceId: WorkspaceId
-  ): Promise<Result<Board, BoardError>> {
+  async validateBoardExists(boardId: BoardId): Promise<Result<Board, BoardError>> {
     try {
       const board = await db.query.boards.findFirst({
-        where: and(eq(boards.id, boardId), eq(boards.workspaceId, workspaceId)),
+        where: eq(boards.id, boardId),
       })
 
       if (!board) {
-        return err(
-          BoardError.notFound(
-            `Board ${boardId} not found or does not belong to organization ${workspaceId}`
-          )
-        )
+        return err(BoardError.notFound(`Board ${boardId} not found`))
       }
 
       return ok(board)

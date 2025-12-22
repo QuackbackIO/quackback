@@ -19,9 +19,8 @@ import type {
   RoadmapId,
   WorkspaceId,
   UserId,
-  DomainId,
 } from '@quackback/ids'
-import { user, workspace, member, workspaceDomain } from './schema/auth'
+import { user, settings, member } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
@@ -219,48 +218,23 @@ function generateVoteCount(): number {
   return 150 + Math.floor(Math.random() * 200) // 150-349
 }
 
-async function verifyMigrationsApplied() {
-  const roleCheck = await client`SELECT 1 FROM pg_roles WHERE rolname = 'app_user'`
-  if (roleCheck.length === 0) {
-    throw new Error('Database migrations have not been applied. Run: bun run db:migrate')
-  }
-}
-
 async function seed() {
   console.log('Seeding database...\n')
 
-  await verifyMigrationsApplied()
-
-  // Create workspace
-  const orgId: WorkspaceId = generateId('workspace')
-  await db.insert(workspace).values({
-    id: orgId,
+  // Create settings (the singleton settings record)
+  const settingsId: WorkspaceId = generateId('workspace')
+  await db.insert(settings).values({
+    id: settingsId,
     name: DEMO_ORG.name,
     slug: DEMO_ORG.slug,
     createdAt: new Date(),
   })
-
-  const domainId: DomainId = generateId('domain')
-  await db.insert(workspaceDomain).values({
-    id: domainId,
-    workspaceId: orgId,
-    domain: `${DEMO_ORG.slug}.localhost:3000`,
-    domainType: 'subdomain',
-    isPrimary: true,
-    verified: true,
-  })
-  console.log('Created workspace: Acme Corp')
+  console.log('Created settings: Acme Corp')
 
   // Create statuses
   const statusMap = new Map<string, StatusId>()
   for (const status of DEFAULT_STATUSES) {
-    const result = await db
-      .insert(postStatuses)
-      .values({
-        workspaceId: orgId,
-        ...status,
-      })
-      .returning()
+    const result = await db.insert(postStatuses).values(status).returning()
     statusMap.set(status.slug, result[0].id)
   }
   console.log('Created default statuses')
@@ -270,7 +244,6 @@ async function seed() {
   const demoMemberId: MemberId = generateId('member')
   await db.insert(user).values({
     id: demoUserId,
-    workspaceId: orgId,
     name: DEMO_USER.name,
     email: DEMO_USER.email,
     emailVerified: true,
@@ -279,7 +252,6 @@ async function seed() {
   })
   await db.insert(member).values({
     id: demoMemberId,
-    workspaceId: orgId,
     userId: demoUserId,
     role: 'owner',
     createdAt: new Date(),
@@ -297,7 +269,6 @@ async function seed() {
 
     await db.insert(user).values({
       id: userId,
-      workspaceId: orgId,
       name,
       email,
       emailVerified: true,
@@ -306,7 +277,6 @@ async function seed() {
     })
     await db.insert(member).values({
       id: memberId,
-      workspaceId: orgId,
       userId: userId,
       role: i < 3 ? 'admin' : 'user', // First 3 are admins
       createdAt: randomDate(90),
@@ -321,7 +291,6 @@ async function seed() {
     const tagId = generateId('tag')
     await db.insert(tags).values({
       id: tagId,
-      workspaceId: orgId,
       name: t.name,
       color: t.color,
     })
@@ -335,7 +304,6 @@ async function seed() {
     const boardId = generateId('board')
     await db.insert(boards).values({
       id: boardId,
-      workspaceId: orgId,
       slug: b.slug,
       name: b.name,
       description: b.description,
@@ -353,7 +321,6 @@ async function seed() {
     const roadmapId = generateId('roadmap')
     await db.insert(roadmaps).values({
       id: roadmapId,
-      workspaceId: orgId,
       slug: r.slug,
       name: r.name,
       description: r.description,
@@ -386,7 +353,6 @@ async function seed() {
 
     postInserts.push({
       id: postId,
-      workspaceId: orgId,
       boardId,
       title,
       content,
@@ -408,7 +374,7 @@ async function seed() {
       const tagId = pick(tagIds)
       if (!usedTags.has(tagId)) {
         usedTags.add(tagId)
-        postTagInserts.push({ workspaceId: orgId, postId, tagId })
+        postTagInserts.push({ postId, tagId })
       }
     }
   }
@@ -443,7 +409,6 @@ async function seed() {
           usedRoadmaps.add(roadmapId)
           const position = roadmapPositions.get(roadmapId) ?? 0
           postRoadmapInserts.push({
-            workspaceId: orgId,
             postId: post.id,
             roadmapId,
             position,
@@ -465,7 +430,6 @@ async function seed() {
     const numVotes = Math.min(post.voteCount, 10) // Cap at 10 actual vote records per post
     for (let v = 0; v < numVotes; v++) {
       voteInserts.push({
-        workspaceId: orgId,
         postId: post.id,
         userIdentifier: `user:${uuid()}`,
         createdAt: randomDate(60),
@@ -485,7 +449,6 @@ async function seed() {
     for (let c = 0; c < numComments; c++) {
       const author = pick(members)
       commentInserts.push({
-        workspaceId: orgId,
         postId: post.id,
         memberId: author.id,
         authorName: author.name,
@@ -504,7 +467,7 @@ async function seed() {
   console.log('Demo account:')
   console.log(`  Email: ${DEMO_USER.email}`)
   console.log('  Sign in with OTP code\n')
-  console.log(`Portal: http://${DEMO_ORG.slug}.localhost:3000`)
+  console.log(`Portal: http://localhost:3000`)
 
   await client.end()
 }

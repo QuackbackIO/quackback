@@ -1,69 +1,66 @@
 /**
- * Token encryption utilities for integration OAuth tokens.
- * Uses AES-256-GCM with organization-scoped key derivation.
+ * Encryption utilities for sensitive data.
+ *
+ * Uses AES-256-GCM for symmetric encryption with the workspace ID as salt.
+ * This is used for encrypting OAuth tokens, API keys, and other secrets.
  */
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
 
-const ALGORITHM = 'aes-256-gcm'
-const KEY_LENGTH = 32
-const IV_LENGTH = 16
-const AUTH_TAG_LENGTH = 16
+const ENCRYPTION_KEY = process.env.INTEGRATION_ENCRYPTION_KEY
 
-/**
- * Derives an organization-specific encryption key from the master key.
- * Uses scrypt for key derivation with organizationId as salt.
- */
-function deriveKey(organizationId: string): Buffer {
-  const masterKey = process.env.INTEGRATION_ENCRYPTION_KEY
-  if (!masterKey) {
-    throw new Error('INTEGRATION_ENCRYPTION_KEY environment variable not set')
+function deriveKey(salt: string): Buffer {
+  if (!ENCRYPTION_KEY) {
+    throw new Error('INTEGRATION_ENCRYPTION_KEY is required for encryption')
   }
-  return scryptSync(masterKey, organizationId, KEY_LENGTH)
+  // Use scrypt to derive a 256-bit key from the base key + salt
+  return scryptSync(ENCRYPTION_KEY, salt, 32)
 }
 
 /**
- * Encrypts a token using AES-256-GCM with organization-scoped key.
- * @param token - The plaintext token to encrypt
- * @param organizationId - Used as salt for key derivation
- * @returns Encrypted string in format: iv:authTag:ciphertext (all base64)
+ * Encrypt a plaintext string using AES-256-GCM.
+ *
+ * @param plaintext - The string to encrypt
+ * @param salt - A unique salt (typically workspaceId) to derive the key
+ * @returns Base64-encoded ciphertext with IV and auth tag
  */
-export function encryptToken(token: string, organizationId: string): string {
-  const key = deriveKey(organizationId)
-  const iv = randomBytes(IV_LENGTH)
-  const cipher = createCipheriv(ALGORITHM, key, iv)
+export function encryptToken(plaintext: string, salt: string): string {
+  const key = deriveKey(salt)
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
 
-  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()])
+  let encrypted = cipher.update(plaintext, 'utf8', 'base64')
+  encrypted += cipher.final('base64')
+
   const authTag = cipher.getAuthTag()
 
-  // Format: iv:authTag:encrypted (all base64)
-  return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`
+  // Format: iv:authTag:ciphertext (all base64)
+  return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted}`
 }
 
 /**
- * Decrypts a token that was encrypted with encryptToken().
- * @param encrypted - The encrypted string in format: iv:authTag:ciphertext
- * @param organizationId - Must match the organizationId used during encryption
- * @returns The decrypted plaintext token
+ * Decrypt a ciphertext string encrypted with encryptToken.
+ *
+ * @param ciphertext - Base64-encoded ciphertext from encryptToken
+ * @param salt - The same salt used during encryption
+ * @returns The original plaintext string
+ * @throws Error if decryption fails (wrong key, tampered data, etc.)
  */
-export function decryptToken(encrypted: string, organizationId: string): string {
-  const parts = encrypted.split(':')
-  if (parts.length !== 3) {
-    throw new Error('Invalid encrypted token format')
+export function decryptToken(ciphertext: string, salt: string): string {
+  const key = deriveKey(salt)
+  const [ivB64, authTagB64, encryptedB64] = ciphertext.split(':')
+
+  if (!ivB64 || !authTagB64 || !encryptedB64) {
+    throw new Error('Invalid ciphertext format')
   }
 
-  const [ivB64, authTagB64, dataB64] = parts
-
-  const key = deriveKey(organizationId)
   const iv = Buffer.from(ivB64, 'base64')
   const authTag = Buffer.from(authTagB64, 'base64')
-  const data = Buffer.from(dataB64, 'base64')
 
-  if (authTag.length !== AUTH_TAG_LENGTH) {
-    throw new Error('Invalid auth tag length')
-  }
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv)
+  const decipher = createDecipheriv('aes-256-gcm', key, iv)
   decipher.setAuthTag(authTag)
 
-  return decipher.update(data).toString('utf8') + decipher.final('utf8')
+  let decrypted = decipher.update(encryptedB64, 'base64', 'utf8')
+  decrypted += decipher.final('utf8')
+
+  return decrypted
 }

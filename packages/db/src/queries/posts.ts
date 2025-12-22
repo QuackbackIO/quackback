@@ -1,13 +1,11 @@
 import { eq, and, desc, asc, sql, inArray, gte, lte, isNull } from 'drizzle-orm'
-import { db } from '../tenant-context'
+import { db } from '../client'
 import { posts, postTags } from '../schema/posts'
-import { boards } from '../schema/boards'
 import type { InboxPostListParams, PostListItem, InboxPostListResult, Post } from '../types'
 
 // Inbox query - fetches posts with board, tags, and comment count for the feedback inbox
 export async function getInboxPostList(params: InboxPostListParams): Promise<InboxPostListResult> {
   const {
-    organizationId,
     boardIds,
     statusIds,
     tagIds,
@@ -24,22 +22,10 @@ export async function getInboxPostList(params: InboxPostListParams): Promise<Inb
   // Build conditions array
   const conditions = []
 
-  // Always filter by organization (via boards)
-  // First get board IDs for this organization
-  const orgBoardIds = boardIds?.length
-    ? boardIds
-    : (
-        await db.query.boards.findMany({
-          where: eq(boards.workspaceId, organizationId),
-          columns: { id: true },
-        })
-      ).map((b) => b.id)
-
-  if (orgBoardIds.length === 0) {
-    return { items: [], total: 0, hasMore: false }
+  // Filter by boards if specified
+  if (boardIds && boardIds.length > 0) {
+    conditions.push(inArray(posts.boardId, boardIds))
   }
-
-  conditions.push(inArray(posts.boardId, orgBoardIds))
 
   // Status filter (multiple statuses = OR)
   if (statusIds && statusIds.length > 0) {

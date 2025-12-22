@@ -2,7 +2,7 @@
  * Input/Output types for CommentService operations
  */
 
-import type { PostId, CommentId, BoardId, MemberId, WorkspaceId } from '@quackback/ids'
+import type { PostId, CommentId, BoardId, MemberId } from '@quackback/ids'
 
 /**
  * Input for creating a new comment
@@ -81,7 +81,7 @@ export interface ReactionResult {
 }
 
 /**
- * Full context of a comment including its post, board, and organization
+ * Full context of a comment including its post and board
  * Used by public API routes that need to check permissions
  */
 export interface CommentContext {
@@ -101,11 +101,9 @@ export interface CommentContext {
   }
   board: {
     id: BoardId
-    workspaceId: WorkspaceId
     name: string
     slug: string
   }
-  workspaceId: WorkspaceId
 }
 
 /**

@@ -31,11 +31,9 @@ const { mockStatusRepoInstance, mockDbInstance } = vi.hoisted(() => ({
 
 // Mock @quackback/db module
 vi.mock('@quackback/db', () => ({
-  withUnitOfWork: vi.fn(
-    async (_orgId: string, callback: (uow: { db: unknown }) => Promise<unknown>) => {
-      return callback({ db: mockDbInstance })
-    }
-  ),
+  withUnitOfWork: vi.fn(async (callback: (uow: { db: unknown }) => Promise<unknown>) => {
+    return callback({ db: mockDbInstance })
+  }),
   StatusRepository: vi.fn(),
   db: mockDbInstance,
   eq: vi.fn(),
@@ -81,7 +79,6 @@ describe('StatusService', () => {
 
     // Setup mock context
     mockContext = {
-      workspaceId: 'org-123',
       userId: 'user-123',
       memberId: 'member_123',
       memberRole: 'admin',
@@ -119,7 +116,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'In Progress',
         slug: 'in_progress',
         color: '#f59e0b',
@@ -272,7 +268,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Test',
         slug: 'valid_slug_123',
         color: '#3b82f6',
@@ -369,7 +364,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Test',
         slug: 'test',
         color: '#3b82f6',
@@ -398,7 +392,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Test',
         slug: 'test',
         color: '#3B82F6',
@@ -427,7 +420,6 @@ describe('StatusService', () => {
 
       const existingStatus: Status = {
         id: 'status_existing',
-        workspaceId: 'org-123',
         name: 'Existing Status',
         slug: 'existing_slug',
         color: '#ef4444',
@@ -476,7 +468,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Test',
         slug: 'test',
         color: '#3b82f6',
@@ -510,7 +501,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Default Status',
         slug: 'default_status',
         color: '#3b82f6',
@@ -528,7 +518,7 @@ describe('StatusService', () => {
       const result = await statusService.createStatus(input, mockContext)
 
       expect(result.success).toBe(true)
-      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status_1')
+      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('status_1')
     })
 
     it('should handle showOnRoadmap flag', async () => {
@@ -542,7 +532,6 @@ describe('StatusService', () => {
 
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Roadmap Status',
         slug: 'roadmap_status',
         color: '#3b82f6',
@@ -569,7 +558,6 @@ describe('StatusService', () => {
   describe('updateStatus', () => {
     const existingStatus: Status = {
       id: 'status_1',
-      workspaceId: 'org-123',
       name: 'Original Name',
       slug: 'original_name',
       color: '#3b82f6',
@@ -757,7 +745,7 @@ describe('StatusService', () => {
 
       const result = await statusService.updateStatus('status_1', input, mockContext)
 
-      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status_1')
+      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('status_1')
       expect(result.success).toBe(true)
     })
 
@@ -793,7 +781,6 @@ describe('StatusService', () => {
   describe('deleteStatus', () => {
     const existingStatus: Status = {
       id: 'status_1',
-      workspaceId: 'org-123',
       name: 'Status to Delete',
       slug: 'status_to_delete',
       color: '#3b82f6',
@@ -883,7 +870,6 @@ describe('StatusService', () => {
     it('should return status when found', async () => {
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Test Status',
         slug: 'test_status',
         color: '#3b82f6',
@@ -922,7 +908,6 @@ describe('StatusService', () => {
       const mockStatuses: Status[] = [
         {
           id: 'status_1',
-          workspaceId: 'org-123',
           name: 'Open',
           slug: 'open',
           color: '#3b82f6',
@@ -934,7 +919,6 @@ describe('StatusService', () => {
         },
         {
           id: 'status_2',
-          workspaceId: 'org-123',
           name: 'Complete',
           slug: 'complete',
           color: '#10b981',
@@ -1013,7 +997,6 @@ describe('StatusService', () => {
   describe('setDefaultStatus', () => {
     const existingStatus: Status = {
       id: 'status_1',
-      workspaceId: 'org-123',
       name: 'Status',
       slug: 'status',
       color: '#3b82f6',
@@ -1041,7 +1024,7 @@ describe('StatusService', () => {
       if (result.success) {
         expect(result.value.isDefault).toBe(true)
       }
-      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('org-123', 'status_1')
+      expect(mockStatusRepoInstance.setDefault).toHaveBeenCalledWith('status_1')
     })
 
     it('should return error when status not found', async () => {
@@ -1074,7 +1057,6 @@ describe('StatusService', () => {
     it('should return default status when it exists', async () => {
       const defaultStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Open',
         slug: 'open',
         color: '#3b82f6',
@@ -1111,7 +1093,6 @@ describe('StatusService', () => {
     it('should return status when found by slug', async () => {
       const mockStatus: Status = {
         id: 'status_1',
-        workspaceId: 'org-123',
         name: 'Test Status',
         slug: 'test_status',
         color: '#3b82f6',
@@ -1149,7 +1130,6 @@ describe('StatusService', () => {
       const mockStatuses: Status[] = [
         {
           id: 'status_1',
-          workspaceId: 'org-new',
           name: 'Open',
           slug: 'open',
           color: '#3b82f6',
@@ -1173,7 +1153,6 @@ describe('StatusService', () => {
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toHaveLength(1)
-        expect(result.value[0].workspaceId).toBe('org-new')
       }
     })
 
@@ -1200,7 +1179,6 @@ describe('StatusService', () => {
       const mockStatuses: Status[] = [
         {
           id: 'status_1',
-          workspaceId: 'org-123',
           name: 'Open',
           slug: 'open',
           color: '#3b82f6',
@@ -1212,7 +1190,6 @@ describe('StatusService', () => {
         },
         {
           id: 'status_2',
-          workspaceId: 'org-123',
           name: 'Complete',
           slug: 'complete',
           color: '#10b981',

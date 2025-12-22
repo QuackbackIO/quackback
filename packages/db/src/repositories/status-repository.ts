@@ -1,5 +1,5 @@
-import { eq, and, asc, sql } from 'drizzle-orm'
-import type { StatusId, WorkspaceId } from '@quackback/ids'
+import { eq, asc, sql } from 'drizzle-orm'
+import type { StatusId } from '@quackback/ids'
 import type { Database } from '../client'
 import { postStatuses } from '../schema/statuses'
 import type { PostStatusEntity, NewPostStatusEntity, StatusCategory } from '../types'
@@ -63,11 +63,11 @@ export class StatusRepository {
   }
 
   /**
-   * Find a status by slug within an organization
+   * Find a status by slug (globally unique in single-tenant mode)
    */
-  async findBySlug(organizationId: WorkspaceId, slug: string): Promise<PostStatusEntity | null> {
+  async findBySlug(slug: string): Promise<PostStatusEntity | null> {
     const status = await this.db.query.postStatuses.findFirst({
-      where: and(eq(postStatuses.workspaceId, organizationId), eq(postStatuses.slug, slug)),
+      where: eq(postStatuses.slug, slug),
     })
     return status ?? null
   }
@@ -102,7 +102,7 @@ export class StatusRepository {
    */
   async update(
     id: StatusId,
-    data: Partial<Omit<PostStatusEntity, 'id' | 'organizationId' | 'createdAt'>>
+    data: Partial<Omit<PostStatusEntity, 'id' | 'createdAt'>>
   ): Promise<PostStatusEntity | null> {
     const [updated] = await this.db
       .update(postStatuses)
@@ -137,19 +137,13 @@ export class StatusRepository {
 
   /**
    * Set a status as the default for new posts
-   * This will unset any other default status in the organization
+   * This will unset any other default status
    */
-  async setDefault(organizationId: WorkspaceId, statusId: StatusId): Promise<void> {
-    // First, unset all defaults for this organization
-    await this.db
-      .update(postStatuses)
-      .set({ isDefault: false })
-      .where(eq(postStatuses.workspaceId, organizationId))
+  async setDefault(statusId: StatusId): Promise<void> {
+    // First, unset all defaults
+    await this.db.update(postStatuses).set({ isDefault: false })
 
     // Then set the new default
-    await this.db
-      .update(postStatuses)
-      .set({ isDefault: true })
-      .where(and(eq(postStatuses.id, statusId), eq(postStatuses.workspaceId, organizationId)))
+    await this.db.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, statusId))
   }
 }

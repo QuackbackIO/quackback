@@ -1,12 +1,12 @@
 /**
- * MemberService - Business logic for organization members
+ * MemberService - Business logic for members
  *
  * Provides member lookup operations that don't require full ServiceContext.
  */
 
-import { db, MemberRepository, eq, and, sql, member, user } from '@quackback/db'
+import { db, MemberRepository, eq, sql, member, user } from '@quackback/db'
 import type { Member } from '@quackback/db'
-import type { MemberId, WorkspaceId, UserId } from '@quackback/ids'
+import type { MemberId, UserId } from '@quackback/ids'
 import { Result, ok, err } from '../shared/result'
 
 export type MemberError = {
@@ -26,19 +26,16 @@ export interface TeamMember {
 
 export class MemberService {
   /**
-   * Find a member by user ID and organization ID
+   * Find a member by user ID
    *
    * This is a public method that doesn't require ServiceContext since
    * it's a simple lookup operation used during authentication flows.
    */
-  async getMemberByUserAndOrg(
-    userId: UserId,
-    workspaceId: WorkspaceId
-  ): Promise<Result<Member | null, MemberError>> {
+  async getMemberByUser(userId: UserId): Promise<Result<Member | null, MemberError>> {
     try {
       const memberRepo = new MemberRepository(db)
-      const member = await memberRepo.findByUserAndOrg(userId, workspaceId)
-      return ok(member)
+      const foundMember = await memberRepo.findByUser(userId)
+      return ok(foundMember)
     } catch (error) {
       console.error('Error looking up member:', error)
       return err({
@@ -66,12 +63,12 @@ export class MemberService {
   }
 
   /**
-   * List all team members for an organization with user details
+   * List all team members with user details
    *
-   * Returns user info (id, name, email, image) for all members of the organization.
+   * Returns user info (id, name, email, image) for all members.
    * Used for member assignment dropdowns and team lists.
    */
-  async listTeamMembers(workspaceId: WorkspaceId): Promise<Result<TeamMember[], MemberError>> {
+  async listTeamMembers(): Promise<Result<TeamMember[], MemberError>> {
     try {
       const teamMembers = await db
         .select({
@@ -82,7 +79,6 @@ export class MemberService {
         })
         .from(member)
         .innerJoin(user, eq(member.userId, user.id))
-        .where(eq(member.workspaceId, workspaceId))
 
       return ok(teamMembers)
     } catch (error) {
@@ -95,16 +91,13 @@ export class MemberService {
   }
 
   /**
-   * Count members for an organization (no auth required)
+   * Count all members (no auth required)
    *
    * Used by getting-started page.
    */
-  async countMembersByOrg(workspaceId: WorkspaceId): Promise<Result<number, MemberError>> {
+  async countMembers(): Promise<Result<number, MemberError>> {
     try {
-      const result = await db
-        .select({ count: sql<number>`count(*)`.as('count') })
-        .from(member)
-        .where(eq(member.workspaceId, workspaceId))
+      const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(member)
 
       return ok(Number(result[0]?.count ?? 0))
     } catch (error) {
@@ -117,17 +110,16 @@ export class MemberService {
   }
 
   /**
-   * Check if user is a member of organization
+   * Check if user is a member
    *
    * Returns member record if exists, null otherwise.
    */
   async checkMembership(
-    userId: UserId,
-    workspaceId: WorkspaceId
+    userId: UserId
   ): Promise<Result<{ isMember: boolean; member?: Member }, MemberError>> {
     try {
       const foundMember = await db.query.member.findFirst({
-        where: and(eq(member.userId, userId), eq(member.workspaceId, workspaceId)),
+        where: eq(member.userId, userId),
       })
 
       if (foundMember) {

@@ -3,7 +3,7 @@
  */
 
 import type { Post, Board, Tag } from '@quackback/db/types'
-import type { PostId, BoardId, TagId, StatusId, MemberId, WorkspaceId } from '@quackback/ids'
+import type { PostId, BoardId, TagId, StatusId, MemberId, CommentId } from '@quackback/ids'
 import type { CommentReactionCount } from '../comments/comment.types'
 
 /**
@@ -60,7 +60,6 @@ export interface PostWithDetails extends Post {
     id: BoardId
     name: string
     slug: string
-    workspaceId: WorkspaceId
   }
   tags: Array<{
     id: TagId
@@ -189,12 +188,12 @@ export interface OfficialResponse {
  * Public comment for portal view
  */
 export interface PublicComment {
-  id: string
+  id: CommentId
   content: string
   authorName: string | null
   memberId: string | null
   createdAt: Date
-  parentId: string | null
+  parentId: CommentId | null
   isTeamMember: boolean
   replies: PublicComment[]
   reactions: CommentReactionCount[]

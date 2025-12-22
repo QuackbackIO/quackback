@@ -31,6 +31,14 @@ export function isCloud(): boolean {
 }
 
 /**
+ * Check if tenant-per-database mode is enabled.
+ * This requires cloud mode AND Neon API key to be configured.
+ */
+export function isTenantPerDatabase(): boolean {
+  return isCloud() && Boolean(process.env.NEON_API_KEY)
+}
+
+/**
  * Get current edition
  */
 export function getEdition(): Edition {

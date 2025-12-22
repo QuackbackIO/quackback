@@ -1,8 +1,8 @@
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../client'
 import { member } from '../schema/auth'
 import type { Member } from '../types'
-import type { MemberId, UserId, WorkspaceId } from '@quackback/ids'
+import type { MemberId, UserId } from '@quackback/ids'
 
 /**
  * MemberRepository - Data access layer for organization members
@@ -25,26 +25,26 @@ export class MemberRepository {
   }
 
   /**
-   * Find a member by user ID and organization ID
+   * Find a member by user ID
+   * In single-tenant mode, there's one member record per user.
    */
-  async findByUserAndOrg(userId: UserId, organizationId: WorkspaceId): Promise<Member | null> {
+  async findByUser(userId: UserId): Promise<Member | null> {
     const result = await this.db.query.member.findFirst({
-      where: and(eq(member.userId, userId), eq(member.workspaceId, organizationId)),
+      where: eq(member.userId, userId),
     })
     return result ?? null
   }
 
   /**
-   * Find all members for an organization
+   * Find all members
    */
-  async findByOrganization(organizationId: WorkspaceId): Promise<Member[]> {
-    return this.db.query.member.findMany({
-      where: eq(member.workspaceId, organizationId),
-    })
+  async findAll(): Promise<Member[]> {
+    return this.db.query.member.findMany()
   }
 
   /**
    * Find all memberships for a user
+   * In single-tenant mode, this returns at most one member record.
    */
   async findByUserId(userId: UserId): Promise<Member[]> {
     return this.db.query.member.findMany({
@@ -65,3 +65,6 @@ export class MemberRepository {
     return updated ?? null
   }
 }
+
+// Backwards compatibility alias
+export const findByUserAndOrg = (repo: MemberRepository, userId: UserId) => repo.findByUser(userId)

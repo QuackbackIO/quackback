@@ -57,11 +57,9 @@ vi.mock('@quackback/db', () => ({
   CommentRepository: vi.fn(),
   PostRepository: vi.fn(),
   BoardRepository: vi.fn(),
-  withUnitOfWork: vi.fn(
-    async (_orgId: string, callback: (uow: { db: unknown }) => Promise<unknown>) => {
-      return callback({ db: mockDbInstance })
-    }
-  ),
+  withUnitOfWork: vi.fn(async (callback: (uow: { db: unknown }) => Promise<unknown>) => {
+    return callback({ db: mockDbInstance })
+  }),
   db: mockDbInstance,
   eq: vi.fn(),
   and: vi.fn(),
@@ -106,7 +104,7 @@ describe('CommentService', () => {
   let mockContext: ServiceContext
 
   // Test data
-  const mockWorkspaceId = 'org_123'
+  const mockOrganizationId = 'org_123'
   const mockUserId = 'user_123'
   const mockMemberId = 'member_123'
   const mockPostId = 'post_123'
@@ -115,7 +113,7 @@ describe('CommentService', () => {
 
   const mockPost: Post = {
     id: mockPostId,
-    workspaceId: mockWorkspaceId,
+    organizationId: mockOrganizationId,
     boardId: mockBoardId,
     title: 'Test Post',
     content: 'Test content',
@@ -129,6 +127,7 @@ describe('CommentService', () => {
     ownerId: null,
     estimated: null,
     voteCount: 0,
+    commentCount: 0,
     officialResponse: null,
     officialResponseMemberId: null,
     officialResponseAuthorId: null,
@@ -143,7 +142,7 @@ describe('CommentService', () => {
 
   const mockBoard: Board = {
     id: mockBoardId,
-    workspaceId: mockWorkspaceId,
+    organizationId: mockOrganizationId,
     name: 'Test Board',
     slug: 'test-board',
     description: null,
@@ -155,7 +154,7 @@ describe('CommentService', () => {
 
   const mockComment: Comment = {
     id: mockCommentId,
-    workspaceId: mockWorkspaceId,
+    organizationId: mockOrganizationId,
     postId: mockPostId,
     parentId: null,
     memberId: mockMemberId,
@@ -185,7 +184,6 @@ describe('CommentService', () => {
 
     // Default mock context (team member)
     mockContext = {
-      workspaceId: mockWorkspaceId,
       userId: mockUserId,
       memberId: mockMemberId,
       memberRole: 'member',
@@ -885,7 +883,6 @@ describe('CommentService', () => {
         expect(result.value.comment.id).toBe(mockCommentId)
         expect(result.value.post.id).toBe(mockPostId)
         expect(result.value.board.id).toBe(mockBoardId)
-        expect(result.value.workspaceId).toBe(mockWorkspaceId)
       }
     })
 

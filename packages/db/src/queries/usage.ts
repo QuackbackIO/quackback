@@ -1,9 +1,8 @@
-import { eq, sql, and, inArray } from 'drizzle-orm'
-import { adminDb } from '../tenant-context'
+import { sql, inArray } from 'drizzle-orm'
+import { db } from '../client'
 import { boards } from '../schema/boards'
 import { posts } from '../schema/posts'
 import { member } from '../schema/auth'
-import type { WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -17,31 +16,24 @@ export interface UsageCounts {
 }
 
 // ============================================================================
-// Usage Queries (admin - bypasses RLS for billing)
+// Usage Queries
 // ============================================================================
 
 /**
- * Get usage counts for an organization.
- * Used for billing dashboard to show current usage vs plan limits.
- * Bypasses RLS since this is an admin operation for billing.
+ * Get usage counts for the application.
+ * Used for dashboard to show current usage.
  *
- * Optimized to use a single query with scalar subqueries for efficiency.
+ * Optimized to use parallel queries for efficiency.
  */
-export async function getWorkspaceUsageCounts(organizationId: WorkspaceId): Promise<UsageCounts> {
+export async function getUsageCounts(): Promise<UsageCounts> {
   // Run 3 parallel count queries - faster than serial and still efficient
   const [boardResult, postResult, seatResult] = await Promise.all([
-    adminDb
-      .select({ count: sql<number>`count(*)::int` })
-      .from(boards)
-      .where(eq(boards.workspaceId, organizationId)),
-    adminDb
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .where(eq(posts.workspaceId, organizationId)),
-    adminDb
+    db.select({ count: sql<number>`count(*)::int` }).from(boards),
+    db.select({ count: sql<number>`count(*)::int` }).from(posts),
+    db
       .select({ count: sql<number>`count(*)::int` })
       .from(member)
-      .where(and(eq(member.workspaceId, organizationId), inArray(member.role, ['owner', 'admin']))),
+      .where(inArray(member.role, ['owner', 'admin'])),
   ])
 
   return {
@@ -50,3 +42,6 @@ export async function getWorkspaceUsageCounts(organizationId: WorkspaceId): Prom
     seats: seatResult[0]?.count ?? 0,
   }
 }
+
+// Backwards compatibility alias
+export const getWorkspaceUsageCounts = getUsageCounts

@@ -36,7 +36,6 @@ describe('Type definitions', () => {
   describe('Board types', () => {
     it('Board has correct shape', () => {
       expectTypeOf<Board>().toHaveProperty('id')
-      expectTypeOf<Board>().toHaveProperty('organizationId')
       expectTypeOf<Board>().toHaveProperty('slug')
       expectTypeOf<Board>().toHaveProperty('name')
       expectTypeOf<Board>().toHaveProperty('description')
@@ -46,8 +45,7 @@ describe('Type definitions', () => {
       expectTypeOf<Board>().toHaveProperty('updatedAt')
     })
 
-    it('NewBoard omits auto-generated fields', () => {
-      expectTypeOf<NewBoard>().toHaveProperty('organizationId')
+    it('NewBoard has required fields', () => {
       expectTypeOf<NewBoard>().toHaveProperty('slug')
       expectTypeOf<NewBoard>().toHaveProperty('name')
     })
@@ -68,7 +66,6 @@ describe('Type definitions', () => {
   describe('Roadmap types', () => {
     it('Roadmap has correct shape', () => {
       expectTypeOf<Roadmap>().toHaveProperty('id')
-      expectTypeOf<Roadmap>().toHaveProperty('organizationId')
       expectTypeOf<Roadmap>().toHaveProperty('slug')
       expectTypeOf<Roadmap>().toHaveProperty('name')
       expectTypeOf<Roadmap>().toHaveProperty('isPublic')
@@ -76,7 +73,6 @@ describe('Type definitions', () => {
     })
 
     it('NewRoadmap has required fields', () => {
-      expectTypeOf<NewRoadmap>().toHaveProperty('organizationId')
       expectTypeOf<NewRoadmap>().toHaveProperty('slug')
       expectTypeOf<NewRoadmap>().toHaveProperty('name')
     })
@@ -85,13 +81,11 @@ describe('Type definitions', () => {
   describe('Tag types', () => {
     it('Tag has correct shape', () => {
       expectTypeOf<Tag>().toHaveProperty('id')
-      expectTypeOf<Tag>().toHaveProperty('organizationId')
       expectTypeOf<Tag>().toHaveProperty('name')
       expectTypeOf<Tag>().toHaveProperty('color')
     })
 
     it('NewTag has required fields', () => {
-      expectTypeOf<NewTag>().toHaveProperty('organizationId')
       expectTypeOf<NewTag>().toHaveProperty('name')
     })
   })
@@ -193,14 +187,12 @@ describe('Type definitions', () => {
   describe('Integration types', () => {
     it('Integration has correct shape', () => {
       expectTypeOf<Integration>().toHaveProperty('id')
-      expectTypeOf<Integration>().toHaveProperty('organizationId')
       expectTypeOf<Integration>().toHaveProperty('integrationType')
       expectTypeOf<Integration>().toHaveProperty('status')
       expectTypeOf<Integration>().toHaveProperty('config')
     })
 
     it('NewIntegration has required fields', () => {
-      expectTypeOf<NewIntegration>().toHaveProperty('organizationId')
       expectTypeOf<NewIntegration>().toHaveProperty('integrationType')
     })
 
@@ -271,14 +263,12 @@ describe('Type definitions', () => {
 
     it('RoadmapWithPosts extends Roadmap with posts array', () => {
       expectTypeOf<RoadmapWithPosts>().toHaveProperty('id')
-      expectTypeOf<RoadmapWithPosts>().toHaveProperty('organizationId')
       expectTypeOf<RoadmapWithPosts>().toHaveProperty('posts')
       expectTypeOf<RoadmapWithPosts['posts']>().toEqualTypeOf<Post[]>()
     })
 
     it('BoardWithRoadmaps extends Board with roadmaps array', () => {
       expectTypeOf<BoardWithRoadmaps>().toHaveProperty('id')
-      expectTypeOf<BoardWithRoadmaps>().toHaveProperty('organizationId')
       expectTypeOf<BoardWithRoadmaps>().toHaveProperty('roadmaps')
       expectTypeOf<BoardWithRoadmaps['roadmaps']>().toEqualTypeOf<Roadmap[]>()
     })

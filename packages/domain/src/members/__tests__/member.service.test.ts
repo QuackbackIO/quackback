@@ -5,7 +5,7 @@ import type { Member } from '@quackback/db'
 // Mock dependencies - must be hoisted for vi.mock to access
 const { mockMemberRepo, mockDb } = vi.hoisted(() => ({
   mockMemberRepo: {
-    findByUserAndOrg: vi.fn(),
+    findByUser: vi.fn(),
     findById: vi.fn(),
   },
   mockDb: {
@@ -28,7 +28,6 @@ vi.mock('@quackback/db', () => ({
   sql: vi.fn((strings, ...values) => ({ sql: { strings, values }, as: vi.fn() })),
   member: {
     userId: 'userId',
-    workspaceId: 'workspaceId',
   },
   user: {
     id: 'id',
@@ -47,31 +46,30 @@ describe('MemberService', () => {
     memberService = new MemberService()
   })
 
-  describe('getMemberByUserAndOrg', () => {
+  describe('getMemberByUser', () => {
     it('should return member when found', async () => {
       const mockMember: Member = {
         id: 'member_123',
         userId: 'user-123',
-        workspaceId: 'org-123',
         role: 'admin',
         createdAt: new Date(),
       }
 
-      mockMemberRepo.findByUserAndOrg.mockResolvedValue(mockMember)
+      mockMemberRepo.findByUser.mockResolvedValue(mockMember)
 
-      const result = await memberService.getMemberByUserAndOrg('user-123', 'org-123')
+      const result = await memberService.getMemberByUser('user-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value).toEqual(mockMember)
       }
-      expect(mockMemberRepo.findByUserAndOrg).toHaveBeenCalledWith('user-123', 'org-123')
+      expect(mockMemberRepo.findByUser).toHaveBeenCalledWith('user-123')
     })
 
     it('should return null when member not found', async () => {
-      mockMemberRepo.findByUserAndOrg.mockResolvedValue(null)
+      mockMemberRepo.findByUser.mockResolvedValue(null)
 
-      const result = await memberService.getMemberByUserAndOrg('user-123', 'org-123')
+      const result = await memberService.getMemberByUser('user-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -80,9 +78,9 @@ describe('MemberService', () => {
     })
 
     it('should return error when database operation fails', async () => {
-      mockMemberRepo.findByUserAndOrg.mockRejectedValue(new Error('Database error'))
+      mockMemberRepo.findByUser.mockRejectedValue(new Error('Database error'))
 
-      const result = await memberService.getMemberByUserAndOrg('user-123', 'org-123')
+      const result = await memberService.getMemberByUser('user-123')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -91,23 +89,21 @@ describe('MemberService', () => {
       }
     })
 
-    it('should work with different user and org IDs', async () => {
+    it('should work with different user IDs', async () => {
       const mockMember: Member = {
         id: 'member_456',
         userId: 'user-456',
-        workspaceId: 'org-456',
         role: 'member',
         createdAt: new Date(),
       }
 
-      mockMemberRepo.findByUserAndOrg.mockResolvedValue(mockMember)
+      mockMemberRepo.findByUser.mockResolvedValue(mockMember)
 
-      const result = await memberService.getMemberByUserAndOrg('user-456', 'org-456')
+      const result = await memberService.getMemberByUser('user-456')
 
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.value?.userId).toBe('user-456')
-        expect(result.value?.workspaceId).toBe('org-456')
       }
     })
   })
@@ -117,7 +113,6 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_123',
         userId: 'user-123',
-        workspaceId: 'org-123',
         role: 'admin',
         createdAt: new Date(),
       }
@@ -176,13 +171,12 @@ describe('MemberService', () => {
 
       const mockSelectChain = {
         from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue(mockTeamMembers),
+        innerJoin: vi.fn().mockResolvedValue(mockTeamMembers),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.listTeamMembers('org-123')
+      const result = await memberService.listTeamMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -195,13 +189,12 @@ describe('MemberService', () => {
     it('should return empty array when no members exist', async () => {
       const mockSelectChain = {
         from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([]),
+        innerJoin: vi.fn().mockResolvedValue([]),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.listTeamMembers('org-123')
+      const result = await memberService.listTeamMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -212,13 +205,12 @@ describe('MemberService', () => {
     it('should return error when database operation fails', async () => {
       const mockSelectChain = {
         from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockRejectedValue(new Error('Database error')),
+        innerJoin: vi.fn().mockRejectedValue(new Error('Database error')),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.listTeamMembers('org-123')
+      const result = await memberService.listTeamMembers()
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -239,13 +231,12 @@ describe('MemberService', () => {
 
       const mockSelectChain = {
         from: vi.fn().mockReturnThis(),
-        innerJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue(mockTeamMembers),
+        innerJoin: vi.fn().mockResolvedValue(mockTeamMembers),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.listTeamMembers('org-123')
+      const result = await memberService.listTeamMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -254,16 +245,15 @@ describe('MemberService', () => {
     })
   })
 
-  describe('countMembersByOrg', () => {
+  describe('countMembers', () => {
     it('should return member count', async () => {
       const mockSelectChain = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([{ count: 5 }]),
+        from: vi.fn().mockResolvedValue([{ count: 5 }]),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.countMembersByOrg('org-123')
+      const result = await memberService.countMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -273,13 +263,12 @@ describe('MemberService', () => {
 
     it('should return 0 when no members exist', async () => {
       const mockSelectChain = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([{ count: 0 }]),
+        from: vi.fn().mockResolvedValue([{ count: 0 }]),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.countMembersByOrg('org-123')
+      const result = await memberService.countMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -289,13 +278,12 @@ describe('MemberService', () => {
 
     it('should return 0 when result is empty', async () => {
       const mockSelectChain = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([]),
+        from: vi.fn().mockResolvedValue([]),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.countMembersByOrg('org-123')
+      const result = await memberService.countMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -305,13 +293,12 @@ describe('MemberService', () => {
 
     it('should return error when database operation fails', async () => {
       const mockSelectChain = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockRejectedValue(new Error('Database error')),
+        from: vi.fn().mockRejectedValue(new Error('Database error')),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.countMembersByOrg('org-123')
+      const result = await memberService.countMembers()
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -322,13 +309,12 @@ describe('MemberService', () => {
 
     it('should handle large member counts', async () => {
       const mockSelectChain = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([{ count: 1000 }]),
+        from: vi.fn().mockResolvedValue([{ count: 1000 }]),
       }
 
       mockDb.select.mockReturnValue(mockSelectChain)
 
-      const result = await memberService.countMembersByOrg('org-123')
+      const result = await memberService.countMembers()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -342,14 +328,13 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_123',
         userId: 'user-123',
-        workspaceId: 'org-123',
         role: 'admin',
         createdAt: new Date(),
       }
 
       mockDb.query.member.findFirst.mockResolvedValue(mockMember)
 
-      const result = await memberService.checkMembership('user-123', 'org-123')
+      const result = await memberService.checkMembership('user-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -361,7 +346,7 @@ describe('MemberService', () => {
     it('should return isMember false when user is not member', async () => {
       mockDb.query.member.findFirst.mockResolvedValue(undefined)
 
-      const result = await memberService.checkMembership('user-123', 'org-123')
+      const result = await memberService.checkMembership('user-123')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -373,7 +358,7 @@ describe('MemberService', () => {
     it('should return error when database operation fails', async () => {
       mockDb.query.member.findFirst.mockRejectedValue(new Error('Database error'))
 
-      const result = await memberService.checkMembership('user-123', 'org-123')
+      const result = await memberService.checkMembership('user-123')
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -382,18 +367,17 @@ describe('MemberService', () => {
       }
     })
 
-    it('should check membership for different user and org combinations', async () => {
+    it('should check membership for different users', async () => {
       const mockMember: Member = {
         id: 'member_456',
         userId: 'user-456',
-        workspaceId: 'org-456',
         role: 'member',
         createdAt: new Date(),
       }
 
       mockDb.query.member.findFirst.mockResolvedValue(mockMember)
 
-      const result = await memberService.checkMembership('user-456', 'org-456')
+      const result = await memberService.checkMembership('user-456')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -406,14 +390,13 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_789',
         userId: 'user-789',
-        workspaceId: 'org-789',
         role: 'owner',
         createdAt: new Date(),
       }
 
       mockDb.query.member.findFirst.mockResolvedValue(mockMember)
 
-      const result = await memberService.checkMembership('user-789', 'org-789')
+      const result = await memberService.checkMembership('user-789')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -426,14 +409,13 @@ describe('MemberService', () => {
       const mockMember: Member = {
         id: 'member_999',
         userId: 'user-999',
-        workspaceId: 'org-999',
         role: 'member',
         createdAt: new Date(),
       }
 
       mockDb.query.member.findFirst.mockResolvedValue(mockMember)
 
-      const result = await memberService.checkMembership('user-999', 'org-999')
+      const result = await memberService.checkMembership('user-999')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -446,7 +428,7 @@ describe('MemberService', () => {
       // Users without a member record (e.g., unauthenticated visitors)
       mockDb.query.member.findFirst.mockResolvedValue(null)
 
-      const result = await memberService.checkMembership('user-999', 'org-999')
+      const result = await memberService.checkMembership('user-999')
 
       expect(result.success).toBe(true)
       if (result.success) {

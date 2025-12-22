@@ -66,7 +66,6 @@ describe('BoardService', () => {
 
     // Setup mock context
     mockContext = {
-      workspaceId: 'org-123',
       userId: 'user-123',
       memberId: 'member_123',
       memberRole: 'admin',
@@ -97,7 +96,7 @@ describe('BoardService', () => {
 
     // Mock withUnitOfWork to execute callback immediately
     vi.mocked(dbModule.withUnitOfWork).mockImplementation(
-      async <T>(_orgId: string, callback: (uow: UnitOfWork) => Promise<T>) => {
+      async <T>(callback: (uow: UnitOfWork) => Promise<T>) => {
         return callback(mockUnitOfWork as UnitOfWork)
       }
     )
@@ -117,7 +116,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Feature Requests',
         slug: 'feature-requests',
         description: 'Submit your feature ideas',
@@ -138,7 +136,6 @@ describe('BoardService', () => {
         expect(result.value.slug).toBe('feature-requests')
       }
       expect(mockBoardRepo.create).toHaveBeenCalledWith({
-        workspaceId: 'org-123',
         name: 'Feature Requests',
         slug: 'feature-requests',
         description: 'Submit your feature ideas',
@@ -154,7 +151,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_2',
-        workspaceId: 'org-123',
         name: 'Bug Reports & Issues',
         slug: 'bug-reports-issues',
         description: null,
@@ -182,7 +178,6 @@ describe('BoardService', () => {
 
       const existingBoard: Board = {
         id: 'board_existing',
-        workspaceId: 'org-123',
         name: 'General',
         slug: 'general',
         description: null,
@@ -220,7 +215,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_new',
-        workspaceId: 'org-123',
         name: 'Ideas',
         slug: 'ideas-3',
         description: null,
@@ -326,7 +320,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Board',
         slug: 'board',
         description: null,
@@ -350,7 +343,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Board',
         slug: 'board',
         description: null,
@@ -376,7 +368,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Feature Requests',
         slug: 'features',
         description: null,
@@ -404,7 +395,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Board',
         slug: 'board',
         description: null,
@@ -434,7 +424,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Private Board',
         slug: 'private-board',
         description: null,
@@ -468,7 +457,6 @@ describe('BoardService', () => {
 
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Board with Settings',
         slug: 'board_with-settings',
         description: null,
@@ -494,7 +482,6 @@ describe('BoardService', () => {
   describe('updateBoard', () => {
     const existingBoard: Board = {
       id: 'board_1',
-      workspaceId: 'org-123',
       name: 'Original Name',
       slug: 'original-name',
       description: 'Original description',
@@ -592,7 +579,6 @@ describe('BoardService', () => {
 
       const existingBoardWithSlug: Board = {
         id: 'board_2',
-        workspaceId: 'org-123',
         name: 'Existing Board Name',
         slug: 'existing-board-name',
         description: null,
@@ -648,7 +634,6 @@ describe('BoardService', () => {
 
       const anotherBoard: Board = {
         id: 'board_2',
-        workspaceId: 'org-123',
         name: 'Another Board',
         slug: 'existing-slug',
         description: null,
@@ -792,7 +777,6 @@ describe('BoardService', () => {
   describe('deleteBoard', () => {
     const existingBoard: Board = {
       id: 'board_1',
-      workspaceId: 'org-123',
       name: 'Board to Delete',
       slug: 'board_to-delete',
       description: null,
@@ -864,7 +848,6 @@ describe('BoardService', () => {
     it('should return board when found', async () => {
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Test Board',
         slug: 'test-board',
         description: null,
@@ -901,7 +884,6 @@ describe('BoardService', () => {
     it('should return board when found by slug', async () => {
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Test Board',
         slug: 'test-board',
         description: null,
@@ -938,7 +920,6 @@ describe('BoardService', () => {
       const mockBoards: Board[] = [
         {
           id: 'board_1',
-          workspaceId: 'org-123',
           name: 'Board 1',
           slug: 'board_1',
           description: null,
@@ -949,7 +930,6 @@ describe('BoardService', () => {
         },
         {
           id: 'board_2',
-          workspaceId: 'org-123',
           name: 'Board 2',
           slug: 'board_2',
           description: null,
@@ -989,7 +969,6 @@ describe('BoardService', () => {
       const mockBoardsWithDetails: (Board & { postCount: number })[] = [
         {
           id: 'board_1' as BoardId,
-          workspaceId: 'org-123',
           name: 'Board 1',
           slug: 'board_1',
           description: null,
@@ -1001,7 +980,6 @@ describe('BoardService', () => {
         },
         {
           id: 'board_2' as BoardId,
-          workspaceId: 'org-123',
           name: 'Board 2',
           slug: 'board_2',
           description: null,
@@ -1029,7 +1007,6 @@ describe('BoardService', () => {
   describe('updateBoardSettings', () => {
     const existingBoard: Board = {
       id: 'board_1',
-      workspaceId: 'org-123',
       name: 'Test Board',
       slug: 'test-board',
       description: null,
@@ -1121,7 +1098,6 @@ describe('BoardService', () => {
     it('should return public board without authentication', async () => {
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Public Board',
         slug: 'public-board',
         description: null,
@@ -1173,7 +1149,6 @@ describe('BoardService', () => {
       const mockBoards: Board[] = [
         {
           id: 'board_1',
-          workspaceId: 'org-123',
           name: 'Public Board 1',
           slug: 'public-board-1',
           description: null,
@@ -1184,7 +1159,6 @@ describe('BoardService', () => {
         },
         {
           id: 'board_2',
-          workspaceId: 'org-123',
           name: 'Public Board 2',
           slug: 'public-board-2',
           description: null,
@@ -1229,7 +1203,6 @@ describe('BoardService', () => {
       const mockBoards: Board[] = [
         {
           id: 'board_1',
-          workspaceId: 'org-123',
           name: 'Empty Board',
           slug: 'empty-board',
           description: null,
@@ -1259,7 +1232,6 @@ describe('BoardService', () => {
     it('should return public board by slug', async () => {
       const mockBoard: Board = {
         id: 'board_1',
-        workspaceId: 'org-123',
         name: 'Public Board',
         slug: 'public-board',
         description: null,

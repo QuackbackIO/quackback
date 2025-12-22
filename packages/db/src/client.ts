@@ -69,7 +69,7 @@ export function getDb(): Database {
 export const db: Database = new Proxy({} as Database, {
   get(_, prop) {
     const database = getDb()
-    return (database as Record<string | symbol, unknown>)[prop]
+    return (database as unknown as Record<string | symbol, unknown>)[prop]
   },
 })
 

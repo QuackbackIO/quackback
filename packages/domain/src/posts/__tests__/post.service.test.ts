@@ -96,7 +96,7 @@ describe('PostService', () => {
     })
 
     mockWithUnitOfWork.mockImplementation(
-      async (_orgId: string, callback: (uow: MockUnitOfWork) => Promise<unknown>) => {
+      async (callback: (uow: MockUnitOfWork) => Promise<unknown>) => {
         const uow = createMockUnitOfWork()
         if (config.uowDbMocks) {
           Object.assign(uow.db, config.uowDbMocks)
@@ -1048,7 +1048,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        workspaceId: TEST_IDS.ORG_ID,
+        organizationId: TEST_IDS.ORG_ID,
       })
 
       expect(result.success).toBe(true)
@@ -1085,7 +1085,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        workspaceId: TEST_IDS.ORG_ID,
+        organizationId: TEST_IDS.ORG_ID,
         boardSlug: 'test-board',
       })
 
@@ -1122,7 +1122,7 @@ describe('PostService', () => {
       })
 
       const result = await postService.listPublicPosts({
-        workspaceId: TEST_IDS.ORG_ID,
+        organizationId: TEST_IDS.ORG_ID,
         search: 'bug fix',
         statusSlugs: ['open'],
         sort: 'new',
@@ -1339,7 +1339,7 @@ describe('PostService', () => {
 
   describe('getRoadmapPosts', () => {
     it('should return empty array when no status slugs provided', async () => {
-      const result = await postService.getRoadmapPosts(TEST_IDS.ORG_ID, [])
+      const result = await postService.getRoadmapPosts([])
 
       expect(result.success).toBe(true)
       if (result.success) {

@@ -18,24 +18,9 @@ describe('Unit of Work Module', () => {
       expect(withUnitOfWork.constructor.name).toBe('AsyncFunction')
     })
 
-    it('accepts organizationId and callback parameters', () => {
-      expect(withUnitOfWork.length).toBe(2)
-    })
-
-    it('throws error for invalid organization ID format', async () => {
-      await expect(withUnitOfWork('invalid-id' as never, async () => {})).rejects.toThrow(
-        'Invalid length'
-      )
-    })
-
-    it('throws error for empty organization ID', async () => {
-      await expect(withUnitOfWork('' as never, async () => {})).rejects.toThrow('Invalid length')
-    })
-
-    it('throws error for SQL injection attempt', async () => {
-      await expect(
-        withUnitOfWork("'; DROP TABLE users; --" as never, async () => {})
-      ).rejects.toThrow('Invalid length')
+    it('accepts callback parameter', () => {
+      // In single-tenant mode, withUnitOfWork only takes a callback
+      expect(withUnitOfWork.length).toBe(1)
     })
   })
 
