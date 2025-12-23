@@ -1,6 +1,6 @@
 {
-  "id": "4b1388b4-4ce4-4170-8310-b6bde5334e67",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "7cf88f78-6f50-43dd-949e-89ab8028a434",
+  "prevId": "94a40c9b-5b98-4171-932d-5e607b3f50c5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -448,12 +448,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "logo": {
-          "name": "logo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "logo_blob": {
           "name": "logo_blob",
           "type": "bytea",
@@ -474,6 +468,18 @@
         },
         "favicon_type": {
           "name": "favicon_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_logo_blob": {
+          "name": "header_logo_blob",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_logo_type": {
+          "name": "header_logo_type",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -510,18 +516,6 @@
         },
         "custom_css": {
           "name": "custom_css",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_logo_blob": {
-          "name": "header_logo_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_logo_type": {
-          "name": "header_logo_type",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2182,6 +2176,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "posts_board_deleted_at_idx": {
+          "name": "posts_board_deleted_at_idx",
+          "columns": [
+            {
+              "expression": "board_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "deleted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2243,7 +2258,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "vote_count_non_negative": {
+          "name": "vote_count_non_negative",
+          "value": "vote_count >= 0"
+        },
+        "comment_count_non_negative": {
+          "name": "comment_count_non_negative",
+          "value": "comment_count >= 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.votes": {
@@ -2870,11 +2894,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "integrations_integration_type_unique": {
-          "name": "integrations_integration_type_unique",
-          "nullsNotDistinct": false,
-          "columns": ["integration_type"]
-        },
         "integration_type_unique": {
           "name": "integration_type_unique",
           "nullsNotDistinct": false,
@@ -2882,7 +2901,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "error_count_non_negative": {
+          "name": "error_count_non_negative",
+          "value": "error_count >= 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.changelog_entries": {
