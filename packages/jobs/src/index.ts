@@ -1,8 +1,5 @@
-// Connection utilities (for BullMQ/Redis)
+// Connection utilities
 export { getConnection, getConnectionOptions, createRedisClient } from './connection'
-
-// Queue utilities (BullMQ - for backwards compatibility and OSS)
-export { QueueNames, getImportQueue, addImportJob, getImportJobStatus, closeQueues } from './queues'
 
 // Types
 export {
@@ -40,11 +37,31 @@ export {
   type EventJobDataFor,
 } from './types'
 
-// Adapters (use these for new code)
+// Adapters
 export {
+  // Adapter factories
   getJobAdapter,
   getStateAdapter,
   closeAdapters,
+  // Types
   type JobAdapter,
   type StateAdapter,
+  type CircuitState,
+  // Config
+  CIRCUIT_BREAKER_CONFIG,
+  IDEMPOTENCY_CONFIG,
+  QueueNames,
+  // Direct functions (for convenience)
+  addImportJob,
+  getImportJobStatus,
+  addEventJob,
+  canExecute,
+  recordSuccess,
+  recordFailure,
+  isProcessed,
+  markProcessed,
+  getProcessedResult,
+  cacheGet,
+  cacheSet,
+  cacheDel,
 } from './adapters'
