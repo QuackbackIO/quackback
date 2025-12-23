@@ -3,13 +3,18 @@
 import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
-import { getPostService, getPublicPostService, getMemberService, getRoadmapService } from '@/lib/services'
+import {
+  getPostService,
+  getPublicPostService,
+  getMemberService,
+  getRoadmapService,
+} from '@/lib/services'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { buildPostCreatedEvent, buildPostStatusChangedEvent } from '@quackback/domain'
 import type { CommentTreeNode } from '@quackback/domain'
-import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
+
+import { getJobAdapter } from '@quackback/jobs'
 import {
   postIdSchema,
   boardIdSchema,
@@ -194,8 +199,8 @@ export const createPostAction = withAction(
         voteCount: post.voteCount,
       }
     )
-    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-    const jobAdapter = getJobAdapter(env)
+
+    const jobAdapter = getJobAdapter()
     await jobAdapter.addEventJob(eventData)
 
     return actionOk(post)
@@ -295,9 +300,7 @@ export const updatePostAction = withAction(
     if (input.ownerId !== undefined) {
       updateInput.ownerId = input.ownerId
       if (input.ownerId) {
-        const ownerMemberResult = await getMemberService().getMemberByUser(
-          input.ownerId as UserId
-        )
+        const ownerMemberResult = await getMemberService().getMemberByUser(input.ownerId as UserId)
         const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
         updateInput.ownerMemberId = ownerMember ? ownerMember.id : null
       } else {
@@ -371,8 +374,8 @@ export const changePostStatusAction = withAction(
       previousStatus,
       newStatus
     )
-    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-    const jobAdapter = getJobAdapter(env)
+
+    const jobAdapter = getJobAdapter()
     await jobAdapter.addEventJob(eventData)
 
     return actionOk(post)

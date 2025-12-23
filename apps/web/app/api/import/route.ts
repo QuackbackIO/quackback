@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Papa from 'papaparse'
-import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
-import { getJobAdapter, isCloudflareWorker, type ImportJobData } from '@quackback/jobs'
+import { getJobAdapter, type ImportJobData } from '@quackback/jobs'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
 import { getBoardService } from '@/lib/services'
 import { buildServiceContext } from '@quackback/domain'
@@ -133,9 +132,8 @@ export async function POST(request: NextRequest) {
       initiatedByMemberId: validation.member.id,
     }
 
-    // Get job adapter based on runtime environment
-    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-    const jobAdapter = getJobAdapter(env)
+    // Get job adapter
+    const jobAdapter = getJobAdapter()
 
     // Add job to queue/workflow
     const jobId = await jobAdapter.addImportJob(jobData)

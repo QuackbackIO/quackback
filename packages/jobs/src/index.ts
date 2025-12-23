@@ -45,8 +45,6 @@ export {
   getJobAdapter,
   getStateAdapter,
   closeAdapters,
-  isCloudflareWorker,
   type JobAdapter,
   type StateAdapter,
-  type CloudflareEnv,
 } from './adapters'

@@ -1,52 +1,25 @@
 /**
  * Adapter factory for job and state management.
  *
- * Automatically selects the appropriate adapter based on runtime environment:
- * - Cloudflare Workers: Uses Workflows + Durable Objects
- * - Node.js/Bun: Uses BullMQ + Redis
+ * Uses BullMQ + Redis for job processing and state management.
  */
 
 import type { JobAdapter, StateAdapter } from './types'
-import { isCloudflareWorker } from './runtime'
 
 // Re-export types
 export type { JobAdapter, StateAdapter, CircuitState, ProcessedEvent } from './types'
 export { CIRCUIT_BREAKER_CONFIG, IDEMPOTENCY_CONFIG } from './types'
-export { isCloudflareWorker } from './runtime'
-
-/**
- * Cloudflare environment type (for type safety when passing env)
- */
-export interface CloudflareEnv {
-  IMPORT_WORKFLOW?: unknown
-  INTEGRATION_WORKFLOW?: unknown
-  NOTIFICATION_WORKFLOW?: unknown
-  INTEGRATION_STATE?: unknown
-}
 
 // Singleton instances for adapters
 let _jobAdapter: JobAdapter | null = null
 let _stateAdapter: StateAdapter | null = null
 
 /**
- * Get the job adapter for the current runtime environment.
+ * Get the job adapter.
  *
- * @param env - Cloudflare environment (required in CF Workers)
- * @returns JobAdapter instance
+ * @returns JobAdapter instance (BullMQ)
  */
-export function getJobAdapter(env?: CloudflareEnv): JobAdapter {
-  // In Cloudflare Workers, we need a new adapter per request (env is request-scoped)
-  if (isCloudflareWorker()) {
-    if (!env) {
-      throw new Error('Cloudflare environment required in Workers runtime')
-    }
-    // Dynamic import to avoid bundling CF-specific code in Node.js
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { WorkflowJobAdapter } = require('./cloudflare/job-adapter')
-    return new WorkflowJobAdapter(env)
-  }
-
-  // In Node.js/Bun, use singleton pattern
+export function getJobAdapter(): JobAdapter {
   if (!_jobAdapter) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { BullMQJobAdapter } = require('./bullmq/job-adapter')
@@ -56,24 +29,11 @@ export function getJobAdapter(env?: CloudflareEnv): JobAdapter {
 }
 
 /**
- * Get the state adapter for the current runtime environment.
+ * Get the state adapter.
  *
- * @param env - Cloudflare environment (required in CF Workers)
- * @returns StateAdapter instance
+ * @returns StateAdapter instance (Redis)
  */
-export function getStateAdapter(env?: CloudflareEnv): StateAdapter {
-  // In Cloudflare Workers, we need a new adapter per request
-  if (isCloudflareWorker()) {
-    if (!env) {
-      throw new Error('Cloudflare environment required in Workers runtime')
-    }
-    // Dynamic import to avoid bundling CF-specific code in Node.js
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DurableObjectStateAdapter } = require('./cloudflare/state-adapter')
-    return new DurableObjectStateAdapter(env)
-  }
-
-  // In Node.js/Bun, use singleton pattern
+export function getStateAdapter(): StateAdapter {
   if (!_stateAdapter) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { RedisStateAdapter } = require('./bullmq/state-adapter')
@@ -84,7 +44,6 @@ export function getStateAdapter(env?: CloudflareEnv): StateAdapter {
 
 /**
  * Close all adapter connections (for graceful shutdown).
- * Only applicable in Node.js/Bun environment.
  */
 export async function closeAdapters(): Promise<void> {
   if (_jobAdapter?.close) {

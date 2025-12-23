@@ -14,8 +14,8 @@ import {
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { hashIP } from '@/lib/utils/ip-hash'
 import { buildServiceContext, buildPostCreatedEvent, type ServiceContext } from '@quackback/domain'
-import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
+
+import { getJobAdapter } from '@quackback/jobs'
 import {
   postIdSchema,
   boardIdSchema,
@@ -547,8 +547,8 @@ export async function createPublicPostAction(
         voteCount: post.voteCount,
       }
     )
-    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-    const jobAdapter = getJobAdapter(env)
+
+    const jobAdapter = getJobAdapter()
     await jobAdapter.addEventJob(eventData)
 
     return actionOk({

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { validateApiTenantAccess } from '@/lib/tenant'
-import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
+import { getJobAdapter } from '@quackback/jobs'
 
 export async function GET(
   request: NextRequest,
@@ -33,9 +32,8 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Get job status via adapter (BullMQ or Workflow)
-    const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-    const jobAdapter = getJobAdapter(env)
+    // Get job status via adapter
+    const jobAdapter = getJobAdapter()
     const status = await jobAdapter.getImportJobStatus(jobId)
 
     if (!status) {

@@ -40,10 +40,10 @@ import type {
 export const inboxKeys = {
   all: ['inbox'] as const,
   lists: () => [...inboxKeys.all, 'list'] as const,
-  list: (_workspaceId: WorkspaceId, filters: InboxFilters) =>
+  list: (workspaceId: WorkspaceId, filters: InboxFilters) =>
     [...inboxKeys.lists(), workspaceId, filters] as const,
   details: () => [...inboxKeys.all, 'detail'] as const,
-  detail: (postId: PostId, _workspaceId: WorkspaceId) =>
+  detail: (postId: PostId, workspaceId: WorkspaceId) =>
     [...inboxKeys.details(), postId, workspaceId] as const,
 }
 
@@ -52,7 +52,7 @@ export const inboxKeys = {
 // ============================================================================
 
 async function fetchInboxPosts(
-  _workspaceId: WorkspaceId,
+  workspaceId: WorkspaceId,
   filters: InboxFilters,
   page: number
 ): Promise<InboxPostListResult> {
@@ -95,7 +95,7 @@ async function fetchPostDetail(postId: PostId, _workspaceId: WorkspaceId): Promi
 // ============================================================================
 
 interface UseInboxPostsOptions {
-  _workspaceId: WorkspaceId
+  workspaceId: WorkspaceId
   filters: InboxFilters
   initialData?: InboxPostListResult
 }
@@ -126,7 +126,7 @@ export function flattenInboxPosts(
 
 interface UsePostDetailOptions {
   postId: PostId | null
-  _workspaceId: WorkspaceId
+  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
@@ -146,7 +146,7 @@ export function usePostDetail({ postId, workspaceId, enabled = true }: UsePostDe
 /**
  * @deprecated Use useChangePostStatusId instead - the legacy status field has been removed
  */
-export function useUpdatePostStatus(_workspaceId: WorkspaceId) {
+export function useUpdatePostStatus(workspaceId: WorkspaceId) {
   const changeStatusId = useChangePostStatusId(workspaceId)
   return changeStatusId
 }
@@ -154,7 +154,7 @@ export function useUpdatePostStatus(_workspaceId: WorkspaceId) {
 /**
  * Hook to change a post's status using TypeID-based statusId
  */
-export function useChangePostStatusId(_workspaceId: WorkspaceId) {
+export function useChangePostStatusId(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -176,7 +176,7 @@ export function useChangePostStatusId(_workspaceId: WorkspaceId) {
   })
 }
 
-export function useUpdatePostOwner(_workspaceId: WorkspaceId) {
+export function useUpdatePostOwner(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -249,7 +249,7 @@ interface UpdateTagsInput {
   allTags: Tag[]
 }
 
-export function useUpdatePostTags(_workspaceId: WorkspaceId) {
+export function useUpdatePostTags(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -323,7 +323,7 @@ export function useUpdatePostTags(_workspaceId: WorkspaceId) {
   })
 }
 
-export function useUpdateOfficialResponse(_workspaceId: WorkspaceId) {
+export function useUpdateOfficialResponse(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -379,7 +379,7 @@ interface ToggleReactionResponse {
   reactions: CommentReaction[]
 }
 
-export function useToggleCommentReaction(_workspaceId: WorkspaceId) {
+export function useToggleCommentReaction(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -511,7 +511,7 @@ interface UpdatePostResponse {
   boardId: string
 }
 
-export function useUpdatePost(_workspaceId: WorkspaceId) {
+export function useUpdatePost(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -612,7 +612,7 @@ interface VotePostResponse {
   voted: boolean
 }
 
-export function useVotePost(_workspaceId: WorkspaceId) {
+export function useVotePost(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -731,7 +731,7 @@ interface AddCommentResponse {
   createdAt: string
 }
 
-export function useAddComment(_workspaceId: WorkspaceId) {
+export function useAddComment(workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({

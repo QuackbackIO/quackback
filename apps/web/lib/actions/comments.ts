@@ -7,8 +7,8 @@ import { getCommentService, getPublicPostService } from '@/lib/services'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSettings } from '@/lib/tenant'
 import { buildCommentCreatedEvent, type ServiceContext } from '@quackback/domain'
-import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getJobAdapter, isCloudflareWorker } from '@quackback/jobs'
+
+import { getJobAdapter } from '@quackback/jobs'
 import {
   postIdSchema,
   commentIdSchema,
@@ -184,8 +184,8 @@ export async function createCommentAction(
         { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
         { id: post.id, title: post.title }
       )
-      const env = isCloudflareWorker() ? getCloudflareContext().env : undefined
-      const jobAdapter = getJobAdapter(env)
+
+      const jobAdapter = getJobAdapter()
       await jobAdapter.addEventJob(eventData)
     }
 
@@ -378,9 +378,7 @@ export async function userDeleteCommentAction(
 /**
  * Toggle a reaction on a comment.
  */
-export async function toggleReactionAction(
-  rawInput: ToggleReactionInput
-): Promise<
+export async function toggleReactionAction(rawInput: ToggleReactionInput): Promise<
   ActionResult<{
     added: boolean
     reactions: Array<{ emoji: string; count: number; hasReacted: boolean }>

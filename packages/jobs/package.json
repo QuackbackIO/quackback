@@ -13,8 +13,6 @@
     "./queues": "./src/queues.ts",
     "./adapters": "./src/adapters/index.ts",
     "./adapters/bullmq": "./src/adapters/bullmq/index.ts",
-    "./adapters/cloudflare": "./src/adapters/cloudflare/index.ts",
-    "./adapters/cloudflare/workflows": "./src/adapters/cloudflare/workflows/index.ts",
     "./processors": "./src/processors/index.ts"
   },
   "dependencies": {
@@ -29,7 +27,6 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241127.0",
     "@types/papaparse": "^5.3.15"
   }
 }
