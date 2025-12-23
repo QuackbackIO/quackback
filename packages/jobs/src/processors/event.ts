@@ -8,7 +8,7 @@
 import { db, integrations, integrationEventMappings, eq } from '@quackback/db'
 import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
 import type { EventJobData, EventJobResult, IntegrationJobData } from '../types'
-import type { StateAdapter } from '../adapters/types'
+import type { StateAdapter } from '../adapters'
 import { processIntegration } from './integration'
 import { processUserNotification } from './user-notification'
 
@@ -62,10 +62,7 @@ export async function getIntegrationMappings(
       status: integrations.status,
     })
     .from(integrationEventMappings)
-    .innerJoin(
-      integrations,
-      eq(integrationEventMappings.integrationId, integrations.id)
-    )
+    .innerJoin(integrations, eq(integrationEventMappings.integrationId, integrations.id))
 
   // Filter to relevant mappings for this event type
   return mappings.filter(

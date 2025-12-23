@@ -23,3 +23,13 @@ export { loadIntegrationConfig, recordSyncLog, processIntegration } from './inte
 
 // User notification processor
 export { processUserNotification } from './user-notification'
+
+// Event processor (unified event handling)
+export {
+  processEvent,
+  processSingleIntegration,
+  processEventNotifications,
+  getIntegrationMappings,
+  isNotificationEvent,
+  type IntegrationMapping,
+} from './event'

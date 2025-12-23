@@ -19,7 +19,7 @@ import {
   type DomainEvent,
 } from '@quackback/integrations'
 import type { IntegrationJobData, IntegrationJobResult } from '../types'
-import type { StateAdapter } from '../adapters/types'
+import type { StateAdapter } from '../adapters'
 import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
