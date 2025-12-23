@@ -11,8 +11,7 @@
  * - UUIDv7 for time-ordered IDs (better index performance)
  */
 
-import { customType, uuid } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
+import { customType } from 'drizzle-orm/pg-core'
 import { generateId, fromUuid, toUuid } from './core'
 import type { IdPrefix } from './prefixes'
 import type { TypeId } from './types'
@@ -110,57 +109,6 @@ export function typeIdWithDefault<P extends IdPrefix>(prefix: P) {
 }
 
 /**
- * Standard UUID column that accepts TypeID input
- *
- * Useful for columns that store UUID but receive TypeID from API.
- * Does not convert on read (returns raw UUID).
- *
- * @param prefix - The expected prefix for input validation
- * @returns A custom column builder
- *
- * @example
- * // For foreign keys where you want to accept TypeID input
- * // but don't need TypeID output
- * export const posts = pgTable('posts', {
- *   boardId: uuidFromTypeId('board')('board_id'),
- * })
- */
-export function uuidFromTypeId<P extends IdPrefix>(_prefix: P) {
-  return customType<{
-    data: string // Raw UUID
-    driverData: string
-  }>({
-    dataType() {
-      return 'uuid'
-    },
-    toDriver(value: string): string {
-      // If it's a TypeID, convert to UUID
-      if (value.includes('_')) {
-        return toUuid(value)
-      }
-      // Already a UUID
-      return value
-    },
-    fromDriver(value: unknown): string {
-      // Return raw UUID from database
-      return value as string
-    },
-  })
-}
-
-/**
- * Helper to create a UUID column with gen_random_uuid() default
- *
- * For cases where you want database-generated UUIDs
- * (not UUIDv7, but compatible with TypeID conversion at read time)
- *
- * @deprecated Prefer typeIdWithDefault for new columns
- */
-export function uuidWithDatabaseDefault() {
-  return uuid().default(sql`gen_random_uuid()`)
-}
-
-/**
  * Create a reference column that accepts TypeID for a foreign key
  *
  * This is a convenience function for defining foreign key columns
@@ -179,30 +127,3 @@ export function uuidWithDatabaseDefault() {
 export function typeIdReference<P extends IdPrefix>(prefix: P) {
   return typeIdColumn(prefix)
 }
-
-// ============================================
-// Migration Helpers
-// ============================================
-
-/**
- * SQL helper to convert UUID to TypeID format in queries
- *
- * @param prefix - The prefix to use
- * @param uuidColumn - The UUID column expression
- * @returns SQL expression for TypeID string
- *
- * @example
- * // In a raw query
- * sql`SELECT ${toTypeIdSql('post', posts.id)} as id FROM posts`
- */
-export function toTypeIdSql(prefix: string, uuidColumn: unknown) {
-  // Note: This creates a SQL expression that concatenates prefix with base32 UUID
-  // For actual TypeID format, you'd need a PostgreSQL function
-  // This is a simplified version that just prefixes the UUID
-  return sql`${prefix} || '_' || replace(${uuidColumn}::text, '-', '')`
-}
-
-/**
- * Type helper to infer TypeId type from a column definition
- */
-export type InferTypeId<T> = T extends { data: infer D } ? D : never

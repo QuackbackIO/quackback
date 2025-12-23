@@ -13,6 +13,7 @@ import {
   type MemberId,
   type InviteId,
 } from '@quackback/ids'
+import { getRootUrl } from '@/lib/routing'
 
 // ============================================
 // Schemas
@@ -62,22 +63,6 @@ export type CancelInvitationInput = z.infer<typeof cancelInvitationSchema>
 export type ResendInvitationInput = z.infer<typeof resendInvitationSchema>
 
 // ============================================
-// Helper Functions
-// ============================================
-
-/**
- * Get the root URL for email links.
- * Requires ROOT_URL environment variable.
- */
-function getRootUrl(): string {
-  const url = process.env.ROOT_URL
-  if (!url) {
-    throw new Error('ROOT_URL environment variable is required for sending invitation emails')
-  }
-  return url
-}
-
-// ============================================
 // Actions
 // ============================================
 
@@ -86,7 +71,7 @@ function getRootUrl(): string {
  */
 export const listPortalUsersAction = withAction(
   listPortalUsersSchema,
-  async (input, ctx) => {
+  async (input, _ctx) => {
     const result = await getUserService().listPortalUsers({
       search: input.search,
       verified: input.verified,
@@ -111,10 +96,8 @@ export const listPortalUsersAction = withAction(
  */
 export const getPortalUserAction = withAction(
   getPortalUserSchema,
-  async (input, ctx) => {
-    const result = await getUserService().getPortalUserDetail(
-      input.memberId as MemberId
-    )
+  async (input, _ctx) => {
+    const result = await getUserService().getPortalUserDetail(input.memberId as MemberId)
 
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
@@ -130,10 +113,8 @@ export const getPortalUserAction = withAction(
  */
 export const deletePortalUserAction = withAction(
   deletePortalUserSchema,
-  async (input, ctx) => {
-    const result = await getUserService().removePortalUser(
-      input.memberId as MemberId
-    )
+  async (input, _ctx) => {
+    const result = await getUserService().removePortalUser(input.memberId as MemberId)
 
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
@@ -154,10 +135,7 @@ export const sendInvitationAction = withAction(
 
     // Check if there's already a pending invitation for this email
     const existingInvitation = await db.query.invitation.findFirst({
-      where: and(
-        eq(invitation.email, email),
-        eq(invitation.status, 'pending')
-      ),
+      where: and(eq(invitation.email, email), eq(invitation.status, 'pending')),
     })
 
     if (existingInvitation) {
@@ -224,14 +202,11 @@ export const sendInvitationAction = withAction(
  */
 export const cancelInvitationAction = withAction(
   cancelInvitationSchema,
-  async (input, ctx) => {
+  async (input, _ctx) => {
     const invitationId = input.invitationId as InviteId
 
     const invitationRecord = await db.query.invitation.findFirst({
-      where: and(
-        eq(invitation.id, invitationId),
-        eq(invitation.status, 'pending')
-      ),
+      where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
     })
 
     if (!invitationRecord) {
@@ -258,10 +233,7 @@ export const resendInvitationAction = withAction(
     const invitationId = input.invitationId as InviteId
 
     const invitationRecord = await db.query.invitation.findFirst({
-      where: and(
-        eq(invitation.id, invitationId),
-        eq(invitation.status, 'pending')
-      ),
+      where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
     })
 
     if (!invitationRecord) {

@@ -19,11 +19,3 @@ export function getRootUrl(): string {
   }
   return url
 }
-
-/**
- * Build a URL path within the app.
- */
-export function buildUrl(path: string = '/'): string {
-  const base = getRootUrl()
-  return `${base}${path}`
-}
