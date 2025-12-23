@@ -14,7 +14,6 @@
     "./tenant": "./src/tenant/index.ts",
     "./migrate": "./src/migrate-runtime.ts",
     "./queries/public": "./src/queries/public.ts",
-    "./queries/usage": "./src/queries/usage.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

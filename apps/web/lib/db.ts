@@ -49,9 +49,6 @@ initializeDb()
 // Re-export everything from the db package
 export * from '@quackback/db'
 
-// Re-export query helpers
-export * from '@quackback/db/queries/usage'
-
 // Re-export client utilities for advanced use cases
 export { createDb, setDbGetter, getDb } from '@quackback/db/client'
 
