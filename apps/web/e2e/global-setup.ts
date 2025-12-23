@@ -9,7 +9,7 @@ const TEST_HOST = 'acme.localhost:3000'
  * Global setup: Authenticate as admin using real OTP flow
  *
  * Uses the actual OTP authentication flow:
- * 1. Send OTP code to email (logged to console via DEV_EMAIL_TO_CONSOLE)
+ * 1. Send OTP code to email (logged to console when RESEND_API_KEY not configured)
  * 2. Retrieve OTP code directly from database
  * 3. Verify OTP and get redirect URL
  * 4. Navigate to redirect URL to complete authentication

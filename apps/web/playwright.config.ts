@@ -86,7 +86,7 @@ export default defineConfig({
 
   /* Run local dev server before starting the tests */
   webServer: {
-    command: 'DEV_EMAIL_TO_CONSOLE=true bun run dev',
+    command: 'bun run dev',
     url: 'http://acme.localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
