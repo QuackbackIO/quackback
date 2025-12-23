@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { BoardService } from '../board.service'
+import { PublicBoardService } from '../board.public'
 import type { CreateBoardInput, UpdateBoardInput } from '../board.types'
 import type { ServiceContext } from '../../shared/service-context'
 import type { Board, BoardSettings, NewBoard } from '@quackback/db/types'
@@ -57,6 +58,7 @@ vi.mock('@quackback/db', () => ({
 
 describe('BoardService', () => {
   let boardService: BoardService
+  let publicBoardService: PublicBoardService
   let mockContext: ServiceContext
   let mockBoardRepo: MockBoardRepository
   let mockUnitOfWork: Pick<UnitOfWork, 'db'>
@@ -90,6 +92,7 @@ describe('BoardService', () => {
     } as UnitOfWork
 
     boardService = new BoardService()
+    publicBoardService = new PublicBoardService()
 
     // Import the mocked module (use import() not require() for ESM mocking)
     const dbModule = await import('@quackback/db')
@@ -1094,7 +1097,7 @@ describe('BoardService', () => {
     })
   })
 
-  describe('getPublicBoardById', () => {
+  describe('PublicBoardService.getBoardById', () => {
     it('should return public board without authentication', async () => {
       const mockBoard: Board = {
         id: 'board_1',
@@ -1110,7 +1113,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(mockBoard)
 
-      const result = await boardService.getPublicBoardById('board_1')
+      const result = await publicBoardService.getBoardById('board_1' as BoardId)
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1122,7 +1125,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(undefined)
 
-      const result = await boardService.getPublicBoardById('board_nonexistent')
+      const result = await publicBoardService.getBoardById('board_nonexistent' as BoardId)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1134,7 +1137,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockRejectedValue(new Error('Database error'))
 
-      const result = await boardService.getPublicBoardById('board_1')
+      const result = await publicBoardService.getBoardById('board_1' as BoardId)
 
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -1144,7 +1147,7 @@ describe('BoardService', () => {
     })
   })
 
-  describe('listPublicBoardsWithStats', () => {
+  describe('PublicBoardService.listBoardsWithStats', () => {
     it('should return only public boards with post counts', async () => {
       const mockBoards: Board[] = [
         {
@@ -1177,7 +1180,7 @@ describe('BoardService', () => {
         { boardId: 'board_2', count: 5 },
       ])
 
-      const result = await boardService.listPublicBoardsWithStats('org-123')
+      const result = await publicBoardService.listBoardsWithStats()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1191,7 +1194,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findMany).mockResolvedValue([])
 
-      const result = await boardService.listPublicBoardsWithStats('org-123')
+      const result = await publicBoardService.listBoardsWithStats()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1218,7 +1221,7 @@ describe('BoardService', () => {
       // Use the hoisted mock for the groupBy result (empty = no posts)
       mockGroupBy.mockResolvedValue([])
 
-      const result = await boardService.listPublicBoardsWithStats('org-123')
+      const result = await publicBoardService.listBoardsWithStats()
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1228,7 +1231,7 @@ describe('BoardService', () => {
     })
   })
 
-  describe('getPublicBoardBySlug', () => {
+  describe('PublicBoardService.getBoardBySlug', () => {
     it('should return public board by slug', async () => {
       const mockBoard: Board = {
         id: 'board_1',
@@ -1244,7 +1247,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(mockBoard)
 
-      const result = await boardService.getPublicBoardBySlug('org-123', 'public-board')
+      const result = await publicBoardService.getBoardBySlug('public-board')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1256,7 +1259,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(undefined)
 
-      const result = await boardService.getPublicBoardBySlug('org-123', 'private-board')
+      const result = await publicBoardService.getBoardBySlug('private-board')
 
       expect(result.success).toBe(true)
       if (result.success) {
@@ -1268,7 +1271,7 @@ describe('BoardService', () => {
       const { db } = await import('@quackback/db')
       vi.mocked(db.query.boards.findFirst).mockResolvedValue(undefined)
 
-      const result = await boardService.getPublicBoardBySlug('org-123', 'board_nonexistent')
+      const result = await publicBoardService.getBoardBySlug('board_nonexistent')
 
       expect(result.success).toBe(true)
       if (result.success) {
