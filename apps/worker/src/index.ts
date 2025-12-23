@@ -8,8 +8,14 @@ import {
   type EventJobData,
   type EventJobResult,
 } from '@quackback/jobs'
-import { processImportJob } from './processors/import'
-import { processEvent } from '@quackback/jobs/processors'
+import {
+  parseCSV,
+  processBatch,
+  validateJobData,
+  mergeResults,
+  BATCH_SIZE,
+  processEvent,
+} from '@quackback/jobs/processors'
 
 console.log('Starting Quackback Worker...')
 
@@ -18,7 +24,31 @@ const importWorker = new Worker<ImportJobData, ImportJobResult>(
   QueueNames.IMPORT,
   async (job) => {
     console.log(`[Import] Processing job ${job.id}`)
-    return processImportJob(job)
+
+    // Validate job data
+    const validation = validateJobData(job.data)
+    if (!validation.success) {
+      throw new Error(`Invalid job data: ${validation.error}`)
+    }
+
+    // Parse CSV
+    const rows = parseCSV(job.data.csvContent)
+    let result: ImportJobResult = { imported: 0, skipped: 0, errors: [], createdTags: [] }
+
+    // Process in batches with progress updates
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE)
+      const batchResult = await processBatch(batch, job.data.workspaceId, job.data.boardId, i)
+      result = mergeResults(result, batchResult)
+
+      // Report progress
+      await job.updateProgress({
+        processed: Math.min(i + BATCH_SIZE, rows.length),
+        total: job.data.totalRows,
+      })
+    }
+
+    return result
   },
   {
     connection: getConnection(),
