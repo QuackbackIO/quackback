@@ -12,9 +12,9 @@ import { templates } from '../dist/templates'
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'Quackback <noreply@quackback.io>'
 
-// Check if we should log emails to console instead of sending
-function shouldLogToConsole(): boolean {
-  return process.env.DEV_EMAIL_TO_CONSOLE === 'true'
+// Check if Resend is configured - if not, log emails to console
+function isResendConfigured(): boolean {
+  return !!process.env.RESEND_API_KEY
 }
 
 // Simple template interpolation - replaces {{key}} with values
@@ -26,6 +26,7 @@ function interpolate(template: string, values: Record<string, string>): string {
 async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
+    // This shouldn't happen as callers check isResendConfigured() first
     throw new Error('RESEND_API_KEY environment variable is not set')
   }
 
@@ -66,7 +67,7 @@ interface SendInvitationParams {
 export async function sendInvitationEmail(params: SendInvitationParams) {
   const { to, invitedByName, inviteeName, workspaceName, inviteLink } = params
 
-  if (shouldLogToConsole()) {
+  if (!isResendConfigured()) {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Invitation Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -107,7 +108,7 @@ interface SendWelcomeParams {
 export async function sendWelcomeEmail(params: SendWelcomeParams) {
   const { to, name, workspaceName, dashboardUrl } = params
 
-  if (shouldLogToConsole()) {
+  if (!isResendConfigured()) {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Welcome Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -144,7 +145,7 @@ interface SendSigninCodeParams {
 export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
   const { to, code } = params
 
-  if (shouldLogToConsole()) {
+  if (!isResendConfigured()) {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Sign-in Code Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -181,7 +182,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
   const { to, postTitle, postUrl, previousStatus, newStatus, workspaceName, unsubscribeUrl } =
     params
 
-  if (shouldLogToConsole()) {
+  if (!isResendConfigured()) {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Status Change Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -239,7 +240,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     unsubscribeUrl,
   } = params
 
-  if (shouldLogToConsole()) {
+  if (!isResendConfigured()) {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] New Comment Email')
     console.log('├────────────────────────────────────────────────────────────')

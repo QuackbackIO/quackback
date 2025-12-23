@@ -89,7 +89,6 @@ export type {
   AccountId,
   InviteId,
   VerificationId,
-  SsoProviderId,
   DomainId,
   TransferTokenId,
   // Billing
