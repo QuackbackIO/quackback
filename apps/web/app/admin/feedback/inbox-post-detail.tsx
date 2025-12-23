@@ -39,9 +39,8 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { AddToRoadmapDropdown } from '@/components/admin/add-to-roadmap-dropdown'
 import { ChevronUp } from 'lucide-react'
 import { getInitials } from '@quackback/domain/utils'
-import { REACTION_EMOJIS } from '@/lib/db/types'
+import { REACTION_EMOJIS, type Tag, type PostStatusEntity } from '@/lib/db-types'
 import type { PostDetails, CommentWithReplies, CurrentUser } from './inbox-types'
-import type { Tag, PostStatusEntity } from '@/lib/db/types'
 import type { CommentId, PostId, TagId, StatusId, WorkspaceId } from '@quackback/ids'
 
 interface SubmitCommentParams {

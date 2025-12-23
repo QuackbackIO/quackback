@@ -6,8 +6,8 @@
  *
  * @example
  * // In a client component:
- * import type { Board, Tag } from '@/lib/db/types'
- * import { REACTION_EMOJIS } from '@/lib/db/types'
+ * import type { Board, Tag } from '@/lib/db-types'
+ * import { REACTION_EMOJIS } from '@/lib/db-types'
  */
 
 // Re-export types and constants (no side effects)

@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { addPostToRoadmapAction, removePostFromRoadmapAction } from '@/lib/actions/roadmaps'
-import type { PostStatusEntity } from '@/lib/db/types'
+import type { PostStatusEntity } from '@/lib/db'
 import type { PostId, RoadmapId, WorkspaceId } from '@quackback/ids'
 
 interface AddToRoadmapDropdownProps {

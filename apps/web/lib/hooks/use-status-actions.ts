@@ -13,7 +13,7 @@ import {
   type DeleteStatusInput,
   type ReorderStatusesInput,
 } from '@/lib/actions/statuses'
-import type { PostStatusEntity } from '@/lib/db/types'
+import type { PostStatusEntity } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
 import type { StatusId, WorkspaceId } from '@quackback/ids'
 

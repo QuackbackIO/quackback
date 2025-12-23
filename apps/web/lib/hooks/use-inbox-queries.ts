@@ -22,7 +22,7 @@ import type {
   CommentReaction,
   CommentWithReplies,
 } from '@/app/admin/feedback/inbox-types'
-import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db/types'
+import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db'
 import type {
   BoardId,
   CommentId,
@@ -40,10 +40,10 @@ import type {
 export const inboxKeys = {
   all: ['inbox'] as const,
   lists: () => [...inboxKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId, filters: InboxFilters) =>
+  list: (_workspaceId: WorkspaceId, filters: InboxFilters) =>
     [...inboxKeys.lists(), workspaceId, filters] as const,
   details: () => [...inboxKeys.all, 'detail'] as const,
-  detail: (postId: PostId, workspaceId: WorkspaceId) =>
+  detail: (postId: PostId, _workspaceId: WorkspaceId) =>
     [...inboxKeys.details(), postId, workspaceId] as const,
 }
 
@@ -52,7 +52,7 @@ export const inboxKeys = {
 // ============================================================================
 
 async function fetchInboxPosts(
-  workspaceId: WorkspaceId,
+  _workspaceId: WorkspaceId,
   filters: InboxFilters,
   page: number
 ): Promise<InboxPostListResult> {
@@ -77,7 +77,7 @@ async function fetchInboxPosts(
   return result.data as InboxPostListResult
 }
 
-async function fetchPostDetail(postId: PostId, workspaceId: WorkspaceId): Promise<PostDetails> {
+async function fetchPostDetail(postId: PostId, _workspaceId: WorkspaceId): Promise<PostDetails> {
   const result = await getPostWithDetailsAction({
     id: postId,
   })
@@ -95,7 +95,7 @@ async function fetchPostDetail(postId: PostId, workspaceId: WorkspaceId): Promis
 // ============================================================================
 
 interface UseInboxPostsOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   filters: InboxFilters
   initialData?: InboxPostListResult
 }
@@ -126,7 +126,7 @@ export function flattenInboxPosts(
 
 interface UsePostDetailOptions {
   postId: PostId | null
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   enabled?: boolean
 }
 
@@ -146,7 +146,7 @@ export function usePostDetail({ postId, workspaceId, enabled = true }: UsePostDe
 /**
  * @deprecated Use useChangePostStatusId instead - the legacy status field has been removed
  */
-export function useUpdatePostStatus(workspaceId: WorkspaceId) {
+export function useUpdatePostStatus(_workspaceId: WorkspaceId) {
   const changeStatusId = useChangePostStatusId(workspaceId)
   return changeStatusId
 }
@@ -154,7 +154,7 @@ export function useUpdatePostStatus(workspaceId: WorkspaceId) {
 /**
  * Hook to change a post's status using TypeID-based statusId
  */
-export function useChangePostStatusId(workspaceId: WorkspaceId) {
+export function useChangePostStatusId(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -176,7 +176,7 @@ export function useChangePostStatusId(workspaceId: WorkspaceId) {
   })
 }
 
-export function useUpdatePostOwner(workspaceId: WorkspaceId) {
+export function useUpdatePostOwner(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -249,7 +249,7 @@ interface UpdateTagsInput {
   allTags: Tag[]
 }
 
-export function useUpdatePostTags(workspaceId: WorkspaceId) {
+export function useUpdatePostTags(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -323,7 +323,7 @@ export function useUpdatePostTags(workspaceId: WorkspaceId) {
   })
 }
 
-export function useUpdateOfficialResponse(workspaceId: WorkspaceId) {
+export function useUpdateOfficialResponse(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -379,7 +379,7 @@ interface ToggleReactionResponse {
   reactions: CommentReaction[]
 }
 
-export function useToggleCommentReaction(workspaceId: WorkspaceId) {
+export function useToggleCommentReaction(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -511,7 +511,7 @@ interface UpdatePostResponse {
   boardId: string
 }
 
-export function useUpdatePost(workspaceId: WorkspaceId) {
+export function useUpdatePost(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -612,7 +612,7 @@ interface VotePostResponse {
   voted: boolean
 }
 
-export function useVotePost(workspaceId: WorkspaceId) {
+export function useVotePost(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -731,7 +731,7 @@ interface AddCommentResponse {
   createdAt: string
 }
 
-export function useAddComment(workspaceId: WorkspaceId) {
+export function useAddComment(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -846,7 +846,7 @@ interface CreatePostResponse {
   boardId: string
 }
 
-export function useCreatePost(workspaceId: WorkspaceId) {
+export function useCreatePost(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({

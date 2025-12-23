@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Roadmap } from '@/lib/db/types'
+import type { Roadmap } from '@/lib/db'
 import type { WorkspaceId, RoadmapId } from '@quackback/ids'
 import {
   listRoadmapsAction,

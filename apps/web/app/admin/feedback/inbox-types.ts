@@ -1,4 +1,4 @@
-import type { Board, Tag, Comment } from '@/lib/db/types'
+import type { Board, Tag, Comment } from '@/lib/db'
 import type { PostId, StatusId } from '@quackback/ids'
 
 export interface OfficialResponse {

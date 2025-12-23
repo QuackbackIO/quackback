@@ -11,7 +11,7 @@ import {
   type UpdateTagInput,
   type DeleteTagInput,
 } from '@/lib/actions/tags'
-import type { Tag } from '@/lib/db/types'
+import type { Tag } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
 import type { TagId, WorkspaceId } from '@quackback/ids'
 

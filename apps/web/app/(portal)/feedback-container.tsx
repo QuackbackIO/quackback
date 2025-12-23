@@ -15,7 +15,7 @@ import {
 import { useSession } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import type { BoardWithStats, PublicPostListItem } from '@quackback/domain'
-import type { PostStatusEntity, Tag } from '@/lib/db/types'
+import type { PostStatusEntity, Tag } from '@/lib/db'
 
 interface FeedbackContainerProps {
   workspaceId: string

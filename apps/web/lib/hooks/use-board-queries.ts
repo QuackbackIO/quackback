@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Board, BoardSettings } from '@/lib/db/types'
+import type { Board, BoardSettings } from '@/lib/db'
 import type { WorkspaceId, BoardId } from '@quackback/ids'
 import { createBoardAction, updateBoardAction, deleteBoardAction } from '@/lib/actions/boards'
 
@@ -31,7 +31,7 @@ interface CreateBoardInput {
 // Mutation Hooks
 // ============================================================================
 
-export function useCreateBoard(workspaceId: WorkspaceId) {
+export function useCreateBoard(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -63,7 +63,7 @@ interface UpdateBoardInput_Full {
   settings?: BoardSettings
 }
 
-export function useUpdateBoard(workspaceId: WorkspaceId) {
+export function useUpdateBoard(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -91,7 +91,7 @@ export function useUpdateBoard(workspaceId: WorkspaceId) {
   })
 }
 
-export function useDeleteBoard(workspaceId: WorkspaceId) {
+export function useDeleteBoard(_workspaceId: WorkspaceId) {
   const queryClient = useQueryClient()
 
   return useMutation({

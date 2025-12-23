@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
-import type { PostListItem, PostStatusEntity } from '@/lib/db/types'
+import type { PostListItem, PostStatusEntity } from '@/lib/db'
 
 interface InboxPostCardProps {
   post: PostListItem

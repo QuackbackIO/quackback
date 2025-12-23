@@ -11,7 +11,7 @@ import {
   type UpdateBoardInput,
   type DeleteBoardInput,
 } from '@/lib/actions/boards'
-import type { Board } from '@/lib/db/types'
+import type { Board } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
 import type { WorkspaceId, BoardId } from '@quackback/ids'
 

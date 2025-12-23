@@ -20,7 +20,7 @@ import {
   type RemovePostFromRoadmapInput,
   type ReorderRoadmapPostsInput,
 } from '@/lib/actions/roadmaps'
-import type { Roadmap } from '@/lib/db/types'
+import type { Roadmap } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
 import type { WorkspaceId, RoadmapId, StatusId } from '@quackback/ids'
 
@@ -31,7 +31,7 @@ import type { WorkspaceId, RoadmapId, StatusId } from '@quackback/ids'
 export const roadmapKeys = {
   all: ['roadmaps'] as const,
   lists: () => [...roadmapKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId) => [...roadmapKeys.lists(), workspaceId] as const,
+  list: (_workspaceId: WorkspaceId) => [...roadmapKeys.lists(), workspaceId] as const,
   detail: (id: RoadmapId) => [...roadmapKeys.all, 'detail', id] as const,
   posts: (roadmapId: RoadmapId) => [...roadmapKeys.all, 'posts', roadmapId] as const,
   postsFiltered: (roadmapId: RoadmapId, statusId?: StatusId) =>
@@ -43,7 +43,7 @@ export const roadmapKeys = {
 // ============================================================================
 
 interface UseRoadmapsOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   enabled?: boolean
 }
 
@@ -66,7 +66,7 @@ export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions)
 }
 
 interface UseRoadmapPostsOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   roadmapId: RoadmapId
   statusId?: StatusId
   limit?: number
@@ -78,7 +78,7 @@ interface UseRoadmapPostsOptions {
  * Hook to get posts for a roadmap, optionally filtered by status.
  */
 export function useRoadmapPosts({
-  workspaceId,
+  workspaceId: _workspaceId,
   roadmapId,
   statusId,
   limit = 20,
@@ -109,7 +109,7 @@ export function useRoadmapPosts({
 // ============================================================================
 
 interface UseCreateRoadmapOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   onSuccess?: (roadmap: Roadmap) => void
   onError?: (error: ActionError) => void
 }
@@ -149,7 +149,7 @@ export function useCreateRoadmap({ workspaceId, onSuccess, onError }: UseCreateR
 }
 
 interface UseUpdateRoadmapOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   onSuccess?: (roadmap: Roadmap) => void
   onError?: (error: ActionError) => void
 }
@@ -186,7 +186,7 @@ export function useUpdateRoadmap({ workspaceId, onSuccess, onError }: UseUpdateR
 }
 
 interface UseDeleteRoadmapOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
@@ -217,7 +217,7 @@ export function useDeleteRoadmap({ workspaceId, onSuccess, onError }: UseDeleteR
 }
 
 interface UseReorderRoadmapsOptions {
-  workspaceId: WorkspaceId
+  _workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
