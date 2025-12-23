@@ -2,11 +2,10 @@
 
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
-import { db, member, eq, and } from '@/lib/db'
+import { db, member, eq } from '@/lib/db'
 import {
   getPostService,
   getPublicPostService,
-  getBoardService,
   getPublicBoardService,
   getStatusService,
   getMemberService,
@@ -98,8 +97,6 @@ const getRoadmapPostsByStatusSchema = z.object({
   limit: z.number().int().min(1).max(100).optional().default(10),
 })
 
-const getOrganizationIdSchema = z.object({})
-
 // ============================================
 // Type Exports
 // ============================================
@@ -114,7 +111,6 @@ export type GetVotedPostsInput = z.infer<typeof getVotedPostsSchema>
 export type ListPublicRoadmapsInput = z.infer<typeof listPublicRoadmapsSchema>
 export type GetPublicRoadmapPostsInput = z.infer<typeof getPublicRoadmapPostsSchema>
 export type GetRoadmapPostsByStatusInput = z.infer<typeof getRoadmapPostsByStatusSchema>
-export type GetOrganizationIdInput = z.infer<typeof getOrganizationIdSchema>
 
 // ============================================
 // Helper Functions
@@ -485,9 +481,7 @@ export async function createPublicPostAction(
     }
 
     // Get member record
-    const memberResult = await getMemberService().getMemberByUser(
-      session.user.id as UserId
-    )
+    const memberResult = await getMemberService().getMemberByUser(session.user.id as UserId)
     if (!memberResult.success || !memberResult.value) {
       return actionErr({
         code: 'FORBIDDEN',
@@ -702,14 +696,11 @@ export async function getPublicRoadmapPostsAction(
       })
     }
 
-    const result = await getRoadmapService().getPublicRoadmapPosts(
-      roadmapId as RoadmapId,
-      {
-        statusId: statusId as StatusId | undefined,
-        limit,
-        offset,
-      }
-    )
+    const result = await getRoadmapService().getPublicRoadmapPosts(roadmapId as RoadmapId, {
+      statusId: statusId as StatusId | undefined,
+      limit,
+      offset,
+    })
 
     if (!result.success) {
       const status = result.error.code === 'ROADMAP_NOT_FOUND' ? 404 : 500

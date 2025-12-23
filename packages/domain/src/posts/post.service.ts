@@ -19,10 +19,8 @@ import {
   asc,
   sql,
   isNull,
-  votes,
   postStatuses,
   posts,
-  boards,
   postTags,
   tags,
   comments,
@@ -30,15 +28,7 @@ import {
   type Post,
   type UnitOfWork,
 } from '@quackback/db'
-import {
-  toUuid,
-  type PostId,
-  type BoardId,
-  type StatusId,
-  type TagId,
-  type MemberId,
-  type CommentId,
-} from '@quackback/ids'
+import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { PostError } from './post.errors'

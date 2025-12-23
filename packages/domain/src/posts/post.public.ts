@@ -27,7 +27,7 @@ import {
   postStatuses,
 } from '@quackback/db'
 import type { PostId, StatusId, TagId, CommentId } from '@quackback/ids'
-import { ok, err, type Result } from '../shared/result'
+import { ok, type Result } from '../shared/result'
 import { PostError } from './post.errors'
 import { buildCommentTree } from '../shared/comment-tree'
 import type {
