@@ -7,10 +7,6 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: resolve(__dirname, '../..'),
   },
-  typescript: {
-    // TODO: Fix type errors from request.json() returning unknown in Next.js 16
-    ignoreBuildErrors: true,
-  },
   allowedDevOrigins: ['localhost', '*.localhost', '*.ngrok.app', '*.quackback.ngrok.app'],
   async headers() {
     return [
