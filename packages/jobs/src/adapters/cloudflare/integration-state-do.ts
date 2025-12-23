@@ -185,7 +185,7 @@ export class IntegrationStateDO extends DurableObject<Env> {
 
       const markProcessedMatch = path.match(/^\/mark-processed\/(.+)$/)
       if (markProcessedMatch && request.method === 'POST') {
-        const body = await request.json<{ externalId?: string }>()
+        const body = (await request.json()) as { externalId?: string }
         return this.handleMarkProcessed(decodeURIComponent(markProcessedMatch[1]), body.externalId)
       }
 
@@ -202,7 +202,7 @@ export class IntegrationStateDO extends DurableObject<Env> {
           return this.handleCacheGet(key)
         }
         if (request.method === 'PUT') {
-          const body = await request.json<{ value: string; ttl?: number }>()
+          const body = (await request.json()) as { value: string; ttl?: number }
           return this.handleCacheSet(key, body.value, body.ttl)
         }
         if (request.method === 'DELETE') {

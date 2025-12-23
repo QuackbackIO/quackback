@@ -45,7 +45,6 @@
         "@neondatabase/serverless": "^1.0.2",
         "@quackback/db": "workspace:*",
         "@quackback/domain": "workspace:*",
-        "@quackback/ee": "workspace:*",
         "@quackback/email": "workspace:*",
         "@quackback/ids": "workspace:*",
         "@quackback/integrations": "workspace:*",
@@ -133,16 +132,6 @@
         "typescript": "^5",
       },
     },
-    "ee": {
-      "name": "@quackback/ee",
-      "version": "0.0.1",
-      "dependencies": {
-        "@quackback/db": "workspace:*",
-        "@quackback/domain": "workspace:*",
-        "@quackback/ids": "workspace:*",
-        "stripe": "^20.0.0",
-      },
-    },
     "packages/db": {
       "name": "@quackback/db",
       "version": "0.1.0",
@@ -227,7 +216,7 @@
     },
   },
   "overrides": {
-    "@noble/ciphers": "1.3.0",
+    "@noble/ciphers": "2.0.0",
     "zod": "4.1.13",
   },
   "packages": {
@@ -633,7 +622,7 @@
 
     "@next/swc-win32-x64-msvc": ["@next/swc-win32-x64-msvc@16.0.10", "", { "os": "win32", "cpu": "x64" }, "sha512-E+njfCoFLb01RAFEnGZn6ERoOqhK1Gl3Lfz1Kjnj0Ulfu7oJbuMyvBKNj/bw8XZnenHDASlygTjZICQW+rYW1Q=="],
 
-    "@noble/ciphers": ["@noble/ciphers@1.3.0", "", {}, "sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw=="],
+    "@noble/ciphers": ["@noble/ciphers@2.0.0", "", {}, "sha512-j/l6jpnpaIBM87cAYPJzi/6TgqmBv9spkqPyCXvRYsu5uxqh6tPJZDnD85yo8VWqzTuTQPgfv7NgT63u7kbwAQ=="],
 
     "@noble/curves": ["@noble/curves@1.9.7", "", { "dependencies": { "@noble/hashes": "1.8.0" } }, "sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw=="],
 
@@ -660,8 +649,6 @@
     "@quackback/db": ["@quackback/db@workspace:packages/db"],
 
     "@quackback/domain": ["@quackback/domain@workspace:packages/domain"],
-
-    "@quackback/ee": ["@quackback/ee@workspace:ee"],
 
     "@quackback/email": ["@quackback/email@workspace:packages/email"],
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback, useRef, useMemo, useState } from 'react'
+import { useEffect, useCallback, useRef, useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { FeedbackHeader } from './feedback-header'
 import { FeedbackToolbar } from './feedback-toolbar'
@@ -14,11 +14,11 @@ import {
 } from '@/lib/hooks/use-public-posts-query'
 import { useSession } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { getOrganizationIdAction } from '@/lib/actions/public-posts'
 import type { BoardWithStats, PublicPostListItem } from '@quackback/domain'
 import type { PostStatusEntity, Tag } from '@/lib/db/types'
 
 interface FeedbackContainerProps {
+  workspaceId: string
   workspaceName: string
   boards: BoardWithStats[]
   posts: PublicPostListItem[]
@@ -36,6 +36,7 @@ interface FeedbackContainerProps {
 }
 
 export function FeedbackContainer({
+  workspaceId,
   workspaceName,
   boards,
   posts: initialPosts,
@@ -52,19 +53,8 @@ export function FeedbackContainer({
 }: FeedbackContainerProps) {
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
 
-  // Fetch organization ID from settings on mount
-  const [organizationId, setOrganizationId] = useState<string | null>(null)
-
-  useEffect(() => {
-    getOrganizationIdAction().then((result) => {
-      if (result.success) {
-        setOrganizationId(result.data.organizationId)
-      }
-    })
-  }, [])
-
   // Client-side session state - updates without page reload
-  const { data: sessionData, refetch: refetchSession} = useSession()
+  const { data: sessionData, refetch: refetchSession } = useSession()
 
   // Derive effective user: prefer fresh client session over stale server prop
   const effectiveUser =
@@ -120,7 +110,7 @@ export function FeedbackContainer({
     hasNextPage,
     fetchNextPage,
   } = usePublicPosts({
-    organizationId,
+    workspaceId,
     filters: mergedFilters,
     initialData: filtersMatchInitial
       ? {
@@ -129,7 +119,6 @@ export function FeedbackContainer({
           hasMore: initialHasMore,
         }
       : undefined,
-    enabled: !!organizationId,
   })
 
   const posts = flattenPublicPosts(postsData)
@@ -138,8 +127,7 @@ export function FeedbackContainer({
   // Track voted posts in client state (syncs with server on vote)
   const { hasVoted, toggleVote, refetchVotedPosts } = useVotedPosts({
     initialVotedIds: votedPostIds,
-    organizationId,
-    enabled: !!organizationId,
+    workspaceId,
   })
 
   // Track auth state to detect login/logout

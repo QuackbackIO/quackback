@@ -20,7 +20,7 @@ import {
 import type { ActionError } from '@/lib/actions/types'
 import type { PublicFeedbackFilters } from '@/app/(portal)/use-public-filters'
 import type { PublicPostListItem } from '@quackback/domain'
-import type { PostId, BoardId, StatusId, TagId, WorkspaceId } from '@quackback/ids'
+import type { PostId, BoardId, StatusId, TagId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -39,13 +39,13 @@ interface PublicPostListResult {
 export const publicPostsKeys = {
   all: ['publicPosts'] as const,
   lists: () => [...publicPostsKeys.all, 'list'] as const,
-  list: (organizationId: string, filters: PublicFeedbackFilters) =>
-    [...publicPostsKeys.lists(), organizationId, filters] as const,
+  list: (workspaceId: string, filters: PublicFeedbackFilters) =>
+    [...publicPostsKeys.lists(), workspaceId, filters] as const,
 }
 
 export const votedPostsKeys = {
   all: ['votedPosts'] as const,
-  byOrg: (organizationId: string) => [...votedPostsKeys.all, organizationId] as const,
+  byWorkspace: (workspaceId: string) => [...votedPostsKeys.all, workspaceId] as const,
 }
 
 // ============================================================================
@@ -53,7 +53,7 @@ export const votedPostsKeys = {
 // ============================================================================
 
 async function fetchPublicPosts(
-  organizationId: string,
+  workspaceId: string,
   filters: PublicFeedbackFilters,
   page: number
 ): Promise<PublicPostListResult> {
@@ -91,27 +91,27 @@ async function fetchPublicPosts(
 // ============================================================================
 
 interface UsePublicPostsOptions {
-  organizationId: string | null
+  workspaceId: string | null
   filters: PublicFeedbackFilters
   initialData?: PublicPostListResult
   enabled?: boolean
 }
 
 export function usePublicPosts({
-  organizationId,
+  workspaceId,
   filters,
   initialData,
   enabled = true,
 }: UsePublicPostsOptions) {
   return useInfiniteQuery({
-    queryKey: organizationId
-      ? publicPostsKeys.list(organizationId, filters)
+    queryKey: workspaceId
+      ? publicPostsKeys.list(workspaceId, filters)
       : ['publicPosts', 'disabled'],
     queryFn: ({ pageParam }) => {
-      if (!organizationId) {
-        throw new Error('organizationId is required')
+      if (!workspaceId) {
+        throw new Error('workspaceId is required')
       }
-      return fetchPublicPosts(organizationId, filters, pageParam)
+      return fetchPublicPosts(workspaceId, filters, pageParam)
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
@@ -123,7 +123,7 @@ export function usePublicPosts({
       : undefined,
     // Keep showing previous data while loading new filter results
     placeholderData: (previousData) => previousData,
-    enabled: enabled && !!organizationId,
+    enabled: enabled && !!workspaceId,
   })
 }
 
@@ -300,7 +300,7 @@ export function useCreatePublicPost() {
 // Voted Posts Query Hook (using server action)
 // ============================================================================
 
-async function fetchVotedPosts(organizationId: string): Promise<Set<string>> {
+async function fetchVotedPosts(_workspaceId: string): Promise<Set<string>> {
   const result = await getVotedPostsAction({})
   if (!result.success) {
     return new Set()
@@ -310,7 +310,7 @@ async function fetchVotedPosts(organizationId: string): Promise<Set<string>> {
 
 interface UseVotedPostsOptions {
   initialVotedIds: string[]
-  organizationId: string | null
+  workspaceId: string | null
   enabled?: boolean
 }
 
@@ -321,7 +321,7 @@ interface UseVotedPostsOptions {
  */
 export function useVotedPosts({
   initialVotedIds,
-  organizationId,
+  workspaceId,
   enabled = true,
 }: UseVotedPostsOptions) {
   const queryClient = useQueryClient()
@@ -331,16 +331,16 @@ export function useVotedPosts({
 
   // React Query for server state
   const { data: serverVotedIds, refetch } = useQuery({
-    queryKey: organizationId ? votedPostsKeys.byOrg(organizationId) : ['votedPosts', 'disabled'],
+    queryKey: workspaceId ? votedPostsKeys.byWorkspace(workspaceId) : ['votedPosts', 'disabled'],
     queryFn: () => {
-      if (!organizationId) {
+      if (!workspaceId) {
         return new Set<string>()
       }
-      return fetchVotedPosts(organizationId)
+      return fetchVotedPosts(workspaceId)
     },
     initialData: new Set(initialVotedIds),
     staleTime: Infinity, // Don't auto-refetch, we control when to refetch
-    enabled: enabled && !!organizationId,
+    enabled: enabled && !!workspaceId,
   })
 
   // Sync local state when server data changes (e.g., after refetch)
@@ -365,8 +365,8 @@ export function useVotedPosts({
         return next
       })
       // Also update the query cache for consistency
-      if (organizationId) {
-        queryClient.setQueryData<Set<string>>(votedPostsKeys.byOrg(organizationId), (old) => {
+      if (workspaceId) {
+        queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(workspaceId), (old) => {
           if (!old) return new Set([postId])
           const next = new Set(old)
           if (voted) {
@@ -378,7 +378,7 @@ export function useVotedPosts({
         })
       }
     },
-    [organizationId, queryClient]
+    [workspaceId, queryClient]
   )
 
   const refetchVotedPosts = useCallback(() => {

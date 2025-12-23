@@ -167,7 +167,7 @@ export async function listPublicPostsAction(
 
     const input = parseResult.data
 
-    // Get organizationId from settings
+    // Get workspaceId from settings
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {
@@ -522,7 +522,7 @@ export async function createPublicPostAction(
 
     const post = createResult.value
 
-    // Get organizationId from settings for event
+    // Get workspaceId from settings for event
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {
@@ -636,7 +636,7 @@ export async function listPublicRoadmapsAction(
       })
     }
 
-    // Get organizationId from settings
+    // Get workspaceId from settings
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {
@@ -685,7 +685,7 @@ export async function getPublicRoadmapPostsAction(
 
     const { roadmapId, statusId, limit, offset } = parseResult.data
 
-    // Get organizationId from settings
+    // Get workspaceId from settings
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {
@@ -740,7 +740,7 @@ export async function getRoadmapPostsByStatusAction(
 
     const { statusId, page, limit } = parseResult.data
 
-    // Get organizationId from settings
+    // Get workspaceId from settings
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {
@@ -764,36 +764,6 @@ export async function getRoadmapPostsByStatusAction(
     return actionOk(result.value)
   } catch (error) {
     console.error('Error fetching roadmap posts by status:', error)
-    return actionErr({
-      code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
-      status: 500,
-    })
-  }
-}
-
-/**
- * Get the current organization ID from settings (no auth required).
- * In single-tenant mode, this returns the singleton organization ID.
- */
-export async function getOrganizationIdAction(
-  _rawInput?: GetOrganizationIdInput
-): Promise<ActionResult<{ organizationId: string }>> {
-  try {
-    const { getSettings } = await import('@/lib/tenant')
-    const settings = await getSettings()
-
-    if (!settings) {
-      return actionErr({
-        code: 'NOT_FOUND',
-        message: 'Organization settings not found',
-        status: 404,
-      })
-    }
-
-    return actionOk({ organizationId: settings.id })
-  } catch (error) {
-    console.error('Error fetching organization ID:', error)
     return actionErr({
       code: 'INTERNAL_ERROR',
       message: 'An unexpected error occurred',

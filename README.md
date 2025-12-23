@@ -116,15 +116,12 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for deta
 
 ## License
 
-Quackback core (`apps/`, `packages/`) is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
-
-Enterprise features (`ee/`) are proprietary and require a commercial license. See [ee/LICENSE](ee/LICENSE) for details.
+Quackback is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
 
 **What this means:**
 
 - **Self-hosting**: Free and fully functional. You can run, modify, and deploy Quackback for your own use
 - **Modifications**: If you modify and distribute Quackback (or run it as a service), you must open-source your changes under AGPL-3.0
-- **Commercial license**: Available for organizations that need proprietary modifications or enterprise features. Contact sales@quackback.io
 
 Contributions require signing our [Contributor License Agreement](CLA.md).
 

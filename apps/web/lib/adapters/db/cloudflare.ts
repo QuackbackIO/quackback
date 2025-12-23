@@ -14,6 +14,11 @@ import { cache } from 'react'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { createDb, type Database } from '@quackback/db/client'
 
+// Cloudflare Hyperdrive type (subset of @cloudflare/workers-types)
+interface Hyperdrive {
+  connectionString: string
+}
+
 // Augment the CloudflareEnv interface with our custom bindings
 declare global {
   interface CloudflareEnv {

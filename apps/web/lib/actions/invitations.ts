@@ -1,9 +1,8 @@
 'use server'
 
-import { db, invitation, member, eq, and } from '@/lib/db'
+import { db, invitation, member, eq } from '@/lib/db'
 import { generateId } from '@quackback/ids'
 import { getSession } from '@/lib/auth/server'
-import { syncWorkspaceSeats, isBillableRole } from '@quackback/ee/billing'
 import type { InviteId, MemberId, UserId } from '@quackback/ids'
 
 export type AcceptInvitationResult = {

@@ -83,7 +83,7 @@ export class DurableObjectStateAdapter implements StateAdapter {
       `http://internal/processed-result/${encodeURIComponent(eventId)}`,
       { method: 'GET' }
     )
-    const data = await response.json<{ externalId: string | null }>()
+    const data = (await response.json()) as { externalId: string | null }
     return data.externalId
   }
 
