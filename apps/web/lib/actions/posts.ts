@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
-import { getPostService, getMemberService, getRoadmapService } from '@/lib/services'
+import { getPostService, getPublicPostService, getMemberService, getRoadmapService } from '@/lib/services'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { buildPostCreatedEvent, buildPostStatusChangedEvent } from '@quackback/domain'
@@ -241,7 +241,7 @@ export const getPostWithDetailsAction = withAction(
 
     // Check if current user has voted on this post
     const userIdentifier = getMemberIdentifier(ctx.member.id)
-    const hasVotedResult = await getPostService().hasUserVotedOnPost(postId, userIdentifier)
+    const hasVotedResult = await getPublicPostService().hasUserVoted(postId, userIdentifier)
     const hasVoted = hasVotedResult.success ? hasVotedResult.value : false
 
     // Get roadmap IDs this post belongs to

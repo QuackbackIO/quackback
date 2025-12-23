@@ -5,7 +5,9 @@ import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and } from '@/lib/db'
 import {
   getPostService,
+  getPublicPostService,
   getBoardService,
+  getPublicBoardService,
   getStatusService,
   getMemberService,
   getRoadmapService,
@@ -180,7 +182,7 @@ export async function listPublicPostsAction(
       })
     }
 
-    const result = await getPostService().listPublicPosts({
+    const result = await getPublicPostService().listPosts({
       boardSlug: input.boardSlug,
       search: input.search,
       statusIds: input.statusIds as StatusId[] | undefined,
@@ -466,7 +468,7 @@ export async function createPublicPostAction(
     const boardId = boardIdRaw as BoardId
 
     // Get board and verify it exists and is public
-    const boardResult = await getBoardService().getPublicBoardById(boardId)
+    const boardResult = await getPublicBoardService().getBoardById(boardId)
     if (!boardResult.success || !boardResult.value.isPublic) {
       return actionErr({ code: 'NOT_FOUND', message: 'Board not found', status: 404 })
     }
@@ -607,7 +609,7 @@ export async function getVotedPostsAction(
     }
 
     const userIdentifier = getMemberIdentifier(memberRecord.id)
-    const result = await getPostService().getAllUserVotedPostIds(userIdentifier)
+    const result = await getPublicPostService().getAllUserVotedPostIds(userIdentifier)
 
     if (!result.success) {
       return actionOk({ votedPostIds: [] })
@@ -758,7 +760,7 @@ export async function getRoadmapPostsByStatusAction(
       })
     }
 
-    const result = await getPostService().getRoadmapPostsPaginated({
+    const result = await getPublicPostService().getRoadmapPostsPaginated({
       statusId: statusId as StatusId,
       page,
       limit,

@@ -1,5 +1,6 @@
 import type { Feature } from '@quackback/domain'
 import type { WorkspaceId, UserId, MemberId } from '@quackback/ids'
+import type { RateLimitConfig } from '@/lib/rate-limit'
 
 /**
  * Unified role type for all users (team + portal)
@@ -27,6 +28,7 @@ export type ActionErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'PAYMENT_REQUIRED'
+  | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
 
 /**
@@ -36,7 +38,7 @@ export interface ActionError {
   code: ActionErrorCode
   message: string
   /** HTTP-equivalent status for client-side handling */
-  status: 400 | 401 | 402 | 403 | 404 | 409 | 500
+  status: 400 | 401 | 402 | 403 | 404 | 409 | 429 | 500
   /** For 402 Payment Required - indicates required tier */
   requiredTier?: string
   /** For 402 - URL to upgrade */
@@ -67,6 +69,14 @@ export interface ActionContext {
 }
 
 /**
+ * Rate limit identifier function type.
+ */
+export type RateLimitIdentifierFn = (ctx: {
+  user: { id: UserId; email: string }
+  headers: Headers
+}) => string
+
+/**
  * Options for the action wrapper.
  */
 export interface ActionOptions {
@@ -79,6 +89,21 @@ export interface ActionOptions {
    * OSS (self-hosted) editions automatically have access to all features.
    */
   feature?: Feature
+  /**
+   * Rate limiting configuration for this action.
+   * If specified, the action will be rate limited based on the identifier.
+   */
+  rateLimit?: {
+    /** Rate limit configuration (limit + window) */
+    config: RateLimitConfig
+    /**
+     * How to identify the requester:
+     * - 'user': Use user ID (default for authenticated actions)
+     * - 'ip': Use client IP address
+     * - function: Custom identifier function
+     */
+    identifier?: 'user' | 'ip' | RateLimitIdentifierFn
+  }
 }
 
 /**
@@ -130,7 +155,7 @@ export function mapDomainError(error: { code: string; message: string }): Action
     case 'INVALID_INPUT':
       return { code: 'VALIDATION_ERROR', message: error.message, status: 400 }
     case 'RATE_LIMITED':
-      return { code: 'VALIDATION_ERROR', message: error.message, status: 400 }
+      return { code: 'RATE_LIMITED', message: error.message, status: 429 }
     default:
       console.error('Unmapped domain error:', error)
       return { code: 'INTERNAL_ERROR', message: 'Internal server error', status: 500 }

@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and, commentReactions, REACTION_EMOJIS } from '@/lib/db'
-import { getCommentService, getPostService } from '@/lib/services'
+import { getCommentService, getPublicPostService } from '@/lib/services'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSettings } from '@/lib/tenant'
 import { buildCommentCreatedEvent, type ServiceContext } from '@quackback/domain'
@@ -132,7 +132,7 @@ export async function createCommentAction(
     }
 
     // Get board to check permissions
-    const boardResult = await getPostService().getBoardByPostId(postId)
+    const boardResult = await getPublicPostService().getBoardByPostId(postId)
     if (!boardResult.success || !boardResult.value) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
