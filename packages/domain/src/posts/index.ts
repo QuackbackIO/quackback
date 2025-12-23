@@ -3,6 +3,7 @@
  */
 
 export { PostService, postService } from './post.service'
+export { PublicPostService, publicPostService } from './post.public'
 export { PostError } from './post.errors'
 export type { PostErrorCode } from './post.errors'
 export type {

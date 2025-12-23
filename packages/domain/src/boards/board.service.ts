@@ -14,11 +14,7 @@ import {
   type Board,
   type UnitOfWork,
   type BoardSettings,
-  db,
   eq,
-  sql,
-  inArray,
-  boards,
   posts,
 } from '@quackback/db'
 import type { BoardId, PostId } from '@quackback/ids'
@@ -29,7 +25,6 @@ import type {
   CreateBoardInput,
   UpdateBoardInput,
   BoardWithDetails,
-  BoardWithStats,
 } from './board.types'
 
 /**
@@ -371,107 +366,6 @@ export class BoardService {
   }
 
   /**
-   * Get a public board by ID (no authentication required)
-   *
-   * This method is used for public endpoints like post creation.
-   *
-   * @param boardId - Board ID to fetch
-   * @returns Result containing the board or an error
-   */
-  async getPublicBoardById(boardId: BoardId): Promise<Result<Board, BoardError>> {
-    try {
-      const board = await db.query.boards.findFirst({
-        where: eq(boards.id, boardId),
-      })
-
-      if (!board) {
-        return err(BoardError.notFound(boardId))
-      }
-
-      return ok(board)
-    } catch (error) {
-      return err(
-        BoardError.validationError(
-          `Failed to fetch board: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
-  }
-
-  /**
-   * List all public boards with post counts
-   *
-   * This method is used for public endpoints and does not require authentication.
-   * Only returns boards where isPublic = true.
-   *
-   * @returns Result containing array of public boards with stats or an error
-   */
-  async listPublicBoardsWithStats(): Promise<Result<BoardWithStats[], BoardError>> {
-    try {
-      // Fetch all public boards
-      const publicBoards = await db.query.boards.findMany({
-        where: eq(boards.isPublic, true),
-        orderBy: (boards, { asc }) => [asc(boards.name)],
-      })
-
-      if (publicBoards.length === 0) {
-        return ok([])
-      }
-
-      // Get post counts for all boards
-      const boardIds = publicBoards.map((b) => b.id)
-      const postCounts = await db
-        .select({
-          boardId: posts.boardId,
-          count: sql<number>`count(*)`.as('count'),
-        })
-        .from(posts)
-        .where(inArray(posts.boardId, boardIds))
-        .groupBy(posts.boardId)
-
-      const postCountMap = new Map(postCounts.map((pc) => [pc.boardId, Number(pc.count)]))
-
-      // Combine boards with post counts
-      const boardsWithStats: BoardWithStats[] = publicBoards.map((board) => ({
-        ...board,
-        postCount: postCountMap.get(board.id) ?? 0,
-      }))
-
-      return ok(boardsWithStats)
-    } catch (error) {
-      return err(
-        BoardError.validationError(
-          `Failed to fetch public boards: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
-  }
-
-  /**
-   * Get a public board by slug (no authentication required)
-   *
-   * Only returns boards where isPublic = true.
-   *
-   * @param slug - Board slug to fetch
-   * @returns Result containing the board or null if not found/not public
-   */
-  async getPublicBoardBySlug(slug: string): Promise<Result<Board | null, BoardError>> {
-    try {
-      const board = await db.query.boards.findFirst({
-        where: (boards, { and, eq }) => and(eq(boards.slug, slug), eq(boards.isPublic, true)),
-      })
-
-      return ok(board || null)
-    } catch (error) {
-      return err(
-        BoardError.validationError(
-          `Failed to fetch board: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
-  }
-
-  /**
    * Get a board by post ID
    *
    * Finds the post and returns its associated board.
@@ -502,55 +396,6 @@ export class BoardService {
 
       return ok(board)
     })
-  }
-
-  /**
-   * Count boards (no auth required)
-   *
-   * Used by onboarding/getting-started pages.
-   *
-   * @returns Result containing the board count
-   */
-  async countBoards(): Promise<Result<number, BoardError>> {
-    try {
-      const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(boards)
-
-      return ok(Number(result[0]?.count ?? 0))
-    } catch (error) {
-      return err(
-        BoardError.validationError(
-          `Failed to count boards: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
-  }
-
-  /**
-   * Validate that a board exists
-   *
-   * This is a lightweight validation method used for import/export operations.
-   *
-   * @param boardId - Board ID to validate
-   * @returns Result containing the board if valid, or an error
-   */
-  async validateBoardExists(boardId: BoardId): Promise<Result<Board, BoardError>> {
-    try {
-      const board = await db.query.boards.findFirst({
-        where: eq(boards.id, boardId),
-      })
-
-      if (!board) {
-        return err(BoardError.notFound(`Board ${boardId} not found`))
-      }
-
-      return ok(board)
-    } catch (error) {
-      return err(
-        BoardError.validationError(
-          `Failed to validate board: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
   }
 }
 
