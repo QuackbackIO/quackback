@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getSettings } from '@/lib/tenant'
-import { getPostService, getBoardService, getStatusService } from '@/lib/services'
+import { getPublicPostService, getPublicBoardService, getStatusService } from '@/lib/services'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from './_components/vote-sidebar'
 import { PostContentSection } from './_components/post-content-section'
@@ -33,14 +33,14 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const postId = postIdParam as PostId
 
   // Verify the board exists and is public
-  const boardResult = await getBoardService().getPublicBoardBySlug(slug)
+  const boardResult = await getPublicBoardService().getBoardBySlug(slug)
   const board = boardResult.success ? boardResult.value : null
   if (!board) {
     notFound()
   }
 
   // Get post detail - services now accept TypeIDs and return TypeIDs
-  const postResult = await getPostService().getPublicPostDetail(postId)
+  const postResult = await getPublicPostService().getPostDetail(postId)
   const post = postResult.success ? postResult.value : null
   if (!post || post.board.slug !== slug) {
     notFound()

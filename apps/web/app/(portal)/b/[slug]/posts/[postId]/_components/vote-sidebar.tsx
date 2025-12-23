@@ -1,5 +1,5 @@
 import { db, member, eq } from '@/lib/db'
-import { getPostService } from '@/lib/services'
+import { getPublicPostService } from '@/lib/services'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSession } from '@/lib/auth/server'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
@@ -46,7 +46,7 @@ export async function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps
   // Check if user has voted
   let hasVoted = false
   if (userIdentifier) {
-    const voteResult = await getPostService().hasUserVotedOnPost(postId, userIdentifier)
+    const voteResult = await getPublicPostService().hasUserVoted(postId, userIdentifier)
     hasVoted = voteResult.success ? voteResult.value : false
   }
 

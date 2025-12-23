@@ -1,8 +1,12 @@
 import {
   postService,
   type PostService,
+  publicPostService,
+  type PublicPostService,
   boardService,
   type BoardService,
+  publicBoardService,
+  type PublicBoardService,
   commentService,
   type CommentService,
   statusService,
@@ -42,10 +46,24 @@ export function getPostService(): PostService {
 }
 
 /**
+ * Get the PublicPostService instance (for unauthenticated portal access)
+ */
+export function getPublicPostService(): PublicPostService {
+  return publicPostService
+}
+
+/**
  * Get the BoardService instance
  */
 export function getBoardService(): BoardService {
   return boardService
+}
+
+/**
+ * Get the PublicBoardService instance (for unauthenticated portal access)
+ */
+export function getPublicBoardService(): PublicBoardService {
+  return publicBoardService
 }
 
 /**
@@ -104,8 +122,14 @@ export const services = {
   get posts(): PostService {
     return getPostService()
   },
+  get publicPosts(): PublicPostService {
+    return getPublicPostService()
+  },
   get boards(): BoardService {
     return getBoardService()
+  },
+  get publicBoards(): PublicBoardService {
+    return getPublicBoardService()
   },
   get comments(): CommentService {
     return getCommentService()

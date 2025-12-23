@@ -2,13 +2,19 @@ import { redirect } from 'next/navigation'
 import { getSettings } from '@/lib/tenant'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
-import { getBoardService, getPostService, getStatusService, getTagService } from '@/lib/services'
-import { db, member, eq, and } from '@/lib/db'
+import {
+  getPublicBoardService,
+  getPublicPostService,
+  getStatusService,
+  getTagService,
+} from '@/lib/services'
+import { db, member, eq } from '@/lib/db'
+import type { PostId } from '@quackback/ids'
 import { FeedbackContainer } from './feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 
 interface PublicPortalPageProps {
-  params?: Promise<{}>
+  params?: Promise<object>
   searchParams: Promise<{
     board?: string
     search?: string
@@ -20,7 +26,7 @@ interface PublicPortalPageProps {
  * Public portal page - shows feedback boards and posts
  * This page is rendered for tenant domain root: acme.quackback.io/
  */
-export default async function PublicPortalPage({ params, searchParams }: PublicPortalPageProps) {
+export default async function PublicPortalPage({ searchParams }: PublicPortalPageProps) {
   // Workspace is validated in portal layout
   const org = await getSettings()
 
@@ -45,8 +51,8 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
 
   // Fetch data in parallel using domain services
   const [boardsResult, postsResult, statusesResult, tagsResult] = await Promise.all([
-    getBoardService().listPublicBoardsWithStats(),
-    getPostService().listPublicPosts({
+    getPublicBoardService().listBoardsWithStats(),
+    getPublicPostService().listPosts({
       boardSlug: board,
       search,
       sort,
@@ -71,8 +77,11 @@ export default async function PublicPortalPage({ params, searchParams }: PublicP
   }
 
   // Get user's voted posts - service now returns TypeID set directly
-  const postIds = posts.map((p) => p.id)
-  const votedPostIdsResult = await getPostService().getUserVotedPostIds(postIds, userIdentifier)
+  const postIds = posts.map((p: { id: PostId }) => p.id)
+  const votedPostIdsResult = await getPublicPostService().getUserVotedPostIds(
+    postIds,
+    userIdentifier
+  )
   const votedPostIds = votedPostIdsResult.success ? Array.from(votedPostIdsResult.value) : []
 
   // Get avatar URLs for post authors (base64 for SSR, no flicker)

@@ -17,11 +17,7 @@ export const dynamic = 'force-dynamic'
 /**
  * Generate dynamic metadata for the portal including custom favicon.
  */
-export async function generateMetadata({
-  params,
-}: {
-  params?: Promise<{}>
-}): Promise<Metadata> {
+export async function generateMetadata(_props: { params?: Promise<object> }): Promise<Metadata> {
   // Workspace is validated in root layout
   const org = await getSettings()
 
@@ -48,10 +44,9 @@ export async function generateMetadata({
  */
 export default async function PublicLayout({
   children,
-  params,
 }: {
   children: React.ReactNode
-  params?: Promise<{}>
+  params?: Promise<object>
 }) {
   // Workspace is validated in root layout
 
@@ -120,7 +115,10 @@ export default async function PublicLayout({
         orgName={org.name}
         orgLogo={brandingData?.logoUrl ?? null}
         headerLogo={brandingData?.headerLogoUrl ?? null}
-        headerDisplayMode={brandingData?.headerDisplayMode ?? null}
+        headerDisplayMode={
+          (brandingData?.headerDisplayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ??
+          undefined
+        }
         headerDisplayName={brandingData?.headerDisplayName ?? null}
         userRole={userRole}
         initialUserData={initialUserData}

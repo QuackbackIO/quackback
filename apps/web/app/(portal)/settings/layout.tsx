@@ -10,10 +10,10 @@ import { settingsService, theme } from '@quackback/domain'
 
 interface SettingsLayoutProps {
   children: React.ReactNode
-  params?: Promise<{}>
+  params?: Promise<object>
 }
 
-export default async function SettingsLayout({ children, params }: SettingsLayoutProps) {
+export default async function SettingsLayout({ children }: SettingsLayoutProps) {
   // Workspace is validated in root layout
 
   // Allow ALL authenticated users (team members and portal users)
@@ -72,7 +72,7 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
             orgName={settings.name}
             orgLogo={brandingData?.logoUrl ?? null}
             headerLogo={brandingData?.headerLogoUrl ?? null}
-            headerDisplayMode={null}
+            headerDisplayMode={undefined}
             headerDisplayName={null}
             userRole={userRole}
             initialUserData={initialUserData}

@@ -23,7 +23,9 @@ export default async function NotFound() {
   return (
     <div className="min-h-screen bg-background">
       {/* Show portal header if settings are available */}
-      {settings && <PortalHeader orgName={settings.name} orgLogo={logoData?.logoUrl} userRole={userRole} />}
+      {settings && (
+        <PortalHeader orgName={settings.name} orgLogo={logoData?.url} userRole={userRole} />
+      )}
 
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
         <div className="w-full max-w-lg space-y-8 text-center">
