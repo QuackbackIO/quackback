@@ -57,7 +57,6 @@ import {
 
 interface StatusListProps {
   initialStatuses: PostStatusEntity[]
-  workspaceId: string
 }
 
 const CATEGORY_INFO: Record<StatusCategory, { label: string; description: string }> = {
@@ -119,7 +118,7 @@ const PRESET_COLORS = [
   '#a8a29e', // Stone 400
 ]
 
-export function StatusList({ initialStatuses, workspaceId: _workspaceId }: StatusListProps) {
+export function StatusList({ initialStatuses }: StatusListProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [statuses, setStatuses] = useState(initialStatuses)

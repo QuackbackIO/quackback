@@ -94,7 +94,6 @@ export default async function PublicPortalPage({ searchParams }: PublicPortalPag
   return (
     <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
       <FeedbackContainer
-        workspaceId={org.id}
         workspaceName={org.name}
         boards={boards}
         posts={posts}

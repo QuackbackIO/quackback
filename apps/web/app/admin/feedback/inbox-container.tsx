@@ -22,13 +22,12 @@ import {
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
-import type { CommentId, PostId, StatusId, WorkspaceId } from '@quackback/ids'
+import type { CommentId, PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from './inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db'
 import type { TeamMember } from '@quackback/domain'
 
 interface InboxContainerProps {
-  workspaceId: WorkspaceId
   initialPosts: InboxPostListResult
   boards: Board[]
   tags: Tag[]
@@ -38,7 +37,6 @@ interface InboxContainerProps {
 }
 
 export function InboxContainer({
-  workspaceId,
   initialPosts,
   boards,
   tags,
@@ -101,7 +99,6 @@ export function InboxContainer({
     hasNextPage: hasMore,
     fetchNextPage,
   } = useInboxPosts({
-    workspaceId,
     filters,
     initialData: shouldUseInitialData ? initialPosts : undefined,
   })
@@ -111,16 +108,15 @@ export function InboxContainer({
   // Server state - Selected post detail
   const { data: selectedPost, isLoading: isLoadingPost } = usePostDetail({
     postId: selectedPostId as PostId | null,
-    workspaceId,
   })
 
   // Mutations
-  const updateStatus = useUpdatePostStatus(workspaceId)
-  const updateTags = useUpdatePostTags(workspaceId)
-  const updateOfficialResponse = useUpdateOfficialResponse(workspaceId)
-  const toggleReaction = useToggleCommentReaction(workspaceId)
-  const votePost = useVotePost(workspaceId)
-  const addComment = useAddComment(workspaceId)
+  const updateStatus = useUpdatePostStatus()
+  const updateTags = useUpdatePostTags()
+  const updateOfficialResponse = useUpdateOfficialResponse()
+  const toggleReaction = useToggleCommentReaction()
+  const votePost = useVotePost()
+  const addComment = useAddComment()
 
   // Handlers
   const handleLoadMore = () => {
@@ -160,7 +156,7 @@ export function InboxContainer({
 
   const refetchPosts = () => {
     queryClient.invalidateQueries({
-      queryKey: inboxKeys.list(workspaceId, filters),
+      queryKey: inboxKeys.list(filters),
     })
   }
 
@@ -206,7 +202,6 @@ export function InboxContainer({
         }
         postDetail={
           <InboxPostDetail
-            workspaceId={workspaceId}
             post={selectedPost ?? null}
             isLoading={isLoadingPost}
             allTags={tags}
@@ -221,7 +216,7 @@ export function InboxContainer({
             onRoadmapChange={() => {
               if (selectedPostId) {
                 queryClient.invalidateQueries({
-                  queryKey: inboxKeys.detail(selectedPostId as PostId, workspaceId),
+                  queryKey: inboxKeys.detail(selectedPostId as PostId),
                 })
               }
             }}
@@ -247,7 +242,6 @@ export function InboxContainer({
       {/* Edit Post Dialog */}
       {selectedPost && (
         <EditPostDialog
-          workspaceId={workspaceId}
           post={selectedPost}
           boards={boards}
           tags={tags}

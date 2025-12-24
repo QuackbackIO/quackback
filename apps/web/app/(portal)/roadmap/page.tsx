@@ -3,13 +3,13 @@ import { getRoadmapService, getStatusService } from '@/lib/services'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 
 interface RoadmapPageProps {
-  params?: Promise<{}>
+  params?: Promise<object>
 }
 
 /**
  * Full roadmap page with kanban board
  */
-export default async function RoadmapPage({ params }: RoadmapPageProps) {
+export default async function RoadmapPage({ params: _params }: RoadmapPageProps) {
   // Workspace is validated in root layout
   const settings = await getSettings()
 
@@ -35,7 +35,7 @@ export default async function RoadmapPage({ params }: RoadmapPageProps) {
         <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
       </div>
 
-      <RoadmapBoard workspaceId={settings.id} statuses={statuses} initialRoadmaps={roadmaps} />
+      <RoadmapBoard statuses={statuses} initialRoadmaps={roadmaps} />
     </div>
   )
 }

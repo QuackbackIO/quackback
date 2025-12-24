@@ -13,10 +13,9 @@ import { Badge } from '@/components/ui/badge'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { addPostToRoadmapAction, removePostFromRoadmapAction } from '@/lib/actions/roadmaps'
 import type { PostStatusEntity } from '@/lib/db'
-import type { PostId, RoadmapId, WorkspaceId } from '@quackback/ids'
+import type { PostId, RoadmapId } from '@quackback/ids'
 
 interface AddToRoadmapDropdownProps {
-  workspaceId: WorkspaceId
   postId: PostId
   currentStatusId: string
   /** List of roadmap IDs this post is already on */
@@ -26,7 +25,6 @@ interface AddToRoadmapDropdownProps {
 }
 
 export function AddToRoadmapDropdown({
-  workspaceId,
   postId,
   currentStatusId,
   currentRoadmapIds = [],
@@ -37,7 +35,6 @@ export function AddToRoadmapDropdown({
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
 
   const { data: roadmaps, isLoading: isLoadingRoadmaps } = useRoadmaps({
-    workspaceId,
     enabled: isOpen,
   })
 

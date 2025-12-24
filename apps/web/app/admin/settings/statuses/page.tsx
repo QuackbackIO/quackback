@@ -3,9 +3,9 @@ import { Settings } from 'lucide-react'
 import { StatusList } from './status-list'
 import { getStatusService } from '@/lib/services'
 
-export default async function StatusesPage({ params }: { params?: Promise<{}> }) {
+export default async function StatusesPage({ params: _params }: { params?: Promise<object> }) {
   // Settings is validated in root layout
-  const { settings } = await requireTenant()
+  await requireTenant()
 
   // Services now return TypeIDs directly
   const statusesResult = await getStatusService().listPublicStatuses()
@@ -26,7 +26,7 @@ export default async function StatusesPage({ params }: { params?: Promise<{}> })
         </div>
       </div>
 
-      <StatusList initialStatuses={statuses} workspaceId={settings.id} />
+      <StatusList initialStatuses={statuses} />
     </div>
   )
 }

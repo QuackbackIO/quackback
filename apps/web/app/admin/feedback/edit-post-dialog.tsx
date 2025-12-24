@@ -19,7 +19,7 @@ import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-e
 import { useUpdatePost, useUpdatePostTags } from '@/lib/hooks/use-inbox-queries'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db'
-import type { BoardId, PostId, StatusId, TagId, WorkspaceId } from '@quackback/ids'
+import type { BoardId, PostId, StatusId, TagId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 const editPostSchema = z.object({
@@ -50,7 +50,6 @@ interface PostToEdit {
 }
 
 interface EditPostDialogProps {
-  workspaceId: WorkspaceId
   post: PostToEdit
   boards: Board[]
   tags: Tag[]
@@ -61,7 +60,6 @@ interface EditPostDialogProps {
 }
 
 export function EditPostDialog({
-  workspaceId,
   post,
   boards,
   tags,
@@ -72,8 +70,8 @@ export function EditPostDialog({
   const [error, setError] = useState('')
 
   // Use mutations for optimistic updates
-  const updatePost = useUpdatePost(workspaceId)
-  const updateTags = useUpdatePostTags(workspaceId)
+  const updatePost = useUpdatePost()
+  const updateTags = useUpdatePostTags()
   // Convert plain text to TipTap JSON format for posts without contentJson
   const getInitialContentJson = (post: PostToEdit): JSONContent | null => {
     if (post.contentJson) {

@@ -41,7 +41,7 @@ import { ChevronUp } from 'lucide-react'
 import { getInitials } from '@quackback/domain/utils'
 import { REACTION_EMOJIS, type Tag, type PostStatusEntity } from '@/lib/db-types'
 import type { PostDetails, CommentWithReplies, CurrentUser } from './inbox-types'
-import type { CommentId, PostId, TagId, StatusId, WorkspaceId } from '@quackback/ids'
+import type { CommentId, PostId, TagId, StatusId } from '@quackback/ids'
 
 interface SubmitCommentParams {
   postId: PostId
@@ -53,7 +53,6 @@ interface SubmitCommentParams {
 }
 
 interface InboxPostDetailProps {
-  workspaceId: WorkspaceId
   post: PostDetails | null
   isLoading: boolean
   allTags: Tag[]
@@ -317,7 +316,6 @@ function CommentItem({
 }
 
 export function InboxPostDetail({
-  workspaceId,
   post,
   isLoading,
   allTags,
@@ -408,7 +406,6 @@ export function InboxPostDetail({
             Edit post
           </Button>
           <AddToRoadmapDropdown
-            workspaceId={workspaceId}
             postId={post.id}
             currentStatusId={post.statusId ?? ''}
             currentRoadmapIds={post.roadmapIds}

@@ -11,17 +11,16 @@ import { InboxContainer } from './inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
 
 interface FeedbackInboxPageProps {
-  params?: Promise<{}>
+  params?: Promise<object>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-export default async function FeedbackInboxPage({ params, searchParams }: FeedbackInboxPageProps) {
+export default async function FeedbackInboxPage({
+  params: _params,
+  searchParams,
+}: FeedbackInboxPageProps) {
   // Settings is validated in root layout
-  const {
-    settings,
-    user: currentUser,
-    serviceContext,
-  } = await requireAuthenticatedTenant()
+  const { user: currentUser, serviceContext } = await requireAuthenticatedTenant()
   const searchParamsResolved = await searchParams
 
   // Check if org has boards - if not, redirect to onboarding
@@ -86,7 +85,6 @@ export default async function FeedbackInboxPage({ params, searchParams }: Feedba
 
   return (
     <InboxContainer
-      workspaceId={settings.id}
       initialPosts={initialPosts}
       boards={orgBoards}
       tags={orgTags}
