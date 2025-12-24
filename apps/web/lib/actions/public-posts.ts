@@ -511,7 +511,7 @@ export async function createPublicPostAction(
 
     const post = createResult.value
 
-    // Get workspaceId from settings for event
+    // Get settings for organization info
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {

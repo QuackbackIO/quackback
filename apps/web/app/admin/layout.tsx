@@ -8,21 +8,21 @@ import { getWorkspaceFeatures } from '@/lib/features/server'
 
 export default async function AdminLayout({
   children,
-  params,
+  params: _params,
 }: {
   children: React.ReactNode
-  params?: Promise<{}>
+  params?: Promise<Record<string, never>>
 }) {
   // Only team members (owner, admin, member roles) can access admin dashboard
   // Portal users don't have member records, so they can't access this
   // Settings is validated in root layout
-  const [{ user, settings }, session] = await Promise.all([
-    requireTenantRole( ['owner', 'admin', 'member']),
+  const [{ user }, session] = await Promise.all([
+    requireTenantRole(['owner', 'admin', 'member']),
     getSession(),
   ])
 
   // Get features for SSR hydration
-  const features = await getWorkspaceFeatures(settings.id)
+  const features = await getWorkspaceFeatures()
 
   // Get avatar URL with base64 data for SSR (no flicker)
   const avatarData = await getUserAvatarData(user.id, user.image)
@@ -36,7 +36,6 @@ export default async function AdminLayout({
   return (
     <SessionProvider initialSession={session}>
       <FeaturesProvider
-        workspaceId={settings.id}
         initialFeatures={{
           edition: features.edition,
           tier: features.tier,

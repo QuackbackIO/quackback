@@ -112,7 +112,7 @@ export function CustomCssEditor({ initialCustomCss }: CustomCssEditorProps) {
     } finally {
       setIsSaving(false)
     }
-  }, [workspaceId, css])
+  }, [css])
 
   return (
     <div className="space-y-4">

@@ -96,7 +96,7 @@ export function withAction<TSchema extends z.ZodType, TOutput>(
 
       // 4. Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.settings.id, options.feature)
+        const featureCheck = await checkFeatureAccess(options.feature)
         if (!featureCheck.allowed) {
           return actionErr({
             code: 'PAYMENT_REQUIRED',
