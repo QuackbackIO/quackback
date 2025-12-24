@@ -10,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CreateBoardDialog } from '../create-board-dialog'
-import type { WorkspaceId } from '@quackback/ids'
 
 interface Board {
   id: string
@@ -21,14 +20,9 @@ interface Board {
 interface BoardSettingsHeaderProps {
   currentBoard: Board
   allBoards: Board[]
-  workspaceId: WorkspaceId
 }
 
-export function BoardSettingsHeader({
-  currentBoard,
-  allBoards,
-  workspaceId,
-}: BoardSettingsHeaderProps) {
+export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHeaderProps) {
   const router = useRouter()
 
   function handleBoardSwitch(slug: string) {
@@ -63,7 +57,7 @@ export function BoardSettingsHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <CreateBoardDialog workspaceId={workspaceId} />
+        <CreateBoardDialog />
       </div>
       <p className="text-sm text-muted-foreground">
         Configure your feedback board settings and preferences

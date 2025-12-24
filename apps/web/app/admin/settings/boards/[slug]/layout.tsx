@@ -12,7 +12,7 @@ export default async function BoardSettingsLayout({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const { settings } = await requireAuthenticatedTenant()
+  await requireAuthenticatedTenant()
 
   // Get current board and all boards for the switcher
   const [board, allBoards] = await Promise.all([
@@ -30,7 +30,7 @@ export default async function BoardSettingsLayout({
 
   return (
     <div className="space-y-6">
-      <BoardSettingsHeader currentBoard={board} allBoards={allBoards} workspaceId={settings.id} />
+      <BoardSettingsHeader currentBoard={board} allBoards={allBoards} />
       <div className="flex gap-8">
         <BoardSettingsNav boardSlug={slug} />
         <div className="min-w-0 flex-1">{children}</div>

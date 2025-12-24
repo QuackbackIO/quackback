@@ -16,7 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import type { BoardId, WorkspaceId } from '@quackback/ids'
+import type { BoardId } from '@quackback/ids'
 
 interface Board {
   id: BoardId
@@ -26,10 +26,9 @@ interface Board {
 
 interface DeleteBoardFormProps {
   board: Board
-  workspaceId: WorkspaceId
 }
 
-export function DeleteBoardForm({ board, workspaceId: _workspaceId }: DeleteBoardFormProps) {
+export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const router = useRouter()
   const mutation = useDeleteBoard({
     onSuccess: () => {

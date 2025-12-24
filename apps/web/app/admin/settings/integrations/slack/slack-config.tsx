@@ -27,7 +27,6 @@ interface EventMapping {
 }
 
 interface SlackConfigProps {
-  workspaceId: string
   integrationId: string
   initialConfig: { channelId?: string }
   initialEventMappings: EventMapping[]
@@ -54,7 +53,6 @@ const EVENT_TYPES = [
 ]
 
 export function SlackConfig({
-  workspaceId,
   integrationId,
   initialConfig,
   initialEventMappings,
@@ -86,7 +84,7 @@ export function SlackConfig({
     setLoadingChannels(true)
     setChannelError(null)
     try {
-      const res = await fetch(`/api/integrations/slack/channels?orgId=${workspaceId}`)
+      const res = await fetch('/api/integrations/slack/channels')
       if (!res.ok) {
         throw new Error('Failed to load channels')
       }
@@ -110,7 +108,6 @@ export function SlackConfig({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          orgId: workspaceId,
           enabled: updates.enabled,
           config: updates.channelId !== undefined ? { channelId: updates.channelId } : undefined,
           eventMappings: updates.eventMappings,

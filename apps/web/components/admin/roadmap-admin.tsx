@@ -26,16 +26,15 @@ import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { useChangePostStatusId } from '@/lib/hooks/use-inbox-queries'
 import type { PostStatusEntity } from '@/lib/db'
 import type { RoadmapPostEntry } from '@quackback/domain'
-import type { StatusId, PostId, WorkspaceId } from '@quackback/ids'
+import type { StatusId, PostId } from '@quackback/ids'
 
 interface RoadmapAdminProps {
-  workspaceId: WorkspaceId
   statuses: PostStatusEntity[]
 }
 
-export function RoadmapAdmin({ workspaceId, statuses }: RoadmapAdminProps) {
+export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null)
-  const { data: roadmaps } = useRoadmaps({ workspaceId })
+  const { data: roadmaps } = useRoadmaps()
 
   // Auto-select first roadmap when loaded
   if (roadmaps && roadmaps.length > 0 && selectedRoadmapId === null) {
@@ -45,7 +44,7 @@ export function RoadmapAdmin({ workspaceId, statuses }: RoadmapAdminProps) {
   const selectedRoadmap = roadmaps?.find((r) => r.id === selectedRoadmapId)
 
   // Change post status mutation (updates the post's actual status)
-  const changeStatus = useChangePostStatusId(workspaceId)
+  const changeStatus = useChangePostStatusId()
 
   // DnD state
   const [activePost, setActivePost] = useState<RoadmapPostEntry | null>(null)

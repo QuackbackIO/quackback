@@ -18,13 +18,11 @@ import {
 import { getSlackConnectUrl } from '../actions'
 
 interface SlackConnectionActionsProps {
-  workspaceId: string
   integrationId?: string
   isConnected: boolean
 }
 
 export function SlackConnectionActions({
-  workspaceId,
   integrationId,
   isConnected,
 }: SlackConnectionActionsProps) {
@@ -64,7 +62,7 @@ export function SlackConnectionActions({
     if (!integrationId) return
     setDisconnecting(true)
     try {
-      const res = await fetch(`/api/integrations/${integrationId}?orgId=${workspaceId}`, {
+      const res = await fetch(`/api/integrations/${integrationId}`, {
         method: 'DELETE',
       })
       if (res.ok) {

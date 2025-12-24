@@ -11,7 +11,7 @@ export default async function BoardGeneralSettingsPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const { settings } = await requireAuthenticatedTenant()
+  await requireAuthenticatedTenant()
 
   // Database now returns TypeIDs directly
   const board = await db.query.boards.findFirst({
@@ -30,7 +30,7 @@ export default async function BoardGeneralSettingsPage({
           <CardDescription>Update your board details</CardDescription>
         </CardHeader>
         <CardContent>
-          <BoardGeneralForm board={board} workspaceId={settings.id} />
+          <BoardGeneralForm board={board} />
         </CardContent>
       </Card>
 
@@ -42,7 +42,7 @@ export default async function BoardGeneralSettingsPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DeleteBoardForm board={board} workspaceId={settings.id} />
+          <DeleteBoardForm board={board} />
         </CardContent>
       </Card>
     </div>

@@ -15,18 +15,15 @@ import {
 } from '@/components/ui/form'
 import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
 import { Globe, Lock } from 'lucide-react'
-import type { WorkspaceId } from '@quackback/ids'
-
 interface BoardAccessFormProps {
   board: Board
-  workspaceId: WorkspaceId
 }
 
 interface FormValues {
   isPublic: boolean
 }
 
-export function BoardAccessForm({ board, workspaceId: _workspaceId }: BoardAccessFormProps) {
+export function BoardAccessForm({ board }: BoardAccessFormProps) {
   const mutation = useUpdateBoard()
 
   const form = useForm<FormValues>({

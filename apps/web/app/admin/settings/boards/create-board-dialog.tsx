@@ -29,13 +29,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import type { WorkspaceId } from '@quackback/ids'
-
-interface CreateBoardDialogProps {
-  workspaceId: WorkspaceId
-}
-
-export function CreateBoardDialog({ workspaceId: _workspaceId }: CreateBoardDialogProps) {
+export function CreateBoardDialog() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
   const mutation = useCreateBoard({

@@ -15,7 +15,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
-import type { BoardId, WorkspaceId } from '@quackback/ids'
+import type { BoardId } from '@quackback/ids'
 
 interface Board {
   id: BoardId
@@ -26,10 +26,9 @@ interface Board {
 
 interface BoardGeneralFormProps {
   board: Board
-  workspaceId: WorkspaceId
 }
 
-export function BoardGeneralForm({ board, workspaceId: _workspaceId }: BoardGeneralFormProps) {
+export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   const mutation = useUpdateBoard()
 
   const form = useForm<UpdateBoardInput>({
