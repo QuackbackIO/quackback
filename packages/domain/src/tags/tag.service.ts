@@ -47,13 +47,7 @@ export class TagService {
 
       const tagRepo = new TagRepository(uow.db)
 
-      // Validate input
-      if (!input.name?.trim()) {
-        return err(TagError.validationError('Tag name is required'))
-      }
-      if (input.name.length > 50) {
-        return err(TagError.validationError('Tag name must be 50 characters or less'))
-      }
+      // Note: Basic validation (name required/length, color format) handled by Zod in action layer
 
       const trimmedName = input.name.trim()
 
@@ -66,11 +60,7 @@ export class TagService {
         return err(TagError.duplicateName(trimmedName))
       }
 
-      // Validate color format (hex color)
       const color = input.color || '#6b7280'
-      if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
-        return err(TagError.validationError('Color must be a valid hex color (e.g., #6b7280)'))
-      }
 
       // Create the tag
       const tag = await tagRepo.create({
@@ -114,16 +104,10 @@ export class TagService {
         return err(TagError.notFound(id))
       }
 
-      // Validate input
-      if (input.name !== undefined) {
-        if (!input.name.trim()) {
-          return err(TagError.validationError('Tag name cannot be empty'))
-        }
-        if (input.name.length > 50) {
-          return err(TagError.validationError('Tag name must be 50 characters or less'))
-        }
+      // Note: Basic validation (name empty/length, color format) handled by Zod in action layer
 
-        // Check for duplicate name (excluding current tag)
+      // Check for duplicate name (excluding current tag)
+      if (input.name !== undefined) {
         const trimmedName = input.name.trim()
         const existingTags = await tagRepo.findAll()
         const duplicate = existingTags.find(
@@ -131,12 +115,6 @@ export class TagService {
         )
         if (duplicate) {
           return err(TagError.duplicateName(trimmedName))
-        }
-      }
-
-      if (input.color !== undefined) {
-        if (!/^#[0-9A-Fa-f]{6}$/.test(input.color)) {
-          return err(TagError.validationError('Color must be a valid hex color (e.g., #6b7280)'))
         }
       }
 

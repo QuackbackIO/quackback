@@ -1,8 +1,6 @@
 import { z } from 'zod'
-import { headers } from 'next/headers'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { checkFeatureAccess } from '@/lib/features/server'
-import { checkRateLimitRedis, getClientIp } from '@/lib/rate-limit'
 import { buildServiceContext, type ServiceContext } from '@quackback/domain'
 import type { ActionResult, ActionContext, ActionOptions, Role } from './types'
 import { actionErr } from './types'
@@ -110,38 +108,7 @@ export function withAction<TSchema extends z.ZodType, TOutput>(
         }
       }
 
-      // 5. Check rate limit if configured
-      if (options.rateLimit) {
-        const reqHeaders = await headers()
-        let identifier: string
-
-        if (options.rateLimit.identifier === 'ip') {
-          identifier = getClientIp(reqHeaders)
-        } else if (typeof options.rateLimit.identifier === 'function') {
-          identifier = options.rateLimit.identifier({
-            user: { id: validation.user.id, email: validation.user.email },
-            headers: reqHeaders,
-          })
-        } else {
-          // Default to user ID for authenticated actions
-          identifier = validation.user.id
-        }
-
-        const rateLimitResult = await checkRateLimitRedis(
-          `action:${identifier}`,
-          options.rateLimit.config
-        )
-
-        if (!rateLimitResult.success) {
-          return actionErr({
-            code: 'RATE_LIMITED',
-            message: 'Too many requests. Please try again later.',
-            status: 429,
-          })
-        }
-      }
-
-      // 6. Build contexts
+      // 5. Build contexts
       const ctx: ActionContext = {
         settings: {
           id: validation.settings.id,
@@ -162,7 +129,7 @@ export function withAction<TSchema extends z.ZodType, TOutput>(
 
       const serviceContext = buildServiceContext(validation)
 
-      // 7. Execute handler
+      // 6. Execute handler
       return await handler(input, ctx, serviceContext)
     } catch (error) {
       console.error('Action error:', error)

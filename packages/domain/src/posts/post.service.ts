@@ -80,19 +80,7 @@ export class PostService {
         return err(PostError.boardNotFound(input.boardId))
       }
 
-      // Validate input
-      if (!input.title?.trim()) {
-        return err(PostError.validationError('Title is required'))
-      }
-      if (!input.content?.trim()) {
-        return err(PostError.validationError('Content is required'))
-      }
-      if (input.title.length > 200) {
-        return err(PostError.validationError('Title must be 200 characters or less'))
-      }
-      if (input.content.length > 10000) {
-        return err(PostError.validationError('Content must be 10,000 characters or less'))
-      }
+      // Note: Basic validation (title/content required, length limits) handled by Zod in action layer
 
       // Determine statusId - either from input or use default "open" status
       let statusId = input.statusId

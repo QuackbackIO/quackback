@@ -1,6 +1,5 @@
 import {
   pgTable,
-  uuid,
   text,
   timestamp,
   jsonb,
@@ -88,61 +87,6 @@ export const integrationEventMappings = pgTable(
   ]
 )
 
-/**
- * Links local entities to external entities for two-way sync tracking.
- * E.g., post ID <-> Slack message ID, post ID <-> Linear issue ID
- */
-export const integrationLinkedEntities = pgTable(
-  'integration_linked_entities',
-  {
-    id: typeIdWithDefault('linked_entity')('id').primaryKey(),
-    integrationId: typeIdColumn('integration')('integration_id').notNull(),
-    entityType: varchar('entity_type', { length: 50 }).notNull(),
-    entityId: uuid('entity_id').notNull(),
-    externalEntityType: varchar('external_entity_type', { length: 50 }).notNull(),
-    externalEntityId: varchar('external_entity_id', { length: 255 }).notNull(),
-    externalEntityUrl: text('external_entity_url'),
-    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    foreignKey({
-      name: 'linked_entities_integration_fk',
-      columns: [table.integrationId],
-      foreignColumns: [integrations.id],
-    }).onDelete('cascade'),
-    unique('linked_entity_unique').on(table.integrationId, table.entityType, table.entityId),
-    index('idx_linked_entities_lookup').on(table.integrationId, table.entityType, table.entityId),
-  ]
-)
-
-/**
- * Audit log for integration sync operations.
- * Used for debugging and monitoring integration health.
- */
-export const integrationSyncLog = pgTable(
-  'integration_sync_log',
-  {
-    id: typeIdWithDefault('sync_log')('id').primaryKey(),
-    integrationId: typeIdColumn('integration')('integration_id').notNull(),
-    eventId: uuid('event_id'),
-    eventType: varchar('event_type', { length: 100 }).notNull(),
-    actionType: varchar('action_type', { length: 50 }).notNull(),
-    status: varchar('status', { length: 20 }).notNull(),
-    errorMessage: text('error_message'),
-    durationMs: integer('duration_ms'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    foreignKey({
-      name: 'sync_log_integration_fk',
-      columns: [table.integrationId],
-      foreignColumns: [integrations.id],
-    }).onDelete('cascade'),
-    index('idx_sync_log_integration_created').on(table.integrationId, table.createdAt),
-  ]
-)
-
 // Relations
 export const integrationsRelations = relations(integrations, ({ one, many }) => ({
   connectedBy: one(member, {
@@ -150,30 +94,11 @@ export const integrationsRelations = relations(integrations, ({ one, many }) => 
     references: [member.id],
   }),
   eventMappings: many(integrationEventMappings),
-  linkedEntities: many(integrationLinkedEntities),
-  syncLogs: many(integrationSyncLog),
 }))
 
 export const integrationEventMappingsRelations = relations(integrationEventMappings, ({ one }) => ({
   integration: one(integrations, {
     fields: [integrationEventMappings.integrationId],
-    references: [integrations.id],
-  }),
-}))
-
-export const integrationLinkedEntitiesRelations = relations(
-  integrationLinkedEntities,
-  ({ one }) => ({
-    integration: one(integrations, {
-      fields: [integrationLinkedEntities.integrationId],
-      references: [integrations.id],
-    }),
-  })
-)
-
-export const integrationSyncLogRelations = relations(integrationSyncLog, ({ one }) => ({
-  integration: one(integrations, {
-    fields: [integrationSyncLog.integrationId],
     references: [integrations.id],
   }),
 }))

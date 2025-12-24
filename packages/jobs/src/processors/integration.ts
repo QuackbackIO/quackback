@@ -5,14 +5,7 @@
  * extracted to be used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import {
-  db,
-  integrations,
-  integrationEventMappings,
-  integrationSyncLog,
-  decryptToken,
-  eq,
-} from '@quackback/db'
+import { db, integrations, integrationEventMappings, decryptToken, eq } from '@quackback/db'
 import {
   integrationRegistry,
   type IntegrationContext,
@@ -43,34 +36,6 @@ export async function loadIntegrationConfig(
     .limit(1)
 
   return { integration, mapping }
-}
-
-/**
- * Record integration sync result in the audit log.
- */
-export async function recordSyncLog(
-  _workspaceId: WorkspaceId,
-  integrationId: IntegrationId,
-  eventId: string,
-  eventType: string,
-  actionType: string,
-  result: { success: boolean; error?: string },
-  startTime: number
-): Promise<void> {
-  try {
-    await db.insert(integrationSyncLog).values({
-      integrationId,
-      eventId,
-      eventType,
-      actionType,
-      status: result.success ? 'success' : 'failed',
-      errorMessage: result.error,
-      durationMs: Date.now() - startTime,
-    })
-  } catch (err) {
-    // Don't fail the job if sync log fails
-    console.error('[Integration] Failed to record sync log:', err)
-  }
 }
 
 /**
@@ -163,17 +128,6 @@ export async function processIntegration(
       ctx
     )
 
-    // Record result in sync log
-    await recordSyncLog(
-      workspaceId,
-      integrationId,
-      event.id,
-      event.type,
-      mapping.actionType,
-      result,
-      startTime
-    )
-
     if (result.success) {
       await stateAdapter.recordSuccess(integrationId)
       await stateAdapter.markProcessed(event.id, integrationId, result.externalEntityId)
@@ -198,18 +152,6 @@ export async function processIntegration(
   } catch (error) {
     await stateAdapter.recordFailure(integrationId)
     console.error(`[Integration] Error processing job:`, error)
-
-    // Record failure in sync log
-    await recordSyncLog(
-      workspaceId,
-      integrationId,
-      event.id,
-      event.type,
-      'unknown',
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
-      startTime
-    )
-
     throw error // Will trigger retry
   }
 }
