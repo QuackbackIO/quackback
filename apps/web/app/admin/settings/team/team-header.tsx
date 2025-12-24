@@ -6,11 +6,10 @@ import { Button } from '@/components/ui/button'
 import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
 
 interface TeamHeaderProps {
-  workspaceId: string
   workspaceName: string
 }
 
-export function TeamHeader({ workspaceId: _workspaceId, workspaceName }: TeamHeaderProps) {
+export function TeamHeader({ workspaceName }: TeamHeaderProps) {
   const [showInviteDialog, setShowInviteDialog] = useState(false)
 
   return (

@@ -1,12 +1,12 @@
 import { requireTenant } from '@/lib/tenant'
-import { db, member, user, invitation, eq, and, ne } from '@/lib/db'
+import { db, member, user, invitation, eq, ne } from '@/lib/db'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { getBulkUserAvatarData } from '@/lib/avatar'
 import { TeamHeader } from './team-header'
 import { PendingInvitations } from './pending-invitations'
 
-export default async function TeamPage({ params }: { params?: Promise<{}> }) {
+export default async function TeamPage({ params: _params }: { params?: Promise<object> }) {
   // Settings is validated in root layout
   const { settings } = await requireTenant()
 
@@ -46,7 +46,7 @@ export default async function TeamPage({ params }: { params?: Promise<{}> }) {
 
   return (
     <div className="space-y-6">
-      <TeamHeader workspaceId={settings.id} workspaceName={settings.name} />
+      <TeamHeader workspaceName={settings.name} />
 
       {/* Pending Invitations */}
       <PendingInvitations invitations={formattedInvitations} />
