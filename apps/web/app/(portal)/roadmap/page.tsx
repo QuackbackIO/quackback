@@ -2,14 +2,10 @@ import { getSettings } from '@/lib/tenant'
 import { getRoadmapService, getStatusService } from '@/lib/services'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 
-interface RoadmapPageProps {
-  params?: Promise<object>
-}
-
 /**
  * Full roadmap page with kanban board
  */
-export default async function RoadmapPage({ params: _params }: RoadmapPageProps) {
+export default async function RoadmapPage() {
   // Workspace is validated in root layout
   const settings = await getSettings()
 

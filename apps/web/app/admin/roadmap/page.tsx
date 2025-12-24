@@ -2,7 +2,7 @@ import { requireAuthenticatedTenant } from '@/lib/tenant'
 import { getStatusService } from '@/lib/services'
 import { RoadmapAdmin } from '@/components/admin/roadmap-admin'
 
-export default async function RoadmapPage({ params: _params }: { params?: Promise<object> }) {
+export default async function RoadmapPage() {
   // Settings is validated in root layout
   await requireAuthenticatedTenant()
 

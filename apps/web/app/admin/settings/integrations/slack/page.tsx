@@ -6,11 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { SlackConfig } from './slack-config'
 import { SlackConnectionActions } from './slack-connection-actions'
 
-export default async function SlackIntegrationPage({
-  params: _params,
-}: {
-  params?: Promise<Record<string, never>>
-}) {
+export default async function SlackIntegrationPage() {
   // Validate tenant role
   await requireTenantRole(['owner', 'admin'])
 

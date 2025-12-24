@@ -3,7 +3,7 @@ import { Settings } from 'lucide-react'
 import { StatusList } from './status-list'
 import { getStatusService } from '@/lib/services'
 
-export default async function StatusesPage({ params: _params }: { params?: Promise<object> }) {
+export default async function StatusesPage() {
   // Settings is validated in root layout
   await requireTenant()
 

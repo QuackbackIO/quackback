@@ -3,10 +3,8 @@ import { getUserService } from '@/lib/services'
 import { UsersContainer } from './users-container'
 
 export default async function UsersPage({
-  params: _params,
   searchParams,
 }: {
-  params?: Promise<object>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   // Settings is validated in root layout

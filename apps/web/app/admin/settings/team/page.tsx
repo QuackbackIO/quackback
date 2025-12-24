@@ -6,7 +6,7 @@ import { getBulkUserAvatarData } from '@/lib/avatar'
 import { TeamHeader } from './team-header'
 import { PendingInvitations } from './pending-invitations'
 
-export default async function TeamPage({ params: _params }: { params?: Promise<object> }) {
+export default async function TeamPage() {
   // Settings is validated in root layout
   const { settings } = await requireTenant()
 

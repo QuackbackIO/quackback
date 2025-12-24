@@ -11,14 +11,10 @@ import { InboxContainer } from './inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
 
 interface FeedbackInboxPageProps {
-  params?: Promise<object>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-export default async function FeedbackInboxPage({
-  params: _params,
-  searchParams,
-}: FeedbackInboxPageProps) {
+export default async function FeedbackInboxPage({ searchParams }: FeedbackInboxPageProps) {
   // Settings is validated in root layout
   const { user: currentUser, serviceContext } = await requireAuthenticatedTenant()
   const searchParamsResolved = await searchParams

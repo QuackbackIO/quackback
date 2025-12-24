@@ -7,7 +7,7 @@ import { CustomCssEditor } from './custom-css-editor'
 import { workspaceService } from '@quackback/domain'
 import { getSettingsLogoData, getSettingsHeaderLogoData } from '@/lib/settings-utils'
 
-export default async function BrandingPage({ params: _params }: { params?: Promise<object> }) {
+export default async function BrandingPage() {
   // Settings is validated in root layout
   const { settings } = await requireTenant()
 

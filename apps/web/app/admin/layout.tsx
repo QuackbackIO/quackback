@@ -6,13 +6,7 @@ import { SessionProvider } from '@/components/providers/session-provider'
 import { FeaturesProvider } from '@/components/providers/features-provider'
 import { getWorkspaceFeatures } from '@/lib/features/server'
 
-export default async function AdminLayout({
-  children,
-  params: _params,
-}: {
-  children: React.ReactNode
-  params?: Promise<Record<string, never>>
-}) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // Only team members (owner, admin, member roles) can access admin dashboard
   // Portal users don't have member records, so they can't access this
   // Settings is validated in root layout

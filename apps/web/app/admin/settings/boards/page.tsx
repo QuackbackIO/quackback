@@ -4,11 +4,7 @@ import { db } from '@/lib/db'
 import { Layout, MessageSquare } from 'lucide-react'
 import { CreateBoardDialog } from './create-board-dialog'
 
-export default async function BoardsSettingsPage({
-  params: _params,
-}: {
-  params?: Promise<object>
-}) {
+export default async function BoardsSettingsPage() {
   // Settings is validated in root layout
   await requireAuthenticatedTenant()
 
