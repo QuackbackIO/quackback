@@ -16,6 +16,20 @@ import type { StateAdapter } from '../adapters'
 import type { IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
+ * Get the single workspace ID (for use as encryption salt).
+ * In single-tenant mode, there's only one settings row.
+ */
+async function getWorkspaceId(): Promise<string> {
+  const setting = await db.query.settings.findFirst({
+    columns: { id: true },
+  })
+  if (!setting) {
+    throw new Error('Settings not found - workspace not initialized')
+  }
+  return setting.id
+}
+
+/**
  * Load integration configuration from the database.
  */
 export async function loadIntegrationConfig(
@@ -48,7 +62,7 @@ export async function processIntegration(
   stateAdapter: StateAdapter
 ): Promise<IntegrationJobResult> {
   const startTime = Date.now()
-  const { workspaceId, integrationId, integrationType, mappingId, event } = data
+  const { integrationId, integrationType, mappingId, event } = data
 
   // Idempotency check - prevent duplicate processing on retries
   if (await stateAdapter.isProcessed(event.id, integrationId)) {
@@ -95,7 +109,7 @@ export async function processIntegration(
       }
     }
 
-    // Decrypt access token
+    // Decrypt access token (using workspace ID as salt)
     if (!integration.accessTokenEncrypted) {
       return {
         success: false,
@@ -104,6 +118,7 @@ export async function processIntegration(
       }
     }
 
+    const workspaceId = await getWorkspaceId()
     const accessToken = decryptToken(integration.accessTokenEncrypted, workspaceId)
 
     // Build context (without Redis - using state adapter instead)

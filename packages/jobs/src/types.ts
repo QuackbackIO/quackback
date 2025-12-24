@@ -1,4 +1,4 @@
-import type { WorkspaceId, BoardId, MemberId, IntegrationId, EventMappingId } from '@quackback/ids'
+import type { BoardId, MemberId, IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
  * Job type identifiers
@@ -14,8 +14,6 @@ export type JobType = (typeof JobTypes)[keyof typeof JobTypes]
  * Import job data - sent when creating a new import job
  */
 export interface ImportJobData {
-  /** Organization ID for tenant isolation */
-  workspaceId: WorkspaceId
   /** Target board ID for imported posts */
   boardId: BoardId
   /** CSV content encoded as base64 */
@@ -88,7 +86,6 @@ export interface ImportJobStatus {
 export interface DomainEventPayload {
   id: string
   type: string
-  workspaceId: WorkspaceId
   timestamp: string
   actor: { type: 'user' | 'system'; userId?: string; email?: string; service?: string }
   data: unknown
@@ -98,8 +95,6 @@ export interface DomainEventPayload {
  * Integration job data - sent when a domain event triggers an integration
  */
 export interface IntegrationJobData {
-  /** Organization ID for tenant isolation */
-  workspaceId: WorkspaceId
   /** Integration configuration ID */
   integrationId: IntegrationId
   /** Integration type (slack, discord, linear, etc.) */
@@ -136,8 +131,6 @@ export interface UserNotificationJobData {
   eventId: string
   /** Event type (post.status_changed, comment.created) */
   eventType: string
-  /** Organization ID for tenant isolation */
-  workspaceId: WorkspaceId
   /** Event timestamp */
   timestamp: string
   /** Actor who triggered the event (excluded from notifications) */
@@ -281,8 +274,6 @@ interface EventJobDataBase<T extends EventType> {
   id: string
   /** Event type */
   type: T
-  /** Organization ID for tenant isolation */
-  workspaceId: WorkspaceId
   /** ISO timestamp of when the event occurred */
   timestamp: string
   /** Actor who triggered the event */

@@ -524,7 +524,6 @@ export async function createPublicPostAction(
 
     // Trigger EventWorkflow for integrations and notifications
     const eventData = buildPostCreatedEvent(
-      settings.id,
       { type: 'user', userId: ctx.userId, email: ctx.userEmail },
       {
         id: post.id,

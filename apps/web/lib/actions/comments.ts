@@ -179,7 +179,6 @@ export async function createCommentAction(
     const settings = await getSettings()
     if (settings) {
       const eventData = buildCommentCreatedEvent(
-        settings.id,
         { type: 'user', userId: ctx.userId, email: ctx.userEmail },
         { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
         { id: post.id, title: post.title }

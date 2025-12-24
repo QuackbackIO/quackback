@@ -1,8 +1,9 @@
 /**
  * Encryption utilities for sensitive data.
  *
- * Uses AES-256-GCM for symmetric encryption with the workspace ID as salt.
+ * Uses AES-256-GCM for symmetric encryption with a salt parameter.
  * This is used for encrypting OAuth tokens, API keys, and other secrets.
+ * In single-tenant mode, the workspace ID is typically used as the salt.
  */
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
 
@@ -20,7 +21,7 @@ function deriveKey(salt: string): Buffer {
  * Encrypt a plaintext string using AES-256-GCM.
  *
  * @param plaintext - The string to encrypt
- * @param salt - A unique salt (typically workspaceId) to derive the key
+ * @param salt - A unique salt to derive the key
  * @returns Base64-encoded ciphertext with IV and auth tag
  */
 export function encryptToken(plaintext: string, salt: string): string {

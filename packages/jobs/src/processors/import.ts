@@ -8,15 +8,7 @@
 import Papa from 'papaparse'
 import { z } from 'zod'
 import { db, posts, tags, postTags, postStatuses, eq } from '@quackback/db'
-import {
-  workspaceIdSchema,
-  boardIdSchema,
-  type WorkspaceId,
-  type BoardId,
-  type PostId,
-  type TagId,
-  type StatusId,
-} from '@quackback/ids'
+import { boardIdSchema, type BoardId, type PostId, type TagId, type StatusId } from '@quackback/ids'
 import type { ImportJobData, ImportJobResult, ImportRowError } from '../types'
 
 // Constants
@@ -28,7 +20,6 @@ export const BATCH_SIZE = 100
  * Job data validation schema
  */
 export const jobDataSchema = z.object({
-  workspaceId: workspaceIdSchema,
   boardId: boardIdSchema,
   csvContent: z.string().min(1, 'CSV content is required'),
   totalRows: z.number().int().positive(),
@@ -131,7 +122,6 @@ export function validateJobData(
  */
 export async function processBatch(
   rows: Record<string, string>[],
-  workspaceId: WorkspaceId,
   defaultBoardId: BoardId,
   startIndex: number
 ): Promise<BatchResult> {
@@ -242,7 +232,6 @@ export async function processBatch(
     // Create missing tags
     if (tagsToCreate.size > 0) {
       const newTags = Array.from(tagsToCreate).map((name) => ({
-        workspaceId,
         name,
         color: '#6b7280', // Default gray color
       }))
@@ -260,12 +249,10 @@ export async function processBatch(
     // Insert posts
     if (validRows.length > 0) {
       const postsToInsert = validRows.map(({ row }) => ({
-        workspaceId,
         boardId: row.boardId,
         title: row.title,
         content: row.content,
         statusId: row.statusId,
-        status: row.status,
         authorName: row.authorName,
         authorEmail: row.authorEmail,
         voteCount: row.voteCount,
@@ -276,7 +263,7 @@ export async function processBatch(
       const insertedPosts = await tx.insert(posts).values(postsToInsert).returning({ id: posts.id })
 
       // Insert post tags
-      const postTagsToInsert: { workspaceId: WorkspaceId; postId: PostId; tagId: TagId }[] = []
+      const postTagsToInsert: { postId: PostId; tagId: TagId }[] = []
 
       for (let i = 0; i < validRows.length; i++) {
         const { row } = validRows[i]
@@ -285,7 +272,7 @@ export async function processBatch(
         for (const tagName of row.tagNames) {
           const tag = tagMap.get(tagName.toLowerCase())
           if (tag) {
-            postTagsToInsert.push({ workspaceId, postId, tagId: tag.id as TagId })
+            postTagsToInsert.push({ postId, tagId: tag.id as TagId })
           }
         }
       }
@@ -329,7 +316,7 @@ export async function processImport(data: ImportJobData): Promise<ImportJobResul
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
-    const batchResult = await processBatch(batch, data.workspaceId, data.boardId, i)
+    const batchResult = await processBatch(batch, data.boardId, i)
     result = mergeResults(result, batchResult)
   }
 

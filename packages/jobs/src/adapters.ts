@@ -104,7 +104,7 @@ function getEventsQueue(): Queue<EventJobData, EventJobResult> {
 export async function addImportJob(data: ImportJobData): Promise<string> {
   const queue = getImportQueue()
   const job = await queue.add('import-posts', data, {
-    jobId: `import-${data.workspaceId}-${Date.now()}`,
+    jobId: `import-${Date.now()}`,
   })
   return job.id!
 }
@@ -132,7 +132,7 @@ export async function getImportJobStatus(jobId: string): Promise<ImportJobStatus
 export async function addEventJob(data: EventJobData): Promise<string> {
   const queue = getEventsQueue()
   const job = await queue.add(`event-${data.type}`, data, {
-    jobId: `event-${data.workspaceId}-${data.id}`,
+    jobId: `event-${data.id}`,
   })
   return job.id!
 }
