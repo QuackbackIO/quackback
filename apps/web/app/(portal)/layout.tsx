@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 /**
  * Generate dynamic metadata for the portal including custom favicon.
  */
-export async function generateMetadata(_props: { params?: Promise<object> }): Promise<Metadata> {
+export async function generateMetadata(): Promise<Metadata> {
   // Workspace is validated in root layout
   const org = await getSettings()
 
@@ -42,12 +42,7 @@ export async function generateMetadata(_props: { params?: Promise<object> }): Pr
  * Public portal layout - no auth required
  * Provides org branding and navigation
  */
-export default async function PublicLayout({
-  children,
-}: {
-  children: React.ReactNode
-  params?: Promise<object>
-}) {
+export default async function PublicLayout({ children }: { children: React.ReactNode }) {
   // Workspace is validated in root layout
 
   const [org, userRole, session] = await Promise.all([
