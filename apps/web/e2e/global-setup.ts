@@ -1,23 +1,29 @@
 import { test as setup, expect } from '@playwright/test'
-import { getOtpCode } from './utils/db-helpers'
+import { getOtpCode, ensureTestUserHasRole } from './utils/db-helpers'
 
 const ADMIN_EMAIL = 'demo@example.com'
 const AUTH_FILE = 'e2e/.auth/admin.json'
 const TEST_HOST = 'acme.localhost:3000'
 
 /**
- * Global setup: Authenticate as admin using real OTP flow
+ * Global setup: Authenticate as admin using Better-auth OTP flow
  *
- * Uses the actual OTP authentication flow:
+ * Uses Better-auth's emailOTP plugin:
  * 1. Send OTP code to email (logged to console when RESEND_API_KEY not configured)
  * 2. Retrieve OTP code directly from database
- * 3. Verify OTP and get redirect URL
- * 4. Navigate to redirect URL to complete authentication
+ * 3. Verify OTP and sign in via Better-auth
+ * 4. Navigate to admin page to verify authentication
  */
-setup('authenticate as admin', async ({ page, request }) => {
-  // Step 1: Request OTP code
-  const sendResponse = await request.post('/api/auth/tenant-otp/send', {
-    data: { email: ADMIN_EMAIL },
+setup('authenticate as admin', async ({ page }) => {
+  // Use page.request so cookies are shared with the page context
+  const request = page.request
+
+  // Step 1: Request OTP code via Better-auth
+  const sendResponse = await request.post('/api/auth/email-otp/send-verification-otp', {
+    data: {
+      email: ADMIN_EMAIL,
+      type: 'sign-in',
+    },
   })
   expect(sendResponse.ok()).toBeTruthy()
 
@@ -25,27 +31,25 @@ setup('authenticate as admin', async ({ page, request }) => {
   const code = await getOtpCode(ADMIN_EMAIL, TEST_HOST)
   expect(code).toMatch(/^\d{6}$/) // 6-digit code
 
-  // Step 3: Verify OTP code
-  const verifyResponse = await request.post('/api/auth/tenant-otp/verify', {
+  // Step 3: Verify OTP code and sign in via Better-auth
+  // This sets the session cookie in the page context and creates the user if not exists
+  const verifyResponse = await request.post('/api/auth/sign-in/email-otp', {
     data: {
       email: ADMIN_EMAIL,
-      code,
-      context: 'team',
-      callbackUrl: '/admin',
+      otp: code,
     },
   })
   expect(verifyResponse.ok()).toBeTruthy()
 
-  const verifyData = await verifyResponse.json()
-  expect(verifyData.success).toBe(true)
-  expect(verifyData.redirectUrl).toBeTruthy()
+  // Step 4: Ensure test user has owner role (user now exists after OTP verification)
+  ensureTestUserHasRole(ADMIN_EMAIL, 'owner')
 
-  // Step 4: Navigate to trust-login URL to complete authentication
-  // This sets the session cookie
-  await page.goto(verifyData.redirectUrl)
+  // Step 5: Navigate to admin page
+  // Session cookie is now set by Better-auth in the page context
+  await page.goto('/admin')
   await page.waitForLoadState('networkidle')
 
-  // Verify we're on admin page (redirected after auth)
+  // Verify we're on admin page (not redirected to login)
   await expect(page).toHaveURL(/\/admin/, { timeout: 10000 })
 
   // Save authentication state

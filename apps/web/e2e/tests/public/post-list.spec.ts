@@ -157,7 +157,7 @@ test.describe('Public Post List', () => {
   })
 
   test('sort persists with board filter', async ({ page }) => {
-    // Navigate with both board and sort params
+    // Navigate with both board and sort params (using 'features' board which exists in database)
     await page.goto('/?board=features&sort=new')
 
     // Wait for posts to load first (indicates page is ready)
@@ -173,8 +173,8 @@ test.describe('Public Post List', () => {
     await expect(newButton).toHaveClass(/font-medium/, { timeout: 10000 })
 
     // Board should be selected
-    const featureButton = page.getByRole('button', { name: /Feature Requests/i })
-    await expect(featureButton).toHaveClass(/font-medium/, { timeout: 10000 })
+    const featuresButton = page.getByRole('button', { name: /Feature Requests/i })
+    await expect(featuresButton).toHaveClass(/font-medium/, { timeout: 10000 })
   })
 
   test('clicking post navigates to detail page', async ({ page }) => {
@@ -211,7 +211,7 @@ test.describe('Public Post List', () => {
   })
 
   test('displays filtered posts when navigating with board param in URL', async ({ page }) => {
-    // Navigate directly to URL with board filter
+    // Navigate directly to URL with board filter (using 'features' board which exists in database)
     await page.goto('/?board=features')
 
     // Wait for posts to load first (indicates page is ready)
@@ -222,8 +222,8 @@ test.describe('Public Post List', () => {
     await expect(page).toHaveURL(/[?&]board=features/)
 
     // The "Feature Requests" board should be visually selected in the sidebar (has font-medium class)
-    const featureButton = page.getByRole('button', { name: /Feature Requests/i })
-    await expect(featureButton).toHaveClass(/font-medium/, { timeout: 10000 })
+    const featuresButton = page.getByRole('button', { name: /Feature Requests/i })
+    await expect(featuresButton).toHaveClass(/font-medium/, { timeout: 10000 })
 
     // "View all posts" should NOT be selected (no font-medium)
     const viewAllButton = page.getByRole('button', { name: /View all posts/i })
@@ -231,7 +231,7 @@ test.describe('Public Post List', () => {
   })
 
   test('can view all posts after filtering by board', async ({ page }) => {
-    // Start with a board filter applied
+    // Start with a board filter applied (using 'features' board which exists in database)
     await page.goto('/?board=features')
     await page.waitForLoadState('networkidle')
 
@@ -291,19 +291,18 @@ test.describe('Public Post List', () => {
     const bugsButton = page.getByRole('button', { name: /Bug Reports/i })
     if ((await bugsButton.count()) > 0) {
       await bugsButton.click()
-      await page.waitForLoadState('networkidle')
 
       // URL should update
       await expect(page).toHaveURL(/[?&]board=bugs/)
+      await page.waitForLoadState('networkidle')
 
-      // Posts should now link to /bugs/posts/...
-      const newLinks = page.locator('a[href*="/posts/"]')
-      const newCount = await newLinks.count()
+      // Wait for posts to refresh - should now link to /bugs/posts/...
+      // Use a locator that specifically looks for bugs board posts
+      const bugsPostLinks = page.locator('a[href*="/b/bugs/posts/"]')
+      await expect(bugsPostLinks.first()).toBeVisible({ timeout: 10000 })
 
-      if (newCount > 0) {
-        const firstNewHref = await newLinks.first().getAttribute('href')
-        expect(firstNewHref).toMatch(/^\/b\/bugs\/posts\//)
-      }
+      const firstNewHref = await bugsPostLinks.first().getAttribute('href')
+      expect(firstNewHref).toMatch(/^\/b\/bugs\/posts\//)
     }
   })
 
@@ -397,7 +396,7 @@ test.describe('Public Post List', () => {
     })
 
     test('status filter persists with other filters', async ({ page }) => {
-      // Navigate with board and sort filters
+      // Navigate with board and sort filters (using 'features' board which exists in database)
       await page.goto('/?board=features&sort=new')
       await page.waitForLoadState('networkidle')
 

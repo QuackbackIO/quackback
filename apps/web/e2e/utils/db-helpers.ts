@@ -34,3 +34,26 @@ export function getOtpCode(email: string, host: string): string {
     throw new Error(`Failed to get OTP code: ${err.stderr || err.message}`)
   }
 }
+
+/**
+ * Ensure a test user has the required role for E2E testing
+ *
+ * This is a test utility that ensures the demo user has the 'owner' role
+ * even if the database wasn't properly seeded. Should only be used in tests.
+ *
+ * @param email - The email address of the user
+ * @param role - The role to ensure (default: 'owner')
+ */
+export function ensureTestUserHasRole(email: string, role: string = 'owner'): void {
+  const scriptPath = resolve(__dirname, '../scripts/ensure-role.ts')
+
+  try {
+    execSync(`dotenv -e ../../.env -- bun "${scriptPath}" "${email}" "${role}"`, {
+      encoding: 'utf-8',
+      cwd: resolve(__dirname, '../..'), // apps/web directory
+    })
+  } catch (error) {
+    const err = error as { stderr?: string; message: string }
+    throw new Error(`Failed to ensure user role: ${err.stderr || err.message}`)
+  }
+}

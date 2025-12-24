@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, InfoIcon, Mail, ArrowLeft } from 'lucide-react'
+import { authClient } from '@/lib/auth/client'
 
 interface OrgAuthConfig {
   found: boolean
@@ -41,16 +42,17 @@ interface OTPAuthFormProps {
   oauthConfig?: PortalOAuthConfig
 }
 
-type Step = 'email' | 'code' | 'name'
+type Step = 'email' | 'code'
 
 /**
  * OTP Auth Form
  *
- * Unified form for login and signup using magic OTP codes.
+ * Unified form for login and signup using Better-auth's emailOTP plugin.
  *
- * Login flow: email → code → redirect
- * Signup flow: email → code → name (if needed) → redirect
- * Invitation flow: email (prefilled) → code → name → redirect
+ * Flow: email → code → redirect
+ * - Better-auth automatically creates users if they don't exist
+ * - Name can be updated after login via profile settings
+ * - Invitation acceptance happens after authentication
  */
 export function OTPAuthForm({
   mode,
@@ -65,16 +67,13 @@ export function OTPAuthForm({
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
-  const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [_codeSent, setCodeSent] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
   const [loadingInvitation, setLoadingInvitation] = useState(!!invitationId)
 
   const codeInputRef = useRef<HTMLInputElement>(null)
-  const nameInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch invitation details if invitationId is provided
   useEffect(() => {
@@ -90,9 +89,6 @@ export function OTPAuthForm({
           const data = await response.json()
           setInvitation(data)
           setEmail(data.email) // Pre-fill email from invitation
-          if (data.name) {
-            setName(data.name) // Pre-fill name from invitation
-          }
         } else {
           const data = await response.json()
           setError(data.error || 'Invalid or expired invitation')
@@ -120,9 +116,6 @@ export function OTPAuthForm({
     if (step === 'code' && codeInputRef.current) {
       codeInputRef.current.focus()
     }
-    if (step === 'name' && nameInputRef.current) {
-      nameInputRef.current.focus()
-    }
   }, [step])
 
   const sendCode = async () => {
@@ -130,18 +123,15 @@ export function OTPAuthForm({
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/tenant-otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'sign-in',
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to send code')
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to send code')
       }
 
-      setCodeSent(true)
       setStep('code')
       setResendCooldown(60) // 60 second cooldown
     } catch (err) {
@@ -151,37 +141,23 @@ export function OTPAuthForm({
     }
   }
 
-  const verifyCode = async (providedName?: string) => {
+  const verifyCode = async () => {
     setError('')
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/tenant-otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          code,
-          name: providedName || name || undefined,
-          invitationId: invitationId || undefined,
-          context,
-          callbackUrl,
-        }),
+      const result = await authClient.signIn.emailOtp({
+        email,
+        otp: code,
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to verify code')
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to verify code')
       }
 
-      if (data.action === 'needsSignup') {
-        // User doesn't exist, need to collect name
-        setStep('name')
-      } else if (data.redirectUrl) {
-        // Success - redirect to trust-login
-        window.location.href = data.redirectUrl
-      }
+      // Success - redirect to callback URL or home
+      // Full page reload to ensure auth state is updated everywhere
+      window.location.href = callbackUrl
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify code')
     } finally {
@@ -207,15 +183,6 @@ export function OTPAuthForm({
     verifyCode()
   }
 
-  const handleNameSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) {
-      setError('Name is required')
-      return
-    }
-    verifyCode(name)
-  }
-
   const handleResend = () => {
     if (resendCooldown > 0) return
     setCode('')
@@ -224,12 +191,8 @@ export function OTPAuthForm({
 
   const handleBack = () => {
     setError('')
-    if (step === 'code') {
-      setStep('email')
-      setCode('')
-    } else if (step === 'name') {
-      setStep('code')
-    }
+    setStep('email')
+    setCode('')
   }
 
   // Loading invitation
@@ -420,55 +383,6 @@ export function OTPAuthForm({
                 : "Didn't receive a code? Resend"}
             </button>
           </div>
-        </form>
-      )}
-
-      {/* Step 3: Name Input (for signup when user doesn't exist) */}
-      {step === 'name' && (
-        <form onSubmit={handleNameSubmit} className="space-y-4">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back
-          </button>
-
-          <div className="rounded-lg bg-muted/50 p-4">
-            <p className="text-sm text-center">Email verified! Let&apos;s set up your account.</p>
-          </div>
-
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="name" className="text-sm font-medium">
-              Your name
-            </label>
-            <Input
-              ref={nameInputRef}
-              id="name"
-              type="text"
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={loading}
-              autoComplete="name"
-            />
-          </div>
-
-          <Button type="submit" disabled={loading || !name.trim()} className="w-full">
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating account...
-              </>
-            ) : (
-              'Create account'
-            )}
-          </Button>
         </form>
       )}
     </div>

@@ -12,9 +12,12 @@ async function authenticateViaOTP(page: Page, maxRetries = 8) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       // Request OTP code
-      const sendResponse = await page.request.post('/api/auth/tenant-otp/send', {
+      const sendResponse = await page.request.post('/api/auth/email-otp/send-verification-otp', {
         headers: { 'Content-Type': 'application/json' },
-        data: { email: TEST_EMAIL },
+        data: {
+          email: TEST_EMAIL,
+          type: 'sign-in',
+        },
       })
 
       // If rate limited, wait and retry with exponential backoff
@@ -36,10 +39,13 @@ async function authenticateViaOTP(page: Page, maxRetries = 8) {
       // Get OTP code from database
       const otpCode = getOtpCode(TEST_EMAIL, TEST_HOST)
 
-      // Verify OTP code - this will return a redirectUrl to trust-login
-      const verifyResponse = await page.request.post('/api/auth/tenant-otp/verify', {
+      // Verify OTP code - Better-auth sets session cookie automatically
+      const verifyResponse = await page.request.post('/api/auth/sign-in/email-otp', {
         headers: { 'Content-Type': 'application/json' },
-        data: { email: TEST_EMAIL, code: otpCode },
+        data: {
+          email: TEST_EMAIL,
+          otp: otpCode,
+        },
       })
 
       if (!verifyResponse.ok()) {
@@ -48,11 +54,9 @@ async function authenticateViaOTP(page: Page, maxRetries = 8) {
         throw new Error(`Failed to verify OTP: ${JSON.stringify(errorData)}`)
       }
 
-      const verifyData = await verifyResponse.json()
-      expect(verifyData.success).toBe(true)
-
-      // Navigate to the redirect URL to complete login
-      await page.goto(verifyData.redirectUrl)
+      // Session cookie is now set by Better-auth
+      // Navigate to any page to verify authentication
+      await page.goto('/')
       await page.waitForLoadState('networkidle')
       console.log('Authentication successful!')
       return // Success!

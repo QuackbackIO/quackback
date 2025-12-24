@@ -360,3 +360,4 @@ a svg,
 .custom-scrollbar-hover:hover::-webkit-scrollbar-thumb:hover {
   background: var(--color-muted-foreground);
 }
+

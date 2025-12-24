@@ -12,7 +12,7 @@ import {
   invitation as invitationTable,
   eq,
 } from '@/lib/db'
-import type { UserId, MemberId } from '@quackback/ids'
+import type { UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { trustLogin } from './plugins/trust-login'
 import { sendSigninCodeEmail } from '@quackback/email'
@@ -100,30 +100,6 @@ export const auth = betterAuth({
       sameSite: 'lax',
       // Secure cookies in production
       secure: process.env.NODE_ENV === 'production',
-    },
-  },
-
-  // Database hooks to auto-create owner member for first user
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          // Check if any owner exists
-          const existingOwner = await db.query.member.findFirst({
-            where: eq(memberTable.role, 'owner'),
-          })
-
-          if (!existingOwner) {
-            // First user becomes owner
-            await db.insert(memberTable).values({
-              id: generateId('member') as MemberId,
-              userId: user.id as UserId,
-              role: 'owner',
-              createdAt: new Date(),
-            })
-          }
-        },
-      },
     },
   },
 

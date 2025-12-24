@@ -78,7 +78,7 @@ export async function setupWorkspaceAction(
       })
     }
 
-    // 3. Verify user is owner (created automatically by databaseHooks when first user signs up)
+    // 3. Verify user is owner (created by onboarding page on first sign-in)
     const memberRecord = await db.query.member.findFirst({
       where: eq(member.userId, session.user.id as UserId),
     })

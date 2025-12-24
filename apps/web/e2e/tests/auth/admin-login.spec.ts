@@ -46,9 +46,12 @@ test.describe('Admin Login with OTP', () => {
 
     // Submit email and wait for OTP send API response
     const [sendResponse] = await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send'), {
-        timeout: 15000,
-      }),
+      page.waitForResponse(
+        (resp) => resp.url().includes('/api/auth/email-otp/send-verification-otp'),
+        {
+          timeout: 15000,
+        }
+      ),
       page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
@@ -70,7 +73,7 @@ test.describe('Admin Login with OTP', () => {
 
     // Submit code and wait for verification
     const [verifyResponse] = await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/verify'), {
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/sign-in/email-otp'), {
         timeout: 15000,
       }),
       page.getByRole('button', { name: /verify code/i }).click(),
@@ -90,7 +93,9 @@ test.describe('Admin Login with OTP', () => {
     await emailInput.fill(TEST_ADMIN.email)
 
     await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.waitForResponse((resp) =>
+        resp.url().includes('/api/auth/email-otp/send-verification-otp')
+      ),
       page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
@@ -119,7 +124,9 @@ test.describe('Admin Login with OTP', () => {
     await emailInput.fill(TEST_ADMIN.email)
 
     await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.waitForResponse((resp) =>
+        resp.url().includes('/api/auth/email-otp/send-verification-otp')
+      ),
       page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
@@ -145,7 +152,9 @@ test.describe('Admin Login with OTP', () => {
     await emailInput.fill(TEST_ADMIN.email)
 
     await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.waitForResponse((resp) =>
+        resp.url().includes('/api/auth/email-otp/send-verification-otp')
+      ),
       page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
@@ -156,7 +165,7 @@ test.describe('Admin Login with OTP', () => {
     await codeInput.fill(code)
 
     const [verifyResponse] = await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/verify')),
+      page.waitForResponse((resp) => resp.url().includes('/api/auth/sign-in/email-otp')),
       page.getByRole('button', { name: /verify code/i }).click(),
     ])
 
@@ -174,7 +183,9 @@ test.describe('Admin Login with OTP', () => {
     await emailInput.fill(TEST_ADMIN.email)
 
     await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.waitForResponse((resp) =>
+        resp.url().includes('/api/auth/email-otp/send-verification-otp')
+      ),
       page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 
@@ -212,7 +223,9 @@ test.describe('Admin Login with OTP', () => {
     await emailInput.fill(TEST_ADMIN.email)
 
     await Promise.all([
-      page.waitForResponse((resp) => resp.url().includes('/api/auth/tenant-otp/send')),
+      page.waitForResponse((resp) =>
+        resp.url().includes('/api/auth/email-otp/send-verification-otp')
+      ),
       page.getByRole('button', { name: /continue with email/i }).click(),
     ])
 

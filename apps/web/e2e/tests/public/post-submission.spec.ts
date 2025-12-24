@@ -32,9 +32,12 @@ async function getOtpCodeWithRetry(email: string, host: string, maxRetries = 3):
 async function loginWithOTP(page: Page) {
   const context = page.context()
 
-  // Step 1: Request OTP code via API
-  const sendResponse = await context.request.post('/api/auth/tenant-otp/send', {
-    data: { email: TEST_EMAIL },
+  // Step 1: Request OTP code via Better-auth
+  const sendResponse = await context.request.post('/api/auth/email-otp/send-verification-otp', {
+    data: {
+      email: TEST_EMAIL,
+      type: 'sign-in',
+    },
   })
 
   if (!sendResponse.ok()) {
@@ -46,24 +49,18 @@ async function loginWithOTP(page: Page) {
   const code = await getOtpCodeWithRetry(TEST_EMAIL, TEST_HOST)
   expect(code).toMatch(/^\d{6}$/) // 6-digit code
 
-  // Step 3: Verify OTP code via API with 'portal' context
-  const verifyResponse = await context.request.post('/api/auth/tenant-otp/verify', {
+  // Step 3: Verify OTP code via Better-auth
+  const verifyResponse = await context.request.post('/api/auth/sign-in/email-otp', {
     data: {
       email: TEST_EMAIL,
-      code,
-      context: 'portal',
-      callbackUrl: '/',
+      otp: code,
     },
   })
   expect(verifyResponse.ok()).toBeTruthy()
 
-  const verifyData = await verifyResponse.json()
-  expect(verifyData.success).toBe(true)
-  expect(verifyData.redirectUrl).toBeTruthy()
-
-  // Step 4: Navigate to trust-login URL to complete authentication
-  // This sets the session cookie
-  await page.goto(verifyData.redirectUrl)
+  // Step 4: Session cookie is now set by Better-auth
+  // Navigate to home page to verify authentication
+  await page.goto('/')
   await page.waitForLoadState('networkidle')
 
   // Verify we're on the home page (portal)
@@ -94,99 +91,97 @@ test.describe('Public Post Submission', () => {
     await globalPage.waitForLoadState('networkidle')
   })
 
-  test('can open submit post dialog', async () => {
-    // Find and click the "Create post" button
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await expect(createPostButton).toBeVisible({ timeout: 10000 })
-    await createPostButton.click()
+  test('can open submit post form', async () => {
+    // Find and click the "What's your idea?" input to expand the form
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await expect(createPostInput).toBeVisible({ timeout: 10000 })
+    await createPostInput.click()
 
-    // Dialog should open - verify by checking for title input
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    // Form should expand - verify by checking for rich text editor
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
   })
 
-  test('dialog has correct placeholder text', async () => {
-    // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+  test('form has correct placeholder text', async () => {
+    // Expand the form by clicking the input
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
-    // Verify title placeholder
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    // Verify title placeholder is visible
+    await expect(createPostInput).toBeVisible({ timeout: 5000 })
 
-    // Verify editor placeholder
+    // Verify editor is visible
     // TipTap renders placeholder via CSS ::before pseudo-element, so we check for the editor element
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
   })
 
-  test('can close dialog with Cancel button', async () => {
-    // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+  test('can close form with Cancel button', async () => {
+    // Expand the form
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
-    // Wait for dialog to open
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    // Wait for form to expand
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Click Cancel button
     const cancelButton = globalPage.getByRole('button', { name: /^cancel$/i })
     await cancelButton.click()
 
-    // Dialog should close - title input should no longer be visible
-    await expect(titleInput).not.toBeVisible({ timeout: 5000 })
+    // Form should collapse - editor should no longer be visible
+    await expect(editor).not.toBeVisible({ timeout: 5000 })
   })
 
-  test('can close dialog with Escape key', async () => {
-    // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+  test('can close form with Escape key', async () => {
+    // Expand the form
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
-    // Wait for dialog to open
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    // Wait for form to expand
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Press Escape key
     await globalPage.keyboard.press('Escape')
 
-    // Dialog should close
-    await expect(titleInput).not.toBeVisible({ timeout: 5000 })
+    // Form should collapse - editor should no longer be visible
+    await expect(editor).not.toBeVisible({ timeout: 5000 })
   })
 
-  test('dialog form resets on close and reopen via Escape', async () => {
-    // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+  test('form resets on close and reopen via Escape', async () => {
+    // Expand the form
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
     // Fill in some data
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await titleInput.fill('Test Title')
+    await createPostInput.fill('Test Title')
 
     const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
     await editor.click()
     await globalPage.keyboard.type('Test description content')
 
-    // Close the dialog with Escape (triggers onOpenChange)
+    // Close the form with Escape
     await globalPage.keyboard.press('Escape')
-    await expect(titleInput).not.toBeVisible({ timeout: 5000 })
+    await expect(editor).not.toBeVisible({ timeout: 5000 })
 
-    // Reopen the dialog
-    await createPostButton.click()
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    // Reopen the form
+    await createPostInput.click()
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
-    // Form should be empty (reset happens via onOpenChange)
-    await expect(titleInput).toHaveValue('')
+    // Form should be empty (reset happens on collapse)
+    await expect(createPostInput).toHaveValue('')
 
     // Editor should be empty (check if it has the empty class)
-    await expect(editor).toBeVisible()
     const editorParagraph = editor.locator('p').first()
     await expect(editorParagraph).toHaveClass(/is-editor-empty/)
   })
 
   test('title input is auto-focused on open', async () => {
     // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
     // Wait for dialog to open
     await globalPage.waitForTimeout(500) // Small delay for focus to settle
@@ -198,12 +193,12 @@ test.describe('Public Post Submission', () => {
 
   test('shows error when submitting without title', async () => {
     // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
     // Wait for dialog to open
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Don't fill anything, just click Submit
     const submitButton = globalPage.getByRole('button', { name: /^submit$/i })
@@ -217,12 +212,13 @@ test.describe('Public Post Submission', () => {
 
   test('shows error when submitting without description', async () => {
     // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
     // Wait for dialog to open
     const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Fill only the title
     await titleInput.fill('Test Post Title')
@@ -239,18 +235,18 @@ test.describe('Public Post Submission', () => {
 
   test('can submit a basic post', async () => {
     // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
     // Wait for dialog to open
     const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Fill in the title
     await titleInput.fill('E2E Test Post')
 
     // Fill in the description (must use keyboard.type for TipTap)
-    const editor = globalPage.locator('.tiptap')
     await editor.click()
     await globalPage.keyboard.type('This is a test post description created by E2E tests.')
 
@@ -259,7 +255,7 @@ test.describe('Public Post Submission', () => {
     await submitButton.click()
 
     // Dialog should close after successful submission
-    await expect(titleInput).not.toBeVisible({ timeout: 10000 })
+    await expect(editor).not.toBeVisible({ timeout: 10000 })
   })
 
   test('new post appears in the list after submission', async () => {
@@ -272,17 +268,17 @@ test.describe('Public Post Submission', () => {
     const uniqueTitle = `E2E Test Post ${Date.now()}`
 
     // Open the dialog
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await createPostButton.click()
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
 
     // Wait for dialog to open
     const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Fill in the form
     await titleInput.fill(uniqueTitle)
 
-    const editor = globalPage.locator('.tiptap')
     await editor.click()
     await globalPage.keyboard.type('This post should appear in the feed after submission.')
 
@@ -291,7 +287,7 @@ test.describe('Public Post Submission', () => {
     await submitButton.click()
 
     // Wait for dialog to close - router.refresh() should update the feed automatically
-    await expect(titleInput).not.toBeVisible({ timeout: 10000 })
+    await expect(editor).not.toBeVisible({ timeout: 10000 })
 
     // The new post should be visible in the list WITHOUT any manual refresh
     // (The component calls router.refresh() after successful submission)
@@ -310,7 +306,7 @@ test.describe('Board Selector', () => {
 
   test('board selector is visible in dialog header', async () => {
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // Board selector should be visible (look for the select trigger)
@@ -320,7 +316,7 @@ test.describe('Board Selector', () => {
 
   test('board selector shows default board name', async () => {
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // Board selector should show a board name (not just "Select board")
@@ -330,7 +326,7 @@ test.describe('Board Selector', () => {
 
   test('can open board selector dropdown', async () => {
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // Click the board selector to open dropdown
@@ -344,7 +340,7 @@ test.describe('Board Selector', () => {
 
   test('can select a different board', async () => {
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // Get initial board name
@@ -379,20 +375,21 @@ test.describe('Board Selector', () => {
   })
 
   test('board selector defaults to filtered board when filter is active', async () => {
-    // Navigate with a board filter
+    // Navigate with a board filter (using 'features' board which exists in database)
     await globalPage.goto('/?board=features')
 
     // Wait for posts to load first (indicates page is ready)
     const postCards = globalPage.locator('a[href*="/posts/"]:has(h3)')
     await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
-    // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 10000 })
+    // Open the form
+    await globalPage.getByPlaceholder("What's your idea?").click()
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 10000 })
 
     // Board selector should show the filtered board (Feature Requests)
     const boardSelector = globalPage.locator('[role="combobox"]')
-    await expect(boardSelector).toContainText(/feature/i, { timeout: 10000 })
+    await expect(boardSelector).toContainText(/Feature Requests/i, { timeout: 10000 })
   })
 
   test('can submit post to a different board than default', async () => {
@@ -403,7 +400,7 @@ test.describe('Board Selector', () => {
     const uniqueTitle = `Different Board Post ${Date.now()}`
 
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // Change board selection
@@ -413,10 +410,10 @@ test.describe('Board Selector', () => {
     const selectContent = globalPage.locator('[role="listbox"]')
     await expect(selectContent).toBeVisible({ timeout: 5000 })
 
-    // Select Bug Reports board (if available)
-    const bugOption = globalPage.locator('[role="option"]', { hasText: /bug/i })
-    if ((await bugOption.count()) > 0) {
-      await bugOption.click()
+    // Select Products board (if available) as an alternative to default
+    const productsOption = globalPage.locator('[role="option"]', { hasText: /products/i })
+    if ((await productsOption.count()) > 0) {
+      await productsOption.click()
     } else {
       // Just click any available option
       await globalPage.locator('[role="option"]').first().click()
@@ -431,7 +428,8 @@ test.describe('Board Selector', () => {
 
     // Submit
     await globalPage.getByRole('button', { name: /^submit$/i }).click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).not.toBeVisible({
+    // Editor should collapse after successful submission
+    await expect(editor).not.toBeVisible({
       timeout: 10000,
     })
 
@@ -449,7 +447,7 @@ test.describe('Board Selector', () => {
 
   test('board selection persists after typing content', async () => {
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // Change board selection
@@ -475,9 +473,10 @@ test.describe('Board Selector', () => {
   })
 
   test('board selection resets when dialog is closed and reopened', async () => {
-    // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    // Open the form
+    await globalPage.getByPlaceholder("What's your idea?").click()
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Get initial board name
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -503,15 +502,15 @@ test.describe('Board Selector', () => {
       }
     }
 
-    // Close dialog with Escape
+    // Close form with Escape (editor should collapse)
     await globalPage.keyboard.press('Escape')
-    await expect(globalPage.getByPlaceholder("What's your idea?")).not.toBeVisible({
+    await expect(editor).not.toBeVisible({
       timeout: 5000,
     })
 
-    // Reopen dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    // Reopen form
+    await globalPage.getByPlaceholder("What's your idea?").click()
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Board should be reset to initial/default
     await expect(boardSelector).toHaveText(initialBoardName || '')
@@ -519,7 +518,7 @@ test.describe('Board Selector', () => {
 
   test('shows "Posting to" label before board selector', async () => {
     // Open the dialog
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     // "Posting to" label should be visible
@@ -527,68 +526,70 @@ test.describe('Board Selector', () => {
   })
 
   test('switching board filter updates default board in dialog', async () => {
-    // Start with no filter - open dialog and note default board
-    await globalPage.getByRole('button', { name: /create post/i }).click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
-
+    const editor = globalPage.locator('.tiptap')
     const boardSelector = globalPage.locator('[role="combobox"]')
 
-    // Close dialog
+    // Start with no filter - open form and note default board
+    await globalPage.getByPlaceholder("What's your idea?").click()
+    await expect(editor).toBeVisible({ timeout: 5000 })
+
+    // Close form
     await globalPage.keyboard.press('Escape')
-    await expect(globalPage.getByPlaceholder("What's your idea?")).not.toBeVisible({
+    await expect(editor).not.toBeVisible({
       timeout: 5000,
     })
 
-    // Click on Bug Reports board filter in sidebar
-    const bugReportsFilter = globalPage.getByRole('button', { name: /bug reports/i })
-    if ((await bugReportsFilter.count()) > 0) {
-      await bugReportsFilter.click()
+    // Click on Bug Reports board filter in sidebar (exists in seed data)
+    const bugsFilter = globalPage.getByRole('button', { name: /Bug Reports/i })
+    if ((await bugsFilter.count()) > 0) {
+      await bugsFilter.click()
       await globalPage.waitForLoadState('networkidle')
 
-      // Open dialog again
-      await globalPage.getByRole('button', { name: /create post/i }).click()
-      await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+      // Open form again
+      await globalPage.getByPlaceholder("What's your idea?").click()
+      await expect(editor).toBeVisible({ timeout: 5000 })
 
       // Board selector should now show Bug Reports
-      await expect(boardSelector).toContainText(/bug/i)
+      await expect(boardSelector).toContainText(/Bug Reports/i)
     }
   })
 
-  test('switching between multiple board filters updates dialog default each time', async () => {
+  test('switching between multiple board filters updates form default each time', async () => {
     const boardSelector = globalPage.locator('[role="combobox"]')
+    const editor = globalPage.locator('.tiptap')
 
-    // Click Feature Requests filter
-    const featureFilter = globalPage.getByRole('button', { name: /feature requests/i })
-    if ((await featureFilter.count()) > 0) {
-      await featureFilter.click()
+    // Click Feature Requests filter (board that exists in database)
+    const featuresFilter = globalPage.getByRole('button', { name: /Feature Requests/i })
+    if ((await featuresFilter.count()) > 0) {
+      await featuresFilter.click()
       await globalPage.waitForLoadState('networkidle')
 
-      // Open dialog - should default to Feature Requests
-      await globalPage.getByRole('button', { name: /create post/i }).click()
-      await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
-      await expect(boardSelector).toContainText(/feature/i)
+      // Open form - should default to Feature Requests
+      await globalPage.getByPlaceholder("What's your idea?").click()
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      await expect(boardSelector).toContainText(/Feature Requests/i)
 
-      // Close dialog
+      // Close form
       await globalPage.keyboard.press('Escape')
-      await expect(globalPage.getByPlaceholder("What's your idea?")).not.toBeVisible({
+      await expect(editor).not.toBeVisible({
         timeout: 5000,
       })
     }
 
-    // Click Bug Reports filter
-    const bugFilter = globalPage.getByRole('button', { name: /bug reports/i })
-    if ((await bugFilter.count()) > 0) {
-      await bugFilter.click()
+    // Click Bug Reports filter (another board that exists in seed data)
+    const bugsFilter = globalPage.getByRole('button', { name: /Bug Reports/i })
+    if ((await bugsFilter.count()) > 0) {
+      await bugsFilter.click()
       await globalPage.waitForLoadState('networkidle')
 
-      // Open dialog - should default to Bug Reports
-      await globalPage.getByRole('button', { name: /create post/i }).click()
-      await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
-      await expect(boardSelector).toContainText(/bug/i)
+      // Open form - should default to Bug Reports
+      await globalPage.getByPlaceholder("What's your idea?").click()
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      await expect(boardSelector).toContainText(/Bug Reports/i)
 
-      // Close dialog
+      // Close form
       await globalPage.keyboard.press('Escape')
-      await expect(globalPage.getByPlaceholder("What's your idea?")).not.toBeVisible({
+      await expect(editor).not.toBeVisible({
         timeout: 5000,
       })
     }
@@ -597,9 +598,9 @@ test.describe('Board Selector', () => {
     await globalPage.goto('/')
     await globalPage.waitForLoadState('networkidle')
 
-    // Open dialog - should default to first board (not filtered)
-    await globalPage.getByRole('button', { name: /create post/i }).click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    // Open form - should default to first board (not filtered)
+    await globalPage.getByPlaceholder("What's your idea?").click()
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Board selector should be visible and show a board name
     await expect(boardSelector).toBeVisible()
@@ -626,7 +627,7 @@ test.describe('Board Selector', () => {
       await globalPage.waitForLoadState('networkidle')
 
       // Open dialog
-      await globalPage.getByRole('button', { name: /create post/i }).click()
+      await globalPage.getByPlaceholder("What's your idea?").click()
       await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
       // Board selector should show the clicked board's name
@@ -650,7 +651,7 @@ test.describe('Rich Text Editor', () => {
     await globalPage.waitForLoadState('networkidle')
 
     // Open the dialog for all tests
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
   })
 
@@ -814,7 +815,7 @@ test.describe('Submission States and Integration', () => {
   })
 
   test('Submit button shows "Submit" initially', async () => {
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
 
     const submitButton = globalPage.getByRole('button', { name: /^submit$/i })
@@ -828,13 +829,13 @@ test.describe('Submission States and Integration', () => {
 
     const uniqueTitle = `Keyboard Submit Test ${Date.now()}`
 
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     await titleInput.fill(uniqueTitle)
 
-    const editor = globalPage.locator('.tiptap')
     await editor.click()
     await globalPage.keyboard.type('Submitted with keyboard shortcut')
 
@@ -842,7 +843,7 @@ test.describe('Submission States and Integration', () => {
     await globalPage.keyboard.press('Meta+Enter')
 
     // Dialog should close
-    await expect(titleInput).not.toBeVisible({ timeout: 10000 })
+    await expect(editor).not.toBeVisible({ timeout: 10000 })
 
     // Post should appear
     await expect(globalPage.getByRole('heading', { name: uniqueTitle })).toBeVisible({
@@ -850,14 +851,14 @@ test.describe('Submission States and Integration', () => {
     })
   })
 
-  test('Create post button is visible on filtered board', async () => {
-    // Navigate with board filter
+  test('Submit form is visible on filtered board', async () => {
+    // Navigate with board filter (using 'features' board which exists in database)
     await globalPage.goto('/?board=features')
     await globalPage.waitForLoadState('networkidle')
 
-    // Create post button should be visible
-    const createPostButton = globalPage.getByRole('button', { name: /create post/i })
-    await expect(createPostButton).toBeVisible({ timeout: 10000 })
+    // Submit form input should be visible
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await expect(createPostInput).toBeVisible({ timeout: 10000 })
   })
 
   test('post submits to the current board context', async () => {
@@ -865,9 +866,9 @@ test.describe('Submission States and Integration', () => {
     await globalPage.goto('/')
     await globalPage.waitForLoadState('networkidle')
 
-    // Click Feature Requests board filter
-    const featureButton = globalPage.getByRole('button', { name: /Feature Requests/i })
-    await featureButton.click()
+    // Click Feature Requests board filter (board that exists in database)
+    const featuresButton = globalPage.getByRole('button', { name: /Feature Requests/i })
+    await featuresButton.click()
     await globalPage.waitForLoadState('networkidle')
 
     // Click New sort to see newest posts first
@@ -875,20 +876,20 @@ test.describe('Submission States and Integration', () => {
     await newSortButton.click()
     await globalPage.waitForLoadState('networkidle')
 
-    const uniqueTitle = `Features Board Post ${Date.now()}`
+    const uniqueTitle = `Feature Requests Board Post ${Date.now()}`
 
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     await titleInput.fill(uniqueTitle)
 
-    const editor = globalPage.locator('.tiptap')
     await editor.click()
     await globalPage.keyboard.type('This post should appear in the features board')
 
     await globalPage.getByRole('button', { name: /^submit$/i }).click()
-    await expect(titleInput).not.toBeVisible({ timeout: 10000 })
+    await expect(editor).not.toBeVisible({ timeout: 10000 })
 
     // Reload page to ensure fresh server data is displayed
     // (Client state doesn't auto-update with router.refresh when filters are already set)
@@ -911,18 +912,18 @@ test.describe('Submission States and Integration', () => {
 
     const uniqueTitle = `Author Test Post ${Date.now()}`
 
-    await globalPage.getByRole('button', { name: /create post/i }).click()
+    await globalPage.getByPlaceholder("What's your idea?").click()
     const titleInput = globalPage.getByPlaceholder("What's your idea?")
-    await expect(titleInput).toBeVisible({ timeout: 5000 })
+    const editor = globalPage.locator('.tiptap')
+    await expect(editor).toBeVisible({ timeout: 5000 })
 
     await titleInput.fill(uniqueTitle)
 
-    const editor = globalPage.locator('.tiptap')
     await editor.click()
     await globalPage.keyboard.type('Testing author attribution')
 
     await globalPage.getByRole('button', { name: /^submit$/i }).click()
-    await expect(titleInput).not.toBeVisible({ timeout: 10000 })
+    await expect(editor).not.toBeVisible({ timeout: 10000 })
 
     // Find the post and verify author is shown
     const postCard = globalPage.locator('a[href*="/posts/"]').filter({ hasText: uniqueTitle })

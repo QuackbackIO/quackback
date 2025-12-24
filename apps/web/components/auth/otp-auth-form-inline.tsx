@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, InfoIcon, Mail, ArrowLeft, Github } from 'lucide-react'
 import { openAuthPopup, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
+import { authClient } from '@/lib/auth/client'
 
 interface OrgAuthConfig {
   found: boolean
@@ -37,15 +38,17 @@ interface OTPAuthFormInlineProps {
   onModeSwitch?: (mode: 'login' | 'signup') => void
 }
 
-type Step = 'email' | 'code' | 'name'
+type Step = 'email' | 'code'
 
 /**
  * Inline OTP Auth Form for use in dialogs/popovers
  *
+ * Uses Better-auth's emailOTP plugin for passwordless authentication.
+ *
  * Unlike the full-page OTPAuthForm, this version:
- * - Opens OAuth/SSO in popup windows instead of redirecting
- * - Opens OTP trust-login in popup for session establishment
- * - Signals success via callback (triggered by BroadcastChannel in parent)
+ * - Opens OAuth in popup windows instead of redirecting
+ * - Signals success via BroadcastChannel to parent
+ * - Better-auth automatically creates users if they don't exist
  */
 export function OTPAuthFormInline({
   mode,
@@ -57,20 +60,17 @@ export function OTPAuthFormInline({
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
-  const [name, setName] = useState('')
   const [error, setError] = useState('')
   // Track which specific action is loading (null = not loading)
   const [loadingAction, setLoadingAction] = useState<
-    'email' | 'code' | 'name' | 'google' | 'github' | 'microsoft' | null
+    'email' | 'code' | 'google' | 'github' | 'microsoft' | null
   >(null)
-  const [_codeSent, setCodeSent] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
   const [loadingInvitation, setLoadingInvitation] = useState(!!invitationId)
   const [popupBlocked, setPopupBlocked] = useState(false)
 
   const codeInputRef = useRef<HTMLInputElement>(null)
-  const nameInputRef = useRef<HTMLInputElement>(null)
 
   // Track popup windows
   const { trackPopup, clearPopup, hasPopup, focusPopup } = usePopupTracker({
@@ -117,13 +117,10 @@ export function OTPAuthFormInline({
     }
   }, [resendCooldown])
 
-  // Focus inputs when step changes
+  // Focus code input when step changes
   useEffect(() => {
     if (step === 'code' && codeInputRef.current) {
       codeInputRef.current.focus()
-    }
-    if (step === 'name' && nameInputRef.current) {
-      nameInputRef.current.focus()
     }
   }, [step])
 
@@ -139,18 +136,15 @@ export function OTPAuthFormInline({
     setLoadingAction('email')
 
     try {
-      const response = await fetch('/api/auth/tenant-otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'sign-in',
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to send code')
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to send code')
       }
 
-      setCodeSent(true)
       setStep('code')
       setResendCooldown(60)
     } catch (err) {
@@ -160,51 +154,25 @@ export function OTPAuthFormInline({
     }
   }
 
-  const verifyCode = async (providedName?: string) => {
+  const verifyCode = async () => {
     setError('')
-    // Use 'name' action if we're on the name step, otherwise 'code'
-    setLoadingAction(step === 'name' ? 'name' : 'code')
+    setLoadingAction('code')
 
     try {
-      const response = await fetch('/api/auth/tenant-otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          code,
-          name: providedName || name || undefined,
-          invitationId: invitationId || undefined,
-          context: 'portal',
-          // No popup flag - we call trust-login inline via fetch
-        }),
+      const result = await authClient.signIn.emailOtp({
+        email,
+        otp: code,
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to verify code')
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to verify code')
       }
 
-      if (data.action === 'needsSignup') {
-        // User doesn't exist, need to collect name
-        setStep('name')
-        setLoadingAction(null)
-      } else if (data.redirectUrl) {
-        // Success - call trust-login to establish session (same origin, no popup needed)
-        try {
-          await fetch(data.redirectUrl, {
-            credentials: 'include',
-            redirect: 'follow',
-          })
-          // Session cookie is now set, broadcast success to other components
-          const { postAuthSuccess } = await import('@/lib/hooks/use-auth-broadcast')
-          postAuthSuccess()
-          // Loading will be cleared when parent handles the broadcast
-        } catch {
-          setError('Failed to complete sign in')
-          setLoadingAction(null)
-        }
-      }
+      // Success - session is now established
+      // Broadcast success to other components (dialog will close, page will refresh)
+      const { postAuthSuccess } = await import('@/lib/hooks/use-auth-broadcast')
+      postAuthSuccess()
+      // Loading will be cleared when parent handles the broadcast
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify code')
       setLoadingAction(null)
@@ -229,15 +197,6 @@ export function OTPAuthFormInline({
     verifyCode()
   }
 
-  const handleNameSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) {
-      setError('Name is required')
-      return
-    }
-    verifyCode(name)
-  }
-
   const handleResend = () => {
     if (resendCooldown > 0) return
     setCode('')
@@ -246,12 +205,8 @@ export function OTPAuthFormInline({
 
   const handleBack = () => {
     setError('')
-    if (step === 'code') {
-      setStep('email')
-      setCode('')
-    } else if (step === 'name') {
-      setStep('code')
-    }
+    setStep('email')
+    setCode('')
   }
 
   /**
@@ -575,59 +530,6 @@ export function OTPAuthFormInline({
                 : "Didn't receive a code? Resend"}
             </button>
           </div>
-        </form>
-      )}
-
-      {/* Step 3: Name Input (for signup when user doesn't exist) */}
-      {step === 'name' && (
-        <form onSubmit={handleNameSubmit} className="space-y-4">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back
-          </button>
-
-          <div className="rounded-lg bg-muted/50 p-4">
-            <p className="text-sm text-center">Email verified! Let&apos;s set up your account.</p>
-          </div>
-
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="name" className="text-sm font-medium">
-              Your name
-            </label>
-            <Input
-              ref={nameInputRef}
-              id="name"
-              type="text"
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={loadingAction !== null}
-              autoComplete="name"
-            />
-          </div>
-
-          <Button
-            type="submit"
-            disabled={loadingAction !== null || !name.trim()}
-            className="w-full"
-          >
-            {loadingAction === 'name' ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating account...
-              </>
-            ) : (
-              'Create account'
-            )}
-          </Button>
         </form>
       )}
     </div>
