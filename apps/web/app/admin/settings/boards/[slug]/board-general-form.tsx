@@ -14,7 +14,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { useUpdateBoard } from '@/lib/hooks/use-board-queries'
+import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
 import type { BoardId, WorkspaceId } from '@quackback/ids'
 
 interface Board {
@@ -30,7 +30,7 @@ interface BoardGeneralFormProps {
 }
 
 export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) {
-  const mutation = useUpdateBoard(workspaceId)
+  const mutation = useUpdateBoard({ workspaceId })
 
   const form = useForm<UpdateBoardInput>({
     resolver: standardSchemaResolver(updateBoardSchema),
@@ -42,7 +42,7 @@ export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) 
 
   function onSubmit(data: UpdateBoardInput) {
     mutation.mutate({
-      boardId: board.id,
+      id: board.id,
       name: data.name,
       description: data.description,
     })

@@ -13,7 +13,7 @@ import {
   FormItem,
   FormLabel,
 } from '@/components/ui/form'
-import { useUpdateBoard } from '@/lib/hooks/use-board-queries'
+import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
 import { Globe, Lock } from 'lucide-react'
 import type { WorkspaceId } from '@quackback/ids'
 
@@ -27,7 +27,7 @@ interface FormValues {
 }
 
 export function BoardAccessForm({ board, workspaceId }: BoardAccessFormProps) {
-  const mutation = useUpdateBoard(workspaceId)
+  const mutation = useUpdateBoard({ workspaceId })
 
   const form = useForm<FormValues>({
     defaultValues: {
@@ -37,7 +37,7 @@ export function BoardAccessForm({ board, workspaceId }: BoardAccessFormProps) {
 
   async function onSubmit(data: FormValues) {
     mutation.mutate({
-      boardId: board.id,
+      id: board.id,
       isPublic: data.isPublic,
     })
   }
