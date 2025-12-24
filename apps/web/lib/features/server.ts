@@ -29,7 +29,7 @@ export interface WorkspaceFeatures {
  * Cached per request for efficiency.
  */
 export const getWorkspaceFeatures = cache(
-  async (workspaceId: WorkspaceId): Promise<WorkspaceFeatures> => {
+  async (_workspaceId: WorkspaceId): Promise<WorkspaceFeatures> => {
     // OSS (self-hosted): all features enabled, no limits
     if (isSelfHosted()) {
       return {
@@ -47,7 +47,7 @@ export const getWorkspaceFeatures = cache(
     }
 
     // Cloud: check subscription
-    const subscription = await getSubscription(workspaceId)
+    const subscription = await getSubscription()
 
     // No active subscription = Free tier
     if (!subscription || !isSubscriptionActive(subscription)) {

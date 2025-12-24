@@ -5,7 +5,7 @@
  * extracted to be used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import { db, eq, and, settings, member, posts } from '@quackback/db'
+import { db, eq, settings, member, posts } from '@quackback/db'
 import type {
   UserNotificationJobData,
   UserNotificationJobResult,
@@ -14,7 +14,7 @@ import type {
 } from '../types'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
-import type { WorkspaceId, PostId, UserId } from '@quackback/ids'
+import type { PostId, UserId } from '@quackback/ids'
 
 /**
  * Options for processing user notifications.
@@ -141,7 +141,7 @@ export async function processUserNotification(
         const isTeamMember = commenterMember?.role !== 'user'
 
         // Get board slug for URL
-        const boardSlug = await getPostBoardSlug(postId, workspaceId)
+        const boardSlug = await getPostBoardSlug(postId)
 
         for (const subscriber of subscribers) {
           // Skip the actor (don't notify about own comments)
@@ -245,7 +245,7 @@ function getRootUrl(): string {
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: PostId, _workspaceId: WorkspaceId): Promise<string | null> {
+async function getPostBoardSlug(postId: PostId): Promise<string | null> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     columns: { boardId: true },

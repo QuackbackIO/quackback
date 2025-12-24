@@ -13,13 +13,12 @@ import {
 } from '@quackback/integrations'
 import type { IntegrationJobData, IntegrationJobResult } from '../types'
 import type { StateAdapter } from '../adapters'
-import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
+import type { IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
  * Load integration configuration from the database.
  */
 export async function loadIntegrationConfig(
-  _workspaceId: WorkspaceId,
   integrationId: IntegrationId,
   mappingId: EventMappingId
 ) {
@@ -65,11 +64,7 @@ export async function processIntegration(
 
   try {
     // Load integration config from database
-    const { integration, mapping } = await loadIntegrationConfig(
-      workspaceId,
-      integrationId,
-      mappingId
-    )
+    const { integration, mapping } = await loadIntegrationConfig(integrationId, mappingId)
 
     if (!integration || !mapping) {
       console.error(`[Integration] Integration or mapping not found: ${integrationId}/${mappingId}`)

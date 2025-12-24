@@ -196,7 +196,6 @@ export function InboxContainer({
             onClearFilters={clearFilters}
             headerAction={
               <CreatePostDialog
-                workspaceId={workspaceId}
                 boards={boards}
                 tags={tags}
                 statuses={statuses}

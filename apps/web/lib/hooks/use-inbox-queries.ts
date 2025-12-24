@@ -77,7 +77,7 @@ async function fetchInboxPosts(
   return result.data as InboxPostListResult
 }
 
-async function fetchPostDetail(postId: PostId, _workspaceId: WorkspaceId): Promise<PostDetails> {
+async function fetchPostDetail(postId: PostId): Promise<PostDetails> {
   const result = await getPostWithDetailsAction({
     id: postId,
   })
@@ -133,7 +133,7 @@ interface UsePostDetailOptions {
 export function usePostDetail({ postId, workspaceId, enabled = true }: UsePostDetailOptions) {
   return useQuery({
     queryKey: inboxKeys.detail(postId!, workspaceId),
-    queryFn: () => fetchPostDetail(postId!, workspaceId),
+    queryFn: () => fetchPostDetail(postId!),
     enabled: enabled && !!postId,
     staleTime: 30 * 1000,
   })
@@ -846,7 +846,7 @@ interface CreatePostResponse {
   boardId: string
 }
 
-export function useCreatePost(_workspaceId: WorkspaceId) {
+export function useCreatePost() {
   const queryClient = useQueryClient()
 
   return useMutation({

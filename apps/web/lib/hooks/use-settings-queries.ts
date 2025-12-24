@@ -31,7 +31,7 @@ interface HeaderLogoData {
 }
 
 // Logo hooks (simplified - returns initial data only for now)
-export function useWorkspaceLogo(_workspaceId: string) {
+export function useWorkspaceLogo() {
   return useQuery({
     queryKey: settingsKeys.logo(),
     queryFn: async (): Promise<LogoData> => {
@@ -42,7 +42,7 @@ export function useWorkspaceLogo(_workspaceId: string) {
   })
 }
 
-export function useUploadWorkspaceLogo(_workspaceId: string) {
+export function useUploadWorkspaceLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (file: Blob): Promise<void> => {
@@ -62,7 +62,7 @@ export function useUploadWorkspaceLogo(_workspaceId: string) {
   })
 }
 
-export function useDeleteWorkspaceLogo(_workspaceId: string) {
+export function useDeleteWorkspaceLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (): Promise<void> => {
@@ -78,7 +78,7 @@ export function useDeleteWorkspaceLogo(_workspaceId: string) {
 }
 
 // Header logo hooks (simplified)
-export function useWorkspaceHeaderLogo(_workspaceId: string) {
+export function useWorkspaceHeaderLogo() {
   return useQuery({
     queryKey: settingsKeys.headerLogo(),
     queryFn: async (): Promise<HeaderLogoData> => {
@@ -93,7 +93,7 @@ export function useWorkspaceHeaderLogo(_workspaceId: string) {
   })
 }
 
-export function useUploadWorkspaceHeaderLogo(_workspaceId: string) {
+export function useUploadWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (file: Blob): Promise<void> => {
@@ -113,7 +113,7 @@ export function useUploadWorkspaceHeaderLogo(_workspaceId: string) {
   })
 }
 
-export function useDeleteWorkspaceHeaderLogo(_workspaceId: string) {
+export function useDeleteWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (): Promise<void> => {
@@ -128,7 +128,7 @@ export function useDeleteWorkspaceHeaderLogo(_workspaceId: string) {
   })
 }
 
-export function useUpdateHeaderDisplayMode(_workspaceId: string) {
+export function useUpdateHeaderDisplayMode() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (mode: string): Promise<void> => {
@@ -145,7 +145,7 @@ export function useUpdateHeaderDisplayMode(_workspaceId: string) {
   })
 }
 
-export function useUpdateHeaderDisplayName(_workspaceId: string) {
+export function useUpdateHeaderDisplayName() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (name: string | null): Promise<void> => {

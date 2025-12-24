@@ -38,7 +38,7 @@ interface HeaderBrandingProps {
 }
 
 export function HeaderBranding({
-  workspaceId,
+  workspaceId: _workspaceId,
   workspaceName,
   logoUrl,
   initialHeaderLogoUrl,
@@ -50,11 +50,11 @@ export function HeaderBranding({
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
   // TanStack Query hooks
-  const { data: headerData } = useWorkspaceHeaderLogo(workspaceId)
-  const uploadMutation = useUploadWorkspaceHeaderLogo(workspaceId)
-  const updateModeMutation = useUpdateHeaderDisplayMode(workspaceId)
-  const updateNameMutation = useUpdateHeaderDisplayName(workspaceId)
-  const deleteMutation = useDeleteWorkspaceHeaderLogo(workspaceId)
+  const { data: headerData } = useWorkspaceHeaderLogo()
+  const uploadMutation = useUploadWorkspaceHeaderLogo()
+  const updateModeMutation = useUpdateHeaderDisplayMode()
+  const updateNameMutation = useUpdateHeaderDisplayName()
+  const deleteMutation = useDeleteWorkspaceHeaderLogo()
 
   // Use query data if available, fall back to initial props
   const headerLogoUrl = headerData?.headerLogoUrl ?? initialHeaderLogoUrl

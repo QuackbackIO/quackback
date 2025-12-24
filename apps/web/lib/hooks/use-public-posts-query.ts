@@ -300,7 +300,7 @@ export function useCreatePublicPost() {
 // Voted Posts Query Hook (using server action)
 // ============================================================================
 
-async function fetchVotedPosts(_workspaceId: string): Promise<Set<string>> {
+async function fetchVotedPosts(): Promise<Set<string>> {
   const result = await getVotedPostsAction({})
   if (!result.success) {
     return new Set()
@@ -336,7 +336,7 @@ export function useVotedPosts({
       if (!workspaceId) {
         return new Set<string>()
       }
-      return fetchVotedPosts(workspaceId)
+      return fetchVotedPosts()
     },
     initialData: new Set(initialVotedIds),
     staleTime: Infinity, // Don't auto-refetch, we control when to refetch
