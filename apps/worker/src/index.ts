@@ -38,7 +38,7 @@ const importWorker = new Worker<ImportJobData, ImportJobResult>(
     // Process in batches with progress updates
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE)
-      const batchResult = await processBatch(batch, job.data.workspaceId, job.data.boardId, i)
+      const batchResult = await processBatch(batch, job.data.boardId, i)
       result = mergeResults(result, batchResult)
 
       // Report progress
