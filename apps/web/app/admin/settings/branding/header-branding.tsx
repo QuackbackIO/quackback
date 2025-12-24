@@ -25,7 +25,6 @@ const HEADER_LOGO_MAX_WIDTH = 400
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
 interface HeaderBrandingProps {
-  workspaceId: string
   workspaceName: string
   /** Square logo URL (for preview) */
   logoUrl?: string | null
@@ -38,7 +37,6 @@ interface HeaderBrandingProps {
 }
 
 export function HeaderBranding({
-  workspaceId: _workspaceId,
   workspaceName,
   logoUrl,
   initialHeaderLogoUrl,

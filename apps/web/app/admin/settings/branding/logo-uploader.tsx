@@ -12,17 +12,12 @@ import {
 } from '@/lib/hooks/use-settings-queries'
 
 interface LogoUploaderProps {
-  workspaceId: string
   workspaceName: string
   /** Initial logo URL from server (for SSR) */
   initialLogoUrl?: string | null
 }
 
-export function LogoUploader({
-  workspaceId: _workspaceId,
-  workspaceName,
-  initialLogoUrl,
-}: LogoUploaderProps) {
+export function LogoUploader({ workspaceName, initialLogoUrl }: LogoUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)

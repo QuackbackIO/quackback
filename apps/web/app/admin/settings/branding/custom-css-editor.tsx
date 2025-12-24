@@ -8,7 +8,6 @@ import { Check, Loader2, Info, ChevronDown } from 'lucide-react'
 import { updateCustomCssAction } from '@/lib/actions/settings'
 
 interface CustomCssEditorProps {
-  workspaceId: string
   initialCustomCss: string | null
 }
 
@@ -85,7 +84,7 @@ html:root {
   );
 }`
 
-export function CustomCssEditor({ workspaceId, initialCustomCss }: CustomCssEditorProps) {
+export function CustomCssEditor({ initialCustomCss }: CustomCssEditorProps) {
   const [css, setCss] = useState(initialCustomCss || '')
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
