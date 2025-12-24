@@ -157,7 +157,6 @@ export function RoadmapAdmin({ workspaceId, statuses }: RoadmapAdminProps) {
     <div className="flex h-[calc(100vh-69px)] bg-background">
       {/* Sidebar */}
       <RoadmapSidebar
-        workspaceId={workspaceId}
         selectedRoadmapId={selectedRoadmapId}
         onSelectRoadmap={setSelectedRoadmapId}
       />
@@ -190,7 +189,6 @@ export function RoadmapAdmin({ workspaceId, statuses }: RoadmapAdminProps) {
                   {statuses.map((status) => (
                     <AdminRoadmapColumn
                       key={status.id}
-                      workspaceId={workspaceId}
                       roadmapId={selectedRoadmapId! as `roadmap_${string}`}
                       statusId={status.id}
                       title={status.name}
