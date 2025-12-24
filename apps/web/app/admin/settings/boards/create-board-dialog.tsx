@@ -35,11 +35,10 @@ interface CreateBoardDialogProps {
   workspaceId: WorkspaceId
 }
 
-export function CreateBoardDialog({ workspaceId }: CreateBoardDialogProps) {
+export function CreateBoardDialog({ workspaceId: _workspaceId }: CreateBoardDialogProps) {
   const [open, setOpen] = useState(false)
   const router = useRouter()
   const mutation = useCreateBoard({
-    workspaceId,
     onSuccess: (board) => {
       setOpen(false)
       form.reset()

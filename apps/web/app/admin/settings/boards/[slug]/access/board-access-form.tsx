@@ -26,8 +26,8 @@ interface FormValues {
   isPublic: boolean
 }
 
-export function BoardAccessForm({ board, workspaceId }: BoardAccessFormProps) {
-  const mutation = useUpdateBoard({ workspaceId })
+export function BoardAccessForm({ board, workspaceId: _workspaceId }: BoardAccessFormProps) {
+  const mutation = useUpdateBoard()
 
   const form = useForm<FormValues>({
     defaultValues: {

@@ -10,7 +10,7 @@ interface TeamHeaderProps {
   workspaceName: string
 }
 
-export function TeamHeader({ workspaceId, workspaceName }: TeamHeaderProps) {
+export function TeamHeader({ workspaceId: _workspaceId, workspaceName }: TeamHeaderProps) {
   const [showInviteDialog, setShowInviteDialog] = useState(false)
 
   return (
@@ -33,10 +33,7 @@ export function TeamHeader({ workspaceId, workspaceName }: TeamHeaderProps) {
         </Button>
       </div>
 
-      <InviteMemberDialog
-        open={showInviteDialog}
-        onClose={() => setShowInviteDialog(false)}
-      />
+      <InviteMemberDialog open={showInviteDialog} onClose={() => setShowInviteDialog(false)} />
     </>
   )
 }

@@ -29,10 +29,9 @@ interface DeleteBoardFormProps {
   workspaceId: WorkspaceId
 }
 
-export function DeleteBoardForm({ board, workspaceId }: DeleteBoardFormProps) {
+export function DeleteBoardForm({ board, workspaceId: _workspaceId }: DeleteBoardFormProps) {
   const router = useRouter()
   const mutation = useDeleteBoard({
-    workspaceId,
     onSuccess: () => {
       router.push(`/admin/settings/boards`)
       router.refresh()

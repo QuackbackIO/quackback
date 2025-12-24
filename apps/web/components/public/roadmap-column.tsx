@@ -21,7 +21,7 @@ interface RoadmapColumnProps {
 }
 
 export function RoadmapColumn({
-  workspaceId,
+  workspaceId: _workspaceId,
   roadmapId,
   statusId,
   title,
@@ -31,7 +31,6 @@ export function RoadmapColumn({
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
-      workspaceId,
       roadmapId,
       statusId,
     }

@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query'
 import type { UsersFilters } from '@/app/admin/users/use-users-filters'
 import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@quackback/domain'
-import type { WorkspaceId, MemberId } from '@quackback/ids'
+import type { MemberId } from '@quackback/ids'
 import {
   listPortalUsersAction,
   getPortalUserAction,
@@ -23,11 +23,9 @@ import {
 export const usersKeys = {
   all: ['users'] as const,
   lists: () => [...usersKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId, filters: UsersFilters) =>
-    [...usersKeys.lists(), workspaceId, filters] as const,
+  list: (filters: UsersFilters) => [...usersKeys.lists(), filters] as const,
   details: () => [...usersKeys.all, 'detail'] as const,
-  detail: (memberId: MemberId, workspaceId: WorkspaceId) =>
-    [...usersKeys.details(), memberId, workspaceId] as const,
+  detail: (memberId: MemberId) => [...usersKeys.details(), memberId] as const,
 }
 
 // ============================================================================
@@ -35,12 +33,11 @@ export const usersKeys = {
 // ============================================================================
 
 interface UsePortalUsersOptions {
-  workspaceId: WorkspaceId
   filters: UsersFilters
   initialData?: PortalUserListResult
 }
 
-export function usePortalUsers({ workspaceId, filters, initialData }: UsePortalUsersOptions) {
+export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) {
   // Only use initialData when there are no active filters
   // Otherwise React Query would use stale server-rendered data for filtered queries
   const hasActiveFilters = !!(
@@ -52,7 +49,7 @@ export function usePortalUsers({ workspaceId, filters, initialData }: UsePortalU
   const useInitialData = initialData && !hasActiveFilters
 
   return useInfiniteQuery({
-    queryKey: usersKeys.list(workspaceId, filters),
+    queryKey: usersKeys.list(filters),
     queryFn: async ({ pageParam }): Promise<PortalUserListResult> => {
       const result = await listPortalUsersAction({
         search: filters.search,
@@ -90,13 +87,12 @@ export function flattenUsers(
 
 interface UseUserDetailOptions {
   memberId: MemberId | null
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
-export function useUserDetail({ memberId, workspaceId, enabled = true }: UseUserDetailOptions) {
+export function useUserDetail({ memberId, enabled = true }: UseUserDetailOptions) {
   return useQuery({
-    queryKey: usersKeys.detail(memberId!, workspaceId),
+    queryKey: usersKeys.detail(memberId!),
     queryFn: async (): Promise<PortalUserDetail> => {
       const result = await getPortalUserAction({
         memberId: memberId!,
@@ -119,7 +115,7 @@ export function useUserDetail({ memberId, workspaceId, enabled = true }: UseUser
  * Hook to remove a portal user from an organization.
  * This deletes their member record and org-scoped user account.
  */
-export function useRemovePortalUser(workspaceId: WorkspaceId) {
+export function useRemovePortalUser() {
   const queryClient = useQueryClient()
 
   return useMutation({

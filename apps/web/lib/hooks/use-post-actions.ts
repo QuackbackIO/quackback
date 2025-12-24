@@ -20,7 +20,7 @@ import {
   type RestorePostInput,
 } from '@/lib/actions/posts'
 import type { ActionError } from '@/lib/actions/types'
-import type { WorkspaceId, PostId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -29,8 +29,7 @@ import type { WorkspaceId, PostId } from '@quackback/ids'
 export const postKeys = {
   all: ['posts'] as const,
   lists: () => [...postKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId, filters?: Record<string, unknown>) =>
-    [...postKeys.lists(), workspaceId, filters] as const,
+  list: (filters?: Record<string, unknown>) => [...postKeys.lists(), filters] as const,
   details: () => [...postKeys.all, 'detail'] as const,
   detail: (id: PostId) => [...postKeys.details(), id] as const,
 }
@@ -40,7 +39,6 @@ export const postKeys = {
 // ============================================================================
 
 interface UseInboxPostsOptions {
-  workspaceId: WorkspaceId
   boardIds?: string[]
   statusIds?: string[]
   statusSlugs?: string[]
@@ -60,7 +58,6 @@ interface UseInboxPostsOptions {
  * Hook to list inbox posts with filtering.
  */
 export function useInboxPosts({
-  workspaceId,
   boardIds,
   statusIds,
   statusSlugs,
@@ -91,7 +88,7 @@ export function useInboxPosts({
   }
 
   return useQuery({
-    queryKey: postKeys.list(workspaceId, filters),
+    queryKey: postKeys.list(filters),
     queryFn: async () => {
       const result = await listInboxPostsAction({
         boardIds,
@@ -118,7 +115,6 @@ export function useInboxPosts({
 }
 
 interface UsePostDetailsOptions {
-  workspaceId: WorkspaceId
   postId: PostId
   enabled?: boolean
 }
@@ -126,7 +122,7 @@ interface UsePostDetailsOptions {
 /**
  * Hook to get post details including comments and avatars.
  */
-export function usePostDetails({ workspaceId, postId, enabled = true }: UsePostDetailsOptions) {
+export function usePostDetails({ postId, enabled = true }: UsePostDetailsOptions) {
   return useQuery({
     queryKey: postKeys.detail(postId),
     queryFn: async () => {

@@ -29,8 +29,8 @@ interface BoardGeneralFormProps {
   workspaceId: WorkspaceId
 }
 
-export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) {
-  const mutation = useUpdateBoard({ workspaceId })
+export function BoardGeneralForm({ board, workspaceId: _workspaceId }: BoardGeneralFormProps) {
+  const mutation = useUpdateBoard()
 
   const form = useForm<UpdateBoardInput>({
     resolver: standardSchemaResolver(updateBoardSchema),

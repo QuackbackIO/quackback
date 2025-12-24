@@ -46,7 +46,10 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-export function PortalAuthSettings({ workspaceId, initialConfig }: PortalAuthSettingsProps) {
+export function PortalAuthSettings({
+  workspaceId: _workspaceId,
+  initialConfig,
+}: PortalAuthSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)

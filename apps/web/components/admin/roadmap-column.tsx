@@ -23,7 +23,7 @@ interface AdminRoadmapColumnProps {
 }
 
 export function AdminRoadmapColumn({
-  workspaceId,
+  workspaceId: _workspaceId,
   roadmapId,
   statusId,
   title,
@@ -43,7 +43,6 @@ export function AdminRoadmapColumn({
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } =
     useRoadmapPostsByRoadmap({
-      workspaceId,
       roadmapId,
       statusId,
     })
