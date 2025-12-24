@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Roadmap } from '@/lib/db'
-import type { WorkspaceId, RoadmapId } from '@quackback/ids'
+import type { RoadmapId } from '@quackback/ids'
 import {
   listRoadmapsAction,
   createRoadmapAction,
@@ -14,22 +14,21 @@ import { listPublicRoadmapsAction } from '@/lib/actions/public-posts'
 
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
-  list: (workspaceId: WorkspaceId) => [...roadmapsKeys.all, 'list', workspaceId] as const,
-  publicList: (workspaceId: WorkspaceId) => [...roadmapsKeys.all, 'public', workspaceId] as const,
+  list: () => [...roadmapsKeys.all, 'list'] as const,
+  publicList: () => [...roadmapsKeys.all, 'public'] as const,
   detail: (roadmapId: RoadmapId) => [...roadmapsKeys.all, 'detail', roadmapId] as const,
 }
 
 interface UseRoadmapsOptions {
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
 /**
- * Hook to fetch all roadmaps for an organization (admin)
+ * Hook to fetch all roadmaps (admin)
  */
-export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions) {
+export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
-    queryKey: roadmapsKeys.list(workspaceId),
+    queryKey: roadmapsKeys.list(),
     queryFn: async (): Promise<Roadmap[]> => {
       const result = await listRoadmapsAction({})
       if (!result.success) {
@@ -42,11 +41,11 @@ export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions)
 }
 
 /**
- * Hook to fetch public roadmaps for an organization (portal)
+ * Hook to fetch public roadmaps (portal)
  */
-export function usePublicRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions) {
+export function usePublicRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
-    queryKey: roadmapsKeys.publicList(workspaceId),
+    queryKey: roadmapsKeys.publicList(),
     queryFn: async (): Promise<Roadmap[]> => {
       const result = await listPublicRoadmapsAction({})
       if (!result.success) {
@@ -68,7 +67,7 @@ interface CreateRoadmapInput {
 /**
  * Hook to create a new roadmap
  */
-export function useCreateRoadmap(workspaceId: WorkspaceId) {
+export function useCreateRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -85,7 +84,7 @@ export function useCreateRoadmap(workspaceId: WorkspaceId) {
       return result.data as Roadmap
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
   })
 }
@@ -99,7 +98,7 @@ interface UpdateRoadmapInput {
 /**
  * Hook to update a roadmap
  */
-export function useUpdateRoadmap(workspaceId: WorkspaceId) {
+export function useUpdateRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -122,7 +121,7 @@ export function useUpdateRoadmap(workspaceId: WorkspaceId) {
       return result.data as Roadmap
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
   })
 }
@@ -130,7 +129,7 @@ export function useUpdateRoadmap(workspaceId: WorkspaceId) {
 /**
  * Hook to delete a roadmap
  */
-export function useDeleteRoadmap(workspaceId: WorkspaceId) {
+export function useDeleteRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -143,7 +142,7 @@ export function useDeleteRoadmap(workspaceId: WorkspaceId) {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
   })
 }
@@ -151,7 +150,7 @@ export function useDeleteRoadmap(workspaceId: WorkspaceId) {
 /**
  * Hook to reorder roadmaps
  */
-export function useReorderRoadmaps(workspaceId: WorkspaceId) {
+export function useReorderRoadmaps() {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -164,7 +163,7 @@ export function useReorderRoadmaps(workspaceId: WorkspaceId) {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list(workspaceId) })
+      queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
   })
 }

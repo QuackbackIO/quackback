@@ -12,7 +12,6 @@ import {
   type NotificationPreferences,
 } from '@/lib/actions/user'
 import type { ActionError } from '@/lib/actions/types'
-import type { WorkspaceId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -22,8 +21,7 @@ export const userKeys = {
   all: ['user'] as const,
   profile: () => [...userKeys.all, 'profile'] as const,
   role: () => [...userKeys.all, 'role'] as const,
-  notificationPrefs: (workspaceId: WorkspaceId) =>
-    [...userKeys.all, 'notificationPrefs', workspaceId] as const,
+  notificationPrefs: () => [...userKeys.all, 'notificationPrefs'] as const,
 }
 
 // ============================================================================
@@ -75,19 +73,17 @@ export function useUserRole({ enabled = true }: UseUserRoleOptions = {}) {
 }
 
 interface UseNotificationPreferencesOptions {
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
 /**
- * Hook to get the user's notification preferences for a workspace.
+ * Hook to get the user's notification preferences.
  */
 export function useNotificationPreferences({
-  workspaceId,
   enabled = true,
-}: UseNotificationPreferencesOptions) {
+}: UseNotificationPreferencesOptions = {}) {
   return useQuery({
-    queryKey: userKeys.notificationPrefs(workspaceId),
+    queryKey: userKeys.notificationPrefs(),
     queryFn: async (): Promise<NotificationPreferences> => {
       const result = await getNotificationPreferencesAction({})
       if (!result.success) {
@@ -168,7 +164,6 @@ export function useRemoveAvatar({ onSuccess, onError }: UseRemoveAvatarOptions =
 }
 
 interface UseUpdateNotificationPreferencesOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (prefs: NotificationPreferences) => void
   onError?: (error: ActionError) => void
 }
@@ -177,10 +172,9 @@ interface UseUpdateNotificationPreferencesOptions {
  * Hook to update notification preferences.
  */
 export function useUpdateNotificationPreferences({
-  workspaceId,
   onSuccess,
   onError,
-}: UseUpdateNotificationPreferencesOptions) {
+}: UseUpdateNotificationPreferencesOptions = {}) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -198,7 +192,7 @@ export function useUpdateNotificationPreferences({
       return result.data
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(userKeys.notificationPrefs(workspaceId), data)
+      queryClient.setQueryData(userKeys.notificationPrefs(), data)
       onSuccess?.(data)
     },
     onError: (error: ActionError) => {

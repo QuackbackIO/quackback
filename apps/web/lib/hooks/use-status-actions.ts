@@ -15,7 +15,7 @@ import {
 } from '@/lib/actions/statuses'
 import type { PostStatusEntity } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
-import type { StatusId, WorkspaceId } from '@quackback/ids'
+import type { StatusId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -24,7 +24,6 @@ import type { StatusId, WorkspaceId } from '@quackback/ids'
 export const statusKeys = {
   all: ['statuses'] as const,
   lists: () => [...statusKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId) => [...statusKeys.lists(), workspaceId] as const,
   detail: (id: StatusId) => [...statusKeys.all, 'detail', id] as const,
 }
 
@@ -33,16 +32,15 @@ export const statusKeys = {
 // ============================================================================
 
 interface UseStatusesOptions {
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
 /**
- * Hook to list all statuses for a workspace.
+ * Hook to list all statuses.
  */
-export function useStatuses({ workspaceId, enabled = true }: UseStatusesOptions) {
+export function useStatuses({ enabled = true }: UseStatusesOptions = {}) {
   return useQuery({
-    queryKey: statusKeys.list(workspaceId),
+    queryKey: statusKeys.lists(),
     queryFn: async () => {
       const result = await listStatusesAction({})
       if (!result.success) {
@@ -60,7 +58,6 @@ export function useStatuses({ workspaceId, enabled = true }: UseStatusesOptions)
 // ============================================================================
 
 interface UseCreateStatusOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (status: PostStatusEntity) => void
   onError?: (error: ActionError) => void
 }
@@ -70,22 +67,20 @@ interface UseCreateStatusOptions {
  *
  * @example
  * const createStatus = useCreateStatus({
- *   workspaceId,
  *   onSuccess: (status) => toast.success(`Created "${status.name}"`),
  *   onError: (error) => toast.error(error.message),
  * })
  *
  * createStatus.mutate({
- *   workspaceId,
  *   name: 'In Progress',
  *   slug: 'in_progress',
  *   color: '#3b82f6',
  *   category: 'active',
  * })
  */
-export function useCreateStatus({ workspaceId, onSuccess, onError }: UseCreateStatusOptions) {
+export function useCreateStatus({ onSuccess, onError }: UseCreateStatusOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.list(workspaceId)
+  const listKey = statusKeys.lists()
 
   return useActionMutation<
     CreateStatusInput,
@@ -121,7 +116,6 @@ export function useCreateStatus({ workspaceId, onSuccess, onError }: UseCreateSt
 }
 
 interface UseUpdateStatusOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (status: PostStatusEntity) => void
   onError?: (error: ActionError) => void
 }
@@ -131,15 +125,14 @@ interface UseUpdateStatusOptions {
  *
  * @example
  * const updateStatus = useUpdateStatus({
- *   workspaceId,
  *   onSuccess: (status) => toast.success(`Updated "${status.name}"`),
  * })
  *
- * updateStatus.mutate({ workspaceId, id: status.id, name: 'New Name' })
+ * updateStatus.mutate({ id: status.id, name: 'New Name' })
  */
-export function useUpdateStatus({ workspaceId, onSuccess, onError }: UseUpdateStatusOptions) {
+export function useUpdateStatus({ onSuccess, onError }: UseUpdateStatusOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.list(workspaceId)
+  const listKey = statusKeys.lists()
 
   return useActionMutation<
     UpdateStatusInput,
@@ -170,7 +163,6 @@ export function useUpdateStatus({ workspaceId, onSuccess, onError }: UseUpdateSt
 }
 
 interface UseDeleteStatusOptions {
-  workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
@@ -180,15 +172,14 @@ interface UseDeleteStatusOptions {
  *
  * @example
  * const deleteStatus = useDeleteStatus({
- *   workspaceId,
  *   onSuccess: () => toast.success('Status deleted'),
  * })
  *
- * deleteStatus.mutate({ workspaceId, id: status.id })
+ * deleteStatus.mutate({ id: status.id })
  */
-export function useDeleteStatus({ workspaceId, onSuccess, onError }: UseDeleteStatusOptions) {
+export function useDeleteStatus({ onSuccess, onError }: UseDeleteStatusOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.list(workspaceId)
+  const listKey = statusKeys.lists()
 
   return useActionMutation<
     DeleteStatusInput,
@@ -211,25 +202,23 @@ export function useDeleteStatus({ workspaceId, onSuccess, onError }: UseDeleteSt
 }
 
 interface UseReorderStatusesOptions {
-  workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
 
 /**
- * Hook to reorder statuses within a workspace.
+ * Hook to reorder statuses.
  *
  * @example
  * const reorderStatuses = useReorderStatuses({
- *   workspaceId,
  *   onSuccess: () => toast.success('Statuses reordered'),
  * })
  *
- * reorderStatuses.mutate({ workspaceId, statusIds: ['status_1', 'status_2', 'status_3'] })
+ * reorderStatuses.mutate({ statusIds: ['status_1', 'status_2', 'status_3'] })
  */
-export function useReorderStatuses({ workspaceId, onSuccess, onError }: UseReorderStatusesOptions) {
+export function useReorderStatuses({ onSuccess, onError }: UseReorderStatusesOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.list(workspaceId)
+  const listKey = statusKeys.lists()
 
   return useActionMutation<
     ReorderStatusesInput,
