@@ -1,13 +1,12 @@
 import { cache } from 'react'
 import { isCloud } from '@quackback/domain'
-import type { SubscriptionId, WorkspaceId } from '@quackback/ids'
+import type { SubscriptionId } from '@quackback/ids'
 import type { PricingTier } from '@quackback/domain/features'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
 
 export interface WorkspaceSubscription {
   id: SubscriptionId
-  workspaceId: WorkspaceId
   tier: PricingTier
   status: SubscriptionStatus
   stripeCustomerId: string | null

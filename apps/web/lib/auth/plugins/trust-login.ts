@@ -26,7 +26,6 @@ const JwtPayloadSchema = z.object({
   email: z.string().email(),
   name: z.string(),
   image: z.string().nullable().optional(),
-  workspaceId: z.string(),
   context: z.enum(['team', 'portal']),
   callbackUrl: z.string().optional(),
 })

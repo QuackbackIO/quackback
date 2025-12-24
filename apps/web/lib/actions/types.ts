@@ -1,5 +1,5 @@
 import type { Feature } from '@quackback/domain'
-import type { WorkspaceId, UserId, MemberId } from '@quackback/ids'
+import type { UserId, MemberId } from '@quackback/ids'
 
 /**
  * Unified role type for all users (team + portal)
@@ -51,7 +51,7 @@ export interface ActionError {
  */
 export interface ActionContext {
   settings: {
-    id: WorkspaceId
+    id: string
     slug: string
     name: string
   }

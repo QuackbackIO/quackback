@@ -2,7 +2,6 @@
  * Base class for all integrations.
  * Provides common utilities and defines the interface for integration processors.
  */
-import type { WorkspaceId } from '@quackback/ids'
 import type { Redis } from 'ioredis'
 
 export type DomainEventType =
@@ -19,14 +18,12 @@ export type DomainEventType =
 export interface DomainEvent<T = unknown> {
   id: string
   type: DomainEventType
-  workspaceId: WorkspaceId
   timestamp: string
   actor: { type: 'user' | 'system'; userId?: string; email?: string; service?: string }
   data: T
 }
 
 export interface IntegrationContext {
-  workspaceId: WorkspaceId
   integrationId: string
   accessToken: string
   config: Record<string, unknown>

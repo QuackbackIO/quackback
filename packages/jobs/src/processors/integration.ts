@@ -123,7 +123,6 @@ export async function processIntegration(
 
     // Build context (without Redis - using state adapter instead)
     const ctx: IntegrationContext = {
-      workspaceId,
       integrationId,
       accessToken,
       config: (integration.config as Record<string, unknown>) || {},
