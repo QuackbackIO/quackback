@@ -68,7 +68,7 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
 
       {mutation.isError && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {mutation.error.message}
+          {mutation.error?.message}
         </div>
       )}
 

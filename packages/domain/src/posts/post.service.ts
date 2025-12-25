@@ -74,13 +74,28 @@ export class PostService {
       const boardRepo = new BoardRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
 
+      // Basic validation (also done at action layer, but enforced here for direct service calls)
+      const title = input.title?.trim()
+      const content = input.content?.trim()
+
+      if (!title) {
+        return err(PostError.validationError('Title is required'))
+      }
+      if (!content) {
+        return err(PostError.validationError('Content is required'))
+      }
+      if (title.length > 200) {
+        return err(PostError.validationError('Title must not exceed 200 characters'))
+      }
+      if (content.length > 10000) {
+        return err(PostError.validationError('Content must not exceed 10,000 characters'))
+      }
+
       // Validate board exists and belongs to this organization
       const board = await boardRepo.findById(input.boardId)
       if (!board) {
         return err(PostError.boardNotFound(input.boardId))
       }
-
-      // Note: Basic validation (title/content required, length limits) handled by Zod in action layer
 
       // Determine statusId - either from input or use default "open" status
       let statusId = input.statusId
@@ -107,8 +122,8 @@ export class PostService {
       // Convert member TypeID back to raw UUID for database foreign key
       const post = await postRepo.create({
         boardId: input.boardId,
-        title: input.title.trim(),
-        content: input.content.trim(),
+        title,
+        content,
         contentJson: input.contentJson,
         statusId,
         memberId: ctx.memberId,

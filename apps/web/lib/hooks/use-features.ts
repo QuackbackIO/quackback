@@ -10,7 +10,7 @@ import { getWorkspaceFeaturesAction } from '@/lib/actions/settings'
 
 export const featuresKeys = {
   all: ['features'] as const,
-  organization: () => [...featuresKeys.all, 'organization'] as const,
+  workspace: () => [...featuresKeys.all, 'workspace'] as const,
 }
 
 // ============================================================================
@@ -40,7 +40,7 @@ export interface WorkspaceFeaturesData {
  */
 export function useWorkspaceFeatures() {
   return useQuery({
-    queryKey: featuresKeys.organization(),
+    queryKey: featuresKeys.workspace(),
     queryFn: async (): Promise<WorkspaceFeaturesData> => {
       const result = await getWorkspaceFeaturesAction({})
       if (!result.success) {

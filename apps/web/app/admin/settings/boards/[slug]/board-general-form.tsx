@@ -52,13 +52,7 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {mutation.isError && (
           <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {mutation.error.message}
-          </div>
-        )}
-
-        {mutation.isSuccess && (
-          <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
-            Board updated successfully
+            {mutation.error?.message}
           </div>
         )}
 
