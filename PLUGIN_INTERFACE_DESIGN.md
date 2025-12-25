@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-**Single, unified interface** for all plugins. Webhooks, Slack, GitHub, and future integrations all implement the same core abstraction.
+**Minimal, flexible interface**. Plugins are self-contained - they handle their own retries, caching, and error strategies.
 
 ---
 
@@ -26,7 +26,7 @@ export interface Plugin {
 
   /**
    * Process a domain event
-   * @returns Result with optional external entity reference
+   * Plugins handle their own retries, idempotency, and error strategies
    */
   handle(
     event: DomainEvent,
@@ -36,13 +36,11 @@ export interface Plugin {
 
   /**
    * Validate plugin configuration
-   * @returns Result indicating if config is valid
    */
   validateConfig(config: PluginConfig): Promise<Result<void, PluginError>>
 
   /**
-   * Test connection/configuration
-   * @returns Result with connection status
+   * Optional: Test connection/configuration
    */
   testConnection?(
     config: PluginConfig,
@@ -81,12 +79,11 @@ export interface PluginContext {
   /** Encrypted credentials (OAuth tokens, API keys, secrets) */
   credentials: PluginCredentials
 
-  /** Resilience services */
-  circuitBreaker: CircuitBreaker
-  idempotency: IdempotencyChecker
-
-  /** Optional Redis for caching */
+  /** Optional Redis for plugin use (caching, idempotency, etc.) */
   redis?: Redis
+
+  /** Optional logger */
+  logger?: Logger
 }
 
 /**
@@ -134,14 +131,13 @@ export interface PluginResult {
 export interface PluginError {
   code: string
   message: string
-  retryable: boolean  // Should the framework retry this?
   cause?: unknown
 }
 ```
 
 ---
 
-## Database Schema (Simplified)
+## Database Schema
 
 ```typescript
 // packages/db/src/schema/plugins.ts
@@ -157,7 +153,7 @@ export const pluginInstallations = pgTable('plugin_installations', {
 
   // Status
   status: varchar('status', { length: 20 }).notNull().default('active'),
-  // 'active' | 'paused' | 'error' | 'disabled'
+  // 'active' | 'paused' | 'disabled'
 
   // Encrypted credentials
   credentialsEncrypted: text('credentials_encrypted'),
@@ -169,10 +165,6 @@ export const pluginInstallations = pgTable('plugin_installations', {
   installedByMemberId: typeIdColumn('member')('installed_by_member_id'),
   installedAt: timestamp('installed_at').defaultNow().notNull(),
   lastEventAt: timestamp('last_event_at'),
-  lastErrorAt: timestamp('last_error_at'),
-  lastError: text('last_error'),
-
-  // Unique: one installation per plugin type per workspace
 })
 
 /**
@@ -185,12 +177,10 @@ export const pluginSubscriptions = pgTable('plugin_subscriptions', {
   eventType: varchar('event_type', { length: 100 }).notNull(),
 
   enabled: boolean('enabled').notNull().default(true),
-
-  // Unique: one subscription per installation per event type
 })
 
 /**
- * Plugin execution log
+ * Plugin execution log (optional - plugins can use this for auditing)
  */
 export const pluginExecutions = pgTable('plugin_executions', {
   id: typeIdWithDefault('exec')('id').primaryKey(),
@@ -200,9 +190,8 @@ export const pluginExecutions = pgTable('plugin_executions', {
   eventType: varchar('event_type', { length: 100 }).notNull(),
 
   status: varchar('status', { length: 20 }).notNull(),
-  // 'success' | 'failed' | 'retrying'
+  // 'success' | 'failed'
 
-  attempt: integer('attempt').notNull().default(1),
   durationMs: integer('duration_ms'),
 
   externalEntityId: text('external_entity_id'),
@@ -251,7 +240,7 @@ export const pluginRegistry = new PluginRegistry()
 
 ---
 
-## Plugin Executor (Framework)
+## Plugin Executor (Simple Framework)
 
 ```typescript
 // packages/integrations/src/executor.ts
@@ -263,7 +252,7 @@ export class PluginExecutor {
   constructor(
     private readonly registry: PluginRegistry,
     private readonly db: Database,
-    private readonly redis: Redis
+    private readonly redis?: Redis
   ) {}
 
   /**
@@ -318,47 +307,26 @@ export class PluginExecutor {
       workspaceId: installation.workspaceId,
       installationId: installation.id,
       credentials: await this.decryptCredentials(installation),
-      circuitBreaker: new CircuitBreaker(installation.id, this.redis),
-      idempotency: new IdempotencyChecker(this.redis),
       redis: this.redis,
-    }
-
-    // Check idempotency
-    const cacheKey = `plugin:${installation.id}:event:${event.id}`
-    const alreadyProcessed = await context.idempotency.check(cacheKey)
-    if (alreadyProcessed) {
-      return {
-        installationId: installation.id,
-        success: true,
-        skipped: true,
-        reason: 'already_processed',
-      }
-    }
-
-    // Check circuit breaker
-    if (!await context.circuitBreaker.canExecute()) {
-      return {
-        installationId: installation.id,
-        success: false,
-        error: 'Circuit breaker open',
-        retryable: true,
-      }
+      logger: this.createLogger(installation.pluginId),
     }
 
     const startTime = Date.now()
 
     try {
-      // Execute plugin
+      // Execute plugin - plugin handles all resilience internally
       const result = await plugin.handle(event, installation.config, context)
 
       const duration = Date.now() - startTime
 
       if (result.success) {
-        // Mark as processed
-        await context.idempotency.mark(cacheKey, 604800) // 7 days
-        await context.circuitBreaker.recordSuccess()
+        // Update last event timestamp
+        await this.db
+          .update(pluginInstallations)
+          .set({ lastEventAt: new Date() })
+          .where(eq(pluginInstallations.id, installation.id))
 
-        // Log execution
+        // Optional: Log execution
         await this.logExecution({
           installationId: installation.id,
           eventId: event.id,
@@ -376,9 +344,7 @@ export class PluginExecutor {
           duration,
         }
       } else {
-        // Error handling
-        await context.circuitBreaker.recordFailure()
-
+        // Log error
         await this.logExecution({
           installationId: installation.id,
           eventId: event.id,
@@ -392,18 +358,26 @@ export class PluginExecutor {
           installationId: installation.id,
           success: false,
           error: result.error.message,
-          retryable: result.error.retryable,
           duration,
         }
       }
     } catch (error) {
-      await context.circuitBreaker.recordFailure()
+      const duration = Date.now() - startTime
+
+      await this.logExecution({
+        installationId: installation.id,
+        eventId: event.id,
+        eventType: event.type,
+        status: 'failed',
+        durationMs: duration,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
 
       return {
         installationId: installation.id,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        retryable: true,
+        duration,
       }
     }
   }
@@ -432,7 +406,10 @@ export class PluginExecutor {
   private async decryptCredentials(
     installation: PluginInstallation
   ): Promise<PluginCredentials> {
-    // Decrypt encrypted credentials using workspace key
+    if (!installation.credentialsEncrypted) {
+      return { type: 'none' }
+    }
+
     const decrypted = decrypt(
       installation.credentialsEncrypted,
       installation.workspaceId
@@ -443,58 +420,157 @@ export class PluginExecutor {
   private async logExecution(data: LogExecutionData): Promise<void> {
     await this.db.insert(pluginExecutions).values(data)
   }
+
+  private createLogger(pluginId: string): Logger {
+    return {
+      info: (msg: string, meta?: unknown) => console.log(`[${pluginId}] ${msg}`, meta),
+      error: (msg: string, meta?: unknown) => console.error(`[${pluginId}] ${msg}`, meta),
+    }
+  }
 }
 ```
 
 ---
 
-## Example Implementations
+## Project Structure for Custom Plugins
 
-### 1. Slack Plugin
+```
+packages/integrations/
+├── src/
+│   ├── base/
+│   │   ├── plugin.ts           # Plugin interface, types
+│   │   └── index.ts
+│   │
+│   ├── registry.ts             # PluginRegistry class
+│   ├── executor.ts             # PluginExecutor class
+│   │
+│   ├── plugins/                # 🔥 Core plugins (shipped with Quackback)
+│   │   ├── slack/
+│   │   │   ├── plugin.ts       # SlackPlugin implementation
+│   │   │   ├── oauth.ts        # OAuth helpers
+│   │   │   ├── formatter.ts    # Message formatting
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── webhook/
+│   │   │   ├── plugin.ts       # WebhookPlugin implementation
+│   │   │   ├── delivery.ts     # Delivery logic with retries
+│   │   │   ├── signature.ts    # HMAC signing
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── github/
+│   │   │   ├── plugin.ts       # GitHubPlugin implementation
+│   │   │   ├── oauth.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   └── index.ts            # Export all core plugins
+│   │
+│   └── index.ts                # Main exports
+│
+├── package.json
+└── tsconfig.json
+
+
+# Custom plugins added by users/developers
+packages/integrations-custom/       # 🎨 Optional: User-added custom plugins
+├── src/
+│   ├── linear/
+│   │   ├── plugin.ts
+│   │   └── index.ts
+│   │
+│   ├── jira/
+│   │   ├── plugin.ts
+│   │   └── index.ts
+│   │
+│   ├── discord/
+│   │   ├── plugin.ts
+│   │   └── index.ts
+│   │
+│   └── index.ts                # Export custom plugins
+│
+├── package.json
+└── tsconfig.json
+
+
+# App initialization (register all plugins)
+apps/web/
+├── lib/
+│   └── plugins/
+│       └── register.ts         # Register all plugins at startup
+│
+└── app/
+    └── api/
+        └── plugins/
+            ├── [id]/
+            │   ├── install/
+            │   │   └── route.ts
+            │   ├── test/
+            │   │   └── route.ts
+            │   └── oauth/
+            │       ├── connect/
+            │       │   └── route.ts
+            │       └── callback/
+            │           └── route.ts
+            └── route.ts
+```
+
+### Example: Core Plugin (Slack)
 
 ```typescript
-// packages/integrations/src/plugins/slack.ts
+// packages/integrations/src/plugins/slack/plugin.ts
+
+import { WebClient } from '@slack/web-api'
+import { ok, err } from '@quackback/domain'
+import type { Plugin, PluginConfig, PluginContext, PluginResult, PluginError } from '../../base/plugin'
 
 export class SlackPlugin implements Plugin {
   readonly id = 'slack'
   readonly name = 'Slack'
-  readonly supportedEvents: DomainEventType[] = [
+  readonly supportedEvents = [
     'post.created',
     'post.status_changed',
     'comment.created',
     'changelog.published',
-  ]
+  ] as const
 
   async handle(
     event: DomainEvent,
     config: PluginConfig,
     context: PluginContext
   ): Promise<Result<PluginResult, PluginError>> {
+    // Validate credentials
     if (context.credentials.type !== 'oauth') {
       return err({
         code: 'INVALID_CREDENTIALS',
         message: 'Slack requires OAuth credentials',
-        retryable: false,
       })
     }
 
-    const client = new WebClient(context.credentials.oauth!.accessToken)
-
-    // Get channel from config
+    const client = new WebClient(context.credentials.oauth.accessToken)
     const channelId = config.settings.channelId as string
+
     if (!channelId) {
       return err({
         code: 'MISSING_CONFIG',
         message: 'channelId is required',
-        retryable: false,
       })
     }
 
-    // Build message based on event type
-    const message = this.buildMessage(event, config)
+    // Plugin handles its own idempotency
+    if (context.redis) {
+      const cacheKey = `slack:${context.installationId}:${event.id}`
+      const cached = await context.redis.get(cacheKey)
+      if (cached) {
+        return ok({
+          success: true,
+          message: 'Already processed (cached)',
+        })
+      }
+    }
 
     try {
-      // Post to Slack
+      // Build and send message
+      const message = this.buildMessage(event, config)
+
       const response = await client.chat.postMessage({
         channel: channelId,
         ...message,
@@ -504,15 +580,20 @@ export class SlackPlugin implements Plugin {
         return err({
           code: 'SLACK_ERROR',
           message: response.error || 'Unknown Slack error',
-          retryable: this.isRetryable(response.error),
         })
+      }
+
+      // Cache for idempotency
+      if (context.redis) {
+        const cacheKey = `slack:${context.installationId}:${event.id}`
+        await context.redis.setex(cacheKey, 604800, response.ts) // 7 days
       }
 
       return ok({
         success: true,
         externalEntity: {
-          id: response.ts!,
-          url: `slack://channel?team=${response.team}&id=${channelId}&message=${response.ts}`,
+          id: response.ts,
+          url: `slack://channel?id=${channelId}&message=${response.ts}`,
         },
         message: `Posted to Slack channel ${channelId}`,
       })
@@ -520,7 +601,6 @@ export class SlackPlugin implements Plugin {
       return err({
         code: 'SLACK_REQUEST_FAILED',
         message: error instanceof Error ? error.message : 'Request failed',
-        retryable: true,
       })
     }
   }
@@ -530,7 +610,6 @@ export class SlackPlugin implements Plugin {
       return err({
         code: 'MISSING_CHANNEL',
         message: 'channelId is required',
-        retryable: false,
       })
     }
 
@@ -545,11 +624,10 @@ export class SlackPlugin implements Plugin {
       return err({
         code: 'INVALID_CREDENTIALS',
         message: 'OAuth token required',
-        retryable: false,
       })
     }
 
-    const client = new WebClient(context.credentials.oauth!.accessToken)
+    const client = new WebClient(context.credentials.oauth.accessToken)
 
     try {
       const response = await client.auth.test()
@@ -558,7 +636,6 @@ export class SlackPlugin implements Plugin {
         return err({
           code: 'AUTH_FAILED',
           message: 'Invalid or expired token',
-          retryable: false,
         })
       }
 
@@ -567,7 +644,6 @@ export class SlackPlugin implements Plugin {
       return err({
         code: 'CONNECTION_FAILED',
         message: error instanceof Error ? error.message : 'Connection failed',
-        retryable: true,
       })
     }
   }
@@ -578,14 +654,12 @@ export class SlackPlugin implements Plugin {
       return this.applyTemplate(event, config.transform.template)
     }
 
-    // Default formatting based on event type
+    // Default formatting
     switch (event.type) {
       case 'post.created':
         return this.formatPostCreated(event)
       case 'post.status_changed':
         return this.formatStatusChanged(event)
-      case 'comment.created':
-        return this.formatCommentCreated(event)
       default:
         return { text: `Event: ${event.type}` }
     }
@@ -608,26 +682,28 @@ export class SlackPlugin implements Plugin {
   }
 
   // ... other formatting methods
-
-  private isRetryable(error?: string): boolean {
-    const retryableErrors = ['rate_limited', 'timeout', 'internal_error']
-    return retryableErrors.some(e => error?.includes(e))
-  }
 }
-
-// Register plugin
-pluginRegistry.register(new SlackPlugin())
 ```
 
-### 2. Webhook Plugin
+```typescript
+// packages/integrations/src/plugins/slack/index.ts
+export { SlackPlugin } from './plugin'
+export * from './oauth'
+```
+
+### Example: Core Plugin (Webhook)
 
 ```typescript
-// packages/integrations/src/plugins/webhook.ts
+// packages/integrations/src/plugins/webhook/plugin.ts
+
+import { createHmac } from 'crypto'
+import { ok, err } from '@quackback/domain'
+import type { Plugin, PluginConfig, PluginContext, PluginResult, PluginError } from '../../base/plugin'
 
 export class WebhookPlugin implements Plugin {
   readonly id = 'webhook'
   readonly name = 'Custom Webhook'
-  readonly supportedEvents: DomainEventType[] = [
+  readonly supportedEvents = [
     'post.created',
     'post.updated',
     'post.status_changed',
@@ -637,7 +713,7 @@ export class WebhookPlugin implements Plugin {
     'vote.created',
     'vote.deleted',
     'changelog.published',
-  ]
+  ] as const
 
   async handle(
     event: DomainEvent,
@@ -648,21 +724,74 @@ export class WebhookPlugin implements Plugin {
       return err({
         code: 'INVALID_CREDENTIALS',
         message: 'Webhook secret required',
-        retryable: false,
       })
     }
 
     const url = config.settings.url as string
-    const secret = context.credentials.webhookSecret!.secret
+    const secret = context.credentials.webhookSecret.secret
     const headers = (config.settings.headers as Record<string, string>) || {}
 
-    // Build payload
-    const payload = JSON.stringify(event)
+    // Plugin handles its own idempotency
+    if (context.redis) {
+      const cacheKey = `webhook:${context.installationId}:${event.id}`
+      const cached = await context.redis.get(cacheKey)
+      if (cached) {
+        return ok({
+          success: true,
+          message: 'Already delivered (cached)',
+        })
+      }
+    }
 
-    // Sign payload
-    const signature = createHmac('sha256', secret)
-      .update(payload)
-      .digest('hex')
+    // Plugin handles its own retry logic
+    const maxAttempts = 3
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await this.deliver(event, url, secret, headers, context)
+
+        if (result.success) {
+          // Cache for idempotency
+          if (context.redis) {
+            const cacheKey = `webhook:${context.installationId}:${event.id}`
+            await context.redis.setex(cacheKey, 604800, '1') // 7 days
+          }
+
+          return ok(result.value)
+        }
+
+        // Check if we should retry
+        if (!this.shouldRetry(result.error, attempt, maxAttempts)) {
+          return result
+        }
+
+        lastError = new Error(result.error.message)
+
+        // Exponential backoff: 5s, 25s
+        const backoff = 5000 * Math.pow(5, attempt - 1)
+        await new Promise(resolve => setTimeout(resolve, backoff))
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error')
+      }
+    }
+
+    return err({
+      code: 'WEBHOOK_EXHAUSTED',
+      message: `Failed after ${maxAttempts} attempts: ${lastError?.message}`,
+    })
+  }
+
+  private async deliver(
+    event: DomainEvent,
+    url: string,
+    secret: string,
+    headers: Record<string, string>,
+    context: PluginContext
+  ): Promise<Result<PluginResult, PluginError>> {
+    const payload = JSON.stringify(event)
+    const signature = createHmac('sha256', secret).update(payload).digest('hex')
 
     try {
       const response = await fetch(url, {
@@ -681,19 +810,17 @@ export class WebhookPlugin implements Plugin {
       })
 
       if (!response.ok) {
-        // Check if endpoint explicitly says "stop retrying"
+        // 410 Gone = stop retrying
         if (response.status === 410) {
           return err({
             code: 'WEBHOOK_GONE',
-            message: 'Endpoint returned 410 Gone - webhook should be disabled',
-            retryable: false,
+            message: 'Endpoint returned 410 Gone',
           })
         }
 
         return err({
           code: 'WEBHOOK_ERROR',
           message: `HTTP ${response.status}: ${response.statusText}`,
-          retryable: response.status >= 500 || response.status === 429,
         })
       }
 
@@ -705,9 +832,21 @@ export class WebhookPlugin implements Plugin {
       return err({
         code: 'WEBHOOK_DELIVERY_FAILED',
         message: error instanceof Error ? error.message : 'Delivery failed',
-        retryable: true,
       })
     }
+  }
+
+  private shouldRetry(error: PluginError, attempt: number, maxAttempts: number): boolean {
+    if (attempt >= maxAttempts) return false
+
+    // Don't retry 410 Gone
+    if (error.code === 'WEBHOOK_GONE') return false
+
+    // Don't retry config errors
+    if (error.code === 'INVALID_URL') return false
+
+    // Retry network errors and 5xx
+    return true
   }
 
   async validateConfig(config: PluginConfig): Promise<Result<void, PluginError>> {
@@ -717,20 +856,17 @@ export class WebhookPlugin implements Plugin {
       return err({
         code: 'MISSING_URL',
         message: 'url is required',
-        retryable: false,
       })
     }
 
-    // Validate URL format
     try {
       const parsed = new URL(url)
 
-      // Security: block localhost and internal IPs
+      // Security: block localhost
       if (parsed.hostname === 'localhost' || parsed.hostname.startsWith('127.')) {
         return err({
           code: 'INVALID_URL',
-          message: 'Cannot use localhost or internal IPs',
-          retryable: false,
+          message: 'Cannot use localhost',
         })
       }
 
@@ -739,7 +875,6 @@ export class WebhookPlugin implements Plugin {
       return err({
         code: 'INVALID_URL',
         message: 'Invalid URL format',
-        retryable: false,
       })
     }
   }
@@ -748,7 +883,6 @@ export class WebhookPlugin implements Plugin {
     config: PluginConfig,
     context: PluginContext
   ): Promise<Result<void, PluginError>> {
-    // Send a test ping event
     const testEvent: DomainEvent = {
       id: 'test',
       type: 'post.created',
@@ -759,250 +893,263 @@ export class WebhookPlugin implements Plugin {
     }
 
     const result = await this.handle(testEvent, config, context)
-
-    if (!result.success) {
-      return err(result.error)
-    }
-
-    return ok(undefined)
+    return result.success ? ok(undefined) : err(result.error)
   }
 }
-
-// Register plugin
-pluginRegistry.register(new WebhookPlugin())
 ```
 
-### 3. GitHub Plugin (Future)
+### Example: Custom Plugin (Linear)
 
 ```typescript
-// packages/integrations/src/plugins/github.ts
+// packages/integrations-custom/src/linear/plugin.ts
 
-export class GitHubPlugin implements Plugin {
-  readonly id = 'github'
-  readonly name = 'GitHub'
-  readonly supportedEvents: DomainEventType[] = [
+import { LinearClient } from '@linear/sdk'
+import { ok, err } from '@quackback/domain'
+import type { Plugin, PluginConfig, PluginContext, PluginResult, PluginError } from '@quackback/integrations'
+
+export class LinearPlugin implements Plugin {
+  readonly id = 'linear'
+  readonly name = 'Linear'
+  readonly supportedEvents = [
     'post.created',
     'post.status_changed',
-  ]
+  ] as const
 
   async handle(
     event: DomainEvent,
     config: PluginConfig,
     context: PluginContext
   ): Promise<Result<PluginResult, PluginError>> {
-    // Create GitHub issue when post is created
-    if (event.type === 'post.created') {
-      return this.createIssue(event, config, context)
+    if (context.credentials.type !== 'api_key') {
+      return err({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Linear requires API key',
+      })
     }
 
-    // Update issue labels when status changes
+    const client = new LinearClient({
+      apiKey: context.credentials.apiKey.key,
+    })
+
+    const teamId = config.settings.teamId as string
+
+    if (event.type === 'post.created') {
+      return this.createIssue(event, teamId, client, context)
+    }
+
     if (event.type === 'post.status_changed') {
-      return this.updateIssue(event, config, context)
+      return this.updateIssue(event, client, context)
     }
 
     return err({
       code: 'UNSUPPORTED_EVENT',
       message: `Event ${event.type} not supported`,
-      retryable: false,
     })
   }
 
   private async createIssue(
     event: DomainEvent,
-    config: PluginConfig,
+    teamId: string,
+    client: LinearClient,
     context: PluginContext
   ): Promise<Result<PluginResult, PluginError>> {
-    const octokit = new Octokit({
-      auth: context.credentials.oauth!.accessToken,
-    })
-
-    const repo = config.settings.repository as string
-    const [owner, repoName] = repo.split('/')
+    // Check idempotency
+    if (context.redis) {
+      const cacheKey = `linear:${context.installationId}:${event.id}`
+      const cached = await context.redis.get(cacheKey)
+      if (cached) {
+        return ok({
+          success: true,
+          externalEntity: { id: cached },
+          message: 'Already created (cached)',
+        })
+      }
+    }
 
     const { post } = event.data
 
     try {
-      const { data } = await octokit.rest.issues.create({
-        owner,
-        repo: repoName,
+      const issue = await client.createIssue({
+        teamId,
         title: post.title,
-        body: post.description,
-        labels: ['quackback', post.boardSlug],
+        description: post.description,
+        labels: ['quackback'],
       })
+
+      const issueId = issue.issue?.id
+
+      if (!issueId) {
+        return err({
+          code: 'LINEAR_ERROR',
+          message: 'Failed to create issue',
+        })
+      }
+
+      // Cache for idempotency
+      if (context.redis) {
+        const cacheKey = `linear:${context.installationId}:${event.id}`
+        await context.redis.setex(cacheKey, 604800, issueId)
+      }
 
       return ok({
         success: true,
         externalEntity: {
-          id: data.number.toString(),
-          url: data.html_url,
+          id: issueId,
+          url: `https://linear.app/issue/${issueId}`,
         },
-        message: `Created GitHub issue #${data.number}`,
+        message: `Created Linear issue ${issueId}`,
       })
     } catch (error) {
       return err({
-        code: 'GITHUB_ERROR',
-        message: error instanceof Error ? error.message : 'GitHub API error',
-        retryable: true,
+        code: 'LINEAR_REQUEST_FAILED',
+        message: error instanceof Error ? error.message : 'Request failed',
       })
     }
   }
 
-  // ... validateConfig, testConnection
-}
+  async validateConfig(config: PluginConfig): Promise<Result<void, PluginError>> {
+    if (!config.settings.teamId) {
+      return err({
+        code: 'MISSING_TEAM',
+        message: 'teamId is required',
+      })
+    }
 
-// Register plugin
-pluginRegistry.register(new GitHubPlugin())
-```
+    return ok(undefined)
+  }
 
----
+  async testConnection(
+    config: PluginConfig,
+    context: PluginContext
+  ): Promise<Result<void, PluginError>> {
+    if (context.credentials.type !== 'api_key') {
+      return err({
+        code: 'INVALID_CREDENTIALS',
+        message: 'API key required',
+      })
+    }
 
-## Usage in Job Processor
+    const client = new LinearClient({
+      apiKey: context.credentials.apiKey.key,
+    })
 
-```typescript
-// packages/jobs/src/processors/event.ts
+    try {
+      const viewer = await client.viewer
+      if (!viewer) {
+        return err({
+          code: 'AUTH_FAILED',
+          message: 'Invalid API key',
+        })
+      }
 
-import { PluginExecutor, pluginRegistry } from '@quackback/integrations'
-
-export async function processEvent(
-  data: EventJobData,
-  redis: Redis,
-  db: Database
-): Promise<EventJobResult> {
-  const executor = new PluginExecutor(pluginRegistry, db, redis)
-
-  // Execute all subscribed plugins
-  const summary = await executor.executeForEvent(data, data.workspaceId)
-
-  return {
-    eventId: data.id,
-    pluginsExecuted: summary.totalPlugins,
-    successful: summary.successful,
-    failed: summary.failed,
+      return ok(undefined)
+    } catch (error) {
+      return err({
+        code: 'CONNECTION_FAILED',
+        message: error instanceof Error ? error.message : 'Connection failed',
+      })
+    }
   }
 }
 ```
 
----
-
-## Admin UI - Plugin Installation
+### Plugin Registration
 
 ```typescript
-// apps/web/app/admin/plugins/[pluginId]/install/actions.ts
-
-'use server'
+// apps/web/lib/plugins/register.ts
 
 import { pluginRegistry } from '@quackback/integrations'
 
-export async function installPlugin(
-  pluginId: string,
-  config: PluginConfig,
-  credentials: PluginCredentials
-) {
-  const { workspace } = await requireTenantRole(['owner', 'admin'])
+// Core plugins
+import { SlackPlugin } from '@quackback/integrations/plugins/slack'
+import { WebhookPlugin } from '@quackback/integrations/plugins/webhook'
+import { GitHubPlugin } from '@quackback/integrations/plugins/github'
 
-  // Validate plugin exists
-  const plugin = pluginRegistry.get(pluginId)
-  if (!plugin) {
-    return { error: 'Plugin not found' }
+// Custom plugins (optional)
+import { LinearPlugin } from '@quackback/integrations-custom/linear'
+import { JiraPlugin } from '@quackback/integrations-custom/jira'
+import { DiscordPlugin } from '@quackback/integrations-custom/discord'
+
+/**
+ * Register all plugins at app startup
+ */
+export function registerPlugins() {
+  // Core plugins (always available)
+  pluginRegistry.register(new SlackPlugin())
+  pluginRegistry.register(new WebhookPlugin())
+  pluginRegistry.register(new GitHubPlugin())
+
+  // Custom plugins (conditionally register)
+  if (process.env.ENABLE_LINEAR_PLUGIN === 'true') {
+    pluginRegistry.register(new LinearPlugin())
   }
 
-  // Validate configuration
-  const validation = await plugin.validateConfig(config)
-  if (!validation.success) {
-    return { error: validation.error.message }
+  if (process.env.ENABLE_JIRA_PLUGIN === 'true') {
+    pluginRegistry.register(new JiraPlugin())
   }
 
-  // Encrypt credentials
-  const encryptedCreds = encrypt(JSON.stringify(credentials), workspace.id)
+  if (process.env.ENABLE_DISCORD_PLUGIN === 'true') {
+    pluginRegistry.register(new DiscordPlugin())
+  }
 
-  // Create installation
-  const [installation] = await db.insert(pluginInstallations).values({
-    pluginId,
-    workspaceId: workspace.id,
-    credentialsEncrypted: encryptedCreds,
-    config,
-    status: 'active',
-    installedByMemberId: ctx.memberId,
-  }).returning()
-
-  // Subscribe to all supported events
-  await Promise.all(
-    plugin.supportedEvents.map(eventType =>
-      db.insert(pluginSubscriptions).values({
-        installationId: installation.id,
-        eventType,
-        enabled: true,
-      })
-    )
-  )
-
-  revalidatePath('/admin/plugins')
-  return { success: true, installation }
+  console.log(`Registered ${pluginRegistry.list().length} plugins`)
 }
 ```
 
+```typescript
+// apps/web/app/layout.tsx or middleware.ts
+
+import { registerPlugins } from '@/lib/plugins/register'
+
+// Register plugins once at startup
+registerPlugins()
+```
+
 ---
 
-## Key Benefits of This Design
+## Key Differences from Previous Design
 
-### 1. **Single Abstraction**
-- All plugins implement the same `Plugin` interface
-- Webhooks are just another plugin
-- Consistent handling, logging, retries
-
-### 2. **Framework Handles Complexity**
+### ❌ Removed (Up to Each Plugin)
 - Circuit breaker
-- Idempotency
-- Credential management
-- Error handling
-- Logging
+- Idempotency checking
+- Retry logic
+- Error classification
 
-### 3. **Plugins Stay Simple**
-- Focus on business logic only
-- Return `Result<PluginResult, PluginError>`
-- Framework does the rest
+### ✅ Plugin's Responsibility
+- Handle retries internally (see WebhookPlugin example)
+- Manage idempotency using `context.redis` if needed
+- Decide error handling strategy
+- Implement circuit breaking if desired
 
-### 4. **Easy to Extend**
-- New plugin? Implement `Plugin` interface
-- Register with `pluginRegistry.register()`
-- Done!
-
-### 5. **Type-Safe Configuration**
-- Each plugin validates its own config
-- Opaque to framework
-- Can use Zod schemas internally
-
-### 6. **Future-Proof**
-- Third-party plugins just implement `Plugin`
-- Same interface for sandboxed code
-- Same interface for webhook delivery
+### ✅ Framework's Responsibility
+- Load subscribed plugins
+- Provide runtime context (credentials, redis, logger)
+- Execute plugins
+- Log results
+- Decrypt credentials
 
 ---
 
-## Comparison
+## Benefits
 
-### Before (Three Separate Systems)
-```
-OAuth Integrations → BaseIntegration → Custom processing
-Webhooks          → WebhookDelivery  → Different system
-Third-party Apps  → API Keys         → Different system
-```
-
-### After (One Unified System)
-```
-All Plugins → Plugin Interface → PluginExecutor → Done
-  ├─ SlackPlugin
-  ├─ WebhookPlugin
-  ├─ GitHubPlugin
-  └─ CustomPlugin
-```
+✅ **Minimal Interface** - Just `handle()`, `validateConfig()`, optional `testConnection()`
+✅ **Plugin Autonomy** - Each plugin decides retry/cache/error strategy
+✅ **Easy to Add** - Create class, implement interface, register
+✅ **Flexible** - Plugins can use Redis, implement circuit breakers, or not
+✅ **Clear Project Structure** - Core vs custom plugins separated
 
 ---
 
-## Next Steps
+## Usage
 
-1. **Migrate existing Slack integration** to use `Plugin` interface
-2. **Implement `WebhookPlugin`** on top of same interface
-3. **Build `PluginExecutor`** framework
-4. **Add GitHub plugin** using same pattern
-5. **Future**: Sandbox third-party code that implements `Plugin`
+```typescript
+// Job processor
+import { PluginExecutor, pluginRegistry } from '@quackback/integrations'
+
+const executor = new PluginExecutor(pluginRegistry, db, redis)
+
+// Execute all subscribed plugins for event
+const summary = await executor.executeForEvent(event, workspaceId)
+
+console.log(`${summary.successful}/${summary.totalPlugins} succeeded`)
+```
