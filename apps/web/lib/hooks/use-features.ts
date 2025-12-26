@@ -77,9 +77,9 @@ export function useHydrateFeatures(initialData: WorkspaceFeaturesData | null) {
 
   // Hydrate cache if initial data is provided and not already cached
   if (initialData) {
-    const existing = queryClient.getQueryData(featuresKeys.organization())
+    const existing = queryClient.getQueryData(featuresKeys.workspace())
     if (!existing) {
-      queryClient.setQueryData(featuresKeys.organization(), initialData)
+      queryClient.setQueryData(featuresKeys.workspace(), initialData)
     }
   }
 }
