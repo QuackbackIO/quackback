@@ -6,7 +6,7 @@
  */
 
 import { db, integrations, integrationEventMappings, eq } from '@quackback/db'
-import type { WorkspaceId, IntegrationId, EventMappingId } from '@quackback/ids'
+import type { IntegrationId, EventMappingId } from '@quackback/ids'
 import type { EventJobData, EventJobResult, IntegrationJobData } from '../types'
 import type { StateAdapter } from '../adapters'
 import { processIntegration } from './integration'
@@ -40,15 +40,10 @@ export function isNotificationEvent(eventType: string): boolean {
 }
 
 /**
- * Get integration mappings for an organization and event type.
+ * Get integration mappings for an event type.
  * This queries the database directly (no caching - caching is done at workflow step level).
  */
-export async function getIntegrationMappings(
-  workspaceId: WorkspaceId,
-  eventType: string
-): Promise<IntegrationMapping[]> {
-  // Note: workspaceId parameter kept for API compatibility but not used in single-tenant mode
-  const _workspaceId = workspaceId
+export async function getIntegrationMappings(eventType: string): Promise<IntegrationMapping[]> {
   const mappings = await db
     .select({
       integrationId: integrations.id,
@@ -81,14 +76,12 @@ export async function processSingleIntegration(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const jobData: IntegrationJobData = {
-      workspaceId: event.workspaceId,
       integrationId: mapping.integrationId,
       integrationType: mapping.integrationType,
       mappingId: mapping.mappingId,
       event: {
         id: event.id,
         type: event.type,
-        workspaceId: event.workspaceId,
         timestamp: event.timestamp,
         actor: event.actor,
         data: event.data,
@@ -119,7 +112,6 @@ export async function processEventNotifications(
     const result = await processUserNotification({
       eventId: event.id,
       eventType: event.type,
-      workspaceId: event.workspaceId,
       timestamp: event.timestamp,
       actor: event.actor,
       data: event.data,
@@ -140,7 +132,7 @@ export async function processEvent(
   data: EventJobData,
   stateAdapter: StateAdapter
 ): Promise<EventJobResult> {
-  console.log(`[Event] Processing ${data.type} event ${data.id} for org ${data.workspaceId}`)
+  console.log(`[Event] Processing ${data.type} event ${data.id}`)
 
   const result: EventJobResult = {
     integrationsProcessed: 0,
@@ -150,7 +142,7 @@ export async function processEvent(
   }
 
   // Step 1: Get integration mappings
-  const mappings = await getIntegrationMappings(data.workspaceId, data.type)
+  const mappings = await getIntegrationMappings(data.type)
   console.log(`[Event] Found ${mappings.length} integration mappings for ${data.type}`)
 
   // Step 2: Process each integration

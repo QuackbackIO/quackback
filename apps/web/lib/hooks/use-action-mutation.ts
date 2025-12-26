@@ -64,7 +64,7 @@ export interface UseActionMutationResult<TInput, TOutput> {
  *
  * // Usage in component:
  * <button
- *   onClick={() => createTag.mutate({ workspaceId, name: 'Bug', color: '#ef4444' })}
+ *   onClick={() => createTag.mutate({ name: 'Bug', color: '#ef4444' })}
  *   disabled={createTag.isPending}
  * >
  *   {createTag.isPending ? 'Creating...' : 'Create Tag'}
@@ -194,7 +194,7 @@ export function useActionMutation<TInput, TOutput, TContext = unknown>({
  *
  * @example
  * const queryClient = useQueryClient()
- * const helper = createListOptimisticUpdate<Tag>(queryClient, tagKeys.list(workspaceId))
+ * const helper = createListOptimisticUpdate<Tag>(queryClient, tagKeys.lists())
  *
  * // In onOptimisticUpdate:
  * const previous = helper.add(optimisticTag)

@@ -1,18 +1,14 @@
 import Link from 'next/link'
 import { requireTenantRole } from '@/lib/tenant'
 import { ArrowLeft, Slack } from 'lucide-react'
-import { db, integrations, integrationEventMappings, eq, and } from '@/lib/db'
+import { db, integrations, integrationEventMappings, eq } from '@/lib/db'
 import { Badge } from '@/components/ui/badge'
 import { SlackConfig } from './slack-config'
 import { SlackConnectionActions } from './slack-connection-actions'
 
-export default async function SlackIntegrationPage({
-  params,
-}: {
-  params?: Promise<{}>
-}) {
-  // Settings is validated in root layout
-  const { settings } = await requireTenantRole( ['owner', 'admin'])
+export default async function SlackIntegrationPage() {
+  // Validate tenant role
+  await requireTenantRole(['owner', 'admin'])
 
   // Fetch Slack integration
   const slackIntegration = await db.query.integrations.findFirst({
@@ -74,7 +70,6 @@ export default async function SlackIntegrationPage({
 
         {/* Connection Actions */}
         <SlackConnectionActions
-          workspaceId={settings.id}
           integrationId={slackIntegration?.id}
           isConnected={!!slackIntegration}
         />
@@ -85,7 +80,6 @@ export default async function SlackIntegrationPage({
         <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
           <h2 className="text-lg font-medium mb-4">Configuration</h2>
           <SlackConfig
-            workspaceId={settings.id}
             integrationId={slackIntegration.id}
             initialConfig={slackIntegration.config as { channelId?: string }}
             initialEventMappings={eventMappings}

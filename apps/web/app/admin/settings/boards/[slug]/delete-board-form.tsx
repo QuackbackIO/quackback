@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/schemas/boards'
-import { useDeleteBoard } from '@/lib/hooks/use-board-queries'
+import { useDeleteBoard } from '@/lib/hooks/use-board-actions'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
@@ -16,7 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import type { BoardId, WorkspaceId } from '@quackback/ids'
+import type { BoardId } from '@quackback/ids'
 
 interface Board {
   id: BoardId
@@ -26,12 +26,16 @@ interface Board {
 
 interface DeleteBoardFormProps {
   board: Board
-  workspaceId: WorkspaceId
 }
 
-export function DeleteBoardForm({ board, workspaceId }: DeleteBoardFormProps) {
+export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const router = useRouter()
-  const mutation = useDeleteBoard(workspaceId)
+  const mutation = useDeleteBoard({
+    onSuccess: () => {
+      router.push(`/admin/settings/boards`)
+      router.refresh()
+    },
+  })
 
   const form = useForm<DeleteBoardInput>({
     resolver: standardSchemaResolver(deleteBoardSchema),
@@ -46,12 +50,7 @@ export function DeleteBoardForm({ board, workspaceId }: DeleteBoardFormProps) {
   function onSubmit() {
     if (!canDelete) return
 
-    mutation.mutate(board.id, {
-      onSuccess: () => {
-        router.push(`/admin/settings/boards`)
-        router.refresh()
-      },
-    })
+    mutation.mutate({ id: board.id })
   }
 
   return (
@@ -69,7 +68,7 @@ export function DeleteBoardForm({ board, workspaceId }: DeleteBoardFormProps) {
 
       {mutation.isError && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {mutation.error.message}
+          {mutation.error?.message}
         </div>
       )}
 

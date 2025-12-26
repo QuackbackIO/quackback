@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { updatePortalConfigAction } from '@/lib/actions/settings'
 
 interface PortalAuthSettingsProps {
-  workspaceId: string
   initialConfig: {
     oauth: { google: boolean; github: boolean }
   }
@@ -46,7 +45,7 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-export function PortalAuthSettings({ workspaceId, initialConfig }: PortalAuthSettingsProps) {
+export function PortalAuthSettings({ initialConfig }: PortalAuthSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)

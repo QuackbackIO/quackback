@@ -2,7 +2,6 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@quackback/domain/features'
-import type { WorkspaceId } from '@quackback/ids'
 import { getWorkspaceFeaturesAction } from '@/lib/actions/settings'
 
 // ============================================================================
@@ -11,7 +10,7 @@ import { getWorkspaceFeaturesAction } from '@/lib/actions/settings'
 
 export const featuresKeys = {
   all: ['features'] as const,
-  organization: (workspaceId: WorkspaceId) => [...featuresKeys.all, workspaceId] as const,
+  workspace: () => [...featuresKeys.all, 'workspace'] as const,
 }
 
 // ============================================================================
@@ -39,9 +38,9 @@ export interface WorkspaceFeaturesData {
  * Query hook to fetch organization features.
  * Uses SSR-provided initial data when available to prevent flash.
  */
-export function useWorkspaceFeatures(workspaceId: WorkspaceId) {
+export function useWorkspaceFeatures() {
   return useQuery({
-    queryKey: featuresKeys.organization(workspaceId),
+    queryKey: featuresKeys.workspace(),
     queryFn: async (): Promise<WorkspaceFeaturesData> => {
       const result = await getWorkspaceFeaturesAction({})
       if (!result.success) {
@@ -57,8 +56,8 @@ export function useWorkspaceFeatures(workspaceId: WorkspaceId) {
  * Hook to check if a specific feature is enabled.
  * Returns { enabled, isLoading, tier, edition } for conditional rendering.
  */
-export function useFeature(workspaceId: WorkspaceId, feature: Feature) {
-  const { data, isLoading, error } = useWorkspaceFeatures(workspaceId)
+export function useFeature(feature: Feature) {
+  const { data, isLoading, error } = useWorkspaceFeatures()
 
   return {
     enabled: data?.enabledFeatures.includes(feature) ?? false,
@@ -73,17 +72,14 @@ export function useFeature(workspaceId: WorkspaceId, feature: Feature) {
  * Hook to hydrate features from SSR data.
  * Call this in a client component that receives SSR features data.
  */
-export function useHydrateFeatures(
-  workspaceId: WorkspaceId,
-  initialData: WorkspaceFeaturesData | null
-) {
+export function useHydrateFeatures(initialData: WorkspaceFeaturesData | null) {
   const queryClient = useQueryClient()
 
   // Hydrate cache if initial data is provided and not already cached
   if (initialData) {
-    const existing = queryClient.getQueryData(featuresKeys.organization(workspaceId))
+    const existing = queryClient.getQueryData(featuresKeys.workspace())
     if (!existing) {
-      queryClient.setQueryData(featuresKeys.organization(workspaceId), initialData)
+      queryClient.setQueryData(featuresKeys.workspace(), initialData)
     }
   }
 }

@@ -12,21 +12,20 @@ import {
 } from '@/lib/hooks/use-settings-queries'
 
 interface LogoUploaderProps {
-  workspaceId: string
   workspaceName: string
   /** Initial logo URL from server (for SSR) */
   initialLogoUrl?: string | null
 }
 
-export function LogoUploader({ workspaceId, workspaceName, initialLogoUrl }: LogoUploaderProps) {
+export function LogoUploader({ workspaceName, initialLogoUrl }: LogoUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
   // TanStack Query hooks
-  const { data: logoData } = useWorkspaceLogo(workspaceId)
-  const uploadMutation = useUploadWorkspaceLogo(workspaceId)
-  const deleteMutation = useDeleteWorkspaceLogo(workspaceId)
+  const { data: logoData } = useWorkspaceLogo()
+  const uploadMutation = useUploadWorkspaceLogo()
+  const deleteMutation = useDeleteWorkspaceLogo()
 
   // Use query data if available, fall back to initial prop
   const logoUrl = logoData?.logoUrl ?? initialLogoUrl

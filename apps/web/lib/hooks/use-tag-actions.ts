@@ -13,7 +13,7 @@ import {
 } from '@/lib/actions/tags'
 import type { Tag } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
-import type { TagId, WorkspaceId } from '@quackback/ids'
+import type { TagId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -22,7 +22,6 @@ import type { TagId, WorkspaceId } from '@quackback/ids'
 export const tagKeys = {
   all: ['tags'] as const,
   lists: () => [...tagKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId) => [...tagKeys.lists(), workspaceId] as const,
   detail: (id: TagId) => [...tagKeys.all, 'detail', id] as const,
 }
 
@@ -31,16 +30,15 @@ export const tagKeys = {
 // ============================================================================
 
 interface UseTagsOptions {
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
 /**
- * Hook to list all tags for a workspace.
+ * Hook to list all tags.
  */
-export function useTags({ workspaceId, enabled = true }: UseTagsOptions) {
+export function useTags({ enabled = true }: UseTagsOptions = {}) {
   return useQuery({
-    queryKey: tagKeys.list(workspaceId),
+    queryKey: tagKeys.lists(),
     queryFn: async () => {
       const result = await listTagsAction({})
       if (!result.success) {
@@ -58,7 +56,6 @@ export function useTags({ workspaceId, enabled = true }: UseTagsOptions) {
 // ============================================================================
 
 interface UseCreateTagOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (tag: Tag) => void
   onError?: (error: ActionError) => void
 }
@@ -68,16 +65,15 @@ interface UseCreateTagOptions {
  *
  * @example
  * const createTag = useCreateTag({
- *   workspaceId,
  *   onSuccess: (tag) => toast.success(`Created "${tag.name}"`),
  *   onError: (error) => toast.error(error.message),
  * })
  *
- * createTag.mutate({ workspaceId, name: 'Bug', color: '#ef4444' })
+ * createTag.mutate({ name: 'Bug', color: '#ef4444' })
  */
-export function useCreateTag({ workspaceId, onSuccess, onError }: UseCreateTagOptions) {
+export function useCreateTag({ onSuccess, onError }: UseCreateTagOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = tagKeys.list(workspaceId)
+  const listKey = tagKeys.lists()
 
   return useActionMutation<CreateTagInput, Tag, { previous: Tag[] | undefined }>({
     action: createTagAction,
@@ -104,7 +100,6 @@ export function useCreateTag({ workspaceId, onSuccess, onError }: UseCreateTagOp
 }
 
 interface UseUpdateTagOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (tag: Tag) => void
   onError?: (error: ActionError) => void
 }
@@ -114,15 +109,14 @@ interface UseUpdateTagOptions {
  *
  * @example
  * const updateTag = useUpdateTag({
- *   workspaceId,
  *   onSuccess: (tag) => toast.success(`Updated "${tag.name}"`),
  * })
  *
- * updateTag.mutate({ workspaceId, id: tag.id, name: 'New Name' })
+ * updateTag.mutate({ id: tag.id, name: 'New Name' })
  */
-export function useUpdateTag({ workspaceId, onSuccess, onError }: UseUpdateTagOptions) {
+export function useUpdateTag({ onSuccess, onError }: UseUpdateTagOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = tagKeys.list(workspaceId)
+  const listKey = tagKeys.lists()
 
   return useActionMutation<UpdateTagInput, Tag, { previous: Tag[] | undefined }>({
     action: updateTagAction,
@@ -147,7 +141,6 @@ export function useUpdateTag({ workspaceId, onSuccess, onError }: UseUpdateTagOp
 }
 
 interface UseDeleteTagOptions {
-  workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
@@ -157,15 +150,14 @@ interface UseDeleteTagOptions {
  *
  * @example
  * const deleteTag = useDeleteTag({
- *   workspaceId,
  *   onSuccess: () => toast.success('Tag deleted'),
  * })
  *
- * deleteTag.mutate({ workspaceId, id: tag.id })
+ * deleteTag.mutate({ id: tag.id })
  */
-export function useDeleteTag({ workspaceId, onSuccess, onError }: UseDeleteTagOptions) {
+export function useDeleteTag({ onSuccess, onError }: UseDeleteTagOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = tagKeys.list(workspaceId)
+  const listKey = tagKeys.lists()
 
   return useActionMutation<DeleteTagInput, { id: string }, { previous: Tag[] | undefined }>({
     action: deleteTagAction,

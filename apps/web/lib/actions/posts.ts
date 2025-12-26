@@ -187,7 +187,6 @@ export const createPostAction = withAction(
     // Trigger EventWorkflow for integrations and notifications
     const { boardSlug, ...post } = result.value
     const eventData = buildPostCreatedEvent(
-      ctx.settings.id,
       { type: 'user', userId: serviceCtx.userId, email: serviceCtx.userEmail },
       {
         id: post.id,
@@ -368,7 +367,6 @@ export const changePostStatusAction = withAction(
     // Trigger EventWorkflow for integrations and notifications
     const { boardSlug, previousStatus, newStatus, ...post } = result.value
     const eventData = buildPostStatusChangedEvent(
-      _ctx.settings.id,
       { type: 'user', userId: serviceCtx.userId, email: serviceCtx.userEmail },
       { id: post.id, title: post.title, boardSlug },
       previousStatus,

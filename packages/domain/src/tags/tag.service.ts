@@ -47,15 +47,16 @@ export class TagService {
 
       const tagRepo = new TagRepository(uow.db)
 
-      // Validate input
-      if (!input.name?.trim()) {
+      // Basic validation (also done at action layer, but enforced here for direct service calls)
+      if (!input.name || !input.name.trim()) {
         return err(TagError.validationError('Tag name is required'))
-      }
-      if (input.name.length > 50) {
-        return err(TagError.validationError('Tag name must be 50 characters or less'))
       }
 
       const trimmedName = input.name.trim()
+
+      if (trimmedName.length > 50) {
+        return err(TagError.validationError('Tag name must not exceed 50 characters'))
+      }
 
       // Check for duplicate name in the organization
       const existingTags = await tagRepo.findAll()
@@ -66,9 +67,11 @@ export class TagService {
         return err(TagError.duplicateName(trimmedName))
       }
 
-      // Validate color format (hex color)
       const color = input.color || '#6b7280'
-      if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+
+      // Validate color format
+      const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
+      if (!hexColorRegex.test(color)) {
         return err(TagError.validationError('Color must be a valid hex color (e.g., #6b7280)'))
       }
 
@@ -114,17 +117,18 @@ export class TagService {
         return err(TagError.notFound(id))
       }
 
-      // Validate input
-      if (input.name !== undefined) {
-        if (!input.name.trim()) {
-          return err(TagError.validationError('Tag name cannot be empty'))
-        }
-        if (input.name.length > 50) {
-          return err(TagError.validationError('Tag name must be 50 characters or less'))
-        }
+      // Basic validation (also done at action layer, but enforced here for direct service calls)
+      if (input.name !== undefined && !input.name.trim()) {
+        return err(TagError.validationError('Tag name cannot be empty'))
+      }
 
-        // Check for duplicate name (excluding current tag)
+      // Check for duplicate name (excluding current tag)
+      if (input.name !== undefined) {
         const trimmedName = input.name.trim()
+
+        if (trimmedName.length > 50) {
+          return err(TagError.validationError('Tag name must not exceed 50 characters'))
+        }
         const existingTags = await tagRepo.findAll()
         const duplicate = existingTags.find(
           (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
@@ -134,8 +138,10 @@ export class TagService {
         }
       }
 
+      // Validate color format if provided
       if (input.color !== undefined) {
-        if (!/^#[0-9A-Fa-f]{6}$/.test(input.color)) {
+        const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
+        if (!hexColorRegex.test(input.color)) {
           return err(TagError.validationError('Color must be a valid hex color (e.g., #6b7280)'))
         }
       }

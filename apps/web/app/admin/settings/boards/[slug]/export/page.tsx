@@ -3,13 +3,9 @@ import { requireAuthenticatedTenant } from '@/lib/tenant'
 import { db, boards, eq } from '@/lib/db'
 import { BoardExportSection } from './board-export-section'
 
-export default async function BoardExportPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}) {
+export default async function BoardExportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const { settings } = await requireAuthenticatedTenant()
+  await requireAuthenticatedTenant()
 
   const board = await db.query.boards.findFirst({
     where: eq(boards.slug, slug),
@@ -30,7 +26,7 @@ export default async function BoardExportPage({
           Download posts from {board.name} as a CSV file
         </p>
       </div>
-      <BoardExportSection workspaceId={settings.id} boardId={boardId} />
+      <BoardExportSection boardId={boardId} />
     </div>
   )
 }

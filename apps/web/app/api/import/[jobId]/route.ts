@@ -19,17 +19,10 @@ export async function GET(
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 })
     }
 
-    // Extract workspaceId from jobId (format: import-{workspaceId}-{timestamp})
-    // Example: import-workspace_01h455vb4pex5vsknk084sn02q-1702000000000
-    const parts = jobId.split('-')
-    if (parts.length < 3 || parts[0] !== 'import') {
+    // Validate job ID format (format: import-{timestamp})
+    // Example: import-1702000000000
+    if (!jobId.startsWith('import-')) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
-    }
-
-    // parts[1] is the workspace TypeID - verify it matches the user's organization
-    const workspaceIdFromJob = parts.slice(1, -1).join('-') // Handle TypeIDs that may contain dashes
-    if (workspaceIdFromJob !== validation.settings.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Get job status via adapter

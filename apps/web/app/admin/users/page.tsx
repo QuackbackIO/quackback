@@ -3,14 +3,12 @@ import { getUserService } from '@/lib/services'
 import { UsersContainer } from './users-container'
 
 export default async function UsersPage({
-  params,
   searchParams,
 }: {
-  params?: Promise<{}>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   // Settings is validated in root layout
-  const { settings, member } = await requireAuthenticatedTenant()
+  const { member } = await requireAuthenticatedTenant()
   const paramsResolved = await searchParams
 
   const getStringParam = (key: string): string | undefined => {
@@ -41,11 +39,5 @@ export default async function UsersPage({
     ? usersResult.value
     : { items: [], total: 0, hasMore: false }
 
-  return (
-    <UsersContainer
-      workspaceId={settings.id}
-      initialUsers={initialUsers}
-      currentMemberRole={member.role}
-    />
-  )
+  return <UsersContainer initialUsers={initialUsers} currentMemberRole={member.role} />
 }

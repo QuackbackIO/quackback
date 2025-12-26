@@ -11,10 +11,9 @@ import {
   useRoadmapPostsByRoadmap,
   flattenRoadmapPostEntries,
 } from '@/lib/hooks/use-roadmap-posts-query'
-import type { RoadmapId, StatusId, WorkspaceId } from '@quackback/ids'
+import type { RoadmapId, StatusId } from '@quackback/ids'
 
 interface AdminRoadmapColumnProps {
-  workspaceId: WorkspaceId
   roadmapId: RoadmapId
   statusId: StatusId
   title: string
@@ -23,7 +22,6 @@ interface AdminRoadmapColumnProps {
 }
 
 export function AdminRoadmapColumn({
-  workspaceId,
   roadmapId,
   statusId,
   title,
@@ -43,7 +41,6 @@ export function AdminRoadmapColumn({
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } =
     useRoadmapPostsByRoadmap({
-      workspaceId,
       roadmapId,
       statusId,
     })

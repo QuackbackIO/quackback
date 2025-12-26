@@ -228,7 +228,7 @@ export function withApiHandler(handler: ApiHandler, options: ApiHandlerOptions =
 
       // Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.settings.id, options.feature)
+        const featureCheck = await checkFeatureAccess(options.feature)
         if (!featureCheck.allowed) {
           return NextResponse.json(
             {
@@ -321,7 +321,7 @@ export function withApiHandlerParams<P>(
 
       // Check feature access if required
       if (options.feature) {
-        const featureCheck = await checkFeatureAccess(validation.settings.id, options.feature)
+        const featureCheck = await checkFeatureAccess(options.feature)
         if (!featureCheck.allowed) {
           return NextResponse.json(
             {

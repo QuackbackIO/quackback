@@ -167,17 +167,6 @@ export async function listPublicPostsAction(
 
     const input = parseResult.data
 
-    // Get workspaceId from settings
-    const { getSettings } = await import('@/lib/tenant')
-    const settings = await getSettings()
-    if (!settings) {
-      return actionErr({
-        code: 'NOT_FOUND',
-        message: 'Organization not found',
-        status: 404,
-      })
-    }
-
     const result = await getPublicPostService().listPosts({
       boardSlug: input.boardSlug,
       search: input.search,
@@ -522,7 +511,7 @@ export async function createPublicPostAction(
 
     const post = createResult.value
 
-    // Get workspaceId from settings for event
+    // Get settings for organization info
     const { getSettings } = await import('@/lib/tenant')
     const settings = await getSettings()
     if (!settings) {
@@ -535,7 +524,6 @@ export async function createPublicPostAction(
 
     // Trigger EventWorkflow for integrations and notifications
     const eventData = buildPostCreatedEvent(
-      settings.id,
       { type: 'user', userId: ctx.userId, email: ctx.userEmail },
       {
         id: post.id,
@@ -636,17 +624,6 @@ export async function listPublicRoadmapsAction(
       })
     }
 
-    // Get workspaceId from settings
-    const { getSettings } = await import('@/lib/tenant')
-    const settings = await getSettings()
-    if (!settings) {
-      return actionErr({
-        code: 'NOT_FOUND',
-        message: 'Organization not found',
-        status: 404,
-      })
-    }
-
     const result = await getRoadmapService().listPublicRoadmaps()
     if (!result.success) {
       return actionErr({
@@ -684,17 +661,6 @@ export async function getPublicRoadmapPostsAction(
     }
 
     const { roadmapId, statusId, limit, offset } = parseResult.data
-
-    // Get workspaceId from settings
-    const { getSettings } = await import('@/lib/tenant')
-    const settings = await getSettings()
-    if (!settings) {
-      return actionErr({
-        code: 'NOT_FOUND',
-        message: 'Organization not found',
-        status: 404,
-      })
-    }
 
     const result = await getRoadmapService().getPublicRoadmapPosts(roadmapId as RoadmapId, {
       statusId: statusId as StatusId | undefined,
@@ -739,17 +705,6 @@ export async function getRoadmapPostsByStatusAction(
     }
 
     const { statusId, page, limit } = parseResult.data
-
-    // Get workspaceId from settings
-    const { getSettings } = await import('@/lib/tenant')
-    const settings = await getSettings()
-    if (!settings) {
-      return actionErr({
-        code: 'NOT_FOUND',
-        message: 'Organization not found',
-        status: 404,
-      })
-    }
 
     const result = await getPublicPostService().getRoadmapPostsPaginated({
       statusId: statusId as StatusId,

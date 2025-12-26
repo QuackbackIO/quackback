@@ -125,7 +125,6 @@ export async function POST(request: NextRequest) {
 
     // Create job data
     const jobData: ImportJobData = {
-      workspaceId: validation.settings.id,
       boardId: targetBoardId!,
       csvContent,
       totalRows,

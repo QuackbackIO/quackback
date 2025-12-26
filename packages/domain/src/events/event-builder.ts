@@ -18,7 +18,7 @@ import type {
   EventPostRef,
   EventCommentData,
 } from '@quackback/jobs'
-import type { WorkspaceId, PostId, BoardId, CommentId } from '@quackback/ids'
+import type { PostId, BoardId, CommentId } from '@quackback/ids'
 
 // Re-export EventActor for API routes that need to construct actor objects
 export type { EventActor } from '@quackback/jobs'
@@ -65,21 +65,18 @@ export interface CommentPostInput {
 /**
  * Build event data for post.created event.
  *
- * @param workspaceId - The organization this event belongs to
  * @param actor - Who triggered the event (user or system)
  * @param post - The created post data
  * @returns Strongly-typed PostCreatedEventJobData
  *
  * @example
  * const event = buildPostCreatedEvent(
- *   ctx.workspaceId,
  *   { type: 'user', userId: ctx.userId, email: ctx.userEmail },
  *   { id: post.id, title: post.title, content: post.content, ... }
  * )
  * await jobAdapter.addEventJob(event)
  */
 export function buildPostCreatedEvent(
-  workspaceId: WorkspaceId,
   actor: EventActor,
   post: PostCreatedInput
 ): PostCreatedEventJobData {
@@ -96,7 +93,6 @@ export function buildPostCreatedEvent(
   return {
     id: randomUUID(),
     type: 'post.created',
-    workspaceId,
     timestamp: new Date().toISOString(),
     actor,
     data: { post: postData },
@@ -106,7 +102,6 @@ export function buildPostCreatedEvent(
 /**
  * Build event data for post.status_changed event.
  *
- * @param workspaceId - The organization this event belongs to
  * @param actor - Who triggered the event (user or system)
  * @param post - Reference to the post that was updated
  * @param previousStatus - The status name before the change (e.g., "Open")
@@ -115,7 +110,6 @@ export function buildPostCreatedEvent(
  *
  * @example
  * const event = buildPostStatusChangedEvent(
- *   ctx.workspaceId,
  *   { type: 'user', userId: ctx.userId, email: ctx.userEmail },
  *   { id: post.id, title: post.title, boardSlug },
  *   'Open',
@@ -124,7 +118,6 @@ export function buildPostCreatedEvent(
  * await jobAdapter.addEventJob(event)
  */
 export function buildPostStatusChangedEvent(
-  workspaceId: WorkspaceId,
   actor: EventActor,
   post: PostStatusChangedInput,
   previousStatus: string,
@@ -139,7 +132,6 @@ export function buildPostStatusChangedEvent(
   return {
     id: randomUUID(),
     type: 'post.status_changed',
-    workspaceId,
     timestamp: new Date().toISOString(),
     actor,
     data: { post: postRef, previousStatus, newStatus },
@@ -149,7 +141,6 @@ export function buildPostStatusChangedEvent(
 /**
  * Build event data for comment.created event.
  *
- * @param workspaceId - The organization this event belongs to
  * @param actor - Who triggered the event (user or system)
  * @param comment - The created comment data
  * @param post - Reference to the post the comment was added to
@@ -157,7 +148,6 @@ export function buildPostStatusChangedEvent(
  *
  * @example
  * const event = buildCommentCreatedEvent(
- *   ctx.workspaceId,
  *   { type: 'user', userId: ctx.userId, email: ctx.userEmail },
  *   { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
  *   { id: post.id, title: post.title }
@@ -165,7 +155,6 @@ export function buildPostStatusChangedEvent(
  * await jobAdapter.addEventJob(event)
  */
 export function buildCommentCreatedEvent(
-  workspaceId: WorkspaceId,
   actor: EventActor,
   comment: CommentCreatedInput,
   post: CommentPostInput
@@ -179,7 +168,6 @@ export function buildCommentCreatedEvent(
   return {
     id: randomUUID(),
     type: 'comment.created',
-    workspaceId,
     timestamp: new Date().toISOString(),
     actor,
     data: {

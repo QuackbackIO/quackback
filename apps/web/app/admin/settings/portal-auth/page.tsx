@@ -3,10 +3,10 @@ import { workspaceService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { Lock } from 'lucide-react'
 import { PortalAuthSettings } from './portal-auth-settings'
 
-export default async function PortalAuthPage({ params }: { params?: Promise<{}> }) {
+export default async function PortalAuthPage() {
   // Settings is validated in root layout
   // Only owners and admins can access portal auth settings
-  const { settings } = await requireTenantRole( ['owner', 'admin'])
+  await requireTenantRole(['owner', 'admin'])
 
   // Fetch portal config
   const configResult = await workspaceService.getPortalConfig()
@@ -38,10 +38,7 @@ export default async function PortalAuthPage({ params }: { params?: Promise<{}> 
         </div>
 
         {/* Right column - settings card */}
-        <PortalAuthSettings
-          workspaceId={settings.id}
-          initialConfig={{ oauth: portalConfig.oauth }}
-        />
+        <PortalAuthSettings initialConfig={{ oauth: portalConfig.oauth }} />
       </div>
     </div>
   )

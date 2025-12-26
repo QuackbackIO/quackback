@@ -10,7 +10,7 @@ export default async function BoardAccessSettingsPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const { settings } = await requireAuthenticatedTenant()
+  await requireAuthenticatedTenant()
 
   // Database now returns TypeIDs directly
   const board = await db.query.boards.findFirst({
@@ -29,7 +29,7 @@ export default async function BoardAccessSettingsPage({
           <CardDescription>Control who can view this board on your portal</CardDescription>
         </CardHeader>
         <CardContent>
-          <BoardAccessForm board={board} workspaceId={settings.id} />
+          <BoardAccessForm board={board} />
         </CardContent>
       </Card>
     </div>

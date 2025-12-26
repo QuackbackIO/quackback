@@ -9,7 +9,6 @@ import {
   getMinimumTierForFeature,
 } from '@quackback/domain'
 import { getSubscription, isSubscriptionActive } from '../subscription'
-import type { WorkspaceId } from '@quackback/ids'
 
 export interface WorkspaceFeatures {
   /** Current edition */
@@ -25,76 +24,71 @@ export interface WorkspaceFeatures {
 }
 
 /**
- * Get feature access info for an organization.
+ * Get feature access info for the workspace.
  * Cached per request for efficiency.
  */
-export const getWorkspaceFeatures = cache(
-  async (workspaceId: WorkspaceId): Promise<WorkspaceFeatures> => {
-    // OSS (self-hosted): all features enabled, no limits
-    if (isSelfHosted()) {
-      return {
-        edition: 'oss',
-        tier: 'enterprise', // Effective tier for OSS
-        enabledFeatures: Object.values(Feature),
-        hasFeature: () => true,
-        limits: {
-          boards: 'unlimited',
-          roadmaps: 'unlimited',
-          seats: 'unlimited',
-          posts: 'unlimited',
-        },
-      }
-    }
-
-    // Cloud: check subscription
-    const subscription = await getSubscription(workspaceId)
-
-    // No active subscription = Free tier
-    if (!subscription || !isSubscriptionActive(subscription)) {
-      const freeTierConfig = TIER_CONFIG['free']
-      return {
-        edition: 'cloud',
-        tier: 'free',
-        enabledFeatures: freeTierConfig.features,
-        hasFeature: (feature: Feature) => freeTierConfig.features.includes(feature),
-        limits: freeTierConfig.limits,
-      }
-    }
-
-    const tier = subscription.tier as PricingTier
-    const tierConfig = TIER_CONFIG[tier]
-    const enabledFeatures = tierConfig.features
-
+export const getWorkspaceFeatures = cache(async (): Promise<WorkspaceFeatures> => {
+  // OSS (self-hosted): all features enabled, no limits
+  if (isSelfHosted()) {
     return {
-      edition: 'cloud',
-      tier,
-      enabledFeatures,
-      hasFeature: (feature: Feature) => enabledFeatures.includes(feature),
-      limits: tierConfig.limits,
+      edition: 'oss',
+      tier: 'enterprise', // Effective tier for OSS
+      enabledFeatures: Object.values(Feature),
+      hasFeature: () => true,
+      limits: {
+        boards: 'unlimited',
+        roadmaps: 'unlimited',
+        seats: 'unlimited',
+        posts: 'unlimited',
+      },
     }
   }
-)
+
+  // Cloud: check subscription
+  const subscription = await getSubscription()
+
+  // No active subscription = Free tier
+  if (!subscription || !isSubscriptionActive(subscription)) {
+    const freeTierConfig = TIER_CONFIG['free']
+    return {
+      edition: 'cloud',
+      tier: 'free',
+      enabledFeatures: freeTierConfig.features,
+      hasFeature: (feature: Feature) => freeTierConfig.features.includes(feature),
+      limits: freeTierConfig.limits,
+    }
+  }
+
+  const tier = subscription.tier as PricingTier
+  const tierConfig = TIER_CONFIG[tier]
+  const enabledFeatures = tierConfig.features
+
+  return {
+    edition: 'cloud',
+    tier,
+    enabledFeatures,
+    hasFeature: (feature: Feature) => enabledFeatures.includes(feature),
+    limits: tierConfig.limits,
+  }
+})
 
 /**
- * Check if an organization has a specific feature.
+ * Check if the workspace has a specific feature.
  * Convenience wrapper for getWorkspaceFeatures.
  */
-export async function hasFeature(workspaceId: WorkspaceId, feature: Feature): Promise<boolean> {
-  const features = await getWorkspaceFeatures(workspaceId)
+export async function hasFeature(feature: Feature): Promise<boolean> {
+  const features = await getWorkspaceFeatures()
   return features.hasFeature(feature)
 }
 
 /**
- * Check if an organization has at least a certain tier.
+ * Check if the workspace has at least a certain tier.
  */
-export async function hasTier(
-  workspaceId: WorkspaceId,
-  requiredTier: PricingTier
-): Promise<boolean> {
+export async function hasTier(requiredTier: PricingTier): Promise<boolean> {
   // OSS always has highest tier
   if (isSelfHosted()) return true
 
-  const features = await getWorkspaceFeatures(workspaceId)
+  const features = await getWorkspaceFeatures()
   return TIER_ORDER.indexOf(features.tier) >= TIER_ORDER.indexOf(requiredTier)
 }
 
@@ -108,11 +102,8 @@ export interface FeatureCheckResult {
 /**
  * Check feature access and get detailed result for API/UI responses.
  */
-export async function checkFeatureAccess(
-  workspaceId: WorkspaceId,
-  feature: Feature
-): Promise<FeatureCheckResult> {
-  const features = await getWorkspaceFeatures(workspaceId)
+export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheckResult> {
+  const features = await getWorkspaceFeatures()
 
   if (features.hasFeature(feature)) {
     return { allowed: true }

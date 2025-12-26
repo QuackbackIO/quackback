@@ -4,10 +4,8 @@ import { createContext, useContext, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@quackback/domain/features'
 import { featuresKeys, type WorkspaceFeaturesData } from '@/lib/hooks/use-features'
-import type { WorkspaceId } from '@quackback/ids'
 
 interface FeaturesContextValue {
-  workspaceId: WorkspaceId
   edition: 'oss' | 'cloud'
   tier: PricingTier | null
   enabledFeatures: Feature[]
@@ -25,7 +23,6 @@ const FeaturesContext = createContext<FeaturesContextValue | null>(null)
 
 interface FeaturesProviderProps {
   children: ReactNode
-  workspaceId: WorkspaceId
   /** SSR-fetched features data for hydration */
   initialFeatures: WorkspaceFeaturesData
 }
@@ -41,30 +38,25 @@ interface FeaturesProviderProps {
  * Usage:
  * ```tsx
  * // In a server component
- * const features = await getWorkspaceFeatures(workspaceId)
+ * const features = await getWorkspaceFeatures()
  *
  * // Pass to client
- * <FeaturesProvider workspaceId={orgId} initialFeatures={features}>
+ * <FeaturesProvider initialFeatures={features}>
  *   {children}
  * </FeaturesProvider>
  * ```
  */
-export function FeaturesProvider({
-  children,
-  workspaceId,
-  initialFeatures,
-}: FeaturesProviderProps) {
+export function FeaturesProvider({ children, initialFeatures }: FeaturesProviderProps) {
   const queryClient = useQueryClient()
 
   // Hydrate React Query cache with SSR data
-  queryClient.setQueryData(featuresKeys.organization(workspaceId), initialFeatures)
+  queryClient.setQueryData(featuresKeys.workspace(), initialFeatures)
 
   const hasFeature = (feature: Feature) => initialFeatures.enabledFeatures.includes(feature)
 
   return (
     <FeaturesContext.Provider
       value={{
-        workspaceId,
         edition: initialFeatures.edition,
         tier: initialFeatures.tier,
         enabledFeatures: initialFeatures.enabledFeatures,

@@ -10,28 +10,20 @@ import {
   usePublicRoadmapPosts,
   flattenRoadmapPostEntries,
 } from '@/lib/hooks/use-roadmap-posts-query'
-import type { RoadmapId, StatusId, WorkspaceId } from '@quackback/ids'
+import type { RoadmapId, StatusId } from '@quackback/ids'
 
 interface RoadmapColumnProps {
-  workspaceId: WorkspaceId
   roadmapId: RoadmapId
   statusId: StatusId
   title: string
   color: string
 }
 
-export function RoadmapColumn({
-  workspaceId,
-  roadmapId,
-  statusId,
-  title,
-  color,
-}: RoadmapColumnProps) {
+export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColumnProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
-      workspaceId,
       roadmapId,
       statusId,
     }

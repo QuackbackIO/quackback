@@ -1,16 +1,12 @@
 import { redirect } from 'next/navigation'
 import { requireAuthenticatedTenant } from '@/lib/tenant'
-import { db, boards, eq } from '@/lib/db'
+import { db } from '@/lib/db'
 import { Layout, MessageSquare } from 'lucide-react'
 import { CreateBoardDialog } from './create-board-dialog'
 
-export default async function BoardsSettingsPage({
-  params,
-}: {
-  params?: Promise<{}>
-}) {
+export default async function BoardsSettingsPage() {
   // Settings is validated in root layout
-  const { settings } = await requireAuthenticatedTenant()
+  await requireAuthenticatedTenant()
 
   // Only fetch slug for faster redirect
   const firstBoard = await db.query.boards.findFirst({
@@ -48,7 +44,7 @@ export default async function BoardsSettingsPage({
         <p className="text-sm text-muted-foreground mb-6">
           Create your first feedback board to start collecting ideas from your users
         </p>
-        <CreateBoardDialog workspaceId={settings.id} />
+        <CreateBoardDialog />
       </div>
     </div>
   )

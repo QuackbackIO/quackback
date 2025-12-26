@@ -36,7 +36,7 @@ export interface Session {
 /**
  * Get the current session with user.
  *
- * Returns session with properly typed IDs (UserId, WorkspaceId, SessionId).
+ * Returns session with properly typed IDs (UserId, SessionId).
  * The database stores UUIDs but the schema layer returns TypeID format.
  */
 export const getSession = cache(async (): Promise<Session | null> => {

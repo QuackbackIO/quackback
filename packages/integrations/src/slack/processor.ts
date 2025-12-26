@@ -3,8 +3,6 @@
  * Sends notifications to Slack channels when domain events occur.
  */
 import { WebClient } from '@slack/web-api'
-import { db, settings, eq } from '@quackback/db'
-import type { WorkspaceId } from '@quackback/ids'
 import type {
   PostCreatedPayload,
   PostStatusChangedPayload,

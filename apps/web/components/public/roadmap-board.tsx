@@ -8,19 +8,16 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePublicRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import type { PostStatusEntity, Roadmap } from '@/lib/db'
-import type { WorkspaceId } from '@quackback/ids'
 
 interface RoadmapBoardProps {
-  workspaceId: WorkspaceId
   statuses: PostStatusEntity[]
   initialRoadmaps?: Roadmap[]
 }
 
-export function RoadmapBoard({ workspaceId, statuses, initialRoadmaps }: RoadmapBoardProps) {
+export function RoadmapBoard({ statuses, initialRoadmaps }: RoadmapBoardProps) {
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null)
 
   const { data: roadmaps } = usePublicRoadmaps({
-    workspaceId,
     enabled: !initialRoadmaps,
   })
 
@@ -83,7 +80,6 @@ export function RoadmapBoard({ workspaceId, statuses, initialRoadmaps }: Roadmap
             {statuses.map((status) => (
               <RoadmapColumn
                 key={status.id}
-                workspaceId={workspaceId}
                 roadmapId={selectedRoadmapId as `roadmap_${string}`}
                 statusId={status.id}
                 title={status.name}

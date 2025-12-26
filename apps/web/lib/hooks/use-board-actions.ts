@@ -13,7 +13,7 @@ import {
 } from '@/lib/actions/boards'
 import type { Board } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
-import type { WorkspaceId, BoardId } from '@quackback/ids'
+import type { BoardId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -22,7 +22,6 @@ import type { WorkspaceId, BoardId } from '@quackback/ids'
 export const boardKeys = {
   all: ['boards'] as const,
   lists: () => [...boardKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId) => [...boardKeys.lists(), workspaceId] as const,
   detail: (id: BoardId) => [...boardKeys.all, 'detail', id] as const,
 }
 
@@ -31,16 +30,15 @@ export const boardKeys = {
 // ============================================================================
 
 interface UseBoardsOptions {
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
 /**
- * Hook to list all boards for a workspace.
+ * Hook to list all boards (single-tenant).
  */
-export function useBoards({ workspaceId, enabled = true }: UseBoardsOptions) {
+export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   return useQuery({
-    queryKey: boardKeys.list(workspaceId),
+    queryKey: boardKeys.lists(),
     queryFn: async () => {
       const result = await listBoardsAction({})
       if (!result.success) {
@@ -58,31 +56,28 @@ export function useBoards({ workspaceId, enabled = true }: UseBoardsOptions) {
 // ============================================================================
 
 interface UseCreateBoardOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (board: Board) => void
   onError?: (error: ActionError) => void
 }
 
 /**
- * Hook to create a new board.
+ * Hook to create a new board (single-tenant).
  *
  * @example
  * const createBoard = useCreateBoard({
- *   workspaceId,
  *   onSuccess: (board) => toast.success(`Created "${board.name}"`),
  *   onError: (error) => toast.error(error.message),
  * })
  *
  * createBoard.mutate({
- *   workspaceId,
  *   name: 'Feature Requests',
  *   description: 'Submit your feature ideas here',
  *   isPublic: true,
  * })
  */
-export function useCreateBoard({ workspaceId, onSuccess, onError }: UseCreateBoardOptions) {
+export function useCreateBoard({ onSuccess, onError }: UseCreateBoardOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = boardKeys.list(workspaceId)
+  const listKey = boardKeys.lists()
 
   return useActionMutation<CreateBoardInput, Board, { previous: Board[] | undefined }>({
     action: createBoardAction,
@@ -113,25 +108,23 @@ export function useCreateBoard({ workspaceId, onSuccess, onError }: UseCreateBoa
 }
 
 interface UseUpdateBoardOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (board: Board) => void
   onError?: (error: ActionError) => void
 }
 
 /**
- * Hook to update an existing board.
+ * Hook to update an existing board (single-tenant).
  *
  * @example
  * const updateBoard = useUpdateBoard({
- *   workspaceId,
  *   onSuccess: (board) => toast.success(`Updated "${board.name}"`),
  * })
  *
- * updateBoard.mutate({ workspaceId, id: board.id, name: 'New Name' })
+ * updateBoard.mutate({ id: board.id, name: 'New Name' })
  */
-export function useUpdateBoard({ workspaceId, onSuccess, onError }: UseUpdateBoardOptions) {
+export function useUpdateBoard({ onSuccess, onError }: UseUpdateBoardOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = boardKeys.list(workspaceId)
+  const listKey = boardKeys.lists()
 
   return useActionMutation<UpdateBoardInput, Board, { previous: Board[] | undefined }>({
     action: updateBoardAction,
@@ -157,25 +150,23 @@ export function useUpdateBoard({ workspaceId, onSuccess, onError }: UseUpdateBoa
 }
 
 interface UseDeleteBoardOptions {
-  workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
 
 /**
- * Hook to delete a board.
+ * Hook to delete a board (single-tenant).
  *
  * @example
  * const deleteBoard = useDeleteBoard({
- *   workspaceId,
  *   onSuccess: () => toast.success('Board deleted'),
  * })
  *
- * deleteBoard.mutate({ workspaceId, id: board.id })
+ * deleteBoard.mutate({ id: board.id })
  */
-export function useDeleteBoard({ workspaceId, onSuccess, onError }: UseDeleteBoardOptions) {
+export function useDeleteBoard({ onSuccess, onError }: UseDeleteBoardOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = boardKeys.list(workspaceId)
+  const listKey = boardKeys.lists()
 
   return useActionMutation<DeleteBoardInput, { id: string }, { previous: Board[] | undefined }>({
     action: deleteBoardAction,

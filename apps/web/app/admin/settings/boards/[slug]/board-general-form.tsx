@@ -14,8 +14,8 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { useUpdateBoard } from '@/lib/hooks/use-board-queries'
-import type { BoardId, WorkspaceId } from '@quackback/ids'
+import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
+import type { BoardId } from '@quackback/ids'
 
 interface Board {
   id: BoardId
@@ -26,11 +26,10 @@ interface Board {
 
 interface BoardGeneralFormProps {
   board: Board
-  workspaceId: WorkspaceId
 }
 
-export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) {
-  const mutation = useUpdateBoard(workspaceId)
+export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
+  const mutation = useUpdateBoard()
 
   const form = useForm<UpdateBoardInput>({
     resolver: standardSchemaResolver(updateBoardSchema),
@@ -42,7 +41,7 @@ export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) 
 
   function onSubmit(data: UpdateBoardInput) {
     mutation.mutate({
-      boardId: board.id,
+      id: board.id,
       name: data.name,
       description: data.description,
     })
@@ -53,13 +52,7 @@ export function BoardGeneralForm({ board, workspaceId }: BoardGeneralFormProps) 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {mutation.isError && (
           <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {mutation.error.message}
-          </div>
-        )}
-
-        {mutation.isSuccess && (
-          <div className="rounded-md bg-primary/10 p-3 text-sm text-primary">
-            Board updated successfully
+            {mutation.error?.message}
           </div>
         )}
 

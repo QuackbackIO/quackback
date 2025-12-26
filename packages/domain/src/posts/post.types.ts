@@ -97,7 +97,6 @@ export interface PublicPostListResult {
 
 /**
  * Parameters for inbox post list query
- * Note: workspaceId comes from ServiceContext, not these params
  */
 export interface InboxPostListParams {
   boardIds?: BoardId[]

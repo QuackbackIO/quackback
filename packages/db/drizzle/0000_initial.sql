@@ -1,48 +1,3 @@
--- Core auth tables (no dependencies)
-CREATE TABLE "user" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"email" text NOT NULL,
-	"email_verified" boolean DEFAULT false NOT NULL,
-	"image" text,
-	"image_blob" "bytea",
-	"image_type" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"metadata" text
-);
---> statement-breakpoint
-CREATE TABLE "verification" (
-	"id" text PRIMARY KEY NOT NULL,
-	"identifier" text NOT NULL,
-	"value" text NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "settings" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"slug" text NOT NULL,
-	"logo_blob" "bytea",
-	"logo_type" text,
-	"favicon_blob" "bytea",
-	"favicon_type" text,
-	"created_at" timestamp with time zone NOT NULL,
-	"metadata" text,
-	"auth_config" text,
-	"portal_config" text,
-	"branding_config" text,
-	"custom_css" text,
-	"header_logo_blob" "bytea",
-	"header_logo_type" text,
-	"header_display_mode" text DEFAULT 'logo_and_name',
-	"header_display_name" text,
-	CONSTRAINT "settings_slug_unique" UNIQUE("slug")
-);
---> statement-breakpoint
--- Auth tables (depend on user)
 CREATE TABLE "account" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -90,7 +45,49 @@ CREATE TABLE "session" (
 	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
--- Application tables (no dependencies)
+CREATE TABLE "settings" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"slug" text NOT NULL,
+	"logo_blob" "bytea",
+	"logo_type" text,
+	"favicon_blob" "bytea",
+	"favicon_type" text,
+	"header_logo_blob" "bytea",
+	"header_logo_type" text,
+	"created_at" timestamp with time zone NOT NULL,
+	"metadata" text,
+	"auth_config" text,
+	"portal_config" text,
+	"branding_config" text,
+	"custom_css" text,
+	"header_display_mode" text DEFAULT 'logo_and_name',
+	"header_display_name" text,
+	CONSTRAINT "settings_slug_unique" UNIQUE("slug")
+);
+--> statement-breakpoint
+CREATE TABLE "user" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"email" text NOT NULL,
+	"email_verified" boolean DEFAULT false NOT NULL,
+	"image" text,
+	"image_blob" "bytea",
+	"image_type" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"metadata" text
+);
+--> statement-breakpoint
+CREATE TABLE "verification" (
+	"id" text PRIMARY KEY NOT NULL,
+	"identifier" text NOT NULL,
+	"value" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "boards" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"slug" text NOT NULL,
@@ -136,7 +133,57 @@ CREATE TABLE "post_statuses" (
 	CONSTRAINT "post_statuses_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
--- Posts table (depends on boards, member, post_statuses)
+CREATE TABLE "comment_edit_history" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"comment_id" uuid NOT NULL,
+	"editor_member_id" uuid NOT NULL,
+	"previous_content" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "comment_reactions" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"comment_id" uuid NOT NULL,
+	"user_identifier" text NOT NULL,
+	"emoji" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "comments" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"post_id" uuid NOT NULL,
+	"parent_id" uuid,
+	"member_id" uuid,
+	"author_id" text,
+	"author_name" text,
+	"author_email" text,
+	"content" text NOT NULL,
+	"is_team_member" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "post_edit_history" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"post_id" uuid NOT NULL,
+	"editor_member_id" uuid NOT NULL,
+	"previous_title" text NOT NULL,
+	"previous_content" text NOT NULL,
+	"previous_content_json" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "post_roadmaps" (
+	"post_id" uuid NOT NULL,
+	"roadmap_id" uuid NOT NULL,
+	"position" integer DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "post_tags" (
+	"post_id" uuid NOT NULL,
+	"tag_id" uuid NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "posts" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"board_id" uuid NOT NULL,
@@ -167,59 +214,6 @@ CREATE TABLE "posts" (
 	CONSTRAINT "comment_count_non_negative" CHECK (comment_count >= 0)
 );
 --> statement-breakpoint
--- Comment tables (depend on posts, member)
-CREATE TABLE "comments" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"post_id" uuid NOT NULL,
-	"parent_id" uuid,
-	"member_id" uuid,
-	"author_id" text,
-	"author_name" text,
-	"author_email" text,
-	"content" text NOT NULL,
-	"is_team_member" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
-CREATE TABLE "comment_edit_history" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"comment_id" uuid NOT NULL,
-	"editor_member_id" uuid NOT NULL,
-	"previous_content" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "comment_reactions" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"comment_id" uuid NOT NULL,
-	"user_identifier" text NOT NULL,
-	"emoji" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
--- Post-related tables (depend on posts)
-CREATE TABLE "post_edit_history" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"post_id" uuid NOT NULL,
-	"editor_member_id" uuid NOT NULL,
-	"previous_title" text NOT NULL,
-	"previous_content" text NOT NULL,
-	"previous_content_json" jsonb,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "post_roadmaps" (
-	"post_id" uuid NOT NULL,
-	"roadmap_id" uuid NOT NULL,
-	"position" integer DEFAULT 0 NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "post_tags" (
-	"post_id" uuid NOT NULL,
-	"tag_id" uuid NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "votes" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"post_id" uuid NOT NULL,
@@ -230,7 +224,19 @@ CREATE TABLE "votes" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
--- Integration tables (depend on member)
+CREATE TABLE "integration_event_mappings" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"integration_id" uuid NOT NULL,
+	"event_type" varchar(100) NOT NULL,
+	"action_type" varchar(50) NOT NULL,
+	"action_config" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"filters" jsonb,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "mapping_unique" UNIQUE("integration_id","event_type","action_type")
+);
+--> statement-breakpoint
 CREATE TABLE "integrations" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"integration_type" varchar(50) NOT NULL,
@@ -253,45 +259,6 @@ CREATE TABLE "integrations" (
 	CONSTRAINT "error_count_non_negative" CHECK (error_count >= 0)
 );
 --> statement-breakpoint
-CREATE TABLE "integration_event_mappings" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"integration_id" uuid NOT NULL,
-	"event_type" varchar(100) NOT NULL,
-	"action_type" varchar(50) NOT NULL,
-	"action_config" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"filters" jsonb,
-	"enabled" boolean DEFAULT true NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "mapping_unique" UNIQUE("integration_id","event_type","action_type")
-);
---> statement-breakpoint
-CREATE TABLE "integration_linked_entities" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"integration_id" uuid NOT NULL,
-	"entity_type" varchar(50) NOT NULL,
-	"entity_id" uuid NOT NULL,
-	"external_entity_type" varchar(50) NOT NULL,
-	"external_entity_id" varchar(255) NOT NULL,
-	"external_entity_url" text,
-	"last_synced_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "linked_entity_unique" UNIQUE("integration_id","entity_type","entity_id")
-);
---> statement-breakpoint
-CREATE TABLE "integration_sync_log" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"integration_id" uuid NOT NULL,
-	"event_id" uuid,
-	"event_type" varchar(100) NOT NULL,
-	"action_type" varchar(50) NOT NULL,
-	"status" varchar(20) NOT NULL,
-	"error_message" text,
-	"duration_ms" integer,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
--- Changelog (depends on boards)
 CREATE TABLE "changelog_entries" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"board_id" uuid NOT NULL,
@@ -302,7 +269,6 @@ CREATE TABLE "changelog_entries" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
--- Notification tables (depend on member and posts)
 CREATE TABLE "notification_preferences" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"member_id" uuid NOT NULL,
@@ -336,41 +302,37 @@ CREATE TABLE "unsubscribe_tokens" (
 	CONSTRAINT "unsubscribe_tokens_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
--- Foreign key constraints
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREIGN KEY ("inviter_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_status_id_post_statuses_id_fk" FOREIGN KEY ("status_id") REFERENCES "public"."post_statuses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_owner_member_id_member_id_fk" FOREIGN KEY ("owner_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_official_response_member_id_member_id_fk" FOREIGN KEY ("official_response_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_deleted_by_member_id_member_id_fk" FOREIGN KEY ("deleted_by_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "comments" ADD CONSTRAINT "comments_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_edit_history" ADD CONSTRAINT "comment_edit_history_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_edit_history" ADD CONSTRAINT "comment_edit_history_editor_member_id_member_id_fk" FOREIGN KEY ("editor_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comment_reactions" ADD CONSTRAINT "comment_reactions_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_edit_history" ADD CONSTRAINT "post_edit_history_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_edit_history" ADD CONSTRAINT "post_edit_history_editor_member_id_member_id_fk" FOREIGN KEY ("editor_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_roadmaps" ADD CONSTRAINT "post_roadmaps_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_roadmaps" ADD CONSTRAINT "post_roadmaps_roadmap_id_roadmaps_id_fk" FOREIGN KEY ("roadmap_id") REFERENCES "public"."roadmaps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_tags" ADD CONSTRAINT "post_tags_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_status_id_post_statuses_id_fk" FOREIGN KEY ("status_id") REFERENCES "public"."post_statuses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_owner_member_id_member_id_fk" FOREIGN KEY ("owner_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_official_response_member_id_member_id_fk" FOREIGN KEY ("official_response_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_deleted_by_member_id_member_id_fk" FOREIGN KEY ("deleted_by_member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "votes" ADD CONSTRAINT "votes_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "votes" ADD CONSTRAINT "votes_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "integrations" ADD CONSTRAINT "integrations_connected_by_member_id_member_id_fk" FOREIGN KEY ("connected_by_member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_event_mappings" ADD CONSTRAINT "event_mappings_integration_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "integration_linked_entities" ADD CONSTRAINT "linked_entities_integration_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "integration_sync_log" ADD CONSTRAINT "sync_log_integration_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "integrations" ADD CONSTRAINT "integrations_connected_by_member_id_member_id_fk" FOREIGN KEY ("connected_by_member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "changelog_entries" ADD CONSTRAINT "changelog_entries_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_subscriptions" ADD CONSTRAINT "post_subscriptions_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "post_subscriptions" ADD CONSTRAINT "post_subscriptions_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "unsubscribe_tokens" ADD CONSTRAINT "unsubscribe_tokens_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "unsubscribe_tokens" ADD CONSTRAINT "unsubscribe_tokens_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
--- Indexes
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "invitation_email_status_idx" ON "invitation" USING btree ("email","status");--> statement-breakpoint
@@ -424,8 +386,6 @@ CREATE UNIQUE INDEX "votes_unique_idx" ON "votes" USING btree ("post_id","user_i
 CREATE INDEX "votes_member_id_idx" ON "votes" USING btree ("member_id");--> statement-breakpoint
 CREATE INDEX "votes_member_created_at_idx" ON "votes" USING btree ("member_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_event_mappings_lookup" ON "integration_event_mappings" USING btree ("integration_id","event_type","enabled");--> statement-breakpoint
-CREATE INDEX "idx_linked_entities_lookup" ON "integration_linked_entities" USING btree ("integration_id","entity_type","entity_id");--> statement-breakpoint
-CREATE INDEX "idx_sync_log_integration_created" ON "integration_sync_log" USING btree ("integration_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_integrations_type_status" ON "integrations" USING btree ("integration_type","status");--> statement-breakpoint
 CREATE INDEX "changelog_board_id_idx" ON "changelog_entries" USING btree ("board_id");--> statement-breakpoint
 CREATE INDEX "changelog_published_at_idx" ON "changelog_entries" USING btree ("published_at");--> statement-breakpoint
@@ -435,40 +395,4 @@ CREATE INDEX "post_subscriptions_member_idx" ON "post_subscriptions" USING btree
 CREATE INDEX "post_subscriptions_post_idx" ON "post_subscriptions" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "post_subscriptions_post_active_idx" ON "post_subscriptions" USING btree ("post_id") WHERE muted = false;--> statement-breakpoint
 CREATE INDEX "unsubscribe_tokens_token_idx" ON "unsubscribe_tokens" USING btree ("token");--> statement-breakpoint
-CREATE INDEX "unsubscribe_tokens_member_idx" ON "unsubscribe_tokens" USING btree ("member_id");--> statement-breakpoint
--- Function to update post comment count
-CREATE OR REPLACE FUNCTION update_post_comment_count()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    -- Only count non-deleted comments
-    IF NEW.deleted_at IS NULL THEN
-      UPDATE posts SET comment_count = comment_count + 1, updated_at = NOW() WHERE id = NEW.post_id;
-    END IF;
-    RETURN NEW;
-  ELSIF TG_OP = 'UPDATE' THEN
-    -- Handle soft delete/restore
-    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN
-      -- Comment was soft-deleted
-      UPDATE posts SET comment_count = GREATEST(comment_count - 1, 0), updated_at = NOW() WHERE id = NEW.post_id;
-    ELSIF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN
-      -- Comment was restored
-      UPDATE posts SET comment_count = comment_count + 1, updated_at = NOW() WHERE id = NEW.post_id;
-    END IF;
-    RETURN NEW;
-  ELSIF TG_OP = 'DELETE' THEN
-    -- Only decrement if it wasn't already soft-deleted
-    IF OLD.deleted_at IS NULL THEN
-      UPDATE posts SET comment_count = GREATEST(comment_count - 1, 0), updated_at = NOW() WHERE id = OLD.post_id;
-    END IF;
-    RETURN OLD;
-  END IF;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;--> statement-breakpoint
--- Trigger for comment count updates
-DROP TRIGGER IF EXISTS trg_update_post_comment_count ON comments;--> statement-breakpoint
-CREATE TRIGGER trg_update_post_comment_count
-AFTER INSERT OR UPDATE OF deleted_at OR DELETE ON comments
-FOR EACH ROW
-EXECUTE FUNCTION update_post_comment_count();
+CREATE INDEX "unsubscribe_tokens_member_idx" ON "unsubscribe_tokens" USING btree ("member_id");

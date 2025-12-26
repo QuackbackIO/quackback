@@ -7,7 +7,7 @@ import { CustomCssEditor } from './custom-css-editor'
 import { workspaceService } from '@quackback/domain'
 import { getSettingsLogoData, getSettingsHeaderLogoData } from '@/lib/settings-utils'
 
-export default async function BrandingPage({ params }: { params?: Promise<{}> }) {
+export default async function BrandingPage() {
   // Settings is validated in root layout
   const { settings } = await requireTenant()
 
@@ -47,11 +47,7 @@ export default async function BrandingPage({ params }: { params?: Promise<{}> })
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
-          <LogoUploader
-            workspaceId={settings.id}
-            workspaceName={settings.name}
-            initialLogoUrl={logoData?.url ?? null}
-          />
+          <LogoUploader workspaceName={settings.name} initialLogoUrl={logoData?.url ?? null} />
         </div>
       </div>
 
@@ -65,11 +61,13 @@ export default async function BrandingPage({ params }: { params?: Promise<{}> })
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
           <HeaderBranding
-            workspaceId={settings.id}
             workspaceName={settings.name}
             logoUrl={logoData?.url ?? null}
             initialHeaderLogoUrl={headerData?.url ?? null}
-            initialDisplayMode={(headerData?.displayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ?? 'logo_and_name'}
+            initialDisplayMode={
+              (headerData?.displayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ??
+              'logo_and_name'
+            }
             initialDisplayName={headerData?.displayName ?? null}
           />
         </div>
@@ -84,12 +82,14 @@ export default async function BrandingPage({ params }: { params?: Promise<{}> })
           </p>
         </div>
         <ThemeCustomizer
-          workspaceId={settings.id}
           initialThemeConfig={brandingConfig}
           logoUrl={logoData?.url ?? null}
           workspaceName={settings.name}
           headerLogoUrl={headerData?.url ?? null}
-          headerDisplayMode={(headerData?.displayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ?? 'logo_and_name'}
+          headerDisplayMode={
+            (headerData?.displayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ??
+            'logo_and_name'
+          }
         />
       </div>
 
@@ -102,7 +102,7 @@ export default async function BrandingPage({ params }: { params?: Promise<{}> })
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
-          <CustomCssEditor workspaceId={settings.id} initialCustomCss={customCss} />
+          <CustomCssEditor initialCustomCss={customCss} />
         </div>
       </div>
     </div>

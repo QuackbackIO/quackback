@@ -12,7 +12,7 @@ import type {
   RoadmapPostsListResult,
   RoadmapPostEntry,
 } from '@quackback/domain'
-import type { WorkspaceId, RoadmapId, StatusId, PostId } from '@quackback/ids'
+import type { RoadmapId, StatusId, PostId } from '@quackback/ids'
 import {
   getRoadmapPostsAction,
   addPostToRoadmapAction,
@@ -31,8 +31,7 @@ export const roadmapPostsKeys = {
   all: ['roadmapPosts'] as const,
   lists: () => [...roadmapPostsKeys.all, 'list'] as const,
   // Legacy: by status ID (used by existing components)
-  list: (workspaceId: WorkspaceId, statusId: StatusId) =>
-    [...roadmapPostsKeys.lists(), workspaceId, statusId] as const,
+  list: (statusId: StatusId) => [...roadmapPostsKeys.lists(), statusId] as const,
   // New: by roadmap ID and status ID
   byRoadmap: (roadmapId: RoadmapId, statusId?: StatusId) =>
     [...roadmapPostsKeys.all, 'roadmap', roadmapId, statusId ?? 'all'] as const,
@@ -43,14 +42,13 @@ export const roadmapPostsKeys = {
 // ============================================================================
 
 interface UseRoadmapPostsOptions {
-  workspaceId: WorkspaceId
   statusId: StatusId
   initialData?: RoadmapPostListResult
 }
 
-export function useRoadmapPosts({ workspaceId, statusId, initialData }: UseRoadmapPostsOptions) {
+export function useRoadmapPosts({ statusId, initialData }: UseRoadmapPostsOptions) {
   return useInfiniteQuery({
-    queryKey: roadmapPostsKeys.list(workspaceId, statusId),
+    queryKey: roadmapPostsKeys.list(statusId),
     queryFn: async ({ pageParam }): Promise<RoadmapPostListResult> => {
       const result = await getRoadmapPostsByStatusAction({
         statusId,
@@ -79,7 +77,6 @@ export function useRoadmapPosts({ workspaceId, statusId, initialData }: UseRoadm
 // ============================================================================
 
 interface UseRoadmapPostsByRoadmapOptions {
-  workspaceId: WorkspaceId
   roadmapId: RoadmapId
   statusId?: StatusId
   enabled?: boolean
@@ -89,7 +86,6 @@ interface UseRoadmapPostsByRoadmapOptions {
  * Hook to fetch posts for a specific roadmap (optionally filtered by status)
  */
 export function useRoadmapPostsByRoadmap({
-  workspaceId,
   roadmapId,
   statusId,
   enabled = true,
@@ -121,7 +117,7 @@ export function useRoadmapPostsByRoadmap({
 /**
  * Hook to add a post to a roadmap
  */
-export function useAddPostToRoadmap(workspaceId: WorkspaceId, roadmapId: RoadmapId) {
+export function useAddPostToRoadmap(roadmapId: RoadmapId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -146,7 +142,7 @@ export function useAddPostToRoadmap(workspaceId: WorkspaceId, roadmapId: Roadmap
 /**
  * Hook to remove a post from a roadmap
  */
-export function useRemovePostFromRoadmap(workspaceId: WorkspaceId, roadmapId: RoadmapId) {
+export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -172,7 +168,6 @@ export function useRemovePostFromRoadmap(workspaceId: WorkspaceId, roadmapId: Ro
 // ============================================================================
 
 interface UsePublicRoadmapPostsOptions {
-  workspaceId: WorkspaceId
   roadmapId: RoadmapId
   statusId?: StatusId
   enabled?: boolean
@@ -182,7 +177,6 @@ interface UsePublicRoadmapPostsOptions {
  * Hook to fetch posts for a public roadmap (no auth required)
  */
 export function usePublicRoadmapPosts({
-  workspaceId,
   roadmapId,
   statusId,
   enabled = true,

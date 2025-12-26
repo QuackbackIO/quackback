@@ -22,7 +22,7 @@ import {
 } from '@/lib/actions/roadmaps'
 import type { Roadmap } from '@/lib/db'
 import type { ActionError } from '@/lib/actions/types'
-import type { WorkspaceId, RoadmapId, StatusId } from '@quackback/ids'
+import type { RoadmapId, StatusId } from '@quackback/ids'
 
 // ============================================================================
 // Query Key Factory
@@ -31,7 +31,6 @@ import type { WorkspaceId, RoadmapId, StatusId } from '@quackback/ids'
 export const roadmapKeys = {
   all: ['roadmaps'] as const,
   lists: () => [...roadmapKeys.all, 'list'] as const,
-  list: (workspaceId: WorkspaceId) => [...roadmapKeys.lists(), workspaceId] as const,
   detail: (id: RoadmapId) => [...roadmapKeys.all, 'detail', id] as const,
   posts: (roadmapId: RoadmapId) => [...roadmapKeys.all, 'posts', roadmapId] as const,
   postsFiltered: (roadmapId: RoadmapId, statusId?: StatusId) =>
@@ -43,16 +42,15 @@ export const roadmapKeys = {
 // ============================================================================
 
 interface UseRoadmapsOptions {
-  workspaceId: WorkspaceId
   enabled?: boolean
 }
 
 /**
- * Hook to list all roadmaps for a workspace.
+ * Hook to list all roadmaps.
  */
-export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions) {
+export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
-    queryKey: roadmapKeys.list(workspaceId),
+    queryKey: roadmapKeys.lists(),
     queryFn: async () => {
       const result = await listRoadmapsAction({})
       if (!result.success) {
@@ -66,7 +64,6 @@ export function useRoadmaps({ workspaceId, enabled = true }: UseRoadmapsOptions)
 }
 
 interface UseRoadmapPostsOptions {
-  workspaceId: WorkspaceId
   roadmapId: RoadmapId
   statusId?: StatusId
   limit?: number
@@ -78,7 +75,6 @@ interface UseRoadmapPostsOptions {
  * Hook to get posts for a roadmap, optionally filtered by status.
  */
 export function useRoadmapPosts({
-  workspaceId: _workspaceId,
   roadmapId,
   statusId,
   limit = 20,
@@ -109,7 +105,6 @@ export function useRoadmapPosts({
 // ============================================================================
 
 interface UseCreateRoadmapOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (roadmap: Roadmap) => void
   onError?: (error: ActionError) => void
 }
@@ -117,9 +112,9 @@ interface UseCreateRoadmapOptions {
 /**
  * Hook to create a new roadmap.
  */
-export function useCreateRoadmap({ workspaceId, onSuccess, onError }: UseCreateRoadmapOptions) {
+export function useCreateRoadmap({ onSuccess, onError }: UseCreateRoadmapOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = roadmapKeys.list(workspaceId)
+  const listKey = roadmapKeys.lists()
 
   return useActionMutation<CreateRoadmapInput, Roadmap, { previous: Roadmap[] | undefined }>({
     action: createRoadmapAction,
@@ -149,7 +144,6 @@ export function useCreateRoadmap({ workspaceId, onSuccess, onError }: UseCreateR
 }
 
 interface UseUpdateRoadmapOptions {
-  workspaceId: WorkspaceId
   onSuccess?: (roadmap: Roadmap) => void
   onError?: (error: ActionError) => void
 }
@@ -157,9 +151,9 @@ interface UseUpdateRoadmapOptions {
 /**
  * Hook to update an existing roadmap.
  */
-export function useUpdateRoadmap({ workspaceId, onSuccess, onError }: UseUpdateRoadmapOptions) {
+export function useUpdateRoadmap({ onSuccess, onError }: UseUpdateRoadmapOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = roadmapKeys.list(workspaceId)
+  const listKey = roadmapKeys.lists()
 
   return useActionMutation<UpdateRoadmapInput, Roadmap, { previous: Roadmap[] | undefined }>({
     action: updateRoadmapAction,
@@ -186,7 +180,6 @@ export function useUpdateRoadmap({ workspaceId, onSuccess, onError }: UseUpdateR
 }
 
 interface UseDeleteRoadmapOptions {
-  workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
@@ -194,9 +187,9 @@ interface UseDeleteRoadmapOptions {
 /**
  * Hook to delete a roadmap.
  */
-export function useDeleteRoadmap({ workspaceId, onSuccess, onError }: UseDeleteRoadmapOptions) {
+export function useDeleteRoadmap({ onSuccess, onError }: UseDeleteRoadmapOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = roadmapKeys.list(workspaceId)
+  const listKey = roadmapKeys.lists()
 
   return useActionMutation<DeleteRoadmapInput, { id: string }, { previous: Roadmap[] | undefined }>(
     {
@@ -217,7 +210,6 @@ export function useDeleteRoadmap({ workspaceId, onSuccess, onError }: UseDeleteR
 }
 
 interface UseReorderRoadmapsOptions {
-  workspaceId: WorkspaceId
   onSuccess?: () => void
   onError?: (error: ActionError) => void
 }
@@ -225,9 +217,9 @@ interface UseReorderRoadmapsOptions {
 /**
  * Hook to reorder roadmaps.
  */
-export function useReorderRoadmaps({ workspaceId, onSuccess, onError }: UseReorderRoadmapsOptions) {
+export function useReorderRoadmaps({ onSuccess, onError }: UseReorderRoadmapsOptions = {}) {
   const queryClient = useQueryClient()
-  const listKey = roadmapKeys.list(workspaceId)
+  const listKey = roadmapKeys.lists()
 
   return useActionMutation<
     ReorderRoadmapsInput,

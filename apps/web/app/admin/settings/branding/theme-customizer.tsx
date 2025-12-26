@@ -57,7 +57,6 @@ import { ThemePreview } from './theme-preview'
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
 interface ThemeCustomizerProps {
-  workspaceId: string
   initialThemeConfig: ThemeConfig
   logoUrl?: string | null
   workspaceName?: string
@@ -365,7 +364,6 @@ const ALL_COLOR_KEYS = COLOR_GROUPS.flatMap((g) => g.variables.map((v) => v.key)
 type ColorVariable = (typeof ALL_COLOR_KEYS)[number]
 
 export function ThemeCustomizer({
-  workspaceId,
   initialThemeConfig,
   logoUrl: initialLogoUrl,
   workspaceName,
@@ -374,12 +372,12 @@ export function ThemeCustomizer({
 }: ThemeCustomizerProps) {
   // Fetch logo data reactively so preview stays in sync
   // when LogoUploader component updates the logo
-  const { data: logoData } = useWorkspaceLogo(workspaceId)
+  const { data: logoData } = useWorkspaceLogo()
   const effectiveLogoUrl = logoData?.logoUrl ?? initialLogoUrl
 
   // Fetch header branding data reactively so preview stays in sync
   // when HeaderBranding component updates settings
-  const { data: headerData } = useWorkspaceHeaderLogo(workspaceId)
+  const { data: headerData } = useWorkspaceHeaderLogo()
   const effectiveHeaderLogoUrl = headerData?.headerLogoUrl ?? initialHeaderLogoUrl
   const effectiveHeaderDisplayMode =
     (headerData?.headerDisplayMode as HeaderDisplayMode) ?? initialHeaderDisplayMode

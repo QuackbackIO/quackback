@@ -5,11 +5,10 @@ import { Download, Loader2, FileDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface BoardExportSectionProps {
-  workspaceId: string
   boardId: string
 }
 
-export function BoardExportSection({ workspaceId, boardId }: BoardExportSectionProps) {
+export function BoardExportSection({ boardId }: BoardExportSectionProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -19,7 +18,6 @@ export function BoardExportSection({ workspaceId, boardId }: BoardExportSectionP
 
     try {
       const params = new URLSearchParams({
-        workspaceId,
         boardId,
       })
 

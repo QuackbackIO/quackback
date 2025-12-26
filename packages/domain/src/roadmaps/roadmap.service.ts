@@ -122,7 +122,7 @@ export class RoadmapService {
       }
 
       // Update the roadmap
-      const updateData: Partial<Omit<Roadmap, 'id' | 'workspaceId' | 'createdAt'>> = {}
+      const updateData: Partial<Omit<Roadmap, 'id' | 'createdAt'>> = {}
       if (input.name !== undefined) updateData.name = input.name.trim()
       if (input.description !== undefined)
         updateData.description = input.description?.trim() || null

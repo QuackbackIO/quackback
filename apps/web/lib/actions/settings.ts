@@ -107,8 +107,8 @@ export type UpdateSecurityInput = z.infer<typeof updateSecuritySchema>
  */
 export const getWorkspaceFeaturesAction = withAction(
   getWorkspaceFeaturesSchema,
-  async (_input, ctx) => {
-    const features = await getWorkspaceFeatures(ctx.settings.id)
+  async (_input, _ctx) => {
+    const features = await getWorkspaceFeatures()
     return actionOk({
       edition: features.edition,
       tier: features.tier,
@@ -123,7 +123,7 @@ export const getWorkspaceFeaturesAction = withAction(
  */
 export const getPortalConfigAction = withAction(
   getPortalConfigSchema,
-  async (_input, ctx) => {
+  async (_input, _ctx) => {
     const result = await workspaceService.getPortalConfig()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
@@ -196,7 +196,7 @@ export const updatePortalConfigAction = withAction(
  */
 export const getThemeAction = withAction(
   getThemeSchema,
-  async (_input, ctx) => {
+  async (_input, _ctx) => {
     const result = await workspaceService.getBrandingConfig()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
@@ -229,7 +229,7 @@ export const updateThemeAction = withAction(
  */
 export const getCustomCssAction = withAction(
   getCustomCssSchema,
-  async (_input, ctx) => {
+  async (_input, _ctx) => {
     const result = await workspaceService.getCustomCss()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
@@ -261,10 +261,7 @@ export const uploadLogoAction = withAction(
   uploadLogoSchema,
   async (input, _ctx, serviceCtx) => {
     const blob = Buffer.from(input.base64, 'base64')
-    const result = await workspaceService.uploadLogo(
-      { blob, mimeType: input.mimeType },
-      serviceCtx
-    )
+    const result = await workspaceService.uploadLogo({ blob, mimeType: input.mimeType }, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -357,7 +354,7 @@ export const updateHeaderDisplayNameAction = withAction(
  */
 export const getSecurityAction = withAction(
   getSecuritySchema,
-  async (_input, ctx) => {
+  async (_input, _ctx) => {
     const result = await workspaceService.getAuthConfig()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))

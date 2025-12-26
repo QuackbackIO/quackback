@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { createBoardSchema, type CreateBoardInput } from '@/lib/schemas/boards'
-import { useCreateBoard } from '@/lib/hooks/use-board-queries'
+import { createBoardSchema, type CreateBoardOutput } from '@/lib/schemas/boards'
+import { useCreateBoard } from '@/lib/hooks/use-board-actions'
 import {
   Dialog,
   DialogContent,
@@ -29,18 +29,21 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import type { WorkspaceId } from '@quackback/ids'
-
-interface CreateBoardDialogProps {
-  workspaceId: WorkspaceId
-}
-
-export function CreateBoardDialog({ workspaceId }: CreateBoardDialogProps) {
+export function CreateBoardDialog() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  const mutation = useCreateBoard(workspaceId)
+  const mutation = useCreateBoard({
+    onSuccess: (board) => {
+      setOpen(false)
+      form.reset()
+      // Navigate to the newly created board's settings page and refresh
+      // Using replace + refresh ensures the board list is updated
+      router.push(`/admin/settings/boards/${board.slug}`)
+      router.refresh()
+    },
+  })
 
-  const form = useForm<CreateBoardInput>({
+  const form = useForm({
     resolver: standardSchemaResolver(createBoardSchema),
     defaultValues: {
       name: '',
@@ -49,17 +52,8 @@ export function CreateBoardDialog({ workspaceId }: CreateBoardDialogProps) {
     },
   })
 
-  function onSubmit(data: CreateBoardInput) {
-    mutation.mutate(data, {
-      onSuccess: (board) => {
-        setOpen(false)
-        form.reset()
-        // Navigate to the newly created board's settings page and refresh
-        // Using replace + refresh ensures the board list is updated
-        router.push(`/admin/settings/boards/${board.slug}`)
-        router.refresh()
-      },
-    })
+  function onSubmit(data: CreateBoardOutput) {
+    mutation.mutate(data)
   }
 
   function handleOpenChange(isOpen: boolean) {
@@ -91,7 +85,7 @@ export function CreateBoardDialog({ workspaceId }: CreateBoardDialogProps) {
             <div className="space-y-4 py-4">
               {mutation.isError && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {mutation.error.message}
+                  {mutation.error?.message}
                 </div>
               )}
 

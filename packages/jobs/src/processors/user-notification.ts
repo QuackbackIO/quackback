@@ -5,7 +5,7 @@
  * extracted to be used by both BullMQ workers and Cloudflare Workflows.
  */
 
-import { db, eq, and, settings, member, posts } from '@quackback/db'
+import { db, eq, member, posts } from '@quackback/db'
 import type {
   UserNotificationJobData,
   UserNotificationJobResult,
@@ -14,7 +14,7 @@ import type {
 } from '../types'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
-import type { WorkspaceId, PostId, UserId } from '@quackback/ids'
+import type { PostId, UserId } from '@quackback/ids'
 
 /**
  * Options for processing user notifications.
@@ -32,7 +32,7 @@ export async function processUserNotification(
   data: UserNotificationJobData,
   options: ProcessUserNotificationOptions = {}
 ): Promise<UserNotificationJobResult> {
-  const { eventId, eventType, workspaceId, actor, data: eventData } = data
+  const { eventId, eventType, actor, data: eventData } = data
   const _options = options
 
   console.log(`[UserNotifications] Processing ${eventType} event ${eventId}`)
@@ -43,15 +43,14 @@ export async function processUserNotification(
   let skipped = 0
 
   try {
-    // Get organization details for email content
+    // Get organization details for email content (single-tenant: just get the first settings row)
     const org = await db.query.settings.findFirst({
-      where: eq(settings.id, workspaceId),
       columns: { name: true },
     })
 
     if (!org) {
-      console.error(`[UserNotifications] Workspace not found: ${workspaceId}`)
-      return { emailsSent: 0, skipped: 0, errors: ['Workspace not found'] }
+      console.error(`[UserNotifications] Settings not found - workspace not initialized`)
+      return { emailsSent: 0, skipped: 0, errors: ['Settings not found'] }
     }
 
     // Get root URL for email links
@@ -141,7 +140,7 @@ export async function processUserNotification(
         const isTeamMember = commenterMember?.role !== 'user'
 
         // Get board slug for URL
-        const boardSlug = await getPostBoardSlug(postId, workspaceId)
+        const boardSlug = await getPostBoardSlug(postId)
 
         for (const subscriber of subscribers) {
           // Skip the actor (don't notify about own comments)
@@ -245,7 +244,7 @@ function getRootUrl(): string {
 /**
  * Get board slug for a post (needed for URL generation)
  */
-async function getPostBoardSlug(postId: PostId, _workspaceId: WorkspaceId): Promise<string | null> {
+async function getPostBoardSlug(postId: PostId): Promise<string | null> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     columns: { boardId: true },

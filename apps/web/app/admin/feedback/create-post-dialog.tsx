@@ -19,29 +19,21 @@ import { PenSquare } from 'lucide-react'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db'
-import type { WorkspaceId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 interface CreatePostDialogProps {
-  workspaceId: WorkspaceId
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
   onPostCreated?: () => void
 }
 
-export function CreatePostDialog({
-  workspaceId,
-  boards,
-  tags,
-  statuses,
-  onPostCreated,
-}: CreatePostDialogProps) {
+export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: CreatePostDialogProps) {
   // Find the default status for new posts
   const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const createPostMutation = useCreatePost(workspaceId)
+  const createPostMutation = useCreatePost()
 
   const form = useForm<CreatePostInput>({
     // Cast resolver since Zod's z.custom<T> doesn't properly infer branded types

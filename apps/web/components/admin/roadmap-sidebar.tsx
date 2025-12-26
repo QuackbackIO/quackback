@@ -40,10 +40,8 @@ import {
   useDeleteRoadmap,
 } from '@/lib/hooks/use-roadmaps-query'
 import type { Roadmap } from '@/lib/db'
-import type { WorkspaceId } from '@quackback/ids'
 
 interface RoadmapSidebarProps {
-  workspaceId: WorkspaceId
   selectedRoadmapId: string | null
   onSelectRoadmap: (roadmapId: string | null) => void
 }
@@ -55,21 +53,17 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-export function RoadmapSidebar({
-  workspaceId,
-  selectedRoadmapId,
-  onSelectRoadmap,
-}: RoadmapSidebarProps) {
+export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSidebarProps) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingRoadmap, setEditingRoadmap] = useState<Roadmap | null>(null)
   const [deletingRoadmap, setDeletingRoadmap] = useState<Roadmap | null>(null)
 
-  const { data: roadmaps, isLoading } = useRoadmaps({ workspaceId })
-  const createRoadmap = useCreateRoadmap(workspaceId)
-  const updateRoadmap = useUpdateRoadmap(workspaceId)
-  const deleteRoadmap = useDeleteRoadmap(workspaceId)
+  const { data: roadmaps, isLoading } = useRoadmaps()
+  const createRoadmap = useCreateRoadmap()
+  const updateRoadmap = useUpdateRoadmap()
+  const deleteRoadmap = useDeleteRoadmap()
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
