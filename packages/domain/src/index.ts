@@ -49,3 +49,6 @@ export {
   buildCommentCreatedEvent,
   type EventActor,
 } from './events/event-builder'
+
+// Hook system
+export * from './hooks'

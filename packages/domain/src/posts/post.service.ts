@@ -35,6 +35,9 @@ import { PostError } from './post.errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '../settings/settings.types'
 import { SubscriptionService } from '../subscriptions'
 import { buildCommentTree, type CommentTreeNode } from '../shared/comment-tree'
+import { hooks } from '../hooks'
+import { HOOKS } from '../hooks'
+import type { HookContext } from '../hooks/types'
 import type {
   CreatePostInput,
   UpdatePostInput,
@@ -74,28 +77,52 @@ export class PostService {
       const boardRepo = new BoardRepository(uow.db)
       const postRepo = new PostRepository(uow.db)
 
+      // Create hook context for all hook executions
+      const hookContext: HookContext = {
+        service: ctx,
+        hookName: '', // Will be set by each hook execution
+        metadata: {}, // Can be used by hooks to pass data between them
+      }
+
+      // 1. Apply validation hooks (spam detection, profanity, etc.)
+      const validationResult = await hooks.applyValidations<CreatePostInput, PostError>(
+        HOOKS.POST_VALIDATE_CREATE,
+        input,
+        { ...hookContext, hookName: HOOKS.POST_VALIDATE_CREATE }
+      )
+      if (!validationResult.success) {
+        return err(validationResult.error)
+      }
+
+      // 2. Apply transformation filters (linkify URLs, auto-tag, etc.)
+      let transformedInput = await hooks.applyFilters<CreatePostInput>(
+        HOOKS.POST_BEFORE_CREATE,
+        validationResult.value,
+        { ...hookContext, hookName: HOOKS.POST_BEFORE_CREATE }
+      )
+
       // Validate board exists and belongs to this organization
-      const board = await boardRepo.findById(input.boardId)
+      const board = await boardRepo.findById(transformedInput.boardId)
       if (!board) {
-        return err(PostError.boardNotFound(input.boardId))
+        return err(PostError.boardNotFound(transformedInput.boardId))
       }
 
       // Validate input
-      if (!input.title?.trim()) {
+      if (!transformedInput.title?.trim()) {
         return err(PostError.validationError('Title is required'))
       }
-      if (!input.content?.trim()) {
+      if (!transformedInput.content?.trim()) {
         return err(PostError.validationError('Content is required'))
       }
-      if (input.title.length > 200) {
+      if (transformedInput.title.length > 200) {
         return err(PostError.validationError('Title must be 200 characters or less'))
       }
-      if (input.content.length > 10000) {
+      if (transformedInput.content.length > 10000) {
         return err(PostError.validationError('Content must be 10,000 characters or less'))
       }
 
       // Determine statusId - either from input or use default "open" status
-      let statusId = input.statusId
+      let statusId = transformedInput.statusId
       if (!statusId) {
         // Look up default "open" status
         const [defaultStatus] = await uow.db
@@ -118,19 +145,19 @@ export class PostService {
       // Create the post with member-scoped identity
       // Convert member TypeID back to raw UUID for database foreign key
       const post = await postRepo.create({
-        boardId: input.boardId,
-        title: input.title.trim(),
-        content: input.content.trim(),
-        contentJson: input.contentJson,
+        boardId: transformedInput.boardId,
+        title: transformedInput.title.trim(),
+        content: transformedInput.content.trim(),
+        contentJson: transformedInput.contentJson,
         statusId,
         memberId: ctx.memberId,
         authorName: ctx.userName,
         authorEmail: ctx.userEmail,
       })
 
-      // Add tags if provided
-      if (input.tagIds && input.tagIds.length > 0) {
-        await postRepo.setTags(post.id, input.tagIds)
+      // Add tags if provided (may have been added/modified by hooks)
+      if (transformedInput.tagIds && transformedInput.tagIds.length > 0) {
+        await postRepo.setTags(post.id, transformedInput.tagIds)
       }
 
       // Auto-subscribe the author to their own post (within the same transaction)
@@ -140,6 +167,14 @@ export class PostService {
           db: uow.db,
         })
       }
+
+      // 3. Execute action hooks (notifications, integrations, analytics)
+      // Fire-and-forget - runs in parallel and doesn't block execution
+      await hooks.doActions(
+        HOOKS.POST_AFTER_CREATE,
+        { ...post, boardSlug: board.slug },
+        { ...hookContext, hookName: HOOKS.POST_AFTER_CREATE }
+      )
 
       // Return post with board info for event building in API route
       return ok({ ...post, boardSlug: board.slug })
