@@ -1,7 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { useActionMutation } from './use-action-mutation'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   listInboxPostsAction,
   createPostAction,
@@ -19,7 +18,6 @@ import {
   type UpdateTagsInput,
   type RestorePostInput,
 } from '@/lib/actions/posts'
-import type { ActionError } from '@/lib/actions/types'
 import type { PostId } from '@quackback/ids'
 
 // ============================================================================
@@ -143,106 +141,125 @@ export function usePostDetails({ postId, enabled = true }: UsePostDetailsOptions
 // Mutation Hooks
 // ============================================================================
 
-interface UseCreatePostOptions {
-  onSuccess?: (post: unknown) => void
-  onError?: (error: ActionError) => void
-}
-
 /**
  * Hook to create a new post.
  */
-export function useCreatePost({ onSuccess, onError }: UseCreatePostOptions = {}) {
-  return useActionMutation<CreatePostInput, unknown>({
-    action: createPostAction,
-    invalidateKeys: [postKeys.lists()],
-    onSuccess,
-    onError,
-  })
-}
+export function useCreatePost() {
+  const queryClient = useQueryClient()
 
-interface UseUpdatePostOptions {
-  onSuccess?: (post: unknown) => void
-  onError?: (error: ActionError) => void
+  return useMutation({
+    mutationFn: async (input: CreatePostInput) => {
+      const result = await createPostAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+    },
+  })
 }
 
 /**
  * Hook to update a post.
  */
-export function useUpdatePost({ onSuccess, onError }: UseUpdatePostOptions = {}) {
-  return useActionMutation<UpdatePostInput, unknown>({
-    action: updatePostAction,
-    invalidateKeys: [postKeys.lists(), postKeys.details()],
-    onSuccess,
-    onError,
-  })
-}
+export function useUpdatePost() {
+  const queryClient = useQueryClient()
 
-interface UseDeletePostOptions {
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
+  return useMutation({
+    mutationFn: async (input: UpdatePostInput) => {
+      const result = await updatePostAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: postKeys.details() })
+    },
+  })
 }
 
 /**
  * Hook to delete a post (soft or permanent).
  */
-export function useDeletePost({ onSuccess, onError }: UseDeletePostOptions = {}) {
-  return useActionMutation<DeletePostInput, { success: boolean }>({
-    action: deletePostAction,
-    invalidateKeys: [postKeys.lists()],
-    onSuccess: () => onSuccess?.(),
-    onError,
-  })
-}
+export function useDeletePost() {
+  const queryClient = useQueryClient()
 
-interface UseChangeStatusOptions {
-  postId: PostId
-  onSuccess?: (post: unknown) => void
-  onError?: (error: ActionError) => void
+  return useMutation({
+    mutationFn: async (input: DeletePostInput): Promise<{ success: boolean }> => {
+      const result = await deletePostAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+    },
+  })
 }
 
 /**
  * Hook to change post status.
  */
-export function useChangePostStatus({ postId, onSuccess, onError }: UseChangeStatusOptions) {
-  return useActionMutation<ChangeStatusInput, unknown>({
-    action: changePostStatusAction,
-    invalidateKeys: [postKeys.lists(), postKeys.detail(postId)],
-    onSuccess,
-    onError,
-  })
-}
+export function useChangePostStatus(postId: PostId) {
+  const queryClient = useQueryClient()
 
-interface UseUpdateTagsOptions {
-  postId: PostId
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
+  return useMutation({
+    mutationFn: async (input: ChangeStatusInput) => {
+      const result = await changePostStatusAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
+    },
+  })
 }
 
 /**
  * Hook to update tags on a post.
  */
-export function useUpdatePostTags({ postId, onSuccess, onError }: UseUpdateTagsOptions) {
-  return useActionMutation<UpdateTagsInput, { success: boolean }>({
-    action: updatePostTagsAction,
-    invalidateKeys: [postKeys.lists(), postKeys.detail(postId)],
-    onSuccess: () => onSuccess?.(),
-    onError,
-  })
-}
+export function useUpdatePostTags(postId: PostId) {
+  const queryClient = useQueryClient()
 
-interface UseRestorePostOptions {
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
+  return useMutation({
+    mutationFn: async (input: UpdateTagsInput): Promise<{ success: boolean }> => {
+      const result = await updatePostTagsAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
+    },
+  })
 }
 
 /**
  * Hook to restore a soft-deleted post.
  */
-export function useRestorePost({ onSuccess, onError }: UseRestorePostOptions = {}) {
-  return useActionMutation<RestorePostInput, { success: boolean }>({
-    action: restorePostAction,
-    invalidateKeys: [postKeys.lists()],
-    onSuccess: () => onSuccess?.(),
-    onError,
+export function useRestorePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: RestorePostInput): Promise<{ success: boolean }> => {
+      const result = await restorePostAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+    },
   })
 }

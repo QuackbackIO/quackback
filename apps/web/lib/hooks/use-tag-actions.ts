@@ -1,7 +1,6 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useActionMutation, createListOptimisticUpdate } from './use-action-mutation'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   listTagsAction,
   createTagAction,
@@ -12,7 +11,6 @@ import {
   type DeleteTagInput,
 } from '@/lib/actions/tags'
 import type { Tag } from '@/lib/db'
-import type { ActionError } from '@/lib/actions/types'
 import type { TagId } from '@quackback/ids'
 
 // ============================================================================
@@ -55,122 +53,120 @@ export function useTags({ enabled = true }: UseTagsOptions = {}) {
 // Mutation Hooks
 // ============================================================================
 
-interface UseCreateTagOptions {
-  onSuccess?: (tag: Tag) => void
-  onError?: (error: ActionError) => void
-}
-
 /**
  * Hook to create a new tag.
- *
- * @example
- * const createTag = useCreateTag({
- *   onSuccess: (tag) => toast.success(`Created "${tag.name}"`),
- *   onError: (error) => toast.error(error.message),
- * })
- *
- * createTag.mutate({ name: 'Bug', color: '#ef4444' })
  */
-export function useCreateTag({ onSuccess, onError }: UseCreateTagOptions = {}) {
+export function useCreateTag() {
   const queryClient = useQueryClient()
-  const listKey = tagKeys.lists()
 
-  return useActionMutation<CreateTagInput, Tag, { previous: Tag[] | undefined }>({
-    action: createTagAction,
-    invalidateKeys: [tagKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      // Create optimistic tag with temp ID
+  return useMutation({
+    mutationFn: async (input: CreateTagInput): Promise<Tag> => {
+      const result = await createTagAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
+      const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
+
+      // Optimistic update
       const optimisticTag: Tag = {
         id: `tag_temp_${Date.now()}` as Tag['id'],
         name: input.name,
         color: input.color || '#6b7280',
         createdAt: new Date(),
       }
+      queryClient.setQueryData<Tag[]>(tagKeys.lists(), (old) =>
+        old ? [...old, optimisticTag] : [optimisticTag]
+      )
 
-      const helper = createListOptimisticUpdate<Tag>(queryClient, listKey)
-      const previous = helper.add(optimisticTag)
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(tagKeys.lists(), context.previous)
+      }
     },
-    onSuccess,
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: tagKeys.lists() })
+    },
   })
-}
-
-interface UseUpdateTagOptions {
-  onSuccess?: (tag: Tag) => void
-  onError?: (error: ActionError) => void
 }
 
 /**
  * Hook to update an existing tag.
- *
- * @example
- * const updateTag = useUpdateTag({
- *   onSuccess: (tag) => toast.success(`Updated "${tag.name}"`),
- * })
- *
- * updateTag.mutate({ id: tag.id, name: 'New Name' })
  */
-export function useUpdateTag({ onSuccess, onError }: UseUpdateTagOptions = {}) {
+export function useUpdateTag() {
   const queryClient = useQueryClient()
-  const listKey = tagKeys.lists()
 
-  return useActionMutation<UpdateTagInput, Tag, { previous: Tag[] | undefined }>({
-    action: updateTagAction,
-    invalidateKeys: [tagKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const helper = createListOptimisticUpdate<Tag>(queryClient, listKey)
-      const previous = helper.update(
-        input.id as string,
-        {
-          name: input.name,
-          color: input.color,
-        } as Partial<Tag>
+  return useMutation({
+    mutationFn: async (input: UpdateTagInput): Promise<Tag> => {
+      const result = await updateTagAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
+      const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
+
+      // Optimistic update
+      queryClient.setQueryData<Tag[]>(tagKeys.lists(), (old) =>
+        old?.map((tag) =>
+          tag.id === input.id
+            ? { ...tag, name: input.name ?? tag.name, color: input.color ?? tag.color }
+            : tag
+        )
       )
+
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(tagKeys.lists(), context.previous)
+      }
     },
-    onSuccess,
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: tagKeys.lists() })
+    },
   })
-}
-
-interface UseDeleteTagOptions {
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
 }
 
 /**
  * Hook to delete a tag.
- *
- * @example
- * const deleteTag = useDeleteTag({
- *   onSuccess: () => toast.success('Tag deleted'),
- * })
- *
- * deleteTag.mutate({ id: tag.id })
  */
-export function useDeleteTag({ onSuccess, onError }: UseDeleteTagOptions = {}) {
+export function useDeleteTag() {
   const queryClient = useQueryClient()
-  const listKey = tagKeys.lists()
 
-  return useActionMutation<DeleteTagInput, { id: string }, { previous: Tag[] | undefined }>({
-    action: deleteTagAction,
-    invalidateKeys: [tagKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const helper = createListOptimisticUpdate<Tag>(queryClient, listKey)
-      const previous = helper.remove(input.id as string)
+  return useMutation({
+    mutationFn: async (input: DeleteTagInput): Promise<{ id: string }> => {
+      const result = await deleteTagAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
+      const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
+
+      // Optimistic update
+      queryClient.setQueryData<Tag[]>(tagKeys.lists(), (old) =>
+        old?.filter((tag) => tag.id !== input.id)
+      )
+
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(tagKeys.lists(), context.previous)
+      }
     },
-    onSuccess: () => onSuccess?.(),
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: tagKeys.lists() })
+    },
   })
 }

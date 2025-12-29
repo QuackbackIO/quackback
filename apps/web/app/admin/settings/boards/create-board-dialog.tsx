@@ -32,16 +32,7 @@ import {
 export function CreateBoardDialog() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  const mutation = useCreateBoard({
-    onSuccess: (board) => {
-      setOpen(false)
-      form.reset()
-      // Navigate to the newly created board's settings page and refresh
-      // Using replace + refresh ensures the board list is updated
-      router.push(`/admin/settings/boards/${board.slug}`)
-      router.refresh()
-    },
-  })
+  const mutation = useCreateBoard()
 
   const form = useForm({
     resolver: standardSchemaResolver(createBoardSchema),
@@ -53,7 +44,14 @@ export function CreateBoardDialog() {
   })
 
   function onSubmit(data: CreateBoardOutput) {
-    mutation.mutate(data)
+    mutation.mutate(data, {
+      onSuccess: (board) => {
+        setOpen(false)
+        form.reset()
+        router.push(`/admin/settings/boards/${board.slug}`)
+        router.refresh()
+      },
+    })
   }
 
   function handleOpenChange(isOpen: boolean) {

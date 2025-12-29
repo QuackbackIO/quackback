@@ -30,12 +30,7 @@ interface DeleteBoardFormProps {
 
 export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const router = useRouter()
-  const mutation = useDeleteBoard({
-    onSuccess: () => {
-      router.push(`/admin/settings/boards`)
-      router.refresh()
-    },
-  })
+  const mutation = useDeleteBoard()
 
   const form = useForm<DeleteBoardInput>({
     resolver: standardSchemaResolver(deleteBoardSchema),
@@ -50,7 +45,15 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   function onSubmit() {
     if (!canDelete) return
 
-    mutation.mutate({ id: board.id })
+    mutation.mutate(
+      { id: board.id },
+      {
+        onSuccess: () => {
+          router.push(`/admin/settings/boards`)
+          router.refresh()
+        },
+      }
+    )
   }
 
   return (

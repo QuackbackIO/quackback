@@ -139,25 +139,33 @@ export function EditPostDialog({
     setError('')
 
     try {
-      // Update post using mutation (handles optimistic updates)
-      await updatePost.mutateAsync({
-        postId: post.id as PostId,
-        title: data.title,
-        content: data.content,
-        contentJson,
-        statusId: data.statusId,
-      })
-
-      // Update tags separately if changed
+      // Check if tags need updating
       const currentTagIds = post.tags.map((t) => t.id).sort()
       const newTagIds = [...data.tagIds].sort()
-      if (JSON.stringify(currentTagIds) !== JSON.stringify(newTagIds)) {
-        await updateTags.mutateAsync({
+      const tagsChanged = JSON.stringify(currentTagIds) !== JSON.stringify(newTagIds)
+
+      // Run mutations in parallel for better performance
+      const mutations: Promise<unknown>[] = [
+        updatePost.mutateAsync({
           postId: post.id as PostId,
-          tagIds: data.tagIds as string[],
-          allTags: tags,
-        })
+          title: data.title,
+          content: data.content,
+          contentJson,
+          statusId: data.statusId,
+        }),
+      ]
+
+      if (tagsChanged) {
+        mutations.push(
+          updateTags.mutateAsync({
+            postId: post.id as PostId,
+            tagIds: data.tagIds as string[],
+            allTags: tags,
+          })
+        )
       }
+
+      await Promise.all(mutations)
 
       onOpenChange(false)
     } catch (err) {

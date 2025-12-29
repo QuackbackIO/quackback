@@ -1,9 +1,9 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useActionMutation, createListOptimisticUpdate } from './use-action-mutation'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   listBoardsAction,
+  getBoardAction,
   createBoardAction,
   updateBoardAction,
   deleteBoardAction,
@@ -12,7 +12,6 @@ import {
   type DeleteBoardInput,
 } from '@/lib/actions/boards'
 import type { Board } from '@/lib/db'
-import type { ActionError } from '@/lib/actions/types'
 import type { BoardId } from '@quackback/ids'
 
 // ============================================================================
@@ -34,7 +33,7 @@ interface UseBoardsOptions {
 }
 
 /**
- * Hook to list all boards (single-tenant).
+ * Hook to list all boards.
  */
 export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   return useQuery({
@@ -51,39 +50,52 @@ export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   })
 }
 
+interface UseBoardDetailOptions {
+  boardId: BoardId
+  enabled?: boolean
+}
+
+/**
+ * Hook to get a single board by ID.
+ */
+export function useBoardDetail({ boardId, enabled = true }: UseBoardDetailOptions) {
+  return useQuery({
+    queryKey: boardKeys.detail(boardId),
+    queryFn: async () => {
+      const result = await getBoardAction({ id: boardId })
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
 // ============================================================================
 // Mutation Hooks
 // ============================================================================
 
-interface UseCreateBoardOptions {
-  onSuccess?: (board: Board) => void
-  onError?: (error: ActionError) => void
-}
-
 /**
- * Hook to create a new board (single-tenant).
- *
- * @example
- * const createBoard = useCreateBoard({
- *   onSuccess: (board) => toast.success(`Created "${board.name}"`),
- *   onError: (error) => toast.error(error.message),
- * })
- *
- * createBoard.mutate({
- *   name: 'Feature Requests',
- *   description: 'Submit your feature ideas here',
- *   isPublic: true,
- * })
+ * Hook to create a new board.
  */
-export function useCreateBoard({ onSuccess, onError }: UseCreateBoardOptions = {}) {
+export function useCreateBoard() {
   const queryClient = useQueryClient()
-  const listKey = boardKeys.lists()
 
-  return useActionMutation<CreateBoardInput, Board, { previous: Board[] | undefined }>({
-    action: createBoardAction,
-    invalidateKeys: [boardKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      // Create optimistic board with temp ID
+  return useMutation({
+    mutationFn: async (input: CreateBoardInput): Promise<Board> => {
+      const result = await createBoardAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
+      const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
+
+      // Optimistic update
       const optimisticBoard: Board = {
         id: `board_temp_${Date.now()}` as Board['id'],
         name: input.name,
@@ -94,92 +106,123 @@ export function useCreateBoard({ onSuccess, onError }: UseCreateBoardOptions = {
         createdAt: new Date(),
         updatedAt: new Date(),
       }
+      queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
+        old ? [...old, optimisticBoard] : [optimisticBoard]
+      )
 
-      const helper = createListOptimisticUpdate<Board>(queryClient, listKey)
-      const previous = helper.add(optimisticBoard)
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(boardKeys.lists(), context.previous)
+      }
     },
-    onSuccess,
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
+    },
   })
 }
 
-interface UseUpdateBoardOptions {
-  onSuccess?: (board: Board) => void
-  onError?: (error: ActionError) => void
-}
-
 /**
- * Hook to update an existing board (single-tenant).
- *
- * @example
- * const updateBoard = useUpdateBoard({
- *   onSuccess: (board) => toast.success(`Updated "${board.name}"`),
- * })
- *
- * updateBoard.mutate({ id: board.id, name: 'New Name' })
+ * Hook to update an existing board.
  */
-export function useUpdateBoard({ onSuccess, onError }: UseUpdateBoardOptions = {}) {
+export function useUpdateBoard() {
   const queryClient = useQueryClient()
-  const listKey = boardKeys.lists()
 
-  return useActionMutation<UpdateBoardInput, Board, { previous: Board[] | undefined }>({
-    action: updateBoardAction,
-    invalidateKeys: [boardKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const helper = createListOptimisticUpdate<Board>(queryClient, listKey)
-      // Only update fields that are actually changed
-      const updates: Partial<Board> = { updatedAt: new Date() }
-      if (input.name !== undefined) updates.name = input.name
-      if (input.description !== undefined) updates.description = input.description
-      if (input.isPublic !== undefined) updates.isPublic = input.isPublic
-      if (input.settings !== undefined) updates.settings = input.settings as Record<string, unknown>
+  return useMutation({
+    mutationFn: async (input: UpdateBoardInput): Promise<Board> => {
+      const result = await updateBoardAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
+      await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id) })
+      const previousList = queryClient.getQueryData<Board[]>(boardKeys.lists())
+      const previousDetail = queryClient.getQueryData<Board>(boardKeys.detail(input.id))
 
-      const previous = helper.update(input.id as string, updates)
-      return { previous }
+      // Optimistic update for list
+      queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
+        old?.map((board) => {
+          if (board.id !== input.id) return board
+          return {
+            ...board,
+            ...(input.name !== undefined && { name: input.name }),
+            ...(input.description !== undefined && { description: input.description }),
+            ...(input.isPublic !== undefined && { isPublic: input.isPublic }),
+            ...(input.settings !== undefined && { settings: input.settings }),
+            updatedAt: new Date(),
+          }
+        })
+      )
+
+      // Optimistic update for detail
+      if (previousDetail) {
+        queryClient.setQueryData<Board>(boardKeys.detail(input.id), {
+          ...previousDetail,
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.description !== undefined && { description: input.description }),
+          ...(input.isPublic !== undefined && { isPublic: input.isPublic }),
+          ...(input.settings !== undefined && { settings: input.settings }),
+          updatedAt: new Date(),
+        })
+      }
+
+      return { previousList, previousDetail }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, input, context) => {
+      if (context?.previousList) {
+        queryClient.setQueryData(boardKeys.lists(), context.previousList)
+      }
+      if (context?.previousDetail) {
+        queryClient.setQueryData(boardKeys.detail(input.id), context.previousDetail)
+      }
     },
-    onSuccess,
-    onError,
+    onSettled: (_data, _error, input) => {
+      queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.id) })
+    },
   })
 }
 
-interface UseDeleteBoardOptions {
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
-}
-
 /**
- * Hook to delete a board (single-tenant).
- *
- * @example
- * const deleteBoard = useDeleteBoard({
- *   onSuccess: () => toast.success('Board deleted'),
- * })
- *
- * deleteBoard.mutate({ id: board.id })
+ * Hook to delete a board.
  */
-export function useDeleteBoard({ onSuccess, onError }: UseDeleteBoardOptions = {}) {
+export function useDeleteBoard() {
   const queryClient = useQueryClient()
-  const listKey = boardKeys.lists()
 
-  return useActionMutation<DeleteBoardInput, { id: string }, { previous: Board[] | undefined }>({
-    action: deleteBoardAction,
-    invalidateKeys: [boardKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const helper = createListOptimisticUpdate<Board>(queryClient, listKey)
-      const previous = helper.remove(input.id as string)
+  return useMutation({
+    mutationFn: async (input: DeleteBoardInput): Promise<{ id: string }> => {
+      const result = await deleteBoardAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
+      await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id) })
+      const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
+
+      // Optimistic update
+      queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
+        old?.filter((board) => board.id !== input.id)
+      )
+
+      // Remove detail from cache
+      queryClient.removeQueries({ queryKey: boardKeys.detail(input.id) })
+
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(boardKeys.lists(), context.previous)
+      }
     },
-    onSuccess: () => onSuccess?.(),
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
+    },
   })
 }

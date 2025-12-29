@@ -1,7 +1,6 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useActionMutation, createListOptimisticUpdate } from './use-action-mutation'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   listStatusesAction,
   createStatusAction,
@@ -14,7 +13,6 @@ import {
   type ReorderStatusesInput,
 } from '@/lib/actions/statuses'
 import type { PostStatusEntity } from '@/lib/db'
-import type { ActionError } from '@/lib/actions/types'
 import type { StatusId } from '@quackback/ids'
 
 // ============================================================================
@@ -57,40 +55,25 @@ export function useStatuses({ enabled = true }: UseStatusesOptions = {}) {
 // Mutation Hooks
 // ============================================================================
 
-interface UseCreateStatusOptions {
-  onSuccess?: (status: PostStatusEntity) => void
-  onError?: (error: ActionError) => void
-}
-
 /**
  * Hook to create a new status.
- *
- * @example
- * const createStatus = useCreateStatus({
- *   onSuccess: (status) => toast.success(`Created "${status.name}"`),
- *   onError: (error) => toast.error(error.message),
- * })
- *
- * createStatus.mutate({
- *   name: 'In Progress',
- *   slug: 'in_progress',
- *   color: '#3b82f6',
- *   category: 'active',
- * })
  */
-export function useCreateStatus({ onSuccess, onError }: UseCreateStatusOptions = {}) {
+export function useCreateStatus() {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.lists()
 
-  return useActionMutation<
-    CreateStatusInput,
-    PostStatusEntity,
-    { previous: PostStatusEntity[] | undefined }
-  >({
-    action: createStatusAction,
-    invalidateKeys: [statusKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      // Create optimistic status with temp ID
+  return useMutation({
+    mutationFn: async (input: CreateStatusInput): Promise<PostStatusEntity> => {
+      const result = await createStatusAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
+      const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
+
+      // Optimistic update
       const optimisticStatus: PostStatusEntity = {
         id: `status_temp_${Date.now()}` as PostStatusEntity['id'],
         name: input.name,
@@ -102,133 +85,121 @@ export function useCreateStatus({ onSuccess, onError }: UseCreateStatusOptions =
         isDefault: input.isDefault ?? false,
         createdAt: new Date(),
       }
+      queryClient.setQueryData<PostStatusEntity[]>(statusKeys.lists(), (old) =>
+        old ? [...old, optimisticStatus] : [optimisticStatus]
+      )
 
-      const helper = createListOptimisticUpdate<PostStatusEntity>(queryClient, listKey)
-      const previous = helper.add(optimisticStatus)
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(statusKeys.lists(), context.previous)
+      }
     },
-    onSuccess,
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: statusKeys.lists() })
+    },
   })
-}
-
-interface UseUpdateStatusOptions {
-  onSuccess?: (status: PostStatusEntity) => void
-  onError?: (error: ActionError) => void
 }
 
 /**
  * Hook to update an existing status.
- *
- * @example
- * const updateStatus = useUpdateStatus({
- *   onSuccess: (status) => toast.success(`Updated "${status.name}"`),
- * })
- *
- * updateStatus.mutate({ id: status.id, name: 'New Name' })
  */
-export function useUpdateStatus({ onSuccess, onError }: UseUpdateStatusOptions = {}) {
+export function useUpdateStatus() {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.lists()
 
-  return useActionMutation<
-    UpdateStatusInput,
-    PostStatusEntity,
-    { previous: PostStatusEntity[] | undefined }
-  >({
-    action: updateStatusAction,
-    invalidateKeys: [statusKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const helper = createListOptimisticUpdate<PostStatusEntity>(queryClient, listKey)
-      const previous = helper.update(
-        input.id as string,
-        {
-          name: input.name,
-          color: input.color,
-          showOnRoadmap: input.showOnRoadmap,
-          isDefault: input.isDefault,
-        } as Partial<PostStatusEntity>
+  return useMutation({
+    mutationFn: async (input: UpdateStatusInput): Promise<PostStatusEntity> => {
+      const result = await updateStatusAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
+      const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
+
+      // Optimistic update
+      queryClient.setQueryData<PostStatusEntity[]>(statusKeys.lists(), (old) =>
+        old?.map((status) => {
+          if (status.id !== input.id) return status
+          return {
+            ...status,
+            ...(input.name !== undefined && { name: input.name }),
+            ...(input.color !== undefined && { color: input.color }),
+            ...(input.showOnRoadmap !== undefined && { showOnRoadmap: input.showOnRoadmap }),
+            ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
+          }
+        })
       )
+
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(statusKeys.lists(), context.previous)
+      }
     },
-    onSuccess,
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: statusKeys.lists() })
+    },
   })
-}
-
-interface UseDeleteStatusOptions {
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
 }
 
 /**
  * Hook to delete a status.
- *
- * @example
- * const deleteStatus = useDeleteStatus({
- *   onSuccess: () => toast.success('Status deleted'),
- * })
- *
- * deleteStatus.mutate({ id: status.id })
  */
-export function useDeleteStatus({ onSuccess, onError }: UseDeleteStatusOptions = {}) {
+export function useDeleteStatus() {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.lists()
 
-  return useActionMutation<
-    DeleteStatusInput,
-    { id: string },
-    { previous: PostStatusEntity[] | undefined }
-  >({
-    action: deleteStatusAction,
-    invalidateKeys: [statusKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const helper = createListOptimisticUpdate<PostStatusEntity>(queryClient, listKey)
-      const previous = helper.remove(input.id as string)
+  return useMutation({
+    mutationFn: async (input: DeleteStatusInput): Promise<{ id: string }> => {
+      const result = await deleteStatusAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
+      const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
+
+      // Optimistic update
+      queryClient.setQueryData<PostStatusEntity[]>(statusKeys.lists(), (old) =>
+        old?.filter((status) => status.id !== input.id)
+      )
+
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(statusKeys.lists(), context.previous)
+      }
     },
-    onSuccess: () => onSuccess?.(),
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: statusKeys.lists() })
+    },
   })
-}
-
-interface UseReorderStatusesOptions {
-  onSuccess?: () => void
-  onError?: (error: ActionError) => void
 }
 
 /**
  * Hook to reorder statuses.
- *
- * @example
- * const reorderStatuses = useReorderStatuses({
- *   onSuccess: () => toast.success('Statuses reordered'),
- * })
- *
- * reorderStatuses.mutate({ statusIds: ['status_1', 'status_2', 'status_3'] })
  */
-export function useReorderStatuses({ onSuccess, onError }: UseReorderStatusesOptions = {}) {
+export function useReorderStatuses() {
   const queryClient = useQueryClient()
-  const listKey = statusKeys.lists()
 
-  return useActionMutation<
-    ReorderStatusesInput,
-    { success: boolean },
-    { previous: PostStatusEntity[] | undefined }
-  >({
-    action: reorderStatusesAction,
-    invalidateKeys: [statusKeys.lists()],
-    onOptimisticUpdate: (input) => {
-      const previous = queryClient.getQueryData<PostStatusEntity[]>(listKey)
+  return useMutation({
+    mutationFn: async (input: ReorderStatusesInput): Promise<{ success: boolean }> => {
+      const result = await reorderStatusesAction(input)
+      if (!result.success) {
+        throw new Error(result.error.message)
+      }
+      return result.data
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
+      const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
 
       if (previous) {
         // Reorder based on the new statusIds order
@@ -249,15 +220,18 @@ export function useReorderStatuses({ onSuccess, onError }: UseReorderStatusesOpt
           .filter((s) => !reorderedIds.has(s.id))
           .map((s, i) => ({ ...s, position: reordered.length + i }))
 
-        queryClient.setQueryData(listKey, [...reordered, ...remaining])
+        queryClient.setQueryData(statusKeys.lists(), [...reordered, ...remaining])
       }
 
       return { previous }
     },
-    onRollback: ({ previous }) => {
-      queryClient.setQueryData(listKey, previous)
+    onError: (_err, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(statusKeys.lists(), context.previous)
+      }
     },
-    onSuccess: () => onSuccess?.(),
-    onError,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: statusKeys.lists() })
+    },
   })
 }
