@@ -6,4 +6,4 @@
 
 export { TagService, tagService } from './tag.service'
 export { TagError, type TagErrorCode } from './tag.errors'
-export type { CreateTagInput, UpdateTagInput, TagWithStats } from './tag.types'
+export type { CreateTagInput, UpdateTagInput } from './tag.types'

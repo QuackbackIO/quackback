@@ -8,7 +8,7 @@ import { getWorkspaceBrandingData, getWorkspaceFaviconData } from '@/lib/setting
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { SessionProvider } from '@/components/providers/session-provider'
-import { workspaceService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
+import { settingsService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { theme } from '@quackback/domain'
 
 // Force dynamic rendering since we read session cookies
@@ -64,9 +64,9 @@ export default async function PublicLayout({ children }: { children: React.React
     await Promise.all([
       session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
       getWorkspaceBrandingData(),
-      workspaceService.getBrandingConfig(),
-      workspaceService.getPublicPortalConfig(),
-      workspaceService.getCustomCss(),
+      settingsService.getBrandingConfig(),
+      settingsService.getPublicPortalConfig(),
+      settingsService.getCustomCss(),
     ])
 
   // Generate theme CSS from org config

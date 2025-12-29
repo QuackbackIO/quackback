@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
-import { workspaceService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
+import { settingsService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
 import { getSettings } from '@/lib/tenant'
 
 /**
@@ -16,7 +16,7 @@ export default async function LoginPage() {
   }
 
   // Fetch portal config to determine which OAuth providers are enabled
-  const configResult = await workspaceService.getPublicPortalConfig()
+  const configResult = await settingsService.getPublicPortalConfig()
   const oauthConfig = configResult.success ? configResult.value.oauth : DEFAULT_PORTAL_CONFIG.oauth
 
   return (

@@ -2,7 +2,7 @@
  * Input/Output types for RoadmapService operations
  */
 
-import type { Roadmap, PostRoadmap } from '@quackback/db/types'
+import type { PostRoadmap } from '@quackback/db/types'
 import type { PostId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
 
 /**
@@ -38,13 +38,6 @@ export interface AddPostToRoadmapInput {
 export interface ReorderPostsInput {
   roadmapId: RoadmapId
   postIds: PostId[]
-}
-
-/**
- * Roadmap with post count per status
- */
-export interface RoadmapWithStats extends Roadmap {
-  postCounts: Record<string, number>
 }
 
 /**

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { workspaceService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
+import { settingsService, DEFAULT_AUTH_CONFIG } from '@quackback/domain'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 import { getSettings } from '@/lib/tenant'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -41,7 +41,7 @@ export default async function AdminLoginPage({
       : '/admin'
 
   // Fetch org auth config using the service
-  const result = await workspaceService.getPublicAuthConfig()
+  const result = await settingsService.getPublicAuthConfig()
 
   const authConfig = result.success
     ? {

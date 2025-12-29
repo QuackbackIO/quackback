@@ -9,11 +9,16 @@
  */
 
 import {
-  withUnitOfWork,
-  RoadmapRepository,
-  PostRepository,
+  db,
+  eq,
+  and,
+  asc,
+  sql,
+  roadmaps,
+  posts,
+  postRoadmaps,
+  boards,
   type Roadmap,
-  type UnitOfWork,
 } from '@quackback/db'
 import type { RoadmapId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
@@ -66,26 +71,32 @@ export class RoadmapService {
       )
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Check for duplicate slug
-      const existing = await roadmapRepo.findBySlug(input.slug)
+      const existing = await tx.query.roadmaps.findFirst({
+        where: eq(roadmaps.slug, input.slug),
+      })
       if (existing) {
         return err(RoadmapError.duplicateSlug(input.slug))
       }
 
       // Get next position
-      const position = await roadmapRepo.getNextPosition()
+      const positionResult = await tx
+        .select({ maxPosition: sql<number>`COALESCE(MAX(${roadmaps.position}), -1)` })
+        .from(roadmaps)
+      const position = (positionResult[0]?.maxPosition ?? -1) + 1
 
       // Create the roadmap
-      const roadmap = await roadmapRepo.create({
-        name: input.name.trim(),
-        slug: input.slug.trim(),
-        description: input.description?.trim() || null,
-        isPublic: input.isPublic ?? true,
-        position,
-      })
+      const [roadmap] = await tx
+        .insert(roadmaps)
+        .values({
+          name: input.name.trim(),
+          slug: input.slug.trim(),
+          description: input.description?.trim() || null,
+          isPublic: input.isPublic ?? true,
+          position,
+        })
+        .returning()
 
       return ok(roadmap)
     })
@@ -112,11 +123,9 @@ export class RoadmapService {
       return err(RoadmapError.validationError('Name must be 100 characters or less'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Check roadmap exists
-      const existing = await roadmapRepo.findById(id)
+      const existing = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, id) })
       if (!existing) {
         return err(RoadmapError.notFound(id))
       }
@@ -128,7 +137,11 @@ export class RoadmapService {
         updateData.description = input.description?.trim() || null
       if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
 
-      const updated = await roadmapRepo.update(id, updateData)
+      const [updated] = await tx
+        .update(roadmaps)
+        .set(updateData)
+        .where(eq(roadmaps.id, id))
+        .returning()
       if (!updated) {
         return err(RoadmapError.notFound(id))
       }
@@ -146,17 +159,15 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('delete roadmaps'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Check roadmap exists
-      const existing = await roadmapRepo.findById(id)
+      const existing = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, id) })
       if (!existing) {
         return err(RoadmapError.notFound(id))
       }
 
       // Delete the roadmap (cascade will handle post_roadmaps)
-      await roadmapRepo.delete(id)
+      await tx.delete(roadmaps).where(eq(roadmaps.id, id)).returning()
 
       return ok(undefined)
     })
@@ -166,9 +177,8 @@ export class RoadmapService {
    * Get a roadmap by ID
    */
   async getRoadmap(id: RoadmapId, _ctx: ServiceContext): Promise<Result<Roadmap, RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmap = await roadmapRepo.findById(id)
+    return db.transaction(async (tx) => {
+      const roadmap = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, id) })
 
       if (!roadmap) {
         return err(RoadmapError.notFound(id))
@@ -185,9 +195,8 @@ export class RoadmapService {
     slug: string,
     _ctx: ServiceContext
   ): Promise<Result<Roadmap, RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmap = await roadmapRepo.findBySlug(slug)
+    return db.transaction(async (tx) => {
+      const roadmap = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.slug, slug) })
 
       if (!roadmap) {
         return err(RoadmapError.notFound())
@@ -201,10 +210,9 @@ export class RoadmapService {
    * List all roadmaps (admin view)
    */
   async listRoadmaps(_ctx: ServiceContext): Promise<Result<Roadmap[], RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmaps = await roadmapRepo.findAll()
-      return ok(roadmaps)
+    return db.transaction(async (tx) => {
+      const allRoadmaps = await tx.query.roadmaps.findMany({ orderBy: [asc(roadmaps.position)] })
+      return ok(allRoadmaps)
     })
   }
 
@@ -212,10 +220,12 @@ export class RoadmapService {
    * List public roadmaps (for portal view)
    */
   async listPublicRoadmaps(): Promise<Result<Roadmap[], RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmaps = await roadmapRepo.findPublic()
-      return ok(roadmaps)
+    return db.transaction(async (tx) => {
+      const publicRoadmaps = await tx.query.roadmaps.findMany({
+        where: eq(roadmaps.isPublic, true),
+        orderBy: [asc(roadmaps.position)],
+      })
+      return ok(publicRoadmaps)
     })
   }
 
@@ -231,9 +241,12 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('reorder roadmaps'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      await roadmapRepo.reorder(roadmapIds)
+    return db.transaction(async (tx) => {
+      await Promise.all(
+        roadmapIds.map((id, index) =>
+          tx.update(roadmaps).set({ position: index }).where(eq(roadmaps.id, id))
+        )
+      )
       return ok(undefined)
     })
   }
@@ -254,33 +267,39 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('add posts to roadmaps'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify roadmap exists
-      const roadmap = await roadmapRepo.findById(input.roadmapId)
+      const roadmap = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
       if (!roadmap) {
         return err(RoadmapError.notFound(input.roadmapId))
       }
 
       // Verify post exists
-      const post = await postRepo.findById(input.postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, input.postId) })
       if (!post) {
         return err(RoadmapError.postNotFound(input.postId))
       }
 
       // Check if post is already in roadmap
-      const isInRoadmap = await roadmapRepo.isPostInRoadmap(input.postId, input.roadmapId)
-      if (isInRoadmap) {
+      const existingEntry = await tx.query.postRoadmaps.findFirst({
+        where: and(
+          eq(postRoadmaps.postId, input.postId),
+          eq(postRoadmaps.roadmapId, input.roadmapId)
+        ),
+      })
+      if (existingEntry) {
         return err(RoadmapError.postAlreadyInRoadmap(input.postId, input.roadmapId))
       }
 
       // Get next position in the roadmap
-      const position = await roadmapRepo.getNextPostPosition(input.roadmapId)
+      const positionResult = await tx
+        .select({ maxPosition: sql<number>`COALESCE(MAX(${postRoadmaps.position}), -1)` })
+        .from(postRoadmaps)
+        .where(eq(postRoadmaps.roadmapId, input.roadmapId))
+      const position = (positionResult[0]?.maxPosition ?? -1) + 1
 
       // Add the post to the roadmap
-      await roadmapRepo.addPost({
+      await tx.insert(postRoadmaps).values({
         postId: input.postId,
         roadmapId: input.roadmapId,
         position,
@@ -303,17 +322,19 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('remove posts from roadmaps'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Check if post is in roadmap
-      const isInRoadmap = await roadmapRepo.isPostInRoadmap(postId, roadmapId)
-      if (!isInRoadmap) {
+      const existingEntry = await tx.query.postRoadmaps.findFirst({
+        where: and(eq(postRoadmaps.postId, postId), eq(postRoadmaps.roadmapId, roadmapId)),
+      })
+      if (!existingEntry) {
         return err(RoadmapError.postNotInRoadmap(postId, roadmapId))
       }
 
       // Remove the post from the roadmap
-      await roadmapRepo.removePost(postId, roadmapId)
+      await tx
+        .delete(postRoadmaps)
+        .where(and(eq(postRoadmaps.postId, postId), eq(postRoadmaps.roadmapId, roadmapId)))
 
       return ok(undefined)
     })
@@ -331,17 +352,24 @@ export class RoadmapService {
       return err(RoadmapError.unauthorized('reorder posts in roadmaps'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify roadmap exists
-      const roadmap = await roadmapRepo.findById(input.roadmapId)
+      const roadmap = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
       if (!roadmap) {
         return err(RoadmapError.notFound(input.roadmapId))
       }
 
       // Reorder the posts
-      await roadmapRepo.reorderPostsInColumn(input.roadmapId, input.postIds)
+      await Promise.all(
+        input.postIds.map((postId, index) =>
+          tx
+            .update(postRoadmaps)
+            .set({ position: index })
+            .where(
+              and(eq(postRoadmaps.roadmapId, input.roadmapId), eq(postRoadmaps.postId, postId))
+            )
+        )
+      )
 
       return ok(undefined)
     })
@@ -359,30 +387,55 @@ export class RoadmapService {
     options: RoadmapPostsQueryOptions,
     _ctx: ServiceContext
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify roadmap exists
-      const roadmap = await roadmapRepo.findById(roadmapId)
+      const roadmap = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, roadmapId) })
       if (!roadmap) {
         return err(RoadmapError.notFound(roadmapId))
       }
 
       const { statusId, limit = 20, offset = 0 } = options
 
-      // Get posts
-      const results = await roadmapRepo.getRoadmapPosts(roadmapId, {
-        statusId,
-        limit: limit + 1, // Fetch one extra to check hasMore
-        offset,
-      })
+      // Get posts with JOIN
+      const conditions = [eq(postRoadmaps.roadmapId, roadmapId)]
+      if (statusId) {
+        conditions.push(eq(posts.statusId, statusId))
+      }
+
+      const results = await tx
+        .select({
+          post: {
+            id: posts.id,
+            title: posts.title,
+            voteCount: posts.voteCount,
+            statusId: posts.statusId,
+          },
+          board: {
+            id: boards.id,
+            name: boards.name,
+            slug: boards.slug,
+          },
+          roadmapEntry: postRoadmaps,
+        })
+        .from(postRoadmaps)
+        .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
+        .innerJoin(boards, eq(posts.boardId, boards.id))
+        .where(and(...conditions))
+        .orderBy(asc(postRoadmaps.position))
+        .limit(limit + 1)
+        .offset(offset)
 
       // Check if there are more
       const hasMore = results.length > limit
       const items = hasMore ? results.slice(0, limit) : results
 
       // Get total count
-      const total = await roadmapRepo.countRoadmapPosts(roadmapId, statusId)
+      const countResult = await tx
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(postRoadmaps)
+        .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
+        .where(and(...conditions))
+      const total = Number(countResult[0]?.count ?? 0)
 
       return ok({
         items: items.map((r) => ({
@@ -390,7 +443,7 @@ export class RoadmapService {
           title: r.post.title,
           voteCount: r.post.voteCount,
           statusId: r.post.statusId,
-          board: r.post.board,
+          board: r.board,
           roadmapEntry: r.roadmapEntry,
         })),
         total,
@@ -406,11 +459,9 @@ export class RoadmapService {
     roadmapId: RoadmapId,
     options: RoadmapPostsQueryOptions
   ): Promise<Result<RoadmapPostsListResult, RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify roadmap exists and is public
-      const roadmap = await roadmapRepo.findById(roadmapId)
+      const roadmap = await tx.query.roadmaps.findFirst({ where: eq(roadmaps.id, roadmapId) })
       if (!roadmap) {
         return err(RoadmapError.notFound(roadmapId))
       }
@@ -420,17 +471,45 @@ export class RoadmapService {
 
       const { statusId, limit = 20, offset = 0 } = options
 
-      // Get posts
-      const results = await roadmapRepo.getRoadmapPosts(roadmapId, {
-        statusId,
-        limit: limit + 1,
-        offset,
-      })
+      // Get posts with JOIN
+      const conditions = [eq(postRoadmaps.roadmapId, roadmapId)]
+      if (statusId) {
+        conditions.push(eq(posts.statusId, statusId))
+      }
+
+      const results = await tx
+        .select({
+          post: {
+            id: posts.id,
+            title: posts.title,
+            voteCount: posts.voteCount,
+            statusId: posts.statusId,
+          },
+          board: {
+            id: boards.id,
+            name: boards.name,
+            slug: boards.slug,
+          },
+          roadmapEntry: postRoadmaps,
+        })
+        .from(postRoadmaps)
+        .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
+        .innerJoin(boards, eq(posts.boardId, boards.id))
+        .where(and(...conditions))
+        .orderBy(asc(postRoadmaps.position))
+        .limit(limit + 1)
+        .offset(offset)
 
       const hasMore = results.length > limit
       const items = hasMore ? results.slice(0, limit) : results
 
-      const total = await roadmapRepo.countRoadmapPosts(roadmapId, statusId)
+      // Get total count
+      const countResult = await tx
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(postRoadmaps)
+        .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
+        .where(and(...conditions))
+      const total = Number(countResult[0]?.count ?? 0)
 
       return ok({
         items: items.map((r) => ({
@@ -438,7 +517,7 @@ export class RoadmapService {
           title: r.post.title,
           voteCount: r.post.voteCount,
           statusId: r.post.statusId,
-          board: r.post.board,
+          board: r.board,
           roadmapEntry: r.roadmapEntry,
         })),
         total,
@@ -454,10 +533,16 @@ export class RoadmapService {
     postId: PostId,
     _ctx: ServiceContext
   ): Promise<Result<Roadmap[], RoadmapError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const roadmapRepo = new RoadmapRepository(uow.db)
-      const roadmaps = await roadmapRepo.getPostRoadmaps(postId)
-      return ok(roadmaps)
+    return db.transaction(async (tx) => {
+      const entries = await tx
+        .select({ roadmap: roadmaps })
+        .from(postRoadmaps)
+        .innerJoin(roadmaps, eq(postRoadmaps.roadmapId, roadmaps.id))
+        .where(eq(postRoadmaps.postId, postId))
+        .orderBy(asc(roadmaps.position))
+
+      const roadmapsList = entries.map((e) => e.roadmap)
+      return ok(roadmapsList)
     })
   }
 }

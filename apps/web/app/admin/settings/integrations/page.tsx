@@ -1,15 +1,11 @@
 import { requireTenantRole } from '@/lib/tenant'
 import { Plug2 } from 'lucide-react'
-import { db, integrations, eq } from '@/lib/db'
+import { db } from '@/lib/db'
 import { IntegrationList } from './integration-list'
 
-export default async function IntegrationsPage({
-  params,
-}: {
-  params?: Promise<{}>
-}) {
-  // Settings is validated in root layout
-  const { settings } = await requireTenantRole( ['owner', 'admin'])
+export default async function IntegrationsPage() {
+  // Validate tenant role
+  await requireTenantRole(['owner', 'admin'])
 
   // Fetch existing integrations (minimal data for catalog view)
   const rawIntegrations = await db.query.integrations.findMany()

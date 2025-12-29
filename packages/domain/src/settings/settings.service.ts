@@ -673,7 +673,3 @@ export class SettingsService {
  * Singleton instance of SettingsService
  */
 export const settingsService = new SettingsService()
-
-// Backwards compatibility aliases
-export const WorkspaceService = SettingsService
-export const workspaceService = settingsService

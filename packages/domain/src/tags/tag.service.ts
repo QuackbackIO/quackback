@@ -8,13 +8,7 @@
  * - Validation and authorization
  */
 
-import {
-  withUnitOfWork,
-  TagRepository,
-  BoardRepository,
-  type Tag,
-  type UnitOfWork,
-} from '@quackback/db'
+import { db, eq, asc, type Tag, tags, boards, postTags, posts } from '@quackback/db'
 import type { TagId, BoardId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
@@ -38,14 +32,12 @@ export class TagService {
    * @returns Result containing the created tag or an error
    */
   async createTag(input: CreateTagInput, ctx: ServiceContext): Promise<Result<Tag, TagError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
+    return db.transaction(async (tx) => {
       // Authorization check - only team members (owner, admin, member) can create tags
       // Portal users don't have member records, so memberRole would be undefined
       if (!ctx.memberRole || !['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(TagError.unauthorized('create tags'))
       }
-
-      const tagRepo = new TagRepository(uow.db)
 
       // Basic validation (also done at action layer, but enforced here for direct service calls)
       if (!input.name || !input.name.trim()) {
@@ -59,7 +51,9 @@ export class TagService {
       }
 
       // Check for duplicate name in the organization
-      const existingTags = await tagRepo.findAll()
+      const existingTags = await tx.query.tags.findMany({
+        orderBy: [asc(tags.name)],
+      })
       const duplicate = existingTags.find(
         (tag) => tag.name.toLowerCase() === trimmedName.toLowerCase()
       )
@@ -76,10 +70,13 @@ export class TagService {
       }
 
       // Create the tag
-      const tag = await tagRepo.create({
-        name: trimmedName,
-        color,
-      })
+      const [tag] = await tx
+        .insert(tags)
+        .values({
+          name: trimmedName,
+          color,
+        })
+        .returning()
 
       return ok(tag)
     })
@@ -103,16 +100,16 @@ export class TagService {
     input: UpdateTagInput,
     ctx: ServiceContext
   ): Promise<Result<Tag, TagError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
+    return db.transaction(async (tx) => {
       // Authorization check - only team members (owner, admin, member) can update tags
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(TagError.unauthorized('update tags'))
       }
 
-      const tagRepo = new TagRepository(uow.db)
-
       // Get existing tag
-      const existingTag = await tagRepo.findById(id)
+      const existingTag = await tx.query.tags.findFirst({
+        where: eq(tags.id, id),
+      })
       if (!existingTag) {
         return err(TagError.notFound(id))
       }
@@ -129,7 +126,9 @@ export class TagService {
         if (trimmedName.length > 50) {
           return err(TagError.validationError('Tag name must not exceed 50 characters'))
         }
-        const existingTags = await tagRepo.findAll()
+        const existingTags = await tx.query.tags.findMany({
+          orderBy: [asc(tags.name)],
+        })
         const duplicate = existingTags.find(
           (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
         )
@@ -152,7 +151,8 @@ export class TagService {
       if (input.color !== undefined) updateData.color = input.color
 
       // Update the tag
-      const updatedTag = await tagRepo.update(id, updateData)
+      const [updatedTag] = await tx.update(tags).set(updateData).where(eq(tags.id, id)).returning()
+
       if (!updatedTag) {
         return err(TagError.notFound(id))
       }
@@ -175,23 +175,23 @@ export class TagService {
    * @returns Result containing void or an error
    */
   async deleteTag(id: TagId, ctx: ServiceContext): Promise<Result<void, TagError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
+    return db.transaction(async (tx) => {
       // Authorization check - only team members (owner, admin, member) can delete tags
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(TagError.unauthorized('delete tags'))
       }
 
-      const tagRepo = new TagRepository(uow.db)
-
       // Verify tag exists
-      const existingTag = await tagRepo.findById(id)
+      const existingTag = await tx.query.tags.findFirst({
+        where: eq(tags.id, id),
+      })
       if (!existingTag) {
         return err(TagError.notFound(id))
       }
 
       // Delete the tag (cascade will remove from post_tags junction table)
-      const deleted = await tagRepo.delete(id)
-      if (!deleted) {
+      const result = await tx.delete(tags).where(eq(tags.id, id)).returning()
+      if (result.length === 0) {
         return err(TagError.notFound(id))
       }
 
@@ -207,16 +207,14 @@ export class TagService {
    * @returns Result containing the tag or an error
    */
   async getTagById(id: TagId, _ctx: ServiceContext): Promise<Result<Tag, TagError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const tagRepo = new TagRepository(uow.db)
-
-      const tag = await tagRepo.findById(id)
-      if (!tag) {
-        return err(TagError.notFound(id))
-      }
-
-      return ok(tag)
+    const tag = await db.query.tags.findFirst({
+      where: eq(tags.id, id),
     })
+    if (!tag) {
+      return err(TagError.notFound(id))
+    }
+
+    return ok(tag)
   }
 
   /**
@@ -226,13 +224,11 @@ export class TagService {
    * @returns Result containing array of tags or an error
    */
   async listTags(_ctx: ServiceContext): Promise<Result<Tag[], TagError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const tagRepo = new TagRepository(uow.db)
-
-      const tags = await tagRepo.findAll()
-
-      return ok(tags)
+    const tagList = await db.query.tags.findMany({
+      orderBy: [asc(tags.name)],
     })
+
+    return ok(tagList)
   }
 
   /**
@@ -245,21 +241,34 @@ export class TagService {
    * @returns Result containing array of tags or an error
    */
   async getTagsByBoard(boardId: BoardId, _ctx: ServiceContext): Promise<Result<Tag[], TagError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-      const tagRepo = new TagRepository(uow.db)
-
-      // Validate board exists and belongs to this organization
-      const board = await boardRepo.findById(boardId)
-      if (!board) {
-        return err(TagError.validationError(`Board with ID ${boardId} not found`))
-      }
-
-      // Get tags used in this board
-      const tags = await tagRepo.findByBoardId(boardId)
-
-      return ok(tags)
+    // Validate board exists
+    const board = await db.query.boards.findFirst({
+      where: eq(boards.id, boardId),
     })
+    if (!board) {
+      return err(TagError.validationError(`Board with ID ${boardId} not found`))
+    }
+
+    // Get unique tag IDs used by posts in this board
+    const tagResults = await db
+      .selectDistinct({ id: tags.id })
+      .from(tags)
+      .innerJoin(postTags, eq(tags.id, postTags.tagId))
+      .innerJoin(posts, eq(postTags.postId, posts.id))
+      .where(eq(posts.boardId, boardId))
+
+    if (tagResults.length === 0) {
+      return ok([])
+    }
+
+    // Fetch full tag details
+    const tagIds = tagResults.map((t) => t.id)
+    const tagList = await db.query.tags.findMany({
+      where: (tags, { inArray }) => inArray(tags.id, tagIds),
+      orderBy: [asc(tags.name)],
+    })
+
+    return ok(tagList)
   }
 
   /**

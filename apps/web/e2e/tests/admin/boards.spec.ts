@@ -84,8 +84,17 @@ test.describe('Admin Board Management', () => {
     const saveButton = page.getByRole('button', { name: 'Save changes' })
     await saveButton.click()
 
-    // Wait for success message
-    await expect(page.getByText('Settings updated successfully')).toBeVisible({ timeout: 5000 })
+    // Wait for mutation to complete (button shows "Saving..." then back to "Save changes")
+    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({ timeout: 5000 })
+    await expect(saveButton).not.toBeDisabled()
+
+    // Verify the radio state is correct after save
+    if (wasPublic) {
+      await expect(privateRadio).toBeChecked()
+    } else {
+      await expect(publicRadio).toBeChecked()
+    }
 
     // Toggle back to original state
     if (wasPublic) {
@@ -218,8 +227,10 @@ test.describe('Board Access Settings', () => {
     const saveButton = page.getByRole('button', { name: 'Save changes' })
     await saveButton.click()
 
-    // Wait for success message
-    await expect(page.getByText('Settings updated successfully')).toBeVisible({ timeout: 5000 })
+    // Wait for mutation to complete (button shows "Saving..." then back to "Save changes")
+    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({ timeout: 5000 })
+    await expect(saveButton).not.toBeDisabled()
 
     // Verify the change persists after page reload
     await page.reload()
@@ -238,7 +249,9 @@ test.describe('Board Access Settings', () => {
       await privateRadio.click()
     }
     await saveButton.click()
-    await expect(page.getByText('Settings updated successfully')).toBeVisible({ timeout: 5000 })
+    // Wait for mutation to complete
+    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({ timeout: 5000 })
   })
 })
 

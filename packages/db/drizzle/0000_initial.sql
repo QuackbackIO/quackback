@@ -197,7 +197,6 @@ CREATE TABLE "posts" (
 	"status_id" uuid,
 	"owner_member_id" uuid,
 	"owner_id" text,
-	"estimated" text,
 	"vote_count" integer DEFAULT 0 NOT NULL,
 	"comment_count" integer DEFAULT 0 NOT NULL,
 	"official_response" text,
@@ -219,7 +218,6 @@ CREATE TABLE "votes" (
 	"post_id" uuid NOT NULL,
 	"user_identifier" text NOT NULL,
 	"member_id" uuid,
-	"ip_hash" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { withAction, mapDomainError } from './with-action'
 import { actionOk, actionErr } from './types'
 import { getWorkspaceFeatures } from '@/lib/features/server'
-import { workspaceService, type BrandingConfig } from '@quackback/domain'
+import { settingsService, type BrandingConfig } from '@quackback/domain'
 
 // ============================================
 // Schemas
@@ -124,7 +124,7 @@ export const getWorkspaceFeaturesAction = withAction(
 export const getPortalConfigAction = withAction(
   getPortalConfigSchema,
   async (_input, _ctx) => {
-    const result = await workspaceService.getPortalConfig()
+    const result = await settingsService.getPortalConfig()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -178,7 +178,7 @@ export const updatePortalConfigAction = withAction(
       })
     }
 
-    const result = await workspaceService.updatePortalConfig(updateInput, serviceCtx)
+    const result = await settingsService.updatePortalConfig(updateInput, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -197,7 +197,7 @@ export const updatePortalConfigAction = withAction(
 export const getThemeAction = withAction(
   getThemeSchema,
   async (_input, _ctx) => {
-    const result = await workspaceService.getBrandingConfig()
+    const result = await settingsService.getBrandingConfig()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -212,7 +212,7 @@ export const getThemeAction = withAction(
 export const updateThemeAction = withAction(
   updateThemeSchema,
   async (input, _ctx, serviceCtx) => {
-    const result = await workspaceService.updateBrandingConfig(
+    const result = await settingsService.updateBrandingConfig(
       (input.brandingConfig || {}) as BrandingConfig,
       serviceCtx
     )
@@ -230,7 +230,7 @@ export const updateThemeAction = withAction(
 export const getCustomCssAction = withAction(
   getCustomCssSchema,
   async (_input, _ctx) => {
-    const result = await workspaceService.getCustomCss()
+    const result = await settingsService.getCustomCss()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -245,7 +245,7 @@ export const getCustomCssAction = withAction(
 export const updateCustomCssAction = withAction(
   updateCustomCssSchema,
   async (input, _ctx, serviceCtx) => {
-    const result = await workspaceService.updateCustomCss(input.customCss, serviceCtx)
+    const result = await settingsService.updateCustomCss(input.customCss, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -261,7 +261,7 @@ export const uploadLogoAction = withAction(
   uploadLogoSchema,
   async (input, _ctx, serviceCtx) => {
     const blob = Buffer.from(input.base64, 'base64')
-    const result = await workspaceService.uploadLogo({ blob, mimeType: input.mimeType }, serviceCtx)
+    const result = await settingsService.uploadLogo({ blob, mimeType: input.mimeType }, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -276,7 +276,7 @@ export const uploadLogoAction = withAction(
 export const deleteLogoAction = withAction(
   deleteLogoSchema,
   async (_input, _ctx, serviceCtx) => {
-    const result = await workspaceService.deleteLogo(serviceCtx)
+    const result = await settingsService.deleteLogo(serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -292,7 +292,7 @@ export const uploadHeaderLogoAction = withAction(
   uploadHeaderLogoSchema,
   async (input, _ctx, serviceCtx) => {
     const blob = Buffer.from(input.base64, 'base64')
-    const result = await workspaceService.uploadHeaderLogo(
+    const result = await settingsService.uploadHeaderLogo(
       { blob, mimeType: input.mimeType },
       serviceCtx
     )
@@ -310,7 +310,7 @@ export const uploadHeaderLogoAction = withAction(
 export const deleteHeaderLogoAction = withAction(
   deleteHeaderLogoSchema,
   async (_input, _ctx, serviceCtx) => {
-    const result = await workspaceService.deleteHeaderLogo(serviceCtx)
+    const result = await settingsService.deleteHeaderLogo(serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -325,7 +325,7 @@ export const deleteHeaderLogoAction = withAction(
 export const updateHeaderDisplayModeAction = withAction(
   updateHeaderDisplayModeSchema,
   async (input, _ctx, serviceCtx) => {
-    const result = await workspaceService.updateHeaderDisplayMode(input.mode, serviceCtx)
+    const result = await settingsService.updateHeaderDisplayMode(input.mode, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -340,7 +340,7 @@ export const updateHeaderDisplayModeAction = withAction(
 export const updateHeaderDisplayNameAction = withAction(
   updateHeaderDisplayNameSchema,
   async (input, _ctx, serviceCtx) => {
-    const result = await workspaceService.updateHeaderDisplayName(input.name, serviceCtx)
+    const result = await settingsService.updateHeaderDisplayName(input.name, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -355,7 +355,7 @@ export const updateHeaderDisplayNameAction = withAction(
 export const getSecurityAction = withAction(
   getSecuritySchema,
   async (_input, _ctx) => {
-    const result = await workspaceService.getAuthConfig()
+    const result = await settingsService.getAuthConfig()
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -397,7 +397,7 @@ export const updateSecurityAction = withAction(
       })
     }
 
-    const result = await workspaceService.updateAuthConfig(updateInput, serviceCtx)
+    const result = await settingsService.updateAuthConfig(updateInput, serviceCtx)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }

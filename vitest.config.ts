@@ -11,6 +11,9 @@ export default defineConfig({
     typecheck: {
       enabled: false,
     },
+    env: {
+      DATABASE_URL: 'postgresql://postgres:password@localhost:5432/quackback_test',
+    },
   },
   esbuild: {
     // Disable esbuild's strip-only mode to properly handle TypeScript features

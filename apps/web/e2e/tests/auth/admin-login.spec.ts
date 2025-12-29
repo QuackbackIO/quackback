@@ -200,21 +200,6 @@ test.describe('Admin Login with OTP', () => {
     await expect(page.getByText(/resend code in \d+s/i)).toBeVisible()
   })
 
-  // Skip OAuth test - requires OAuth providers to be configured in seed data
-  test.skip('shows OAuth login options', async ({ page }) => {
-    await page.goto('/admin/login')
-
-    // OAuth buttons should be visible before entering email
-    // Based on the OTPAuthForm component, OAuth is shown with showOAuth=true
-    await expect(page.getByRole('button', { name: /sign in with google/i })).toBeVisible({
-      timeout: 10000,
-    })
-    await expect(page.getByRole('button', { name: /sign in with github/i })).toBeVisible()
-
-    // Separator text
-    await expect(page.getByText(/or continue with email/i)).toBeVisible()
-  })
-
   test('verify code button is disabled until 6 digits entered', async ({ page }) => {
     await page.goto('/admin/login')
 

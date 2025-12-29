@@ -1,14 +1,8 @@
 // Database client
 export { db, getDb, createDb, setDbGetter, type Database } from './src/client'
 
-// Unit of Work
-export { UnitOfWork, withUnitOfWork } from './src/unit-of-work'
-
 // Crypto utilities for integration tokens
 export { encryptToken, decryptToken } from './src/crypto'
-
-// Repositories
-export * from './src/repositories'
 
 // Schema
 export * from './src/schema'

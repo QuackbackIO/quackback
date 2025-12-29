@@ -53,7 +53,6 @@ export const posts = pgTable(
       onDelete: 'set null',
     }),
     ownerId: text('owner_id'), // Legacy, kept for migration
-    estimated: text('estimated'),
     voteCount: integer('vote_count').default(0).notNull(),
     // Denormalized comment count for performance (updated via trigger)
     commentCount: integer('comment_count').default(0).notNull(),
@@ -159,7 +158,6 @@ export const votes = pgTable(
     memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
       onDelete: 'cascade',
     }),
-    ipHash: text('ip_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

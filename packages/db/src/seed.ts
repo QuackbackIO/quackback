@@ -10,7 +10,16 @@ config({ path: '../../.env', quiet: true })
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { generateId } from '@quackback/ids'
-import type { TagId, BoardId, StatusId, MemberId, PostId, RoadmapId, UserId } from '@quackback/ids'
+import type {
+  TagId,
+  BoardId,
+  StatusId,
+  MemberId,
+  PostId,
+  RoadmapId,
+  UserId,
+  WorkspaceId,
+} from '@quackback/ids'
 import { user, settings, member } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'

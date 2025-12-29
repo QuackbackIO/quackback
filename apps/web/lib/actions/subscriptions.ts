@@ -2,14 +2,9 @@
 
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
-import { db, member, posts, eq, and } from '@/lib/db'
+import { db, member, posts, eq } from '@/lib/db'
 import { SubscriptionService } from '@quackback/domain/subscriptions'
-import {
-  postIdSchema,
-  type PostId,
-  type MemberId,
-  type UserId,
-} from '@quackback/ids'
+import { postIdSchema, type PostId, type MemberId, type UserId } from '@quackback/ids'
 import { actionOk, actionErr, type ActionResult } from './types'
 
 // ============================================
@@ -182,11 +177,7 @@ export async function subscribeToPostAction(
     }
 
     const subscriptionService = new SubscriptionService()
-    await subscriptionService.subscribeToPost(
-      memberRecord.id as MemberId,
-      postId,
-      reason
-    )
+    await subscriptionService.subscribeToPost(memberRecord.id as MemberId, postId, reason)
 
     return actionOk({
       subscribed: true,

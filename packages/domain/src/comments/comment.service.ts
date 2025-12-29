@@ -10,10 +10,6 @@
  */
 
 import {
-  withUnitOfWork,
-  CommentRepository,
-  PostRepository,
-  BoardRepository,
   db,
   eq,
   and,
@@ -22,8 +18,9 @@ import {
   comments,
   commentReactions,
   commentEditHistory,
+  posts,
+  boards,
   type Comment,
-  type UnitOfWork,
 } from '@quackback/db'
 import type { CommentId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
@@ -36,7 +33,6 @@ import type {
   UpdateCommentInput,
   CommentThread,
   ReactionResult,
-  CommentContext,
   CommentPermissionCheckResult,
 } from './comment.types'
 import { buildCommentTree, aggregateReactions } from '../shared/comment-tree'
@@ -61,26 +57,28 @@ export class CommentService {
     input: CreateCommentInput,
     ctx: ServiceContext
   ): Promise<Result<CreateCommentResult, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Validate post exists
-      const post = await postRepo.findById(input.postId)
+      const post = await tx.query.posts.findFirst({
+        where: eq(posts.id, input.postId),
+      })
       if (!post) {
         return err(CommentError.postNotFound(input.postId))
       }
 
       // Verify post belongs to this organization (via its board)
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({
+        where: eq(boards.id, post.boardId),
+      })
       if (!board) {
         return err(CommentError.postNotFound(input.postId))
       }
 
       // Validate parent comment exists if specified
       if (input.parentId) {
-        const parentComment = await commentRepo.findById(input.parentId)
+        const parentComment = await tx.query.comments.findFirst({
+          where: eq(comments.id, input.parentId),
+        })
         if (!parentComment) {
           return err(CommentError.invalidParent(input.parentId))
         }
@@ -102,23 +100,25 @@ export class CommentService {
       // Determine if user is a team member
       const isTeamMember = ['owner', 'admin', 'member'].includes(ctx.memberRole)
 
-      // Create the comment with member-scoped identity
-      // Convert member TypeID back to raw UUID for database foreign key
-      const comment = await commentRepo.create({
-        postId: input.postId,
-        content: input.content.trim(),
-        parentId: input.parentId || null,
-        memberId: ctx.memberId,
-        authorName: input.authorName || ctx.userName,
-        authorEmail: input.authorEmail || ctx.userEmail,
-        isTeamMember,
-      })
+      // Create the comment
+      const [comment] = await tx
+        .insert(comments)
+        .values({
+          postId: input.postId,
+          content: input.content.trim(),
+          parentId: input.parentId || null,
+          memberId: ctx.memberId,
+          authorName: input.authorName || ctx.userName,
+          authorEmail: input.authorEmail || ctx.userEmail,
+          isTeamMember,
+        })
+        .returning()
 
       // Auto-subscribe commenter to the post (within the same transaction)
       if (ctx.memberId) {
         const subscriptionService = new SubscriptionService()
         await subscriptionService.subscribeToPost(ctx.memberId, input.postId, 'comment', {
-          db: uow.db,
+          db: tx,
         })
       }
 
@@ -145,24 +145,26 @@ export class CommentService {
     input: UpdateCommentInput,
     ctx: ServiceContext
   ): Promise<Result<Comment, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing comment
-      const existingComment = await commentRepo.findById(id)
+      const existingComment = await tx.query.comments.findFirst({
+        where: eq(comments.id, id),
+      })
       if (!existingComment) {
         return err(CommentError.notFound(id))
       }
 
       // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(existingComment.postId)
+      const post = await tx.query.posts.findFirst({
+        where: eq(posts.id, existingComment.postId),
+      })
       if (!post) {
         return err(CommentError.postNotFound(existingComment.postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({
+        where: eq(boards.id, post.boardId),
+      })
       if (!board) {
         return err(CommentError.postNotFound(existingComment.postId))
       }
@@ -190,7 +192,12 @@ export class CommentService {
       if (input.content !== undefined) updateData.content = input.content.trim()
 
       // Update the comment
-      const updatedComment = await commentRepo.update(id, updateData)
+      const [updatedComment] = await tx
+        .update(comments)
+        .set(updateData)
+        .where(eq(comments.id, id))
+        .returning()
+
       if (!updatedComment) {
         return err(CommentError.notFound(id))
       }
@@ -213,24 +220,26 @@ export class CommentService {
    * @returns Result indicating success or an error
    */
   async deleteComment(id: CommentId, ctx: ServiceContext): Promise<Result<void, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing comment
-      const existingComment = await commentRepo.findById(id)
+      const existingComment = await tx.query.comments.findFirst({
+        where: eq(comments.id, id),
+      })
       if (!existingComment) {
         return err(CommentError.notFound(id))
       }
 
       // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(existingComment.postId)
+      const post = await tx.query.posts.findFirst({
+        where: eq(posts.id, existingComment.postId),
+      })
       if (!post) {
         return err(CommentError.postNotFound(existingComment.postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({
+        where: eq(boards.id, post.boardId),
+      })
       if (!board) {
         return err(CommentError.postNotFound(existingComment.postId))
       }
@@ -244,8 +253,8 @@ export class CommentService {
       }
 
       // Delete the comment
-      const deleted = await commentRepo.delete(id)
-      if (!deleted) {
+      const result = await tx.delete(comments).where(eq(comments.id, id)).returning()
+      if (result.length === 0) {
         return err(CommentError.notFound(id))
       }
 
@@ -264,23 +273,19 @@ export class CommentService {
     id: CommentId,
     _ctx: ServiceContext
   ): Promise<Result<Comment, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
-      const comment = await commentRepo.findById(id)
+    return db.transaction(async (tx) => {
+      const comment = await tx.query.comments.findFirst({ where: eq(comments.id, id) })
       if (!comment) {
         return err(CommentError.notFound(id))
       }
 
       // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
       if (!post) {
         return err(CommentError.postNotFound(comment.postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(CommentError.postNotFound(comment.postId))
       }
@@ -303,24 +308,21 @@ export class CommentService {
     postId: PostId,
     ctx: ServiceContext
   ): Promise<Result<CommentThread[], CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify post exists
-      const post = await postRepo.findById(postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!post) {
         return err(CommentError.postNotFound(postId))
       }
 
       // Verify post belongs to this organization
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(CommentError.postNotFound(postId))
       }
 
       // Fetch all comments with reactions using a single query
-      const commentsWithReactions = await uow.db.query.comments.findMany({
+      const commentsWithReactions = await tx.query.comments.findMany({
         where: eq(comments.postId, postId),
         with: {
           reactions: true,
@@ -370,24 +372,20 @@ export class CommentService {
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify comment exists
-      const comment = await commentRepo.findById(commentId)
+      const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
       if (!comment) {
         return err(CommentError.notFound(commentId))
       }
 
       // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
       if (!post) {
         return err(CommentError.postNotFound(comment.postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(CommentError.postNotFound(comment.postId))
       }
@@ -396,7 +394,7 @@ export class CommentService {
       const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
 
       // Check if reaction already exists
-      const existingReaction = await uow.db.query.commentReactions.findFirst({
+      const existingReaction = await tx.query.commentReactions.findFirst({
         where: and(
           eq(commentReactions.commentId, commentId),
           eq(commentReactions.userIdentifier, userIdentifier),
@@ -407,7 +405,7 @@ export class CommentService {
       let added = false
       if (!existingReaction) {
         // Add reaction
-        await uow.db.insert(commentReactions).values({
+        await tx.insert(commentReactions).values({
           commentId,
           userIdentifier,
           emoji,
@@ -416,7 +414,7 @@ export class CommentService {
       }
 
       // Fetch updated reactions
-      const reactions = await uow.db.query.commentReactions.findMany({
+      const reactions = await tx.query.commentReactions.findMany({
         where: eq(commentReactions.commentId, commentId),
       })
 
@@ -447,24 +445,20 @@ export class CommentService {
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify comment exists
-      const comment = await commentRepo.findById(commentId)
+      const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
       if (!comment) {
         return err(CommentError.notFound(commentId))
       }
 
       // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
       if (!post) {
         return err(CommentError.postNotFound(comment.postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(CommentError.postNotFound(comment.postId))
       }
@@ -473,7 +467,7 @@ export class CommentService {
       const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
 
       // Check if reaction exists
-      const existingReaction = await uow.db.query.commentReactions.findFirst({
+      const existingReaction = await tx.query.commentReactions.findFirst({
         where: and(
           eq(commentReactions.commentId, commentId),
           eq(commentReactions.userIdentifier, userIdentifier),
@@ -483,11 +477,11 @@ export class CommentService {
 
       if (existingReaction) {
         // Remove reaction
-        await uow.db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
+        await tx.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
       }
 
       // Fetch updated reactions
-      const reactions = await uow.db.query.commentReactions.findMany({
+      const reactions = await tx.query.commentReactions.findMany({
         where: eq(commentReactions.commentId, commentId),
       })
 
@@ -501,72 +495,6 @@ export class CommentService {
 
       return ok({ added: false, reactions: aggregatedReactions })
     })
-  }
-
-  /**
-   * Resolve organization context from a comment ID
-   *
-   * Traverses: Comment -> Post -> Board -> Organization
-   * Used by public API routes that need to check permissions without full auth context.
-   * This is a PUBLIC method - no authentication required.
-   *
-   * @param commentId - Comment ID to resolve context for
-   * @returns Result containing the full context or an error
-   */
-  async resolveCommentContext(commentId: CommentId): Promise<Result<CommentContext, CommentError>> {
-    try {
-      // Fetch comment with its post and board in a single query
-      const comment = await db.query.comments.findFirst({
-        where: eq(comments.id, commentId),
-        with: {
-          post: {
-            with: {
-              board: true,
-            },
-          },
-        },
-      })
-
-      if (!comment) {
-        return err(CommentError.notFound(commentId))
-      }
-
-      if (!comment.post) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
-
-      if (!comment.post.board) {
-        return err(CommentError.validationError('Board not found for post'))
-      }
-
-      return ok({
-        comment: {
-          id: comment.id,
-          postId: comment.postId,
-          content: comment.content,
-          parentId: comment.parentId,
-          memberId: comment.memberId,
-          authorName: comment.authorName,
-          createdAt: comment.createdAt,
-        },
-        post: {
-          id: comment.post.id,
-          boardId: comment.post.boardId,
-          title: comment.post.title,
-        },
-        board: {
-          id: comment.post.board.id,
-          name: comment.post.board.name,
-          slug: comment.post.board.slug,
-        },
-      })
-    } catch (error) {
-      return err(
-        CommentError.validationError(
-          `Failed to resolve comment context: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
-    }
   }
 
   /**
@@ -584,24 +512,20 @@ export class CommentService {
     emoji: string,
     ctx: ServiceContext
   ): Promise<Result<ReactionResult, CommentError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify comment exists
-      const comment = await commentRepo.findById(commentId)
+      const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
       if (!comment) {
         return err(CommentError.notFound(commentId))
       }
 
       // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
       if (!post) {
         return err(CommentError.postNotFound(comment.postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(CommentError.postNotFound(comment.postId))
       }
@@ -610,7 +534,7 @@ export class CommentService {
       const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
 
       // Check if reaction already exists
-      const existingReaction = await uow.db.query.commentReactions.findFirst({
+      const existingReaction = await tx.query.commentReactions.findFirst({
         where: and(
           eq(commentReactions.commentId, commentId),
           eq(commentReactions.userIdentifier, userIdentifier),
@@ -621,11 +545,11 @@ export class CommentService {
       let added: boolean
       if (existingReaction) {
         // Remove existing reaction
-        await uow.db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
+        await tx.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
         added = false
       } else {
         // Add new reaction
-        await uow.db.insert(commentReactions).values({
+        await tx.insert(commentReactions).values({
           commentId,
           userIdentifier,
           emoji,
@@ -634,7 +558,7 @@ export class CommentService {
       }
 
       // Fetch updated reactions
-      const reactions = await uow.db.query.commentReactions.findMany({
+      const reactions = await tx.query.commentReactions.findMany({
         where: eq(commentReactions.commentId, commentId),
       })
 
@@ -773,11 +697,11 @@ export class CommentService {
       return err(CommentError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get the existing comment
-      const existingComment = await commentRepo.findById(commentId)
+      const existingComment = await tx.query.comments.findFirst({
+        where: eq(comments.id, commentId),
+      })
       if (!existingComment) {
         return err(CommentError.notFound(commentId))
       }
@@ -792,7 +716,7 @@ export class CommentService {
 
       // Record edit history (always record for comments)
       if (ctx.memberId) {
-        await uow.db.insert(commentEditHistory).values({
+        await tx.insert(commentEditHistory).values({
           commentId: commentId,
           editorMemberId: ctx.memberId,
           previousContent: existingComment.content,
@@ -800,9 +724,13 @@ export class CommentService {
       }
 
       // Update the comment (content only, not timestamps per PRD)
-      const updatedComment = await commentRepo.update(commentId, {
-        content: content.trim(),
-      })
+      const [updatedComment] = await tx
+        .update(comments)
+        .set({
+          content: content.trim(),
+        })
+        .where(eq(comments.id, commentId))
+        .returning()
 
       if (!updatedComment) {
         return err(CommentError.notFound(commentId))
@@ -833,13 +761,15 @@ export class CommentService {
       return err(CommentError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const commentRepo = new CommentRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Set deletedAt
-      const updatedComment = await commentRepo.update(commentId, {
-        deletedAt: new Date(),
-      })
+      const [updatedComment] = await tx
+        .update(comments)
+        .set({
+          deletedAt: new Date(),
+        })
+        .where(eq(comments.id, commentId))
+        .returning()
 
       if (!updatedComment) {
         return err(CommentError.notFound(commentId))

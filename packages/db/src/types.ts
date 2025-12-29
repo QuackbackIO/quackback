@@ -2,14 +2,7 @@ import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import type { BoardId, TagId, StatusId } from '@quackback/ids'
 import type { boards, roadmaps, tags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
-import type {
-  posts,
-  postTags,
-  postRoadmaps,
-  votes,
-  comments,
-  commentReactions,
-} from './schema/posts'
+import type { posts, postRoadmaps, votes, comments, commentReactions } from './schema/posts'
 import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
 import type { member } from './schema/auth'
@@ -51,10 +44,6 @@ export type NewPostStatusEntity = InferInsertModel<typeof postStatuses>
 export type Post = InferSelectModel<typeof posts>
 export type NewPost = InferInsertModel<typeof posts>
 
-// Post tag types
-export type PostTag = InferSelectModel<typeof postTags>
-export type NewPostTag = InferInsertModel<typeof postTags>
-
 // Post roadmap types (many-to-many junction)
 export type PostRoadmap = InferSelectModel<typeof postRoadmaps>
 export type NewPostRoadmap = InferInsertModel<typeof postRoadmaps>
@@ -90,14 +79,6 @@ export type Member = InferSelectModel<typeof member>
 export type NewMember = InferInsertModel<typeof member>
 
 // Extended types for queries with relations
-export type PostWithTags = Post & {
-  tags: Tag[]
-}
-
-export type PostWithRoadmaps = Post & {
-  roadmaps: Roadmap[]
-}
-
 export type CommentWithReplies = Comment & {
   replies: CommentWithReplies[]
   reactions: CommentReaction[]
@@ -109,15 +90,6 @@ export type PostWithDetails = Post & {
   roadmaps: Roadmap[]
   comments: CommentWithReplies[]
   votes: Vote[]
-}
-
-// Roadmap with its posts (for roadmap view)
-export type RoadmapWithPosts = Roadmap & {
-  posts: Post[]
-}
-
-export type BoardWithRoadmaps = Board & {
-  roadmaps: Roadmap[]
 }
 
 // Inbox query types

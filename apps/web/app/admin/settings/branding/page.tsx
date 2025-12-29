@@ -4,7 +4,7 @@ import { ThemeCustomizer } from './theme-customizer'
 import { LogoUploader } from './logo-uploader'
 import { HeaderBranding } from './header-branding'
 import { CustomCssEditor } from './custom-css-editor'
-import { workspaceService } from '@quackback/domain'
+import { settingsService } from '@quackback/domain'
 import { getSettingsLogoData, getSettingsHeaderLogoData } from '@/lib/settings-utils'
 
 export default async function BrandingPage() {
@@ -12,14 +12,14 @@ export default async function BrandingPage() {
   const { settings } = await requireTenant()
 
   // Fetch branding config from service
-  const brandingConfigResult = await workspaceService.getBrandingConfig()
+  const brandingConfigResult = await settingsService.getBrandingConfig()
   const brandingConfig = brandingConfigResult.success ? brandingConfigResult.value : {}
 
   // Get logo, header branding data, and custom CSS for SSR
   const [logoData, headerData, customCssResult] = await Promise.all([
     getSettingsLogoData(),
     getSettingsHeaderLogoData(),
-    workspaceService.getCustomCss(),
+    settingsService.getCustomCss(),
   ])
   const customCss = customCssResult.success ? customCssResult.value : null
 

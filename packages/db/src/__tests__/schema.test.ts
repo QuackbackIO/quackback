@@ -78,7 +78,6 @@ describe('Schema definitions', () => {
       expect(columns).toContain('authorEmail')
       expect(columns).toContain('statusId')
       expect(columns).toContain('ownerId')
-      expect(columns).toContain('estimated')
       expect(columns).toContain('voteCount')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
@@ -86,8 +85,8 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      // 23 business columns + 1 searchVector (generated column for full-text search) + 1 deletedByMemberId (soft delete)
-      expect(columns.length).toBe(25)
+      // 22 business columns + 1 searchVector (generated column for full-text search) + 1 deletedByMemberId (soft delete)
+      expect(columns.length).toBe(24)
     })
   })
 

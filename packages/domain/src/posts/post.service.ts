@@ -9,9 +9,8 @@
  */
 
 import {
-  withUnitOfWork,
-  PostRepository,
-  BoardRepository,
+  db,
+  boards,
   eq,
   and,
   inArray,
@@ -26,7 +25,6 @@ import {
   comments,
   postEditHistory,
   type Post,
-  type UnitOfWork,
 } from '@quackback/db'
 import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
@@ -45,7 +43,6 @@ import type {
   PostForExport,
   PermissionCheckResult,
   UserEditPostInput,
-  PostEditHistoryEntry,
   CreatePostResult,
   ChangeStatusResult,
 } from './post.types'
@@ -70,10 +67,7 @@ export class PostService {
     input: CreatePostInput,
     ctx: ServiceContext
   ): Promise<Result<CreatePostResult, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Basic validation (also done at action layer, but enforced here for direct service calls)
       const title = input.title?.trim()
       const content = input.content?.trim()
@@ -92,7 +86,7 @@ export class PostService {
       }
 
       // Validate board exists and belongs to this organization
-      const board = await boardRepo.findById(input.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, input.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(input.boardId))
       }
@@ -101,7 +95,7 @@ export class PostService {
       let statusId = input.statusId
       if (!statusId) {
         // Look up default "open" status
-        const [defaultStatus] = await uow.db
+        const [defaultStatus] = await tx
           .select()
           .from(postStatuses)
           .where(eq(postStatuses.slug, 'open'))
@@ -120,27 +114,33 @@ export class PostService {
 
       // Create the post with member-scoped identity
       // Convert member TypeID back to raw UUID for database foreign key
-      const post = await postRepo.create({
-        boardId: input.boardId,
-        title,
-        content,
-        contentJson: input.contentJson,
-        statusId,
-        memberId: ctx.memberId,
-        authorName: ctx.userName,
-        authorEmail: ctx.userEmail,
-      })
+      const [post] = await tx
+        .insert(posts)
+        .values({
+          boardId: input.boardId,
+          title,
+          content,
+          contentJson: input.contentJson,
+          statusId,
+          memberId: ctx.memberId,
+          authorName: ctx.userName,
+          authorEmail: ctx.userEmail,
+        })
+        .returning()
 
       // Add tags if provided
       if (input.tagIds && input.tagIds.length > 0) {
-        await postRepo.setTags(post.id, input.tagIds)
+        // Remove all existing tags
+        await tx.delete(postTags).where(eq(postTags.postId, post.id))
+        // Add new tags
+        await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: post.id, tagId })))
       }
 
       // Auto-subscribe the author to their own post (within the same transaction)
       if (ctx.memberId) {
         const subscriptionService = new SubscriptionService()
         await subscriptionService.subscribeToPost(ctx.memberId, post.id, 'author', {
-          db: uow.db,
+          db: tx,
         })
       }
 
@@ -167,18 +167,15 @@ export class PostService {
     input: UpdatePostInput,
     ctx: ServiceContext
   ): Promise<Result<Post, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing post
-      const existingPost = await postRepo.findById(id)
+      const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, id) })
       if (!existingPost) {
         return err(PostError.notFound(id))
       }
 
       // Verify post belongs to this organization (via its board)
-      const board = await boardRepo.findById(existingPost.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(existingPost.boardId))
       }
@@ -235,14 +232,23 @@ export class PostService {
       }
 
       // Update the post
-      const updatedPost = await postRepo.update(id, updateData)
+      const [updatedPost] = await tx
+        .update(posts)
+        .set(updateData)
+        .where(eq(posts.id, id))
+        .returning()
       if (!updatedPost) {
         return err(PostError.notFound(id))
       }
 
       // Update tags if provided
       if (input.tagIds !== undefined) {
-        await postRepo.setTags(id, input.tagIds)
+        // Remove all existing tags
+        await tx.delete(postTags).where(eq(postTags.postId, id))
+        // Add new tags if any
+        if (input.tagIds.length > 0) {
+          await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+        }
       }
 
       return ok(updatedPost)
@@ -269,18 +275,15 @@ export class PostService {
     ctx: ServiceContext,
     options?: { memberId?: MemberId; ipHash?: string }
   ): Promise<Result<VoteResult, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify post exists
-      const post = await postRepo.findById(postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!post) {
         return err(PostError.notFound(postId))
       }
 
       // Verify post belongs to this organization
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(post.boardId))
       }
@@ -291,7 +294,7 @@ export class PostService {
       const postUuid = toUuid(postId)
       // Convert memberId TypeID to UUID for raw SQL
       const memberUuid = options?.memberId ? toUuid(options.memberId) : null
-      const result = await uow.db.execute<{ vote_count: number; voted: boolean }>(sql`
+      const result = await tx.execute<{ vote_count: number; voted: boolean }>(sql`
         WITH existing_vote AS (
           SELECT id FROM votes
           WHERE post_id = ${postUuid} AND user_identifier = ${userIdentifier}
@@ -331,7 +334,7 @@ export class PostService {
       if (voted && options?.memberId) {
         const subscriptionService = new SubscriptionService()
         await subscriptionService.subscribeToPost(options.memberId, postId, 'vote', {
-          db: uow.db,
+          db: tx,
         })
       }
 
@@ -360,18 +363,15 @@ export class PostService {
     statusId: StatusId,
     ctx: ServiceContext
   ): Promise<Result<ChangeStatusResult, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing post
-      const existingPost = await postRepo.findById(postId)
+      const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!existingPost) {
         return err(PostError.notFound(postId))
       }
 
       // Verify post belongs to this organization
-      const board = await boardRepo.findById(existingPost.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(existingPost.boardId))
       }
@@ -382,7 +382,7 @@ export class PostService {
       }
 
       // Validate status exists (query the postStatuses table)
-      const newStatus = await uow.db.query.postStatuses.findFirst({
+      const newStatus = await tx.query.postStatuses.findFirst({
         where: eq(postStatuses.id, statusId),
       })
       if (!newStatus) {
@@ -392,7 +392,7 @@ export class PostService {
       // Get previous status name for event
       let previousStatusName = 'Open'
       if (existingPost.statusId) {
-        const prevStatus = await uow.db.query.postStatuses.findFirst({
+        const prevStatus = await tx.query.postStatuses.findFirst({
           where: eq(postStatuses.id, existingPost.statusId),
         })
         if (prevStatus) {
@@ -401,7 +401,11 @@ export class PostService {
       }
 
       // Update the post status
-      const updatedPost = await postRepo.update(postId, { statusId })
+      const [updatedPost] = await tx
+        .update(posts)
+        .set({ statusId })
+        .where(eq(posts.id, postId))
+        .returning()
       if (!updatedPost) {
         return err(PostError.notFound(postId))
       }
@@ -424,17 +428,14 @@ export class PostService {
    * @returns Result containing the post with details or an error
    */
   async getPostById(postId: PostId, _ctx: ServiceContext): Promise<Result<Post, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
-      const post = await postRepo.findById(postId)
+    return db.transaction(async (tx) => {
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!post) {
         return err(PostError.notFound(postId))
       }
 
       // Verify post belongs to this organization
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(post.boardId))
       }
@@ -454,24 +455,21 @@ export class PostService {
     postId: PostId,
     _ctx: ServiceContext
   ): Promise<Result<PostWithDetails, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get the post
-      const post = await postRepo.findById(postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!post) {
         return err(PostError.notFound(postId))
       }
 
       // Get the board and verify it belongs to this organization
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(post.boardId))
       }
 
       // Get tags via postTags junction table
-      const postTagsResult = await uow.db
+      const postTagsResult = await tx
         .select({
           id: tags.id,
           name: tags.name,
@@ -482,7 +480,7 @@ export class PostService {
         .where(eq(postTags.postId, postId))
 
       // Get comment count
-      const [commentCountResult] = await uow.db
+      const [commentCountResult] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(comments)
         .where(eq(comments.postId, postId))
@@ -517,23 +515,20 @@ export class PostService {
     userIdentifier: string,
     _ctx: ServiceContext
   ): Promise<Result<CommentTreeNode[], PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Verify post exists and belongs to organization
-      const post = await postRepo.findById(postId)
+      const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!post) {
         return err(PostError.notFound(postId))
       }
 
-      const board = await boardRepo.findById(post.boardId)
+      const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
       if (!board) {
         return err(PostError.boardNotFound(post.boardId))
       }
 
       // Get all comments with reactions
-      const allComments = await uow.db.query.comments.findMany({
+      const allComments = await tx.query.comments.findMany({
         where: eq(comments.postId, postId),
         with: {
           reactions: true,
@@ -559,7 +554,7 @@ export class PostService {
     params: InboxPostListParams,
     _ctx: ServiceContext
   ): Promise<Result<InboxPostListResult, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
+    return db.transaction(async (tx) => {
       const {
         boardIds,
         statusIds,
@@ -582,7 +577,7 @@ export class PostService {
       const allBoardIds = boardIds?.length
         ? boardIds
         : (
-            await uow.db.query.boards.findMany({
+            await tx.query.boards.findMany({
               columns: { id: true },
             })
           ).map((b) => b.id)
@@ -596,7 +591,7 @@ export class PostService {
       // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
       let resolvedStatusIds = statusIds
       if (statusSlugs && statusSlugs.length > 0) {
-        const statusesBySlug = await uow.db.query.postStatuses.findMany({
+        const statusesBySlug = await tx.query.postStatuses.findMany({
           where: inArray(postStatuses.slug, statusSlugs),
           columns: { id: true },
         })
@@ -636,7 +631,7 @@ export class PostService {
       // Tag filter - posts must have at least one of the selected tags
       let postIdsWithTags: PostId[] | null = null
       if (tagIds && tagIds.length > 0) {
-        const postsWithSelectedTags = await uow.db
+        const postsWithSelectedTags = await tx
           .selectDistinct({ postId: postTags.postId })
           .from(postTags)
           .where(inArray(postTags.tagId, tagIds))
@@ -660,7 +655,7 @@ export class PostService {
 
       // Fetch posts with pagination
       const [rawPosts, countResult] = await Promise.all([
-        uow.db.query.posts.findMany({
+        tx.query.posts.findMany({
           where: whereClause,
           orderBy: orderByMap[sort],
           limit,
@@ -678,7 +673,7 @@ export class PostService {
             },
           },
         }),
-        uow.db
+        tx
           .select({ count: sql<number>`count(*)::int` })
           .from(posts)
           .where(whereClause),
@@ -688,7 +683,7 @@ export class PostService {
       const postIds = rawPosts.map((p) => p.id)
       const commentCounts =
         postIds.length > 0
-          ? await uow.db
+          ? await tx
               .select({
                 postId: comments.postId,
                 count: sql<number>`count(*)::int`.as('count'),
@@ -729,7 +724,7 @@ export class PostService {
     boardId: BoardId | undefined,
     _ctx: ServiceContext
   ): Promise<Result<PostForExport[], PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
+    return db.transaction(async (tx) => {
       // Build conditions
       const conditions = []
 
@@ -737,7 +732,7 @@ export class PostService {
       const allBoardIds = boardId
         ? [boardId]
         : (
-            await uow.db.query.boards.findMany({
+            await tx.query.boards.findMany({
               columns: { id: true },
             })
           ).map((b) => b.id)
@@ -751,7 +746,7 @@ export class PostService {
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
       // Get all posts with board and tags
-      const rawPosts = await uow.db.query.posts.findMany({
+      const rawPosts = await tx.query.posts.findMany({
         where: whereClause,
         orderBy: desc(posts.createdAt),
         with: {
@@ -776,7 +771,7 @@ export class PostService {
 
       const statusDetails =
         postStatusIds.length > 0
-          ? await uow.db.query.postStatuses.findMany({
+          ? await tx.query.postStatuses.findMany({
               where: inArray(postStatuses.id, postStatusIds),
             })
           : []
@@ -804,35 +799,6 @@ export class PostService {
       }))
 
       return ok(exportPosts)
-    })
-  }
-
-  /**
-   * Reconcile vote counts for all posts
-   * Fixes any drift between actual vote count and stored vote_count
-   *
-   * @param ctx - Service context
-   * @returns Result with number of posts fixed
-   */
-  async reconcileVoteCounts(_ctx: ServiceContext): Promise<Result<{ fixed: number }, PostError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      // Find and fix posts with mismatched counts in a single query
-      const result = await uow.db.execute<{ id: string }>(sql`
-        WITH mismatched AS (
-          SELECT p.id, p.vote_count as stored, COUNT(v.id)::int as actual
-          FROM posts p
-          LEFT JOIN votes v ON v.post_id = p.id
-          GROUP BY p.id
-          HAVING p.vote_count != COUNT(v.id)
-        )
-        UPDATE posts p
-        SET vote_count = m.actual
-        FROM mismatched m
-        WHERE p.id = m.id
-        RETURNING p.id
-      `)
-
-      return ok({ fixed: result.length })
     })
   }
 
@@ -996,11 +962,9 @@ export class PostService {
       return err(PostError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get the existing post
-      const existingPost = await postRepo.findById(postId)
+      const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!existingPost) {
         return err(PostError.notFound(postId))
       }
@@ -1024,7 +988,7 @@ export class PostService {
 
       // Record edit history if enabled
       if (config.features.showPublicEditHistory && ctx.memberId) {
-        await uow.db.insert(postEditHistory).values({
+        await tx.insert(postEditHistory).values({
           postId: postId,
           editorMemberId: ctx.memberId,
           previousTitle: existingPost.title,
@@ -1034,12 +998,16 @@ export class PostService {
       }
 
       // Update the post
-      const updatedPost = await postRepo.update(postId, {
-        title: input.title.trim(),
-        content: input.content.trim(),
-        contentJson: input.contentJson,
-        updatedAt: new Date(),
-      })
+      const [updatedPost] = await tx
+        .update(posts)
+        .set({
+          title: input.title.trim(),
+          content: input.content.trim(),
+          contentJson: input.contentJson,
+          updatedAt: new Date(),
+        })
+        .where(eq(posts.id, postId))
+        .returning()
 
       if (!updatedPost) {
         return err(PostError.notFound(postId))
@@ -1067,14 +1035,16 @@ export class PostService {
       return err(PostError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Set deletedAt and deletedByMemberId
-      const updatedPost = await postRepo.update(postId, {
-        deletedAt: new Date(),
-        deletedByMemberId: ctx.memberId,
-      })
+      const [updatedPost] = await tx
+        .update(posts)
+        .set({
+          deletedAt: new Date(),
+          deletedByMemberId: ctx.memberId,
+        })
+        .where(eq(posts.id, postId))
+        .returning()
 
       if (!updatedPost) {
         return err(PostError.notFound(postId))
@@ -1097,11 +1067,9 @@ export class PostService {
       return err(PostError.unauthorized('restore this post'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get the post
-      const existingPost = await postRepo.findById(postId)
+      const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
       if (!existingPost) {
         return err(PostError.notFound(postId))
       }
@@ -1111,10 +1079,14 @@ export class PostService {
       }
 
       // Clear deletedAt and deletedByMemberId
-      const restoredPost = await postRepo.update(postId, {
-        deletedAt: null,
-        deletedByMemberId: null,
-      })
+      const [restoredPost] = await tx
+        .update(posts)
+        .set({
+          deletedAt: null,
+          deletedByMemberId: null,
+        })
+        .where(eq(posts.id, postId))
+        .returning()
 
       if (!restoredPost) {
         return err(PostError.notFound(postId))
@@ -1138,58 +1110,14 @@ export class PostService {
       return err(PostError.unauthorized('permanently delete this post'))
     }
 
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const postRepo = new PostRepository(uow.db)
-
-      const deleted = await postRepo.delete(postId)
+    return db.transaction(async (tx) => {
+      const [deleted] = await tx.delete(posts).where(eq(posts.id, postId)).returning()
       if (!deleted) {
         return err(PostError.notFound(postId))
       }
 
       return ok(undefined)
     })
-  }
-
-  /**
-   * Get edit history for a post
-   *
-   * @param postId - Post ID to get history for
-   * @param ctx - Service context with user/org information
-   * @returns Result containing array of edit history entries
-   */
-  async getPostEditHistory(
-    postId: PostId,
-    _ctx: ServiceContext
-  ): Promise<Result<PostEditHistoryEntry[], PostError>> {
-    const { db } = await import('@quackback/db')
-
-    const history = await db
-      .select({
-        id: postEditHistory.id,
-        postId: postEditHistory.postId,
-        editorMemberId: postEditHistory.editorMemberId,
-        previousTitle: postEditHistory.previousTitle,
-        previousContent: postEditHistory.previousContent,
-        previousContentJson: postEditHistory.previousContentJson,
-        createdAt: postEditHistory.createdAt,
-      })
-      .from(postEditHistory)
-      .where(eq(postEditHistory.postId, postId))
-      .orderBy(desc(postEditHistory.createdAt))
-
-    // Map to the expected type
-    const entries: PostEditHistoryEntry[] = history.map((h) => ({
-      id: h.id,
-      postId: h.postId,
-      editorMemberId: h.editorMemberId,
-      editorName: null, // We'd need to join to user table for name
-      previousTitle: h.previousTitle,
-      previousContent: h.previousContent,
-      previousContentJson: h.previousContentJson,
-      createdAt: h.createdAt,
-    }))
-
-    return ok(entries)
   }
 
   // ============================================================================

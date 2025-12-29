@@ -9,23 +9,21 @@
  */
 
 import {
-  withUnitOfWork,
-  BoardRepository,
+  db,
   type Board,
-  type UnitOfWork,
   type BoardSettings,
   eq,
   posts,
+  boards,
+  sql,
+  inArray,
+  asc,
 } from '@quackback/db'
 import type { BoardId, PostId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
 import { BoardError } from './board.errors'
-import type {
-  CreateBoardInput,
-  UpdateBoardInput,
-  BoardWithDetails,
-} from './board.types'
+import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 
 /**
  * Generate a URL-friendly slug from a string
@@ -60,9 +58,7 @@ export class BoardService {
     input: CreateBoardInput,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Authorization check - only team members (owner, admin, member) can create boards
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(BoardError.unauthorized('create boards'))
@@ -93,7 +89,9 @@ export class BoardService {
       const baseSlug = slug
 
       while (!isUnique) {
-        const existingBoard = await boardRepo.findBySlug(slug)
+        const existingBoard = await tx.query.boards.findFirst({
+          where: eq(boards.slug, slug),
+        })
         if (!existingBoard) {
           isUnique = true
         } else {
@@ -103,13 +101,16 @@ export class BoardService {
       }
 
       // Create the board
-      const board = await boardRepo.create({
-        name: input.name.trim(),
-        slug,
-        description: input.description?.trim() || null,
-        isPublic: input.isPublic ?? true, // default to public
-        settings: input.settings || {},
-      })
+      const [board] = await tx
+        .insert(boards)
+        .values({
+          name: input.name.trim(),
+          slug,
+          description: input.description?.trim() || null,
+          isPublic: input.isPublic ?? true, // default to public
+          settings: input.settings || {},
+        })
+        .returning()
 
       return ok(board)
     })
@@ -134,11 +135,11 @@ export class BoardService {
     input: UpdateBoardInput,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing board
-      const existingBoard = await boardRepo.findById(id)
+      const existingBoard = await tx.query.boards.findFirst({
+        where: eq(boards.id, id),
+      })
       if (!existingBoard) {
         return err(BoardError.notFound(id))
       }
@@ -174,7 +175,9 @@ export class BoardService {
 
         // Check uniqueness if slug is changing
         if (slug !== existingBoard.slug) {
-          const existingWithSlug = await boardRepo.findBySlug(slug)
+          const existingWithSlug = await tx.query.boards.findFirst({
+            where: eq(boards.slug, slug),
+          })
           if (existingWithSlug && existingWithSlug.id !== id) {
             return err(BoardError.duplicateSlug(slug))
           }
@@ -183,7 +186,9 @@ export class BoardService {
         // Auto-update slug if name changes but slug is not explicitly provided
         const newSlug = slugify(input.name)
         if (newSlug !== existingBoard.slug) {
-          const existingWithSlug = await boardRepo.findBySlug(newSlug)
+          const existingWithSlug = await tx.query.boards.findFirst({
+            where: eq(boards.slug, newSlug),
+          })
           if (!existingWithSlug || existingWithSlug.id === id) {
             slug = newSlug
           }
@@ -200,7 +205,12 @@ export class BoardService {
       if (input.settings !== undefined) updateData.settings = input.settings
 
       // Update the board
-      const updatedBoard = await boardRepo.update(id, updateData)
+      const [updatedBoard] = await tx
+        .update(boards)
+        .set({ ...updateData, updatedAt: new Date() })
+        .where(eq(boards.id, id))
+        .returning()
+
       if (!updatedBoard) {
         return err(BoardError.notFound(id))
       }
@@ -221,11 +231,11 @@ export class BoardService {
    * @returns Result containing void or an error
    */
   async deleteBoard(id: BoardId, ctx: ServiceContext): Promise<Result<void, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing board
-      const existingBoard = await boardRepo.findById(id)
+      const existingBoard = await tx.query.boards.findFirst({
+        where: eq(boards.id, id),
+      })
       if (!existingBoard) {
         return err(BoardError.notFound(id))
       }
@@ -236,8 +246,8 @@ export class BoardService {
       }
 
       // Delete the board
-      const deleted = await boardRepo.delete(id)
-      if (!deleted) {
+      const result = await tx.delete(boards).where(eq(boards.id, id)).returning()
+      if (result.length === 0) {
         return err(BoardError.notFound(id))
       }
 
@@ -253,16 +263,14 @@ export class BoardService {
    * @returns Result containing the board or an error
    */
   async getBoardById(id: BoardId, _ctx: ServiceContext): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
-      const board = await boardRepo.findById(id)
-      if (!board) {
-        return err(BoardError.notFound(id))
-      }
-
-      return ok(board)
+    const board = await db.query.boards.findFirst({
+      where: eq(boards.id, id),
     })
+    if (!board) {
+      return err(BoardError.notFound(id))
+    }
+
+    return ok(board)
   }
 
   /**
@@ -273,16 +281,14 @@ export class BoardService {
    * @returns Result containing the board or an error
    */
   async getBoardBySlug(slug: string, _ctx: ServiceContext): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
-      const board = await boardRepo.findBySlug(slug)
-      if (!board) {
-        return err(BoardError.notFound(slug))
-      }
-
-      return ok(board)
+    const board = await db.query.boards.findFirst({
+      where: eq(boards.slug, slug),
     })
+    if (!board) {
+      return err(BoardError.notFound(slug))
+    }
+
+    return ok(board)
   }
 
   /**
@@ -292,12 +298,10 @@ export class BoardService {
    * @returns Result containing array of boards or an error
    */
   async listBoards(_ctx: ServiceContext): Promise<Result<Board[], BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
-      const boards = await boardRepo.findAll()
-      return ok(boards)
+    const boardList = await db.query.boards.findMany({
+      orderBy: [asc(boards.name)],
     })
+    return ok(boardList)
   }
 
   /**
@@ -309,12 +313,36 @@ export class BoardService {
   async listBoardsWithDetails(
     _ctx: ServiceContext
   ): Promise<Result<BoardWithDetails[], BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
-      const boards = await boardRepo.findWithPostCount()
-      return ok(boards)
+    // Get all boards ordered by name
+    const allBoards = await db.query.boards.findMany({
+      orderBy: [asc(boards.name)],
     })
+
+    if (allBoards.length === 0) {
+      return ok([])
+    }
+
+    // Get post counts for all boards
+    const boardIds = allBoards.map((b) => b.id)
+    const postCounts = await db
+      .select({
+        boardId: posts.boardId,
+        count: sql<number>`count(*)`.as('count'),
+      })
+      .from(posts)
+      .where(inArray(posts.boardId, boardIds))
+      .groupBy(posts.boardId)
+
+    // Create a map of board ID -> post count
+    const postCountMap = new Map(postCounts.map((pc) => [pc.boardId, Number(pc.count)]))
+
+    // Return boards with post counts
+    const boardsWithDetails = allBoards.map((board) => ({
+      ...board,
+      postCount: postCountMap.get(board.id) ?? 0,
+    }))
+
+    return ok(boardsWithDetails)
   }
 
   /**
@@ -334,11 +362,11 @@ export class BoardService {
     settings: BoardSettings,
     ctx: ServiceContext
   ): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Get existing board
-      const existingBoard = await boardRepo.findById(id)
+      const existingBoard = await tx.query.boards.findFirst({
+        where: eq(boards.id, id),
+      })
       if (!existingBoard) {
         return err(BoardError.notFound(id))
       }
@@ -356,7 +384,12 @@ export class BoardService {
       }
 
       // Update the board
-      const updatedBoard = await boardRepo.update(id, { settings: updatedSettings })
+      const [updatedBoard] = await tx
+        .update(boards)
+        .set({ settings: updatedSettings, updatedAt: new Date() })
+        .where(eq(boards.id, id))
+        .returning()
+
       if (!updatedBoard) {
         return err(BoardError.notFound(id))
       }
@@ -376,26 +409,24 @@ export class BoardService {
    * @returns Result containing the board or an error
    */
   async getBoardByPostId(postId: PostId, _ctx: ServiceContext): Promise<Result<Board, BoardError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const boardRepo = new BoardRepository(uow.db)
-
-      // Find the post first
-      const post = await uow.db.query.posts.findFirst({
-        where: eq(posts.id, postId),
-      })
-
-      if (!post) {
-        return err(BoardError.notFound(`Post with ID ${postId}`))
-      }
-
-      // Get the board
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(BoardError.notFound(post.boardId))
-      }
-
-      return ok(board)
+    // Find the post first
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
     })
+
+    if (!post) {
+      return err(BoardError.notFound(`Post with ID ${postId}`))
+    }
+
+    // Get the board
+    const board = await db.query.boards.findFirst({
+      where: eq(boards.id, post.boardId),
+    })
+    if (!board) {
+      return err(BoardError.notFound(post.boardId))
+    }
+
+    return ok(board)
   }
 }
 

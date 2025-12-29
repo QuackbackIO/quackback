@@ -1,5 +1,5 @@
 import { requireTenant } from '@/lib/tenant'
-import { db, boards, member, eq } from '@/lib/db'
+import { db, member } from '@/lib/db'
 import Link from 'next/link'
 import { MessageSquare, Users, Palette, Plug, Check, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,11 +16,7 @@ interface OnboardingTask {
   completedLabel: string
 }
 
-export default async function GettingStartedPage({
-  params,
-}: {
-  params?: Promise<{}>
-}) {
+export default async function GettingStartedPage() {
   // Settings is validated in root layout
   const { settings } = await requireTenant()
 

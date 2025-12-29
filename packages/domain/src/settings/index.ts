@@ -2,12 +2,7 @@
  * Settings domain module exports
  */
 
-export {
-  SettingsService,
-  settingsService,
-  WorkspaceService,
-  workspaceService,
-} from './settings.service'
+export { SettingsService, settingsService } from './settings.service'
 export { SettingsError, WorkspaceError } from './settings.errors'
 export type { SettingsErrorCode, WorkspaceErrorCode } from './settings.errors'
 
@@ -28,8 +23,4 @@ export type {
 } from './settings.types'
 
 // Default config values
-export {
-  DEFAULT_AUTH_CONFIG,
-  DEFAULT_PORTAL_CONFIG,
-  DEFAULT_HEADER_DISPLAY_MODE,
-} from './settings.types'
+export { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './settings.types'

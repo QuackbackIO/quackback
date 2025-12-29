@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/server'
-import { db, member, integrations, integrationEventMappings, eq, and } from '@/lib/db'
+import { db, member, integrations, integrationEventMappings, eq } from '@/lib/db'
 import { z } from 'zod'
 import { isValidTypeId, type IntegrationId } from '@quackback/ids'
 
@@ -85,10 +85,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     updates.config = { ...existingConfig, ...config }
   }
 
-  await db
-    .update(integrations)
-    .set(updates)
-    .where(eq(integrations.id, integrationId))
+  await db.update(integrations).set(updates).where(eq(integrations.id, integrationId))
 
   // Update event mappings if provided
   if (eventMappings && eventMappings.length > 0) {

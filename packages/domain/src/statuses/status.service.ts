@@ -9,7 +9,7 @@
  * - Validation and authorization
  */
 
-import { withUnitOfWork, StatusRepository, eq, sql, posts, type UnitOfWork } from '@quackback/db'
+import { db, eq, sql, posts, postStatuses, asc } from '@quackback/db'
 import type { StatusId } from '@quackback/ids'
 import type { ServiceContext } from '../shared/service-context'
 import { ok, err, type Result } from '../shared/result'
@@ -36,9 +36,7 @@ export class StatusService {
     input: CreateStatusInput,
     ctx: ServiceContext
   ): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Authorization check - only team members can create statuses
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(StatusError.unauthorized('create statuses'))
@@ -68,25 +66,33 @@ export class StatusService {
       }
 
       // Check if slug already exists
-      const existingStatus = await statusRepo.findBySlug(input.slug)
+      const existingStatus = await tx.query.postStatuses.findFirst({
+        where: eq(postStatuses.slug, input.slug),
+      })
       if (existingStatus) {
         return err(StatusError.duplicateSlug(input.slug))
       }
 
       // Create the status
-      const status = await statusRepo.create({
-        name: input.name.trim(),
-        slug: input.slug.trim(),
-        color: input.color,
-        category: input.category,
-        position: input.position ?? 0,
-        showOnRoadmap: input.showOnRoadmap ?? false,
-        isDefault: input.isDefault ?? false,
-      })
+      const [status] = await tx
+        .insert(postStatuses)
+        .values({
+          name: input.name.trim(),
+          slug: input.slug.trim(),
+          color: input.color,
+          category: input.category,
+          position: input.position ?? 0,
+          showOnRoadmap: input.showOnRoadmap ?? false,
+          isDefault: input.isDefault ?? false,
+        })
+        .returning()
 
       // If this is marked as default, ensure only one default exists
       if (input.isDefault) {
-        await statusRepo.setDefault(status.id)
+        // First, unset all defaults
+        await tx.update(postStatuses).set({ isDefault: false })
+        // Then set the new default
+        await tx.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, status.id))
       }
 
       return ok(status)
@@ -111,16 +117,16 @@ export class StatusService {
     input: UpdateStatusInput,
     ctx: ServiceContext
   ): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Authorization check - only team members can update statuses
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(StatusError.unauthorized('update statuses'))
       }
 
       // Get existing status
-      const existingStatus = await statusRepo.findById(id)
+      const existingStatus = await tx.query.postStatuses.findFirst({
+        where: eq(postStatuses.id, id),
+      })
       if (!existingStatus) {
         return err(StatusError.notFound(id))
       }
@@ -143,9 +149,12 @@ export class StatusService {
         }
       }
 
-      // If setting as default, use the special function
+      // If setting as default, use the setDefault pattern
       if (input.isDefault === true) {
-        await statusRepo.setDefault(id)
+        // First, unset all defaults
+        await tx.update(postStatuses).set({ isDefault: false })
+        // Then set the new default
+        await tx.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, id))
       }
 
       // Build update data
@@ -156,7 +165,12 @@ export class StatusService {
       if (input.isDefault === false) updateData.isDefault = false
 
       // Update the status
-      const updatedStatus = await statusRepo.update(id, updateData)
+      const [updatedStatus] = await tx
+        .update(postStatuses)
+        .set(updateData)
+        .where(eq(postStatuses.id, id))
+        .returning()
+
       if (!updatedStatus) {
         return err(StatusError.notFound(id))
       }
@@ -179,16 +193,16 @@ export class StatusService {
    * @returns Result containing void or an error
    */
   async deleteStatus(id: StatusId, ctx: ServiceContext): Promise<Result<void, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Authorization check - only team members can delete statuses
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(StatusError.unauthorized('delete statuses'))
       }
 
       // Get existing status
-      const existingStatus = await statusRepo.findById(id)
+      const existingStatus = await tx.query.postStatuses.findFirst({
+        where: eq(postStatuses.id, id),
+      })
       if (!existingStatus) {
         return err(StatusError.notFound(id))
       }
@@ -199,7 +213,7 @@ export class StatusService {
       }
 
       // Check if any posts are using this status
-      const result = await uow.db
+      const result = await tx
         .select({ count: sql<number>`count(*)` })
         .from(posts)
         .where(eq(posts.statusId, id))
@@ -210,7 +224,10 @@ export class StatusService {
       }
 
       // Delete the status
-      await statusRepo.delete(id)
+      const deleteResult = await tx.delete(postStatuses).where(eq(postStatuses.id, id)).returning()
+      if (deleteResult.length === 0) {
+        return err(StatusError.notFound(id))
+      }
 
       return ok(undefined)
     })
@@ -224,16 +241,14 @@ export class StatusService {
    * @returns Result containing the status or an error
    */
   async getStatusById(id: StatusId, _ctx: ServiceContext): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
-      const status = await statusRepo.findById(id)
-      if (!status) {
-        return err(StatusError.notFound(id))
-      }
-
-      return ok(status)
+    const status = await db.query.postStatuses.findFirst({
+      where: eq(postStatuses.id, id),
     })
+    if (!status) {
+      return err(StatusError.notFound(id))
+    }
+
+    return ok(status)
   }
 
   /**
@@ -245,13 +260,19 @@ export class StatusService {
    * @returns Result containing array of statuses or an error
    */
   async listStatuses(_ctx: ServiceContext): Promise<Result<Status[], StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
-      const statuses = await statusRepo.findAll()
-
-      return ok(statuses)
+    const statuses = await db.query.postStatuses.findMany({
+      orderBy: [
+        // Order by category (active, complete, closed) then position
+        sql`CASE
+          WHEN ${postStatuses.category} = 'active' THEN 0
+          WHEN ${postStatuses.category} = 'complete' THEN 1
+          WHEN ${postStatuses.category} = 'closed' THEN 2
+        END`,
+        asc(postStatuses.position),
+      ],
     })
+
+    return ok(statuses)
   }
 
   /**
@@ -268,9 +289,7 @@ export class StatusService {
    * @returns Result containing void or an error
    */
   async reorderStatuses(ids: StatusId[], ctx: ServiceContext): Promise<Result<void, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Authorization check - only team members can reorder statuses
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(StatusError.unauthorized('reorder statuses'))
@@ -281,8 +300,12 @@ export class StatusService {
         return err(StatusError.validationError('Status IDs are required'))
       }
 
-      // Reorder the statuses
-      await statusRepo.reorder(ids)
+      // Reorder the statuses by updating their positions
+      await Promise.all(
+        ids.map((id, index) =>
+          tx.update(postStatuses).set({ position: index }).where(eq(postStatuses.id, id))
+        )
+      )
 
       return ok(undefined)
     })
@@ -302,25 +325,28 @@ export class StatusService {
    * @returns Result containing the updated status or an error
    */
   async setDefaultStatus(id: StatusId, ctx: ServiceContext): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
+    return db.transaction(async (tx) => {
       // Authorization check - only team members can set default status
       if (!['owner', 'admin', 'member'].includes(ctx.memberRole)) {
         return err(StatusError.unauthorized('set default status'))
       }
 
       // Get existing status to verify it exists
-      const existingStatus = await statusRepo.findById(id)
+      const existingStatus = await tx.query.postStatuses.findFirst({
+        where: eq(postStatuses.id, id),
+      })
       if (!existingStatus) {
         return err(StatusError.notFound(id))
       }
 
-      // Set as default
-      await statusRepo.setDefault(id)
+      // Set as default (unset all others first, then set this one)
+      await tx.update(postStatuses).set({ isDefault: false })
+      await tx.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, id))
 
       // Fetch and return the updated status
-      const updatedStatus = await statusRepo.findById(id)
+      const updatedStatus = await tx.query.postStatuses.findFirst({
+        where: eq(postStatuses.id, id),
+      })
       if (!updatedStatus) {
         return err(StatusError.notFound(id))
       }
@@ -338,13 +364,11 @@ export class StatusService {
    * @returns Result containing the default status, null if not found, or an error
    */
   async getDefaultStatus(_ctx: ServiceContext): Promise<Result<Status | null, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
-      const defaultStatus = await statusRepo.findDefault()
-
-      return ok(defaultStatus)
+    const defaultStatus = await db.query.postStatuses.findFirst({
+      where: eq(postStatuses.isDefault, true),
     })
+
+    return ok(defaultStatus ?? null)
   }
 
   /**
@@ -357,42 +381,14 @@ export class StatusService {
    * @returns Result containing the status or an error
    */
   async getStatusBySlug(slug: string, _ctx: ServiceContext): Promise<Result<Status, StatusError>> {
-    return withUnitOfWork(async (uow: UnitOfWork) => {
-      const statusRepo = new StatusRepository(uow.db)
-
-      const status = await statusRepo.findBySlug(slug)
-      if (!status) {
-        return err(StatusError.notFound(slug))
-      }
-
-      return ok(status)
+    const status = await db.query.postStatuses.findFirst({
+      where: eq(postStatuses.slug, slug),
     })
-  }
-
-  /**
-   * Seed default statuses for a new organization
-   *
-   * This method is called during initial setup to initialize
-   * the default set of statuses (Open, Under Review, Planned, In Progress, Complete, Closed).
-   * This is a public method that doesn't require ServiceContext since it's used
-   * during initial setup.
-   *
-   * @returns Result containing the created statuses or an error
-   */
-  async seedDefaultStatuses(): Promise<Result<Status[], StatusError>> {
-    try {
-      const { db, postStatuses, DEFAULT_STATUSES } = await import('@quackback/db')
-
-      const inserted = await db.insert(postStatuses).values(DEFAULT_STATUSES).returning()
-
-      return ok(inserted)
-    } catch (error) {
-      return err(
-        StatusError.validationError(
-          `Failed to seed statuses: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      )
+    if (!status) {
+      return err(StatusError.notFound(slug))
     }
+
+    return ok(status)
   }
 
   /**

@@ -4,7 +4,7 @@
  * Provides member lookup operations that don't require full ServiceContext.
  */
 
-import { db, MemberRepository, eq, sql, member, user } from '@quackback/db'
+import { db, eq, sql, member, user } from '@quackback/db'
 import type { Member } from '@quackback/db'
 import type { MemberId, UserId } from '@quackback/ids'
 import { Result, ok, err } from '../shared/result'
@@ -33,9 +33,10 @@ export class MemberService {
    */
   async getMemberByUser(userId: UserId): Promise<Result<Member | null, MemberError>> {
     try {
-      const memberRepo = new MemberRepository(db)
-      const foundMember = await memberRepo.findByUser(userId)
-      return ok(foundMember)
+      const foundMember = await db.query.member.findFirst({
+        where: eq(member.userId, userId),
+      })
+      return ok(foundMember ?? null)
     } catch (error) {
       console.error('Error looking up member:', error)
       return err({
@@ -50,9 +51,10 @@ export class MemberService {
    */
   async getMemberById(memberId: MemberId): Promise<Result<Member | null, MemberError>> {
     try {
-      const memberRepo = new MemberRepository(db)
-      const foundMember = await memberRepo.findById(memberId)
-      return ok(foundMember)
+      const foundMember = await db.query.member.findFirst({
+        where: eq(member.id, memberId),
+      })
+      return ok(foundMember ?? null)
     } catch (error) {
       console.error('Error looking up member:', error)
       return err({
@@ -105,33 +107,6 @@ export class MemberService {
       return err({
         code: 'DATABASE_ERROR',
         message: 'Failed to count members',
-      })
-    }
-  }
-
-  /**
-   * Check if user is a member
-   *
-   * Returns member record if exists, null otherwise.
-   */
-  async checkMembership(
-    userId: UserId
-  ): Promise<Result<{ isMember: boolean; member?: Member }, MemberError>> {
-    try {
-      const foundMember = await db.query.member.findFirst({
-        where: eq(member.userId, userId),
-      })
-
-      if (foundMember) {
-        return ok({ isMember: true, member: foundMember })
-      }
-
-      return ok({ isMember: false })
-    } catch (error) {
-      console.error('Error checking membership:', error)
-      return err({
-        code: 'DATABASE_ERROR',
-        message: 'Failed to check membership',
       })
     }
   }
