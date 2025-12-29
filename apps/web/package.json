@@ -21,7 +21,6 @@
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/serverless": "^1.0.2",
     "@quackback/db": "workspace:*",
-    "@quackback/domain": "workspace:*",
     "@quackback/email": "workspace:*",
     "@quackback/ids": "workspace:*",
     "@quackback/integrations": "workspace:*",

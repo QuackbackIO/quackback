@@ -44,7 +44,6 @@
         "@hookform/resolvers": "^5.2.2",
         "@neondatabase/serverless": "^1.0.2",
         "@quackback/db": "workspace:*",
-        "@quackback/domain": "workspace:*",
         "@quackback/email": "workspace:*",
         "@quackback/ids": "workspace:*",
         "@quackback/integrations": "workspace:*",
@@ -113,7 +112,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@quackback/db": "workspace:*",
-        "@quackback/domain": "workspace:*",
         "@quackback/email": "workspace:*",
         "@quackback/ids": "workspace:*",
         "@quackback/integrations": "workspace:*",
@@ -143,15 +141,6 @@
         "bcryptjs": "^3.0.3",
         "dotenv": "^17.2.3",
         "drizzle-kit": "^0.31.8",
-      },
-    },
-    "packages/domain": {
-      "name": "@quackback/domain",
-      "version": "0.1.0",
-      "dependencies": {
-        "@quackback/db": "workspace:*",
-        "@quackback/ids": "workspace:*",
-        "@quackback/jobs": "workspace:*",
       },
     },
     "packages/email": {
@@ -196,7 +185,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@quackback/db": "workspace:*",
-        "@quackback/domain": "workspace:*",
         "@quackback/email": "workspace:*",
         "@quackback/ids": "workspace:*",
         "@quackback/integrations": "workspace:*",
@@ -472,8 +460,6 @@
     "@playwright/test": ["@playwright/test@1.57.0", "", { "dependencies": { "playwright": "1.57.0" }, "bin": { "playwright": "cli.js" } }, "sha512-6TyEnHgd6SArQO8UO2OMTxshln3QMWBtPGrOCgs3wVEmQmwyuNtB10IZMfmYDE0riwNR1cu4q+pPcxMVtaG3TA=="],
 
     "@quackback/db": ["@quackback/db@workspace:packages/db"],
-
-    "@quackback/domain": ["@quackback/domain@workspace:packages/domain"],
 
     "@quackback/email": ["@quackback/email@workspace:packages/email"],
 

@@ -14,7 +14,6 @@
     "@quackback/email": "workspace:*",
     "@quackback/ids": "workspace:*",
     "@quackback/jobs": "workspace:*",
-    "@quackback/domain": "workspace:*",
     "@quackback/integrations": "workspace:*",
     "bullmq": "^5.34.8",
     "papaparse": "^5.5.3",

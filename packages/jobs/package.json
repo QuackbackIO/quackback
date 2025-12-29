@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@quackback/db": "workspace:*",
-    "@quackback/domain": "workspace:*",
     "@quackback/email": "workspace:*",
     "@quackback/ids": "workspace:*",
     "@quackback/integrations": "workspace:*",
