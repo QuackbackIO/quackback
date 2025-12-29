@@ -1,5 +1,5 @@
 import { requireTenantRole } from '@/lib/tenant'
-import { settingsService, DEFAULT_PORTAL_CONFIG } from '@quackback/domain'
+import { getPortalConfig, DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 import { Lock } from 'lucide-react'
 import { PortalAuthSettings } from './portal-auth-settings'
 
@@ -9,7 +9,7 @@ export default async function PortalAuthPage() {
   await requireTenantRole(['owner', 'admin'])
 
   // Fetch portal config
-  const configResult = await settingsService.getPortalConfig()
+  const configResult = await getPortalConfig()
   const portalConfig = configResult.success ? configResult.value : DEFAULT_PORTAL_CONFIG
 
   return (

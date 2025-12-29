@@ -6,7 +6,8 @@ import { getUserAvatarData } from '@/lib/avatar'
 import { getSettingsBrandingData } from '@/lib/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { SessionProvider } from '@/components/providers/session-provider'
-import { settingsService, theme } from '@quackback/domain'
+import { getBrandingConfig, getCustomCss } from '@/lib/settings'
+import { theme } from '@/lib/theme'
 
 interface SettingsLayoutProps {
   children: React.ReactNode
@@ -35,8 +36,8 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
   const [avatarData, brandingData, brandingResult, customCssResult] = await Promise.all([
     getUserAvatarData(user.id, user.image),
     getSettingsBrandingData(),
-    settingsService.getBrandingConfig(),
-    settingsService.getCustomCss(),
+    getBrandingConfig(),
+    getCustomCss(),
   ])
 
   // Generate theme CSS from org config

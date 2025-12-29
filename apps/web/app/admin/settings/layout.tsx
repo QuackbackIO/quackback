@@ -1,4 +1,4 @@
-import { isSelfHosted } from '@quackback/domain'
+import { isSelfHosted } from '@/lib/features'
 import { SettingsNav } from './settings-nav'
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

@@ -14,7 +14,8 @@ import {
 } from '@/lib/hooks/use-public-posts-query'
 import { useSession } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import type { BoardWithStats, PublicPostListItem } from '@quackback/domain'
+import type { BoardWithStats } from '@/lib/boards'
+import type { PublicPostListItem } from '@/lib/posts'
 import type { PostStatusEntity, Tag } from '@/lib/db'
 
 interface FeedbackContainerProps {

@@ -1,7 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
-import { Feature } from '@quackback/domain/features'
+import { Feature } from '@/lib/features'
 import { useFeatures } from '@/components/providers/features-provider'
 
 interface FeatureGateProps {

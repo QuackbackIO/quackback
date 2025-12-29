@@ -22,7 +22,7 @@ export function NotificationPreferencesForm() {
   useEffect(() => {
     async function fetchPreferences() {
       try {
-        const result = await getNotificationPreferencesAction({})
+        const result = await getNotificationPreferencesAction()
         if (!result.success) {
           throw new Error(result.error.message)
         }

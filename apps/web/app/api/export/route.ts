@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
-import { getPostService, getBoardService } from '@/lib/services'
-import { buildServiceContext } from '@quackback/domain'
+import { listPostsForExport } from '@/lib/posts'
+import { getBoardById } from '@/lib/boards'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 export async function GET(request: NextRequest) {
@@ -21,11 +21,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Only admins can export data' }, { status: 403 })
     }
 
-    // Build service context
-    const ctx = buildServiceContext(validation)
-    const boardService = getBoardService()
-    const postService = getPostService()
-
     // Validate boardId TypeID format
     let boardId: BoardId | undefined
     if (boardIdParam) {
@@ -34,14 +29,14 @@ export async function GET(request: NextRequest) {
       }
       boardId = boardIdParam as BoardId
       // Verify board exists
-      const boardResult = await boardService.getBoardById(boardId, ctx)
+      const boardResult = await getBoardById(boardId)
       if (!boardResult.success) {
         return NextResponse.json({ error: 'Board not found' }, { status: 400 })
       }
     }
 
     // Get all posts for export
-    const postsResult = await postService.listPostsForExport(boardId, ctx)
+    const postsResult = await listPostsForExport(boardId)
     if (!postsResult.success) {
       return NextResponse.json({ error: postsResult.error.message }, { status: 500 })
     }

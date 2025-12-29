@@ -1,12 +1,10 @@
 import { redirect } from 'next/navigation'
 import { requireAuthenticatedTenant } from '@/lib/tenant'
-import {
-  getPostService,
-  getTagService,
-  getStatusService,
-  getBoardService,
-  getMemberService,
-} from '@/lib/services'
+import { listInboxPosts } from '@/lib/posts'
+import { listTags } from '@/lib/tags'
+import { listStatuses } from '@/lib/statuses'
+import { listBoards } from '@/lib/boards'
+import { listTeamMembers } from '@/lib/members'
 import { InboxContainer } from './inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
 
@@ -16,11 +14,11 @@ interface FeedbackInboxPageProps {
 
 export default async function FeedbackInboxPage({ searchParams }: FeedbackInboxPageProps) {
   // Settings is validated in root layout
-  const { user: currentUser, serviceContext } = await requireAuthenticatedTenant()
+  const { user: currentUser, member } = await requireAuthenticatedTenant()
   const searchParamsResolved = await searchParams
 
   // Check if org has boards - if not, redirect to onboarding
-  const boardsResult = await getBoardService().listBoards(serviceContext)
+  const boardsResult = await listBoards()
   const orgBoards = boardsResult.success ? boardsResult.value : []
 
   if (orgBoards.length === 0) {
@@ -46,37 +44,34 @@ export default async function FeedbackInboxPage({ searchParams }: FeedbackInboxP
   const tagFilterIds = getArrayParam('tags') as TagId[]
   const statusFilterSlugs = getArrayParam('status')
   const ownerFilterId = getStringParam('owner')
-  const postsResult = await getPostService().listInboxPosts(
-    {
-      boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
-      statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
-      tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
-      ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
-      search: getStringParam('search'),
-      dateFrom: getStringParam('dateFrom') ? new Date(getStringParam('dateFrom')!) : undefined,
-      dateTo: getStringParam('dateTo') ? new Date(getStringParam('dateTo')!) : undefined,
-      minVotes: getStringParam('minVotes') ? parseInt(getStringParam('minVotes')!, 10) : undefined,
-      sort: (getStringParam('sort') as 'newest' | 'oldest' | 'votes') || 'newest',
-      page: 1,
-      limit: 20,
-    },
-    serviceContext
-  )
+  const postsResult = await listInboxPosts({
+    boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
+    statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
+    tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
+    ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
+    search: getStringParam('search'),
+    dateFrom: getStringParam('dateFrom') ? new Date(getStringParam('dateFrom')!) : undefined,
+    dateTo: getStringParam('dateTo') ? new Date(getStringParam('dateTo')!) : undefined,
+    minVotes: getStringParam('minVotes') ? parseInt(getStringParam('minVotes')!, 10) : undefined,
+    sort: (getStringParam('sort') as 'newest' | 'oldest' | 'votes') || 'newest',
+    page: 1,
+    limit: 20,
+  })
 
   const initialPosts = postsResult.success
     ? postsResult.value
     : { items: [], total: 0, hasMore: false }
 
   // Fetch tags for this organization using TagService
-  const tagsResult = await getTagService().listTags(serviceContext)
+  const tagsResult = await listTags()
   const orgTags = tagsResult.success ? tagsResult.value : []
 
   // Fetch statuses for this organization using StatusService
-  const statusesResult = await getStatusService().listStatuses(serviceContext)
+  const statusesResult = await listStatuses()
   const orgStatuses = statusesResult.success ? statusesResult.value : []
 
   // Fetch team members using MemberService (returns TypeIDs directly)
-  const membersResult = await getMemberService().listTeamMembers()
+  const membersResult = await listTeamMembers()
   const teamMembers = membersResult.success ? membersResult.value : []
 
   return (
@@ -89,7 +84,7 @@ export default async function FeedbackInboxPage({ searchParams }: FeedbackInboxP
       currentUser={{
         name: currentUser.name,
         email: currentUser.email,
-        memberId: serviceContext.memberId,
+        memberId: member.id,
       }}
     />
   )

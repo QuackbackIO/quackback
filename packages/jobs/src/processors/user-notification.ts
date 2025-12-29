@@ -13,7 +13,12 @@ import type {
   CommentCreatedPayload,
 } from '../types'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
-import { SubscriptionService, type Subscriber } from '@quackback/domain/subscriptions'
+import {
+  getActiveSubscribers,
+  getNotificationPreferences,
+  generateUnsubscribeToken,
+  type Subscriber,
+} from '@quackback/domain/subscriptions'
 import type { PostId, UserId } from '@quackback/ids'
 
 /**
@@ -37,7 +42,6 @@ export async function processUserNotification(
 
   console.log(`[UserNotifications] Processing ${eventType} event ${eventId}`)
 
-  const subscriptionService = new SubscriptionService()
   const errors: string[] = []
   let emailsSent = 0
   let skipped = 0
@@ -63,7 +67,7 @@ export async function processUserNotification(
         const postId = statusData.post.id as PostId
 
         // Get active subscribers for this post
-        const subscribers = await subscriptionService.getActiveSubscribers(postId)
+        const subscribers = await getActiveSubscribers(postId)
         console.log(
           `[UserNotifications] Found ${subscribers.length} subscribers for post ${postId}`
         )
@@ -77,7 +81,7 @@ export async function processUserNotification(
           }
 
           // Check notification preferences
-          const prefs = await subscriptionService.getNotificationPreferences(subscriber.memberId)
+          const prefs = await getNotificationPreferences(subscriber.memberId)
           if (!prefs.emailStatusChange || prefs.emailMuted) {
             console.log(`[UserNotifications] Preferences disabled for ${subscriber.email}`)
             skipped++
@@ -85,7 +89,7 @@ export async function processUserNotification(
           }
 
           // Generate unsubscribe token
-          const unsubscribeToken = await subscriptionService.generateUnsubscribeToken(
+          const unsubscribeToken = await generateUnsubscribeToken(
             subscriber.memberId,
             postId,
             'unsubscribe_post'
@@ -121,7 +125,7 @@ export async function processUserNotification(
         const postId = commentData.post.id as PostId
 
         // Get active subscribers for this post
-        const subscribers = await subscriptionService.getActiveSubscribers(postId)
+        const subscribers = await getActiveSubscribers(postId)
         console.log(
           `[UserNotifications] Found ${subscribers.length} subscribers for post ${postId}`
         )
@@ -151,7 +155,7 @@ export async function processUserNotification(
           }
 
           // Check notification preferences
-          const prefs = await subscriptionService.getNotificationPreferences(subscriber.memberId)
+          const prefs = await getNotificationPreferences(subscriber.memberId)
           if (!prefs.emailNewComment || prefs.emailMuted) {
             console.log(`[UserNotifications] Preferences disabled for ${subscriber.email}`)
             skipped++
@@ -159,7 +163,7 @@ export async function processUserNotification(
           }
 
           // Generate unsubscribe token
-          const unsubscribeToken = await subscriptionService.generateUnsubscribeToken(
+          const unsubscribeToken = await generateUnsubscribeToken(
             subscriber.memberId,
             postId,
             'unsubscribe_post'

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { ChevronUp, MessageSquare, Bell, User, Plus, TrendingUp, Clock, Flame } from 'lucide-react'
-import { oklchToHex, type ThemeVariables } from '@quackback/domain/theme'
+import { oklchToHex, type ThemeVariables } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 /** Map font family names to Google Fonts URL */

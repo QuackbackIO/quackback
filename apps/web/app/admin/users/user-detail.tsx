@@ -31,7 +31,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
-import type { PortalUserDetail, EngagedPost } from '@quackback/domain'
+import type { PortalUserDetail, EngagedPost } from '@/lib/users'
 
 interface UserDetailProps {
   user: PortalUserDetail | null

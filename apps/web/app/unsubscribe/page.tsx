@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { SubscriptionService } from '@quackback/domain/subscriptions'
+import { processUnsubscribeToken } from '@/lib/subscriptions'
 
 interface UnsubscribePageProps {
   searchParams: Promise<{ token?: string }>
@@ -15,8 +15,7 @@ export default async function UnsubscribePage({ searchParams }: UnsubscribePageP
   }
 
   try {
-    const subscriptionService = new SubscriptionService()
-    const result = await subscriptionService.processUnsubscribeToken(token)
+    const result = await processUnsubscribeToken(token)
 
     if (!result) {
       return <ErrorPage error="invalid" />

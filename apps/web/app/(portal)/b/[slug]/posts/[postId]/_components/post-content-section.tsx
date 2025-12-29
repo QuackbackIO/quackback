@@ -1,4 +1,4 @@
-import type { PublicPostDetail } from '@quackback/domain'
+import type { PublicPostDetail } from '@/lib/posts'
 import { PostContent } from '@/components/public/post-content'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'

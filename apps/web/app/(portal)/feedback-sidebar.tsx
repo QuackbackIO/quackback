@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { LayoutList, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { BoardWithStats } from '@quackback/domain'
+import type { BoardWithStats } from '@/lib/boards'
 
 interface FeedbackSidebarProps {
   boards: BoardWithStats[]

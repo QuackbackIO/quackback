@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Feature, type PricingTier } from '@quackback/domain/features'
+import { Feature, type PricingTier } from '@/lib/features'
 import { featuresKeys, type WorkspaceFeaturesData } from '@/lib/hooks/use-features'
 
 interface FeaturesContextValue {

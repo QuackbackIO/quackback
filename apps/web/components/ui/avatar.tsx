@@ -3,8 +3,7 @@
 import * as React from 'react'
 import * as AvatarPrimitive from '@radix-ui/react-avatar'
 
-import { cn } from '@/lib/utils'
-import { getInitials } from '@quackback/domain/utils'
+import { cn, getInitials } from '@/lib/utils'
 
 interface AvatarProps extends React.ComponentProps<typeof AvatarPrimitive.Root> {
   /**

@@ -1,6 +1,6 @@
 'use client'
 
-import { Feature, getMinimumTierForFeature, TIER_CONFIG } from '@quackback/domain/features'
+import { Feature, getMinimumTierForFeature, TIER_CONFIG } from '@/lib/features'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Sparkles, ArrowRight } from 'lucide-react'

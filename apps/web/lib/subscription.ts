@@ -1,7 +1,6 @@
 import { cache } from 'react'
-import { isCloud } from '@quackback/domain'
+import { isCloud, type PricingTier } from '@/lib/features'
 import type { SubscriptionId } from '@quackback/ids'
-import type { PricingTier } from '@quackback/domain/features'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
 

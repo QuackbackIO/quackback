@@ -3,7 +3,7 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { ChevronUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { RoadmapPostEntry } from '@quackback/domain'
+import type { RoadmapPostEntry } from '@/lib/roadmaps'
 
 interface AdminRoadmapCardProps {
   post: RoadmapPostEntry

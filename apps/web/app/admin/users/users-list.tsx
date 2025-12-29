@@ -13,7 +13,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { UserCard } from './user-card'
-import type { PortalUserListItem } from '@quackback/domain'
+import type { PortalUserListItem } from '@/lib/users'
 import type { UsersFilters } from './use-users-filters'
 
 interface UsersListProps {

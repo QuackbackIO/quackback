@@ -1,5 +1,6 @@
 import { getSettings } from '@/lib/tenant'
-import { getRoadmapService, getStatusService } from '@/lib/services'
+import { listPublicRoadmaps } from '@/lib/roadmaps'
+import { listPublicStatuses } from '@/lib/statuses'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 
 /**
@@ -16,8 +17,8 @@ export default async function RoadmapPage() {
   // Get statuses marked for roadmap display and public roadmaps in parallel
   // Services now return TypeIDs directly
   const [statusesResult, roadmapsResult] = await Promise.all([
-    getStatusService().listPublicStatuses(),
-    getRoadmapService().listPublicRoadmaps(),
+    listPublicStatuses(),
+    listPublicRoadmaps(),
   ])
 
   const allStatuses = statusesResult.success ? statusesResult.value : []

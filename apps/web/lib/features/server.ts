@@ -7,7 +7,7 @@ import {
   TIER_CONFIG,
   TIER_ORDER,
   getMinimumTierForFeature,
-} from '@quackback/domain'
+} from '@/lib/features'
 import { getSubscription, isSubscriptionActive } from '../subscription'
 
 export interface WorkspaceFeatures {
@@ -121,4 +121,4 @@ export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheck
 }
 
 // Re-export Feature enum for convenience
-export { Feature } from '@quackback/domain'
+export { Feature } from '@/lib/features'

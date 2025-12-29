@@ -25,7 +25,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { useChangePostStatusId } from '@/lib/hooks/use-inbox-queries'
 import type { PostStatusEntity } from '@/lib/db'
-import type { RoadmapPostEntry } from '@quackback/domain'
+import type { RoadmapPostEntry } from '@/lib/roadmaps'
 import type { StatusId, PostId } from '@quackback/ids'
 
 interface RoadmapAdminProps {

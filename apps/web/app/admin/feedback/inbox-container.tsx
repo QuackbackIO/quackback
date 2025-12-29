@@ -25,7 +25,7 @@ import { useInboxUIStore } from '@/lib/stores/inbox-ui'
 import type { CommentId, PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from './inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db'
-import type { TeamMember } from '@quackback/domain'
+import type { TeamMember } from '@/lib/members'
 
 interface InboxContainerProps {
   initialPosts: InboxPostListResult

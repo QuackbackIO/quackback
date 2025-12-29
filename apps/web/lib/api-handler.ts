@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { validateApiTenantAccess, type ApiTenantResult } from '@/lib/tenant'
-import { Feature } from '@quackback/domain'
+import { Feature } from '@/lib/features'
 import { checkFeatureAccess } from '@/lib/features/server'
 import {
   isValidTypeId,
@@ -347,4 +347,4 @@ export function withApiHandlerParams<P>(
 }
 
 // Re-export Feature for convenience
-export { Feature }
+export { Feature } from '@/lib/features'

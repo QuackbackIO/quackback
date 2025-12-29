@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getSettings } from '@/lib/tenant'
-import { getPublicPostService, getPublicBoardService, getStatusService } from '@/lib/services'
+import { getPublicPostDetail } from '@/lib/posts'
+import { getPublicBoardBySlug } from '@/lib/boards'
+import { listPublicStatuses } from '@/lib/statuses'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from './_components/vote-sidebar'
 import { PostContentSection } from './_components/post-content-section'
@@ -33,21 +35,21 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const postId = postIdParam as PostId
 
   // Verify the board exists and is public
-  const boardResult = await getPublicBoardService().getBoardBySlug(slug)
+  const boardResult = await getPublicBoardBySlug(slug)
   const board = boardResult.success ? boardResult.value : null
   if (!board) {
     notFound()
   }
 
   // Get post detail - services now accept TypeIDs and return TypeIDs
-  const postResult = await getPublicPostService().getPostDetail(postId)
+  const postResult = await getPublicPostDetail(postId)
   const post = postResult.success ? postResult.value : null
   if (!post || post.board.slug !== slug) {
     notFound()
   }
 
   // Get statuses for display - services return TypeIDs directly
-  const statusesResult = await getStatusService().listPublicStatuses()
+  const statusesResult = await listPublicStatuses()
   const statuses = statusesResult.success ? statusesResult.value : []
   const currentStatus = statuses.find((s) => s.id === post.statusId)
 

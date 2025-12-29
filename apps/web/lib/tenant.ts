@@ -8,7 +8,6 @@ import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { db, member, eq, type Database } from '@/lib/db'
 import { getSession } from './auth/server'
-import type { ServiceContext } from '@quackback/domain'
 import type { UserId } from '@quackback/ids'
 
 // =============================================================================
@@ -218,7 +217,6 @@ export async function requireAuthenticatedTenant(): Promise<
     /** @deprecated Use withDb instead */
     withRLS: <T>(fn: (db: Database) => Promise<T>) => Promise<T>
     withDb: <T>(fn: (db: Database) => Promise<T>) => Promise<T>
-    serviceContext: ServiceContext
   }
 > {
   const result = await requireTenant() // This already redirects on failure
@@ -231,13 +229,6 @@ export async function requireAuthenticatedTenant(): Promise<
     user: result.user,
     withRLS: withDb, // @deprecated alias
     withDb,
-    serviceContext: {
-      userId: result.user.id,
-      memberId: result.member.id,
-      memberRole: result.member.role as 'owner' | 'admin' | 'member' | 'user',
-      userName: result.user.name || result.user.email,
-      userEmail: result.user.email,
-    },
   }
 }
 

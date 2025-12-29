@@ -49,7 +49,7 @@ import {
   oklchToHex,
   type ThemeConfig,
   type ThemeVariables,
-} from '@quackback/domain/theme'
+} from '@/lib/theme'
 import { useWorkspaceLogo, useWorkspaceHeaderLogo } from '@/lib/hooks/use-settings-queries'
 import { updateThemeAction } from '@/lib/actions/settings'
 import { ThemePreview } from './theme-preview'

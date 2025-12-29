@@ -1,5 +1,5 @@
 import { requireAuthenticatedTenant } from '@/lib/tenant'
-import { getUserService } from '@/lib/services'
+import { listPortalUsers } from '@/lib/users'
 import { UsersContainer } from './users-container'
 
 export default async function UsersPage({
@@ -25,7 +25,7 @@ export default async function UsersPage({
   const sort = (getStringParam('sort') as 'newest' | 'oldest' | 'most_active' | 'name') || 'newest'
 
   // Fetch initial users with filters from URL
-  const usersResult = await getUserService().listPortalUsers({
+  const usersResult = await listPortalUsers({
     search,
     verified,
     dateFrom: dateFrom ? new Date(dateFrom) : undefined,

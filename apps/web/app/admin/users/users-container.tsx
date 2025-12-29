@@ -11,7 +11,7 @@ import {
   useRemovePortalUser,
   flattenUsers,
 } from '@/lib/hooks/use-users-queries'
-import type { PortalUserListResult } from '@quackback/domain'
+import type { PortalUserListResult } from '@/lib/users'
 import type { MemberId } from '@quackback/ids'
 
 interface UsersContainerProps {

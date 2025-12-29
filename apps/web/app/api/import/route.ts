@@ -4,8 +4,7 @@ import { validateApiTenantAccess } from '@/lib/tenant'
 import { requireRole } from '@/lib/api-handler'
 import { getJobAdapter, type ImportJobData } from '@quackback/jobs'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
-import { getBoardService } from '@/lib/services'
-import { buildServiceContext } from '@quackback/domain'
+import { getBoardById, listBoards } from '@/lib/boards'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -42,10 +41,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File must be a CSV' }, { status: 400 })
     }
 
-    // Build service context
-    const ctx = buildServiceContext(validation)
-    const boardService = getBoardService()
-
     // Validate boardId TypeID format
     let boardId: BoardId | null = null
     if (boardIdParam) {
@@ -58,13 +53,13 @@ export async function POST(request: NextRequest) {
     // Validate board exists
     let targetBoardId: BoardId | null = boardId
     if (boardId) {
-      const boardResult = await boardService.getBoardById(boardId, ctx)
+      const boardResult = await getBoardById(boardId)
       if (!boardResult.success) {
         return NextResponse.json({ error: 'Board not found' }, { status: 400 })
       }
     } else {
       // Use first board if none specified
-      const boardsResult = await boardService.listBoards(ctx)
+      const boardsResult = await listBoards()
       if (!boardsResult.success || boardsResult.value.length === 0) {
         return NextResponse.json(
           { error: 'No boards found. Create a board first.' },

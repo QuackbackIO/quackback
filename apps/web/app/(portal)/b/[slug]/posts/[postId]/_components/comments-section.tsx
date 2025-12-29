@@ -1,4 +1,4 @@
-import type { PublicComment } from '@quackback/domain'
+import type { PublicComment } from '@/lib/posts'
 import { db, member, eq } from '@/lib/db'
 import { getSession } from '@/lib/auth/server'
 import { getBulkMemberAvatarData } from '@/lib/avatar'

@@ -1,14 +1,14 @@
 import { requireTenant } from '@/lib/tenant'
 import { Settings } from 'lucide-react'
 import { StatusList } from './status-list'
-import { getStatusService } from '@/lib/services'
+import { listPublicStatuses } from '@/lib/statuses'
 
 export default async function StatusesPage() {
   // Settings is validated in root layout
   await requireTenant()
 
   // Services now return TypeIDs directly
-  const statusesResult = await getStatusService().listPublicStatuses()
+  const statusesResult = await listPublicStatuses()
   const statuses = statusesResult.success ? statusesResult.value : []
 
   return (
