@@ -1,16 +1,16 @@
 'use server'
 
 import { z } from 'zod'
-import { withAction, mapDomainError } from './with-action'
-import { actionOk, actionErr } from './types'
-import { getTagService } from '@/lib/services'
-import { tagIdSchema, type TagId } from '@quackback/ids'
+import { getSession } from '@/lib/auth/server'
+import { db, member, eq } from '@/lib/db'
+import { listTags, getTagById, createTag, updateTag, deleteTag } from '@/lib/tags'
+import { tagIdSchema, type TagId, type UserId } from '@quackback/ids'
+import { actionOk, actionErr, mapDomainError, type ActionResult } from './types'
+import type { Tag } from '@quackback/db'
 
 // ============================================
 // Schemas
 // ============================================
-
-const listTagsSchema = z.object({})
 
 const createTagSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name must be 50 characters or less'),
@@ -42,7 +42,6 @@ const deleteTagSchema = z.object({
 // Type Exports
 // ============================================
 
-export type ListTagsInput = z.infer<typeof listTagsSchema>
 export type CreateTagInput = z.infer<typeof createTagSchema>
 export type GetTagInput = z.infer<typeof getTagSchema>
 export type UpdateTagInput = z.infer<typeof updateTagSchema>
@@ -55,73 +54,165 @@ export type DeleteTagInput = z.infer<typeof deleteTagSchema>
 /**
  * List all tags for a workspace.
  */
-export const listTagsAction = withAction(listTagsSchema, async (_input, _ctx, serviceCtx) => {
-  const result = await getTagService().listTags(serviceCtx)
+export async function listTagsAction(): Promise<ActionResult<Tag[]>> {
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await listTags()
   if (!result.success) {
     return actionErr(mapDomainError(result.error))
   }
   return actionOk(result.value)
-})
+}
 
 /**
  * Get a single tag by ID.
  */
-export const getTagAction = withAction(getTagSchema, async (input, _ctx, serviceCtx) => {
-  const result = await getTagService().getTagById(input.id as TagId, serviceCtx)
+export async function getTagAction(rawInput: unknown): Promise<ActionResult<Tag>> {
+  const parsed = getTagSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await getTagById(parsed.data.id as TagId)
   if (!result.success) {
     return actionErr(mapDomainError(result.error))
   }
   return actionOk(result.value)
-})
+}
 
 /**
  * Create a new tag.
  */
-export const createTagAction = withAction(
-  createTagSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getTagService().createTag(
-      { name: input.name, color: input.color },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function createTagAction(rawInput: unknown): Promise<ActionResult<Tag>> {
+  const parsed = createTagSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await createTag({ name: parsed.data.name, color: parsed.data.color })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Update an existing tag.
  */
-export const updateTagAction = withAction(
-  updateTagSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getTagService().updateTag(
-      input.id as TagId,
-      { name: input.name, color: input.color },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function updateTagAction(rawInput: unknown): Promise<ActionResult<Tag>> {
+  const parsed = updateTagSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await updateTag(parsed.data.id as TagId, {
+    name: parsed.data.name,
+    color: parsed.data.color,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Delete a tag.
  */
-export const deleteTagAction = withAction(
-  deleteTagSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getTagService().deleteTag(input.id as TagId, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ id: input.id as string })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function deleteTagAction(rawInput: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = deleteTagSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await deleteTag(parsed.data.id as TagId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ id: parsed.data.id })
+}

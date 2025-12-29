@@ -3,11 +3,19 @@
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq, and, commentReactions, REACTION_EMOJIS } from '@/lib/db'
-import { getCommentService, getPublicPostService } from '@/lib/services'
+import {
+  createComment,
+  canEditComment,
+  canDeleteComment,
+  userEditComment,
+  softDeleteComment,
+  addReaction,
+  removeReaction,
+} from '@/lib/comments'
+import { getBoardByPostId } from '@/lib/posts'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getSettings } from '@/lib/tenant'
-import { buildCommentCreatedEvent, type ServiceContext } from '@quackback/domain'
-
+import { buildCommentCreatedEvent } from '@/lib/events'
 import { getJobAdapter } from '@quackback/jobs'
 import {
   postIdSchema,
@@ -18,8 +26,7 @@ import {
   type MemberId,
   type UserId,
 } from '@quackback/ids'
-import { actionOk, actionErr, type ActionResult } from './types'
-import { mapDomainError } from './with-action'
+import { actionOk, actionErr, mapDomainError, type ActionResult } from './types'
 
 // ============================================
 // Schemas
@@ -73,18 +80,27 @@ async function getMemberRecord(userId: UserId) {
 }
 
 /**
- * Build service context from session and member
+ * Build author info from session and member for comment creation
  */
-function buildCtx(
+function buildAuthor(
   session: { user: { id: string; email: string; name: string | null } },
   memberRecord: { id: string; role: string }
-): ServiceContext {
+) {
   return {
-    userId: session.user.id as UserId,
     memberId: memberRecord.id as MemberId,
-    memberRole: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
-    userName: session.user.name || session.user.email,
-    userEmail: session.user.email,
+    name: session.user.name || session.user.email,
+    email: session.user.email,
+    role: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
+  }
+}
+
+/**
+ * Build actor info from member for permission checks
+ */
+function buildActor(memberRecord: { id: string; role: string }) {
+  return {
+    memberId: memberRecord.id as MemberId,
+    role: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
   }
 }
 
@@ -132,7 +148,7 @@ export async function createCommentAction(
     }
 
     // Get board to check permissions
-    const boardResult = await getPublicPostService().getBoardByPostId(postId)
+    const boardResult = await getBoardByPostId(postId)
     if (!boardResult.success || !boardResult.value) {
       return actionErr({ code: 'NOT_FOUND', message: 'Post not found', status: 404 })
     }
@@ -157,9 +173,9 @@ export async function createCommentAction(
       parentIdTypeId = parentId as CommentId
     }
 
-    const ctx = buildCtx(session, memberRecord)
+    const author = buildAuthor(session, memberRecord)
 
-    const serviceResult = await getCommentService().createComment(
+    const serviceResult = await createComment(
       {
         postId,
         content,
@@ -167,7 +183,7 @@ export async function createCommentAction(
         authorName: null,
         authorEmail: null,
       },
-      ctx
+      author
     )
 
     if (!serviceResult.success) {
@@ -179,8 +195,8 @@ export async function createCommentAction(
     const settings = await getSettings()
     if (settings) {
       const eventData = buildCommentCreatedEvent(
-        { type: 'user', userId: ctx.userId, email: ctx.userEmail },
-        { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
+        { type: 'user', userId: session.user.id as UserId, email: author.email },
+        { id: comment.id, content: comment.content, authorEmail: author.email },
         { id: post.id, title: post.title }
       )
 
@@ -234,13 +250,12 @@ export async function getCommentPermissionsAction(rawInput: GetCommentPermission
       return actionOk({ canEdit: false, canDelete: false })
     }
 
-    const ctx = buildCtx(session, memberRecord)
-    const commentService = getCommentService()
+    const actor = buildActor(memberRecord)
 
     // Check permissions
     const [editResult, deleteResult] = await Promise.all([
-      commentService.canEditComment(commentId, ctx),
-      commentService.canDeleteComment(commentId, ctx),
+      canEditComment(commentId, actor),
+      canDeleteComment(commentId, actor),
     ])
 
     return actionOk({
@@ -298,10 +313,9 @@ export async function userEditCommentAction(
       })
     }
 
-    const ctx = buildCtx(session, memberRecord)
-    const commentService = getCommentService()
+    const actor = buildActor(memberRecord)
 
-    const result = await commentService.userEditComment(commentId, content, ctx)
+    const result = await userEditComment(commentId, content, actor)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -355,10 +369,9 @@ export async function userDeleteCommentAction(
       })
     }
 
-    const ctx = buildCtx(session, memberRecord)
-    const commentService = getCommentService()
+    const actor = buildActor(memberRecord)
 
-    const result = await commentService.softDeleteComment(commentId, ctx)
+    const result = await softDeleteComment(commentId, actor)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -442,7 +455,6 @@ export async function toggleReactionAction(rawInput: ToggleReactionInput): Promi
     }
 
     const userIdentifier = getMemberIdentifier(memberRecord.id)
-    const ctx = buildCtx(session, memberRecord)
 
     // Check if reaction already exists
     const existingReaction = await db.query.commentReactions.findFirst({
@@ -454,10 +466,9 @@ export async function toggleReactionAction(rawInput: ToggleReactionInput): Promi
     })
 
     // Toggle the reaction
-    const commentService = getCommentService()
     const serviceResult = existingReaction
-      ? await commentService.removeReaction(commentId, emoji, ctx)
-      : await commentService.addReaction(commentId, emoji, ctx)
+      ? await removeReaction(commentId, emoji, userIdentifier)
+      : await addReaction(commentId, emoji, userIdentifier)
 
     if (!serviceResult.success) {
       return actionErr(mapDomainError(serviceResult.error))

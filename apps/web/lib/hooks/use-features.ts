@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Feature, type PricingTier } from '@quackback/domain/features'
+import { Feature, type PricingTier } from '@/lib/features'
 import { getWorkspaceFeaturesAction } from '@/lib/actions/settings'
 
 // ============================================================================
@@ -42,7 +42,7 @@ export function useWorkspaceFeatures() {
   return useQuery({
     queryKey: featuresKeys.workspace(),
     queryFn: async (): Promise<WorkspaceFeaturesData> => {
-      const result = await getWorkspaceFeaturesAction({})
+      const result = await getWorkspaceFeaturesAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }

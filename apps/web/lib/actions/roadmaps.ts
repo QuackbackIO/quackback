@@ -1,9 +1,21 @@
 'use server'
 
 import { z } from 'zod'
-import { withAction, mapDomainError } from './with-action'
-import { actionOk, actionErr } from './types'
-import { getRoadmapService } from '@/lib/services'
+import { getSession } from '@/lib/auth/server'
+import { db, member, eq } from '@/lib/db'
+import {
+  listRoadmaps,
+  getRoadmap,
+  createRoadmap,
+  updateRoadmap,
+  deleteRoadmap,
+  reorderRoadmaps,
+  getRoadmapPosts,
+  addPostToRoadmap,
+  removePostFromRoadmap,
+  reorderPostsInColumn,
+  type RoadmapPostsListResult,
+} from '@/lib/roadmaps'
 import {
   roadmapIdSchema,
   postIdSchema,
@@ -12,13 +24,14 @@ import {
   type RoadmapId,
   type PostId,
   type StatusId,
+  type UserId,
 } from '@quackback/ids'
+import { actionOk, actionErr, mapDomainError, type ActionResult } from './types'
+import type { Roadmap } from '@quackback/db'
 
 // ============================================
 // Schemas
 // ============================================
-
-const listRoadmapsSchema = z.object({})
 
 const createRoadmapSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
@@ -76,7 +89,6 @@ const reorderRoadmapPostsSchema = z.object({
 // Type Exports
 // ============================================
 
-export type ListRoadmapsInput = z.infer<typeof listRoadmapsSchema>
 export type CreateRoadmapInput = z.infer<typeof createRoadmapSchema>
 export type GetRoadmapInput = z.infer<typeof getRoadmapSchema>
 export type UpdateRoadmapInput = z.infer<typeof updateRoadmapSchema>
@@ -94,199 +106,388 @@ export type ReorderRoadmapPostsInput = z.infer<typeof reorderRoadmapPostsSchema>
 /**
  * List all roadmaps for a workspace.
  */
-export const listRoadmapsAction = withAction(
-  listRoadmapsSchema,
-  async (_input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().listRoadmaps(serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
+export async function listRoadmapsAction(): Promise<ActionResult<Roadmap[]>> {
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
   }
-)
 
-/**
- * Get a single roadmap by ID.
- */
-export const getRoadmapAction = withAction(getRoadmapSchema, async (input, _ctx, serviceCtx) => {
-  const result = await getRoadmapService().getRoadmap(input.id as RoadmapId, serviceCtx)
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await listRoadmaps()
   if (!result.success) {
     return actionErr(mapDomainError(result.error))
   }
   return actionOk(result.value)
-})
+}
+
+/**
+ * Get a single roadmap by ID.
+ */
+export async function getRoadmapAction(rawInput: unknown): Promise<ActionResult<Roadmap>> {
+  const parsed = getRoadmapSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await getRoadmap(parsed.data.id as RoadmapId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Create a new roadmap.
  */
-export const createRoadmapAction = withAction(
-  createRoadmapSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().createRoadmap(
-      {
-        name: input.name,
-        slug: input.slug,
-        description: input.description,
-        isPublic: input.isPublic,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function createRoadmapAction(rawInput: unknown): Promise<ActionResult<Roadmap>> {
+  const parsed = createRoadmapSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await createRoadmap({
+    name: parsed.data.name,
+    slug: parsed.data.slug,
+    description: parsed.data.description,
+    isPublic: parsed.data.isPublic,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Update an existing roadmap.
  */
-export const updateRoadmapAction = withAction(
-  updateRoadmapSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().updateRoadmap(
-      input.id as RoadmapId,
-      {
-        name: input.name,
-        description: input.description === null ? undefined : input.description,
-        isPublic: input.isPublic,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function updateRoadmapAction(rawInput: unknown): Promise<ActionResult<Roadmap>> {
+  const parsed = updateRoadmapSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await updateRoadmap(parsed.data.id as RoadmapId, {
+    name: parsed.data.name,
+    description: parsed.data.description === null ? undefined : parsed.data.description,
+    isPublic: parsed.data.isPublic,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Delete a roadmap.
  */
-export const deleteRoadmapAction = withAction(
-  deleteRoadmapSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().deleteRoadmap(input.id as RoadmapId, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ id: input.id as string })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function deleteRoadmapAction(
+  rawInput: unknown
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = deleteRoadmapSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await deleteRoadmap(parsed.data.id as RoadmapId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ id: parsed.data.id as string })
+}
 
 /**
  * Reorder roadmaps in the sidebar.
  */
-export const reorderRoadmapsAction = withAction(
-  reorderRoadmapsSchema,
-  async (input, _ctx, serviceCtx) => {
-    // Validate all roadmap IDs
-    const validatedRoadmapIds = input.roadmapIds.map((id) => {
-      if (!isValidTypeId(id, 'roadmap')) {
-        throw new Error(`Invalid roadmap ID format: ${id}`)
-      }
-      return id as RoadmapId
+export async function reorderRoadmapsAction(
+  rawInput: unknown
+): Promise<ActionResult<{ success: boolean }>> {
+  const parsed = reorderRoadmapsSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
     })
+  }
 
-    const result = await getRoadmapService().reorderRoadmaps(validatedRoadmapIds, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  // Validate all roadmap IDs
+  const validatedRoadmapIds = parsed.data.roadmapIds.map((id) => {
+    if (!isValidTypeId(id, 'roadmap')) {
+      throw new Error(`Invalid roadmap ID format: ${id}`)
     }
-    return actionOk({ success: true })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+    return id as RoadmapId
+  })
+
+  const result = await reorderRoadmaps(validatedRoadmapIds)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ success: true })
+}
 
 /**
  * Get posts for a roadmap, optionally filtered by status.
  */
-export const getRoadmapPostsAction = withAction(
-  getRoadmapPostsSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().getRoadmapPosts(
-      input.roadmapId as RoadmapId,
-      {
-        statusId: input.statusId as StatusId | undefined,
-        limit: input.limit,
-        offset: input.offset,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
+export async function getRoadmapPostsAction(
+  rawInput: unknown
+): Promise<ActionResult<RoadmapPostsListResult>> {
+  const parsed = getRoadmapPostsSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
   }
-)
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await getRoadmapPosts(parsed.data.roadmapId as RoadmapId, {
+    statusId: parsed.data.statusId as StatusId | undefined,
+    limit: parsed.data.limit,
+    offset: parsed.data.offset,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Add a post to a roadmap.
  */
-export const addPostToRoadmapAction = withAction(
-  addPostToRoadmapSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().addPostToRoadmap(
-      {
-        postId: input.postId as PostId,
-        roadmapId: input.roadmapId as RoadmapId,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ added: true })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function addPostToRoadmapAction(
+  rawInput: unknown
+): Promise<ActionResult<{ added: boolean }>> {
+  const parsed = addPostToRoadmapSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await addPostToRoadmap({
+    postId: parsed.data.postId as PostId,
+    roadmapId: parsed.data.roadmapId as RoadmapId,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ added: true })
+}
 
 /**
  * Remove a post from a roadmap.
  */
-export const removePostFromRoadmapAction = withAction(
-  removePostFromRoadmapSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getRoadmapService().removePostFromRoadmap(
-      input.postId as PostId,
-      input.roadmapId as RoadmapId,
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ removed: true })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function removePostFromRoadmapAction(
+  rawInput: unknown
+): Promise<ActionResult<{ removed: boolean }>> {
+  const parsed = removePostFromRoadmapSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await removePostFromRoadmap(
+    parsed.data.postId as PostId,
+    parsed.data.roadmapId as RoadmapId
+  )
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ removed: true })
+}
 
 /**
  * Reorder posts within a roadmap column.
  */
-export const reorderRoadmapPostsAction = withAction(
-  reorderRoadmapPostsSchema,
-  async (input, _ctx, serviceCtx) => {
-    // Validate all post IDs
-    const validatedPostIds = input.postIds.map((id) => {
-      if (!isValidTypeId(id, 'post')) {
-        throw new Error(`Invalid post ID format: ${id}`)
-      }
-      return id as PostId
+export async function reorderRoadmapPostsAction(
+  rawInput: unknown
+): Promise<ActionResult<{ success: boolean }>> {
+  const parsed = reorderRoadmapPostsSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
     })
+  }
 
-    const result = await getRoadmapService().reorderPostsInColumn(
-      {
-        roadmapId: input.roadmapId as RoadmapId,
-        postIds: validatedPostIds,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  // Validate all post IDs
+  const validatedPostIds = parsed.data.postIds.map((id) => {
+    if (!isValidTypeId(id, 'post')) {
+      throw new Error(`Invalid post ID format: ${id}`)
     }
-    return actionOk({ success: true })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+    return id as PostId
+  })
+
+  const result = await reorderPostsInColumn({
+    roadmapId: parsed.data.roadmapId as RoadmapId,
+    postIds: validatedPostIds,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ success: true })
+}

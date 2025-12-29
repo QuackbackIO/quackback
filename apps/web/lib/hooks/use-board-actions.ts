@@ -40,7 +40,7 @@ export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   return useQuery({
     queryKey: boardKeys.lists(),
     queryFn: async () => {
-      const result = await listBoardsAction({})
+      const result = await listBoardsAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }

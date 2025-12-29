@@ -1,18 +1,25 @@
 'use server'
 
 import { z } from 'zod'
-import { withAction, mapDomainError } from './with-action'
-import { actionOk, actionErr } from './types'
-import { getStatusService } from '@/lib/services'
-import { statusIdSchema, isValidTypeId, type StatusId } from '@quackback/ids'
+import { getSession } from '@/lib/auth/server'
+import { db, member, eq } from '@/lib/db'
+import {
+  listStatuses,
+  getStatusById,
+  createStatus,
+  updateStatus,
+  deleteStatus,
+  reorderStatuses,
+  type Status,
+} from '@/lib/statuses'
+import { statusIdSchema, isValidTypeId, type StatusId, type UserId } from '@quackback/ids'
+import { actionOk, actionErr, mapDomainError, type ActionResult } from './types'
 
 // ============================================
 // Schemas
 // ============================================
 
 const statusCategorySchema = z.enum(['active', 'complete', 'closed'])
-
-const listStatusesSchema = z.object({})
 
 const createStatusSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name must be 50 characters or less'),
@@ -56,7 +63,6 @@ const reorderStatusesSchema = z.object({
 // ============================================
 
 export type StatusCategory = z.infer<typeof statusCategorySchema>
-export type ListStatusesInput = z.infer<typeof listStatusesSchema>
 export type CreateStatusInput = z.infer<typeof createStatusSchema>
 export type GetStatusInput = z.infer<typeof getStatusSchema>
 export type UpdateStatusInput = z.infer<typeof updateStatusSchema>
@@ -70,112 +76,226 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
 /**
  * List all statuses for a workspace.
  */
-export const listStatusesAction = withAction(
-  listStatusesSchema,
-  async (_input, _ctx, serviceCtx) => {
-    const result = await getStatusService().listStatuses(serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
+export async function listStatusesAction(): Promise<ActionResult<Status[]>> {
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
   }
-)
 
-/**
- * Get a single status by ID.
- */
-export const getStatusAction = withAction(getStatusSchema, async (input, _ctx, serviceCtx) => {
-  const result = await getStatusService().getStatusById(input.id as StatusId, serviceCtx)
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await listStatuses()
   if (!result.success) {
     return actionErr(mapDomainError(result.error))
   }
   return actionOk(result.value)
-})
+}
+
+/**
+ * Get a single status by ID.
+ */
+export async function getStatusAction(rawInput: unknown): Promise<ActionResult<Status>> {
+  const parsed = getStatusSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const result = await getStatusById(parsed.data.id as StatusId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Create a new status.
  */
-export const createStatusAction = withAction(
-  createStatusSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getStatusService().createStatus(
-      {
-        name: input.name,
-        slug: input.slug,
-        color: input.color,
-        category: input.category,
-        position: input.position,
-        showOnRoadmap: input.showOnRoadmap,
-        isDefault: input.isDefault,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function createStatusAction(rawInput: unknown): Promise<ActionResult<Status>> {
+  const parsed = createStatusSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await createStatus({
+    name: parsed.data.name,
+    slug: parsed.data.slug,
+    color: parsed.data.color,
+    category: parsed.data.category,
+    position: parsed.data.position,
+    showOnRoadmap: parsed.data.showOnRoadmap,
+    isDefault: parsed.data.isDefault,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Update an existing status.
  */
-export const updateStatusAction = withAction(
-  updateStatusSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getStatusService().updateStatus(
-      input.id as StatusId,
-      {
-        name: input.name,
-        color: input.color,
-        showOnRoadmap: input.showOnRoadmap,
-        isDefault: input.isDefault,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function updateStatusAction(rawInput: unknown): Promise<ActionResult<Status>> {
+  const parsed = updateStatusSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await updateStatus(parsed.data.id as StatusId, {
+    name: parsed.data.name,
+    color: parsed.data.color,
+    showOnRoadmap: parsed.data.showOnRoadmap,
+    isDefault: parsed.data.isDefault,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Delete a status.
  */
-export const deleteStatusAction = withAction(
-  deleteStatusSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getStatusService().deleteStatus(input.id as StatusId, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ id: input.id as string })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+export async function deleteStatusAction(rawInput: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = deleteStatusSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const result = await deleteStatus(parsed.data.id as StatusId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ id: parsed.data.id })
+}
 
 /**
  * Reorder statuses within a category.
  */
-export const reorderStatusesAction = withAction(
-  reorderStatusesSchema,
-  async (input, _ctx, serviceCtx) => {
-    // Validate all status IDs
-    const validatedStatusIds = input.statusIds.map((id) => {
-      if (!isValidTypeId(id, 'status')) {
-        throw new Error(`Invalid status ID format: ${id}`)
-      }
-      return id as StatusId
+export async function reorderStatusesAction(
+  rawInput: unknown
+): Promise<ActionResult<{ success: true }>> {
+  const parsed = reorderStatusesSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
     })
+  }
 
-    const result = await getStatusService().reorderStatuses(validatedStatusIds, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  // Validate all status IDs
+  const validatedStatusIds: StatusId[] = []
+  for (const id of parsed.data.statusIds) {
+    if (!isValidTypeId(id, 'status')) {
+      return actionErr({
+        code: 'VALIDATION_ERROR',
+        message: `Invalid status ID format: ${id}`,
+        status: 400,
+      })
     }
-    return actionOk({ success: true })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+    validatedStatusIds.push(id as StatusId)
+  }
+
+  const result = await reorderStatuses(validatedStatusIds)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ success: true })
+}

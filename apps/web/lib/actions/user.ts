@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
 import { db, user, member, eq } from '@/lib/db'
 import { getCurrentUserRole } from '@/lib/tenant'
-import { SubscriptionService } from '@quackback/domain/subscriptions'
+import { getNotificationPreferences, updateNotificationPreferences } from '@/lib/subscriptions'
 import { type MemberId, type UserId } from '@quackback/ids'
 import { actionOk, actionErr, type ActionResult } from './types'
 
@@ -15,8 +15,6 @@ import { actionOk, actionErr, type ActionResult } from './types'
 const updateProfileNameSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
 })
-
-const getNotificationPreferencesSchema = z.object({})
 
 const updateNotificationPreferencesSchema = z.object({
   emailStatusChange: z.boolean().optional(),
@@ -29,7 +27,6 @@ const updateNotificationPreferencesSchema = z.object({
 // ============================================
 
 export type UpdateProfileNameInput = z.infer<typeof updateProfileNameSchema>
-export type GetNotificationPreferencesInput = z.infer<typeof getNotificationPreferencesSchema>
 export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>
 
 export interface UserProfile {
@@ -234,19 +231,10 @@ export async function getUserRoleAction(): Promise<
 /**
  * Get notification preferences.
  */
-export async function getNotificationPreferencesAction(
-  rawInput: GetNotificationPreferencesInput
-): Promise<ActionResult<NotificationPreferences>> {
+export async function getNotificationPreferencesAction(): Promise<
+  ActionResult<NotificationPreferences>
+> {
   try {
-    const parseResult = getNotificationPreferencesSchema.safeParse(rawInput)
-    if (!parseResult.success) {
-      return actionErr({
-        code: 'VALIDATION_ERROR',
-        message: parseResult.error.issues[0]?.message || 'Invalid input',
-        status: 400,
-      })
-    }
-
     const session = await getSession()
     if (!session?.user) {
       return actionErr({
@@ -269,10 +257,7 @@ export async function getNotificationPreferencesAction(
       })
     }
 
-    const subscriptionService = new SubscriptionService()
-    const preferences = await subscriptionService.getNotificationPreferences(
-      memberRecord.id as MemberId
-    )
+    const preferences = await getNotificationPreferences(memberRecord.id as MemberId)
 
     return actionOk(preferences)
   } catch (error) {
@@ -301,11 +286,7 @@ export async function updateNotificationPreferencesAction(
       })
     }
 
-    const {
-      emailStatusChange,
-      emailNewComment,
-      emailMuted,
-    } = parseResult.data
+    const { emailStatusChange, emailNewComment, emailMuted } = parseResult.data
 
     const session = await getSession()
     if (!session?.user) {
@@ -354,11 +335,7 @@ export async function updateNotificationPreferencesAction(
       })
     }
 
-    const subscriptionService = new SubscriptionService()
-    const preferences = await subscriptionService.updateNotificationPreferences(
-      memberRecord.id as MemberId,
-      updates
-    )
+    const preferences = await updateNotificationPreferences(memberRecord.id as MemberId, updates)
 
     return actionOk(preferences)
   } catch (error) {

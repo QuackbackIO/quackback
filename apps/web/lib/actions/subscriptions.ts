@@ -3,7 +3,12 @@
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
 import { db, member, posts, eq } from '@/lib/db'
-import { SubscriptionService } from '@quackback/domain/subscriptions'
+import {
+  getSubscriptionStatus,
+  subscribeToPost,
+  unsubscribeFromPost,
+  setSubscriptionMuted,
+} from '@/lib/subscriptions'
 import { postIdSchema, type PostId, type MemberId, type UserId } from '@quackback/ids'
 import { actionOk, actionErr, type ActionResult } from './types'
 
@@ -114,11 +119,7 @@ export async function getSubscriptionStatusAction(
       })
     }
 
-    const subscriptionService = new SubscriptionService()
-    const status = await subscriptionService.getSubscriptionStatus(
-      memberRecord.id as MemberId,
-      postId
-    )
+    const status = await getSubscriptionStatus(memberRecord.id as MemberId, postId)
 
     return actionOk(status)
   } catch (error) {
@@ -176,8 +177,7 @@ export async function subscribeToPostAction(
       })
     }
 
-    const subscriptionService = new SubscriptionService()
-    await subscriptionService.subscribeToPost(memberRecord.id as MemberId, postId, reason)
+    await subscribeToPost(memberRecord.id as MemberId, postId, reason)
 
     return actionOk({
       subscribed: true,
@@ -238,8 +238,7 @@ export async function unsubscribeFromPostAction(
       })
     }
 
-    const subscriptionService = new SubscriptionService()
-    await subscriptionService.unsubscribeFromPost(memberRecord.id as MemberId, postId)
+    await unsubscribeFromPost(memberRecord.id as MemberId, postId)
 
     return actionOk({
       subscribed: false,
@@ -301,12 +300,11 @@ export async function muteSubscriptionAction(
       })
     }
 
-    const subscriptionService = new SubscriptionService()
     const memberId = memberRecord.id as MemberId
-    await subscriptionService.setSubscriptionMuted(memberId, postId, muted)
+    await setSubscriptionMuted(memberId, postId, muted)
 
     // Get updated status
-    const status = await subscriptionService.getSubscriptionStatus(memberId, postId)
+    const status = await getSubscriptionStatus(memberId, postId)
 
     return actionOk(status)
   } catch (error) {

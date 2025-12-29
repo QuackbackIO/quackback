@@ -1,19 +1,27 @@
 'use server'
 
 import { z } from 'zod'
-import { withAction, mapDomainError } from './with-action'
-import { actionOk, actionErr } from './types'
+import { getSession } from '@/lib/auth/server'
+import { db, member, eq } from '@/lib/db'
+import { actionOk, actionErr, mapDomainError, type ActionResult } from './types'
 import {
-  getPostService,
-  getPublicPostService,
-  getMemberService,
-  getRoadmapService,
-} from '@/lib/services'
+  createPost,
+  updatePost,
+  listInboxPosts,
+  getPostWithDetails,
+  getCommentsWithReplies,
+  changeStatus,
+  softDeletePost,
+  permanentDeletePost,
+  restorePost,
+  hasUserVoted,
+} from '@/lib/posts'
+import { getMemberByUser } from '@/lib/members'
+import { getPostRoadmaps } from '@/lib/roadmaps'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { getMemberIdentifier } from '@/lib/user-identifier'
-import { buildPostCreatedEvent, buildPostStatusChangedEvent } from '@quackback/domain'
-import type { CommentTreeNode } from '@quackback/domain'
-
+import { buildPostCreatedEvent, buildPostStatusChangedEvent } from '@/lib/events'
+import type { CommentTreeNode } from '@/lib/shared'
 import { getJobAdapter } from '@quackback/jobs'
 import {
   postIdSchema,
@@ -136,293 +144,472 @@ export type RestorePostInput = z.infer<typeof restorePostSchema>
 /**
  * List inbox posts with filtering, sorting, and pagination.
  */
-export const listInboxPostsAction = withAction(
-  listInboxPostsSchema,
-  async (input, _ctx, serviceCtx) => {
-    const result = await getPostService().listInboxPosts(
-      {
-        boardIds: input.boardIds as BoardId[] | undefined,
-        statusIds: input.statusIds as StatusId[] | undefined,
-        statusSlugs: input.statusSlugs,
-        tagIds: input.tagIds as TagId[] | undefined,
-        ownerId: input.ownerId as MemberId | null | undefined,
-        search: input.search,
-        dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
-        dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-        minVotes: input.minVotes,
-        sort: input.sort,
-        page: input.page,
-        limit: input.limit,
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
+export async function listInboxPostsAction(rawInput: unknown): Promise<ActionResult<unknown>> {
+  const parsed = listInboxPostsSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
   }
-)
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const input = parsed.data
+  const result = await listInboxPosts({
+    boardIds: input.boardIds as BoardId[] | undefined,
+    statusIds: input.statusIds as StatusId[] | undefined,
+    statusSlugs: input.statusSlugs,
+    tagIds: input.tagIds as TagId[] | undefined,
+    ownerId: input.ownerId as MemberId | null | undefined,
+    search: input.search,
+    dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
+    dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
+    minVotes: input.minVotes,
+    sort: input.sort,
+    page: input.page,
+    limit: input.limit,
+  })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Create a new post.
  */
-export const createPostAction = withAction(
-  createPostSchema,
-  async (input, ctx, serviceCtx) => {
-    const result = await getPostService().createPost(
-      {
-        title: input.title,
-        content: input.content,
-        contentJson: input.contentJson,
-        boardId: input.boardId as BoardId,
-        statusId: input.statusId as StatusId | undefined,
-        tagIds: (input.tagIds || []) as TagId[],
-      },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
+export async function createPostAction(rawInput: unknown): Promise<ActionResult<unknown>> {
+  const parsed = createPostSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const input = parsed.data
+  const author = {
+    memberId: memberRecord.id as MemberId,
+    name: session.user.name || session.user.email,
+    email: session.user.email,
+  }
+
+  const result = await createPost(
+    {
+      title: input.title,
+      content: input.content,
+      contentJson: input.contentJson,
+      boardId: input.boardId as BoardId,
+      statusId: input.statusId as StatusId | undefined,
+      tagIds: (input.tagIds || []) as TagId[],
+    },
+    author
+  )
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+
+  // Trigger EventWorkflow for integrations and notifications
+  const { boardSlug, ...post } = result.value
+  const eventData = buildPostCreatedEvent(
+    { type: 'user', userId: session.user.id as UserId, email: session.user.email },
+    {
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      boardId: post.boardId,
+      boardSlug,
+      authorEmail: session.user.email,
+      voteCount: post.voteCount,
     }
+  )
 
-    // Trigger EventWorkflow for integrations and notifications
-    const { boardSlug, ...post } = result.value
-    const eventData = buildPostCreatedEvent(
-      { type: 'user', userId: serviceCtx.userId, email: serviceCtx.userEmail },
-      {
-        id: post.id,
-        title: post.title,
-        content: post.content,
-        boardId: post.boardId,
-        boardSlug,
-        authorEmail: serviceCtx.userEmail,
-        voteCount: post.voteCount,
-      }
-    )
+  const jobAdapter = getJobAdapter()
+  await jobAdapter.addEventJob(eventData)
 
-    const jobAdapter = getJobAdapter()
-    await jobAdapter.addEventJob(eventData)
-
-    return actionOk(post)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+  return actionOk(post)
+}
 
 /**
  * Get a post with full details including comments, votes, and avatars.
  */
-export const getPostWithDetailsAction = withAction(
-  getPostSchema,
-  async (input, ctx, serviceCtx) => {
-    const postId = input.id as PostId
-
-    // Get post with details
-    const postResult = await getPostService().getPostWithDetails(postId, serviceCtx)
-    if (!postResult.success) {
-      return actionErr(mapDomainError(postResult.error))
-    }
-
-    const post = postResult.value
-
-    // Get comments with reactions in nested format
-    const commentsResult = await getPostService().getCommentsWithReplies(
-      postId,
-      `member:${ctx.member.id}`,
-      serviceCtx
-    )
-    if (!commentsResult.success) {
-      return actionErr(mapDomainError(commentsResult.error))
-    }
-
-    const commentsWithReplies = commentsResult.value
-
-    // Collect member IDs from post author and all comments for avatar lookup
-    const memberIds: MemberId[] = []
-    if (post.memberId) memberIds.push(post.memberId as MemberId)
-    memberIds.push(...collectCommentMemberIds(commentsWithReplies))
-
-    // Fetch avatar URLs for all members
-    const avatarMap = await getBulkMemberAvatarData(memberIds)
-
-    // Check if current user has voted on this post
-    const userIdentifier = getMemberIdentifier(ctx.member.id)
-    const hasVotedResult = await getPublicPostService().hasUserVoted(postId, userIdentifier)
-    const hasVoted = hasVotedResult.success ? hasVotedResult.value : false
-
-    // Get roadmap IDs this post belongs to
-    const roadmapsResult = await getRoadmapService().getPostRoadmaps(postId, serviceCtx)
-    const roadmapIds = roadmapsResult.success ? roadmapsResult.value.map((r) => r.id) : []
-
-    const responseData = {
-      ...post,
-      comments: commentsWithReplies,
-      hasVoted,
-      roadmapIds,
-      officialResponse: post.officialResponse
-        ? {
-            content: post.officialResponse,
-            authorName: post.officialResponseAuthorName,
-            respondedAt: post.officialResponseAt,
-          }
-        : null,
-      avatarUrls: Object.fromEntries(avatarMap),
-    }
-
-    return actionOk(responseData)
+export async function getPostWithDetailsAction(rawInput: unknown): Promise<ActionResult<unknown>> {
+  const parsed = getPostSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
   }
-)
+
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  const postId = parsed.data.id as PostId
+
+  // Get post with details
+  const postResult = await getPostWithDetails(postId)
+  if (!postResult.success) {
+    return actionErr(mapDomainError(postResult.error))
+  }
+
+  const post = postResult.value
+
+  // Get comments with reactions in nested format
+  const commentsResult = await getCommentsWithReplies(postId, `member:${memberRecord.id}`)
+  if (!commentsResult.success) {
+    return actionErr(mapDomainError(commentsResult.error))
+  }
+
+  const commentsWithReplies = commentsResult.value
+
+  // Collect member IDs from post author and all comments for avatar lookup
+  const memberIds: MemberId[] = []
+  if (post.memberId) memberIds.push(post.memberId as MemberId)
+  memberIds.push(...collectCommentMemberIds(commentsWithReplies))
+
+  // Fetch avatar URLs for all members
+  const avatarMap = await getBulkMemberAvatarData(memberIds)
+
+  // Check if current user has voted on this post
+  const userIdentifier = getMemberIdentifier(memberRecord.id)
+  const hasVotedResult = await hasUserVoted(postId, userIdentifier)
+  const hasVoted = hasVotedResult.success ? hasVotedResult.value : false
+
+  // Get roadmap IDs this post belongs to
+  const roadmapsResult = await getPostRoadmaps(postId)
+  const roadmapIds = roadmapsResult.success ? roadmapsResult.value.map((r) => r.id) : []
+
+  const responseData = {
+    ...post,
+    comments: commentsWithReplies,
+    hasVoted,
+    roadmapIds,
+    officialResponse: post.officialResponse
+      ? {
+          content: post.officialResponse,
+          authorName: post.officialResponseAuthorName,
+          respondedAt: post.officialResponseAt,
+        }
+      : null,
+    avatarUrls: Object.fromEntries(avatarMap),
+  }
+
+  return actionOk(responseData)
+}
 
 /**
  * Update a post (title, content, owner, official response).
  */
-export const updatePostAction = withAction(
-  updatePostSchema,
-  async (input, ctx, serviceCtx) => {
-    const postId = input.id as PostId
+export async function updatePostAction(rawInput: unknown): Promise<ActionResult<unknown>> {
+  const parsed = updatePostSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
 
-    // Build update input
-    const updateInput: {
-      title?: string
-      content?: string
-      contentJson?: unknown
-      ownerId?: string | null
-      ownerMemberId?: MemberId | null
-      officialResponse?: string | null
-      officialResponseMemberId?: MemberId | null
-      officialResponseAuthorName?: string | null
-    } = {}
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
 
-    if (input.title !== undefined) updateInput.title = input.title
-    if (input.content !== undefined) updateInput.content = input.content
-    if (input.contentJson !== undefined) updateInput.contentJson = input.contentJson
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
 
-    // Handle owner update
-    if (input.ownerId !== undefined) {
-      updateInput.ownerId = input.ownerId
-      if (input.ownerId) {
-        const ownerMemberResult = await getMemberService().getMemberByUser(input.ownerId as UserId)
-        const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
-        updateInput.ownerMemberId = ownerMember ? ownerMember.id : null
-      } else {
-        updateInput.ownerMemberId = null
-      }
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const input = parsed.data
+  const postId = input.id as PostId
+
+  // Build update input
+  const updateInput: {
+    title?: string
+    content?: string
+    contentJson?: unknown
+    ownerId?: string | null
+    ownerMemberId?: MemberId | null
+    officialResponse?: string | null
+    officialResponseMemberId?: MemberId | null
+    officialResponseAuthorName?: string | null
+  } = {}
+
+  if (input.title !== undefined) updateInput.title = input.title
+  if (input.content !== undefined) updateInput.content = input.content
+  if (input.contentJson !== undefined) updateInput.contentJson = input.contentJson
+
+  // Handle owner update
+  if (input.ownerId !== undefined) {
+    updateInput.ownerId = input.ownerId
+    if (input.ownerId) {
+      const ownerMemberResult = await getMemberByUser(input.ownerId as UserId)
+      const ownerMember = ownerMemberResult.success ? ownerMemberResult.value : null
+      updateInput.ownerMemberId = ownerMember ? ownerMember.id : null
+    } else {
+      updateInput.ownerMemberId = null
     }
+  }
 
-    // Handle official response update
-    if (input.officialResponse !== undefined) {
-      if (input.officialResponse === null || input.officialResponse === '') {
-        updateInput.officialResponse = null
-        updateInput.officialResponseMemberId = null
-        updateInput.officialResponseAuthorName = null
-      } else {
-        updateInput.officialResponse = input.officialResponse
-        updateInput.officialResponseMemberId = ctx.member.id as MemberId
-        updateInput.officialResponseAuthorName = ctx.user.name || ctx.user.email
-      }
+  // Handle official response update - pass responder info to service
+  if (input.officialResponse !== undefined) {
+    if (input.officialResponse === null || input.officialResponse === '') {
+      updateInput.officialResponse = null
+      updateInput.officialResponseMemberId = null
+      updateInput.officialResponseAuthorName = null
+    } else {
+      updateInput.officialResponse = input.officialResponse
+      // Let the service layer use the responder info
     }
+  }
 
-    const result = await getPostService().updatePost(postId, updateInput, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk(result.value)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+  // Build responder info for official response
+  const responder = {
+    memberId: memberRecord.id as MemberId,
+    name: session.user.name || session.user.email,
+  }
+
+  const result = await updatePost(postId, updateInput, responder)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk(result.value)
+}
 
 /**
  * Delete a post (soft or permanent).
  */
-export const deletePostAction = withAction(
-  deletePostSchema,
-  async (input, _ctx, serviceCtx) => {
-    const postId = input.id as PostId
-    const postService = getPostService()
+export async function deletePostAction(
+  rawInput: unknown
+): Promise<ActionResult<{ success: boolean }>> {
+  const parsed = deletePostSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
 
-    const result = input.permanent
-      ? await postService.permanentDeletePost(postId, serviceCtx)
-      : await postService.softDeletePost(postId, serviceCtx)
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
 
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ success: true })
-  },
-  { roles: ['owner', 'admin'] }
-)
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const input = parsed.data
+  const postId = input.id as PostId
+
+  // Build actor info for soft delete (permission check)
+  const actor = {
+    memberId: memberRecord.id as MemberId,
+    role: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
+  }
+
+  const result = input.permanent
+    ? await permanentDeletePost(postId)
+    : await softDeletePost(postId, actor)
+
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ success: true })
+}
 
 /**
  * Change post status.
  */
-export const changePostStatusAction = withAction(
-  changeStatusSchema,
-  async (input, _ctx, serviceCtx) => {
-    const postId = input.id as PostId
-    const statusId = input.statusId as StatusId
+export async function changePostStatusAction(rawInput: unknown): Promise<ActionResult<unknown>> {
+  const parsed = changeStatusSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
 
-    const result = await getPostService().changeStatus(postId, statusId, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
 
-    // Trigger EventWorkflow for integrations and notifications
-    const { boardSlug, previousStatus, newStatus, ...post } = result.value
-    const eventData = buildPostStatusChangedEvent(
-      { type: 'user', userId: serviceCtx.userId, email: serviceCtx.userEmail },
-      { id: post.id, title: post.title, boardSlug },
-      previousStatus,
-      newStatus
-    )
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
 
-    const jobAdapter = getJobAdapter()
-    await jobAdapter.addEventJob(eventData)
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
 
-    return actionOk(post)
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+  const input = parsed.data
+  const postId = input.id as PostId
+  const statusId = input.statusId as StatusId
+
+  const result = await changeStatus(postId, statusId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+
+  // Trigger EventWorkflow for integrations and notifications
+  const { boardSlug, previousStatus, newStatus, ...post } = result.value
+  const eventData = buildPostStatusChangedEvent(
+    { type: 'user', userId: session.user.id as UserId, email: session.user.email },
+    { id: post.id, title: post.title, boardSlug },
+    previousStatus,
+    newStatus
+  )
+
+  const jobAdapter = getJobAdapter()
+  await jobAdapter.addEventJob(eventData)
+
+  return actionOk(post)
+}
 
 /**
  * Update tags assigned to a post.
  */
-export const updatePostTagsAction = withAction(
-  updateTagsSchema,
-  async (input, _ctx, serviceCtx) => {
-    const postId = input.id as PostId
-
-    // Validate tag TypeIDs
-    const validatedTagIds = input.tagIds.map((id) => {
-      if (!isValidTypeId(id, 'tag')) {
-        throw new Error(`Invalid tag ID format: ${id}`)
-      }
-      return id as TagId
+export async function updatePostTagsAction(
+  rawInput: unknown
+): Promise<ActionResult<{ success: boolean }>> {
+  const parsed = updateTagsSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
     })
+  }
 
-    const result = await getPostService().updatePost(
-      postId,
-      { tagIds: validatedTagIds },
-      serviceCtx
-    )
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin', 'member'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const input = parsed.data
+  const postId = input.id as PostId
+
+  // Validate tag TypeIDs
+  const validatedTagIds = input.tagIds.map((id) => {
+    if (!isValidTypeId(id, 'tag')) {
+      throw new Error(`Invalid tag ID format: ${id}`)
     }
-    return actionOk({ success: true })
-  },
-  { roles: ['owner', 'admin', 'member'] }
-)
+    return id as TagId
+  })
+
+  const result = await updatePost(postId, { tagIds: validatedTagIds })
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ success: true })
+}
 
 /**
  * Restore a soft-deleted post.
  */
-export const restorePostAction = withAction(
-  restorePostSchema,
-  async (input, _ctx, serviceCtx) => {
-    const postId = input.id as PostId
+export async function restorePostAction(
+  rawInput: unknown
+): Promise<ActionResult<{ success: boolean }>> {
+  const parsed = restorePostSchema.safeParse(rawInput)
+  if (!parsed.success) {
+    return actionErr({
+      code: 'VALIDATION_ERROR',
+      message: parsed.error.issues[0]?.message || 'Invalid input',
+      status: 400,
+    })
+  }
 
-    const result = await getPostService().restorePost(postId, serviceCtx)
-    if (!result.success) {
-      return actionErr(mapDomainError(result.error))
-    }
-    return actionOk({ success: true })
-  },
-  { roles: ['owner', 'admin'] }
-)
+  const session = await getSession()
+  if (!session?.user) {
+    return actionErr({ code: 'UNAUTHORIZED', message: 'Authentication required', status: 401 })
+  }
+
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, session.user.id as UserId),
+  })
+  if (!memberRecord) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Access denied', status: 403 })
+  }
+
+  if (!['owner', 'admin'].includes(memberRecord.role)) {
+    return actionErr({ code: 'FORBIDDEN', message: 'Insufficient permissions', status: 403 })
+  }
+
+  const postId = parsed.data.id as PostId
+
+  const result = await restorePost(postId)
+  if (!result.success) {
+    return actionErr(mapDomainError(result.error))
+  }
+  return actionOk({ success: true })
+}

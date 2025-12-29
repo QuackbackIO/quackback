@@ -42,7 +42,7 @@ export function useStatuses({ enabled = true }: UseStatusesOptions = {}) {
   return useQuery({
     queryKey: statusKeys.lists(),
     queryFn: async () => {
-      const result = await listStatusesAction({})
+      const result = await listStatusesAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }

@@ -8,7 +8,7 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query'
 import type { UsersFilters } from '@/app/admin/users/use-users-filters'
-import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@quackback/domain'
+import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@/lib/users'
 import type { MemberId } from '@quackback/ids'
 import {
   listPortalUsersAction,
@@ -56,7 +56,7 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
         verified: filters.verified,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
-        sort: filters.sort,
+        sort: filters.sort ?? 'newest',
         page: pageParam,
         limit: 20,
       })

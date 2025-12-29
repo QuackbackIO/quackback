@@ -1,4 +1,4 @@
-import type { Feature } from '@quackback/domain'
+import type { Feature } from '@/lib/features'
 import type { UserId, MemberId } from '@quackback/ids'
 
 /**

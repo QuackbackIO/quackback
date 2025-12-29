@@ -19,7 +19,7 @@ import {
 } from '@/lib/actions/public-posts'
 import type { ActionError } from '@/lib/actions/types'
 import type { PublicFeedbackFilters } from '@/app/(portal)/use-public-filters'
-import type { PublicPostListItem } from '@quackback/domain'
+import type { PublicPostListItem } from '@/lib/posts'
 import type { PostId, BoardId, StatusId, TagId } from '@quackback/ids'
 
 // ============================================================================
@@ -286,7 +286,7 @@ export function useCreatePublicPost() {
 // ============================================================================
 
 async function fetchVotedPosts(): Promise<Set<string>> {
-  const result = await getVotedPostsAction({})
+  const result = await getVotedPostsAction()
   if (!result.success) {
     return new Set()
   }

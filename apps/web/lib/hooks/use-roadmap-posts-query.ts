@@ -6,12 +6,8 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type {
-  RoadmapPost,
-  RoadmapPostListResult,
-  RoadmapPostsListResult,
-  RoadmapPostEntry,
-} from '@quackback/domain'
+import type { RoadmapPost, RoadmapPostListResult } from '@/lib/posts'
+import type { RoadmapPostsListResult, RoadmapPostEntry } from '@/lib/roadmaps'
 import type { RoadmapId, StatusId, PostId } from '@quackback/ids'
 import {
   getRoadmapPostsAction,

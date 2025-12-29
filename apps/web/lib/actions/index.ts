@@ -13,9 +13,6 @@
 // Core types and utilities (client-safe)
 export * from './types'
 
-// Note: withAction and withAuthAction are server-only utilities
-// Import directly from './with-action' in server action files
-
 // Domain actions
 export * from './tags'
 export * from './statuses'

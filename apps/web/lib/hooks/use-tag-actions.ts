@@ -40,7 +40,7 @@ export function useTags({ enabled = true }: UseTagsOptions = {}) {
   return useQuery({
     queryKey: tagKeys.lists(),
     queryFn: async () => {
-      const result = await listTagsAction({})
+      const result = await listTagsAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }

@@ -52,7 +52,7 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapKeys.lists(),
     queryFn: async () => {
-      const result = await listRoadmapsAction({})
+      const result = await listRoadmapsAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }

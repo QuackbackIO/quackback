@@ -4,17 +4,25 @@ import { z } from 'zod'
 import { getSession } from '@/lib/auth/server'
 import { db, member, eq } from '@/lib/db'
 import {
-  getPostService,
-  getPublicPostService,
-  getPublicBoardService,
-  getStatusService,
-  getMemberService,
-  getRoadmapService,
-} from '@/lib/services'
+  createPost,
+  voteOnPost,
+  userEditPost,
+  softDeletePost,
+  canEditPost,
+  canDeletePost,
+  listPublicPosts,
+  getAllUserVotedPostIds,
+  getPublicRoadmapPostsPaginated,
+} from '@/lib/posts'
+import { getPublicBoardById } from '@/lib/boards'
+import { getDefaultStatus } from '@/lib/statuses'
+import { getMemberByUser } from '@/lib/members'
+import { listPublicRoadmaps } from '@/lib/roadmaps'
+// Import getPublicRoadmapPosts directly from roadmaps to avoid naming conflict with posts module
+import { getPublicRoadmapPosts } from '@/lib/roadmaps'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { hashIP } from '@/lib/utils/ip-hash'
-import { buildServiceContext, buildPostCreatedEvent, type ServiceContext } from '@quackback/domain'
-
+import { buildPostCreatedEvent } from '@/lib/events'
 import { getJobAdapter } from '@quackback/jobs'
 import {
   postIdSchema,
@@ -30,8 +38,7 @@ import {
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
-import { actionOk, actionErr, type ActionResult } from './types'
-import { mapDomainError } from './with-action'
+import { actionOk, actionErr, mapDomainError, type ActionResult } from './types'
 
 // ============================================
 // Schemas
@@ -80,10 +87,6 @@ const createPublicPostSchema = z.object({
   contentJson: tiptapContentSchema.optional(),
 })
 
-const getVotedPostsSchema = z.object({})
-
-const listPublicRoadmapsSchema = z.object({})
-
 const getPublicRoadmapPostsSchema = z.object({
   roadmapId: roadmapIdSchema,
   statusId: statusIdSchema.optional(),
@@ -107,8 +110,6 @@ export type UserEditPostInput = z.infer<typeof userEditPostSchema>
 export type UserDeletePostInput = z.infer<typeof userDeletePostSchema>
 export type ToggleVoteInput = z.infer<typeof toggleVoteSchema>
 export type CreatePublicPostInput = z.infer<typeof createPublicPostSchema>
-export type GetVotedPostsInput = z.infer<typeof getVotedPostsSchema>
-export type ListPublicRoadmapsInput = z.infer<typeof listPublicRoadmapsSchema>
 export type GetPublicRoadmapPostsInput = z.infer<typeof getPublicRoadmapPostsSchema>
 export type GetRoadmapPostsByStatusInput = z.infer<typeof getRoadmapPostsByStatusSchema>
 
@@ -122,26 +123,6 @@ export type GetRoadmapPostsByStatusInput = z.infer<typeof getRoadmapPostsByStatu
 async function getMemberRecord(userId: UserId) {
   return db.query.member.findFirst({
     where: eq(member.userId, userId),
-  })
-}
-
-/**
- * Build service context from session and member
- */
-function buildCtx(
-  session: { user: { id: string; email: string; name: string | null } },
-  memberRecord: { id: string; role: string }
-): ServiceContext {
-  return buildServiceContext({
-    user: {
-      id: session.user.id as UserId,
-      name: session.user.name,
-      email: session.user.email,
-    },
-    member: {
-      id: memberRecord.id as MemberId,
-      role: memberRecord.role,
-    },
   })
 }
 
@@ -167,7 +148,7 @@ export async function listPublicPostsAction(
 
     const input = parseResult.data
 
-    const result = await getPublicPostService().listPosts({
+    const result = await listPublicPosts({
       boardSlug: input.boardSlug,
       search: input.search,
       statusIds: input.statusIds as StatusId[] | undefined,
@@ -228,13 +209,16 @@ export async function getPostPermissionsAction(rawInput: GetPostPermissionsInput
       return actionOk({ canEdit: false, canDelete: false })
     }
 
-    const ctx = buildCtx(session, memberRecord)
-    const postService = getPostService()
+    // Build actor info for permission checks
+    const actor = {
+      memberId: memberRecord.id as MemberId,
+      role: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
+    }
 
     // Check permissions
     const [editResult, deleteResult] = await Promise.all([
-      postService.canEditPost(postId, ctx),
-      postService.canDeletePost(postId, ctx),
+      canEditPost(postId, actor),
+      canDeletePost(postId, actor),
     ])
 
     return actionOk({
@@ -292,9 +276,13 @@ export async function userEditPostAction(
       })
     }
 
-    const ctx = buildCtx(session, memberRecord)
+    // Build actor info for permission check
+    const actor = {
+      memberId: memberRecord.id as MemberId,
+      role: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
+    }
 
-    const result = await getPostService().userEditPost(postId, { title, content, contentJson }, ctx)
+    const result = await userEditPost(postId, { title, content, contentJson }, actor)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -348,9 +336,13 @@ export async function userDeletePostAction(
       })
     }
 
-    const ctx = buildCtx(session, memberRecord)
+    // Build actor info for permission check
+    const actor = {
+      memberId: memberRecord.id as MemberId,
+      role: memberRecord.role as 'owner' | 'admin' | 'member' | 'user',
+    }
 
-    const result = await getPostService().softDeletePost(postId, ctx)
+    const result = await softDeletePost(postId, actor)
     if (!result.success) {
       return actionErr(mapDomainError(result.error))
     }
@@ -407,13 +399,12 @@ export async function toggleVoteAction(
 
     const memberId = memberRecord.id as MemberId
     const userIdentifier = getMemberIdentifier(memberId)
-    const ctx = buildCtx(session, memberRecord)
 
     // Generate IP hash if not provided (for privacy-preserving storage)
     const ipHash =
       clientIpHash || hashIP('unknown', process.env.BETTER_AUTH_SECRET || 'default-salt')
 
-    const result = await getPostService().voteOnPost(postId, userIdentifier, ctx, {
+    const result = await voteOnPost(postId, userIdentifier, {
       memberId,
       ipHash,
     })
@@ -453,7 +444,7 @@ export async function createPublicPostAction(
     const boardId = boardIdRaw as BoardId
 
     // Get board and verify it exists and is public
-    const boardResult = await getPublicBoardService().getBoardById(boardId)
+    const boardResult = await getPublicBoardById(boardId)
     if (!boardResult.success || !boardResult.value.isPublic) {
       return actionErr({ code: 'NOT_FOUND', message: 'Board not found', status: 404 })
     }
@@ -470,7 +461,7 @@ export async function createPublicPostAction(
     }
 
     // Get member record
-    const memberResult = await getMemberService().getMemberByUser(session.user.id as UserId)
+    const memberResult = await getMemberByUser(session.user.id as UserId)
     if (!memberResult.success || !memberResult.value) {
       return actionErr({
         code: 'FORBIDDEN',
@@ -480,10 +471,15 @@ export async function createPublicPostAction(
     }
     const memberRecord = memberResult.value
 
-    const ctx = buildCtx(session, memberRecord)
+    // Build author info
+    const author = {
+      memberId: memberRecord.id as MemberId,
+      name: session.user.name || session.user.email,
+      email: session.user.email,
+    }
 
     // Get default status
-    const defaultStatusResult = await getStatusService().getDefaultStatus(ctx)
+    const defaultStatusResult = await getDefaultStatus()
     if (!defaultStatusResult.success) {
       return actionErr({
         code: 'INTERNAL_ERROR',
@@ -494,7 +490,7 @@ export async function createPublicPostAction(
     const defaultStatus = defaultStatusResult.value
 
     // Create the post
-    const createResult = await getPostService().createPost(
+    const createResult = await createPost(
       {
         boardId,
         title,
@@ -502,7 +498,7 @@ export async function createPublicPostAction(
         contentJson,
         statusId: defaultStatus?.id,
       },
-      ctx
+      author
     )
 
     if (!createResult.success) {
@@ -524,14 +520,14 @@ export async function createPublicPostAction(
 
     // Trigger EventWorkflow for integrations and notifications
     const eventData = buildPostCreatedEvent(
-      { type: 'user', userId: ctx.userId, email: ctx.userEmail },
+      { type: 'user', userId: session.user.id as UserId, email: session.user.email },
       {
         id: post.id,
         title: post.title,
         content: post.content,
         boardId: post.boardId,
         boardSlug: board.slug,
-        authorEmail: ctx.userEmail,
+        authorEmail: session.user.email,
         voteCount: post.voteCount,
       }
     )
@@ -565,19 +561,8 @@ export async function createPublicPostAction(
 /**
  * Get all post IDs the user has voted on (optional auth).
  */
-export async function getVotedPostsAction(
-  rawInput: GetVotedPostsInput
-): Promise<ActionResult<{ votedPostIds: string[] }>> {
+export async function getVotedPostsAction(): Promise<ActionResult<{ votedPostIds: string[] }>> {
   try {
-    const parseResult = getVotedPostsSchema.safeParse(rawInput)
-    if (!parseResult.success) {
-      return actionErr({
-        code: 'VALIDATION_ERROR',
-        message: parseResult.error.issues[0]?.message || 'Invalid input',
-        status: 400,
-      })
-    }
-
     // Optional auth - return empty if not authenticated
     const session = await getSession()
     if (!session?.user) {
@@ -591,7 +576,7 @@ export async function getVotedPostsAction(
     }
 
     const userIdentifier = getMemberIdentifier(memberRecord.id)
-    const result = await getPublicPostService().getAllUserVotedPostIds(userIdentifier)
+    const result = await getAllUserVotedPostIds(userIdentifier)
 
     if (!result.success) {
       return actionOk({ votedPostIds: [] })
@@ -611,20 +596,9 @@ export async function getVotedPostsAction(
 /**
  * List public roadmaps for a workspace (no auth required).
  */
-export async function listPublicRoadmapsAction(
-  rawInput: ListPublicRoadmapsInput
-): Promise<ActionResult<unknown[]>> {
+export async function listPublicRoadmapsAction(): Promise<ActionResult<unknown[]>> {
   try {
-    const parseResult = listPublicRoadmapsSchema.safeParse(rawInput)
-    if (!parseResult.success) {
-      return actionErr({
-        code: 'VALIDATION_ERROR',
-        message: parseResult.error.issues[0]?.message || 'Invalid input',
-        status: 400,
-      })
-    }
-
-    const result = await getRoadmapService().listPublicRoadmaps()
+    const result = await listPublicRoadmaps()
     if (!result.success) {
       return actionErr({
         code: 'INTERNAL_ERROR',
@@ -662,7 +636,7 @@ export async function getPublicRoadmapPostsAction(
 
     const { roadmapId, statusId, limit, offset } = parseResult.data
 
-    const result = await getRoadmapService().getPublicRoadmapPosts(roadmapId as RoadmapId, {
+    const result = await getPublicRoadmapPosts(roadmapId as RoadmapId, {
       statusId: statusId as StatusId | undefined,
       limit,
       offset,
@@ -706,7 +680,7 @@ export async function getRoadmapPostsByStatusAction(
 
     const { statusId, page, limit } = parseResult.data
 
-    const result = await getPublicPostService().getRoadmapPostsPaginated({
+    const result = await getPublicRoadmapPostsPaginated({
       statusId: statusId as StatusId,
       page,
       limit,

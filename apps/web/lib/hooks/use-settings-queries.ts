@@ -66,7 +66,7 @@ export function useDeleteWorkspaceLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (): Promise<void> => {
-      const result = await deleteLogoAction({})
+      const result = await deleteLogoAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -117,7 +117,7 @@ export function useDeleteWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (): Promise<void> => {
-      const result = await deleteHeaderLogoAction({})
+      const result = await deleteHeaderLogoAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }

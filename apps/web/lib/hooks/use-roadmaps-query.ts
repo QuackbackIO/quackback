@@ -30,7 +30,7 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.list(),
     queryFn: async (): Promise<Roadmap[]> => {
-      const result = await listRoadmapsAction({})
+      const result = await listRoadmapsAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }
@@ -47,7 +47,7 @@ export function usePublicRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.publicList(),
     queryFn: async (): Promise<Roadmap[]> => {
-      const result = await listPublicRoadmapsAction({})
+      const result = await listPublicRoadmapsAction()
       if (!result.success) {
         throw new Error(result.error.message)
       }
