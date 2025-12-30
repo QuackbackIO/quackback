@@ -16,6 +16,8 @@ import {
   CommentsSectionSkeleton,
 } from '@/app/(portal)/b/[slug]/posts/[postId]/_components/comments-section'
 import { isValidTypeId, type PostId } from '@quackback/ids'
+import type { BoardSettings } from '@quackback/db/types'
+import type { TiptapContent } from '@/lib/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
@@ -55,12 +57,12 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     // Type the board settings and post contentJson fields for serialization
     const serializedBoard = {
       ...board,
-      settings: (board.settings ?? {}) as Record<string, unknown>,
+      settings: (board.settings ?? {}) as BoardSettings,
     }
 
     const serializedPost = {
       ...post,
-      contentJson: (post.contentJson ?? {}) as Record<string, unknown>,
+      contentJson: (post.contentJson ?? {}) as TiptapContent,
     }
 
     return {

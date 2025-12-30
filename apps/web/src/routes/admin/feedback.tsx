@@ -8,6 +8,8 @@ import { listBoards } from '@/lib/boards'
 import { listTeamMembers } from '@/lib/members'
 import { InboxContainer } from '@/app/admin/feedback/inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
+import type { BoardSettings } from '@quackback/db/types'
+import type { TiptapContent } from '@/lib/schemas/posts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -92,14 +94,14 @@ export const Route = createFileRoute('/admin/feedback')({
       ...initialPosts,
       items: initialPosts.items.map((p) => ({
         ...p,
-        contentJson: (p.contentJson ?? {}) as Record<string, unknown>,
+        contentJson: (p.contentJson ?? {}) as TiptapContent,
       })),
     }
 
     // Type the boards settings field for serialization
     const serializedBoards = orgBoards.map((b) => ({
       ...b,
-      settings: (b.settings ?? {}) as Record<string, unknown>,
+      settings: (b.settings ?? {}) as BoardSettings,
     }))
 
     return {

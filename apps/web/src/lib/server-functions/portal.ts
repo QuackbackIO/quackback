@@ -5,6 +5,7 @@ import { listPublicStatuses } from '@/lib/statuses'
 import { listPublicTags } from '@/lib/tags'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
 import type { PostId, MemberId } from '@quackback/ids'
+import type { BoardSettings } from '@quackback/db/types'
 
 /**
  * Server functions for portal/public data fetching.
@@ -19,7 +20,7 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
   // Serialize settings field for client
   return result.value.map((b) => ({
     ...b,
-    settings: (b.settings ?? {}) as Record<string, unknown>,
+    settings: (b.settings ?? {}) as BoardSettings,
   }))
 })
 
