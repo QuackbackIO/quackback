@@ -1,5 +1,6 @@
 [install]
 peer = false
+linker = "isolated"
 
 [install.lockfile]
 save = true
