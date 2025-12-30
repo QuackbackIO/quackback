@@ -12,7 +12,6 @@ import {
   type DomainEvent,
 } from '@quackback/integrations'
 import type { IntegrationJobData, IntegrationJobResult } from '../types'
-import type { StateAdapter } from '../adapters'
 import type { IntegrationId, EventMappingId } from '@quackback/ids'
 
 /**
@@ -55,26 +54,10 @@ export async function loadIntegrationConfig(
  * Process an integration job.
  *
  * @param data - The integration job data
- * @param stateAdapter - State adapter for circuit breaker and idempotency
  */
-export async function processIntegration(
-  data: IntegrationJobData,
-  stateAdapter: StateAdapter
-): Promise<IntegrationJobResult> {
+export async function processIntegration(data: IntegrationJobData): Promise<IntegrationJobResult> {
   const startTime = Date.now()
   const { integrationId, integrationType, mappingId, event } = data
-
-  // Idempotency check - prevent duplicate processing on retries
-  if (await stateAdapter.isProcessed(event.id, integrationId)) {
-    console.log(`[Integration] Skipping already processed event ${event.id} for ${integrationId}`)
-    return { success: true, durationMs: Date.now() - startTime }
-  }
-
-  // Circuit breaker check - prevent hammering failed services
-  if (!(await stateAdapter.canExecute(integrationId))) {
-    console.log(`[Integration] Circuit open for ${integrationId}, will retry later`)
-    throw new Error('Circuit breaker open - will retry')
-  }
 
   try {
     // Load integration config from database
@@ -138,17 +121,14 @@ export async function processIntegration(
     )
 
     if (result.success) {
-      await stateAdapter.recordSuccess(integrationId)
-      await stateAdapter.markProcessed(event.id, integrationId, result.externalEntityId)
       console.log(`[Integration] Successfully processed ${event.type} for ${integrationType}`)
     } else {
-      await stateAdapter.recordFailure(integrationId)
       console.error(
         `[Integration] Failed to process ${event.type} for ${integrationType}: ${result.error}`
       )
 
       if (result.shouldRetry) {
-        throw new Error(result.error) // Will trigger retry
+        throw new Error(result.error)
       }
     }
 
@@ -159,8 +139,7 @@ export async function processIntegration(
       durationMs: Date.now() - startTime,
     }
   } catch (error) {
-    await stateAdapter.recordFailure(integrationId)
     console.error(`[Integration] Error processing job:`, error)
-    throw error // Will trigger retry
+    throw error
   }
 }

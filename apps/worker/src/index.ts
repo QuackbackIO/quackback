@@ -2,7 +2,6 @@ import { Worker } from 'bullmq'
 import {
   getConnection,
   QueueNames,
-  getStateAdapter,
   type ImportJobData,
   type ImportJobResult,
   type EventJobData,
@@ -61,8 +60,7 @@ const eventsWorker = new Worker<EventJobData, EventJobResult>(
   QueueNames.EVENTS,
   async (job) => {
     console.log(`[Events] Processing ${job.data.type} event ${job.data.id}`)
-    const stateAdapter = getStateAdapter()
-    return processEvent(job.data, stateAdapter)
+    return processEvent(job.data)
   },
   {
     connection: getConnection(),

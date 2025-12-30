@@ -41,27 +41,13 @@ export {
 export {
   // Adapter factories
   getJobAdapter,
-  getStateAdapter,
   closeAdapters,
   // Types
   type JobAdapter,
-  type StateAdapter,
-  type CircuitState,
   // Config
-  CIRCUIT_BREAKER_CONFIG,
-  IDEMPOTENCY_CONFIG,
   QueueNames,
   // Direct functions (for convenience)
   addImportJob,
   getImportJobStatus,
   addEventJob,
-  canExecute,
-  recordSuccess,
-  recordFailure,
-  isProcessed,
-  markProcessed,
-  getProcessedResult,
-  cacheGet,
-  cacheSet,
-  cacheDel,
 } from './adapters'

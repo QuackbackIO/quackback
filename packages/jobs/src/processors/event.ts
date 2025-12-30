@@ -8,7 +8,6 @@
 import { db, integrations, integrationEventMappings, eq } from '@quackback/db'
 import type { IntegrationId, EventMappingId } from '@quackback/ids'
 import type { EventJobData, EventJobResult, IntegrationJobData } from '../types'
-import type { StateAdapter } from '../adapters'
 import { processIntegration } from './integration'
 import { processUserNotification } from './user-notification'
 
@@ -71,8 +70,7 @@ export async function getIntegrationMappings(eventType: string): Promise<Integra
  */
 export async function processSingleIntegration(
   mapping: IntegrationMapping,
-  event: EventJobData,
-  stateAdapter: StateAdapter
+  event: EventJobData
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const jobData: IntegrationJobData = {
@@ -88,7 +86,7 @@ export async function processSingleIntegration(
       },
     }
 
-    const result = await processIntegration(jobData, stateAdapter)
+    const result = await processIntegration(jobData)
     return { success: result.success, error: result.error }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error'
@@ -128,10 +126,7 @@ export async function processEventNotifications(
  * Process a complete event (integrations + notifications).
  * This is the main entry point for event processing in non-workflow contexts.
  */
-export async function processEvent(
-  data: EventJobData,
-  stateAdapter: StateAdapter
-): Promise<EventJobResult> {
+export async function processEvent(data: EventJobData): Promise<EventJobResult> {
   console.log(`[Event] Processing ${data.type} event ${data.id}`)
 
   const result: EventJobResult = {
@@ -147,7 +142,7 @@ export async function processEvent(
 
   // Step 2: Process each integration
   for (const mapping of mappings) {
-    const integrationResult = await processSingleIntegration(mapping, data, stateAdapter)
+    const integrationResult = await processSingleIntegration(mapping, data)
     if (integrationResult.success) {
       result.integrationsProcessed++
     } else if (integrationResult.error) {
