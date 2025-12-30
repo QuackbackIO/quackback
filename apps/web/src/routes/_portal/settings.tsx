@@ -5,7 +5,6 @@ import { SettingsNav } from '@/app/(portal)/settings/settings-nav'
 import { getUserAvatarData } from '@/lib/avatar'
 import { getSettingsBrandingData } from '@/lib/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
-import { SessionProvider } from '@/components/providers/session-provider'
 import { getBrandingConfig, getCustomCss } from '@/lib/settings'
 import { theme } from '@/lib/theme'
 
@@ -83,7 +82,6 @@ function SettingsLayout() {
   const {
     settings,
     userRole,
-    session,
     brandingData,
     themeStyles,
     googleFontsUrl,
@@ -96,32 +94,30 @@ function SettingsLayout() {
   }
 
   return (
-    <SessionProvider initialSession={session}>
-      <AuthPopoverProvider>
-        <div className="min-h-screen bg-background flex flex-col">
-          {/* Google Fonts - loaded dynamically based on theme */}
-          {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
-          {/* Theme CSS variables */}
-          {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-          {/* Custom CSS - injected after theme for override capability */}
-          {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
-          <PortalHeader
-            orgName={settings.name}
-            orgLogo={brandingData?.logoUrl ?? null}
-            headerLogo={brandingData?.headerLogoUrl ?? null}
-            headerDisplayMode={undefined}
-            headerDisplayName={null}
-            userRole={userRole}
-            initialUserData={initialUserData}
-          />
-          <div className="flex gap-8 px-6 py-8 max-w-5xl mx-auto w-full flex-1">
-            <SettingsNav />
-            <main className="min-w-0 flex-1">
-              <Outlet />
-            </main>
-          </div>
+    <AuthPopoverProvider>
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Google Fonts - loaded dynamically based on theme */}
+        {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
+        {/* Theme CSS variables */}
+        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+        {/* Custom CSS - injected after theme for override capability */}
+        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+        <PortalHeader
+          orgName={settings.name}
+          orgLogo={brandingData?.logoUrl ?? null}
+          headerLogo={brandingData?.headerLogoUrl ?? null}
+          headerDisplayMode={undefined}
+          headerDisplayName={null}
+          userRole={userRole}
+          initialUserData={initialUserData}
+        />
+        <div className="flex gap-8 px-6 py-8 max-w-5xl mx-auto w-full flex-1">
+          <SettingsNav />
+          <main className="min-w-0 flex-1">
+            <Outlet />
+          </main>
         </div>
-      </AuthPopoverProvider>
-    </SessionProvider>
+      </div>
+    </AuthPopoverProvider>
   )
 }

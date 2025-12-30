@@ -3,18 +3,7 @@ import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { routeTree } from './routeTree.gen'
 
-// Client-side singleton to prevent memory leaks
-// On server (SSR), create fresh instances for each request
-let clientRouterInstance: ReturnType<typeof createRouter> | undefined
-
 export function getRouter() {
-  const isServer = typeof window === 'undefined'
-
-  // On client, use singleton to prevent memory leaks from multiple instances
-  if (!isServer && clientRouterInstance) {
-    return clientRouterInstance
-  }
-
   // Create new QueryClient
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -46,16 +35,5 @@ export function getRouter() {
     queryClient,
   })
 
-  // Cache on client only
-  if (!isServer) {
-    clientRouterInstance = router
-  }
-
   return router
-}
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: ReturnType<typeof getRouter>
-  }
 }

@@ -5,7 +5,6 @@ import { getUserAvatarData } from '@/lib/avatar'
 import { getWorkspaceBrandingData, getWorkspaceFaviconData } from '@/lib/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
-import { SessionProvider } from '@/components/providers/session-provider'
 import {
   getBrandingConfig,
   getPublicPortalConfig,
@@ -108,7 +107,6 @@ function PortalLayout() {
   const {
     org,
     userRole,
-    session,
     brandingData,
     themeStyles,
     googleFontsUrl,
@@ -145,12 +143,7 @@ function PortalLayout() {
     </div>
   )
 
-  // Wrap with providers:
-  // - SessionProvider hydrates better-auth session from SSR data (prevents flash)
-  // - AuthPopoverProvider manages auth dialog state
-  return (
-    <SessionProvider initialSession={session}>
-      <AuthPopoverProvider>{content}</AuthPopoverProvider>
-    </SessionProvider>
-  )
+  // Wrap with AuthPopoverProvider to manage auth dialog state
+  // Note: Session management is handled automatically by better-auth's tanstackStartCookies plugin
+  return <AuthPopoverProvider>{content}</AuthPopoverProvider>
 }
