@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requireWorkspaceRole } from '@/lib/workspace'
 import { Plug2 } from 'lucide-react'
-import { db } from '@/lib/db'
+import { fetchIntegrationsList } from '@/lib/server-functions/admin'
 import { IntegrationList } from '@/app/admin/settings/integrations/integration-list'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
@@ -10,7 +10,7 @@ export const Route = createFileRoute('/admin/settings/integrations/')({
     await requireWorkspaceRole(['owner', 'admin'])
 
     // Fetch existing integrations (minimal data for catalog view)
-    const rawIntegrations = await db.query.integrations.findMany()
+    const rawIntegrations = await fetchIntegrationsList()
 
     // Map to simplified status format for the catalog
     const integrations = rawIntegrations.map((i) => ({

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { commentSchema, type CommentInput } from '@/lib/schemas/comments'
@@ -14,7 +14,8 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { useSession, signOut } from '@/lib/auth/client'
+import { signOut } from '@/lib/auth/client'
+import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { createCommentAction } from '@/lib/actions/comments'
@@ -50,33 +51,26 @@ export function CommentForm({
   submitComment,
   isSubmitting: externalIsSubmitting,
 }: CommentFormProps) {
+  const router = useRouter()
+  const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   // Use external pending state if provided, otherwise use local
   const isSubmitting = externalIsSubmitting ?? isPending
 
-  // Hydration tracking to prevent SSR mismatch
-  const [isHydrated, setIsHydrated] = useState(false)
-  useEffect(() => setIsHydrated(true), [])
-
-  // Client-side session state - updates without page reload
-  const { data: sessionData, isPending: isSessionPending, refetch: refetchSession } = useSession()
   const authPopover = useAuthPopoverSafe()
 
-  // Derive effective user: use server prop during SSR/hydration, client session after
+  // Get user from session
   // Note: memberId is only available from the server-provided `user` prop, not from client session
-  const isSessionLoaded = isHydrated && !isSessionPending
-  const effectiveUser = isSessionLoaded
-    ? sessionData?.user
-      ? { name: sessionData.user.name, email: sessionData.user.email, memberId: user?.memberId }
-      : null
+  const effectiveUser = session?.user
+    ? { name: session.user.name, email: session.user.email, memberId: user?.memberId }
     : user
 
   // Listen for auth success to refetch session (no page reload)
   useAuthBroadcast({
     onSuccess: () => {
-      refetchSession()
+      router.invalidate()
     },
   })
 

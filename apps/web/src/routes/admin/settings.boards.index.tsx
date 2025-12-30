@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { requireAuthenticatedWorkspace } from '@/lib/workspace'
-import { db } from '@/lib/db'
+import { fetchBoardsForSettings } from '@/lib/server-functions/admin'
 import { Layout, MessageSquare } from 'lucide-react'
 import { CreateBoardDialog } from '@/app/admin/settings/boards/create-board-dialog'
 
@@ -9,15 +9,11 @@ export const Route = createFileRoute('/admin/settings/boards/')({
     // Settings is validated in root layout
     await requireAuthenticatedWorkspace()
 
-    // Only fetch slug for faster redirect
-    const firstBoard = await db.query.boards.findFirst({
-      orderBy: (boards, { desc }) => [desc(boards.updatedAt)],
-      columns: { slug: true },
-    })
+    const boards = await fetchBoardsForSettings()
 
     // If boards exist, redirect to the boards settings page
     // TODO: Create dynamic route for /admin/settings/boards/$slug and redirect there
-    if (firstBoard) {
+    if (boards.length > 0) {
       throw redirect({
         to: '/admin/settings/boards',
       })

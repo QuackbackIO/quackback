@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Link, useRouter, useRouterState } from '@tanstack/react-router'
+import { useState } from 'react'
+import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { signOut, useSession } from '@/lib/auth/client'
+import { signOut } from '@/lib/auth/client'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,24 +52,16 @@ export function PortalHeader({
   headerDisplayMode = 'logo_and_name',
   headerDisplayName,
   userRole,
-  initialUserData,
+  initialUserData: _initialUserData,
 }: PortalHeaderProps) {
   const router = useRouter()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const { session } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
 
   // Use custom display name if provided, otherwise fall back to org name
   const displayName = headerDisplayName || orgName
-
-  // Track if we've completed initial hydration to prevent SSR/client mismatch
-  const [isHydrated, setIsHydrated] = useState(false)
-  useEffect(() => {
-    setIsHydrated(true)
-  }, [])
-
-  // Client-side session state - updates without page reload
-  const { data: sessionData, isPending, refetch: refetchSession } = useSession()
 
   // Client-side role state - fetched when session changes
   const [clientRole, setClientRole] = useState<'owner' | 'admin' | 'member' | 'user' | null>(null)
@@ -94,50 +86,30 @@ export function PortalHeader({
   // Listen for auth success to refetch session and role
   useAuthBroadcast({
     onSuccess: () => {
-      refetchSession()
+      router.invalidate() // Refetch root loader (includes session)
       fetchRole()
     },
   })
 
-  // Derive effective auth state from client session when available
-  // During initial hydration (!isHydrated), ALWAYS use server props to match SSR output
-  // After hydration, use client session once loaded
-  const clientUser = sessionData?.user
-  const isSessionLoaded = isHydrated && !isPending
+  // Get user info from session
+  const user = session?.user
+  const isLoggedIn = !!user
 
-  // Auth state: during hydration use server props, after use client session
-  const isLoggedIn = isSessionLoaded ? !!clientUser : userRole !== null && userRole !== undefined
-
-  // Use client session for name/email once loaded, otherwise fall back to server data
-  const name =
-    isSessionLoaded && clientUser ? (clientUser.name ?? null) : (initialUserData?.name ?? null)
-  const email =
-    isSessionLoaded && clientUser ? (clientUser.email ?? null) : (initialUserData?.email ?? null)
-
-  // For avatar: use session image URL once loaded, fall back to SSR data
-  // During hydration, MUST use SSR data to prevent hydration mismatch
-  // After hydration, use session image (which may be /api/user/avatar/... URL)
-  // Important: if session is loaded but image is empty/null, show no avatar (not SSR fallback)
-  const avatarUrl = isSessionLoaded
-    ? clientUser?.image || null // Use session image or null (for initials fallback)
-    : (initialUserData?.avatarUrl ?? null) // During hydration, use SSR data
+  const name = user?.name ?? null
+  const email = user?.email ?? null
+  const avatarUrl = user?.image ?? null
 
   // Team members (owner, admin, member) can access admin dashboard
   // Use client role if fetched, otherwise fall back to server prop
   const effectiveRole = isRoleFetched ? clientRole : userRole
   const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(effectiveRole || '')
 
-  const handleSignOut = () => {
-    signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          setClientRole(null)
-          setIsRoleFetched(true)
-          router.navigate({ to: '/' })
-          refetchSession()
-        },
-      },
-    })
+  const handleSignOut = async () => {
+    await signOut()
+    setClientRole(null)
+    setIsRoleFetched(true)
+    router.invalidate() // Refetch session
+    router.navigate({ to: '/' })
   }
 
   // Check if we're using the two-row layout (custom header logo)

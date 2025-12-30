@@ -1,6 +1,5 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { useSession } from '@/lib/auth/client'
 import { acceptInvitationAction } from '@/lib/actions/invitations'
 import { getProfileAction } from '@/lib/actions/user'
 
@@ -11,16 +10,12 @@ export const Route = createFileRoute('/accept-invitation/$id')({
 function AcceptInvitationPage() {
   const { id } = Route.useParams()
   const router = useRouter()
-  const sessionQuery = useSession()
+  const { session } = useRouteContext({ from: '__root__' })
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // Wait for session to load
-    if (sessionQuery.isPending) return
-
     async function accept() {
-      const session = sessionQuery.data as any
       // Check if user is authenticated
       if (!session || !session.user) {
         // Redirect to admin signup with invitation ID
@@ -57,7 +52,7 @@ function AcceptInvitationPage() {
     }
 
     accept()
-  }, [id, sessionQuery.data, sessionQuery.isPending, router])
+  }, [id, session, router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

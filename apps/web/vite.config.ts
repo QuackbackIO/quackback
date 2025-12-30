@@ -9,8 +9,27 @@ export default defineConfig({
     port: 3000,
   },
   ssr: {
-    // Keep server-only dependencies out of client bundle
+    // Keep server-only dependencies out of SSR bundle
     external: ['drizzle-orm', 'postgres'],
+    // Ensure server-only code doesn't leak into client
+    noExternal: ['@quackback/db', '@quackback/domain', '@quackback/email'],
+  },
+  optimizeDeps: {
+    // Exclude server-only packages from dependency optimization
+    exclude: ['@quackback/db', 'postgres', 'drizzle-orm'],
+  },
+  build: {
+    rollupOptions: {
+      // Externalize server-only modules in client build
+      external: (id) => {
+        // Externalize postgres and Node.js built-ins for client build
+        if (id === 'postgres' || id.startsWith('postgres/')) return true
+        if (id === 'drizzle-orm' || id.startsWith('drizzle-orm/')) return true
+        // Externalize Node.js built-ins
+        if (/^(crypto|fs|path|os|net|tls|stream|perf_hooks|node:)/.test(id)) return true
+        return false
+      },
+    },
   },
   plugins: [
     tailwindcss(),

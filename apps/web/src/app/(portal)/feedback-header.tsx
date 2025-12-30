@@ -2,7 +2,7 @@
 
 import type { BoardId } from '@quackback/ids'
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PenLine } from 'lucide-react'
@@ -18,7 +18,7 @@ import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-e
 import { useCreatePublicPost } from '@/lib/hooks/use-public-posts-query'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { useSession, signOut } from '@/lib/auth/client'
+import { signOut } from '@/lib/auth/client'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {
@@ -42,27 +42,22 @@ export function FeedbackHeader({
   onPostCreated,
 }: FeedbackHeaderProps) {
   const router = useRouter()
+  const { session } = useRouteContext({ from: '__root__' })
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()
 
   const createPost = useCreatePublicPost()
 
-  // Client-side session state - updates without page reload
-  const { data: sessionData, refetch: refetchSession } = useSession()
-
-  // Derive effective user: prefer fresh client session over stale server prop
-  const effectiveUser =
-    sessionData === undefined
-      ? user
-      : sessionData?.user
-        ? { name: sessionData.user.name, email: sessionData.user.email }
-        : null
+  // Get user from session
+  const effectiveUser = session?.user
+    ? { name: session.user.name, email: session.user.email }
+    : user
 
   // Listen for auth success to refetch session (no page reload)
   useAuthBroadcast({
     onSuccess: () => {
-      refetchSession()
+      router.invalidate()
     },
     enabled: expanded,
   })
@@ -305,14 +300,9 @@ export function FeedbackHeader({
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => {
-                      signOut({
-                        fetchOptions: {
-                          onSuccess: () => {
-                            refetchSession()
-                          },
-                        },
-                      })
+                    onClick={async () => {
+                      await signOut()
+                      router.invalidate()
                     }}
                   >
                     sign out

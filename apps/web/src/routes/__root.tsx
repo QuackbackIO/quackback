@@ -25,6 +25,8 @@ const systemThemeScript = `
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
+  session: Awaited<ReturnType<typeof getSession>>
+  settings: Awaited<ReturnType<typeof getSettings>>
 }>()({
   beforeLoad: async () => {
     // Fetch session and settings at the root level

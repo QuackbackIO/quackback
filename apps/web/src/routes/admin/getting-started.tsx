@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { requireWorkspace } from '@/lib/workspace'
-import { db, member } from '@/lib/db'
+import { fetchOnboardingStatus } from '@/lib/server-functions/admin'
 import { MessageSquare, Users, Palette, Plug, Check, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,19 +28,14 @@ export const Route = createFileRoute('/admin/getting-started')({
     // Settings is validated in root layout
     const { settings } = await requireWorkspace()
 
-    const [orgBoards, members] = await Promise.all([
-      db.query.boards.findMany({
-        columns: { id: true },
-      }),
-      db.select({ id: member.id }).from(member),
-    ])
+    const status = await fetchOnboardingStatus()
 
     const tasks: OnboardingTask[] = [
       {
         id: 'create-board',
         title: 'Create your first board',
         description: 'Set up a feedback board where users can submit and vote on ideas',
-        isCompleted: orgBoards.length > 0,
+        isCompleted: status.hasBoards,
         href: '/admin/settings/boards',
         actionLabel: 'Create Board',
         completedLabel: 'View Boards',
@@ -49,7 +44,7 @@ export const Route = createFileRoute('/admin/getting-started')({
         id: 'invite-team',
         title: 'Invite team members',
         description: 'Add your team to collaborate on feedback management',
-        isCompleted: members.length > 1,
+        isCompleted: status.memberCount > 1,
         href: '/admin/settings/team',
         actionLabel: 'Invite Members',
         completedLabel: 'Manage Team',

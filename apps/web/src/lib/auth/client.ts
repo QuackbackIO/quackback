@@ -1,18 +1,20 @@
-'use client'
+import { createAuthClient } from 'better-auth/client'
 
-import { createAuthClient } from 'better-auth/react'
-import { customSessionClient, emailOTPClient } from 'better-auth/client/plugins'
-import { ssoClient } from '@better-auth/sso/client'
-import type { auth } from './index'
-
-// @ts-expect-error - The inferred type may include non-portable paths from Better Auth SSO internals
+/**
+ * Better-auth client for client-side authentication
+ * Used in React components for auth actions
+ *
+ * For TanStack Start integration:
+ * - Session is fetched server-side in root loader
+ * - Access session via route context: Route.useRouteContext()
+ * - Use router.invalidate() to refetch session after auth actions
+ */
 export const authClient = createAuthClient({
-  plugins: [
-    ssoClient(),
-    emailOTPClient(),
-    // Custom session client for proper TypeScript inference of customSession fields
-    customSessionClient<typeof auth>(),
-  ],
+  baseURL: process.env.BETTER_AUTH_URL || '',
 })
 
-export const { signIn, signOut, useSession } = authClient
+/**
+ * Sign out the current user
+ * Note: Call router.invalidate() after signOut to update session
+ */
+export const signOut = authClient.signOut

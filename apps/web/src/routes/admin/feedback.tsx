@@ -1,15 +1,15 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { requireAuthenticatedWorkspace } from '@/lib/workspace'
-import { listInboxPosts } from '@/lib/posts'
-import { listTags } from '@/lib/tags'
-import { listStatuses } from '@/lib/statuses'
-import { listBoards } from '@/lib/boards'
-import { listTeamMembers } from '@/lib/members'
+import {
+  fetchInboxPosts,
+  fetchBoardsList,
+  fetchTagsList,
+  fetchStatusesList,
+  fetchTeamMembers,
+} from '@/lib/server-functions/admin'
 import { InboxContainer } from '@/app/admin/feedback/inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
-import type { BoardSettings } from '@quackback/db/types'
-import type { TiptapContent } from '@/lib/schemas/posts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -45,8 +45,7 @@ export const Route = createFileRoute('/admin/feedback')({
     const { user: currentUser, member } = await requireAuthenticatedWorkspace()
 
     // Check if org has boards - if not, redirect to onboarding
-    const boardsResult = await listBoards()
-    const orgBoards = boardsResult.success ? boardsResult.value : []
+    const orgBoards = await fetchBoardsList()
 
     if (orgBoards.length === 0) {
       throw redirect({ to: '/onboarding' })
@@ -58,55 +57,29 @@ export const Route = createFileRoute('/admin/feedback')({
     const statusFilterSlugs = deps.status || []
     const ownerFilterId = deps.owner
 
-    // Fetch initial posts with filters from URL using PostService
-    const postsResult = await listInboxPosts({
-      boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
-      statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
-      tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
-      ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
-      search: deps.search,
-      dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
-      dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
-      minVotes: deps.minVotes ? parseInt(deps.minVotes, 10) : undefined,
-      sort: deps.sort,
-      page: 1,
-      limit: 20,
-    })
-
-    const initialPosts = postsResult.success
-      ? postsResult.value
-      : { items: [], total: 0, hasMore: false }
-
-    // Fetch tags for this organization using TagService
-    const tagsResult = await listTags()
-    const orgTags = tagsResult.success ? tagsResult.value : []
-
-    // Fetch statuses for this organization using StatusService
-    const statusesResult = await listStatuses()
-    const orgStatuses = statusesResult.success ? statusesResult.value : []
-
-    // Fetch team members using MemberService (returns TypeIDs directly)
-    const membersResult = await listTeamMembers()
-    const teamMembers = membersResult.success ? membersResult.value : []
-
-    // Type the contentJson field for serialization
-    const serializedPosts = {
-      ...initialPosts,
-      items: initialPosts.items.map((p) => ({
-        ...p,
-        contentJson: (p.contentJson ?? {}) as TiptapContent,
-      })),
-    }
-
-    // Type the boards settings field for serialization
-    const serializedBoards = orgBoards.map((b) => ({
-      ...b,
-      settings: (b.settings ?? {}) as BoardSettings,
-    }))
+    // Fetch data in parallel using server functions
+    const [initialPosts, orgTags, orgStatuses, teamMembers] = await Promise.all([
+      fetchInboxPosts({
+        boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
+        statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
+        tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
+        ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
+        search: deps.search,
+        dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
+        dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
+        minVotes: deps.minVotes ? parseInt(deps.minVotes, 10) : undefined,
+        sort: deps.sort,
+        page: 1,
+        limit: 20,
+      }),
+      fetchTagsList(),
+      fetchStatusesList(),
+      fetchTeamMembers(),
+    ])
 
     return {
-      initialPosts: serializedPosts,
-      boards: serializedBoards,
+      initialPosts,
+      boards: orgBoards,
       tags: orgTags,
       statuses: orgStatuses,
       members: teamMembers,

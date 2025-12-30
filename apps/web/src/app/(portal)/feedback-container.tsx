@@ -12,7 +12,7 @@ import {
   flattenPublicPosts,
   useVotedPosts,
 } from '@/lib/hooks/use-public-posts-query'
-import { useSession } from '@/lib/auth/client'
+import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import type { BoardWithStats } from '@/lib/boards'
 import type { PublicPostListItem } from '@/lib/posts'
@@ -50,18 +50,14 @@ export function FeedbackContainer({
   defaultBoardId,
   user,
 }: FeedbackContainerProps) {
+  const router = useRouter()
+  const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
 
-  // Client-side session state - updates without page reload
-  const { data: sessionData, refetch: refetchSession } = useSession()
-
-  // Derive effective user: prefer fresh client session over stale server prop
-  const effectiveUser =
-    sessionData === undefined
-      ? user
-      : sessionData?.user
-        ? { name: sessionData.user.name, email: sessionData.user.email }
-        : null
+  // Get user from session
+  const effectiveUser = session?.user
+    ? { name: session.user.name, email: session.user.email }
+    : user
 
   // Refs for intersection observer
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -142,7 +138,7 @@ export function FeedbackContainer({
   // Listen for auth success via broadcast (for popup OAuth flows)
   useAuthBroadcast({
     onSuccess: () => {
-      refetchSession()
+      router.invalidate()
     },
   })
 

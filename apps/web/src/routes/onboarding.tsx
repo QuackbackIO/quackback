@@ -1,8 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { db, member, eq } from '@/lib/db'
+import { checkOnboardingState } from '@/lib/server-functions/admin'
 import { OnboardingWizard } from '@/app/onboarding/onboarding-wizard'
-import { generateId } from '@quackback/ids'
-import type { UserId, MemberId } from '@quackback/ids'
 
 export const Route = createFileRoute('/onboarding')({
   loader: async ({ context }) => {
@@ -14,48 +12,17 @@ export const Route = createFileRoute('/onboarding')({
     let initialStep: 'create-account' | 'setup-workspace' | 'create-board' = 'create-account'
 
     if (session?.user) {
-      // Safety check: Ensure user has a member record
-      // (databaseHooks should have created this, but this is a fallback)
-      let memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, session.user.id as UserId),
-      })
+      // Check onboarding state via server function
+      const state = await checkOnboardingState({ data: session.user.id })
 
-      if (!memberRecord) {
-        console.log('[Onboarding] Member record not found, checking if user should be owner')
-
-        // Check if any owner exists
-        const existingOwner = await db.query.member.findFirst({
-          where: eq(member.role, 'owner'),
-        })
-
-        if (!existingOwner) {
-          console.log('[Onboarding] Creating owner member record')
-
-          // First user - create owner member record
-          const [newMember] = await db
-            .insert(member)
-            .values({
-              id: generateId('member') as MemberId,
-              userId: session.user.id as UserId,
-              role: 'owner',
-              createdAt: new Date(),
-            })
-            .returning()
-
-          memberRecord = newMember
-        } else {
-          // Not first user - they need an invitation
-          console.log('[Onboarding] Owner exists, user needs invitation')
-          throw redirect({ to: '/auth/login' })
-        }
+      if (state.needsInvitation) {
+        // Not first user - they need an invitation
+        throw redirect({ to: '/auth/login' })
       }
 
       // User is authenticated with member record
       if (settings) {
-        // Settings exist - check if boards exist
-        const existingBoards = await db.query.boards.findFirst()
-
-        if (existingBoards) {
+        if (state.hasBoards) {
           // Everything is set up, redirect to admin
           throw redirect({ to: '/admin' })
         }

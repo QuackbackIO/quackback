@@ -1,50 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requireWorkspace } from '@/lib/workspace'
-import { db, member, user, invitation, eq, ne } from '@/lib/db'
+import { fetchTeamMembersAndInvitations } from '@/lib/server-functions/settings'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { getBulkUserAvatarData } from '@/lib/avatar'
 import { TeamHeader } from '@/app/admin/settings/team/team-header'
 import { PendingInvitations } from '@/app/admin/settings/team/pending-invitations'
+import type { UserId } from '@quackback/ids'
 
 export const Route = createFileRoute('/admin/settings/team')({
   loader: async () => {
     // Settings is validated in root layout
     const { settings } = await requireWorkspace()
 
-    // Only show team members (owner, admin, member) - exclude portal users (role='user')
-    const members = await db
-      .select({
-        id: member.id,
-        role: member.role,
-        userId: member.userId,
-        userName: user.name,
-        userEmail: user.email,
-      })
-      .from(member)
-      .innerJoin(user, eq(member.userId, user.id))
-      .where(ne(member.role, 'user'))
-
-    // Fetch pending invitations
-    const pendingInvitations = await db.query.invitation.findMany({
-      where: eq(invitation.status, 'pending'),
-      orderBy: (invitation, { desc }) => [desc(invitation.createdAt)],
-    })
-
-    // Get avatar URLs for all team members (base64 for SSR)
-    const userIds = members.map((m) => m.userId)
-    const avatarMap = await getBulkUserAvatarData(userIds)
-
-    // Format invitations for client component (TypeIDs come directly from DB)
-    const formattedInvitations = pendingInvitations.map((inv) => ({
-      id: inv.id,
-      email: inv.email,
-      name: inv.name,
-      role: inv.role,
-      createdAt: inv.createdAt.toISOString(),
-      lastSentAt: inv.lastSentAt?.toISOString() || null,
-      expiresAt: inv.expiresAt.toISOString(),
-    }))
+    const { members, avatarMap, formattedInvitations } = await fetchTeamMembersAndInvitations()
 
     return {
       settings,
@@ -82,7 +50,7 @@ function TeamPage() {
               userName: string
               userEmail: string
             }) => {
-              const avatarUrl = avatarMap.get(m.userId as `user_${string}`)
+              const avatarUrl = avatarMap[m.userId as UserId]
 
               return (
                 <li key={m.id} className="flex items-center justify-between px-6 py-4">

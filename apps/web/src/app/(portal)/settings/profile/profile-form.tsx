@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
-import { useSession, authClient } from '@/lib/auth/client'
+import { authClient } from '@/lib/auth/client'
+import { useRouter } from '@tanstack/react-router'
 import { updateProfileNameAction, removeAvatarAction } from '@/lib/actions/user'
 
 interface ProfileFormProps {
@@ -28,6 +29,7 @@ export function ProfileForm({
   oauthAvatarUrl,
   hasCustomAvatar: initialHasCustomAvatar,
 }: ProfileFormProps) {
+  const router = useRouter()
   const [name, setName] = useState(user.name)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
@@ -39,10 +41,6 @@ export function ProfileForm({
   // Cropper state
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
-
-  // Session for syncing profile changes across the app
-  const session = useSession()
-  const refetchSession = session?.refetch
 
   const initials = name
     .split(' ')
@@ -117,7 +115,7 @@ export function ProfileForm({
       setHasCustomAvatar(true)
 
       // Refetch session to pick up the custom avatar URL from customSession plugin
-      refetchSession?.()
+      router.invalidate()
       toast.success('Avatar updated')
     } catch (error) {
       // Revoke the object URL on error
@@ -151,7 +149,7 @@ export function ProfileForm({
       setAvatarUrl(oauthAvatarUrl)
 
       // Refetch session - customSession plugin will return OAuth URL as fallback
-      refetchSession?.()
+      router.invalidate()
       toast.success('Avatar removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')
@@ -187,7 +185,7 @@ export function ProfileForm({
         { name: name.trim() },
         {
           onSuccess: () => {
-            refetchSession?.()
+            router.invalidate()
           },
         }
       )

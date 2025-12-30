@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requireWorkspace } from '@/lib/workspace'
-import { db, user as userTable, eq } from '@/lib/db'
+import { fetchUserProfile } from '@/lib/server-functions/settings'
 import { User } from 'lucide-react'
 import { ProfileForm } from '@/app/(portal)/settings/profile/profile-form'
 
@@ -9,29 +9,7 @@ export const Route = createFileRoute('/_portal/settings/profile')({
     // Workspace is validated in root layout
     const { user } = await requireWorkspace()
 
-    // Fetch user's avatar data for SSR
-    const userRecord = await db.query.user.findFirst({
-      where: eq(userTable.id, user.id),
-      columns: {
-        imageBlob: true,
-        imageType: true,
-        image: true,
-      },
-    })
-
-    const hasCustomAvatar = !!(userRecord?.imageBlob && userRecord?.imageType)
-    // OAuth avatar URL (from GitHub, Google, etc.) - used as fallback
-    const oauthAvatarUrl = userRecord?.image ?? null
-
-    // Convert blob to base64 data URL for SSR - eliminates flicker
-    // Custom blob avatar takes precedence over OAuth image URL
-    let avatarUrl: string | null = null
-    if (hasCustomAvatar && userRecord.imageBlob && userRecord.imageType) {
-      const base64 = Buffer.from(userRecord.imageBlob).toString('base64')
-      avatarUrl = `data:${userRecord.imageType};base64,${base64}`
-    } else if (oauthAvatarUrl) {
-      avatarUrl = oauthAvatarUrl
-    }
+    const { avatarUrl, oauthAvatarUrl, hasCustomAvatar } = await fetchUserProfile(user.id)
 
     return {
       user,

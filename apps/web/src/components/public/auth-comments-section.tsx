@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
-import { useSession } from '@/lib/auth/client'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import type { PostId, CommentId } from '@quackback/ids'
 
@@ -50,31 +48,21 @@ export function AuthCommentsSection({
   user: serverUser,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
+  const { session } = useRouteContext({ from: '__root__' })
   const { openAuthPopover } = useAuthPopover()
-
-  // Hydration tracking to prevent SSR mismatch
-  const [isHydrated, setIsHydrated] = useState(false)
-  useEffect(() => setIsHydrated(true), [])
-
-  // Client session for reactive auth state
-  const { data: sessionData, isPending } = useSession()
 
   // Refresh page on auth change to get updated server state (member status, user data)
   useAuthBroadcast({ onSuccess: () => router.invalidate() })
 
-  // Derive auth state: use server props during hydration, client session after
-  const isSessionLoaded = isHydrated && !isPending
-  const isLoggedIn = isSessionLoaded ? !!sessionData?.user : !!serverUser
+  // Get user from session
+  const user = session?.user
+  const isLoggedIn = !!user
 
   // Can comment only if logged in (reactive check)
-  // When logged out (client detects no session), hide comment form even if server said OK
   const allowCommenting = isLoggedIn && serverAllowCommenting
 
-  // User info from client session (reactive) or server props (SSR)
-  const user =
-    isSessionLoaded && sessionData?.user
-      ? { name: sessionData.user.name ?? null, email: sessionData.user.email ?? '' }
-      : serverUser
+  // User info from session
+  const userData = user ? { name: user.name ?? null, email: user.email ?? '' } : serverUser
 
   return (
     <CommentThread
@@ -83,7 +71,7 @@ export function AuthCommentsSection({
       allowCommenting={allowCommenting}
       avatarUrls={avatarUrls}
       onCommentAdded={() => router.invalidate()}
-      user={user}
+      user={userData}
       onAuthRequired={() => openAuthPopover({ mode: 'login' })}
     />
   )

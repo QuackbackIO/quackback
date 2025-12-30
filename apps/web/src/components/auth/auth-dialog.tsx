@@ -37,8 +37,7 @@ export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
 
   // Listen for auth success broadcasts from popup windows
-  // Note: We don't call router.refresh() here to avoid disrupting other dialogs
-  // Components that need updated auth state should use useSession with refetch
+  // The onAuthSuccess callback handles session updates via router.invalidate()
   useAuthBroadcast({
     onSuccess: onAuthSuccess,
     enabled: isOpen,
