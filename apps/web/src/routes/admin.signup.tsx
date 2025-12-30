@@ -1,6 +1,8 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { z } from 'zod'
-import { getPublicAuthConfig, DEFAULT_AUTH_CONFIG } from '@/lib/settings'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
+import { DEFAULT_AUTH_CONFIG } from '@/lib/settings'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 
 const searchSchema = z.object({
@@ -30,22 +32,11 @@ export const Route = createFileRoute('/admin/signup')({
       throw redirect({ to: '/admin/login' })
     }
 
-    // Fetch auth config using the service
-    const result = await getPublicAuthConfig()
-
-    const authConfig = result.success
-      ? {
-          found: true,
-          openSignup: result.value.openSignup,
-        }
-      : {
-          found: false,
-          openSignup: DEFAULT_AUTH_CONFIG.openSignup,
-        }
+    // Pre-fetch auth config using React Query
+    await queryClient.ensureQueryData(settingsQueries.publicAuthConfig())
 
     return {
       settings,
-      authConfig,
       invitationId,
     }
   },
@@ -53,7 +44,19 @@ export const Route = createFileRoute('/admin/signup')({
 })
 
 function AdminSignupPage() {
-  const { settings, authConfig, invitationId } = Route.useLoaderData()
+  const { settings, invitationId } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const authConfigQuery = useSuspenseQuery(settingsQueries.publicAuthConfig())
+  const authConfig = authConfigQuery.data
+    ? {
+        found: true,
+        openSignup: authConfigQuery.data.openSignup,
+      }
+    : {
+        found: false,
+        openSignup: DEFAULT_AUTH_CONFIG.openSignup,
+      }
 
   return (
     <div className="flex min-h-screen items-center justify-center">

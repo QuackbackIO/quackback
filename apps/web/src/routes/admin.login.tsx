@@ -1,6 +1,8 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { getPublicAuthConfig, DEFAULT_AUTH_CONFIG } from '@/lib/settings'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
+import { DEFAULT_AUTH_CONFIG } from '@/lib/settings'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
@@ -29,7 +31,7 @@ export const Route = createFileRoute('/admin/login')({
   loaderDeps: ({ search }) => ({ callbackUrl: search.callbackUrl, error: search.error }),
   loader: async ({ deps, context }) => {
     // Settings already available from root context
-    const { settings } = context
+    const { settings, queryClient } = context
     if (!settings) {
       throw redirect({ to: '/workspace-not-found' })
     }
@@ -45,31 +47,32 @@ export const Route = createFileRoute('/admin/login')({
         ? callbackUrl
         : '/admin'
 
-    // Fetch org auth config using the service
-    const result = await getPublicAuthConfig()
-
-    const authConfig = result.success
-      ? {
-          found: true,
-          openSignup: result.value.openSignup,
-        }
-      : {
-          found: false,
-          openSignup: DEFAULT_AUTH_CONFIG.openSignup,
-        }
+    // Pre-fetch auth config using React Query
+    await queryClient.ensureQueryData(settingsQueries.publicAuthConfig())
 
     return {
       settings,
       errorMessage,
       safeCallbackUrl,
-      authConfig,
     }
   },
   component: AdminLoginPage,
 })
 
 function AdminLoginPage() {
-  const { settings, errorMessage, safeCallbackUrl, authConfig } = Route.useLoaderData()
+  const { settings, errorMessage, safeCallbackUrl } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const authConfigQuery = useSuspenseQuery(settingsQueries.publicAuthConfig())
+  const authConfig = authConfigQuery.data
+    ? {
+        found: true,
+        openSignup: authConfigQuery.data.openSignup,
+      }
+    : {
+        found: false,
+        openSignup: DEFAULT_AUTH_CONFIG.openSignup,
+      }
 
   return (
     <div className="flex min-h-screen items-center justify-center">

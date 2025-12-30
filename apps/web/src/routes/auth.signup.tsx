@@ -1,6 +1,8 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
-import { getPublicPortalConfig, DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 
 /**
  * Portal Signup Page
@@ -11,27 +13,27 @@ import { getPublicPortalConfig, DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 export const Route = createFileRoute('/auth/signup')({
   loader: async ({ context }) => {
     // Settings already available from root context
-    const { settings } = context
+    const { settings, queryClient } = context
     if (!settings) {
       throw redirect({ to: '/workspace-not-found' })
     }
 
-    // Fetch portal config to determine which OAuth providers are enabled
-    const configResult = await getPublicPortalConfig()
-    const oauthConfig = configResult.success
-      ? configResult.value.oauth
-      : DEFAULT_PORTAL_CONFIG.oauth
+    // Pre-fetch portal config using React Query
+    await queryClient.ensureQueryData(settingsQueries.publicPortalConfig())
 
     return {
       settings,
-      oauthConfig,
     }
   },
   component: SignupPage,
 })
 
 function SignupPage() {
-  const { settings, oauthConfig } = Route.useLoaderData()
+  const { settings } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
+  const oauthConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
 
   return (
     <div className="flex min-h-screen items-center justify-center">
