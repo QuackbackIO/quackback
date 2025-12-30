@@ -68,23 +68,6 @@ export abstract class BaseIntegration {
   }
 
   /**
-   * Determines if an error is retryable (temporary failures).
-   */
-  protected isRetryableError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false
-    const msg = error.message.toLowerCase()
-    return (
-      msg.includes('timeout') ||
-      msg.includes('rate') ||
-      msg.includes('503') ||
-      msg.includes('502') ||
-      msg.includes('temporarily') ||
-      msg.includes('econnreset') ||
-      msg.includes('enotfound')
-    )
-  }
-
-  /**
    * Strips HTML tags from text (useful for Slack/Discord formatting).
    */
   protected stripHtml(html: string): string {
