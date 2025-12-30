@@ -9,10 +9,11 @@ export const Route = createFileRoute('/admin')({
     // Portal users don't have member records, so they can't access this
     // Settings is validated in root layout
     // Session is already available from root context
-    const { user } = await requireWorkspaceRole(['owner', 'admin', 'member'])
+    const { user, member } = await requireWorkspaceRole(['owner', 'admin', 'member'])
 
     return {
       user,
+      member,
     }
   },
   loader: async ({ context }) => {
