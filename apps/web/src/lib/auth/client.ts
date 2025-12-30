@@ -1,0 +1,18 @@
+'use client'
+
+import { createAuthClient } from 'better-auth/react'
+import { customSessionClient, emailOTPClient } from 'better-auth/client/plugins'
+import { ssoClient } from '@better-auth/sso/client'
+import type { auth } from './index'
+
+// @ts-expect-error - The inferred type may include non-portable paths from Better Auth SSO internals
+export const authClient = createAuthClient({
+  plugins: [
+    ssoClient(),
+    emailOTPClient(),
+    // Custom session client for proper TypeScript inference of customSession fields
+    customSessionClient<typeof auth>(),
+  ],
+})
+
+export const { signIn, signOut, useSession } = authClient

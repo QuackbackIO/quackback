@@ -1,0 +1,58 @@
+import { createFileRoute, redirect, Link } from '@tanstack/react-router'
+import { OTPAuthForm } from '@/components/auth/otp-auth-form'
+import { getPublicPortalConfig, DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
+
+/**
+ * Portal Login Page
+ *
+ * For portal users (visitors) to sign in using magic OTP codes or OAuth.
+ */
+export const Route = createFileRoute('/auth/login')({
+  loader: async ({ context }) => {
+    // Settings already available from root context
+    const { settings } = context
+    if (!settings) {
+      throw redirect({ to: '/workspace-not-found' })
+    }
+
+    // Fetch portal config to determine which OAuth providers are enabled
+    const configResult = await getPublicPortalConfig()
+    const oauthConfig = configResult.success
+      ? configResult.value.oauth
+      : DEFAULT_PORTAL_CONFIG.oauth
+
+    return {
+      settings,
+      oauthConfig,
+    }
+  },
+  component: LoginPage,
+})
+
+function LoginPage() {
+  const { settings, oauthConfig } = Route.useLoaderData()
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-md space-y-8 px-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Welcome back</h1>
+          <p className="mt-2 text-muted-foreground">Sign in to your account</p>
+        </div>
+        <OTPAuthForm
+          mode="login"
+          callbackUrl="/"
+          context="portal"
+          orgSlug={settings.slug}
+          oauthConfig={oauthConfig}
+        />
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{' '}
+          <Link to="/auth/signup" className="font-medium text-primary hover:underline">
+            Sign up
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}

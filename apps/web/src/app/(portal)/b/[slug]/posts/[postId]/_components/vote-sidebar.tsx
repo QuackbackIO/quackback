@@ -1,0 +1,79 @@
+import { db, member, eq } from '@/lib/db'
+import { hasUserVoted } from '@/lib/posts'
+import { getMemberIdentifier } from '@/lib/user-identifier'
+import { getSession } from '@/lib/auth/server'
+import { getSubscriptionStatus } from '@/lib/subscriptions'
+import { AuthVoteButton } from '@/components/public/auth-vote-button'
+import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
+import { Skeleton } from '@/components/ui/skeleton'
+import type { PostId, MemberId } from '@quackback/ids'
+
+export function VoteSidebarSkeleton() {
+  return (
+    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 gap-4">
+      <div className="flex flex-col items-center gap-1">
+        <Skeleton className="h-8 w-8 rounded-md" />
+        <Skeleton className="h-4 w-6" />
+      </div>
+      <Skeleton className="h-8 w-8 rounded-full" />
+    </div>
+  )
+}
+
+interface VoteSidebarProps {
+  postId: PostId
+  initialVoteCount: number
+}
+
+export async function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps) {
+  const session = await getSession()
+
+  let userIdentifier = ''
+  let isMember = false
+  let memberRecord: { id: string } | undefined
+
+  if (session?.user) {
+    memberRecord = await db.query.member.findFirst({
+      where: eq(member.userId, session.user.id),
+      columns: { id: true },
+    })
+    if (memberRecord) {
+      userIdentifier = getMemberIdentifier(memberRecord.id)
+      isMember = true
+    }
+  }
+
+  // Check if user has voted
+  let hasVotedResult = false
+  if (userIdentifier) {
+    const voteResult = await hasUserVoted(postId, userIdentifier)
+    hasVotedResult = voteResult.success ? voteResult.value : false
+  }
+
+  // Check subscription status
+  let subscriptionStatus: { subscribed: boolean; muted: boolean; reason: string | null } = {
+    subscribed: false,
+    muted: false,
+    reason: null,
+  }
+  if (isMember && memberRecord) {
+    const memberId = memberRecord.id as MemberId
+    subscriptionStatus = await getSubscriptionStatus(memberId, postId)
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 gap-4">
+      <AuthVoteButton
+        postId={postId}
+        initialVoteCount={initialVoteCount}
+        initialHasVoted={hasVotedResult}
+        disabled={!isMember}
+      />
+      <AuthSubscriptionBell
+        postId={postId}
+        initialStatus={subscriptionStatus}
+        disabled={!isMember}
+      />
+    </div>
+  )
+}
