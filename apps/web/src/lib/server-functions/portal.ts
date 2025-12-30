@@ -74,3 +74,24 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
     const avatarMap = await getBulkMemberAvatarData(memberIds)
     return Object.fromEntries(avatarMap)
   })
+
+/**
+ * Check if a user has voted on a post
+ */
+export const checkUserVoted = createServerFn({ method: 'GET' })
+  .inputValidator((params: { postId: PostId; userIdentifier: string }) => params)
+  .handler(async ({ data }) => {
+    const { hasUserVoted } = await import('@/lib/posts')
+    const result = await hasUserVoted(data.postId, data.userIdentifier)
+    return result.success ? result.value : false
+  })
+
+/**
+ * Get subscription status for a member and post
+ */
+export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
+  .inputValidator((params: { memberId: MemberId; postId: PostId }) => params)
+  .handler(async ({ data }) => {
+    const { getSubscriptionStatus } = await import('@/lib/subscriptions')
+    return await getSubscriptionStatus(data.memberId, data.postId)
+  })
