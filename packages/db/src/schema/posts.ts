@@ -33,7 +33,7 @@ export const posts = pgTable(
     title: text('title').notNull(),
     content: text('content').notNull(),
     // Rich content stored as TipTap JSON (optional, for rich text support)
-    contentJson: jsonb('content_json'),
+    contentJson: jsonb('content_json').$type<Record<string, any>>(),
     // Member-scoped identity (Hub-and-Spoke model)
     // memberId links to the workspace-scoped member record
     // For anonymous posts, memberId is null and authorName/authorEmail are used
@@ -234,7 +234,7 @@ export const postEditHistory = pgTable(
       .references(() => member.id, { onDelete: 'set null' }),
     previousTitle: text('previous_title').notNull(),
     previousContent: text('previous_content').notNull(),
-    previousContentJson: jsonb('previous_content_json'),
+    previousContentJson: jsonb('previous_content_json').$type<Record<string, any>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
