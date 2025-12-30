@@ -1,18 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspace } from '@/lib/workspace'
 import { Settings } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences-form'
 
 export const Route = createFileRoute('/_portal/settings/preferences')({
-  loader: async () => {
-    // Workspace is validated in root layout
-    const { settings } = await requireWorkspace()
-
-    return {
-      settings,
-    }
-  },
   component: PreferencesPage,
 })
 

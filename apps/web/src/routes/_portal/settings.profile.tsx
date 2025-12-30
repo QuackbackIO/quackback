@@ -1,28 +1,34 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspace } from '@/lib/workspace'
-import { fetchUserProfile } from '@/lib/server-functions/settings'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
 import { User } from 'lucide-react'
 import { ProfileForm } from '@/app/(portal)/settings/profile/profile-form'
 
 export const Route = createFileRoute('/_portal/settings/profile')({
-  loader: async () => {
-    // Workspace is validated in root layout
-    const { user } = await requireWorkspace()
+  loader: async ({ context }) => {
+    // Session and settings validated in parent _portal layout
+    const { session, queryClient } = context
 
-    const { avatarUrl, oauthAvatarUrl, hasCustomAvatar } = await fetchUserProfile(user.id)
+    if (!session?.user) {
+      throw new Error('User not authenticated')
+    }
+
+    // Pre-fetch user profile using React Query
+    await queryClient.ensureQueryData(settingsQueries.userProfile(session.user.id))
 
     return {
-      user,
-      avatarUrl,
-      oauthAvatarUrl,
-      hasCustomAvatar,
+      user: session.user,
     }
   },
   component: ProfilePage,
 })
 
 function ProfilePage() {
-  const { user, avatarUrl, oauthAvatarUrl, hasCustomAvatar } = Route.useLoaderData()
+  const { user } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const profileQuery = useSuspenseQuery(settingsQueries.userProfile(user.id))
+  const { avatarUrl, oauthAvatarUrl, hasCustomAvatar } = profileQuery.data
 
   return (
     <div className="space-y-6">

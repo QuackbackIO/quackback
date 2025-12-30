@@ -1,9 +1,9 @@
 import { Suspense } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import { getPublicPostDetail } from '@/lib/posts'
-import { getPublicBoardBySlug } from '@/lib/boards'
-import { listPublicStatuses } from '@/lib/statuses'
+import { portalDetailQueries } from '@/lib/queries/portal-detail'
+import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import {
   VoteSidebar,
@@ -16,7 +16,6 @@ import {
   CommentsSectionSkeleton,
 } from '@/app/(portal)/b/[slug]/posts/[postId]/_components/comments-section'
 import { isValidTypeId, type PostId } from '@quackback/ids'
-import type { BoardSettings } from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
@@ -24,7 +23,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     const { slug, postId: postIdParam } = params
 
     // Settings already available from root context
-    const { settings } = context
+    const { settings, queryClient } = context
     if (!settings) {
       throw notFound()
     }
@@ -35,43 +34,26 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     }
     const postId = postIdParam as PostId
 
-    // Verify the board exists and is public
-    const boardResult = await getPublicBoardBySlug(slug)
-    const board = boardResult.success ? boardResult.value : null
+    // Pre-fetch all data using React Query
+    const [board, post, _statuses] = await Promise.all([
+      queryClient.ensureQueryData(portalDetailQueries.board(slug)),
+      queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
+      queryClient.ensureQueryData(portalQueries.statuses()),
+    ])
+
+    // Verify board exists
     if (!board) {
       throw notFound()
     }
 
-    // Get post detail - services now accept TypeIDs and return TypeIDs
-    const postResult = await getPublicPostDetail(postId)
-    const post = postResult.success ? postResult.value : null
+    // Verify post exists and belongs to this board
     if (!post || post.board.slug !== slug) {
       throw notFound()
     }
 
-    // Get statuses for display - services return TypeIDs directly
-    const statusesResult = await listPublicStatuses()
-    const statuses = statusesResult.success ? statusesResult.value : []
-    const currentStatus = statuses.find((s) => s.id === post.statusId)
-
-    // Type the board settings and post contentJson fields for serialization
-    const serializedBoard = {
-      ...board,
-      settings: (board.settings ?? {}) as BoardSettings,
-    }
-
-    const serializedPost = {
-      ...post,
-      contentJson: (post.contentJson ?? {}) as TiptapContent,
-    }
-
     return {
       settings,
-      board: serializedBoard,
-      post: serializedPost,
       postId,
-      statuses,
-      currentStatus,
       slug,
     }
   },
@@ -79,7 +61,22 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 })
 
 function PostDetailPage() {
-  const { settings, board, post, postId, currentStatus, slug } = Route.useLoaderData()
+  const { settings, postId, slug } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const boardQuery = useSuspenseQuery(portalDetailQueries.board(slug))
+  const postQuery = useSuspenseQuery(portalDetailQueries.postDetail(postId))
+  const statusesQuery = useSuspenseQuery(portalQueries.statuses())
+
+  const board = boardQuery.data
+  const post = postQuery.data
+  const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
+
+  // Type the serialized fields for rendering
+  const serializedPost = {
+    ...post,
+    contentJson: (post.contentJson ?? {}) as TiptapContent,
+  }
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6">
@@ -106,7 +103,7 @@ function PostDetailPage() {
           </Suspense>
 
           {/* Content section */}
-          <PostContentSection post={post} currentStatus={currentStatus} />
+          <PostContentSection post={serializedPost} currentStatus={currentStatus} />
         </div>
 
         {/* Official Response (if exists) */}
