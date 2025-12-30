@@ -1,26 +1,29 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requireWorkspaceRole } from '@/lib/workspace'
-import { getPortalConfig, DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
 import { Lock } from 'lucide-react'
 import { PortalAuthSettings } from '@/app/admin/settings/portal-auth/portal-auth-settings'
 
 export const Route = createFileRoute('/admin/settings/portal-auth')({
-  loader: async () => {
+  loader: async ({ context }) => {
     // Settings is validated in root layout
-    // Only owners and admins can access portal auth settings
+    // Only owners and admins can access portal auth settings (more restrictive than parent)
     await requireWorkspaceRole(['owner', 'admin'])
 
-    // Fetch portal config
-    const configResult = await getPortalConfig()
-    const portalConfig = configResult.success ? configResult.value : DEFAULT_PORTAL_CONFIG
+    const { queryClient } = context
 
-    return { portalConfig }
+    // Pre-fetch portal config using React Query
+    await queryClient.ensureQueryData(settingsQueries.portalConfig())
+
+    return {}
   },
   component: PortalAuthPage,
 })
 
 function PortalAuthPage() {
-  const { portalConfig } = Route.useLoaderData()
+  // Read pre-fetched data from React Query cache
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
 
   return (
     <div className="space-y-6">
@@ -48,7 +51,7 @@ function PortalAuthPage() {
         </div>
 
         {/* Right column - settings card */}
-        <PortalAuthSettings initialConfig={{ oauth: portalConfig.oauth }} />
+        <PortalAuthSettings initialConfig={{ oauth: portalConfigQuery.data.oauth }} />
       </div>
     </div>
   )

@@ -1,13 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { requireAuthenticatedWorkspace } from '@/lib/workspace'
-import {
-  fetchInboxPosts,
-  fetchBoardsList,
-  fetchTagsList,
-  fetchStatusesList,
-  fetchTeamMembers,
-} from '@/lib/server-functions/admin'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { adminQueries } from '@/lib/queries/admin'
 import { InboxContainer } from '@/app/admin/feedback/inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -40,12 +34,12 @@ export const Route = createFileRoute('/admin/feedback')({
     sort: search.sort,
   }),
   errorComponent: FeedbackErrorComponent,
-  loader: async ({ deps }) => {
-    // Settings is validated in root layout
-    const { user: currentUser, member } = await requireAuthenticatedWorkspace()
+  loader: async ({ deps, context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { user: currentUser, member, queryClient } = context
 
-    // Check if org has boards - if not, redirect to onboarding
-    const orgBoards = await fetchBoardsList()
+    // Pre-fetch boards first to check if onboarding is needed
+    const orgBoards = await queryClient.ensureQueryData(adminQueries.boards())
 
     if (orgBoards.length === 0) {
       throw redirect({ to: '/onboarding' })
@@ -57,32 +51,29 @@ export const Route = createFileRoute('/admin/feedback')({
     const statusFilterSlugs = deps.status || []
     const ownerFilterId = deps.owner
 
-    // Fetch data in parallel using server functions
-    const [initialPosts, orgTags, orgStatuses, teamMembers] = await Promise.all([
-      fetchInboxPosts({
-        boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
-        statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
-        tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
-        ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
-        search: deps.search,
-        dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
-        dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
-        minVotes: deps.minVotes ? parseInt(deps.minVotes, 10) : undefined,
-        sort: deps.sort,
-        page: 1,
-        limit: 20,
-      }),
-      fetchTagsList(),
-      fetchStatusesList(),
-      fetchTeamMembers(),
+    // Pre-fetch all data in parallel using React Query
+    await Promise.all([
+      queryClient.ensureQueryData(
+        adminQueries.inboxPosts({
+          boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
+          statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
+          tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
+          ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
+          search: deps.search,
+          dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
+          dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
+          minVotes: deps.minVotes ? parseInt(deps.minVotes, 10) : undefined,
+          sort: deps.sort,
+          page: 1,
+          limit: 20,
+        })
+      ),
+      queryClient.ensureQueryData(adminQueries.tags()),
+      queryClient.ensureQueryData(adminQueries.statuses()),
+      queryClient.ensureQueryData(adminQueries.teamMembers()),
     ])
 
     return {
-      initialPosts,
-      boards: orgBoards,
-      tags: orgTags,
-      statuses: orgStatuses,
-      members: teamMembers,
       currentUser: {
         name: currentUser.name,
         email: currentUser.email,
@@ -111,15 +102,43 @@ function FeedbackErrorComponent({ error, reset }: { error: Error; reset: () => v
 }
 
 function FeedbackInboxPage() {
-  const { initialPosts, boards, tags, statuses, members, currentUser } = Route.useLoaderData()
+  const { currentUser } = Route.useLoaderData()
+  const search = Route.useSearch()
+
+  // Parse filter params (same logic as in loader)
+  const boardFilterIds = (search.board || []) as BoardId[]
+  const tagFilterIds = (search.tags || []) as TagId[]
+  const statusFilterSlugs = search.status || []
+  const ownerFilterId = search.owner
+
+  // Read pre-fetched data from React Query cache
+  const boardsQuery = useSuspenseQuery(adminQueries.boards())
+  const postsQuery = useSuspenseQuery(
+    adminQueries.inboxPosts({
+      boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
+      statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
+      tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
+      ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
+      search: search.search,
+      dateFrom: search.dateFrom ? new Date(search.dateFrom) : undefined,
+      dateTo: search.dateTo ? new Date(search.dateTo) : undefined,
+      minVotes: search.minVotes ? parseInt(search.minVotes, 10) : undefined,
+      sort: search.sort,
+      page: 1,
+      limit: 20,
+    })
+  )
+  const tagsQuery = useSuspenseQuery(adminQueries.tags())
+  const statusesQuery = useSuspenseQuery(adminQueries.statuses())
+  const membersQuery = useSuspenseQuery(adminQueries.teamMembers())
 
   return (
     <InboxContainer
-      initialPosts={initialPosts}
-      boards={boards}
-      tags={tags}
-      statuses={statuses}
-      members={members}
+      initialPosts={postsQuery.data}
+      boards={boardsQuery.data}
+      tags={tagsQuery.data}
+      statuses={statusesQuery.data}
+      members={membersQuery.data}
       currentUser={currentUser}
     />
   )

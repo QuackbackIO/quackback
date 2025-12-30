@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { requireAuthenticatedWorkspace } from '@/lib/workspace'
-import { listPortalUsers } from '@/lib/users'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { adminQueries } from '@/lib/queries/admin'
 import { UsersContainer } from '@/app/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
@@ -25,30 +25,27 @@ export const Route = createFileRoute('/admin/users')({
     sort: search.sort,
   }),
   errorComponent: UsersErrorComponent,
-  loader: async ({ deps }) => {
-    // Settings is validated in root layout
-    const { member } = await requireAuthenticatedWorkspace()
+  loader: async ({ deps, context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { member, queryClient } = context
 
     // Parse verified param
     const verified = deps.verified === 'true' ? true : deps.verified === 'false' ? false : undefined
 
-    // Fetch initial users with filters from URL
-    const usersResult = await listPortalUsers({
-      search: deps.search,
-      verified,
-      dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
-      dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
-      sort: deps.sort,
-      page: 1,
-      limit: 20,
-    })
-
-    const initialUsers = usersResult.success
-      ? usersResult.value
-      : { items: [], total: 0, hasMore: false }
+    // Pre-fetch users data using React Query
+    await queryClient.ensureQueryData(
+      adminQueries.portalUsers({
+        search: deps.search,
+        verified,
+        dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
+        dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
+        sort: deps.sort,
+        page: 1,
+        limit: 20,
+      })
+    )
 
     return {
-      initialUsers,
       currentMemberRole: member.role,
     }
   },
@@ -73,7 +70,30 @@ function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void
 }
 
 function UsersPage() {
-  const { initialUsers, currentMemberRole } = Route.useLoaderData()
+  const { currentMemberRole } = Route.useLoaderData()
+  const search = Route.useSearch()
+
+  // Parse verified param (same logic as in loader)
+  const verified =
+    search.verified === 'true' ? true : search.verified === 'false' ? false : undefined
+
+  // Read pre-fetched data from React Query cache
+  const usersQuery = useSuspenseQuery(
+    adminQueries.portalUsers({
+      search: search.search,
+      verified,
+      dateFrom: search.dateFrom ? new Date(search.dateFrom) : undefined,
+      dateTo: search.dateTo ? new Date(search.dateTo) : undefined,
+      sort: search.sort,
+      page: 1,
+      limit: 20,
+    })
+  )
+
+  // Handle error state from service Result type
+  const initialUsers = usersQuery.data.success
+    ? usersQuery.data.value
+    : { items: [], total: 0, hasMore: false }
 
   return <UsersContainer initialUsers={initialUsers} currentMemberRole={currentMemberRole} />
 }

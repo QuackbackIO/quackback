@@ -1,25 +1,25 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspace } from '@/lib/workspace'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { adminQueries } from '@/lib/queries/admin'
 import { Settings } from 'lucide-react'
 import { StatusList } from '@/app/admin/settings/statuses/status-list'
-import { listPublicStatuses } from '@/lib/statuses'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
-  loader: async () => {
-    // Settings is validated in root layout
-    await requireWorkspace()
+  loader: async ({ context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { queryClient } = context
 
-    // Services now return TypeIDs directly
-    const statusesResult = await listPublicStatuses()
-    const statuses = statusesResult.success ? statusesResult.value : []
+    // Pre-fetch statuses using React Query
+    await queryClient.ensureQueryData(adminQueries.statuses())
 
-    return { statuses }
+    return {}
   },
   component: StatusesPage,
 })
 
 function StatusesPage() {
-  const { statuses } = Route.useLoaderData()
+  // Read pre-fetched data from React Query cache
+  const statusesQuery = useSuspenseQuery(adminQueries.statuses())
 
   return (
     <div className="space-y-6">
@@ -36,7 +36,7 @@ function StatusesPage() {
         </div>
       </div>
 
-      <StatusList initialStatuses={statuses} />
+      <StatusList initialStatuses={statusesQuery.data} />
     </div>
   )
 }

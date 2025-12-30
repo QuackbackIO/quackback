@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspace } from '@/lib/workspace'
-import { fetchTeamMembersAndInvitations } from '@/lib/server-functions/settings'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { TeamHeader } from '@/app/admin/settings/team/team-header'
@@ -8,24 +8,26 @@ import { PendingInvitations } from '@/app/admin/settings/team/pending-invitation
 import type { UserId } from '@quackback/ids'
 
 export const Route = createFileRoute('/admin/settings/team')({
-  loader: async () => {
-    // Settings is validated in root layout
-    const { settings } = await requireWorkspace()
+  loader: async ({ context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { settings, queryClient } = context
 
-    const { members, avatarMap, formattedInvitations } = await fetchTeamMembersAndInvitations()
+    // Pre-fetch team data using React Query
+    await queryClient.ensureQueryData(settingsQueries.teamMembersAndInvitations())
 
     return {
       settings,
-      members,
-      avatarMap,
-      formattedInvitations,
     }
   },
   component: TeamPage,
 })
 
 function TeamPage() {
-  const { settings, members, avatarMap, formattedInvitations } = Route.useLoaderData()
+  const { settings } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
+  const { members, avatarMap, formattedInvitations } = teamDataQuery.data
 
   return (
     <div className="space-y-6">

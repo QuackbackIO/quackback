@@ -1,31 +1,28 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireAuthenticatedWorkspace } from '@/lib/workspace'
-import { listPublicStatuses } from '@/lib/statuses'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { adminQueries } from '@/lib/queries/admin'
 import { RoadmapAdmin } from '@/components/admin/roadmap-admin'
 
 export const Route = createFileRoute('/admin/roadmap')({
-  loader: async () => {
-    // Settings is validated in root layout
-    await requireAuthenticatedWorkspace()
+  loader: async ({ context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { queryClient } = context
 
-    // Get statuses marked for roadmap display (services now return TypeIDs directly)
-    const statusesResult = await listPublicStatuses()
-    const allStatuses = statusesResult.success ? statusesResult.value : []
-    const roadmapStatuses = allStatuses.filter((s) => s.showOnRoadmap)
+    // Pre-fetch roadmap statuses using React Query
+    await queryClient.ensureQueryData(adminQueries.roadmapStatuses())
 
-    return {
-      roadmapStatuses,
-    }
+    return {}
   },
   component: RoadmapPage,
 })
 
 function RoadmapPage() {
-  const { roadmapStatuses } = Route.useLoaderData()
+  // Read pre-fetched data from React Query cache
+  const roadmapStatusesQuery = useSuspenseQuery(adminQueries.roadmapStatuses())
 
   return (
     <main className="h-full">
-      <RoadmapAdmin statuses={roadmapStatuses} />
+      <RoadmapAdmin statuses={roadmapStatusesQuery.data} />
     </main>
   )
 }

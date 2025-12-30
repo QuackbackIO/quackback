@@ -1,31 +1,33 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspaceRole } from '@/lib/workspace'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { Plug2 } from 'lucide-react'
-import { fetchIntegrationsList } from '@/lib/server-functions/admin'
+import { adminQueries } from '@/lib/queries/admin'
 import { IntegrationList } from '@/app/admin/settings/integrations/integration-list'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
-  loader: async () => {
-    // Validate workspace role
-    await requireWorkspaceRole(['owner', 'admin'])
+  loader: async ({ context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { queryClient } = context
 
-    // Fetch existing integrations (minimal data for catalog view)
-    const rawIntegrations = await fetchIntegrationsList()
+    // Pre-fetch integrations data
+    await queryClient.ensureQueryData(adminQueries.integrations())
 
-    // Map to simplified status format for the catalog
-    const integrations = rawIntegrations.map((i) => ({
-      id: i.integrationType,
-      status: i.status as 'active' | 'paused' | 'error',
-      workspaceName: i.externalWorkspaceName || undefined,
-    }))
-
-    return { integrations }
+    return {}
   },
   component: IntegrationsPage,
 })
 
 function IntegrationsPage() {
-  const { integrations } = Route.useLoaderData()
+  // Read pre-fetched data from React Query cache
+  const integrationsQuery = useSuspenseQuery(adminQueries.integrations())
+  const rawIntegrations = integrationsQuery.data
+
+  // Map to simplified status format for the catalog
+  const integrations = rawIntegrations.map((i) => ({
+    id: i.integrationType,
+    status: i.status as 'active' | 'paused' | 'error',
+    workspaceName: i.externalWorkspaceName || undefined,
+  }))
 
   return (
     <div className="space-y-6">

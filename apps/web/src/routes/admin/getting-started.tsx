@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { requireWorkspace } from '@/lib/workspace'
-import { fetchOnboardingStatus } from '@/lib/server-functions/admin'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { adminQueries } from '@/lib/queries/admin'
 import { MessageSquare, Users, Palette, Plug, Check, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,64 +24,65 @@ const taskIcons: Record<string, React.ComponentType<{ className?: string }>> = {
 }
 
 export const Route = createFileRoute('/admin/getting-started')({
-  loader: async () => {
-    // Settings is validated in root layout
-    const { settings } = await requireWorkspace()
+  loader: async ({ context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { settings, queryClient } = context
 
-    const status = await fetchOnboardingStatus()
+    // Pre-fetch onboarding status using React Query
+    await queryClient.ensureQueryData(adminQueries.onboardingStatus())
 
-    const tasks: OnboardingTask[] = [
-      {
-        id: 'create-board',
-        title: 'Create your first board',
-        description: 'Set up a feedback board where users can submit and vote on ideas',
-        isCompleted: status.hasBoards,
-        href: '/admin/settings/boards',
-        actionLabel: 'Create Board',
-        completedLabel: 'View Boards',
-      },
-      {
-        id: 'invite-team',
-        title: 'Invite team members',
-        description: 'Add your team to collaborate on feedback management',
-        isCompleted: status.memberCount > 1,
-        href: '/admin/settings/team',
-        actionLabel: 'Invite Members',
-        completedLabel: 'Manage Team',
-      },
-      {
-        id: 'customize-branding',
-        title: 'Customize branding',
-        description: 'Add your logo and brand colors to match your product',
-        isCompleted: false,
-        href: '/admin/settings',
-        actionLabel: 'Customize',
-        completedLabel: 'Edit Branding',
-      },
-      {
-        id: 'connect-integrations',
-        title: 'Connect integrations',
-        description: 'Connect GitHub, Slack, or Discord to streamline your workflow',
-        isCompleted: false,
-        href: '/admin/settings',
-        actionLabel: 'Connect',
-        completedLabel: 'Manage Integrations',
-      },
-    ]
-
-    const completedCount = tasks.filter((t) => t.isCompleted).length
-
-    return {
-      settings,
-      tasks,
-      completedCount,
-    }
+    return { settings }
   },
   component: GettingStartedPage,
 })
 
 function GettingStartedPage() {
-  const { settings, tasks, completedCount } = Route.useLoaderData()
+  const { settings } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const statusQuery = useSuspenseQuery(adminQueries.onboardingStatus())
+  const status = statusQuery.data
+
+  const tasks: OnboardingTask[] = [
+    {
+      id: 'create-board',
+      title: 'Create your first board',
+      description: 'Set up a feedback board where users can submit and vote on ideas',
+      isCompleted: status.hasBoards,
+      href: '/admin/settings/boards',
+      actionLabel: 'Create Board',
+      completedLabel: 'View Boards',
+    },
+    {
+      id: 'invite-team',
+      title: 'Invite team members',
+      description: 'Add your team to collaborate on feedback management',
+      isCompleted: status.memberCount > 1,
+      href: '/admin/settings/team',
+      actionLabel: 'Invite Members',
+      completedLabel: 'Manage Team',
+    },
+    {
+      id: 'customize-branding',
+      title: 'Customize branding',
+      description: 'Add your logo and brand colors to match your product',
+      isCompleted: false,
+      href: '/admin/settings',
+      actionLabel: 'Customize',
+      completedLabel: 'Edit Branding',
+    },
+    {
+      id: 'connect-integrations',
+      title: 'Connect integrations',
+      description: 'Connect GitHub, Slack, or Discord to streamline your workflow',
+      isCompleted: false,
+      href: '/admin/settings',
+      actionLabel: 'Connect',
+      completedLabel: 'Manage Integrations',
+    },
+  ]
+
+  const completedCount = tasks.filter((t) => t.isCompleted).length
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-8">

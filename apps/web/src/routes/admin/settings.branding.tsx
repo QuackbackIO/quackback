@@ -1,43 +1,45 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspace } from '@/lib/workspace'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/queries/settings'
 import { Brush } from 'lucide-react'
 import { ThemeCustomizer } from '@/app/admin/settings/branding/theme-customizer'
 import { LogoUploader } from '@/app/admin/settings/branding/logo-uploader'
 import { HeaderBranding } from '@/app/admin/settings/branding/header-branding'
 import { CustomCssEditor } from '@/app/admin/settings/branding/custom-css-editor'
-import { getBrandingConfig, getCustomCss } from '@/lib/settings'
-import { getSettingsLogoData, getSettingsHeaderLogoData } from '@/lib/settings-utils'
 
 export const Route = createFileRoute('/admin/settings/branding')({
-  loader: async () => {
-    // Settings is validated in root layout
-    const { settings } = await requireWorkspace()
+  loader: async ({ context }) => {
+    // User, member, and settings are validated in parent /admin layout
+    const { settings, queryClient } = context
 
-    // Fetch branding config from service
-    const brandingConfigResult = await getBrandingConfig()
-    const brandingConfig = brandingConfigResult.success ? brandingConfigResult.value : {}
-
-    // Get logo, header branding data, and custom CSS for SSR
-    const [logoData, headerData, customCssResult] = await Promise.all([
-      getSettingsLogoData(),
-      getSettingsHeaderLogoData(),
-      getCustomCss(),
+    // Pre-fetch all branding data in parallel using React Query
+    await Promise.all([
+      queryClient.ensureQueryData(settingsQueries.branding()),
+      queryClient.ensureQueryData(settingsQueries.logo()),
+      queryClient.ensureQueryData(settingsQueries.headerLogo()),
+      queryClient.ensureQueryData(settingsQueries.customCss()),
     ])
-    const customCss = customCssResult.success ? customCssResult.value : null
 
     return {
       settings,
-      brandingConfig,
-      logoData,
-      headerData,
-      customCss,
     }
   },
   component: BrandingPage,
 })
 
 function BrandingPage() {
-  const { settings, brandingConfig, logoData, headerData, customCss } = Route.useLoaderData()
+  const { settings } = Route.useLoaderData()
+
+  // Read pre-fetched data from React Query cache
+  const brandingConfigQuery = useSuspenseQuery(settingsQueries.branding())
+  const logoDataQuery = useSuspenseQuery(settingsQueries.logo())
+  const headerDataQuery = useSuspenseQuery(settingsQueries.headerLogo())
+  const customCssQuery = useSuspenseQuery(settingsQueries.customCss())
+
+  const brandingConfig = brandingConfigQuery.data ?? {}
+  const logoData = logoDataQuery.data
+  const headerData = headerDataQuery.data
+  const customCss = customCssQuery.data || null
 
   return (
     <div className="space-y-6">
