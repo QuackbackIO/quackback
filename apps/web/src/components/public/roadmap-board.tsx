@@ -12,10 +12,17 @@ import type { PostStatusEntity, Roadmap } from '@/lib/db'
 interface RoadmapBoardProps {
   statuses: PostStatusEntity[]
   initialRoadmaps?: Roadmap[]
+  initialSelectedRoadmapId?: string | null
 }
 
-export function RoadmapBoard({ statuses, initialRoadmaps }: RoadmapBoardProps) {
-  const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null)
+export function RoadmapBoard({
+  statuses,
+  initialRoadmaps,
+  initialSelectedRoadmapId,
+}: RoadmapBoardProps) {
+  const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(
+    initialSelectedRoadmapId ?? null
+  )
 
   const { data: roadmaps } = usePublicRoadmaps({
     enabled: !initialRoadmaps,
@@ -24,7 +31,7 @@ export function RoadmapBoard({ statuses, initialRoadmaps }: RoadmapBoardProps) {
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []
   const selectedRoadmap = availableRoadmaps.find((r) => r.id === selectedRoadmapId)
 
-  // Auto-select first roadmap when loaded
+  // Auto-select first roadmap when loaded (fallback if not pre-selected)
   useEffect(() => {
     if (availableRoadmaps.length > 0 && selectedRoadmapId === null) {
       setSelectedRoadmapId(availableRoadmaps[0].id)

@@ -14,10 +14,7 @@ import {
   addPostToRoadmapAction,
   removePostFromRoadmapAction,
 } from '@/lib/actions/roadmaps'
-import {
-  getPublicRoadmapPostsAction,
-  getRoadmapPostsByStatusAction,
-} from '@/lib/actions/public-posts'
+import { getRoadmapPostsByStatusAction } from '@/lib/actions/public-posts'
 
 // ============================================================================
 // Query Key Factory
@@ -179,6 +176,7 @@ interface UsePublicRoadmapPostsOptions {
 
 /**
  * Hook to fetch posts for a public roadmap (no auth required)
+ * Now aligned with portal query pattern for cache sharing with SSR
  */
 export function usePublicRoadmapPosts({
   roadmapId,
@@ -186,9 +184,12 @@ export function usePublicRoadmapPosts({
   enabled = true,
 }: UsePublicRoadmapPostsOptions) {
   return useInfiniteQuery({
-    queryKey: [...roadmapPostsKeys.all, 'public', roadmapId, statusId ?? 'all'],
-    queryFn: async ({ pageParam }): Promise<RoadmapPostsListResult> => {
-      const result = await getPublicRoadmapPostsAction({
+    // Use portal query key pattern to match pre-fetched cache from loader
+    queryKey: ['portal', 'roadmapPosts', roadmapId, statusId],
+    queryFn: async ({ pageParam = 0 }): Promise<RoadmapPostsListResult> => {
+      // Use server function instead of action for consistency
+      const { fetchPublicRoadmapPosts } = await import('@/lib/server-functions/portal')
+      return fetchPublicRoadmapPosts({
         data: {
           roadmapId,
           statusId,
@@ -196,10 +197,6 @@ export function usePublicRoadmapPosts({
           offset: pageParam,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as RoadmapPostsListResult
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),

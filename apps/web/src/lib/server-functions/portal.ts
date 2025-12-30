@@ -4,7 +4,8 @@ import { listPublicBoardsWithStats } from '@/lib/boards'
 import { listPublicStatuses } from '@/lib/statuses'
 import { listPublicTags } from '@/lib/tags'
 import { getBulkMemberAvatarData } from '@/lib/avatar'
-import type { PostId, MemberId } from '@quackback/ids'
+import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps'
+import type { PostId, MemberId, RoadmapId, StatusId } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
 
 /**
@@ -94,4 +95,35 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const { getSubscriptionStatus } = await import('@/lib/subscriptions')
     return await getSubscriptionStatus(data.memberId, data.postId)
+  })
+
+/**
+ * Fetch all public roadmaps
+ */
+export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
+  const result = await listPublicRoadmaps()
+  if (!result.success) {
+    throw new Error(result.error.message)
+  }
+  return result.value
+})
+
+/**
+ * Fetch posts for a specific roadmap + status combination
+ */
+export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
+  .inputValidator(
+    (params: { roadmapId: RoadmapId; statusId?: StatusId; limit?: number; offset?: number }) =>
+      params
+  )
+  .handler(async ({ data }) => {
+    const result = await getPublicRoadmapPosts(data.roadmapId, {
+      statusId: data.statusId,
+      limit: data.limit ?? 20,
+      offset: data.offset ?? 0,
+    })
+    if (!result.success) {
+      throw new Error(result.error.message)
+    }
+    return result.value
   })

@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, MemberId } from '@quackback/ids'
+import type { PostId, MemberId, RoadmapId, StatusId } from '@quackback/ids'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
@@ -7,6 +7,8 @@ import {
   fetchPublicTags,
   fetchVotedPosts,
   fetchAvatars,
+  fetchPublicRoadmaps,
+  fetchPublicRoadmapPosts,
 } from '@/lib/server-functions/portal'
 
 /**
@@ -71,5 +73,32 @@ export const portalQueries = {
       queryFn: () => fetchAvatars({ data: memberIds }),
       // Avatars don't change often
       staleTime: 5 * 60 * 1000, // 5 minutes
+    }),
+
+  /**
+   * List all public roadmaps
+   */
+  roadmaps: () =>
+    queryOptions({
+      queryKey: ['portal', 'roadmaps'],
+      queryFn: () => fetchPublicRoadmaps(),
+      // Roadmaps don't change often
+      staleTime: 2 * 60 * 1000, // 2 minutes
+    }),
+
+  /**
+   * List posts for a roadmap column (roadmap + status combination)
+   */
+  roadmapPosts: (params: {
+    roadmapId: RoadmapId
+    statusId: StatusId
+    limit?: number
+    offset?: number
+  }) =>
+    queryOptions({
+      // Don't include offset/limit in query key to allow cache sharing with infinite queries
+      queryKey: ['portal', 'roadmapPosts', params.roadmapId, params.statusId],
+      queryFn: () => fetchPublicRoadmapPosts({ data: params }),
+      staleTime: 60 * 1000, // 1 minute
     }),
 }

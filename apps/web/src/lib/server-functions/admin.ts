@@ -136,7 +136,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
 
     // Check if user has a member record
     let memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, userId),
+      where: eq(member.userId, userId as UserId),
     })
 
     if (!memberRecord) {
