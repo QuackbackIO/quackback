@@ -32,10 +32,11 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * schema.parse('550e8400-e29b-41d4-a716-446655440000') // Error: not TypeID format
  */
 export function typeIdSchema<P extends IdPrefix>(prefix: P) {
-  // Validate TypeID format and return as branded TypeId<P> type
-  // Using z.string().refine() for better Zod v4 compatibility
+  // Simplified schema for TanStack Start compatibility
+  // Returns z.ZodString which works better with TanStack's type inference
+  // The branded type TypeId<P> is enforced through runtime validation
   return z.string().refine(
-    (val): val is TypeId<P> => {
+    (val) => {
       try {
         const tid = TypeID.fromString(val)
         return tid.getType() === prefix
@@ -44,7 +45,7 @@ export function typeIdSchema<P extends IdPrefix>(prefix: P) {
       }
     },
     { message: `Invalid ${prefix} ID format. Expected: ${prefix}_<base32>` }
-  ) as z.ZodType<TypeId<P>>
+  )
 }
 
 // ============================================

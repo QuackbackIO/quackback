@@ -473,8 +473,6 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .handler(
     async ({
       data,
-    }: {
-      data: GetVoteSidebarDataInput
     }): Promise<{
       userIdentifier: string
       isMember: boolean

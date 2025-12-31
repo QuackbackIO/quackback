@@ -128,8 +128,8 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
 
 export const fetchVotedPosts = createServerFn({ method: 'GET' })
   .inputValidator(fetchVotedPostsSchema)
-  .handler(async ({ data }: { data: { postIds: PostId[]; userIdentifier: string } }) => {
-    const result = await getUserVotedPostIds(data.postIds, data.userIdentifier)
+  .handler(async ({ data }) => {
+    const result = await getUserVotedPostIds(data.postIds as PostId[], data.userIdentifier)
     if (!result.success) {
       return []
     }
@@ -178,9 +178,9 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
  */
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .inputValidator(fetchAvatarsSchema)
-  .handler(async ({ data }: { data: MemberId[] }) => {
-    // Filter out nulls
-    const validMemberIds = data.filter((id): id is MemberId => id !== null)
+  .handler(async ({ data }) => {
+    // Filter out nulls and cast to MemberId
+    const validMemberIds = (data as MemberId[]).filter((id): id is MemberId => id !== null)
 
     if (validMemberIds.length === 0) {
       return {}
@@ -225,8 +225,8 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
  */
 export const checkUserVoted = createServerFn({ method: 'GET' })
   .inputValidator(checkUserVotedSchema)
-  .handler(async ({ data }: { data: { postId: PostId; userIdentifier: string } }) => {
-    const result = await hasUserVoted(data.postId, data.userIdentifier)
+  .handler(async ({ data }) => {
+    const result = await hasUserVoted(data.postId as PostId, data.userIdentifier)
     return result.success ? result.value : false
   })
 
@@ -235,8 +235,8 @@ export const checkUserVoted = createServerFn({ method: 'GET' })
  */
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .inputValidator(fetchSubscriptionStatusSchema)
-  .handler(async ({ data }: { data: { memberId: MemberId; postId: PostId } }) => {
-    return await getSubscriptionStatus(data.memberId, data.postId)
+  .handler(async ({ data }) => {
+    return await getSubscriptionStatus(data.memberId as MemberId, data.postId as PostId)
   })
 
 /**
@@ -260,23 +260,17 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
  */
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicRoadmapPostsSchema)
-  .handler(
-    async ({
-      data,
-    }: {
-      data: { roadmapId: RoadmapId; statusId?: StatusId; limit?: number; offset?: number }
-    }) => {
-      const result = await getPublicRoadmapPosts(data.roadmapId, {
-        statusId: data.statusId,
-        limit: data.limit ?? 20,
-        offset: data.offset ?? 0,
-      })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.value
+  .handler(async ({ data }) => {
+    const result = await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
+      statusId: data.statusId as StatusId | undefined,
+      limit: data.limit ?? 20,
+      offset: data.offset ?? 0,
+    })
+    if (!result.success) {
+      throw new Error(result.error.message)
     }
-  )
+    return result.value
+  })
 
 /**
  * Get comments section data (optional auth).
@@ -287,8 +281,6 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
   .handler(
     async ({
       data,
-    }: {
-      data: { commentMemberIds: MemberId[] }
     }): Promise<{
       isMember: boolean
       canComment: boolean
@@ -312,7 +304,9 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       const canComment = isMember
 
       // Fetch avatar URLs for all comment authors
-      const validMemberIds = data.commentMemberIds.filter((id): id is MemberId => id !== null)
+      const validMemberIds = (data.commentMemberIds as MemberId[]).filter(
+        (id): id is MemberId => id !== null
+      )
       let commentAvatarMap: Record<string, string | null> = {}
 
       if (validMemberIds.length > 0) {
