@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect, useRef } from 'react'
 import { OAuthButtons } from './oauth-buttons'
 import { Input } from '@/components/ui/input'

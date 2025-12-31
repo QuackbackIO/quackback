@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { acceptInvitationAction } from '@/lib/actions/invitations'
-import { getProfileAction } from '@/lib/actions/user'
+import { acceptInvitationFn } from '@/lib/server-functions/invitations'
+import { getProfileFn } from '@/lib/server-functions/user'
 
 export const Route = createFileRoute('/accept-invitation/$id')({
   component: AcceptInvitationPage,
@@ -29,18 +29,14 @@ function AcceptInvitationPage() {
 
       try {
         // Check if user is a portal user (portal users can't accept team invitations)
-        const profileResult = await getProfileAction()
-        if (profileResult.success && profileResult.data.userType === 'portal') {
+        const profileResult = await getProfileFn()
+        if (profileResult.userType === 'portal') {
           throw new Error(
             'Portal users cannot accept team invitations. Please sign up with a team account or contact your administrator.'
           )
         }
 
-        const result = await acceptInvitationAction({ data: id })
-
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to accept invitation')
-        }
+        await acceptInvitationFn({ data: id })
 
         setStatus('success')
         // Redirect to admin dashboard after a short delay

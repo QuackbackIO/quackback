@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import Papa from 'papaparse'
 import { validateApiWorkspaceAccess } from '@/lib/workspace'
 import { requireRole } from '@/lib/api-handler'
-import { getJobAdapter, type ImportJobData } from '@quackback/jobs'
+import { processImport } from '@/lib/import/import-service'
+import type { ImportInput } from '@/lib/import/types'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
 import { getBoardById, listBoards } from '@/lib/boards'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
@@ -125,28 +126,28 @@ export const Route = createFileRoute('/api/import/')({
           // Encode CSV as base64 for job queue
           const csvContent = Buffer.from(csvText).toString('base64')
 
-          // Create job data
-          const jobData: ImportJobData = {
+          // Create import data
+          const importData: ImportInput = {
             boardId: targetBoardId!,
             csvContent,
             totalRows,
             initiatedByMemberId: validation.member.id,
           }
 
-          // Get job adapter
-          const jobAdapter = getJobAdapter()
-
-          // Add job to queue/workflow
-          const jobId = await jobAdapter.addImportJob(jobData)
+          // Process import inline (synchronous)
+          const result = await processImport(importData)
 
           return Response.json({
-            jobId,
-            status: 'waiting',
+            imported: result.imported,
+            skipped: result.skipped,
+            errors: result.errors,
+            createdTags: result.createdTags,
             totalRows,
           })
         } catch (error) {
-          console.error('Error creating import job:', error)
-          return Response.json({ error: 'Internal server error' }, { status: 500 })
+          console.error('Error processing import:', error)
+          const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+          return Response.json({ error: errorMessage }, { status: 500 })
         }
       },
     },

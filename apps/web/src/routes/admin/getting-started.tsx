@@ -89,7 +89,7 @@ function GettingStartedPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-foreground">Getting Started</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Complete these steps to set up {settings.name}
+          Complete these steps to set up {settings!.name}
         </p>
         <div className="mt-4 flex items-center gap-3">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">

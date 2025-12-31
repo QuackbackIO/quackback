@@ -1,5 +1,3 @@
-'use client'
-
 import { useEditor, EditorContent, type Editor, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'

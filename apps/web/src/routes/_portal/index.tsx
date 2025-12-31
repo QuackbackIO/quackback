@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { FeedbackContainer } from '@/app/(portal)/feedback-container'
+import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { portalQueries } from '@/lib/queries/portal'
 
@@ -63,7 +63,9 @@ export const Route = createFileRoute('/_portal/')({
 
     // Pre-fetch voted posts and avatars
     const postIds = posts.items.map((p) => p.id)
-    const postMemberIds = posts.items.map((p) => p.memberId).filter(Boolean)
+    const postMemberIds = posts.items
+      .map((p) => p.memberId)
+      .filter((id): id is `member_${string}` => id !== null)
 
     await Promise.all([
       queryClient.ensureQueryData(portalQueries.votedPosts(postIds, userIdentifier)),
@@ -114,7 +116,7 @@ function PublicPortalPage() {
       <FeedbackContainer
         workspaceName={org.name}
         boards={boardsQuery.data}
-        posts={postsQuery.data.items}
+        posts={postsQuery.data.items as any}
         statuses={statusesQuery.data}
         tags={tagsQuery.data}
         hasMore={postsQuery.data.hasMore}

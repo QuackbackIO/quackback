@@ -1,5 +1,4 @@
-'use client'
-
+import { useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -35,6 +34,11 @@ interface AuthDialogProps {
  */
 export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
+
+  // DEBUG: Log when dialog state changes
+  useEffect(() => {
+    console.log('[AuthDialog] isOpen:', isOpen, 'mode:', mode)
+  }, [isOpen, mode])
 
   // Listen for auth success broadcasts from popup windows
   // The onAuthSuccess callback handles session updates via router.invalidate()

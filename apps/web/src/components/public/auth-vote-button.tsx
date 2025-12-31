@@ -1,5 +1,3 @@
-'use client'
-
 import { VoteButton } from './vote-button'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import type { PostId } from '@quackback/ids'

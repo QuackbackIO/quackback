@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useCallback, useEffect } from 'react'
 import { Bell, BellRing, Check, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -12,11 +10,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  getSubscriptionStatusAction,
-  subscribeToPostAction,
-  unsubscribeFromPostAction,
-  muteSubscriptionAction,
-} from '@/lib/actions/subscriptions'
+  fetchSubscriptionStatus,
+  subscribeToPostFn,
+  unsubscribeFromPostFn,
+  muteSubscriptionFn,
+} from '@/lib/server-functions/subscriptions'
 import type { PostId } from '@quackback/ids'
 
 type SubscriptionLevel = 'all' | 'status_only' | 'none'
@@ -55,10 +53,8 @@ export function SubscriptionBell({
 
   const fetchStatus = async () => {
     try {
-      const result = await getSubscriptionStatusAction({ data: { postId } })
-      if (result.success) {
-        setStatus(result.data)
-      }
+      const result = await fetchSubscriptionStatus({ data: { postId } })
+      setStatus(result)
     } catch (error) {
       console.error('Failed to fetch subscription status:', error)
     }
@@ -74,32 +70,29 @@ export function SubscriptionBell({
 
       setLoading(true)
       try {
-        let result: { success: boolean; data?: SubscriptionStatus; error?: { message: string } }
-
         if (level === 'none') {
           // Unsubscribe
-          result = await unsubscribeFromPostAction({ data: { postId } })
+          await unsubscribeFromPostFn({ data: { postId } })
         } else if (level === 'all') {
           // Subscribe to all (unmuted)
           if (!status.subscribed) {
-            result = await subscribeToPostAction({ data: { postId, reason: 'manual' } })
+            await subscribeToPostFn({ data: { postId, reason: 'manual' } })
           } else {
             // Already subscribed, just unmute
-            result = await muteSubscriptionAction({ data: { postId, muted: false } })
+            await muteSubscriptionFn({ data: { postId, muted: false } })
           }
         } else {
           // Subscribe to status only (muted)
           if (!status.subscribed) {
             // Subscribe first
-            await subscribeToPostAction({ data: { postId, reason: 'manual' } })
+            await subscribeToPostFn({ data: { postId, reason: 'manual' } })
           }
           // Then mute
-          result = await muteSubscriptionAction({ data: { postId, muted: true } })
+          await muteSubscriptionFn({ data: { postId, muted: true } })
         }
 
-        if (result!.success && result!.data) {
-          setStatus(result!.data)
-        }
+        // Refetch status after update
+        await fetchStatus()
       } catch (error) {
         console.error('Failed to update subscription:', error)
       } finally {

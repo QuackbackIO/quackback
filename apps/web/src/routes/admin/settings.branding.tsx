@@ -2,10 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { Brush } from 'lucide-react'
-import { ThemeCustomizer } from '@/app/admin/settings/branding/theme-customizer'
-import { LogoUploader } from '@/app/admin/settings/branding/logo-uploader'
-import { HeaderBranding } from '@/app/admin/settings/branding/header-branding'
-import { CustomCssEditor } from '@/app/admin/settings/branding/custom-css-editor'
+import { ThemeCustomizer } from '@/components/admin/settings/branding/theme-customizer'
+import { LogoUploader } from '@/components/admin/settings/branding/logo-uploader'
+import { HeaderBranding } from '@/components/admin/settings/branding/header-branding'
+import { CustomCssEditor } from '@/components/admin/settings/branding/custom-css-editor'
 
 export const Route = createFileRoute('/admin/settings/branding')({
   loader: async ({ context }) => {
@@ -65,7 +65,7 @@ function BrandingPage() {
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
-          <LogoUploader workspaceName={settings.name} initialLogoUrl={logoData?.url ?? null} />
+          <LogoUploader workspaceName={settings!.name} initialLogoUrl={logoData?.url ?? null} />
         </div>
       </div>
 
@@ -79,7 +79,7 @@ function BrandingPage() {
         </div>
         <div className="rounded-xl border border-border bg-card p-6">
           <HeaderBranding
-            workspaceName={settings.name}
+            workspaceName={settings!.name}
             logoUrl={logoData?.url ?? null}
             initialHeaderLogoUrl={headerData?.url ?? null}
             initialDisplayMode={
@@ -102,7 +102,7 @@ function BrandingPage() {
         <ThemeCustomizer
           initialThemeConfig={brandingConfig}
           logoUrl={logoData?.url ?? null}
-          workspaceName={settings.name}
+          workspaceName={settings!.name}
           headerLogoUrl={headerData?.url ?? null}
           headerDisplayMode={
             (headerData?.displayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ??

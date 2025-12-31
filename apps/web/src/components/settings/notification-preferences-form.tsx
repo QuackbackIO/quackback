@@ -1,12 +1,10 @@
-'use client'
-
 import { useState, useEffect, useCallback } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-react'
 import {
-  getNotificationPreferencesAction,
-  updateNotificationPreferencesAction,
-} from '@/lib/actions/user'
+  getNotificationPreferencesFn,
+  updateNotificationPreferencesFn,
+} from '@/lib/server-functions/user'
 interface Preferences {
   emailStatusChange: boolean
   emailNewComment: boolean
@@ -22,11 +20,8 @@ export function NotificationPreferencesForm() {
   useEffect(() => {
     async function fetchPreferences() {
       try {
-        const result = await getNotificationPreferencesAction()
-        if (!result.success) {
-          throw new Error(result.error.message)
-        }
-        setPreferences(result.data as Preferences)
+        const result = await getNotificationPreferencesFn()
+        setPreferences(result as Preferences)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load preferences')
       } finally {
@@ -48,17 +43,13 @@ export function NotificationPreferencesForm() {
       setPreferences((prev) => (prev ? { ...prev, [key]: value } : prev))
 
       try {
-        const result = await updateNotificationPreferencesAction({
+        const result = await updateNotificationPreferencesFn({
           data: {
             [key]: value,
           },
         })
 
-        if (!result.success) {
-          throw new Error(result.error.message)
-        }
-
-        setPreferences(result.data as Preferences)
+        setPreferences(result as Preferences)
       } catch (err) {
         // Revert on error
         setPreferences((prev) => (prev ? { ...prev, [key]: !value } : prev))

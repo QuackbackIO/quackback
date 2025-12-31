@@ -1,5 +1,3 @@
-'use client'
-
 import { useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useDroppable } from '@dnd-kit/core'

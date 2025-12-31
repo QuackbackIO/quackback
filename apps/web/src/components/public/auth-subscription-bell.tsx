@@ -1,5 +1,3 @@
-'use client'
-
 import { SubscriptionBell } from './subscription-bell'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import type { PostId } from '@quackback/ids'

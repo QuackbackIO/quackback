@@ -1,5 +1,3 @@
-'use client'
-
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
 

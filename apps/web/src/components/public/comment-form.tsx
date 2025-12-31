@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
@@ -18,13 +16,13 @@ import { signOut } from '@/lib/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { createCommentAction } from '@/lib/actions/comments'
+import { createCommentFn } from '@/lib/server-functions/comments'
 import type { PostId, CommentId } from '@quackback/ids'
 
 interface SubmitCommentParams {
   postId: PostId
   content: string
-  parentId?: CommentId | null
+  parentId?: CommentId
   authorName?: string | null
   authorEmail?: string | null
   memberId?: string | null
@@ -78,7 +76,7 @@ export function CommentForm({
     resolver: standardSchemaResolver(commentSchema),
     defaultValues: {
       content: '',
-      parentId: parentId || null,
+      parentId: parentId || undefined,
     },
   })
 
@@ -88,7 +86,7 @@ export function CommentForm({
     const submitParams: SubmitCommentParams = {
       postId,
       content: data.content.trim(),
-      parentId: parentId || null,
+      parentId: parentId || undefined,
       authorName: effectiveUser?.name || null,
       authorEmail: effectiveUser?.email || null,
       memberId: effectiveUser?.memberId || null,
@@ -110,17 +108,13 @@ export function CommentForm({
     // Otherwise, use default server action behavior
     startTransition(async () => {
       try {
-        const result = await createCommentAction({
+        await createCommentFn({
           data: {
             postId,
             content: submitParams.content,
             parentId: submitParams.parentId,
           },
         })
-
-        if (!result.success) {
-          throw new Error(result.error.message || 'Failed to post comment')
-        }
 
         form.reset()
         onSuccess?.()
@@ -186,7 +180,7 @@ export function CommentForm({
                 signOut({
                   fetchOptions: {
                     onSuccess: () => {
-                      refetchSession()
+                      router.invalidate()
                     },
                   },
                 })

@@ -1,5 +1,3 @@
-'use client'
-
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'

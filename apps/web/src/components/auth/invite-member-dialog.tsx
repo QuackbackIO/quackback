@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
@@ -29,7 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { sendInvitationAction } from '@/lib/actions/admin'
+import { sendInvitationFn } from '@/lib/server-functions/admin'
 
 interface InviteMemberDialogProps {
   open: boolean
@@ -53,17 +51,13 @@ export function InviteMemberDialog({ open, onClose }: InviteMemberDialogProps) {
     setError('')
 
     try {
-      const result = await sendInvitationAction({
+      await sendInvitationFn({
         data: {
           email: data.email,
           name: data.name || undefined,
           role: data.role,
         },
       })
-
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
 
       setSuccess(true)
       form.reset()

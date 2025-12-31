@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { User } from 'lucide-react'
-import { ProfileForm } from '@/app/(portal)/settings/profile/profile-form'
+import { ProfileForm } from '@/components/settings/profile-form'
 
 export const Route = createFileRoute('/_portal/settings/profile')({
   loader: async ({ context }) => {

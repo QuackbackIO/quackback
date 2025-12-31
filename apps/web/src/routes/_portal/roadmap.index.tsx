@@ -32,14 +32,14 @@ export const Route = createFileRoute('/_portal/roadmap/')({
           const queryKey = ['portal', 'roadmapPosts', firstRoadmapId, statusId]
 
           // Fetch the first page
-          const firstPage = await portalQueries
-            .roadmapPosts({
+          const firstPage = await queryClient.fetchQuery(
+            portalQueries.roadmapPosts({
               roadmapId: firstRoadmapId,
               statusId,
               limit: 20,
               offset: 0,
             })
-            .queryFn()
+          )
 
           // Set the data in infinite query format
           queryClient.setQueryData(queryKey, {
@@ -51,7 +51,7 @@ export const Route = createFileRoute('/_portal/roadmap/')({
     }
 
     return {
-      firstRoadmapId: roadmaps.length > 0 ? roadmaps[0].id : null,
+      firstRoadmapId: roadmaps.length > 0 ? (roadmaps[0]?.id ?? null) : null,
       roadmapStatusIds: roadmapStatuses.map((s) => s.id),
     }
   },
@@ -76,8 +76,8 @@ function RoadmapPage() {
       </div>
 
       <RoadmapBoard
-        statuses={statuses}
-        initialRoadmaps={roadmaps}
+        statuses={statuses as any}
+        initialRoadmaps={roadmaps as any}
         initialSelectedRoadmapId={loaderData.firstRoadmapId}
       />
     </div>

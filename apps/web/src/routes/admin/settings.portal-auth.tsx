@@ -3,7 +3,7 @@ import { requireWorkspaceRole } from '@/lib/workspace'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { Lock } from 'lucide-react'
-import { PortalAuthSettings } from '@/app/admin/settings/portal-auth/portal-auth-settings'
+import { PortalAuthSettings } from '@/components/admin/settings/portal-auth/portal-auth-settings'
 
 export const Route = createFileRoute('/admin/settings/portal-auth')({
   loader: async ({ context }) => {

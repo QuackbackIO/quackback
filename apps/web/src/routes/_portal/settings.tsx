@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { requireWorkspace, getCurrentUserRole } from '@/lib/workspace'
 import { PortalHeader } from '@/components/public/portal-header'
-import { SettingsNav } from '@/app/(portal)/settings/settings-nav'
+import { SettingsNav } from '@/components/settings/settings-nav'
 import { getUserAvatarData } from '@/lib/avatar'
 import { getSettingsBrandingData } from '@/lib/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'

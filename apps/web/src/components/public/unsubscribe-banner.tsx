@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect } from 'react'
 import { useSearch } from '@tanstack/react-router'
 import { CheckCircle, X } from 'lucide-react'

@@ -20,7 +20,7 @@ export const Route = createFileRoute('/admin/signup')({
   loaderDeps: ({ search }) => ({ invitation: search.invitation }),
   loader: async ({ deps, context }) => {
     // Settings already available from root context
-    const { settings } = context
+    const { settings, queryClient } = context
     if (!settings) {
       throw redirect({ to: '/workspace-not-found' })
     }

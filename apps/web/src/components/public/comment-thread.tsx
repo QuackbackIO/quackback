@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useTransition, useEffect } from 'react'
 import { Reply, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CommentForm } from './comment-form'
 import { cn, getInitials } from '@/lib/utils'
 import { REACTION_EMOJIS } from '@/lib/db-types'
-import { toggleReactionAction } from '@/lib/actions/comments'
+import { toggleReactionFn } from '@/lib/server-functions/comments'
 import type { CommentId, PostId } from '@quackback/ids'
 
 interface CommentReaction {
@@ -131,16 +129,14 @@ function CommentItem({
     setShowEmojiPicker(false)
     startTransition(async () => {
       try {
-        const result = await toggleReactionAction({
+        const result = await toggleReactionFn({
           data: {
             commentId: comment.id,
             emoji,
           },
         })
 
-        if (result.success) {
-          setReactions(result.data.reactions)
-        }
+        setReactions(result.reactions)
       } catch (error) {
         console.error('Failed to toggle reaction:', error)
       }

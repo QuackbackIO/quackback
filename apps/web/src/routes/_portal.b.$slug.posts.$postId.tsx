@@ -5,16 +5,13 @@ import { ArrowLeft } from 'lucide-react'
 import { portalDetailQueries } from '@/lib/queries/portal-detail'
 import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
-import {
-  VoteSidebar,
-  VoteSidebarSkeleton,
-} from '@/app/(portal)/b/[slug]/posts/[postId]/_components/vote-sidebar'
-import { PostContentSection } from '@/app/(portal)/b/[slug]/posts/[postId]/_components/post-content-section'
-import { OfficialResponseSection } from '@/app/(portal)/b/[slug]/posts/[postId]/_components/official-response-section'
+import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
+import { PostContentSection } from '@/components/public/post-detail/post-content-section'
+import { OfficialResponseSection } from '@/components/public/post-detail/official-response-section'
 import {
   CommentsSection,
   CommentsSectionSkeleton,
-} from '@/app/(portal)/b/[slug]/posts/[postId]/_components/comments-section'
+} from '@/components/public/post-detail/comments-section'
 import { isValidTypeId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/schemas/posts'
 
@@ -70,6 +67,12 @@ function PostDetailPage() {
 
   const board = boardQuery.data
   const post = postQuery.data
+
+  // Null safety check - ensure post and board are available
+  if (!post || !board) {
+    return <div>Post not found</div>
+  }
+
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
 
   // Type the serialized fields for rendering

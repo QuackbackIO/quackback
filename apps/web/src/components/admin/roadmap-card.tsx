@@ -1,5 +1,3 @@
-'use client'
-
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { ChevronUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'

@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { Map, Plus, Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,7 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
-import { addPostToRoadmapAction, removePostFromRoadmapAction } from '@/lib/actions/roadmaps'
+import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server-functions/roadmaps'
 import type { PostStatusEntity } from '@/lib/db'
 import type { PostId, RoadmapId } from '@quackback/ids'
 
@@ -47,14 +45,14 @@ export function AddToRoadmapDropdown({
     setPendingRoadmapId(roadmapId)
     try {
       if (isCurrentlyOn) {
-        await removePostFromRoadmapAction({
+        await removePostFromRoadmapFn({
           data: {
             roadmapId: roadmapId as RoadmapId,
             postId,
           },
         })
       } else {
-        await addPostToRoadmapAction({
+        await addPostToRoadmapFn({
           data: {
             roadmapId: roadmapId as RoadmapId,
             postId,

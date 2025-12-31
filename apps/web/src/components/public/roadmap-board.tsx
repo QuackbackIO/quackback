@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect } from 'react'
 import { Map } from 'lucide-react'
 import { RoadmapColumn } from './roadmap-column'

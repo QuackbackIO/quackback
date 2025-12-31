@@ -1,5 +1,3 @@
-'use client'
-
 import { ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePostVote } from '@/lib/hooks/use-post-vote'

@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/queries/admin'
 import { Settings } from 'lucide-react'
-import { StatusList } from '@/app/admin/settings/statuses/status-list'
+import { StatusList } from '@/components/admin/settings/statuses/status-list'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
   loader: async ({ context }) => {

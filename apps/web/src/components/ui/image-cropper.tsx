@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useCallback, useEffect } from 'react'
 import Cropper from 'react-easy-crop'
 import type { Area, MediaSize } from 'react-easy-crop'

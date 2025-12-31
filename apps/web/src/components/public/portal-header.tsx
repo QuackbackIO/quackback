@@ -1,6 +1,4 @@
-'use client'
-
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -17,7 +15,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { LogOut, Settings, Shield } from 'lucide-react'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { getUserRoleAction } from '@/lib/actions/user'
+import { getUserRoleFn } from '@/lib/server-functions/user'
 
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
@@ -60,6 +58,11 @@ export function PortalHeader({
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
 
+  // DEBUG: Log context availability on mount
+  useEffect(() => {
+    console.log('[PortalHeader] authPopover context:', authPopover ? 'AVAILABLE' : 'NULL')
+  }, [authPopover])
+
   // Use custom display name if provided, otherwise fall back to org name
   const displayName = headerDisplayName || orgName
 
@@ -70,12 +73,8 @@ export function PortalHeader({
   // Fetch role when session changes
   const fetchRole = async () => {
     try {
-      const result = await getUserRoleAction()
-      if (result.success) {
-        setClientRole(result.data.role)
-      } else {
-        setClientRole(null)
-      }
+      const result = await getUserRoleFn()
+      setClientRole(result.role)
       setIsRoleFetched(true)
     } catch {
       setClientRole(null)
@@ -187,10 +186,23 @@ export function PortalHeader({
       ) : openAuthPopover ? (
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              console.log('[PortalHeader] Login button clicked')
+              openAuthPopover({ mode: 'login' })
+            }}
+          >
             Log in
           </Button>
-          <Button size="sm" onClick={() => openAuthPopover({ mode: 'signup' })}>
+          <Button
+            size="sm"
+            onClick={() => {
+              console.log('[PortalHeader] Signup button clicked')
+              openAuthPopover({ mode: 'signup' })
+            }}
+          >
             Sign up
           </Button>
         </div>

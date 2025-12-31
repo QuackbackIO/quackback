@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { checkOnboardingState } from '@/lib/server-functions/admin'
-import { OnboardingWizard } from '@/app/onboarding/onboarding-wizard'
+import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
 
 export const Route = createFileRoute('/onboarding')({
   loader: async ({ context }) => {

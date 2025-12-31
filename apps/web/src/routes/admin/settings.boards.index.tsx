@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { adminQueries } from '@/lib/queries/admin'
 import { Layout, MessageSquare } from 'lucide-react'
-import { CreateBoardDialog } from '@/app/admin/settings/boards/create-board-dialog'
+import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 
 export const Route = createFileRoute('/admin/settings/boards/')({
   loader: async ({ context }) => {

@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { requireWorkspaceRole } from '@/lib/workspace'
-import { AdminNav } from '@/app/admin/admin-nav'
+import { AdminNav } from '@/components/admin/admin-nav'
 import { getUserAvatarData } from '@/lib/avatar'
 
 export const Route = createFileRoute('/admin')({

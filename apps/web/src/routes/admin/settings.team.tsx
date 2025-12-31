@@ -3,8 +3,8 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { TeamHeader } from '@/app/admin/settings/team/team-header'
-import { PendingInvitations } from '@/app/admin/settings/team/pending-invitations'
+import { TeamHeader } from '@/components/admin/settings/team/team-header'
+import { PendingInvitations } from '@/components/admin/settings/team/pending-invitations'
 import type { UserId } from '@quackback/ids'
 
 export const Route = createFileRoute('/admin/settings/team')({
@@ -31,7 +31,7 @@ function TeamPage() {
 
   return (
     <div className="space-y-6">
-      <TeamHeader workspaceName={settings.name} />
+      <TeamHeader workspaceName={settings!.name} />
 
       {/* Pending Invitations */}
       <PendingInvitations invitations={formattedInvitations} />

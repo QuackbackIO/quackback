@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { isSelfHosted } from '@/lib/features'
-import { SettingsNav } from '@/app/admin/settings/settings-nav'
+import { SettingsNav } from '@/components/admin/settings/settings-nav'
 
 export const Route = createFileRoute('/admin/settings')({
   component: SettingsLayout,
