@@ -162,9 +162,11 @@ export function useUpdateRoadmap() {
     mutationFn: (input: UpdateRoadmapInput) => updateRoadmapFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: roadmapKeys.lists() })
-      await queryClient.cancelQueries({ queryKey: roadmapKeys.detail(input.id) })
+      await queryClient.cancelQueries({ queryKey: roadmapKeys.detail(input.id as RoadmapId) })
       const previousList = queryClient.getQueryData<Roadmap[]>(roadmapKeys.lists())
-      const previousDetail = queryClient.getQueryData<Roadmap>(roadmapKeys.detail(input.id))
+      const previousDetail = queryClient.getQueryData<Roadmap>(
+        roadmapKeys.detail(input.id as RoadmapId)
+      )
 
       // Optimistic update for list
       queryClient.setQueryData<Roadmap[]>(roadmapKeys.lists(), (old) =>
@@ -182,7 +184,7 @@ export function useUpdateRoadmap() {
 
       // Optimistic update for detail
       if (previousDetail) {
-        queryClient.setQueryData<Roadmap>(roadmapKeys.detail(input.id), {
+        queryClient.setQueryData<Roadmap>(roadmapKeys.detail(input.id as RoadmapId), {
           ...previousDetail,
           ...(input.name !== undefined && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),
@@ -198,12 +200,12 @@ export function useUpdateRoadmap() {
         queryClient.setQueryData(roadmapKeys.lists(), context.previousList)
       }
       if (context?.previousDetail) {
-        queryClient.setQueryData(roadmapKeys.detail(input.id), context.previousDetail)
+        queryClient.setQueryData(roadmapKeys.detail(input.id as RoadmapId), context.previousDetail)
       }
     },
     onSettled: (_data, _error, input) => {
       queryClient.invalidateQueries({ queryKey: roadmapKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: roadmapKeys.detail(input.id) })
+      queryClient.invalidateQueries({ queryKey: roadmapKeys.detail(input.id as RoadmapId) })
     },
   })
 }
@@ -220,7 +222,7 @@ export function useDeleteRoadmap() {
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: roadmapKeys.lists() })
-      await queryClient.cancelQueries({ queryKey: roadmapKeys.detail(input.id) })
+      await queryClient.cancelQueries({ queryKey: roadmapKeys.detail(input.id as RoadmapId) })
       const previous = queryClient.getQueryData<Roadmap[]>(roadmapKeys.lists())
 
       // Optimistic update
@@ -229,7 +231,7 @@ export function useDeleteRoadmap() {
       )
 
       // Remove detail from cache
-      queryClient.removeQueries({ queryKey: roadmapKeys.detail(input.id) })
+      queryClient.removeQueries({ queryKey: roadmapKeys.detail(input.id as RoadmapId) })
 
       return { previous }
     },

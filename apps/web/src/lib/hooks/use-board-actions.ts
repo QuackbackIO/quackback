@@ -113,9 +113,9 @@ export function useUpdateBoard() {
     mutationFn: (input: UpdateBoardInput) => updateBoardFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
-      await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id) })
+      await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
       const previousList = queryClient.getQueryData<Board[]>(boardKeys.lists())
-      const previousDetail = queryClient.getQueryData<Board>(boardKeys.detail(input.id))
+      const previousDetail = queryClient.getQueryData<Board>(boardKeys.detail(input.id as BoardId))
 
       // Optimistic update for list
       queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
@@ -134,7 +134,7 @@ export function useUpdateBoard() {
 
       // Optimistic update for detail
       if (previousDetail) {
-        queryClient.setQueryData<Board>(boardKeys.detail(input.id), {
+        queryClient.setQueryData<Board>(boardKeys.detail(input.id as BoardId), {
           ...previousDetail,
           ...(input.name !== undefined && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),
@@ -151,12 +151,12 @@ export function useUpdateBoard() {
         queryClient.setQueryData(boardKeys.lists(), context.previousList)
       }
       if (context?.previousDetail) {
-        queryClient.setQueryData(boardKeys.detail(input.id), context.previousDetail)
+        queryClient.setQueryData(boardKeys.detail(input.id as BoardId), context.previousDetail)
       }
     },
     onSettled: (_data, _error, input) => {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.id) })
+      queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
     },
   })
 }
@@ -171,7 +171,7 @@ export function useDeleteBoard() {
     mutationFn: (input: DeleteBoardInput) => deleteBoardFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
-      await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id) })
+      await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
 
       // Optimistic update
@@ -180,7 +180,7 @@ export function useDeleteBoard() {
       )
 
       // Remove detail from cache
-      queryClient.removeQueries({ queryKey: boardKeys.detail(input.id) })
+      queryClient.removeQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
 
       return { previous }
     },
