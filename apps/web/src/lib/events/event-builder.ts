@@ -1,27 +1,27 @@
 /**
- * Event builder utilities for creating EventJobData.
+ * Event builder utilities for creating EventData.
  *
- * These helpers construct the event data structure that API routes
- * pass to jobAdapter.addEventJob().
+ * These helpers construct the event data structure that gets dispatched
+ * to the event processing system.
  *
- * Each builder returns a strongly-typed event job data object that
- * can be used with jobAdapter.addEventJob().
+ * Each builder returns a strongly-typed event data object that
+ * can be used with dispatchEvent().
  */
 
 import { randomUUID } from 'crypto'
 import type {
   EventActor,
-  PostCreatedEventJobData,
-  PostStatusChangedEventJobData,
-  CommentCreatedEventJobData,
+  PostCreatedEvent,
+  PostStatusChangedEvent,
+  CommentCreatedEvent,
   EventPostData,
   EventPostRef,
   EventCommentData,
-} from '@quackback/jobs'
+} from './types'
 import type { PostId, BoardId, CommentId } from '@quackback/ids'
 
 // Re-export EventActor for API routes that need to construct actor objects
-export type { EventActor } from '@quackback/jobs'
+export type { EventActor } from './types'
 
 /**
  * Input type for buildPostCreatedEvent - matches EventPostData but with branded IDs
@@ -67,19 +67,16 @@ export interface CommentPostInput {
  *
  * @param actor - Who triggered the event (user or system)
  * @param post - The created post data
- * @returns Strongly-typed PostCreatedEventJobData
+ * @returns Strongly-typed PostCreatedEvent
  *
  * @example
  * const event = buildPostCreatedEvent(
  *   { type: 'user', userId: ctx.userId, email: ctx.userEmail },
  *   { id: post.id, title: post.title, content: post.content, ... }
  * )
- * await jobAdapter.addEventJob(event)
+ * dispatchPostCreated(actor, post)
  */
-export function buildPostCreatedEvent(
-  actor: EventActor,
-  post: PostCreatedInput
-): PostCreatedEventJobData {
+export function buildPostCreatedEvent(actor: EventActor, post: PostCreatedInput): PostCreatedEvent {
   const postData: EventPostData = {
     id: post.id,
     title: post.title,
@@ -106,7 +103,7 @@ export function buildPostCreatedEvent(
  * @param post - Reference to the post that was updated
  * @param previousStatus - The status name before the change (e.g., "Open")
  * @param newStatus - The status name after the change (e.g., "In Progress")
- * @returns Strongly-typed PostStatusChangedEventJobData
+ * @returns Strongly-typed PostStatusChangedEvent
  *
  * @example
  * const event = buildPostStatusChangedEvent(
@@ -115,14 +112,14 @@ export function buildPostCreatedEvent(
  *   'Open',
  *   'In Progress'
  * )
- * await jobAdapter.addEventJob(event)
+ * dispatchPostStatusChanged(actor, post, 'Open', 'In Progress')
  */
 export function buildPostStatusChangedEvent(
   actor: EventActor,
   post: PostStatusChangedInput,
   previousStatus: string,
   newStatus: string
-): PostStatusChangedEventJobData {
+): PostStatusChangedEvent {
   const postRef: EventPostRef = {
     id: post.id,
     title: post.title,
@@ -144,7 +141,7 @@ export function buildPostStatusChangedEvent(
  * @param actor - Who triggered the event (user or system)
  * @param comment - The created comment data
  * @param post - Reference to the post the comment was added to
- * @returns Strongly-typed CommentCreatedEventJobData
+ * @returns Strongly-typed CommentCreatedEvent
  *
  * @example
  * const event = buildCommentCreatedEvent(
@@ -152,13 +149,13 @@ export function buildPostStatusChangedEvent(
  *   { id: comment.id, content: comment.content, authorEmail: ctx.userEmail },
  *   { id: post.id, title: post.title }
  * )
- * await jobAdapter.addEventJob(event)
+ * dispatchCommentCreated(actor, comment, post)
  */
 export function buildCommentCreatedEvent(
   actor: EventActor,
   comment: CommentCreatedInput,
   post: CommentPostInput
-): CommentCreatedEventJobData {
+): CommentCreatedEvent {
   const commentData: EventCommentData = {
     id: comment.id,
     content: comment.content,
