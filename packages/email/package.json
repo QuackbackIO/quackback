@@ -10,13 +10,12 @@
     ".": "./src/index.ts",
     "./templates": "./src/templates/index.ts"
   },
-  "scripts": {
-    "build:templates": "bun run scripts/build-templates.ts"
+  "dependencies": {
+    "@react-email/components": "^1",
+    "react": "^19",
+    "resend": "^4"
   },
   "devDependencies": {
-    "@react-email/components": "^1",
-    "@react-email/render": "^1",
-    "@types/react": "^19",
-    "react": "^19.2.1"
+    "@types/react": "^19"
   }
 }
