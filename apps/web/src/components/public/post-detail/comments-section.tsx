@@ -1,10 +1,10 @@
+import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import type { PublicComment } from '@/lib/posts'
-import { db, member, eq } from '@/lib/db'
-import { getSession } from '@/lib/auth/server'
-import { getBulkMemberAvatarData } from '@/lib/avatar'
+import { getCommentsSectionDataFn } from '@/lib/server-functions/portal'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PostId } from '@quackback/ids'
+import type { PostId, MemberId } from '@quackback/ids'
 
 /**
  * Recursively collect all member IDs from comments and their nested replies
@@ -70,25 +70,19 @@ interface CommentsSectionProps {
   comments: PublicComment[]
 }
 
-export async function CommentsSection({ postId, comments }: CommentsSectionProps) {
-  const session = await getSession()
+export function CommentsSection({ postId, comments }: CommentsSectionProps) {
+  const commentMemberIds = useMemo(() => collectCommentMemberIds(comments), [comments])
+  const commentCount = useMemo(() => countAllComments(comments), [comments])
 
-  let isMember = false
-  if (session?.user) {
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id),
-      columns: { id: true },
-    })
-    isMember = !!memberRecord
+  const { data, isLoading } = useQuery({
+    queryKey: ['comments-section', postId, commentMemberIds],
+    queryFn: () =>
+      getCommentsSectionDataFn({ data: { commentMemberIds: commentMemberIds as MemberId[] } }),
+  })
+
+  if (isLoading || !data) {
+    return <CommentsSectionSkeleton />
   }
-
-  const canComment = isMember
-
-  // Fetch avatar URLs for all comment authors
-  const commentMemberIds = collectCommentMemberIds(comments)
-  const commentAvatarMap = await getBulkMemberAvatarData(commentMemberIds)
-
-  const commentCount = countAllComments(comments)
 
   return (
     <div className="border-t border-border/30 p-6">
@@ -99,9 +93,9 @@ export async function CommentsSection({ postId, comments }: CommentsSectionProps
       <AuthCommentsSection
         postId={postId}
         comments={comments}
-        allowCommenting={canComment}
-        avatarUrls={Object.fromEntries(commentAvatarMap)}
-        user={session?.user ? { name: session.user.name, email: session.user.email } : undefined}
+        allowCommenting={data.canComment}
+        avatarUrls={data.commentAvatarMap}
+        user={data.user}
       />
     </div>
   )

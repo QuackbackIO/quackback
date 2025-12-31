@@ -13,12 +13,14 @@ import {
   listPublicPosts,
   getAllUserVotedPostIds,
   getPublicRoadmapPostsPaginated,
+  hasUserVoted,
 } from '@/lib/posts'
 import { getPublicBoardById } from '@/lib/boards'
 import { getDefaultStatus } from '@/lib/statuses'
 import { getMemberByUser } from '@/lib/members'
 import { listPublicRoadmaps } from '@/lib/roadmaps'
 import { getPublicRoadmapPosts } from '@/lib/roadmaps'
+import { getSubscriptionStatus, type SubscriptionReason } from '@/lib/subscriptions'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 import { hashIP } from '@/lib/utils/ip-hash'
 import { dispatchPostCreated } from '@/lib/events/dispatch'
@@ -36,6 +38,7 @@ import {
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
+import { getSettings } from './workspace'
 
 // ============================================
 // Schemas
@@ -97,6 +100,10 @@ const getRoadmapPostsByStatusSchema = z.object({
   limit: z.number().int().min(1).max(100).optional().default(10),
 })
 
+const getVoteSidebarDataSchema = z.object({
+  postId: postIdSchema,
+})
+
 // ============================================
 // Type Exports
 // ============================================
@@ -109,6 +116,7 @@ export type ToggleVoteInput = z.infer<typeof toggleVoteSchema>
 export type CreatePublicPostInput = z.infer<typeof createPublicPostSchema>
 export type GetPublicRoadmapPostsInput = z.infer<typeof getPublicRoadmapPostsSchema>
 export type GetRoadmapPostsByStatusInput = z.infer<typeof getRoadmapPostsByStatusSchema>
+export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
 
 // ============================================
 // Server Functions
@@ -334,7 +342,6 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
     const post = createResult.value
 
     // Get settings for organization info
-    const { getSettings } = await import('@/lib/workspace')
     const settings = await getSettings()
     if (!settings) {
       throw new Error('Organization settings not found')
@@ -456,3 +463,58 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 
     return result.value
   })
+
+/**
+ * Get vote sidebar data for a post (optional auth).
+ * Returns user identifier, membership status, vote status, and subscription status.
+ */
+export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
+  .inputValidator(getVoteSidebarDataSchema)
+  .handler(
+    async ({
+      data,
+    }: {
+      data: GetVoteSidebarDataInput
+    }): Promise<{
+      userIdentifier: string
+      isMember: boolean
+      hasVoted: boolean
+      subscriptionStatus: { subscribed: boolean; muted: boolean; reason: SubscriptionReason | null }
+    }> => {
+      const ctx = await getOptionalAuth()
+      const postId = data.postId as PostId
+
+      let userIdentifier = ''
+      let isMember = false
+      let hasVoted = false
+      let subscriptionStatus: {
+        subscribed: boolean
+        muted: boolean
+        reason: SubscriptionReason | null
+      } = {
+        subscribed: false,
+        muted: false,
+        reason: null,
+      }
+
+      // If user is authenticated and is a member
+      if (ctx.user && ctx.member) {
+        userIdentifier = getMemberIdentifier(ctx.member.id)
+        isMember = true
+
+        // Check if user has voted
+        const voteResult = await hasUserVoted(postId, userIdentifier)
+        hasVoted = voteResult.success ? voteResult.value : false
+
+        // Get subscription status
+        subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
+      }
+
+      return {
+        userIdentifier,
+        isMember,
+        hasVoted,
+        subscriptionStatus,
+      }
+    }
+  )

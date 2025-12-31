@@ -1,16 +1,19 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { listPublicPosts, getUserVotedPostIds } from '@/lib/posts'
+import { getOptionalAuth } from './auth-helpers'
+import { listPublicPosts, getUserVotedPostIds, hasUserVoted } from '@/lib/posts'
 import { listPublicBoardsWithStats } from '@/lib/boards'
 import { listPublicStatuses } from '@/lib/statuses'
 import { listPublicTags } from '@/lib/tags'
-import { getBulkMemberAvatarData } from '@/lib/avatar'
 import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps'
+import { getSubscriptionStatus } from '@/lib/subscriptions'
+import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/db'
 import {
   postIdSchema,
   memberIdSchema,
   roadmapIdSchema,
   statusIdSchema,
+  userIdSchema,
   type PostId,
   type MemberId,
   type RoadmapId,
@@ -40,6 +43,11 @@ const fetchVotedPostsSchema = z.object({
 
 const fetchAvatarsSchema = z.array(memberIdSchema)
 
+const fetchUserAvatarSchema = z.object({
+  userId: userIdSchema,
+  fallbackImageUrl: z.string().nullable().optional(),
+})
+
 const checkUserVotedSchema = z.object({
   postId: postIdSchema,
   userIdentifier: z.string(),
@@ -55,6 +63,10 @@ const fetchPublicRoadmapPostsSchema = z.object({
   statusId: statusIdSchema.optional(),
   limit: z.number().int().min(1).max(100).optional(),
   offset: z.number().int().min(0).optional(),
+})
+
+const getCommentsSectionDataSchema = z.object({
+  commentMemberIds: z.array(memberIdSchema),
 })
 
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
@@ -124,10 +136,87 @@ export const fetchVotedPosts = createServerFn({ method: 'GET' })
     return Array.from(result.value)
   })
 
+/**
+ * Fetch avatar for a single user
+ */
+export const fetchUserAvatar = createServerFn({ method: 'GET' })
+  .inputValidator(fetchUserAvatarSchema)
+  .handler(async ({ data }) => {
+    const { userId, fallbackImageUrl } = data
+
+    const userRecord = await db.query.user.findFirst({
+      where: eq(userTable.id, userId),
+      columns: {
+        imageBlob: true,
+        imageType: true,
+        image: true,
+      },
+    })
+
+    if (!userRecord) {
+      return { avatarUrl: fallbackImageUrl ?? null, hasCustomAvatar: false }
+    }
+
+    // Custom blob avatar takes precedence
+    if (userRecord.imageBlob && userRecord.imageType) {
+      const base64 = Buffer.from(userRecord.imageBlob).toString('base64')
+      return {
+        avatarUrl: `data:${userRecord.imageType};base64,${base64}`,
+        hasCustomAvatar: true,
+      }
+    }
+
+    // Fall back to OAuth image URL
+    return {
+      avatarUrl: userRecord.image ?? fallbackImageUrl ?? null,
+      hasCustomAvatar: false,
+    }
+  })
+
+/**
+ * Fetch avatars for multiple members
+ */
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .inputValidator(fetchAvatarsSchema)
   .handler(async ({ data }: { data: MemberId[] }) => {
-    const avatarMap = await getBulkMemberAvatarData(data)
+    // Filter out nulls
+    const validMemberIds = data.filter((id): id is MemberId => id !== null)
+
+    if (validMemberIds.length === 0) {
+      return {}
+    }
+
+    // Get members with their user data
+    const members = await db
+      .select({
+        memberId: memberTable.id,
+        userId: memberTable.userId,
+        imageBlob: userTable.imageBlob,
+        imageType: userTable.imageType,
+        image: userTable.image,
+      })
+      .from(memberTable)
+      .innerJoin(userTable, eq(memberTable.userId, userTable.id))
+      .where(inArray(memberTable.id, validMemberIds))
+
+    const avatarMap = new Map<MemberId, string | null>()
+
+    for (const member of members) {
+      if (member.imageBlob && member.imageType) {
+        const base64 = Buffer.from(member.imageBlob).toString('base64')
+        avatarMap.set(member.memberId, `data:${member.imageType};base64,${base64}`)
+      } else {
+        avatarMap.set(member.memberId, member.image)
+      }
+    }
+
+    // Fill in null for any members not found
+    for (const memberId of validMemberIds) {
+      if (!avatarMap.has(memberId)) {
+        avatarMap.set(memberId, null)
+      }
+    }
+
     return Object.fromEntries(avatarMap)
   })
 
@@ -137,7 +226,6 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
 export const checkUserVoted = createServerFn({ method: 'GET' })
   .inputValidator(checkUserVotedSchema)
   .handler(async ({ data }: { data: { postId: PostId; userIdentifier: string } }) => {
-    const { hasUserVoted } = await import('@/lib/posts')
     const result = await hasUserVoted(data.postId, data.userIdentifier)
     return result.success ? result.value : false
   })
@@ -148,7 +236,6 @@ export const checkUserVoted = createServerFn({ method: 'GET' })
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .inputValidator(fetchSubscriptionStatusSchema)
   .handler(async ({ data }: { data: { memberId: MemberId; postId: PostId } }) => {
-    const { getSubscriptionStatus } = await import('@/lib/subscriptions')
     return await getSubscriptionStatus(data.memberId, data.postId)
   })
 
@@ -188,5 +275,86 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
         throw new Error(result.error.message)
       }
       return result.value
+    }
+  )
+
+/**
+ * Get comments section data (optional auth).
+ * Returns membership status and avatar URLs for comment authors.
+ */
+export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
+  .inputValidator(getCommentsSectionDataSchema)
+  .handler(
+    async ({
+      data,
+    }: {
+      data: { commentMemberIds: MemberId[] }
+    }): Promise<{
+      isMember: boolean
+      canComment: boolean
+      commentAvatarMap: Record<string, string | null>
+      user: { name: string; email: string } | null
+    }> => {
+      const ctx = await getOptionalAuth()
+
+      let isMember = false
+      let user: { name: string; email: string } | null = null
+
+      // If user is authenticated and is a member
+      if (ctx.user && ctx.member) {
+        isMember = true
+        user = {
+          name: ctx.user.name,
+          email: ctx.user.email,
+        }
+      }
+
+      const canComment = isMember
+
+      // Fetch avatar URLs for all comment authors
+      const validMemberIds = data.commentMemberIds.filter((id): id is MemberId => id !== null)
+      let commentAvatarMap: Record<string, string | null> = {}
+
+      if (validMemberIds.length > 0) {
+        // Get members with their user data
+        const members = await db
+          .select({
+            memberId: memberTable.id,
+            userId: memberTable.userId,
+            imageBlob: userTable.imageBlob,
+            imageType: userTable.imageType,
+            image: userTable.image,
+          })
+          .from(memberTable)
+          .innerJoin(userTable, eq(memberTable.userId, userTable.id))
+          .where(inArray(memberTable.id, validMemberIds))
+
+        const avatarMap = new Map<MemberId, string | null>()
+
+        for (const member of members) {
+          if (member.imageBlob && member.imageType) {
+            const base64 = Buffer.from(member.imageBlob).toString('base64')
+            avatarMap.set(member.memberId, `data:${member.imageType};base64,${base64}`)
+          } else {
+            avatarMap.set(member.memberId, member.image)
+          }
+        }
+
+        // Fill in null for any members not found
+        for (const memberId of validMemberIds) {
+          if (!avatarMap.has(memberId)) {
+            avatarMap.set(memberId, null)
+          }
+        }
+
+        commentAvatarMap = Object.fromEntries(avatarMap)
+      }
+
+      return {
+        isMember,
+        canComment,
+        commentAvatarMap,
+        user,
+      }
     }
   )

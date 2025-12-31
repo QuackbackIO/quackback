@@ -1,12 +1,9 @@
-import { db, member, eq } from '@/lib/db'
-import { hasUserVoted } from '@/lib/posts'
-import { getMemberIdentifier } from '@/lib/user-identifier'
-import { getSession } from '@/lib/auth/server'
-import { getSubscriptionStatus } from '@/lib/subscriptions'
+import { useQuery } from '@tanstack/react-query'
+import { getVoteSidebarDataFn } from '@/lib/server-functions/public-posts'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PostId, MemberId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 
 export function VoteSidebarSkeleton() {
   return (
@@ -25,40 +22,14 @@ interface VoteSidebarProps {
   initialVoteCount: number
 }
 
-export async function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps) {
-  const session = await getSession()
+export function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['vote-sidebar', postId],
+    queryFn: () => getVoteSidebarDataFn({ data: { postId } }),
+  })
 
-  let userIdentifier = ''
-  let isMember = false
-  let memberRecord: { id: string } | undefined
-
-  if (session?.user) {
-    memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id),
-      columns: { id: true },
-    })
-    if (memberRecord) {
-      userIdentifier = getMemberIdentifier(memberRecord.id)
-      isMember = true
-    }
-  }
-
-  // Check if user has voted
-  let hasVotedResult = false
-  if (userIdentifier) {
-    const voteResult = await hasUserVoted(postId, userIdentifier)
-    hasVotedResult = voteResult.success ? voteResult.value : false
-  }
-
-  // Check subscription status
-  let subscriptionStatus: { subscribed: boolean; muted: boolean; reason: string | null } = {
-    subscribed: false,
-    muted: false,
-    reason: null,
-  }
-  if (isMember && memberRecord) {
-    const memberId = memberRecord.id as MemberId
-    subscriptionStatus = await getSubscriptionStatus(memberId, postId)
+  if (isLoading || !data) {
+    return <VoteSidebarSkeleton />
   }
 
   return (
@@ -66,13 +37,13 @@ export async function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps
       <AuthVoteButton
         postId={postId}
         initialVoteCount={initialVoteCount}
-        initialHasVoted={hasVotedResult}
-        disabled={!isMember}
+        initialHasVoted={data.hasVoted}
+        disabled={!data.isMember}
       />
       <AuthSubscriptionBell
         postId={postId}
-        initialStatus={subscriptionStatus}
-        disabled={!isMember}
+        initialStatus={data.subscriptionStatus}
+        disabled={!data.isMember}
       />
     </div>
   )
