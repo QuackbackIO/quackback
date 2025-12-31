@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getSession, requireAuth } from '../server'
-import type { Session } from '../server'
+import { getSession, requireAuth } from '@/lib/server-functions/auth'
+import type { Session } from '@/lib/server-functions/auth'
 
 // Mock Next.js headers
 vi.mock('next/headers', () => ({
