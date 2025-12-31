@@ -1,5 +1,3 @@
-'use client'
-
 import {
   useQuery,
   useInfiniteQuery,
@@ -8,20 +6,21 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query'
 import {
-  listInboxPostsAction,
-  getPostWithDetailsAction,
-  changePostStatusAction,
-  updatePostAction,
-  updatePostTagsAction,
-  createPostAction,
-} from '@/lib/actions/posts'
-import { toggleVoteAction, createCommentAction, toggleReactionAction } from '@/lib/actions'
-import type { InboxFilters } from '@/app/admin/feedback/use-inbox-filters'
+  fetchInboxPostsForAdmin,
+  fetchPostWithDetails,
+  changePostStatusFn,
+  updatePostFn,
+  updatePostTagsFn,
+  createPostFn,
+} from '@/lib/server-functions/posts'
+import { toggleVoteFn } from '@/lib/server-functions/public-posts'
+import { createCommentFn, toggleReactionFn } from '@/lib/server-functions/comments'
+import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type {
   PostDetails,
   CommentReaction,
   CommentWithReplies,
-} from '@/app/admin/feedback/inbox-types'
+} from '@/components/admin/feedback/inbox-types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db'
 import type { BoardId, CommentId, MemberId, PostId, StatusId, TagId } from '@quackback/ids'
 
@@ -42,7 +41,7 @@ export const inboxKeys = {
 // ============================================================================
 
 async function fetchInboxPosts(filters: InboxFilters, page: number): Promise<InboxPostListResult> {
-  const result = await listInboxPostsAction({
+  return (await fetchInboxPostsForAdmin({
     data: {
       boardIds: filters.board as BoardId[] | undefined,
       statusIds: filters.status as StatusId[] | undefined,
@@ -56,28 +55,15 @@ async function fetchInboxPosts(filters: InboxFilters, page: number): Promise<Inb
       page,
       limit: 20,
     },
-  })
-
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-
-  return result.data as InboxPostListResult
+  })) as unknown as InboxPostListResult
 }
 
 async function fetchPostDetail(postId: PostId): Promise<PostDetails> {
-  const result = await getPostWithDetailsAction({
+  return (await fetchPostWithDetails({
     data: {
       id: postId,
     },
-  })
-
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-
-  // Cast the result data to PostDetails - the types are compatible
-  return result.data as unknown as PostDetails
+  })) as unknown as PostDetails
 }
 
 // ============================================================================
@@ -147,16 +133,12 @@ export function useChangePostStatusId() {
 
   return useMutation({
     mutationFn: async ({ postId, statusId }: { postId: PostId; statusId: StatusId }) => {
-      const result = await changePostStatusAction({
+      return await changePostStatusFn({
         data: {
           id: postId,
           statusId,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     onSuccess: (_data, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
@@ -171,16 +153,12 @@ export function useUpdatePostOwner() {
 
   return useMutation({
     mutationFn: async ({ postId, ownerId }: { postId: PostId; ownerId: MemberId | null }) => {
-      const result = await updatePostAction({
+      return await updatePostFn({
         data: {
           id: postId,
           ownerId,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     onMutate: async ({ postId, ownerId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
@@ -244,16 +222,12 @@ export function useUpdatePostTags() {
 
   return useMutation({
     mutationFn: async ({ postId, tagIds }: UpdateTagsInput) => {
-      const result = await updatePostTagsAction({
+      return await updatePostTagsFn({
         data: {
           id: postId,
-          tagIds,
+          tagIds: tagIds as TagId[],
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     onMutate: async ({ postId, tagIds, allTags }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
@@ -318,16 +292,12 @@ export function useUpdateOfficialResponse() {
 
   return useMutation({
     mutationFn: async ({ postId, response }: { postId: PostId; response: string | null }) => {
-      const result = await updatePostAction({
+      return await updatePostFn({
         data: {
           id: postId,
           officialResponse: response,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     onSuccess: (data, { postId }) => {
       queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) => {
@@ -379,13 +349,10 @@ export function useToggleCommentReaction() {
       commentId,
       emoji,
     }: ToggleReactionInput): Promise<ToggleReactionResponse> => {
-      const result = await toggleReactionAction({ data: { commentId, emoji } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
+      const result = await toggleReactionFn({ data: { commentId, emoji } })
       // The action returns { added, reactions } from the domain service
       // reactions already has { emoji, count, hasReacted } for each reaction
-      return { reactions: result.data.reactions }
+      return { reactions: result.reactions }
     },
     onMutate: async ({ postId, commentId, emoji }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
@@ -511,18 +478,14 @@ export function useUpdatePost() {
       content,
       contentJson,
     }: UpdatePostInput): Promise<UpdatePostResponse> => {
-      const result = await updatePostAction({
+      return (await updatePostFn({
         data: {
           id: postId,
           title,
           content,
           contentJson: contentJson as { type: 'doc'; content?: unknown[] },
         },
-      })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as UpdatePostResponse
+      })) as UpdatePostResponse
     },
     onMutate: async ({ postId, title, content, contentJson, statusId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
@@ -606,13 +569,7 @@ export function useVotePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (postId: PostId): Promise<VotePostResponse> => {
-      const result = await toggleVoteAction({ data: { postId } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (postId: PostId): Promise<VotePostResponse> => toggleVoteFn({ data: { postId } }),
     onMutate: async (postId) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
@@ -724,17 +681,13 @@ export function useAddComment() {
 
   return useMutation({
     mutationFn: async ({ postId, content, parentId }: AddCommentInput) => {
-      const result = await createCommentAction({
+      return await createCommentFn({
         data: {
           postId,
           content: content.trim(),
-          parentId: parentId || null,
+          parentId: parentId || undefined,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     onMutate: async ({ postId, content, parentId, authorName, authorEmail, memberId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
@@ -835,7 +788,7 @@ export function useCreatePost() {
 
   return useMutation({
     mutationFn: async (input: CreatePostInput): Promise<CreatePostResponse> => {
-      const result = await createPostAction({
+      return (await createPostFn({
         data: {
           title: input.title,
           content: input.content,
@@ -844,13 +797,7 @@ export function useCreatePost() {
           statusId: input.statusId,
           tagIds: input.tagIds as TagId[],
         },
-      })
-
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-
-      return result.data as CreatePostResponse
+      })) as CreatePostResponse
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })

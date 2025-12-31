@@ -1,16 +1,14 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Roadmap } from '@/lib/db'
 import type { RoadmapId } from '@quackback/ids'
 import {
-  listRoadmapsAction,
-  createRoadmapAction,
-  updateRoadmapAction,
-  deleteRoadmapAction,
-  reorderRoadmapsAction,
-} from '@/lib/actions/roadmaps'
-import { listPublicRoadmapsAction } from '@/lib/actions/public-posts'
+  fetchRoadmaps,
+  createRoadmapFn,
+  updateRoadmapFn,
+  deleteRoadmapFn,
+  reorderRoadmapsFn,
+} from '@/lib/server-functions/roadmaps'
+import { listPublicRoadmapsFn } from '@/lib/server-functions/public-posts'
 
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
@@ -30,11 +28,7 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.list(),
     queryFn: async (): Promise<Roadmap[]> => {
-      const result = await listRoadmapsAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as Roadmap[]
+      return (await fetchRoadmaps()) as unknown as Roadmap[]
     },
     enabled,
   })
@@ -46,13 +40,7 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
 export function usePublicRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.publicList(),
-    queryFn: async (): Promise<Roadmap[]> => {
-      const result = await listPublicRoadmapsAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as Roadmap[]
-    },
+    queryFn: (): Promise<Roadmap[]> => listPublicRoadmapsFn() as unknown as Promise<Roadmap[]>,
     enabled,
   })
 }
@@ -72,18 +60,14 @@ export function useCreateRoadmap() {
 
   return useMutation({
     mutationFn: async (input: CreateRoadmapInput): Promise<Roadmap> => {
-      const result = await createRoadmapAction({
+      return (await createRoadmapFn({
         data: {
           name: input.name,
           slug: input.slug,
           description: input.description,
           isPublic: input.isPublic,
         },
-      })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as Roadmap
+      })) as unknown as Roadmap
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
@@ -111,18 +95,14 @@ export function useUpdateRoadmap() {
       roadmapId: RoadmapId
       input: UpdateRoadmapInput
     }): Promise<Roadmap> => {
-      const result = await updateRoadmapAction({
+      return (await updateRoadmapFn({
         data: {
           id: roadmapId,
           name: input.name,
           description: input.description,
           isPublic: input.isPublic,
         },
-      })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as Roadmap
+      })) as unknown as Roadmap
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
@@ -138,14 +118,11 @@ export function useDeleteRoadmap() {
 
   return useMutation({
     mutationFn: async (roadmapId: RoadmapId): Promise<void> => {
-      const result = await deleteRoadmapAction({
+      await deleteRoadmapFn({
         data: {
           id: roadmapId,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
@@ -161,14 +138,11 @@ export function useReorderRoadmaps() {
 
   return useMutation({
     mutationFn: async (roadmapIds: string[]): Promise<void> => {
-      const result = await reorderRoadmapsAction({
+      await reorderRoadmapsFn({
         data: {
           roadmapIds,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })

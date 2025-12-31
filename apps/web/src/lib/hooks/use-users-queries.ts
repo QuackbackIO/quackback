@@ -1,5 +1,3 @@
-'use client'
-
 import {
   useQuery,
   useInfiniteQuery,
@@ -7,14 +5,14 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type { UsersFilters } from '@/app/admin/users/use-users-filters'
+import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@/lib/users'
 import type { MemberId } from '@quackback/ids'
 import {
-  listPortalUsersAction,
-  getPortalUserAction,
-  deletePortalUserAction,
-} from '@/lib/actions/admin'
+  listPortalUsersFn,
+  getPortalUserFn,
+  deletePortalUserFn,
+} from '@/lib/server-functions/admin'
 
 // ============================================================================
 // Query Key Factory
@@ -51,21 +49,17 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
   return useInfiniteQuery({
     queryKey: usersKeys.list(filters),
     queryFn: async ({ pageParam }): Promise<PortalUserListResult> => {
-      const result = await listPortalUsersAction({
+      return (await listPortalUsersFn({
         data: {
           search: filters.search,
           verified: filters.verified,
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
-          sort: filters.sort ?? 'newest',
+          sort: (filters.sort || 'newest') as 'newest' | 'oldest' | 'most_active',
           page: pageParam,
           limit: 20,
         },
-      })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as PortalUserListResult
+      })) as unknown as PortalUserListResult
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
@@ -96,15 +90,11 @@ export function useUserDetail({ memberId, enabled = true }: UseUserDetailOptions
   return useQuery({
     queryKey: usersKeys.detail(memberId!),
     queryFn: async (): Promise<PortalUserDetail> => {
-      const result = await getPortalUserAction({
+      return (await getPortalUserFn({
         data: {
           memberId: memberId!,
         },
-      })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as PortalUserDetail
+      })) as unknown as PortalUserDetail
     },
     enabled: enabled && !!memberId,
     staleTime: 30 * 1000,
@@ -124,15 +114,11 @@ export function useRemovePortalUser() {
 
   return useMutation({
     mutationFn: async (memberId: MemberId) => {
-      const result = await deletePortalUserAction({
+      return await deletePortalUserFn({
         data: {
           memberId,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     onMutate: async (memberId) => {
       // Cancel outgoing refetches

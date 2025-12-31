@@ -1,14 +1,11 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  createCommentAction,
-  getCommentPermissionsAction,
-  userEditCommentAction,
-  userDeleteCommentAction,
-  toggleReactionAction,
-} from '@/lib/actions/comments'
-import type { ActionError } from '@/lib/actions/types'
+  createCommentFn,
+  getCommentPermissionsFn,
+  userEditCommentFn,
+  userDeleteCommentFn,
+  toggleReactionFn,
+} from '@/lib/server-functions/comments'
 import type { PostId, CommentId } from '@quackback/ids'
 import { postKeys } from './use-post-actions'
 
@@ -45,11 +42,11 @@ export function useCommentPermissions({ commentId, enabled = true }: UseCommentP
   return useQuery({
     queryKey: commentKeys.permission(commentId),
     queryFn: async (): Promise<CommentPermissions> => {
-      const result = await getCommentPermissionsAction({ data: { commentId } })
-      if (!result.success) {
+      try {
+        return await getCommentPermissionsFn({ data: { commentId } })
+      } catch {
         return { canEdit: false, canDelete: false }
       }
-      return result.data
     },
     enabled,
     staleTime: 30 * 1000, // 30 seconds
@@ -63,7 +60,7 @@ export function useCommentPermissions({ commentId, enabled = true }: UseCommentP
 interface UseCreateCommentOptions {
   postId: PostId
   onSuccess?: (comment: unknown) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -74,24 +71,20 @@ export function useCreateComment({ postId, onSuccess, onError }: UseCreateCommen
 
   return useMutation({
     mutationFn: async (input: { content: string; parentId?: string | null }) => {
-      const result = await createCommentAction({
+      return await createCommentFn({
         data: {
           postId,
           content: input.content,
-          parentId: input.parentId,
+          parentId: (input.parentId || undefined) as CommentId | undefined,
         },
       })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
     },
     onSuccess: (data) => {
       // Invalidate post details to refresh comments
       queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
       onSuccess?.(data)
     },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -101,7 +94,7 @@ interface UseEditCommentOptions {
   commentId: CommentId
   postId: PostId
   onSuccess?: (comment: unknown) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -112,11 +105,7 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
 
   return useMutation({
     mutationFn: async (content: string) => {
-      const result = await userEditCommentAction({ data: { commentId, content } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
+      return await userEditCommentFn({ data: { commentId, content } })
     },
     onSuccess: (data) => {
       // Invalidate post details to refresh comments
@@ -125,7 +114,7 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
       queryClient.invalidateQueries({ queryKey: commentKeys.permission(commentId) })
       onSuccess?.(data)
     },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -135,7 +124,7 @@ interface UseDeleteCommentOptions {
   commentId: CommentId
   postId: PostId
   onSuccess?: () => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -151,18 +140,14 @@ export function useDeleteComment({
 
   return useMutation({
     mutationFn: async () => {
-      const result = await userDeleteCommentAction({ data: { commentId } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
+      return await userDeleteCommentFn({ data: { commentId } })
     },
     onSuccess: () => {
       // Invalidate post details to refresh comments
       queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
       onSuccess?.()
     },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -175,7 +160,7 @@ interface UseToggleReactionOptions {
     added: boolean
     reactions: Array<{ emoji: string; count: number; hasReacted: boolean }>
   }) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -191,18 +176,14 @@ export function useToggleReaction({
 
   return useMutation({
     mutationFn: async (emoji: string) => {
-      const result = await toggleReactionAction({ data: { commentId, emoji } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
+      return await toggleReactionFn({ data: { commentId, emoji } })
     },
     onSuccess: (data) => {
       // Invalidate post details to refresh reaction counts
       queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
       onSuccess?.(data)
     },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })

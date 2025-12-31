@@ -1,15 +1,13 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listTagsAction,
-  createTagAction,
-  updateTagAction,
-  deleteTagAction,
+  fetchTags,
+  createTagFn,
+  updateTagFn,
+  deleteTagFn,
   type CreateTagInput,
   type UpdateTagInput,
   type DeleteTagInput,
-} from '@/lib/actions/tags'
+} from '@/lib/server-functions/tags'
 import type { Tag } from '@/lib/db'
 import type { TagId } from '@quackback/ids'
 
@@ -38,11 +36,7 @@ export function useTags({ enabled = true }: UseTagsOptions = {}) {
   return useQuery({
     queryKey: tagKeys.lists(),
     queryFn: async () => {
-      const result = await listTagsAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await fetchTags()
     },
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -60,13 +54,7 @@ export function useCreateTag() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreateTagInput): Promise<Tag> => {
-      const result = await createTagAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: CreateTagInput) => createTagFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
       const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
@@ -102,13 +90,7 @@ export function useUpdateTag() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: UpdateTagInput): Promise<Tag> => {
-      const result = await updateTagAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: UpdateTagInput) => updateTagFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
       const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
@@ -143,11 +125,7 @@ export function useDeleteTag() {
 
   return useMutation({
     mutationFn: async (input: DeleteTagInput): Promise<{ id: string }> => {
-      const result = await deleteTagAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await deleteTagFn({ data: input })
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: tagKeys.lists() })

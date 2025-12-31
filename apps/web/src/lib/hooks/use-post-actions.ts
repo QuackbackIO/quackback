@@ -1,15 +1,13 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listInboxPostsAction,
-  createPostAction,
-  getPostWithDetailsAction,
-  updatePostAction,
-  deletePostAction,
-  changePostStatusAction,
-  updatePostTagsAction,
-  restorePostAction,
+  fetchInboxPostsForAdmin,
+  createPostFn,
+  fetchPostWithDetails,
+  updatePostFn,
+  deletePostFn,
+  changePostStatusFn,
+  updatePostTagsFn,
+  restorePostFn,
   type ListInboxPostsInput,
   type CreatePostInput,
   type UpdatePostInput,
@@ -17,7 +15,7 @@ import {
   type ChangeStatusInput,
   type UpdateTagsInput,
   type RestorePostInput,
-} from '@/lib/actions/posts'
+} from '@/lib/server-functions/posts'
 import type { PostId } from '@quackback/ids'
 
 // ============================================================================
@@ -88,7 +86,7 @@ export function useInboxPosts({
   return useQuery({
     queryKey: postKeys.list(filters),
     queryFn: async () => {
-      const result = await listInboxPostsAction({
+      return await fetchInboxPostsForAdmin({
         data: {
           boardIds,
           statusIds,
@@ -104,10 +102,6 @@ export function useInboxPosts({
           limit,
         } as ListInboxPostsInput,
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     enabled,
     staleTime: 1 * 60 * 1000, // 1 minute
@@ -126,15 +120,11 @@ export function usePostDetails({ postId, enabled = true }: UsePostDetailsOptions
   return useQuery({
     queryKey: postKeys.detail(postId),
     queryFn: async () => {
-      const result = await getPostWithDetailsAction({
+      return await fetchPostWithDetails({
         data: {
           id: postId,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     enabled,
     staleTime: 30 * 1000, // 30 seconds
@@ -153,11 +143,7 @@ export function useCreatePost() {
 
   return useMutation({
     mutationFn: async (input: CreatePostInput) => {
-      const result = await createPostAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await createPostFn({ data: input })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.lists() })
@@ -173,11 +159,7 @@ export function useUpdatePost() {
 
   return useMutation({
     mutationFn: async (input: UpdatePostInput) => {
-      const result = await updatePostAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await updatePostFn({ data: input })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.lists() })
@@ -193,12 +175,8 @@ export function useDeletePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: DeletePostInput): Promise<{ success: boolean }> => {
-      const result = await deletePostAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+    mutationFn: async (input: DeletePostInput) => {
+      return await deletePostFn({ data: input })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.lists() })
@@ -214,11 +192,7 @@ export function useChangePostStatus(postId: PostId) {
 
   return useMutation({
     mutationFn: async (input: ChangeStatusInput) => {
-      const result = await changePostStatusAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await changePostStatusFn({ data: input })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.lists() })
@@ -234,12 +208,8 @@ export function useUpdatePostTags(postId: PostId) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: UpdateTagsInput): Promise<{ success: boolean }> => {
-      const result = await updatePostTagsAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+    mutationFn: async (input: UpdateTagsInput) => {
+      return await updatePostTagsFn({ data: input })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.lists() })
@@ -255,12 +225,8 @@ export function useRestorePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: RestorePostInput): Promise<{ success: boolean }> => {
-      const result = await restorePostAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+    mutationFn: async (input: RestorePostInput) => {
+      return await restorePostFn({ data: input })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.lists() })

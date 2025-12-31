@@ -1,8 +1,6 @@
-'use client'
-
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Feature, type PricingTier } from '@/lib/features'
-import { getWorkspaceFeaturesAction } from '@/lib/actions/settings'
+import { getWorkspaceFeaturesFn } from '@/lib/server-functions/settings'
 
 // ============================================================================
 // Query Key Factory
@@ -42,11 +40,7 @@ export function useWorkspaceFeatures() {
   return useQuery({
     queryKey: featuresKeys.workspace(),
     queryFn: async (): Promise<WorkspaceFeaturesData> => {
-      const result = await getWorkspaceFeaturesAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data as WorkspaceFeaturesData
+      return (await getWorkspaceFeaturesFn()) as WorkspaceFeaturesData
     },
     staleTime: 5 * 60 * 1000, // 5 minutes - features don't change often
   })

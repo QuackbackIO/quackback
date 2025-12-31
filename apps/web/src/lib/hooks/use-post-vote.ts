@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useCallback, useEffect } from 'react'
 import { useVoteMutation } from './use-public-posts-query'
 import type { PostId } from '@quackback/ids'

@@ -1,5 +1,3 @@
-'use client'
-
 import { useEffect, useCallback, useRef } from 'react'
 
 const CHANNEL_NAME = 'quackback-auth'

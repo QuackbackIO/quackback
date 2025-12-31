@@ -1,14 +1,12 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  uploadLogoAction,
-  deleteLogoAction,
-  uploadHeaderLogoAction,
-  deleteHeaderLogoAction,
-  updateHeaderDisplayModeAction,
-  updateHeaderDisplayNameAction,
-} from '@/lib/actions/settings'
+  uploadLogoFn,
+  deleteLogoFn,
+  uploadHeaderLogoFn,
+  deleteHeaderLogoFn,
+  updateHeaderDisplayModeFn,
+  updateHeaderDisplayNameFn,
+} from '@/lib/server-functions/settings'
 
 // Query keys
 export const settingsKeys = {
@@ -51,10 +49,7 @@ export function useUploadWorkspaceLogo() {
       const base64 = Buffer.from(arrayBuffer).toString('base64')
       const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
-      const result = await uploadLogoAction({ data: { base64, mimeType } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
+      await uploadLogoFn({ data: { base64, mimeType } })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.logo() })
@@ -66,10 +61,7 @@ export function useDeleteWorkspaceLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (): Promise<void> => {
-      const result = await deleteLogoAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
+      await deleteLogoFn()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.logo() })
@@ -102,10 +94,7 @@ export function useUploadWorkspaceHeaderLogo() {
       const base64 = Buffer.from(arrayBuffer).toString('base64')
       const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/webp'
 
-      const result = await uploadHeaderLogoAction({ data: { base64, mimeType } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
+      await uploadHeaderLogoFn({ data: { base64, mimeType } })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
@@ -117,10 +106,7 @@ export function useDeleteWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (): Promise<void> => {
-      const result = await deleteHeaderLogoAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
+      await deleteHeaderLogoFn()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
@@ -132,14 +118,11 @@ export function useUpdateHeaderDisplayMode() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (mode: string): Promise<void> => {
-      const result = await updateHeaderDisplayModeAction({
+      await updateHeaderDisplayModeFn({
         data: {
           mode: mode as 'logo_and_name' | 'logo_only' | 'custom_logo',
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
@@ -151,10 +134,7 @@ export function useUpdateHeaderDisplayName() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (name: string | null): Promise<void> => {
-      const result = await updateHeaderDisplayNameAction({ data: { name } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
+      await updateHeaderDisplayNameFn({ data: { name } })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })

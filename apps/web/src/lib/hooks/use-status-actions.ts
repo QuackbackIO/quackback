@@ -1,17 +1,15 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listStatusesAction,
-  createStatusAction,
-  updateStatusAction,
-  deleteStatusAction,
-  reorderStatusesAction,
+  fetchStatuses,
+  createStatusFn,
+  updateStatusFn,
+  deleteStatusFn,
+  reorderStatusesFn,
   type CreateStatusInput,
   type UpdateStatusInput,
   type DeleteStatusInput,
   type ReorderStatusesInput,
-} from '@/lib/actions/statuses'
+} from '@/lib/server-functions/statuses'
 import type { PostStatusEntity } from '@/lib/db'
 import type { StatusId } from '@quackback/ids'
 
@@ -40,11 +38,7 @@ export function useStatuses({ enabled = true }: UseStatusesOptions = {}) {
   return useQuery({
     queryKey: statusKeys.lists(),
     queryFn: async () => {
-      const result = await listStatusesAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await fetchStatuses()
     },
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -62,13 +56,7 @@ export function useCreateStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreateStatusInput): Promise<PostStatusEntity> => {
-      const result = await createStatusAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: CreateStatusInput) => createStatusFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
       const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
@@ -109,13 +97,7 @@ export function useUpdateStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: UpdateStatusInput): Promise<PostStatusEntity> => {
-      const result = await updateStatusAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: UpdateStatusInput) => updateStatusFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
       const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
@@ -155,11 +137,7 @@ export function useDeleteStatus() {
 
   return useMutation({
     mutationFn: async (input: DeleteStatusInput): Promise<{ id: string }> => {
-      const result = await deleteStatusAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await deleteStatusFn({ data: input })
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
@@ -190,12 +168,8 @@ export function useReorderStatuses() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: ReorderStatusesInput): Promise<{ success: boolean }> => {
-      const result = await reorderStatusesAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+    mutationFn: async (input: ReorderStatusesInput): Promise<void> => {
+      await reorderStatusesFn({ data: input })
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })

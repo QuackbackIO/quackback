@@ -1,16 +1,14 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listBoardsAction,
-  getBoardAction,
-  createBoardAction,
-  updateBoardAction,
-  deleteBoardAction,
+  fetchBoards,
+  fetchBoard,
+  createBoardFn,
+  updateBoardFn,
+  deleteBoardFn,
   type CreateBoardInput,
   type UpdateBoardInput,
   type DeleteBoardInput,
-} from '@/lib/actions/boards'
+} from '@/lib/server-functions/boards'
 import type { Board } from '@/lib/db'
 import type { BoardId } from '@quackback/ids'
 
@@ -38,13 +36,7 @@ interface UseBoardsOptions {
 export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   return useQuery({
     queryKey: boardKeys.lists(),
-    queryFn: async () => {
-      const result = await listBoardsAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    queryFn: () => fetchBoards(),
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -61,13 +53,7 @@ interface UseBoardDetailOptions {
 export function useBoardDetail({ boardId, enabled = true }: UseBoardDetailOptions) {
   return useQuery({
     queryKey: boardKeys.detail(boardId),
-    queryFn: async () => {
-      const result = await getBoardAction({ data: { id: boardId } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    queryFn: () => fetchBoard({ data: { id: boardId } }),
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -84,13 +70,7 @@ export function useCreateBoard() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreateBoardInput): Promise<Board> => {
-      const result = await createBoardAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: CreateBoardInput) => createBoardFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
@@ -130,13 +110,7 @@ export function useUpdateBoard() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: UpdateBoardInput): Promise<Board> => {
-      const result = await updateBoardAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: UpdateBoardInput) => updateBoardFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id) })
@@ -194,13 +168,7 @@ export function useDeleteBoard() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: DeleteBoardInput): Promise<{ id: string }> => {
-      const result = await deleteBoardAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: DeleteBoardInput) => deleteBoardFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id) })

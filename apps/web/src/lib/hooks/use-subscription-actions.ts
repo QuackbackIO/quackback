@@ -1,15 +1,17 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  getSubscriptionStatusAction,
-  subscribeToPostAction,
-  unsubscribeFromPostAction,
-  muteSubscriptionAction,
-  type SubscriptionStatus,
-} from '@/lib/actions/subscriptions'
-import type { ActionError } from '@/lib/actions/types'
+  fetchSubscriptionStatus,
+  subscribeToPostFn,
+  unsubscribeFromPostFn,
+  muteSubscriptionFn,
+} from '@/lib/server-functions/subscriptions'
 import type { PostId } from '@quackback/ids'
+
+type SubscriptionStatus = {
+  subscribed: boolean
+  muted: boolean
+  reason: string | null
+}
 
 // ============================================================================
 // Query Key Factory
@@ -36,12 +38,12 @@ export function useSubscriptionStatus({ postId, enabled = true }: UseSubscriptio
   return useQuery({
     queryKey: subscriptionKeys.status(postId),
     queryFn: async (): Promise<SubscriptionStatus> => {
-      const result = await getSubscriptionStatusAction({ data: { postId } })
-      if (!result.success) {
+      try {
+        return await fetchSubscriptionStatus({ data: { postId } })
+      } catch {
         // Return default status on error (user not subscribed)
         return { subscribed: false, muted: false, reason: null }
       }
-      return result.data
     },
     enabled,
     staleTime: 30 * 1000, // 30 seconds
@@ -55,7 +57,7 @@ export function useSubscriptionStatus({ postId, enabled = true }: UseSubscriptio
 interface UseSubscribeOptions {
   postId: PostId
   onSuccess?: (status: SubscriptionStatus) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -66,18 +68,19 @@ export function useSubscribe({ postId, onSuccess, onError }: UseSubscribeOptions
 
   return useMutation({
     mutationFn: async (reason: 'manual' | 'author' | 'vote' | 'comment' = 'manual') => {
-      const result = await subscribeToPostAction({ data: { postId, reason } })
-      if (!result.success) {
-        throw result.error
+      return await subscribeToPostFn({ data: { postId, reason } })
+    },
+    onSuccess: async () => {
+      // Refetch the subscription status
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
+      const newStatus = queryClient.getQueryData<SubscriptionStatus>(
+        subscriptionKeys.status(postId)
+      )
+      if (newStatus) {
+        onSuccess?.(newStatus)
       }
-      return result.data
     },
-    onSuccess: (data) => {
-      // Update the subscription status in cache
-      queryClient.setQueryData(subscriptionKeys.status(postId), data)
-      onSuccess?.(data)
-    },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -86,7 +89,7 @@ export function useSubscribe({ postId, onSuccess, onError }: UseSubscribeOptions
 interface UseUnsubscribeOptions {
   postId: PostId
   onSuccess?: (status: SubscriptionStatus) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -97,18 +100,19 @@ export function useUnsubscribe({ postId, onSuccess, onError }: UseUnsubscribeOpt
 
   return useMutation({
     mutationFn: async () => {
-      const result = await unsubscribeFromPostAction({ data: { postId } })
-      if (!result.success) {
-        throw result.error
+      return await unsubscribeFromPostFn({ data: { postId } })
+    },
+    onSuccess: async () => {
+      // Refetch the subscription status
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
+      const newStatus = queryClient.getQueryData<SubscriptionStatus>(
+        subscriptionKeys.status(postId)
+      )
+      if (newStatus) {
+        onSuccess?.(newStatus)
       }
-      return result.data
     },
-    onSuccess: (data) => {
-      // Update the subscription status in cache
-      queryClient.setQueryData(subscriptionKeys.status(postId), data)
-      onSuccess?.(data)
-    },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -117,7 +121,7 @@ export function useUnsubscribe({ postId, onSuccess, onError }: UseUnsubscribeOpt
 interface UseMuteSubscriptionOptions {
   postId: PostId
   onSuccess?: (status: SubscriptionStatus) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -128,18 +132,19 @@ export function useMuteSubscription({ postId, onSuccess, onError }: UseMuteSubsc
 
   return useMutation({
     mutationFn: async (muted: boolean) => {
-      const result = await muteSubscriptionAction({ data: { postId, muted } })
-      if (!result.success) {
-        throw result.error
+      return await muteSubscriptionFn({ data: { postId, muted } })
+    },
+    onSuccess: async () => {
+      // Refetch the subscription status
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
+      const newStatus = queryClient.getQueryData<SubscriptionStatus>(
+        subscriptionKeys.status(postId)
+      )
+      if (newStatus) {
+        onSuccess?.(newStatus)
       }
-      return result.data
     },
-    onSuccess: (data) => {
-      // Update the subscription status in cache
-      queryClient.setQueryData(subscriptionKeys.status(postId), data)
-      onSuccess?.(data)
-    },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -154,40 +159,28 @@ export function usePostSubscription({ postId, enabled = true }: UseSubscriptionS
 
   const subscribeMutation = useMutation({
     mutationFn: async (reason: 'manual' | 'author' | 'vote' | 'comment' = 'manual') => {
-      const result = await subscribeToPostAction({ data: { postId, reason } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
+      return await subscribeToPostFn({ data: { postId, reason } })
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(subscriptionKeys.status(postId), data)
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
   })
 
   const unsubscribeMutation = useMutation({
     mutationFn: async () => {
-      const result = await unsubscribeFromPostAction({ data: { postId } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
+      return await unsubscribeFromPostFn({ data: { postId } })
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(subscriptionKeys.status(postId), data)
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
   })
 
   const muteMutation = useMutation({
     mutationFn: async (muted: boolean) => {
-      const result = await muteSubscriptionAction({ data: { postId, muted } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
+      return await muteSubscriptionFn({ data: { postId, muted } })
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(subscriptionKeys.status(postId), data)
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
   })
 

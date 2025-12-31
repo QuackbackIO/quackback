@@ -1,25 +1,21 @@
-'use client'
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listRoadmapsAction,
-  getRoadmapAction,
-  createRoadmapAction,
-  updateRoadmapAction,
-  deleteRoadmapAction,
-  reorderRoadmapsAction,
-  getRoadmapPostsAction,
-  addPostToRoadmapAction,
-  removePostFromRoadmapAction,
-  reorderRoadmapPostsAction,
+  fetchRoadmaps,
+  fetchRoadmap,
+  createRoadmapFn,
+  updateRoadmapFn,
+  deleteRoadmapFn,
+  reorderRoadmapsFn,
+  getRoadmapPostsFn,
+  addPostToRoadmapFn,
+  removePostFromRoadmapFn,
   type CreateRoadmapInput,
   type UpdateRoadmapInput,
   type DeleteRoadmapInput,
   type ReorderRoadmapsInput,
   type AddPostToRoadmapInput,
   type RemovePostFromRoadmapInput,
-  type ReorderRoadmapPostsInput,
-} from '@/lib/actions/roadmaps'
+} from '@/lib/server-functions/roadmaps'
 import type { Roadmap } from '@/lib/db'
 import type { RoadmapId, StatusId } from '@quackback/ids'
 
@@ -51,11 +47,7 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapKeys.lists(),
     queryFn: async () => {
-      const result = await listRoadmapsAction()
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await fetchRoadmaps()
     },
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -74,11 +66,7 @@ export function useRoadmapDetail({ roadmapId, enabled = true }: UseRoadmapDetail
   return useQuery({
     queryKey: roadmapKeys.detail(roadmapId),
     queryFn: async () => {
-      const result = await getRoadmapAction({ data: { id: roadmapId } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await fetchRoadmap({ data: { id: roadmapId } })
     },
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -106,7 +94,7 @@ export function useRoadmapPosts({
   return useQuery({
     queryKey: roadmapKeys.postsFiltered(roadmapId, statusId),
     queryFn: async () => {
-      const result = await getRoadmapPostsAction({
+      return await getRoadmapPostsFn({
         data: {
           roadmapId,
           statusId,
@@ -114,10 +102,6 @@ export function useRoadmapPosts({
           offset,
         },
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
     },
     enabled,
     staleTime: 2 * 60 * 1000, // 2 minutes
@@ -135,13 +119,7 @@ export function useCreateRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreateRoadmapInput): Promise<Roadmap> => {
-      const result = await createRoadmapAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: CreateRoadmapInput) => createRoadmapFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: roadmapKeys.lists() })
       const previous = queryClient.getQueryData<Roadmap[]>(roadmapKeys.lists())
@@ -181,13 +159,7 @@ export function useUpdateRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: UpdateRoadmapInput): Promise<Roadmap> => {
-      const result = await updateRoadmapAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (input: UpdateRoadmapInput) => updateRoadmapFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: roadmapKeys.lists() })
       await queryClient.cancelQueries({ queryKey: roadmapKeys.detail(input.id) })
@@ -244,11 +216,7 @@ export function useDeleteRoadmap() {
 
   return useMutation({
     mutationFn: async (input: DeleteRoadmapInput): Promise<{ id: string }> => {
-      const result = await deleteRoadmapAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await deleteRoadmapFn({ data: input })
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: roadmapKeys.lists() })
@@ -284,11 +252,7 @@ export function useReorderRoadmaps() {
 
   return useMutation({
     mutationFn: async (input: ReorderRoadmapsInput): Promise<{ success: boolean }> => {
-      const result = await reorderRoadmapsAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      return await reorderRoadmapsFn({ data: input })
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: roadmapKeys.lists() })
@@ -335,11 +299,8 @@ export function useAddPostToRoadmap(roadmapId: RoadmapId) {
 
   return useMutation({
     mutationFn: async (input: AddPostToRoadmapInput): Promise<{ added: boolean }> => {
-      const result = await addPostToRoadmapAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      await addPostToRoadmapFn({ data: input })
+      return { added: true }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: roadmapKeys.posts(roadmapId) })
@@ -355,31 +316,8 @@ export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
 
   return useMutation({
     mutationFn: async (input: RemovePostFromRoadmapInput): Promise<{ removed: boolean }> => {
-      const result = await removePostFromRoadmapAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: roadmapKeys.posts(roadmapId) })
-    },
-  })
-}
-
-/**
- * Hook to reorder posts within a roadmap.
- */
-export function useReorderRoadmapPosts(roadmapId: RoadmapId) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (input: ReorderRoadmapPostsInput): Promise<{ success: boolean }> => {
-      const result = await reorderRoadmapPostsAction({ data: input })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
+      await removePostFromRoadmapFn({ data: input })
+      return { removed: true }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: roadmapKeys.posts(roadmapId) })

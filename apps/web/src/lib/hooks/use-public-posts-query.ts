@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   useInfiniteQuery,
@@ -9,16 +7,15 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query'
 import {
-  listPublicPostsAction,
-  toggleVoteAction,
-  createPublicPostAction,
-  getVotedPostsAction,
-  getPostPermissionsAction,
-  userEditPostAction,
-  userDeletePostAction,
-} from '@/lib/actions/public-posts'
-import type { ActionError } from '@/lib/actions/types'
-import type { PublicFeedbackFilters } from '@/app/(portal)/use-public-filters'
+  listPublicPostsFn,
+  toggleVoteFn,
+  createPublicPostFn,
+  getVotedPostsFn,
+  getPostPermissionsFn,
+  userEditPostFn,
+  userDeletePostFn,
+} from '@/lib/server-functions/public-posts'
+import type { PublicFeedbackFilters } from '@/components/public/feedback/use-public-filters'
 import type { PublicPostListItem } from '@/lib/posts'
 import type { PostId, BoardId, StatusId, TagId } from '@quackback/ids'
 
@@ -47,6 +44,11 @@ export const votedPostsKeys = {
   byWorkspace: () => [...votedPostsKeys.all] as const,
 }
 
+export const postPermissionsKeys = {
+  all: ['postPermissions'] as const,
+  detail: (postId: PostId) => [...postPermissionsKeys.all, postId] as const,
+}
+
 // ============================================================================
 // Fetch Function (using server action)
 // ============================================================================
@@ -66,7 +68,7 @@ async function fetchPublicPosts(
     }
   }
 
-  const result = await listPublicPostsAction({
+  return (await listPublicPostsFn({
     data: {
       boardSlug: filters.board,
       search: filters.search,
@@ -77,13 +79,7 @@ async function fetchPublicPosts(
       page,
       limit: 20,
     },
-  })
-
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-
-  return result.data as PublicPostListResult
+  })) as unknown as PublicPostListResult
 }
 
 // ============================================================================
@@ -139,13 +135,7 @@ export function useVoteMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (postId: PostId): Promise<VoteResponse> => {
-      const result = await toggleVoteAction({ data: { postId } })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-      return result.data
-    },
+    mutationFn: (postId: PostId): Promise<VoteResponse> => toggleVoteFn({ data: { postId } }),
     onMutate: async (_postId): Promise<VoteMutationContext> => {
       // Cancel any outgoing refetches for all public post lists
       await queryClient.cancelQueries({ queryKey: publicPostsKeys.lists() })
@@ -218,22 +208,15 @@ export function useCreatePublicPost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ boardId, title, content, contentJson }: CreatePostInput) => {
-      const result = await createPublicPostAction({
+    mutationFn: ({ boardId, title, content, contentJson }: CreatePostInput) =>
+      createPublicPostFn({
         data: {
           boardId,
           title,
           content,
           contentJson: contentJson as { type: 'doc'; content?: unknown[] },
         },
-      })
-
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-
-      return result.data
-    },
+      }),
     onSuccess: (newPost) => {
       // Add new post to the beginning of all list queries
       queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
@@ -285,11 +268,8 @@ export function useCreatePublicPost() {
 // ============================================================================
 
 async function fetchVotedPosts(): Promise<Set<string>> {
-  const result = await getVotedPostsAction()
-  if (!result.success) {
-    return new Set()
-  }
-  return new Set(result.data.votedPostIds)
+  const result = await getVotedPostsFn()
+  return new Set(result.votedPostIds)
 }
 
 interface UseVotedPostsOptions {
@@ -313,7 +293,8 @@ export function useVotedPosts({ initialVotedIds, enabled = true }: UseVotedPosts
     queryKey: votedPostsKeys.byWorkspace(),
     queryFn: () => fetchVotedPosts(),
     initialData: new Set(initialVotedIds),
-    staleTime: Infinity, // Don't auto-refetch, we control when to refetch
+    // Refresh voted posts periodically to sync cross-device votes
+    staleTime: 5 * 60 * 1000, // 5 minutes
     enabled,
   })
 
@@ -367,11 +348,6 @@ export function useVotedPosts({ initialVotedIds, enabled = true }: UseVotedPosts
 // Post Permissions Query
 // ============================================================================
 
-export const postPermissionsKeys = {
-  all: ['postPermissions'] as const,
-  detail: (postId: PostId) => [...postPermissionsKeys.all, postId] as const,
-}
-
 interface PostPermissions {
   canEdit: boolean
   canDelete: boolean
@@ -390,13 +366,7 @@ interface UsePostPermissionsOptions {
 export function usePostPermissions({ postId, enabled = true }: UsePostPermissionsOptions) {
   return useQuery({
     queryKey: postPermissionsKeys.detail(postId),
-    queryFn: async (): Promise<PostPermissions> => {
-      const result = await getPostPermissionsAction({ data: { postId } })
-      if (!result.success) {
-        return { canEdit: false, canDelete: false }
-      }
-      return result.data
-    },
+    queryFn: (): Promise<PostPermissions> => getPostPermissionsFn({ data: { postId } }),
     enabled,
     staleTime: 30 * 1000, // 30 seconds
   })
@@ -415,7 +385,7 @@ interface UserEditPostInput {
 
 interface UseUserEditPostOptions {
   onSuccess?: (post: unknown) => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -425,13 +395,7 @@ export function useUserEditPost({ onSuccess, onError }: UseUserEditPostOptions =
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: UserEditPostInput) => {
-      const result = await userEditPostAction({ data: input })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
-    },
+    mutationFn: (input: UserEditPostInput) => userEditPostFn({ data: input }),
     onSuccess: (data, variables) => {
       // Update post in all list queries
       queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
@@ -455,7 +419,7 @@ export function useUserEditPost({ onSuccess, onError }: UseUserEditPostOptions =
       queryClient.invalidateQueries({ queryKey: postPermissionsKeys.detail(variables.postId) })
       onSuccess?.(data)
     },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
@@ -467,7 +431,7 @@ export function useUserEditPost({ onSuccess, onError }: UseUserEditPostOptions =
 
 interface UseUserDeletePostOptions {
   onSuccess?: () => void
-  onError?: (error: ActionError) => void
+  onError?: (error: Error) => void
 }
 
 /**
@@ -477,13 +441,7 @@ export function useUserDeletePost({ onSuccess, onError }: UseUserDeletePostOptio
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (postId: PostId) => {
-      const result = await userDeletePostAction({ data: { postId } })
-      if (!result.success) {
-        throw result.error
-      }
-      return result.data
-    },
+    mutationFn: (postId: PostId) => userDeletePostFn({ data: { postId } }),
     onSuccess: (_, postId) => {
       // Remove post from all list queries
       queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
@@ -504,7 +462,7 @@ export function useUserDeletePost({ onSuccess, onError }: UseUserDeletePostOptio
       queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
       onSuccess?.()
     },
-    onError: (error: ActionError) => {
+    onError: (error: Error) => {
       onError?.(error)
     },
   })
