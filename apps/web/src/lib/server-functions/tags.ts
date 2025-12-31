@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { listTags, getTagById, createTag, updateTag, deleteTag } from '@/lib/tags'
-import { tagIdSchema, type TagId } from '@quackback/ids'
+import { type TagId } from '@quackback/ids'
 import type { Tag } from '@quackback/db'
 
 // ============================================
@@ -23,11 +23,11 @@ const createTagSchema = z.object({
 })
 
 const getTagSchema = z.object({
-  id: tagIdSchema,
+  id: z.string(),
 })
 
 const updateTagSchema = z.object({
-  id: tagIdSchema,
+  id: z.string(),
   name: z.string().min(1).max(50).optional(),
   color: z
     .string()
@@ -36,7 +36,7 @@ const updateTagSchema = z.object({
 })
 
 const deleteTagSchema = z.object({
-  id: tagIdSchema,
+  id: z.string(),
 })
 
 // ============================================

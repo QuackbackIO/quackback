@@ -16,13 +16,7 @@ import {
   addPostToRoadmap,
   removePostFromRoadmap,
 } from '@/lib/roadmaps'
-import {
-  roadmapIdSchema,
-  postIdSchema,
-  statusIdSchema,
-  type RoadmapId,
-  type PostId,
-} from '@quackback/ids'
+import { type RoadmapId, type PostId } from '@quackback/ids'
 
 const createRoadmapSchema = z.object({
   name: z.string().min(1).max(100),
@@ -32,28 +26,28 @@ const createRoadmapSchema = z.object({
 })
 
 const getRoadmapSchema = z.object({
-  id: roadmapIdSchema,
+  id: z.string(),
 })
 
 const updateRoadmapSchema = z.object({
-  id: roadmapIdSchema,
+  id: z.string(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   isPublic: z.boolean().optional(),
 })
 
 const deleteRoadmapSchema = z.object({
-  id: roadmapIdSchema,
+  id: z.string(),
 })
 
 const addPostToRoadmapSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  postId: postIdSchema,
+  roadmapId: z.string(),
+  postId: z.string(),
 })
 
 const removePostFromRoadmapSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  postId: postIdSchema,
+  roadmapId: z.string(),
+  postId: z.string(),
 })
 
 export type CreateRoadmapInput = z.infer<typeof createRoadmapSchema>
@@ -191,8 +185,8 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   })
 
 const getRoadmapPostsSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  statusId: statusIdSchema.optional(),
+  roadmapId: z.string(),
+  statusId: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
 })

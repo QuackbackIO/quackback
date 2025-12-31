@@ -18,11 +18,6 @@ import {
   restorePost,
 } from '@/lib/posts'
 import {
-  postIdSchema,
-  boardIdSchema,
-  statusIdSchema,
-  tagIdSchema,
-  memberIdSchema,
   type PostId,
   type BoardId,
   type StatusId,
@@ -43,11 +38,11 @@ const tiptapContentSchema = z.object({
 })
 
 const listInboxPostsSchema = z.object({
-  boardIds: z.array(boardIdSchema).optional(),
-  statusIds: z.array(statusIdSchema).optional(),
+  boardIds: z.array(z.string()).optional(),
+  statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
-  tagIds: z.array(tagIdSchema).optional(),
-  ownerId: z.union([memberIdSchema, z.null()]).optional(),
+  tagIds: z.array(z.string()).optional(),
+  ownerId: z.union([z.string(), z.null()]).optional(),
   search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
@@ -61,41 +56,41 @@ const createPostSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Description is required').max(10000),
   contentJson: tiptapContentSchema.optional(),
-  boardId: boardIdSchema,
-  statusId: statusIdSchema.optional(),
-  tagIds: z.array(tagIdSchema).optional().default([]),
+  boardId: z.string(),
+  statusId: z.string().optional(),
+  tagIds: z.array(z.string()).optional().default([]),
 })
 
 const getPostSchema = z.object({
-  id: postIdSchema,
+  id: z.string(),
 })
 
 const updatePostSchema = z.object({
-  id: postIdSchema,
+  id: z.string(),
   title: z.string().min(1).max(200).optional(),
   content: z.string().max(10000).optional(),
   contentJson: tiptapContentSchema.optional(),
-  boardId: boardIdSchema.optional(),
-  ownerId: memberIdSchema.nullable().optional(),
+  boardId: z.string().optional(),
+  ownerId: z.string().nullable().optional(),
   officialResponse: z.string().max(5000).nullable().optional(),
 })
 
 const deletePostSchema = z.object({
-  id: postIdSchema,
+  id: z.string(),
 })
 
 const changeStatusSchema = z.object({
-  id: postIdSchema,
-  statusId: statusIdSchema,
+  id: z.string(),
+  statusId: z.string(),
 })
 
 const updateTagsSchema = z.object({
-  id: postIdSchema,
-  tagIds: z.array(tagIdSchema),
+  id: z.string(),
+  tagIds: z.array(z.string()),
 })
 
 const restorePostSchema = z.object({
-  id: postIdSchema,
+  id: z.string(),
 })
 
 // ============================================

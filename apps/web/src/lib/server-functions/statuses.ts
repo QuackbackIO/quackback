@@ -14,7 +14,7 @@ import {
   reorderStatuses,
   type Status,
 } from '@/lib/statuses'
-import { statusIdSchema, type StatusId } from '@quackback/ids'
+import { type StatusId } from '@quackback/ids'
 
 // ============================================
 // Schemas
@@ -37,11 +37,11 @@ const createStatusSchema = z.object({
 })
 
 const getStatusSchema = z.object({
-  id: statusIdSchema,
+  id: z.string(),
 })
 
 const updateStatusSchema = z.object({
-  id: statusIdSchema,
+  id: z.string(),
   name: z.string().min(1).max(50).optional(),
   color: z
     .string()
@@ -52,7 +52,7 @@ const updateStatusSchema = z.object({
 })
 
 const deleteStatusSchema = z.object({
-  id: statusIdSchema,
+  id: z.string(),
 })
 
 const reorderStatusesSchema = z.object({

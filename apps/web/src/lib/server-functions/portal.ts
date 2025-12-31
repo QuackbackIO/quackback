@@ -9,11 +9,6 @@ import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps'
 import { getSubscriptionStatus } from '@/lib/subscriptions'
 import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/db'
 import {
-  postIdSchema,
-  memberIdSchema,
-  roadmapIdSchema,
-  statusIdSchema,
-  userIdSchema,
   type PostId,
   type MemberId,
   type RoadmapId,
@@ -38,36 +33,36 @@ const fetchPublicPostsSchema = z.object({
 })
 
 const fetchVotedPostsSchema = z.object({
-  postIds: z.array(postIdSchema),
+  postIds: z.array(z.string()),
   userIdentifier: z.string(),
 })
 
-const fetchAvatarsSchema = z.array(memberIdSchema)
+const fetchAvatarsSchema = z.array(z.string())
 
 const fetchUserAvatarSchema = z.object({
-  userId: userIdSchema,
+  userId: z.string(),
   fallbackImageUrl: z.string().nullable().optional(),
 })
 
 const checkUserVotedSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
   userIdentifier: z.string(),
 })
 
 const fetchSubscriptionStatusSchema = z.object({
-  memberId: memberIdSchema,
-  postId: postIdSchema,
+  memberId: z.string(),
+  postId: z.string(),
 })
 
 const fetchPublicRoadmapPostsSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  statusId: statusIdSchema.optional(),
+  roadmapId: z.string(),
+  statusId: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
   offset: z.number().int().min(0).optional(),
 })
 
 const getCommentsSectionDataSchema = z.object({
-  commentMemberIds: z.array(memberIdSchema),
+  commentMemberIds: z.array(z.string()),
 })
 
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
@@ -286,12 +281,12 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       isMember: boolean
       canComment: boolean
       commentAvatarMap: Record<string, string | null>
-      user: { name: string | null; email: string } | null
+      user: { name: string | null; email: string } | undefined
     }> => {
       const ctx = await getOptionalAuth()
 
       let isMember = false
-      let user: { name: string | null; email: string } | null = null
+      let user: { name: string | null; email: string } | undefined = undefined
 
       // If user is authenticated and is a member
       if (ctx.user && ctx.member) {

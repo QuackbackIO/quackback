@@ -11,23 +11,23 @@ import {
   unsubscribeFromPost,
   setSubscriptionMuted,
 } from '@/lib/subscriptions'
-import { postIdSchema, type PostId } from '@quackback/ids'
+import { type PostId } from '@quackback/ids'
 
 const getSubscriptionStatusSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
 })
 
 const subscribeToPostSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
   reason: z.enum(['manual', 'author', 'vote', 'comment']).optional().default('manual'),
 })
 
 const unsubscribeFromPostSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
 })
 
 const muteSubscriptionSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
   muted: z.boolean().optional().default(true),
 })
 

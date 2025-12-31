@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { listBoards, getBoardById, createBoard, updateBoard, deleteBoard } from '@/lib/boards'
-import { boardIdSchema, type BoardId } from '@quackback/ids'
+import { type BoardId } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
 
 // ============================================
@@ -23,11 +23,11 @@ const createBoardSchema = z.object({
 })
 
 const getBoardSchema = z.object({
-  id: boardIdSchema,
+  id: z.string(),
 })
 
 const updateBoardSchema = z.object({
-  id: boardIdSchema,
+  id: z.string(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
   isPublic: z.boolean().optional(),
@@ -35,7 +35,7 @@ const updateBoardSchema = z.object({
 })
 
 const deleteBoardSchema = z.object({
-  id: boardIdSchema,
+  id: z.string(),
 })
 
 // ============================================

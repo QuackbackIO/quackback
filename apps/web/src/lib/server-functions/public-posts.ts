@@ -25,11 +25,6 @@ import { getMemberIdentifier } from '@/lib/user-identifier'
 import { hashIP } from '@/lib/utils/ip-hash'
 import { dispatchPostCreated } from '@/lib/events/dispatch'
 import {
-  postIdSchema,
-  boardIdSchema,
-  statusIdSchema,
-  tagIdSchema,
-  roadmapIdSchema,
   type PostId,
   type BoardId,
   type StatusId,
@@ -52,56 +47,56 @@ const tiptapContentSchema = z.object({
 const listPublicPostsSchema = z.object({
   boardSlug: z.string().optional(),
   search: z.string().optional(),
-  statusIds: z.array(statusIdSchema).optional(),
+  statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
-  tagIds: z.array(tagIdSchema).optional(),
+  tagIds: z.array(z.string()).optional(),
   sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
   page: z.number().int().min(1).optional().default(1),
   limit: z.number().int().min(1).max(100).optional().default(20),
 })
 
 const getPostPermissionsSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
 })
 
 const userEditPostSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required').max(10000),
   contentJson: tiptapContentSchema.optional(),
 })
 
 const userDeletePostSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
 })
 
 const toggleVoteSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
   ipHash: z.string().optional(),
 })
 
 const createPublicPostSchema = z.object({
-  boardId: boardIdSchema,
+  boardId: z.string(),
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().max(10000),
   contentJson: tiptapContentSchema.optional(),
 })
 
 const getPublicRoadmapPostsSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  statusId: statusIdSchema.optional(),
+  roadmapId: z.string(),
+  statusId: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
   offset: z.number().int().min(0).optional().default(0),
 })
 
 const getRoadmapPostsByStatusSchema = z.object({
-  statusId: statusIdSchema,
+  statusId: z.string(),
   page: z.number().int().min(1).optional().default(1),
   limit: z.number().int().min(1).max(100).optional().default(10),
 })
 
 const getVoteSidebarDataSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
 })
 
 // ============================================

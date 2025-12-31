@@ -16,13 +16,7 @@ import {
   userEditComment,
   softDeleteComment,
 } from '@/lib/comments'
-import {
-  commentIdSchema,
-  postIdSchema,
-  type CommentId,
-  type PostId,
-  type UserId,
-} from '@quackback/ids'
+import { type CommentId, type PostId, type UserId } from '@quackback/ids'
 import { dispatchCommentCreated } from '@/lib/events/dispatch'
 
 const tiptapContentSchema = z.object({
@@ -31,24 +25,24 @@ const tiptapContentSchema = z.object({
 })
 
 const createCommentSchema = z.object({
-  postId: postIdSchema,
+  postId: z.string(),
   content: z.string().min(1).max(10000),
   contentJson: tiptapContentSchema.optional(),
-  parentId: commentIdSchema.optional(),
+  parentId: z.string().optional(),
 })
 
 const updateCommentSchema = z.object({
-  id: commentIdSchema,
+  id: z.string(),
   content: z.string().min(1).max(10000),
   contentJson: tiptapContentSchema.optional(),
 })
 
 const deleteCommentSchema = z.object({
-  id: commentIdSchema,
+  id: z.string(),
 })
 
 const toggleReactionSchema = z.object({
-  commentId: commentIdSchema,
+  commentId: z.string(),
   emoji: z.string(),
 })
 
@@ -139,16 +133,16 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
   })
 
 const getCommentPermissionsSchema = z.object({
-  commentId: commentIdSchema,
+  commentId: z.string(),
 })
 
 const userEditCommentSchema = z.object({
-  commentId: commentIdSchema,
+  commentId: z.string(),
   content: z.string(),
 })
 
 const userDeleteCommentSchema = z.object({
-  commentId: commentIdSchema,
+  commentId: z.string(),
 })
 
 export type GetCommentPermissionsInput = z.infer<typeof getCommentPermissionsSchema>

@@ -10,10 +10,6 @@ import { db, member, invitation, user, eq, and } from '@/lib/db'
 import {
   generateId,
   inviteIdSchema,
-  memberIdSchema,
-  boardIdSchema,
-  statusIdSchema,
-  tagIdSchema,
   type InviteId,
   type UserId,
   type MemberId,
@@ -37,12 +33,12 @@ const inboxPostListSchema = z.object({
   limit: z.number().default(20),
   page: z.number().default(1),
   search: z.string().optional(),
-  ownerId: memberIdSchema.nullable().optional(),
-  statusIds: z.array(statusIdSchema).optional(),
+  ownerId: z.string().nullable().optional(),
+  statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
-  boardIds: z.array(boardIdSchema).optional(),
+  boardIds: z.array(z.string()).optional(),
   boardSlugs: z.array(z.string()).optional(),
-  tagIds: z.array(tagIdSchema).optional(),
+  tagIds: z.array(z.string()).optional(),
   minVotes: z.number().optional(),
 }) as z.ZodType<InboxPostListParams>
 
@@ -57,11 +53,11 @@ const listPortalUsersSchema = z.object({
 })
 
 const getPortalUserSchema = z.object({
-  memberId: memberIdSchema,
+  memberId: z.string(),
 })
 
 const deletePortalUserSchema = z.object({
-  memberId: memberIdSchema,
+  memberId: z.string(),
 })
 
 /**
