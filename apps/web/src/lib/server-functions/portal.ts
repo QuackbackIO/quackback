@@ -18,6 +18,7 @@ import {
   type MemberId,
   type RoadmapId,
   type StatusId,
+  type UserId,
 } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
 
@@ -145,7 +146,7 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
     const { userId, fallbackImageUrl } = data
 
     const userRecord = await db.query.user.findFirst({
-      where: eq(userTable.id, userId),
+      where: eq(userTable.id, userId as UserId),
       columns: {
         imageBlob: true,
         imageType: true,
@@ -285,12 +286,12 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       isMember: boolean
       canComment: boolean
       commentAvatarMap: Record<string, string | null>
-      user: { name: string; email: string } | null
+      user: { name: string | null; email: string } | null
     }> => {
       const ctx = await getOptionalAuth()
 
       let isMember = false
-      let user: { name: string; email: string } | null = null
+      let user: { name: string | null; email: string } | null = null
 
       // If user is authenticated and is a member
       if (ctx.user && ctx.member) {

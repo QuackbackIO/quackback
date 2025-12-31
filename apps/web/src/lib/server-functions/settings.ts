@@ -152,7 +152,7 @@ const updateCustomCssSchema = z.object({
 })
 
 const updateThemeSchema = z.object({
-  brandingConfig: z.record(z.unknown()),
+  brandingConfig: z.record(z.string(), z.unknown()),
 })
 
 const updatePortalConfigSchema = z.object({

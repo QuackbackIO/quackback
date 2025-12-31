@@ -32,9 +32,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * schema.parse('550e8400-e29b-41d4-a716-446655440000') // Error: not TypeID format
  */
 export function typeIdSchema<P extends IdPrefix>(prefix: P) {
-  // Simplified schema for TanStack Start compatibility
-  // Returns z.ZodString which works better with TanStack's type inference
-  // The branded type TypeId<P> is enforced through runtime validation
+  // Simplified for TanStack Start compatibility
+  // Returns ZodEffects<ZodString> without branded types for better type inference
   return z.string().refine(
     (val) => {
       try {
