@@ -3,23 +3,20 @@
  * Sends notifications to Slack channels when domain events occur.
  */
 import { WebClient } from '@slack/web-api'
-import type {
-  PostCreatedPayload,
-  PostStatusChangedPayload,
-  CommentCreatedPayload,
-} from '@quackback/jobs'
 import {
   BaseIntegration,
   type DomainEvent,
   type DomainEventType,
   type IntegrationContext,
   type ProcessResult,
+  type PostCreatedPayload,
+  type PostStatusChangedPayload,
+  type CommentCreatedPayload,
 } from '../base'
 
 /**
  * Changelog data for changelog.published events.
- * Note: changelog events are not yet part of the core EventJobData types
- * as they're integration-specific and not used for notifications.
+ * Note: changelog events are integration-specific and not used for core notifications.
  */
 interface ChangelogPublishedPayload {
   changelog: { id: string; title: string; slug: string; content: string }

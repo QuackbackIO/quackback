@@ -4,4 +4,7 @@ export {
   type DomainEventType,
   type IntegrationContext,
   type ProcessResult,
+  type PostCreatedPayload,
+  type PostStatusChangedPayload,
+  type CommentCreatedPayload,
 } from './integration'

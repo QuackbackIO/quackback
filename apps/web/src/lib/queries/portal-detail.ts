@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { BoardSlug, PostId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 import { getPublicBoardBySlug } from '@/lib/boards/board.public'
 import { getPublicPostDetail } from '@/lib/posts/post.public'
 
@@ -12,7 +12,7 @@ export const portalDetailQueries = {
   /**
    * Get public board by slug
    */
-  board: (slug: BoardSlug) =>
+  board: (slug: string) =>
     queryOptions({
       queryKey: ['portal', 'board', slug],
       queryFn: async () => {

@@ -1,4 +1,5 @@
 import { createAuthClient } from 'better-auth/client'
+import { emailOTPClient } from 'better-auth/client/plugins'
 
 /**
  * Better-auth client for client-side authentication
@@ -11,6 +12,7 @@ import { createAuthClient } from 'better-auth/client'
  */
 export const authClient = createAuthClient({
   baseURL: process.env.BETTER_AUTH_URL || '',
+  plugins: [emailOTPClient()],
 })
 
 /**

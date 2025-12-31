@@ -129,7 +129,7 @@ export const settingsQueries = {
   userProfile: (userId: UserId) =>
     queryOptions({
       queryKey: ['settings', 'userProfile', userId],
-      queryFn: () => fetchUserProfile(userId),
+      queryFn: () => fetchUserProfile({ data: userId }),
       staleTime: 1 * 60 * 1000, // 1min
     }),
 }

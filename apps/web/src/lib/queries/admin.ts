@@ -10,7 +10,8 @@ import {
   fetchOnboardingStatus,
   fetchIntegrationsList,
 } from '@/lib/server-functions/admin'
-import { listPortalUsers, type PortalUserFilters } from '@/lib/users'
+import { listPortalUsers } from '@/lib/users/user.service'
+import type { PortalUserListParams } from '@/lib/users/user.types'
 import { listPublicStatuses } from '@/lib/statuses'
 
 /**
@@ -42,7 +43,7 @@ export const adminQueries = {
   inboxPosts: (filters: InboxPostListParams) =>
     queryOptions({
       queryKey: ['admin', 'inbox', 'posts', filters],
-      queryFn: () => fetchInboxPosts(filters),
+      queryFn: () => fetchInboxPosts({ data: filters }),
       staleTime: 30 * 1000, // 30s - frequently updated
     }),
 
@@ -99,7 +100,7 @@ export const adminQueries = {
   /**
    * List portal users with filtering
    */
-  portalUsers: (filters: PortalUserFilters) =>
+  portalUsers: (filters: PortalUserListParams) =>
     queryOptions({
       queryKey: ['admin', 'users', filters],
       queryFn: () => listPortalUsers(filters),
@@ -140,3 +141,6 @@ export const adminQueries = {
       staleTime: 1 * 60 * 1000, // 1min - integration status can change
     }),
 }
+
+// Export filter types for external use
+export type { PortalUserListParams as PortalUserFilters }
