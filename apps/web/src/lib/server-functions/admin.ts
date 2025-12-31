@@ -20,8 +20,8 @@ import {
 } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getRootUrl } from '@/lib/routing'
-import { getSettings } from '@/lib/workspace'
-import { getSession } from '@/lib/auth/server'
+import { getSettings } from '@/lib/server-functions/workspace'
+import { getSession } from '@/lib/server-functions/auth'
 import type { InboxPostListParams } from '@/lib/posts/post.types'
 import type { BoardSettings } from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
@@ -69,7 +69,7 @@ const deletePortalUserSchema = z.object({
  */
 export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .inputValidator(inboxPostListSchema)
-  .handler(async ({ data }: { data: InboxPostListParams }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await listInboxPosts(data)
@@ -199,7 +199,7 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
  */
 export const checkOnboardingState = createServerFn({ method: 'GET' })
   .inputValidator(z.string().optional())
-  .handler(async ({ data }: { data: string | undefined }) => {
+  .handler(async ({ data }) => {
     // Allow unauthenticated access for onboarding
     const userId = data
 
@@ -272,59 +272,45 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
  */
 export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .inputValidator(listPortalUsersSchema)
-  .handler(
-    async ({
-      data,
-    }: {
-      data: {
-        search?: string
-        verified?: boolean
-        dateFrom?: string
-        dateTo?: string
-        sort?: 'newest' | 'oldest' | 'most_active'
-        page?: number
-        limit?: number
-      }
-    }) => {
-      await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
-      const { listPortalUsers } = await import('@/lib/users')
-      const result = await listPortalUsers({
-        search: data.search,
-        verified: data.verified,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-        sort: data.sort,
-        page: data.page,
-        limit: data.limit,
-      })
+    const { listPortalUsers } = await import('@/lib/users')
+    const result = await listPortalUsers({
+      search: data.search,
+      verified: data.verified,
+      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+      sort: data.sort,
+      page: data.page,
+      limit: data.limit,
+    })
 
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-
-      // Serialize Date fields for client
-      return {
-        ...result.value,
-        items: result.value.items.map((user) => ({
-          ...user,
-          joinedAt: user.joinedAt.toISOString(),
-        })),
-      }
+    if (!result.success) {
+      throw new Error(result.error.message)
     }
-  )
+
+    // Serialize Date fields for client
+    return {
+      ...result.value,
+      items: result.value.items.map((user) => ({
+        ...user,
+        joinedAt: user.joinedAt.toISOString(),
+      })),
+    }
+  })
 
 /**
  * Get a portal user's details.
  */
 export const getPortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(getPortalUserSchema)
-  .handler(async ({ data }: { data: { memberId: MemberId } }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const { getPortalUserDetail } = await import('@/lib/users')
 
-    const result = await getPortalUserDetail(data.memberId)
+    const result = await getPortalUserDetail(data.memberId as MemberId)
 
     if (!result.success) {
       throw new Error(result.error.message)
@@ -352,12 +338,12 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
  */
 export const deletePortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(deletePortalUserSchema)
-  .handler(async ({ data }: { data: { memberId: MemberId } }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const { removePortalUser } = await import('@/lib/users')
 
-    const result = await removePortalUser(data.memberId)
+    const result = await removePortalUser(data.memberId as MemberId)
 
     if (!result.success) {
       throw new Error(result.error.message)
@@ -393,7 +379,7 @@ export type ResendInvitationInput = z.infer<typeof resendInvitationSchema>
  */
 export const sendInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(sendInvitationSchema)
-  .handler(async ({ data }: { data: SendInvitationInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const session = await getSession()
@@ -459,7 +445,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
  */
 export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(cancelInvitationSchema)
-  .handler(async ({ data }: { data: CancelInvitationInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const invitationId = data.invitationId as InviteId
@@ -482,7 +468,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
  */
 export const resendInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(resendInvitationSchema)
-  .handler(async ({ data }: { data: ResendInvitationInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const session = await getSession()

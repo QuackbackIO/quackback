@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { validateApiWorkspaceAccess, type ApiWorkspaceResult } from '@/lib/workspace'
+import {
+  validateApiWorkspaceAccess,
+  type ApiWorkspaceResult,
+} from '@/lib/server-functions/workspace'
 import { Feature } from '@/lib/features'
 import { checkFeatureAccess } from '@/lib/features/server'
 import {

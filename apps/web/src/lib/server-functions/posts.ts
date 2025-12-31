@@ -120,7 +120,7 @@ export type RestorePostInput = z.infer<typeof restorePostSchema>
  */
 export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .inputValidator(listInboxPostsSchema)
-  .handler(async ({ data }: { data: ListInboxPostsInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await listInboxPosts({
@@ -158,7 +158,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
  */
 export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   .inputValidator(getPostSchema)
-  .handler(async ({ data }: { data: GetPostInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getPostWithDetails(data.id as PostId)
@@ -184,7 +184,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
  */
 export const createPostFn = createServerFn({ method: 'POST' })
   .inputValidator(createPostSchema)
-  .handler(async ({ data }: { data: CreatePostInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createPost(
@@ -220,7 +220,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
  */
 export const updatePostFn = createServerFn({ method: 'POST' })
   .inputValidator(updatePostSchema)
-  .handler(async ({ data }: { data: UpdatePostInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updatePost(
@@ -253,7 +253,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
  */
 export const deletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(deletePostSchema)
-  .handler(async ({ data }: { data: DeletePostInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await softDeletePost(data.id as PostId, {
@@ -271,7 +271,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
  */
 export const changePostStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(changeStatusSchema)
-  .handler(async ({ data }: { data: ChangeStatusInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
@@ -306,7 +306,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
  */
 export const restorePostFn = createServerFn({ method: 'POST' })
   .inputValidator(restorePostSchema)
-  .handler(async ({ data }: { data: RestorePostInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await restorePost(data.id as PostId)
@@ -328,7 +328,7 @@ export const restorePostFn = createServerFn({ method: 'POST' })
  */
 export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .inputValidator(updateTagsSchema)
-  .handler(async ({ data }: { data: UpdateTagsInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updatePost(

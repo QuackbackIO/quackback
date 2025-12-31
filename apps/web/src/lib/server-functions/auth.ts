@@ -1,4 +1,4 @@
-import { auth } from './index'
+import { auth } from '@/lib/auth/index'
 import type { UserId, SessionId } from '@quackback/ids'
 
 /**

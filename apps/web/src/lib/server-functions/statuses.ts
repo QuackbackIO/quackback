@@ -92,7 +92,7 @@ export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () 
  */
 export const fetchStatus = createServerFn({ method: 'GET' })
   .inputValidator(getStatusSchema)
-  .handler(async ({ data }: { data: GetStatusInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getStatusById(data.id as StatusId)
@@ -111,7 +111,7 @@ export const fetchStatus = createServerFn({ method: 'GET' })
  */
 export const createStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(createStatusSchema)
-  .handler(async ({ data }: { data: CreateStatusInput }): Promise<Status> => {
+  .handler(async ({ data }): Promise<Status> => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createStatus({
@@ -134,7 +134,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
  */
 export const updateStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(updateStatusSchema)
-  .handler(async ({ data }: { data: UpdateStatusInput }): Promise<Status> => {
+  .handler(async ({ data }): Promise<Status> => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updateStatus(data.id as StatusId, {
@@ -154,7 +154,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
  */
 export const deleteStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteStatusSchema)
-  .handler(async ({ data }: { data: DeleteStatusInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await deleteStatus(data.id as StatusId)
@@ -169,7 +169,7 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
  */
 export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderStatusesSchema)
-  .handler(async ({ data }: { data: ReorderStatusesInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await reorderStatuses(data.statusIds as StatusId[])

@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { requireWorkspaceRole } from '@/lib/workspace'
+import { requireWorkspaceRole } from '@/lib/server-functions/workspace'
+import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { AdminNav } from '@/components/admin/admin-nav'
-import { getUserAvatarData } from '@/lib/avatar'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ context: _context }) => {
@@ -22,7 +22,9 @@ export const Route = createFileRoute('/admin')({
     const { user } = context
 
     // Get avatar URL with base64 data for SSR (no flicker)
-    const avatarData = await getUserAvatarData(user.id, user.image)
+    const avatarData = await fetchUserAvatar({
+      data: { userId: user.id, fallbackImageUrl: user.image },
+    })
 
     const initialUserData = {
       name: user.name,

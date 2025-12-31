@@ -3,8 +3,8 @@
  * These replace the auth-middleware.ts wrappers with simpler, inline checks.
  */
 
-import { getSession } from '@/lib/auth/server'
-import { getSettings } from '@/lib/workspace'
+import { getSession } from '@/lib/server-functions/auth'
+import { getSettings } from '@/lib/server-functions/workspace'
 import { db, member, eq } from '@/lib/db'
 import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
 

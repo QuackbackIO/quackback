@@ -70,7 +70,7 @@ export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
  */
 export const fetchTag = createServerFn({ method: 'GET' })
   .inputValidator(getTagSchema)
-  .handler(async ({ data }: { data: GetTagInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getTagById(data.id as TagId)
@@ -89,7 +89,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
  */
 export const createTagFn = createServerFn({ method: 'POST' })
   .inputValidator(createTagSchema)
-  .handler(async ({ data }: { data: CreateTagInput }): Promise<Tag> => {
+  .handler(async ({ data }): Promise<Tag> => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createTag({
@@ -107,7 +107,7 @@ export const createTagFn = createServerFn({ method: 'POST' })
  */
 export const updateTagFn = createServerFn({ method: 'POST' })
   .inputValidator(updateTagSchema)
-  .handler(async ({ data }: { data: UpdateTagInput }): Promise<Tag> => {
+  .handler(async ({ data }): Promise<Tag> => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updateTag(data.id as TagId, {
@@ -125,7 +125,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
  */
 export const deleteTagFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteTagSchema)
-  .handler(async ({ data }: { data: DeleteTagInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await deleteTag(data.id as TagId)

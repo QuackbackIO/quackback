@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import Papa from 'papaparse'
-import { validateApiWorkspaceAccess } from '@/lib/workspace'
+import { validateApiWorkspaceAccess } from '@/lib/server-functions/workspace'
 import { requireRole } from '@/lib/api-handler'
 import { processImport } from '@/lib/import/import-service'
 import type { ImportInput } from '@/lib/import/types'

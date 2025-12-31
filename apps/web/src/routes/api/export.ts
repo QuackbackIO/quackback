@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { validateApiWorkspaceAccess } from '@/lib/workspace'
+import { validateApiWorkspaceAccess } from '@/lib/server-functions/workspace'
 import { requireRole } from '@/lib/api-handler'
 import { listPostsForExport } from '@/lib/posts'
 import { getBoardById } from '@/lib/boards'

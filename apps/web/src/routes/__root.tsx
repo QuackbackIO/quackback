@@ -9,8 +9,8 @@ import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { getSession } from '@/lib/auth/server'
-import { getSettings } from '@/lib/workspace'
+import { getSession } from '@/lib/server-functions/auth'
+import { getSettings } from '@/lib/server-functions/workspace'
 
 // Script to handle system theme preference when theme is set to 'system'
 const systemThemeScript = `

@@ -79,7 +79,7 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
 
 export const fetchRoadmap = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapSchema)
-  .handler(async ({ data }: { data: GetRoadmapInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getRoadmap(data.id as RoadmapId)
@@ -95,7 +95,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
 // Write Operations
 export const createRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(createRoadmapSchema)
-  .handler(async ({ data }: { data: CreateRoadmapInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createRoadmap({
@@ -115,7 +115,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
 
 export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(updateRoadmapSchema)
-  .handler(async ({ data }: { data: UpdateRoadmapInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updateRoadmap(data.id as RoadmapId, {
@@ -134,7 +134,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
 
 export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteRoadmapSchema)
-  .handler(async ({ data }: { data: DeleteRoadmapInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await deleteRoadmap(data.id as RoadmapId)
@@ -147,7 +147,7 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
  */
 export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(addPostToRoadmapSchema)
-  .handler(async ({ data }: { data: AddPostToRoadmapInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await addPostToRoadmap({
@@ -163,7 +163,7 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
  */
 export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(removePostFromRoadmapSchema)
-  .handler(async ({ data }: { data: RemovePostFromRoadmapInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
@@ -182,7 +182,7 @@ export type ReorderRoadmapsInput = z.infer<typeof reorderRoadmapsSchema>
  */
 export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderRoadmapsSchema)
-  .handler(async ({ data }: { data: ReorderRoadmapsInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await reorderRoadmaps(data.roadmapIds as RoadmapId[])
@@ -204,7 +204,7 @@ export type GetRoadmapPostsInput = z.infer<typeof getRoadmapPostsSchema>
  */
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsSchema)
-  .handler(async ({ data }: { data: GetRoadmapPostsInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {})

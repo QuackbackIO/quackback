@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { getCurrentUserRole } from '@/lib/workspace'
+import { getCurrentUserRole } from '@/lib/server-functions/workspace'
+import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
-import { getUserAvatarData } from '@/lib/avatar'
 import { getWorkspaceBrandingData, getWorkspaceFaviconData } from '@/lib/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
@@ -35,7 +35,11 @@ export const Route = createFileRoute('/_portal')({
     // Get custom CSS for portal customization
     const [avatarData, brandingData, faviconData, brandingResult, portalResult, customCssResult] =
       await Promise.all([
-        session?.user ? getUserAvatarData(session.user.id, session.user.image) : null,
+        session?.user
+          ? fetchUserAvatar({
+              data: { userId: session.user.id, fallbackImageUrl: session.user.image },
+            })
+          : null,
         getWorkspaceBrandingData(),
         getWorkspaceFaviconData(),
         getBrandingConfig(),

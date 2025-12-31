@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getSession } from '@/lib/auth/server'
+import { getSession } from '@/lib/server-functions/auth'
 import { db, member, integrations, integrationEventMappings, eq } from '@/lib/db'
 import { z } from 'zod'
 import { isValidTypeId, type IntegrationId } from '@quackback/ids'

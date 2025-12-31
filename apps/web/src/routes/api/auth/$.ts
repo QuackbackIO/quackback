@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { auth } from '@/lib/auth/index'
 
 export const Route = createFileRoute('/api/auth/$')({
   server: {
@@ -9,7 +8,8 @@ export const Route = createFileRoute('/api/auth/$')({
        * Better-auth catch-all route handler
        */
       GET: async ({ request }) => {
-        // Better-auth handles the request internally
+        // Dynamic import to prevent client bundling of auth config
+        const { auth } = await import('@/lib/auth/index')
         return await auth.handler(request)
       },
 
@@ -18,7 +18,8 @@ export const Route = createFileRoute('/api/auth/$')({
        * Better-auth catch-all route handler
        */
       POST: async ({ request }) => {
-        // Better-auth handles the request internally
+        // Dynamic import to prevent client bundling of auth config
+        const { auth } = await import('@/lib/auth/index')
         return await auth.handler(request)
       },
     },

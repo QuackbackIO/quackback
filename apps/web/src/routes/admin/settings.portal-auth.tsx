@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspaceRole } from '@/lib/workspace'
+import { requireWorkspaceRole } from '@/lib/server-functions/workspace'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { Lock } from 'lucide-react'

@@ -39,7 +39,7 @@ export type MuteSubscriptionInput = z.infer<typeof muteSubscriptionSchema>
 // Read Operations
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .inputValidator(getSubscriptionStatusSchema)
-  .handler(async ({ data }: { data: GetSubscriptionStatusInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     return await getSubscriptionStatus(auth.member.id, data.postId as PostId)
@@ -48,7 +48,7 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
 // Write Operations
 export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .inputValidator(subscribeToPostSchema)
-  .handler(async ({ data }: { data: SubscribeToPostInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual')
@@ -57,7 +57,7 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
 
 export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   .inputValidator(unsubscribeFromPostSchema)
-  .handler(async ({ data }: { data: UnsubscribeFromPostInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     await unsubscribeFromPost(auth.member.id, data.postId as PostId)
@@ -66,7 +66,7 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
 
 export const muteSubscriptionFn = createServerFn({ method: 'POST' })
   .inputValidator(muteSubscriptionSchema)
-  .handler(async ({ data }: { data: MuteSubscriptionInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     await setSubscriptionMuted(auth.member.id, data.postId as PostId, data.muted ?? true)

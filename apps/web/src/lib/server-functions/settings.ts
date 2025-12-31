@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { db, member, user, invitation, eq, ne } from '@/lib/db'
-import { getBulkUserAvatarData } from '@/lib/avatar'
 import {
   updateCustomCss,
   updateBrandingConfig,
@@ -54,7 +53,36 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 
     // Get avatar URLs for all team members (base64 for SSR)
     const userIds = members.map((m) => m.userId)
-    const avatarMap = await getBulkUserAvatarData(userIds)
+
+    // Fetch avatars inline
+    const avatarMap = new Map<UserId, string | null>()
+    if (userIds.length > 0) {
+      const users = await db.query.user.findMany({
+        where: (users, { inArray }) => inArray(users.id, userIds),
+        columns: {
+          id: true,
+          imageBlob: true,
+          imageType: true,
+          image: true,
+        },
+      })
+
+      for (const user of users) {
+        if (user.imageBlob && user.imageType) {
+          const base64 = Buffer.from(user.imageBlob).toString('base64')
+          avatarMap.set(user.id, `data:${user.imageType};base64,${base64}`)
+        } else {
+          avatarMap.set(user.id, user.image)
+        }
+      }
+
+      // Fill in null for any users not found
+      for (const userId of userIds) {
+        if (!avatarMap.has(userId)) {
+          avatarMap.set(userId, null)
+        }
+      }
+    }
 
     // Format invitations for client component (TypeIDs come directly from DB)
     const formattedInvitations = pendingInvitations.map((inv) => ({
@@ -80,10 +108,10 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
  */
 export const fetchUserProfile = createServerFn({ method: 'GET' })
   .inputValidator(fetchUserProfileSchema)
-  .handler(async ({ data }: { data: UserId }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
-    const userId = data
+    const userId = data as UserId
     // Fetch user's avatar data for SSR
     const userRecord = await db.query.user.findFirst({
       where: eq(user.id, userId),
@@ -162,7 +190,7 @@ export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSch
  */
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .inputValidator(updateCustomCssSchema)
-  .handler(async ({ data }: { data: UpdateCustomCssInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateCustomCss(data.customCss)
@@ -175,7 +203,7 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
  */
 export const updateThemeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateThemeSchema)
-  .handler(async ({ data }: { data: UpdateThemeInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateBrandingConfig(data.brandingConfig as BrandingConfig)
@@ -188,7 +216,7 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
  */
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updatePortalConfigSchema)
-  .handler(async ({ data }: { data: UpdatePortalConfigActionInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updatePortalConfig(data as UpdatePortalConfigInput)
@@ -244,7 +272,7 @@ export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNam
  */
 export const uploadLogoFn = createServerFn({ method: 'POST' })
   .inputValidator(uploadLogoSchema)
-  .handler(async ({ data }: { data: UploadLogoInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
@@ -272,7 +300,7 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
  */
 export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
   .inputValidator(uploadHeaderLogoSchema)
-  .handler(async ({ data }: { data: UploadHeaderLogoInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
@@ -300,7 +328,7 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
  */
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayModeSchema)
-  .handler(async ({ data }: { data: UpdateHeaderDisplayModeInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateHeaderDisplayMode(data.mode)
@@ -313,7 +341,7 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
  */
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayNameSchema)
-  .handler(async ({ data }: { data: UpdateHeaderDisplayNameInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateHeaderDisplayName(data.name)

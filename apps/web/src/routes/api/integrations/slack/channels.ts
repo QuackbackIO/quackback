@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getSession } from '@/lib/auth/server'
+import { getSession } from '@/lib/server-functions/auth'
 import { db, member, integrations, decryptToken, eq } from '@/lib/db'
 import { listSlackChannels } from '@quackback/integrations'
 import type { UserId } from '@quackback/ids'

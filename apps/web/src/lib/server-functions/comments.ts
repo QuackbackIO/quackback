@@ -5,7 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth, getOptionalAuth } from './auth-helpers'
-import { getSession } from '@/lib/auth/server'
+import { getSession } from '@/lib/server-functions/auth'
 import {
   createComment,
   updateComment,
@@ -60,7 +60,7 @@ export type ToggleReactionInput = z.infer<typeof toggleReactionSchema>
 // Write Operations
 export const createCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(createCommentSchema)
-  .handler(async ({ data }: { data: CreateCommentInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const result = await createComment(
@@ -97,7 +97,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
 
 export const updateCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(updateCommentSchema)
-  .handler(async ({ data }: { data: UpdateCommentInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const result = await updateComment(
@@ -116,7 +116,7 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
 
 export const deleteCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteCommentSchema)
-  .handler(async ({ data }: { data: DeleteCommentInput }) => {
+  .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const result = await deleteComment(data.id as CommentId, {
@@ -129,7 +129,7 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
 
 export const toggleReactionFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleReactionSchema)
-  .handler(async ({ data }: { data: ToggleReactionInput }) => {
+  .handler(async ({ data }) => {
     const session = await getSession()
     if (!session?.user) throw new Error('Authentication required')
 

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { db, settings, member, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/db'
-import { getSettings } from '@/lib/workspace'
+import { getSettings } from '@/lib/server-functions/workspace'
 import { generateId } from '@quackback/ids'
 import type { UserId, StatusId } from '@quackback/ids'
 

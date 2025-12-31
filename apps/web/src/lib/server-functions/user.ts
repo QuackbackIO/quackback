@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { db, user, member, eq } from '@/lib/db'
-import { getCurrentUserRole } from '@/lib/workspace'
+import { getCurrentUserRole } from '@/lib/server-functions/workspace'
 import { getNotificationPreferences, updateNotificationPreferences } from '@/lib/subscriptions'
 import { type UserId, type MemberId } from '@quackback/ids'
 

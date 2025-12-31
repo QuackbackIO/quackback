@@ -2,7 +2,7 @@
 
 import { db, invitation, member, eq } from '@/lib/db'
 import { generateId } from '@quackback/ids'
-import { getSession } from '@/lib/auth/server'
+import { getSession } from '@/lib/server-functions/auth'
 import type { InviteId, MemberId, UserId } from '@quackback/ids'
 import { createServerFn } from '@tanstack/react-start'
 

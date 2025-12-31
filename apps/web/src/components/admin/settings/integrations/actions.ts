@@ -1,7 +1,7 @@
 'use server'
 
 import { createHmac, randomBytes } from 'crypto'
-import { requireWorkspaceRole } from '@/lib/workspace'
+import { requireWorkspaceRole } from '@/lib/server-functions/workspace'
 
 function getHmacSecret(): string {
   const secret = process.env.BETTER_AUTH_SECRET

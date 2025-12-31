@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { db, user, eq } from '@/lib/db'
-import { getSession } from '@/lib/auth/server'
+import { getSession } from '@/lib/server-functions/auth'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']

@@ -75,7 +75,7 @@ export const fetchBoards = createServerFn({ method: 'GET' }).handler(async () =>
  */
 export const fetchBoard = createServerFn({ method: 'GET' })
   .inputValidator(getBoardSchema)
-  .handler(async ({ data }: { data: GetBoardInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getBoardById(data.id as BoardId)
@@ -99,7 +99,7 @@ export const fetchBoard = createServerFn({ method: 'GET' })
  */
 export const createBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(createBoardSchema)
-  .handler(async ({ data }: { data: CreateBoardInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createBoard({
@@ -123,7 +123,7 @@ export const createBoardFn = createServerFn({ method: 'POST' })
  */
 export const updateBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(updateBoardSchema)
-  .handler(async ({ data }: { data: UpdateBoardInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updateBoard(data.id as BoardId, {
@@ -148,7 +148,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
  */
 export const deleteBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteBoardSchema)
-  .handler(async ({ data }: { data: DeleteBoardInput }) => {
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await deleteBoard(data.id as BoardId)
