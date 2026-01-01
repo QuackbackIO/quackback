@@ -18,7 +18,6 @@ import type { BetterAuthPlugin } from 'better-auth'
 import { jwtVerify } from 'jose'
 import { z } from 'zod'
 import crypto from 'crypto'
-import { getDb, user, member, session, eq } from '@/lib/db'
 import { generateId } from '@quackback/ids'
 
 // JWT payload schema
@@ -69,6 +68,7 @@ export const trustLogin = () => {
             return ctx.redirect('/admin/login?error=invalid_token')
           }
 
+          const { getDb, user, member, session, eq } = await import('@/lib/db')
           const db = getDb()
 
           // 2. Find or create user

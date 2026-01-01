@@ -4,7 +4,6 @@
  *
  * Logos are stored as bytea blobs in the database and converted to data URLs on read.
  */
-import { db } from '@/lib/db'
 
 /**
  * Convert a bytea blob and MIME type to a data URL.
@@ -32,6 +31,7 @@ export interface BrandingData {
  * Get the first (and only) settings record for single workspace deployment.
  */
 async function getSettingsRecord() {
+  const { db } = await import('@/lib/db')
   return db.query.settings.findFirst()
 }
 
