@@ -1,12 +1,13 @@
-'use server'
-
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth } from './auth-helpers'
-import { db, user, member, eq } from '@/lib/db'
-import { getCurrentUserRole } from '@/lib/server-functions/workspace'
-import { getNotificationPreferences, updateNotificationPreferences } from '@/lib/subscriptions'
 import { type UserId, type MemberId } from '@quackback/ids'
+
+/**
+ * User profile and notification preferences server functions.
+ *
+ * NOTE: All DB and server-only imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
+ */
 
 // ============================================
 // Schemas
@@ -54,6 +55,9 @@ export interface NotificationPreferences {
  */
 export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserProfile> => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, user, member, eq } = await import('@/lib/db')
+
     const ctx = await requireAuth()
 
     const userRecord = await db.query.user.findFirst({
@@ -102,6 +106,9 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, user, eq } = await import('@/lib/db')
+
     const ctx = await requireAuth()
     const { name } = data
 
@@ -128,6 +135,9 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, user, eq } = await import('@/lib/db')
+
     const ctx = await requireAuth()
 
     const [updated] = await db
@@ -157,6 +167,9 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ role: 'owner' | 'admin' | 'member' | 'user' | null }> => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getCurrentUserRole } = await import('./workspace')
+
     await requireAuth()
 
     const role = await getCurrentUserRole()
@@ -169,6 +182,10 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
  */
 export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NotificationPreferences> => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, member, eq } = await import('@/lib/db')
+    const { getNotificationPreferences } = await import('@/lib/subscriptions/subscription.service')
+
     const ctx = await requireAuth()
 
     const memberRecord = await db.query.member.findFirst({
@@ -195,6 +212,11 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }: {
       data: UpdateNotificationPreferencesInput
     }): Promise<NotificationPreferences> => {
+      const { requireAuth } = await import('./auth-helpers')
+      const { db, member, eq } = await import('@/lib/db')
+      const { updateNotificationPreferences } =
+        await import('@/lib/subscriptions/subscription.service')
+
       const ctx = await requireAuth()
       const { emailStatusChange, emailNewComment, emailMuted } = data
 

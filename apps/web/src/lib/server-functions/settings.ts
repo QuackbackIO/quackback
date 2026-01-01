@@ -1,27 +1,79 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth } from './auth-helpers'
-import { db, member, user, invitation, eq, ne } from '@/lib/db'
+// Import types from barrel export (client-safe)
 import {
-  updateCustomCss,
-  updateBrandingConfig,
-  updatePortalConfig,
-  uploadLogo,
-  deleteLogo,
-  uploadHeaderLogo,
-  deleteHeaderLogo,
-  updateHeaderDisplayMode,
-  updateHeaderDisplayName,
+  DEFAULT_PORTAL_CONFIG,
   type BrandingConfig,
   type UpdatePortalConfigInput,
 } from '@/lib/settings'
-import { getWorkspaceFeatures } from '@/lib/features/server'
 import { userIdSchema, type UserId } from '@quackback/ids'
 
 /**
  * Server functions for settings data fetching.
  * All functions require authentication.
+ *
+ * NOTE: All DB and server-only imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
+
+// ============================================
+// Read Operations (public - no auth required)
+// ============================================
+
+/**
+ * Fetch branding configuration (public - used for theming)
+ */
+export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getBrandingConfig } = await import('@/lib/settings/settings.service')
+
+  const result = await getBrandingConfig()
+  if (!result.success) throw new Error(result.error.message)
+  return result.value
+})
+
+/**
+ * Fetch custom CSS (public - used for portal styling)
+ */
+export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getCustomCss } = await import('@/lib/settings/settings.service')
+
+  const result = await getCustomCss()
+  if (!result.success) throw new Error(result.error.message)
+  return result.value
+})
+
+/**
+ * Fetch portal configuration (admin - full config)
+ */
+export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getPortalConfig } = await import('@/lib/settings/settings.service')
+
+  const result = await getPortalConfig()
+  if (!result.success) throw new Error(result.error.message)
+  return result.value ?? DEFAULT_PORTAL_CONFIG
+})
+
+/**
+ * Fetch public portal configuration (public - for login pages)
+ */
+export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getPublicPortalConfig } = await import('@/lib/settings/settings.service')
+
+  const result = await getPublicPortalConfig()
+  if (!result.success) throw new Error(result.error.message)
+  return result.value
+})
+
+/**
+ * Fetch public auth configuration (public - for admin login)
+ */
+export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getPublicAuthConfig } = await import('@/lib/settings/settings.service')
+
+  const result = await getPublicAuthConfig()
+  if (!result.success) throw new Error(result.error.message)
+  return result.value
+})
 
 const fetchUserProfileSchema = userIdSchema
 
@@ -30,6 +82,9 @@ const fetchUserProfileSchema = userIdSchema
  */
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, member, user, invitation, eq, ne } = await import('@/lib/db')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     // Only show team members (owner, admin, member) - exclude portal users (role='user')
@@ -67,12 +122,12 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         },
       })
 
-      for (const user of users) {
-        if (user.imageBlob && user.imageType) {
-          const base64 = Buffer.from(user.imageBlob).toString('base64')
-          avatarMap.set(user.id, `data:${user.imageType};base64,${base64}`)
+      for (const u of users) {
+        if (u.imageBlob && u.imageType) {
+          const base64 = Buffer.from(u.imageBlob).toString('base64')
+          avatarMap.set(u.id, `data:${u.imageType};base64,${base64}`)
         } else {
-          avatarMap.set(user.id, user.image)
+          avatarMap.set(u.id, u.image)
         }
       }
 
@@ -109,6 +164,9 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 export const fetchUserProfile = createServerFn({ method: 'GET' })
   .inputValidator(fetchUserProfileSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, user, eq } = await import('@/lib/db')
+
     await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const userId = data as UserId
@@ -191,6 +249,9 @@ export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSch
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .inputValidator(updateCustomCssSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateCustomCss } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateCustomCss(data.customCss)
@@ -204,6 +265,9 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
 export const updateThemeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateThemeSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateBrandingConfig } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateBrandingConfig(data.brandingConfig as BrandingConfig)
@@ -217,6 +281,9 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updatePortalConfigSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updatePortalConfig } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updatePortalConfig(data as UpdatePortalConfigInput)
@@ -228,6 +295,9 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
  * Get workspace features (edition, tier, enabled features, limits)
  */
 export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { getWorkspaceFeatures } = await import('@/lib/features/server')
+
   await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
   const features = await getWorkspaceFeatures()
@@ -273,6 +343,9 @@ export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNam
 export const uploadLogoFn = createServerFn({ method: 'POST' })
   .inputValidator(uploadLogoSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { uploadLogo } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
@@ -288,6 +361,9 @@ export const uploadLogoFn = createServerFn({ method: 'POST' })
  * Delete logo
  */
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { deleteLogo } = await import('@/lib/settings/settings.service')
+
   await requireAuth({ roles: ['owner', 'admin'] })
 
   const result = await deleteLogo()
@@ -301,6 +377,9 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
 export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
   .inputValidator(uploadHeaderLogoSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { uploadHeaderLogo } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
@@ -316,6 +395,9 @@ export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
  * Delete header logo
  */
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { deleteHeaderLogo } = await import('@/lib/settings/settings.service')
+
   await requireAuth({ roles: ['owner', 'admin'] })
 
   const result = await deleteHeaderLogo()
@@ -329,6 +411,9 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayModeSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateHeaderDisplayMode } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateHeaderDisplayMode(data.mode)
@@ -342,6 +427,9 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayNameSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateHeaderDisplayName } = await import('@/lib/settings/settings.service')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await updateHeaderDisplayName(data.name)

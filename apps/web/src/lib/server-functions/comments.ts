@@ -1,23 +1,13 @@
 /**
  * Server functions for comment operations
+ *
+ * NOTE: All service imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth, getOptionalAuth } from './auth-helpers'
-import { getSession } from '@/lib/server-functions/auth'
-import {
-  createComment,
-  updateComment,
-  deleteComment,
-  toggleReaction,
-  canEditComment,
-  canDeleteComment,
-  userEditComment,
-  softDeleteComment,
-} from '@/lib/comments'
 import { type CommentId, type PostId, type UserId } from '@quackback/ids'
-import { dispatchCommentCreated } from '@/lib/events/dispatch'
 
 const tiptapContentSchema = z.object({
   type: z.literal('doc'),
@@ -55,6 +45,10 @@ export type ToggleReactionInput = z.infer<typeof toggleReactionSchema>
 export const createCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(createCommentSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { createComment } = await import('@/lib/comments/comment.service')
+    const { dispatchCommentCreated } = await import('@/lib/events/dispatch')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const result = await createComment(
@@ -92,6 +86,9 @@ export const createCommentFn = createServerFn({ method: 'POST' })
 export const updateCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(updateCommentSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateComment } = await import('@/lib/comments/comment.service')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const result = await updateComment(
@@ -111,6 +108,9 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
 export const deleteCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteCommentSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { deleteComment } = await import('@/lib/comments/comment.service')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     const result = await deleteComment(data.id as CommentId, {
@@ -124,6 +124,9 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
 export const toggleReactionFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleReactionSchema)
   .handler(async ({ data }) => {
+    const { getSession } = await import('./auth')
+    const { toggleReaction } = await import('@/lib/comments/comment.service')
+
     const session = await getSession()
     if (!session?.user) throw new Error('Authentication required')
 
@@ -152,6 +155,10 @@ export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
 export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
   .inputValidator(getCommentPermissionsSchema)
   .handler(async ({ data }) => {
+    const { getSession } = await import('./auth')
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { canEditComment, canDeleteComment } = await import('@/lib/comments/comment.service')
+
     const session = await getSession()
     if (!session?.user) {
       return { canEdit: false, canDelete: false }
@@ -177,6 +184,9 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
 export const userEditCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(userEditCommentSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { userEditComment } = await import('@/lib/comments/comment.service')
+
     const ctx = await requireAuth()
     const actor = { memberId: ctx.member.id, role: ctx.member.role }
 
@@ -188,6 +198,9 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
 export const userDeleteCommentFn = createServerFn({ method: 'POST' })
   .inputValidator(userDeleteCommentSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { softDeleteComment } = await import('@/lib/comments/comment.service')
+
     const ctx = await requireAuth()
     const actor = { memberId: ctx.member.id, role: ctx.member.role }
 

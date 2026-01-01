@@ -1,19 +1,12 @@
 /**
  * Server functions for status operations
+ *
+ * NOTE: All service imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth } from './auth-helpers'
-import {
-  listStatuses,
-  getStatusById,
-  createStatus,
-  updateStatus,
-  deleteStatus,
-  reorderStatuses,
-  type Status,
-} from '@/lib/statuses'
 import { type StatusId } from '@quackback/ids'
 
 // ============================================
@@ -78,6 +71,9 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
  * List all statuses for the workspace
  */
 export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { listStatuses } = await import('@/lib/statuses/status.service')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const result = await listStatuses()
@@ -93,6 +89,9 @@ export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchStatus = createServerFn({ method: 'GET' })
   .inputValidator(getStatusSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getStatusById } = await import('@/lib/statuses/status.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getStatusById(data.id as StatusId)
@@ -111,7 +110,10 @@ export const fetchStatus = createServerFn({ method: 'GET' })
  */
 export const createStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(createStatusSchema)
-  .handler(async ({ data }): Promise<Status> => {
+  .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { createStatus } = await import('@/lib/statuses/status.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createStatus({
@@ -134,7 +136,10 @@ export const createStatusFn = createServerFn({ method: 'POST' })
  */
 export const updateStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(updateStatusSchema)
-  .handler(async ({ data }): Promise<Status> => {
+  .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateStatus } = await import('@/lib/statuses/status.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updateStatus(data.id as StatusId, {
@@ -155,6 +160,9 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
 export const deleteStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteStatusSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { deleteStatus } = await import('@/lib/statuses/status.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await deleteStatus(data.id as StatusId)
@@ -170,6 +178,9 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
 export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderStatusesSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { reorderStatuses } = await import('@/lib/statuses/status.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await reorderStatuses(data.statusIds as StatusId[])

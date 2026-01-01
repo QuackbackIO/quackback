@@ -1,12 +1,5 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth } from './auth-helpers'
-import { listInboxPosts } from '@/lib/posts'
-import { listBoards } from '@/lib/boards'
-import { listTags } from '@/lib/tags'
-import { listStatuses } from '@/lib/statuses'
-import { listTeamMembers } from '@/lib/members'
-import { db, member, invitation, user, eq, and } from '@/lib/db'
 import {
   generateId,
   inviteIdSchema,
@@ -14,10 +7,6 @@ import {
   type UserId,
   type MemberId,
 } from '@quackback/ids'
-import { sendInvitationEmail } from '@quackback/email'
-import { getRootUrl } from '@/lib/routing'
-import { getSettings } from '@/lib/server-functions/workspace'
-import { getSession } from '@/lib/server-functions/auth'
 import type { InboxPostListParams } from '@/lib/posts/post.types'
 import type { BoardSettings } from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
@@ -25,6 +14,9 @@ import type { TiptapContent } from '@/lib/schemas/posts'
 /**
  * Server functions for admin data fetching.
  * All functions require authentication and team member role (owner, admin, or member).
+ *
+ * NOTE: All DB and server-only imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
 
 // Schemas for GET request parameters
@@ -66,6 +58,9 @@ const deletePortalUserSchema = z.object({
 export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .inputValidator(inboxPostListSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listInboxPosts } = await import('@/lib/posts/post.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await listInboxPosts(data)
@@ -90,6 +85,9 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
  * Fetch all boards for the organization
  */
 export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { listBoards } = await import('@/lib/boards/board.service')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const result = await listBoards()
@@ -109,6 +107,9 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
  * Fetch all tags for the organization
  */
 export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { listTags } = await import('@/lib/tags/tag.service')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const result = await listTags()
@@ -122,6 +123,9 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
  * Fetch all statuses for the organization
  */
 export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { listStatuses } = await import('@/lib/statuses/status.service')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const result = await listStatuses()
@@ -135,6 +139,9 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
  * Fetch team members (not portal users)
  */
 export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { listTeamMembers } = await import('@/lib/members/member.service')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const result = await listTeamMembers()
@@ -148,6 +155,9 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
  * Check onboarding completion status
  */
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { db, member } = await import('@/lib/db')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const [orgBoards, members] = await Promise.all([
@@ -167,6 +177,9 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
  * Fetch boards list for settings page
  */
 export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { db } = await import('@/lib/db')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const orgBoards = await db.query.boards.findMany()
@@ -182,6 +195,9 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
  * Fetch integrations list
  */
 export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { db } = await import('@/lib/db')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const integrations = await db.query.integrations.findMany()
@@ -196,6 +212,8 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
 export const checkOnboardingState = createServerFn({ method: 'GET' })
   .inputValidator(z.string().optional())
   .handler(async ({ data }) => {
+    const { db, member, eq } = await import('@/lib/db')
+
     // Allow unauthenticated access for onboarding
     const userId = data
 
@@ -269,9 +287,11 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
 export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .inputValidator(listPortalUsersSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listPortalUsers } = await import('@/lib/users/user.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
-    const { listPortalUsers } = await import('@/lib/users')
     const result = await listPortalUsers({
       search: data.search,
       verified: data.verified,
@@ -302,9 +322,10 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
 export const getPortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(getPortalUserSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    const { requireAuth } = await import('./auth-helpers')
+    const { getPortalUserDetail } = await import('@/lib/users/user.service')
 
-    const { getPortalUserDetail } = await import('@/lib/users')
+    await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getPortalUserDetail(data.memberId as MemberId)
 
@@ -335,9 +356,10 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 export const deletePortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(deletePortalUserSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['owner', 'admin'] })
+    const { requireAuth } = await import('./auth-helpers')
+    const { removePortalUser } = await import('@/lib/users/user.service')
 
-    const { removePortalUser } = await import('@/lib/users')
+    await requireAuth({ roles: ['owner', 'admin'] })
 
     const result = await removePortalUser(data.memberId as MemberId)
 
@@ -376,6 +398,13 @@ export type ResendInvitationInput = z.infer<typeof resendInvitationSchema>
 export const sendInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(sendInvitationSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
+    const { getSettings } = await import('./workspace')
+    const { db, invitation, user, eq, and } = await import('@/lib/db')
+    const { sendInvitationEmail } = await import('@quackback/email')
+    const { getRootUrl } = await import('@/lib/routing')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const session = await getSession()
@@ -442,6 +471,9 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
 export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(cancelInvitationSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, invitation, eq, and } = await import('@/lib/db')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const invitationId = data.invitationId as InviteId
@@ -465,6 +497,13 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
 export const resendInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(resendInvitationSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
+    const { getSettings } = await import('./workspace')
+    const { db, invitation, eq, and } = await import('@/lib/db')
+    const { sendInvitationEmail } = await import('@quackback/email')
+    const { getRootUrl } = await import('@/lib/routing')
+
     await requireAuth({ roles: ['owner', 'admin'] })
 
     const session = await getSession()

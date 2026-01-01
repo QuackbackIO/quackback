@@ -1,4 +1,3 @@
-import { auth } from '@/lib/auth/index'
 import type { UserId, SessionId } from '@quackback/ids'
 
 /**
@@ -41,6 +40,7 @@ export interface Session {
  * so we don't need to pass headers explicitly like in Next.js
  */
 export const getSession = async (): Promise<Session | null> => {
+  const { auth } = await import('@/lib/auth/index')
   const session = await auth.api.getSession({
     headers: new Headers(),
   })

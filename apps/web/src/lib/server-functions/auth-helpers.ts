@@ -1,11 +1,11 @@
 /**
  * Auth helper functions for inline use in server functions.
  * These replace the auth-middleware.ts wrappers with simpler, inline checks.
+ *
+ * NOTE: All DB and server-only imports are done dynamically inside functions
+ * to prevent client bundling issues with TanStack Start.
  */
 
-import { getSession } from '@/lib/server-functions/auth'
-import { getSettings } from '@/lib/server-functions/workspace'
-import { db, member, eq } from '@/lib/db'
 import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
 
 export type Role = 'owner' | 'admin' | 'member' | 'user'
@@ -42,6 +42,10 @@ export interface PartialAuthContext {
  * Throws if user is not authenticated or not a team member.
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
+  const { getSession } = await import('./auth')
+  const { getSettings } = await import('./workspace')
+  const { db, member, eq } = await import('@/lib/db')
+
   const session = await getSession()
   if (!session?.user) {
     throw new Error('Authentication required')
@@ -88,6 +92,10 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
  * Returns partial context with null user/member if not authenticated.
  */
 export async function getOptionalAuth(): Promise<AuthContext | PartialAuthContext> {
+  const { getSession } = await import('./auth')
+  const { getSettings } = await import('./workspace')
+  const { db, member, eq } = await import('@/lib/db')
+
   const session = await getSession()
   const appSettings = await getSettings()
   if (!appSettings) {

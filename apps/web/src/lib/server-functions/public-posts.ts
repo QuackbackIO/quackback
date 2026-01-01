@@ -1,29 +1,12 @@
-'use server'
+/**
+ * Server functions for public post operations
+ *
+ * NOTE: All service imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
+ */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth, getOptionalAuth } from './auth-helpers'
-import {
-  createPost,
-  voteOnPost,
-  userEditPost,
-  softDeletePost,
-  canEditPost,
-  canDeletePost,
-  listPublicPosts,
-  getAllUserVotedPostIds,
-  getPublicRoadmapPostsPaginated,
-  hasUserVoted,
-} from '@/lib/posts'
-import { getPublicBoardById } from '@/lib/boards'
-import { getDefaultStatus } from '@/lib/statuses'
-import { getMemberByUser } from '@/lib/members'
-import { listPublicRoadmaps } from '@/lib/roadmaps'
-import { getPublicRoadmapPosts } from '@/lib/roadmaps'
-import { getSubscriptionStatus, type SubscriptionReason } from '@/lib/subscriptions'
-import { getMemberIdentifier } from '@/lib/user-identifier'
-import { hashIP } from '@/lib/utils/ip-hash'
-import { dispatchPostCreated } from '@/lib/events/dispatch'
 import {
   type PostId,
   type BoardId,
@@ -33,7 +16,6 @@ import {
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
-import { getSettings } from './workspace'
 
 // ============================================
 // Schemas
@@ -123,6 +105,9 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
 export const listPublicPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(listPublicPostsSchema)
   .handler(async ({ data }: { data: ListPublicPostsInput }) => {
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { listPublicPosts } = await import('@/lib/posts/post.public')
+
     await getOptionalAuth()
 
     const result = await listPublicPosts({
@@ -166,6 +151,9 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
       editReason?: string
       deleteReason?: string
     }> => {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { canEditPost, canDeletePost } = await import('@/lib/posts/post.service')
+
       const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
 
@@ -201,6 +189,9 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
 export const userEditPostFn = createServerFn({ method: 'POST' })
   .inputValidator(userEditPostSchema)
   .handler(async ({ data }: { data: UserEditPostInput }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { userEditPost } = await import('@/lib/posts/post.service')
+
     const ctx = await requireAuth()
     const { postId: postIdRaw, title, content, contentJson } = data
     const postId = postIdRaw as PostId
@@ -232,6 +223,9 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
 export const userDeletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(userDeletePostSchema)
   .handler(async ({ data }: { data: UserDeletePostInput }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { softDeletePost } = await import('@/lib/posts/post.service')
+
     const ctx = await requireAuth()
     const postId = data.postId as PostId
 
@@ -256,6 +250,11 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleVoteSchema)
   .handler(
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
+      const { requireAuth } = await import('./auth-helpers')
+      const { voteOnPost } = await import('@/lib/posts/post.service')
+      const { getMemberIdentifier } = await import('@/lib/user-identifier')
+      const { hashIP } = await import('@/lib/utils/ip-hash')
+
       const ctx = await requireAuth()
       const postId = data.postId as PostId
       const clientIpHash = data.ipHash
@@ -286,6 +285,14 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
 export const createPublicPostFn = createServerFn({ method: 'POST' })
   .inputValidator(createPublicPostSchema)
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getSettings } = await import('./workspace')
+    const { createPost } = await import('@/lib/posts/post.service')
+    const { getPublicBoardById } = await import('@/lib/boards/board.public')
+    const { getDefaultStatus } = await import('@/lib/statuses/status.service')
+    const { getMemberByUser } = await import('@/lib/members/member.service')
+    const { dispatchPostCreated } = await import('@/lib/events/dispatch')
+
     const ctx = await requireAuth()
     const { boardId: boardIdRaw, title, content, contentJson } = data
     const boardId = boardIdRaw as BoardId
@@ -376,6 +383,10 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
  */
 export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { getAllUserVotedPostIds } = await import('@/lib/posts/post.public')
+    const { getMemberIdentifier } = await import('@/lib/user-identifier')
+
     const ctx = await getOptionalAuth()
 
     // Optional auth - return empty if not authenticated
@@ -398,6 +409,9 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
  * List public roadmaps for a workspace (no auth required).
  */
 export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getOptionalAuth } = await import('./auth-helpers')
+  const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+
   await getOptionalAuth()
 
   const result = await listPublicRoadmaps()
@@ -419,6 +433,9 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
 export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getPublicRoadmapPostsSchema)
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { getPublicRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
+
     await getOptionalAuth()
 
     const { roadmapId, statusId, limit, offset } = data
@@ -442,6 +459,9 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
 export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsByStatusSchema)
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { getPublicRoadmapPostsPaginated } = await import('@/lib/posts/post.public')
+
     await getOptionalAuth()
 
     const { statusId, page, limit } = data
@@ -465,49 +485,45 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
  */
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
-  .handler(
-    async ({
-      data,
-    }): Promise<{
-      userIdentifier: string
-      isMember: boolean
-      hasVoted: boolean
-      subscriptionStatus: { subscribed: boolean; muted: boolean; reason: SubscriptionReason | null }
-    }> => {
-      const ctx = await getOptionalAuth()
-      const postId = data.postId as PostId
+  .handler(async ({ data }) => {
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { hasUserVoted } = await import('@/lib/posts/post.public')
+    const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
+    const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-      let userIdentifier = ''
-      let isMember = false
-      let hasVoted = false
-      let subscriptionStatus: {
-        subscribed: boolean
-        muted: boolean
-        reason: SubscriptionReason | null
-      } = {
-        subscribed: false,
-        muted: false,
-        reason: null,
-      }
+    const ctx = await getOptionalAuth()
+    const postId = data.postId as PostId
 
-      // If user is authenticated and is a member
-      if (ctx.user && ctx.member) {
-        userIdentifier = getMemberIdentifier(ctx.member.id)
-        isMember = true
-
-        // Check if user has voted
-        const voteResult = await hasUserVoted(postId, userIdentifier)
-        hasVoted = voteResult.success ? voteResult.value : false
-
-        // Get subscription status
-        subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
-      }
-
-      return {
-        userIdentifier,
-        isMember,
-        hasVoted,
-        subscriptionStatus,
-      }
+    let userIdentifier = ''
+    let isMember = false
+    let hasVoted = false
+    let subscriptionStatus: {
+      subscribed: boolean
+      muted: boolean
+      reason: string | null
+    } = {
+      subscribed: false,
+      muted: false,
+      reason: null,
     }
-  )
+
+    // If user is authenticated and is a member
+    if (ctx.user && ctx.member) {
+      userIdentifier = getMemberIdentifier(ctx.member.id)
+      isMember = true
+
+      // Check if user has voted
+      const voteResult = await hasUserVoted(postId, userIdentifier)
+      hasVoted = voteResult.success ? voteResult.value : false
+
+      // Get subscription status
+      subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
+    }
+
+    return {
+      userIdentifier,
+      isMember,
+      hasVoted,
+      subscriptionStatus,
+    }
+  })

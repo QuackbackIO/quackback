@@ -1,16 +1,12 @@
 /**
  * Server functions for subscription operations
+ *
+ * NOTE: All service imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth } from './auth-helpers'
-import {
-  getSubscriptionStatus,
-  subscribeToPost,
-  unsubscribeFromPost,
-  setSubscriptionMuted,
-} from '@/lib/subscriptions'
 import { type PostId } from '@quackback/ids'
 
 const getSubscriptionStatusSchema = z.object({
@@ -40,6 +36,9 @@ export type MuteSubscriptionInput = z.infer<typeof muteSubscriptionSchema>
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .inputValidator(getSubscriptionStatusSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     return await getSubscriptionStatus(auth.member.id, data.postId as PostId)
@@ -49,6 +48,9 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
 export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .inputValidator(subscribeToPostSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { subscribeToPost } = await import('@/lib/subscriptions/subscription.service')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual')
@@ -58,6 +60,9 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
 export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   .inputValidator(unsubscribeFromPostSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { unsubscribeFromPost } = await import('@/lib/subscriptions/subscription.service')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     await unsubscribeFromPost(auth.member.id, data.postId as PostId)
@@ -67,6 +72,9 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
 export const muteSubscriptionFn = createServerFn({ method: 'POST' })
   .inputValidator(muteSubscriptionSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { setSubscriptionMuted } = await import('@/lib/subscriptions/subscription.service')
+
     const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
 
     await setSubscriptionMuted(auth.member.id, data.postId as PostId, data.muted ?? true)

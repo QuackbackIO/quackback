@@ -1,13 +1,5 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { getOptionalAuth } from './auth-helpers'
-import { listPublicPosts, getUserVotedPostIds, hasUserVoted } from '@/lib/posts'
-import { listPublicBoardsWithStats } from '@/lib/boards'
-import { listPublicStatuses } from '@/lib/statuses'
-import { listPublicTags } from '@/lib/tags'
-import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps'
-import { getSubscriptionStatus } from '@/lib/subscriptions'
-import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/db'
 import {
   type PostId,
   type MemberId,
@@ -20,6 +12,9 @@ import type { BoardSettings } from '@quackback/db/types'
 /**
  * Server functions for portal/public data fetching.
  * These functions allow unauthenticated access for public portal use.
+ *
+ * NOTE: All DB and server-only imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
 
 // ============================================
@@ -65,7 +60,29 @@ const getCommentsSectionDataSchema = z.object({
   commentMemberIds: z.array(z.string()),
 })
 
+const getMemberIdForUserSchema = z.object({
+  userId: z.string(),
+})
+
+/**
+ * Get the member ID for a user.
+ * Used in loaders to get member identifier for authenticated users.
+ */
+export const getMemberIdForUser = createServerFn({ method: 'GET' })
+  .inputValidator(getMemberIdForUserSchema)
+  .handler(async ({ data }): Promise<MemberId | null> => {
+    const { db, member, eq } = await import('@/lib/db')
+
+    const memberRecord = await db.query.member.findFirst({
+      where: eq(member.userId, data.userId),
+    })
+
+    return memberRecord?.id ?? null
+  })
+
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
+  const { listPublicBoardsWithStats } = await import('@/lib/boards/board.public')
+
   const result = await listPublicBoardsWithStats()
   if (!result.success) {
     throw new Error(result.error.message)
@@ -77,6 +94,66 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
   }))
 })
 
+const fetchPublicBoardBySlugSchema = z.object({
+  slug: z.string(),
+})
+
+export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
+  .inputValidator(fetchPublicBoardBySlugSchema)
+  .handler(async ({ data }) => {
+    const { getPublicBoardBySlug } = await import('@/lib/boards/board.public')
+
+    const result = await getPublicBoardBySlug(data.slug)
+    if (!result.success) {
+      throw new Error(result.error.message)
+    }
+    if (!result.value) {
+      return null
+    }
+    return {
+      ...result.value,
+      settings: (result.value.settings ?? {}) as BoardSettings,
+    }
+  })
+
+const fetchPublicPostDetailSchema = z.object({
+  postId: z.string(),
+})
+
+export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
+  .inputValidator(fetchPublicPostDetailSchema)
+  .handler(async ({ data }) => {
+    const { getPublicPostDetail } = await import('@/lib/posts/post.public')
+
+    const result = await getPublicPostDetail(data.postId as PostId)
+    if (!result.success) {
+      throw new Error(result.error.message)
+    }
+    if (!result.value) {
+      return null
+    }
+    // Serialize Date fields
+    return {
+      ...result.value,
+      createdAt: result.value.createdAt.toISOString(),
+      updatedAt: result.value.updatedAt?.toISOString() ?? null,
+      comments: result.value.comments.map((c) => ({
+        ...c,
+        createdAt: c.createdAt.toISOString(),
+        replies: c.replies.map((r) => ({
+          ...r,
+          createdAt: r.createdAt.toISOString(),
+        })),
+      })),
+      officialResponse: result.value.officialResponse
+        ? {
+            ...result.value.officialResponse,
+            createdAt: result.value.officialResponse.createdAt.toISOString(),
+          }
+        : null,
+    }
+  })
+
 export const fetchPublicPosts = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicPostsSchema)
   .handler(
@@ -85,6 +162,8 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
     }: {
       data: { boardSlug?: string; search?: string; sort: 'top' | 'new' | 'trending' }
     }) => {
+      const { listPublicPosts } = await import('@/lib/posts/post.public')
+
       const result = await listPublicPosts({
         boardSlug: data.boardSlug,
         search: data.search,
@@ -107,6 +186,8 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
   )
 
 export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(async () => {
+  const { listPublicStatuses } = await import('@/lib/statuses/status.service')
+
   const result = await listPublicStatuses()
   if (!result.success) {
     throw new Error(result.error.message)
@@ -115,6 +196,8 @@ export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(asy
 })
 
 export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async () => {
+  const { listPublicTags } = await import('@/lib/tags/tag.service')
+
   const result = await listPublicTags()
   if (!result.success) {
     throw new Error(result.error.message)
@@ -125,6 +208,8 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
 export const fetchVotedPosts = createServerFn({ method: 'GET' })
   .inputValidator(fetchVotedPostsSchema)
   .handler(async ({ data }) => {
+    const { getUserVotedPostIds } = await import('@/lib/posts/post.public')
+
     const result = await getUserVotedPostIds(data.postIds as PostId[], data.userIdentifier)
     if (!result.success) {
       return []
@@ -138,6 +223,8 @@ export const fetchVotedPosts = createServerFn({ method: 'GET' })
 export const fetchUserAvatar = createServerFn({ method: 'GET' })
   .inputValidator(fetchUserAvatarSchema)
   .handler(async ({ data }) => {
+    const { db, user: userTable, eq } = await import('@/lib/db')
+
     const { userId, fallbackImageUrl } = data
 
     const userRecord = await db.query.user.findFirst({
@@ -175,6 +262,8 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .inputValidator(fetchAvatarsSchema)
   .handler(async ({ data }) => {
+    const { db, member: memberTable, user: userTable, eq, inArray } = await import('@/lib/db')
+
     // Filter out nulls and cast to MemberId
     const validMemberIds = (data as MemberId[]).filter((id): id is MemberId => id !== null)
 
@@ -222,6 +311,8 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
 export const checkUserVoted = createServerFn({ method: 'GET' })
   .inputValidator(checkUserVotedSchema)
   .handler(async ({ data }) => {
+    const { hasUserVoted } = await import('@/lib/posts/post.public')
+
     const result = await hasUserVoted(data.postId as PostId, data.userIdentifier)
     return result.success ? result.value : false
   })
@@ -232,6 +323,8 @@ export const checkUserVoted = createServerFn({ method: 'GET' })
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .inputValidator(fetchSubscriptionStatusSchema)
   .handler(async ({ data }) => {
+    const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
+
     return await getSubscriptionStatus(data.memberId as MemberId, data.postId as PostId)
   })
 
@@ -239,6 +332,8 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
  * Fetch all public roadmaps
  */
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
+  const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+
   const result = await listPublicRoadmaps()
   if (!result.success) {
     throw new Error(result.error.message)
@@ -257,6 +352,8 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicRoadmapPostsSchema)
   .handler(async ({ data }) => {
+    const { getPublicRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
+
     const result = await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
       statusId: data.statusId as StatusId | undefined,
       limit: data.limit ?? 20,
@@ -283,6 +380,9 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       commentAvatarMap: Record<string, string | null>
       user: { name: string | null; email: string } | undefined
     }> => {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { db, member: memberTable, user: userTable, eq, inArray } = await import('@/lib/db')
+
       const ctx = await getOptionalAuth()
 
       let isMember = false

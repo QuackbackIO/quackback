@@ -1,21 +1,12 @@
 /**
  * Server functions for roadmap operations
+ *
+ * NOTE: All service imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { requireAuth } from './auth-helpers'
-import {
-  listRoadmaps,
-  getRoadmap,
-  createRoadmap,
-  updateRoadmap,
-  deleteRoadmap,
-  reorderRoadmaps,
-  getRoadmapPosts,
-  addPostToRoadmap,
-  removePostFromRoadmap,
-} from '@/lib/roadmaps'
 import { type RoadmapId, type PostId } from '@quackback/ids'
 
 const createRoadmapSchema = z.object({
@@ -59,6 +50,9 @@ export type RemovePostFromRoadmapInput = z.infer<typeof removePostFromRoadmapSch
 
 // Read Operations
 export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
+  const { requireAuth } = await import('./auth-helpers')
+  const { listRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+
   await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
   const result = await listRoadmaps()
@@ -74,6 +68,9 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchRoadmap = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getRoadmap(data.id as RoadmapId)
@@ -90,6 +87,9 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
 export const createRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(createRoadmapSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { createRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await createRoadmap({
@@ -110,6 +110,9 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
 export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(updateRoadmapSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { updateRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await updateRoadmap(data.id as RoadmapId, {
@@ -129,6 +132,9 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
 export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteRoadmapSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { deleteRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await deleteRoadmap(data.id as RoadmapId)
@@ -142,6 +148,9 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
 export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(addPostToRoadmapSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { addPostToRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await addPostToRoadmap({
@@ -158,6 +167,9 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
 export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(removePostFromRoadmapSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { removePostFromRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
@@ -177,6 +189,9 @@ export type ReorderRoadmapsInput = z.infer<typeof reorderRoadmapsSchema>
 export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderRoadmapsSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { reorderRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await reorderRoadmaps(data.roadmapIds as RoadmapId[])
@@ -199,6 +214,9 @@ export type GetRoadmapPostsInput = z.infer<typeof getRoadmapPostsSchema>
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsSchema)
   .handler(async ({ data }) => {
+    const { requireAuth } = await import('./auth-helpers')
+    const { getRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
+
     await requireAuth({ roles: ['owner', 'admin', 'member'] })
 
     const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {})

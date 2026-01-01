@@ -1,10 +1,5 @@
-'use server'
-
-import { db, invitation, member, eq } from '@/lib/db'
-import { generateId } from '@quackback/ids'
-import { getSession } from '@/lib/server-functions/auth'
-import type { InviteId, MemberId, UserId } from '@quackback/ids'
 import { createServerFn } from '@tanstack/react-start'
+import type { InviteId, MemberId, UserId } from '@quackback/ids'
 
 /**
  * Accept a team invitation.
@@ -13,12 +8,19 @@ import { createServerFn } from '@tanstack/react-start'
  * It validates the invitation, creates/updates the member record, and marks the
  * invitation as accepted.
  *
+ * NOTE: All DB and server-only imports are done dynamically inside handlers
+ * to prevent client bundling issues with TanStack Start.
+ *
  * Note: Uses createServerFn directly instead of withAuth because this needs to be
  * accessible to newly authenticated users who may not yet have a member record.
  */
 export const acceptInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator((invitationId: string) => invitationId)
   .handler(async ({ data: invitationId }) => {
+    const { db, invitation, member, eq } = await import('@/lib/db')
+    const { generateId } = await import('@quackback/ids')
+    const { getSession } = await import('./auth')
+
     // Get current session
     const session = await getSession()
     if (!session?.user) {
