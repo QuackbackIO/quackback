@@ -82,8 +82,6 @@ export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColu
                   board={{ slug: post.board.slug, name: post.board.name }}
                 />
               ))}
-
-              {/* Sentinel element for intersection observer */}
               {hasNextPage && (
                 <div ref={sentinelRef} className="py-2 flex justify-center">
                   {isFetchingNextPage && (

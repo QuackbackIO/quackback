@@ -29,14 +29,12 @@ export function RoadmapBoard({
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []
   const selectedRoadmap = availableRoadmaps.find((r) => r.id === selectedRoadmapId)
 
-  // Auto-select first roadmap when loaded (fallback if not pre-selected)
   useEffect(() => {
     if (availableRoadmaps.length > 0 && selectedRoadmapId === null) {
       setSelectedRoadmapId(availableRoadmaps[0].id)
     }
   }, [availableRoadmaps, selectedRoadmapId])
 
-  // Show empty state if no roadmaps
   if (availableRoadmaps.length === 0) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -53,7 +51,6 @@ export function RoadmapBoard({
 
   return (
     <div className="space-y-4">
-      {/* Roadmap selector - only show if multiple roadmaps */}
       {availableRoadmaps.length > 1 && (
         <div className="space-y-2">
           <Tabs value={selectedRoadmapId ?? undefined} onValueChange={setSelectedRoadmapId}>
@@ -75,7 +72,6 @@ export function RoadmapBoard({
         </div>
       )}
 
-      {/* Kanban board */}
       {selectedRoadmapId && (
         <ScrollArea
           className="w-full"

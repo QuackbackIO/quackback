@@ -14,23 +14,13 @@ import {
 } from '@/lib/server-functions/roadmaps'
 import { getRoadmapPostsByStatusFn } from '@/lib/server-functions/public-posts'
 
-// ============================================================================
-// Query Key Factory
-// ============================================================================
-
 export const roadmapPostsKeys = {
   all: ['roadmapPosts'] as const,
   lists: () => [...roadmapPostsKeys.all, 'list'] as const,
-  // Legacy: by status ID (used by existing components)
   list: (statusId: StatusId) => [...roadmapPostsKeys.lists(), statusId] as const,
-  // New: by roadmap ID and status ID
   byRoadmap: (roadmapId: RoadmapId, statusId?: StatusId) =>
     [...roadmapPostsKeys.all, 'roadmap', roadmapId, statusId ?? 'all'] as const,
 }
-
-// ============================================================================
-// Legacy Query Hook (by status ID)
-// ============================================================================
 
 interface UseRoadmapPostsOptions {
   statusId: StatusId
@@ -60,19 +50,12 @@ export function useRoadmapPosts({ statusId, initialData }: UseRoadmapPostsOption
   })
 }
 
-// ============================================================================
-// Admin: Fetch posts by roadmap ID
-// ============================================================================
-
 interface UseRoadmapPostsByRoadmapOptions {
   roadmapId: RoadmapId
   statusId?: StatusId
   enabled?: boolean
 }
 
-/**
- * Hook to fetch posts for a specific roadmap (optionally filtered by status)
- */
 export function useRoadmapPostsByRoadmap({
   roadmapId,
   statusId,
@@ -96,13 +79,6 @@ export function useRoadmapPostsByRoadmap({
   })
 }
 
-// ============================================================================
-// Mutations for roadmap posts
-// ============================================================================
-
-/**
- * Hook to add a post to a roadmap
- */
 export function useAddPostToRoadmap(roadmapId: RoadmapId) {
   const queryClient = useQueryClient()
 
@@ -116,7 +92,6 @@ export function useAddPostToRoadmap(roadmapId: RoadmapId) {
       })
     },
     onSuccess: () => {
-      // Invalidate all queries for this roadmap
       queryClient.invalidateQueries({
         queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId],
       })
@@ -124,9 +99,6 @@ export function useAddPostToRoadmap(roadmapId: RoadmapId) {
   })
 }
 
-/**
- * Hook to remove a post from a roadmap
- */
 export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
   const queryClient = useQueryClient()
 
@@ -147,30 +119,20 @@ export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
   })
 }
 
-// ============================================================================
-// Public: Fetch posts by roadmap ID (no auth required)
-// ============================================================================
-
 interface UsePublicRoadmapPostsOptions {
   roadmapId: RoadmapId
   statusId?: StatusId
   enabled?: boolean
 }
 
-/**
- * Hook to fetch posts for a public roadmap (no auth required)
- * Now aligned with portal query pattern for cache sharing with SSR
- */
 export function usePublicRoadmapPosts({
   roadmapId,
   statusId,
   enabled = true,
 }: UsePublicRoadmapPostsOptions) {
   return useInfiniteQuery({
-    // Use portal query key pattern to match pre-fetched cache from loader
     queryKey: ['portal', 'roadmapPosts', roadmapId, statusId],
     queryFn: async ({ pageParam = 0 }): Promise<RoadmapPostsListResult> => {
-      // Use server function instead of action for consistency
       const { fetchPublicRoadmapPosts } = await import('@/lib/server-functions/portal')
       return fetchPublicRoadmapPosts({
         data: {
@@ -187,26 +149,16 @@ export function usePublicRoadmapPosts({
   })
 }
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Flatten paginated roadmap posts into a single array (legacy format)
- */
 export function flattenRoadmapPosts(
   data: InfiniteData<RoadmapPostListResult> | undefined
 ): RoadmapPost[] {
-  if (!data) return []
-  return data.pages.flatMap((page) => page.items)
+  if (!data?.pages) return []
+  return data.pages.flatMap((page) => page?.items ?? []).filter((item) => item?.id)
 }
 
-/**
- * Flatten paginated roadmap posts into a single array (new format with roadmap entry)
- */
 export function flattenRoadmapPostEntries(
   data: InfiniteData<RoadmapPostsListResult> | undefined
 ): RoadmapPostEntry[] {
-  if (!data) return []
-  return data.pages.flatMap((page) => page.items)
+  if (!data?.pages) return []
+  return data.pages.flatMap((page) => page?.items ?? []).filter((item) => item?.id)
 }
