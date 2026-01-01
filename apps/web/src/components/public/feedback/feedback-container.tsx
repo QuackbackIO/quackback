@@ -14,7 +14,7 @@ import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import type { BoardWithStats } from '@/lib/boards'
 import type { PublicPostListItem } from '@/lib/posts'
-import type { PostStatusEntity, Tag } from '@/lib/db'
+import type { PostStatusEntity, Tag } from '@/lib/db-types'
 
 interface FeedbackContainerProps {
   workspaceName: string

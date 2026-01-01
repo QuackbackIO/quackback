@@ -22,7 +22,7 @@ import {
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
 import type { CommentId, PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
-import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db'
+import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db-types'
 import type { TeamMember } from '@/lib/members'
 
 interface InboxContainerProps {

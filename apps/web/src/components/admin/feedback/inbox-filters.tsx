@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { Board, Tag, PostStatusEntity } from '@/lib/db'
+import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
 import type { TeamMember } from '@/lib/members'
 
 interface InboxFiltersProps {

@@ -12,7 +12,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxPostCard } from '@/components/admin/feedback/inbox-post-card'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
-import type { PostListItem, PostStatusEntity } from '@/lib/db'
+import type { PostListItem, PostStatusEntity } from '@/lib/db-types'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 
 interface InboxPostListProps {

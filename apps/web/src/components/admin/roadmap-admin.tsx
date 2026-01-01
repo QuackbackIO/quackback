@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { useChangePostStatusId } from '@/lib/hooks/use-inbox-queries'
-import type { PostStatusEntity } from '@/lib/db'
+import type { PostStatusEntity } from '@/lib/db-types'
 import type { RoadmapPostEntry } from '@/lib/roadmaps'
 import type { StatusId, PostId } from '@quackback/ids'
 

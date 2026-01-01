@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import type { Board } from '@/lib/db'
+import type { Board } from '@/lib/db-types'
 import {
   Form,
   FormControl,

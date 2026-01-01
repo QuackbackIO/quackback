@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,6 @@ import { Avatar } from '@/components/ui/avatar'
 import { LogOut, Settings, Shield } from 'lucide-react'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { getUserRoleFn } from '@/lib/server-functions/user'
 
 type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
 
@@ -66,27 +65,10 @@ export function PortalHeader({
   // Use custom display name if provided, otherwise fall back to org name
   const displayName = headerDisplayName || orgName
 
-  // Client-side role state - fetched when session changes
-  const [clientRole, setClientRole] = useState<'owner' | 'admin' | 'member' | 'user' | null>(null)
-  const [isRoleFetched, setIsRoleFetched] = useState(false)
-
-  // Fetch role when session changes
-  const fetchRole = async () => {
-    try {
-      const result = await getUserRoleFn()
-      setClientRole(result.role)
-      setIsRoleFetched(true)
-    } catch {
-      setClientRole(null)
-      setIsRoleFetched(true)
-    }
-  }
-
-  // Listen for auth success to refetch session and role
+  // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
     onSuccess: () => {
-      router.invalidate() // Refetch root loader (includes session)
-      fetchRole()
+      router.invalidate() // Refetch loaders (includes session and userRole)
     },
   })
 
@@ -99,14 +81,10 @@ export function PortalHeader({
   const avatarUrl = user?.image ?? null
 
   // Team members (owner, admin, member) can access admin dashboard
-  // Use client role if fetched, otherwise fall back to server prop
-  const effectiveRole = isRoleFetched ? clientRole : userRole
-  const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(effectiveRole || '')
+  const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(userRole || '')
 
   const handleSignOut = async () => {
     await signOut()
-    setClientRole(null)
-    setIsRoleFetched(true)
     router.invalidate() // Refetch session
     router.navigate({ to: '/' })
   }

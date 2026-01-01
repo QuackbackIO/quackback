@@ -37,7 +37,7 @@ import {
   useUpdateRoadmap,
   useDeleteRoadmap,
 } from '@/lib/hooks/use-roadmaps-query'
-import type { Roadmap } from '@/lib/db'
+import type { Roadmap } from '@/lib/db-types'
 
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null

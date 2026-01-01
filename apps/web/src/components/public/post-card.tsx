@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { getInitials } from '@/lib/utils'
-import type { PostStatusEntity } from '@/lib/db'
+import type { PostStatusEntity } from '@/lib/db-types'
 import type { PostId, StatusId } from '@quackback/ids'
 
 interface PostCardProps {

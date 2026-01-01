@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterDropdown } from '@/components/public/feedback/filter-dropdown'
 import { cn } from '@/lib/utils'
-import type { PostStatusEntity, Tag } from '@/lib/db'
+import type { PostStatusEntity, Tag } from '@/lib/db-types'
 
 interface FeedbackToolbarProps {
   currentSort: 'top' | 'new' | 'trending'

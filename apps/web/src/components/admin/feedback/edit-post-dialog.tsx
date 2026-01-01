@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { useUpdatePost, useUpdatePostTags } from '@/lib/hooks/use-inbox-queries'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/db'
+import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
 import type { BoardId, PostId, StatusId, TagId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 

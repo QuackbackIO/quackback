@@ -44,7 +44,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { PostStatusEntity, StatusCategory } from '@/lib/db'
+import type { PostStatusEntity, StatusCategory } from '@/lib/db-types'
 import { cn } from '@/lib/utils'
 import {
   updateStatusFn,

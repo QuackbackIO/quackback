@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { getSlackConnectUrl } from '../actions'
+import { getSlackConnectUrl } from '@/lib/server-functions/integrations'
 
 interface SlackConnectionActionsProps {
   integrationId?: string
