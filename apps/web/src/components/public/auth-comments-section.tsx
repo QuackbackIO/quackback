@@ -2,7 +2,8 @@ import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import type { PostId, CommentId } from '@quackback/ids'
+import { useCreateComment } from '@/lib/hooks/use-comment-actions'
+import type { PostId, CommentId, MemberId } from '@quackback/ids'
 
 interface CommentReaction {
   emoji: string
@@ -29,7 +30,7 @@ interface AuthCommentsSectionProps {
   allowCommenting?: boolean
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
-  user?: { name: string | null; email: string }
+  user?: { name: string | null; email: string; memberId?: MemberId }
 }
 
 /**
@@ -37,6 +38,7 @@ interface AuthCommentsSectionProps {
  * - Shows comment form when logged in
  * - Shows "Sign in to comment" when logged out
  * - Updates reactively on login/logout without page refresh
+ * - Uses optimistic updates for instant comment appearance
  */
 export function AuthCommentsSection({
   postId,
@@ -59,8 +61,16 @@ export function AuthCommentsSection({
   // Can comment only if logged in (reactive check)
   const allowCommenting = isLoggedIn && serverAllowCommenting
 
-  // User info from session
-  const userData = user ? { name: user.name ?? null, email: user.email ?? '' } : serverUser
+  // User info from session, falling back to server-provided user
+  const userData = user
+    ? { name: user.name ?? null, email: user.email ?? '', memberId: serverUser?.memberId }
+    : serverUser
+
+  // Use mutation hook with optimistic updates
+  const createComment = useCreateComment({
+    postId,
+    author: userData,
+  })
 
   return (
     <CommentThread
@@ -68,9 +78,9 @@ export function AuthCommentsSection({
       comments={comments}
       allowCommenting={allowCommenting}
       avatarUrls={avatarUrls}
-      onCommentAdded={() => router.invalidate()}
       user={userData}
       onAuthRequired={() => openAuthPopover({ mode: 'login' })}
+      createComment={createComment}
     />
   )
 }

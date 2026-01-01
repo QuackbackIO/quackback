@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
-import { CommentForm } from '@/components/public/comment-form'
+import { CommentForm, type CreateCommentMutation } from '@/components/public/comment-form'
 import { PostContent } from '@/components/public/post-content'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { AddToRoadmapDropdown } from '@/components/admin/add-to-roadmap-dropdown'
@@ -43,16 +43,7 @@ import type {
   CommentWithReplies,
   CurrentUser,
 } from '@/components/admin/feedback/inbox-types'
-import type { CommentId, PostId, TagId, StatusId } from '@quackback/ids'
-
-interface SubmitCommentParams {
-  postId: PostId
-  content: string
-  parentId?: CommentId | null
-  authorName?: string | null
-  authorEmail?: string | null
-  memberId?: string | null
-}
+import type { PostId, TagId, StatusId } from '@quackback/ids'
 
 interface InboxPostDetailProps {
   post: PostDetails | null
@@ -68,8 +59,8 @@ interface InboxPostDetailProps {
   onTagsChange: (tagIds: TagId[]) => Promise<void>
   onOfficialResponseChange: (response: string | null) => Promise<void>
   onRoadmapChange?: () => void
-  submitComment: (params: SubmitCommentParams) => Promise<unknown>
-  isCommentPending: boolean
+  /** Mutation for creating comments with optimistic updates */
+  createComment: CreateCommentMutation
   onReaction: (commentId: string, emoji: string) => void
   isReactionPending: boolean
   onVote: () => void
@@ -127,8 +118,7 @@ interface CommentItemProps {
   comment: CommentWithReplies
   avatarUrls?: Record<string, string | null>
   currentUser: CurrentUser
-  submitComment: (params: SubmitCommentParams) => Promise<unknown>
-  isCommentPending: boolean
+  createComment: CreateCommentMutation
   onReaction: (commentId: string, emoji: string) => void
   isReactionPending: boolean
   depth?: number
@@ -139,8 +129,7 @@ function CommentItem({
   comment,
   avatarUrls,
   currentUser,
-  submitComment,
-  isCommentPending,
+  createComment,
   onReaction,
   isReactionPending,
   depth = 0,
@@ -284,8 +273,7 @@ function CommentItem({
                 postId={postId}
                 parentId={comment.id}
                 user={currentUser}
-                submitComment={submitComment}
-                isSubmitting={isCommentPending}
+                createComment={createComment}
                 onSuccess={() => setShowReplyForm(false)}
                 onCancel={() => setShowReplyForm(false)}
               />
@@ -303,8 +291,7 @@ function CommentItem({
                 comment={reply}
                 avatarUrls={avatarUrls}
                 currentUser={currentUser}
-                submitComment={submitComment}
-                isCommentPending={isCommentPending}
+                createComment={createComment}
                 onReaction={onReaction}
                 isReactionPending={isReactionPending}
                 depth={depth + 1}
@@ -330,8 +317,7 @@ export function InboxPostDetail({
   onTagsChange,
   onOfficialResponseChange,
   onRoadmapChange,
-  submitComment,
-  isCommentPending,
+  createComment,
   onReaction,
   isReactionPending,
   onVote,
@@ -778,12 +764,7 @@ export function InboxPostDetail({
 
         {/* Add comment form */}
         <div className="mb-6">
-          <CommentForm
-            postId={post.id}
-            user={currentUser}
-            submitComment={submitComment}
-            isSubmitting={isCommentPending}
-          />
+          <CommentForm postId={post.id} user={currentUser} createComment={createComment} />
         </div>
 
         {/* Comments list - sorted newest first */}
@@ -798,8 +779,7 @@ export function InboxPostDetail({
                   comment={comment}
                   avatarUrls={avatarUrls}
                   currentUser={currentUser}
-                  submitComment={submitComment}
-                  isCommentPending={isCommentPending}
+                  createComment={createComment}
                   onReaction={onReaction}
                   isReactionPending={isReactionPending}
                 />

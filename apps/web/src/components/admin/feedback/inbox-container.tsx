@@ -209,17 +209,7 @@ export function InboxContainer({
                 })
               }
             }}
-            submitComment={
-              addComment.mutateAsync as (params: {
-                postId: PostId
-                content: string
-                parentId?: CommentId | null
-                authorName?: string | null
-                authorEmail?: string | null
-                memberId?: string | null
-              }) => Promise<unknown>
-            }
-            isCommentPending={addComment.isPending}
+            createComment={addComment}
             onReaction={handleReaction}
             isReactionPending={toggleReaction.isPending}
             onVote={handleVote}

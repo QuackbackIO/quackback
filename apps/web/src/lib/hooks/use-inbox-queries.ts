@@ -656,12 +656,12 @@ export function useVotePost() {
 // ============================================================================
 
 interface AddCommentInput {
-  postId: PostId
+  postId: string
   content: string
-  parentId?: CommentId | null
+  parentId?: string | null
   authorName?: string | null
   authorEmail?: string | null
-  memberId?: MemberId | null
+  memberId?: string | null
 }
 
 interface _AddCommentResponse {
@@ -683,24 +683,25 @@ export function useAddComment() {
     mutationFn: async ({ postId, content, parentId }: AddCommentInput) => {
       return await createCommentFn({
         data: {
-          postId,
+          postId: postId as PostId,
           content: content.trim(),
-          parentId: parentId || undefined,
+          parentId: (parentId || undefined) as CommentId | undefined,
         },
       })
     },
     onMutate: async ({ postId, content, parentId, authorName, authorEmail, memberId }) => {
-      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
+      const typedPostId = postId as PostId
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(typedPostId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
-      const previousDetail = queryClient.getQueryData<PostDetails>(inboxKeys.detail(postId))
+      const previousDetail = queryClient.getQueryData<PostDetails>(inboxKeys.detail(typedPostId))
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
         queryKey: inboxKeys.lists(),
       })
 
       const optimisticComment: CommentWithReplies = {
         id: `comment_temp${Date.now()}` as CommentId,
-        postId: postId as PostId,
+        postId: typedPostId,
         content,
         authorId: null,
         authorName: authorName || null,
@@ -716,10 +717,10 @@ export function useAddComment() {
 
       if (previousDetail) {
         const updatedComments = parentId
-          ? addReplyToComment(previousDetail.comments, parentId, optimisticComment)
+          ? addReplyToComment(previousDetail.comments, parentId as CommentId, optimisticComment)
           : [...previousDetail.comments, optimisticComment]
 
-        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(typedPostId), {
           ...previousDetail,
           comments: updatedComments,
         })
@@ -744,8 +745,9 @@ export function useAddComment() {
       return { previousDetail, previousLists }
     },
     onError: (_err, { postId }, context) => {
+      const typedPostId = postId as PostId
       if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId), context.previousDetail)
+        queryClient.setQueryData(inboxKeys.detail(typedPostId), context.previousDetail)
       }
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
@@ -755,8 +757,44 @@ export function useAddComment() {
         }
       }
     },
-    onSettled: (_data, _error, { postId }) => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
+    onSuccess: (data, { postId, content, parentId }) => {
+      // Replace optimistic comment with real server data (no refetch needed)
+      const typedPostId = postId as PostId
+      const serverComment = data as { comment: { id: CommentId; createdAt: Date } }
+
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(typedPostId), (old) => {
+        if (!old) return old
+
+        const replaceOptimisticComment = (comments: CommentWithReplies[]): CommentWithReplies[] => {
+          return comments.map((comment) => {
+            // Replace optimistic comment with real one
+            if (comment.id.startsWith('comment_temp')) {
+              const sameParent = (comment.parentId || null) === (parentId || null)
+              const sameContent = comment.content === content
+              if (sameParent && sameContent) {
+                return {
+                  ...comment,
+                  id: serverComment.comment.id,
+                  createdAt: serverComment.comment.createdAt,
+                }
+              }
+            }
+            // Recurse into replies
+            if (comment.replies.length > 0) {
+              return {
+                ...comment,
+                replies: replaceOptimisticComment(comment.replies),
+              }
+            }
+            return comment
+          })
+        }
+
+        return {
+          ...old,
+          comments: replaceOptimisticComment(old.comments),
+        }
+      })
     },
   })
 }

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CommentForm } from './comment-form'
+import { CommentForm, type CreateCommentMutation } from './comment-form'
 import { cn, getInitials } from '@/lib/utils'
 import { REACTION_EMOJIS } from '@/lib/db-types'
 import { toggleReactionFn } from '@/lib/server-functions/comments'
@@ -35,10 +35,11 @@ interface CommentThreadProps {
   allowCommenting?: boolean
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
-  onCommentAdded?: () => void
   user?: { name: string | null; email: string }
   /** Called when unauthenticated user tries to comment */
   onAuthRequired?: () => void
+  /** React Query mutation for creating comments with optimistic updates */
+  createComment?: CreateCommentMutation
 }
 
 export function CommentThread({
@@ -46,15 +47,15 @@ export function CommentThread({
   comments,
   allowCommenting = true,
   avatarUrls,
-  onCommentAdded,
   user,
   onAuthRequired,
+  createComment,
 }: CommentThreadProps) {
   return (
     <div className="space-y-6">
       {/* Add comment form or sign in prompt */}
       {allowCommenting ? (
-        <CommentForm postId={postId} onSuccess={onCommentAdded} user={user} />
+        <CommentForm postId={postId} user={user} createComment={createComment} />
       ) : (
         <div className="flex items-center justify-center py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
           <p className="text-sm text-muted-foreground mr-3">Sign in to comment</p>
@@ -80,8 +81,8 @@ export function CommentThread({
                 comment={comment}
                 allowCommenting={allowCommenting}
                 avatarUrls={avatarUrls}
-                onCommentAdded={onCommentAdded}
                 user={user}
+                createComment={createComment}
               />
             ))}
         </div>
@@ -95,9 +96,9 @@ interface CommentItemProps {
   comment: Comment
   allowCommenting: boolean
   avatarUrls?: Record<string, string | null>
-  onCommentAdded?: () => void
   depth?: number
   user?: { name: string | null; email: string }
+  createComment?: CreateCommentMutation
 }
 
 function CommentItem({
@@ -105,9 +106,9 @@ function CommentItem({
   comment,
   allowCommenting,
   avatarUrls,
-  onCommentAdded,
   depth = 0,
   user,
+  createComment,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -268,12 +269,10 @@ function CommentItem({
               <CommentForm
                 postId={postId}
                 parentId={comment.id}
-                onSuccess={() => {
-                  setShowReplyForm(false)
-                  onCommentAdded?.()
-                }}
+                onSuccess={() => setShowReplyForm(false)}
                 onCancel={() => setShowReplyForm(false)}
                 user={user}
+                createComment={createComment}
               />
             </div>
           )}
@@ -289,9 +288,9 @@ function CommentItem({
                 comment={reply}
                 allowCommenting={allowCommenting}
                 avatarUrls={avatarUrls}
-                onCommentAdded={onCommentAdded}
                 depth={depth + 1}
                 user={user}
+                createComment={createComment}
               />
             ))}
           </div>

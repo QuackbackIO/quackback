@@ -1,5 +1,6 @@
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import type { UseMutationResult } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { commentSchema, type CommentInput } from '@/lib/schemas/comments'
 import { Button } from '@/components/ui/button'
@@ -16,17 +17,20 @@ import { signOut } from '@/lib/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { createCommentFn } from '@/lib/server-functions/comments'
 import type { PostId, CommentId } from '@quackback/ids'
 
-interface SubmitCommentParams {
-  postId: PostId
-  content: string
-  parentId?: CommentId
-  authorName?: string | null
-  authorEmail?: string | null
-  memberId?: string | null
-}
+export type CreateCommentMutation = UseMutationResult<
+  unknown,
+  Error,
+  {
+    content: string
+    parentId?: string | null
+    postId: string
+    authorName?: string | null
+    authorEmail?: string | null
+    memberId?: string | null
+  }
+>
 
 interface CommentFormProps {
   postId: PostId
@@ -34,10 +38,8 @@ interface CommentFormProps {
   onSuccess?: () => void
   onCancel?: () => void
   user?: { name: string | null; email: string; memberId?: string }
-  /** Optional custom submit handler (e.g., TanStack Query mutation) */
-  submitComment?: (params: SubmitCommentParams) => Promise<unknown>
-  /** External pending state (from mutation) */
-  isSubmitting?: boolean
+  /** React Query mutation for creating comments with optimistic updates */
+  createComment?: CreateCommentMutation
 }
 
 export function CommentForm({
@@ -46,16 +48,11 @@ export function CommentForm({
   onSuccess,
   onCancel,
   user,
-  submitComment,
-  isSubmitting: externalIsSubmitting,
+  createComment,
 }: CommentFormProps) {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
-
-  // Use external pending state if provided, otherwise use local
-  const isSubmitting = externalIsSubmitting ?? isPending
 
   const authPopover = useAuthPopoverSafe()
 
@@ -80,48 +77,35 @@ export function CommentForm({
     },
   })
 
+  const isSubmitting = createComment?.isPending ?? false
+
   function onSubmit(data: CommentInput) {
     setError(null)
 
-    const submitParams: SubmitCommentParams = {
-      postId,
-      content: data.content.trim(),
-      parentId: parentId || undefined,
-      authorName: effectiveUser?.name || null,
-      authorEmail: effectiveUser?.email || null,
-      memberId: effectiveUser?.memberId || null,
-    }
-
-    // If custom submit handler provided, use it
-    if (submitComment) {
-      submitComment(submitParams)
-        .then(() => {
-          form.reset()
-          onSuccess?.()
-        })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : 'Failed to post comment')
-        })
+    if (!createComment) {
+      setError('Comment functionality not available')
       return
     }
 
-    // Otherwise, use default server action behavior
-    startTransition(async () => {
-      try {
-        await createCommentFn({
-          data: {
-            postId,
-            content: submitParams.content,
-            parentId: submitParams.parentId,
-          },
-        })
-
-        form.reset()
-        onSuccess?.()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to post comment')
+    createComment.mutate(
+      {
+        content: data.content.trim(),
+        parentId: parentId || null,
+        postId,
+        authorName: effectiveUser?.name || null,
+        authorEmail: effectiveUser?.email || null,
+        memberId: effectiveUser?.memberId || null,
+      },
+      {
+        onSuccess: () => {
+          form.reset()
+          onSuccess?.()
+        },
+        onError: (err) => {
+          setError(err instanceof Error ? err.message : 'Failed to post comment')
+        },
       }
-    })
+    )
   }
 
   // If not authenticated, show sign-in prompt
