@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requireWorkspaceRole } from '@/lib/server-functions/workspace'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { Lock } from 'lucide-react'
@@ -9,7 +8,8 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
   loader: async ({ context }) => {
     // Settings is validated in root layout
     // Only owners and admins can access portal auth settings (more restrictive than parent)
-    await requireWorkspaceRole(['owner', 'admin'])
+    const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
+    await requireWorkspaceRole({ data: { allowedRoles: ['owner', 'admin'] } })
 
     const { queryClient } = context
 

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { portalQueries } from '@/lib/queries/portal'
+import { getMemberIdForUser } from '@/lib/server-functions/portal'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -36,13 +37,10 @@ export const Route = createFileRoute('/_portal/')({
     // Get user identifier - use member ID for authenticated users, anonymous cookie for others
     let userIdentifier = await getUserIdentifier()
     if (session?.user) {
-      // Dynamically import DB code (loader runs on server only)
-      const { db, member, eq } = await import('@/lib/db')
-      const memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, session.user.id),
-      })
-      if (memberRecord) {
-        userIdentifier = getMemberIdentifier(memberRecord.id)
+      // Use server function to get member ID (keeps db code out of client bundle)
+      const memberId = await getMemberIdForUser({ data: { userId: session.user.id } })
+      if (memberId) {
+        userIdentifier = getMemberIdentifier(memberId)
       }
     }
 

@@ -17,11 +17,6 @@ export function getRouter() {
   // Create new router
   const router = createRouter({
     routeTree,
-    context: {
-      queryClient,
-      session: null,
-      settings: null,
-    },
     defaultPreload: 'intent',
     scrollRestoration: true,
     defaultNotFoundComponent: () => (

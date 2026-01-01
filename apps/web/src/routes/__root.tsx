@@ -2,15 +2,15 @@
 import type { ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { Outlet, createRootRouteWithContext, HeadContent, Scripts } from '@tanstack/react-router'
-import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
+// import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
-import { Toaster } from '@/components/ui/sonner'
-import { ThemeProvider } from '@/components/theme-provider'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { getSession } from '@/lib/server-functions/auth'
-import { getSettings } from '@/lib/server-functions/workspace'
+// import { Toaster } from '@/components/ui/sonner'
+// import { ThemeProvider } from '@/components/theme-provider'
+// import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+// import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+// import { getSession } from '@/lib/server-functions/auth'
+// import { getSettings } from '@/lib/server-functions/workspace'
 
 // Script to handle system theme preference when theme is set to 'system'
 const systemThemeScript = `
@@ -25,19 +25,19 @@ const systemThemeScript = `
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
-  session: Awaited<ReturnType<typeof getSession>>
-  settings: Awaited<ReturnType<typeof getSettings>>
+  // session: Awaited<ReturnType<typeof getSession>>
+  // settings: Awaited<ReturnType<typeof getSettings>>
 }>()({
-  beforeLoad: async () => {
-    // Fetch session and settings at the root level
-    // These will be available to all child routes via context
-    const [session, settings] = await Promise.all([getSession(), getSettings()])
+  // beforeLoad: async () => {
+  //   // Fetch session and settings at the root level
+  //   // These will be available to all child routes via context
+  //   const [session, settings] = await Promise.all([getSession(), getSettings()])
 
-    return {
-      session,
-      settings,
-    }
-  },
+  //   return {
+  //     session,
+  //     settings,
+  //   }
+  // },
   head: () => ({
     meta: [
       {
@@ -79,23 +79,23 @@ export const Route = createRootRouteWithContext<{
 })
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext()
+  // const { queryClient } = Route.useRouteContext()
 
   return (
     <RootDocument>
-      <NuqsAdapter>
-        <ThemeProvider
+      {/* <NuqsAdapter> */}
+      {/* <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
-        >
-          <Outlet />
-          <Toaster />
-          <ReactQueryDevtools client={queryClient} buttonPosition="bottom-left" />
-          <TanStackRouterDevtools position="bottom-right" />
-        </ThemeProvider>
-      </NuqsAdapter>
+        > */}
+      <Outlet />
+      {/* <Toaster /> */}
+      {/* <ReactQueryDevtools client={queryClient} buttonPosition="bottom-left" /> */}
+      {/* <TanStackRouterDevtools position="bottom-right" /> */}
+      {/* </ThemeProvider> */}
+      {/* </NuqsAdapter> */}
     </RootDocument>
   )
 }

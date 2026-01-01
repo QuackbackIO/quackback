@@ -2,15 +2,18 @@ import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { getCurrentUserRole } from '@/lib/server-functions/workspace'
 import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
-import { getWorkspaceBrandingData, getWorkspaceFaviconData } from '@/lib/settings-utils'
+import {
+  fetchSettingsBrandingData,
+  fetchSettingsFaviconData,
+} from '@/lib/server-functions/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import {
-  getBrandingConfig,
-  getPublicPortalConfig,
-  getCustomCss,
-  DEFAULT_PORTAL_CONFIG,
-} from '@/lib/settings'
+  fetchBrandingConfig,
+  fetchPublicPortalConfig,
+  fetchCustomCss,
+} from '@/lib/server-functions/settings'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 import { theme } from '@/lib/theme'
 
 /**
@@ -33,22 +36,21 @@ export const Route = createFileRoute('/_portal')({
     // Get branding data (logo) from blob storage for SSR
     // Get portal config for branding and auth
     // Get custom CSS for portal customization
-    const [avatarData, brandingData, faviconData, brandingResult, portalResult, customCssResult] =
+    const [avatarData, brandingData, faviconData, brandingConfig, portalConfig, customCss] =
       await Promise.all([
         session?.user
           ? fetchUserAvatar({
               data: { userId: session.user.id, fallbackImageUrl: session.user.image },
             })
           : null,
-        getWorkspaceBrandingData(),
-        getWorkspaceFaviconData(),
-        getBrandingConfig(),
-        getPublicPortalConfig(),
-        getCustomCss(),
+        fetchSettingsBrandingData(),
+        fetchSettingsFaviconData(),
+        fetchBrandingConfig(),
+        fetchPublicPortalConfig(),
+        fetchCustomCss(),
       ])
 
     // Generate theme CSS from org config
-    const brandingConfig = brandingResult.success ? brandingResult.value : {}
     const themeStyles =
       brandingConfig.preset || brandingConfig.light || brandingConfig.dark
         ? theme.generateThemeCSS(brandingConfig)
@@ -56,9 +58,6 @@ export const Route = createFileRoute('/_portal')({
 
     // Get Google Fonts URL if using a custom font
     const googleFontsUrl = theme.getGoogleFontsUrl(brandingConfig)
-
-    // Get custom CSS for additional portal styling
-    const customCss = customCssResult.success ? customCssResult.value : null
 
     // Build initial user data for SSR (used by both header props and provider)
     const initialUserData = session?.user
@@ -70,10 +69,9 @@ export const Route = createFileRoute('/_portal')({
       : undefined
 
     // Build auth config for the auth dialog
-    const portalConfig = portalResult.success ? portalResult.value : DEFAULT_PORTAL_CONFIG
     const authConfig = {
       found: true,
-      oauth: portalConfig.oauth,
+      oauth: portalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
     }
 
     return {

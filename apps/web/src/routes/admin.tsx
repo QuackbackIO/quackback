@@ -1,15 +1,15 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { requireWorkspaceRole } from '@/lib/server-functions/workspace'
 import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { AdminNav } from '@/components/admin/admin-nav'
 
 export const Route = createFileRoute('/admin')({
-  beforeLoad: async ({ context: _context }) => {
+  beforeLoad: async () => {
     // Only team members (owner, admin, member roles) can access admin dashboard
     // Portal users don't have member records, so they can't access this
-    // Settings is validated in root layout
-    // Session is already available from root context
-    const { user, member } = await requireWorkspaceRole(['owner', 'admin', 'member'])
+    const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
+    const { user, member } = await requireWorkspaceRole({
+      data: { allowedRoles: ['owner', 'admin', 'member'] },
+    })
 
     return {
       user,
@@ -18,7 +18,6 @@ export const Route = createFileRoute('/admin')({
   },
   loader: async ({ context }) => {
     // Auth is already validated in beforeLoad
-    // Session is available from root context
     const { user } = context
 
     // Get avatar URL with base64 data for SSR (no flicker)
