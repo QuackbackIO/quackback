@@ -9,21 +9,10 @@ import type { Member } from '@quackback/db'
 import type { MemberId, UserId } from '@quackback/ids'
 import { ok, err } from '@/lib/shared'
 import type { Result } from '@/lib/shared'
+import type { MemberError, TeamMember } from './member.types'
 
-export type MemberError = {
-  code: 'MEMBER_NOT_FOUND' | 'DATABASE_ERROR'
-  message: string
-}
-
-/**
- * Team member info with user details
- */
-export interface TeamMember {
-  id: UserId
-  name: string | null
-  email: string
-  image: string | null
-}
+// Re-export types for backwards compatibility
+export type { MemberError, TeamMember } from './member.types'
 
 /**
  * Find a member by user ID

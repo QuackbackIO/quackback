@@ -30,7 +30,7 @@ import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from 
 import { ok, err, type Result } from '@/lib/shared'
 import { PostError } from './post.errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/settings'
-import { subscribeToPost } from '@/lib/subscriptions'
+import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
 import { buildCommentTree, type CommentTreeNode } from '@/lib/shared'
 import type {
   CreatePostInput,

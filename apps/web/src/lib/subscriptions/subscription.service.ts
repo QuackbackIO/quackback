@@ -20,33 +20,22 @@ import {
   user,
   type Database,
 } from '@quackback/db'
-import type { MemberId, PostId, PostSubscriptionId } from '@quackback/ids'
+import type { MemberId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
+import type {
+  SubscriptionReason,
+  Subscriber,
+  Subscription,
+  NotificationPreferencesData,
+} from './subscription.types'
 
-export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual'
-
-export interface Subscriber {
-  memberId: MemberId
-  userId: string
-  email: string
-  name: string | null
-  reason: SubscriptionReason
-}
-
-export interface Subscription {
-  id: PostSubscriptionId
-  postId: PostId
-  postTitle: string
-  reason: SubscriptionReason
-  muted: boolean
-  createdAt: Date
-}
-
-export interface NotificationPreferencesData {
-  emailStatusChange: boolean
-  emailNewComment: boolean
-  emailMuted: boolean
-}
+// Re-export types for backwards compatibility
+export type {
+  SubscriptionReason,
+  Subscriber,
+  Subscription,
+  NotificationPreferencesData,
+} from './subscription.types'
 
 interface SubscribeOptions {
   /** Optional: pass an existing transaction to run within the same context */

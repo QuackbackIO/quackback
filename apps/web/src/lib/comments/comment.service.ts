@@ -25,7 +25,7 @@ import {
 import type { CommentId, PostId, MemberId } from '@quackback/ids'
 import { ok, err, type Result } from '@/lib/shared'
 import { CommentError } from './comment.errors'
-import { subscribeToPost } from '@/lib/subscriptions'
+import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
 import type {
   CreateCommentInput,
   CreateCommentResult,
