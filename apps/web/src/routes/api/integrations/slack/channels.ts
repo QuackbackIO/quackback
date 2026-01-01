@@ -1,7 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getSession } from '@/lib/server-functions/auth'
-import { db, member, integrations, decryptToken, eq } from '@/lib/db'
-import { listSlackChannels } from '@quackback/integrations'
 import type { UserId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/integrations/slack/channels')({
@@ -12,6 +9,10 @@ export const Route = createFileRoute('/api/integrations/slack/channels')({
        * Lists available Slack channels for the connected workspace
        */
       GET: async () => {
+        const { getSession } = await import('@/lib/server-functions/auth')
+        const { db, member, integrations, decryptToken, eq } = await import('@/lib/db')
+        const { listSlackChannels } = await import('@quackback/integrations')
+
         // Validate session
         const session = await getSession()
         if (!session?.user) {

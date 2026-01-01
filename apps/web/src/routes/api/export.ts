@@ -1,8 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { validateApiWorkspaceAccess } from '@/lib/server-functions/workspace'
-import { requireRole } from '@/lib/api-handler'
-import { listPostsForExport } from '@/lib/posts'
-import { getBoardById } from '@/lib/boards'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 /**
@@ -38,6 +34,11 @@ export const Route = createFileRoute('/api/export')({
        * Export posts to CSV format
        */
       GET: async ({ request }) => {
+        const { validateApiWorkspaceAccess } = await import('@/lib/server-functions/workspace')
+        const { requireRole } = await import('@/lib/api-handler')
+        const { listPostsForExport } = await import('@/lib/posts/post.service')
+        const { getBoardById } = await import('@/lib/boards/board.service')
+
         try {
           const url = new URL(request.url)
           const boardIdParam = url.searchParams.get('boardId')

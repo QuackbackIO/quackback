@@ -1,6 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getSession } from '@/lib/server-functions/auth'
-import { db, member, integrations, integrationEventMappings, eq } from '@/lib/db'
 import { z } from 'zod'
 import { isValidTypeId, type IntegrationId } from '@quackback/ids'
 
@@ -29,6 +27,9 @@ export const Route = createFileRoute('/api/integrations/$id')({
        * Update integration config and event mappings
        */
       PATCH: async ({ request, params }) => {
+        const { getSession } = await import('@/lib/server-functions/auth')
+        const { db, member, integrations, integrationEventMappings, eq } = await import('@/lib/db')
+
         const integrationIdParam = params.id
 
         // Validate TypeID format
@@ -122,6 +123,9 @@ export const Route = createFileRoute('/api/integrations/$id')({
        * Remove integration record
        */
       DELETE: async ({ params }) => {
+        const { getSession } = await import('@/lib/server-functions/auth')
+        const { db, member, integrations, eq } = await import('@/lib/db')
+
         const integrationIdParam = params.id
 
         // Validate TypeID format

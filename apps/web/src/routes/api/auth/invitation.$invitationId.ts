@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { db, invitation, eq } from '@/lib/db'
 import { isValidTypeId, type InviteId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
@@ -10,6 +9,8 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
        * Public endpoint to get invitation details for signup form
        */
       GET: async ({ request: _request, params }) => {
+        const { db, invitation, eq } = await import('@/lib/db')
+
         try {
           const { invitationId: invitationIdParam } = params
 

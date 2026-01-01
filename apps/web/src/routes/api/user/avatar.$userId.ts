@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { db, user, eq } from '@/lib/db'
 import { isValidTypeId, type UserId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/user/avatar/$userId')({
@@ -10,6 +9,8 @@ export const Route = createFileRoute('/api/user/avatar/$userId')({
        * Serve user avatar image.
        */
       GET: async ({ params }) => {
+        const { db, user, eq } = await import('@/lib/db')
+
         try {
           const userIdParam = params.userId
 

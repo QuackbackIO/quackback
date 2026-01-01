@@ -1,6 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { db, settings, eq } from '@/lib/db'
-import { signOAuthState } from '@/lib/auth/oauth-state'
 
 /**
  * OAuth Initiation Route
@@ -53,6 +51,9 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
        * Initiate OAuth flow with provider
        */
       GET: async ({ request, params }) => {
+        const { db, settings, eq } = await import('@/lib/db')
+        const { signOAuthState } = await import('@/lib/auth/oauth-state')
+
         const { provider } = params
         const url = new URL(request.url)
         const searchParams = url.searchParams

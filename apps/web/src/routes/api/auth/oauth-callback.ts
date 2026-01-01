@@ -1,6 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { db, settings, user, account, member, session, eq, and } from '@/lib/db'
-import { verifyOAuthState } from '@/lib/auth/oauth-state'
 import { generateId, type UserId } from '@quackback/ids'
 
 /**
@@ -217,6 +215,9 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
        * OAuth callback handler for GitHub and Google
        */
       GET: async ({ request }) => {
+        const { db, settings, user, account, member, session, eq, and } = await import('@/lib/db')
+        const { verifyOAuthState } = await import('@/lib/auth/oauth-state')
+
         const url = new URL(request.url)
         const searchParams = url.searchParams
         const code = searchParams.get('code')

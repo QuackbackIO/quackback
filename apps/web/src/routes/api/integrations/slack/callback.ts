@@ -1,7 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { db, encryptToken, integrations } from '@/lib/db'
-import { exchangeSlackCode } from '@quackback/integrations'
 import type { MemberId } from '@quackback/ids'
 
 /**
@@ -93,6 +91,9 @@ export const Route = createFileRoute('/api/integrations/slack/callback')({
        * Handles Slack OAuth callback
        */
       GET: async ({ request }) => {
+        const { db, encryptToken, integrations } = await import('@/lib/db')
+        const { exchangeSlackCode } = await import('@quackback/integrations')
+
         const { searchParams } = new URL(request.url)
         const code = searchParams.get('code')
         const state = searchParams.get('state')

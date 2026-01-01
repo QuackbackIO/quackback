@@ -1,11 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import Papa from 'papaparse'
-import { validateApiWorkspaceAccess } from '@/lib/server-functions/workspace'
-import { requireRole } from '@/lib/api-handler'
-import { processImport } from '@/lib/import/import-service'
 import type { ImportInput } from '@/lib/import/types'
 import { REQUIRED_HEADERS } from '@/lib/schemas/import'
-import { getBoardById, listBoards } from '@/lib/boards'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -19,6 +15,11 @@ export const Route = createFileRoute('/api/import/')({
        * Upload and queue CSV import job
        */
       POST: async ({ request }) => {
+        const { validateApiWorkspaceAccess } = await import('@/lib/server-functions/workspace')
+        const { requireRole } = await import('@/lib/api-handler')
+        const { processImport } = await import('@/lib/import/import-service')
+        const { getBoardById, listBoards } = await import('@/lib/boards/board.service')
+
         try {
           // Parse multipart form data
           const formData = await request.formData()

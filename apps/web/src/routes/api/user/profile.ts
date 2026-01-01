@@ -1,6 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { db, user, eq } from '@/lib/db'
-import { getSession } from '@/lib/server-functions/auth'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -13,6 +11,9 @@ export const Route = createFileRoute('/api/user/profile')({
        * Get current user's profile information.
        */
       GET: async () => {
+        const { db, user, eq } = await import('@/lib/db')
+        const { getSession } = await import('@/lib/server-functions/auth')
+
         try {
           const session = await getSession()
           if (!session?.user) {
@@ -50,6 +51,9 @@ export const Route = createFileRoute('/api/user/profile')({
        * Update current user's profile.
        */
       PATCH: async ({ request }) => {
+        const { db, user, eq } = await import('@/lib/db')
+        const { getSession } = await import('@/lib/server-functions/auth')
+
         try {
           const session = await getSession()
           if (!session?.user) {
@@ -151,6 +155,9 @@ export const Route = createFileRoute('/api/user/profile')({
        * Remove custom avatar.
        */
       DELETE: async () => {
+        const { db, user, eq } = await import('@/lib/db')
+        const { getSession } = await import('@/lib/server-functions/auth')
+
         try {
           const session = await getSession()
           if (!session?.user) {
