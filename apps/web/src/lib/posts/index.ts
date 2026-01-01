@@ -1,40 +1,19 @@
 /**
  * Post domain module exports
+ *
+ * IMPORTANT: This barrel export only includes types and error classes.
+ * Service functions that access the database are NOT exported here to prevent
+ * them from being bundled into the client.
+ *
+ * For service functions, import directly from './post.service' or './post.public'
+ * in server-only code (server functions, API routes, etc.)
  */
 
-// PostService functions
-export {
-  createPost,
-  updatePost,
-  voteOnPost,
-  changeStatus,
-  getPostById,
-  getPostWithDetails,
-  getCommentsWithReplies,
-  listInboxPosts,
-  listPostsForExport,
-  canEditPost,
-  canDeletePost,
-  userEditPost,
-  softDeletePost,
-  restorePost,
-  permanentDeletePost,
-} from './post.service'
-
-// PublicPostService functions (prefixed with "public" or descriptive names)
-export {
-  listPublicPosts,
-  getPublicPostDetail,
-  getPublicRoadmapPosts,
-  getPublicRoadmapPostsPaginated,
-  hasUserVoted,
-  getUserVotedPostIds,
-  getAllUserVotedPostIds,
-  getBoardByPostId,
-} from './post.public'
-
+// Error classes (no DB dependency)
 export { PostError } from './post.errors'
 export type { PostErrorCode } from './post.errors'
+
+// Types (no DB dependency)
 export type {
   CreatePostInput,
   UpdatePostInput,

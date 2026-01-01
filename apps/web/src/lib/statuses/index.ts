@@ -1,27 +1,18 @@
 /**
- * Status domain module
+ * Status domain module exports
  *
- * This module exports all status-related domain types, services, and errors.
+ * IMPORTANT: This barrel export only includes types and error classes.
+ * Service functions that access the database are NOT exported here to prevent
+ * them from being bundled into the client.
+ *
+ * For service functions, import directly from './status.service' in server-only code
+ * (server functions, API routes, etc.)
  */
 
-// Export service functions
-export {
-  createStatus,
-  updateStatus,
-  deleteStatus,
-  getStatusById,
-  listStatuses,
-  reorderStatuses,
-  setDefaultStatus,
-  getDefaultStatus,
-  getStatusBySlug,
-  listPublicStatuses,
-} from './status.service'
-
-// Export errors
+// Error classes (no DB dependency)
 export { StatusError, type StatusErrorCode } from './status.errors'
 
-// Export types
+// Types (no DB dependency)
 export type {
   Status,
   CreateStatusInput,

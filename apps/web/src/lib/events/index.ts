@@ -1,19 +1,19 @@
 /**
  * Event system barrel exports
  *
- * This module provides a centralized export point for all event-related functionality.
+ * IMPORTANT: This barrel export only includes types and event builders.
+ * Service functions that access the database are NOT exported here to prevent
+ * them from being bundled into the client.
+ *
+ * For service functions (processEvent, processIntegration, processUserNotification),
+ * import directly from './event-service', './integration-service', or './notification-service'
+ * in server-only code (server functions, API routes, etc.)
+ *
+ * For dispatching events, import directly from './dispatch' in server-only code.
  */
 
-// Types
+// Types (no DB dependency)
 export * from './types'
 
-// Event builders
+// Event builders (no DB dependency - only uses crypto)
 export * from './event-builder'
-
-// Dispatchers
-export * from './dispatch'
-
-// Services
-export * from './event-service'
-export * from './integration-service'
-export * from './notification-service'
