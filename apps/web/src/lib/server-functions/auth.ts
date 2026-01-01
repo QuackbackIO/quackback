@@ -5,6 +5,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { UserId, SessionId } from '@quackback/ids'
 
 /**
@@ -40,7 +41,7 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Session | null> => {
     const { auth } = await import('@/lib/auth/index')
     const session = await auth.api.getSession({
-      headers: new Headers(),
+      headers: getRequestHeaders(),
     })
 
     if (!session?.user) {

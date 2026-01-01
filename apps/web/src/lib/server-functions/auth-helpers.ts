@@ -91,11 +91,15 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
 /**
  * Get auth context if authenticated, null otherwise.
  * Useful for public endpoints that behave differently for logged-in users.
+ *
+ * Auto-creates a member record with role 'user' for authenticated users
+ * who don't have one (e.g., users who signed up via OTP).
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
   const { getSession } = await import('./auth')
   const { getSettings } = await import('./workspace')
   const { db, member, eq } = await import('@/lib/db')
+  const { generateId } = await import('@quackback/ids')
 
   const session = await getSession()
   if (!session?.user) {
@@ -107,11 +111,23 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     return null
   }
 
-  const memberRecord = await db.query.member.findFirst({
+  let memberRecord = await db.query.member.findFirst({
     where: eq(member.userId, session.user.id as UserId),
   })
+
+  // Auto-create member record for authenticated users without one
   if (!memberRecord) {
-    return null
+    const newMemberId = generateId('member')
+    const [created] = await db
+      .insert(member)
+      .values({
+        id: newMemberId,
+        userId: session.user.id as UserId,
+        role: 'user',
+        createdAt: new Date(),
+      })
+      .returning()
+    memberRecord = created
   }
 
   return {

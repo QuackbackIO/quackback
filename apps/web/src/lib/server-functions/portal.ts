@@ -123,32 +123,38 @@ const fetchPublicPostDetailSchema = z.object({
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicPostDetailSchema)
   .handler(async ({ data }) => {
+    const { getOptionalAuth } = await import('./auth-helpers')
     const { getPublicPostDetail } = await import('@/lib/posts/post.public')
+    const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-    const result = await getPublicPostDetail(data.postId as PostId)
+    // Get user identifier for reaction highlighting (optional auth)
+    const ctx = await getOptionalAuth()
+    const userIdentifier = ctx?.member ? getMemberIdentifier(ctx.member.id) : undefined
+
+    const result = await getPublicPostDetail(data.postId as PostId, userIdentifier)
     if (!result.success) {
       throw new Error(result.error.message)
     }
     if (!result.value) {
       return null
     }
+
+    // Helper to serialize comment dates recursively
+    const serializeComment = (c: (typeof result.value.comments)[0]): unknown => ({
+      ...c,
+      createdAt: c.createdAt.toISOString(),
+      replies: c.replies.map(serializeComment),
+    })
+
     // Serialize Date fields
     return {
       ...result.value,
       createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt?.toISOString() ?? null,
-      comments: result.value.comments.map((c) => ({
-        ...c,
-        createdAt: c.createdAt.toISOString(),
-        replies: c.replies.map((r) => ({
-          ...r,
-          createdAt: r.createdAt.toISOString(),
-        })),
-      })),
+      comments: result.value.comments.map(serializeComment),
       officialResponse: result.value.officialResponse
         ? {
             ...result.value.officialResponse,
-            createdAt: result.value.officialResponse.createdAt.toISOString(),
+            respondedAt: result.value.officialResponse.respondedAt.toISOString(),
           }
         : null,
     }
@@ -378,7 +384,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       isMember: boolean
       canComment: boolean
       commentAvatarMap: Record<string, string | null>
-      user: { name: string | null; email: string } | undefined
+      user: { name: string | null; email: string; memberId?: MemberId } | undefined
     }> => {
       const { getOptionalAuth } = await import('./auth-helpers')
       const { db, member: memberTable, user: userTable, eq, inArray } = await import('@/lib/db')
@@ -386,14 +392,14 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       const ctx = await getOptionalAuth()
 
       let isMember = false
-      let user: { name: string | null; email: string } | undefined = undefined
+      let user: { name: string | null; email: string; memberId?: MemberId } | undefined = undefined
 
-      // If user is authenticated and is a member
-      if (ctx.user && ctx.member) {
+      if (ctx?.user && ctx?.member) {
         isMember = true
         user = {
           name: ctx.user.name,
           email: ctx.user.email,
+          memberId: ctx.member.id,
         }
       }
 

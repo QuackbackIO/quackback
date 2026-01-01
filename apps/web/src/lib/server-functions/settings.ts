@@ -159,17 +159,26 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 )
 
 /**
- * Fetch user profile data including avatar
+ * Fetch user profile data including avatar.
+ * Only requires authentication - any logged-in user can view their own profile.
  */
 export const fetchUserProfile = createServerFn({ method: 'GET' })
   .inputValidator(fetchUserProfileSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
     const { db, user, eq } = await import('@/lib/db')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
+    // Users can only fetch their own profile
     const userId = data as UserId
+    if (session.user.id !== userId) {
+      throw new Error("Access denied: Cannot view other users' profiles")
+    }
+
     // Fetch user's avatar data for SSR
     const userRecord = await db.query.user.findFirst({
       where: eq(user.id, userId),

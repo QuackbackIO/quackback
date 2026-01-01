@@ -52,16 +52,20 @@ export interface NotificationPreferences {
 
 /**
  * Get current user's profile information.
+ * Only requires authentication - any logged-in user can view their own profile.
  */
 export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserProfile> => {
-    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
     const { db, user, member, eq } = await import('@/lib/db')
 
-    const ctx = await requireAuth()
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
     const userRecord = await db.query.user.findFirst({
-      where: eq(user.id, ctx.user.id),
+      where: eq(user.id, session.user.id),
       columns: {
         id: true,
         name: true,
@@ -77,7 +81,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 
     // Get member record to determine userType
     const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, ctx.user.id as UserId),
+      where: eq(member.userId, session.user.id as UserId),
       columns: { role: true },
     })
 
@@ -102,20 +106,24 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 
 /**
  * Update current user's display name.
+ * Only requires authentication - any logged-in user can update their own name.
  */
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
-    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
     const { db, user, eq } = await import('@/lib/db')
 
-    const ctx = await requireAuth()
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
     const { name } = data
 
     const [updated] = await db
       .update(user)
       .set({ name: name.trim() })
-      .where(eq(user.id, ctx.user.id))
+      .where(eq(user.id, session.user.id))
       .returning({
         id: user.id,
         name: user.name,
@@ -132,13 +140,17 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
 
 /**
  * Remove custom avatar.
+ * Only requires authentication - any logged-in user can remove their own avatar.
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
-    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
     const { db, user, eq } = await import('@/lib/db')
 
-    const ctx = await requireAuth()
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
     const [updated] = await db
       .update(user)
@@ -146,7 +158,7 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
         imageBlob: null,
         imageType: null,
       })
-      .where(eq(user.id, ctx.user.id))
+      .where(eq(user.id, session.user.id))
       .returning({
         id: user.id,
         name: user.name,
@@ -164,13 +176,17 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
 
 /**
  * Get current user's role.
+ * Only requires authentication - returns null if user has no member record.
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ role: 'owner' | 'admin' | 'member' | 'user' | null }> => {
-    const { requireAuth } = await import('./auth-helpers')
+    const { getSession } = await import('./auth')
     const { getCurrentUserRole } = await import('./workspace')
 
-    await requireAuth()
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
     const role = await getCurrentUserRole()
     return { role }

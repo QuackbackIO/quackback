@@ -158,7 +158,7 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
       const postId = data.postId as PostId
 
       // If no user/member, return no permissions
-      if (!ctx.user || !ctx.member) {
+      if (!ctx?.user || !ctx?.member) {
         return { canEdit: false, canDelete: false }
       }
 
@@ -390,7 +390,7 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
     const ctx = await getOptionalAuth()
 
     // Optional auth - return empty if not authenticated
-    if (!ctx.user || !ctx.member) {
+    if (!ctx?.user || !ctx?.member) {
       return { votedPostIds: [] }
     }
 
@@ -507,16 +507,13 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       reason: null,
     }
 
-    // If user is authenticated and is a member
-    if (ctx.user && ctx.member) {
+    if (ctx?.user && ctx?.member) {
       userIdentifier = getMemberIdentifier(ctx.member.id)
       isMember = true
 
-      // Check if user has voted
       const voteResult = await hasUserVoted(postId, userIdentifier)
       hasVoted = voteResult.success ? voteResult.value : false
 
-      // Get subscription status
       subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
     }
 
