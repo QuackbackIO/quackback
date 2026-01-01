@@ -21,7 +21,7 @@ import type {
   CommentReaction,
   CommentWithReplies,
 } from '@/components/admin/feedback/inbox-types'
-import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db'
+import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db-types'
 import type { BoardId, CommentId, MemberId, PostId, StatusId, TagId } from '@quackback/ids'
 
 // ============================================================================

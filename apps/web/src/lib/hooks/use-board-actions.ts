@@ -9,7 +9,7 @@ import {
   type UpdateBoardInput,
   type DeleteBoardInput,
 } from '@/lib/server-functions/boards'
-import type { Board } from '@/lib/db'
+import type { Board } from '@/lib/db-types'
 import type { BoardId } from '@quackback/ids'
 
 // ============================================================================

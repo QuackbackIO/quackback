@@ -16,7 +16,7 @@ import {
   type AddPostToRoadmapInput,
   type RemovePostFromRoadmapInput,
 } from '@/lib/server-functions/roadmaps'
-import type { Roadmap } from '@/lib/db'
+import type { Roadmap } from '@/lib/db-types'
 import type { RoadmapId, StatusId } from '@quackback/ids'
 
 // ============================================================================

@@ -10,7 +10,7 @@ import {
   type DeleteStatusInput,
   type ReorderStatusesInput,
 } from '@/lib/server-functions/statuses'
-import type { PostStatusEntity } from '@/lib/db'
+import type { PostStatusEntity } from '@/lib/db-types'
 import type { StatusId } from '@quackback/ids'
 
 // ============================================================================

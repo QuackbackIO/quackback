@@ -8,7 +8,7 @@ import {
   type UpdateTagInput,
   type DeleteTagInput,
 } from '@/lib/server-functions/tags'
-import type { Tag } from '@/lib/db'
+import type { Tag } from '@/lib/db-types'
 import type { TagId } from '@quackback/ids'
 
 // ============================================================================
