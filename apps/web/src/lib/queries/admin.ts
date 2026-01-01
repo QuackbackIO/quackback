@@ -9,10 +9,10 @@ import {
   fetchTeamMembers,
   fetchOnboardingStatus,
   fetchIntegrationsList,
+  listPortalUsersFn,
 } from '@/lib/server-functions/admin'
-import { listPortalUsers } from '@/lib/users/user.service'
+import { fetchPublicStatuses } from '@/lib/server-functions/portal'
 import type { PortalUserListParams } from '@/lib/users/user.types'
-import { listPublicStatuses } from '@/lib/statuses'
 
 /**
  * Inbox/Feedback filter params
@@ -103,7 +103,18 @@ export const adminQueries = {
   portalUsers: (filters: PortalUserListParams) =>
     queryOptions({
       queryKey: ['admin', 'users', filters],
-      queryFn: () => listPortalUsers(filters),
+      queryFn: () =>
+        listPortalUsersFn({
+          data: {
+            search: filters.search,
+            verified: filters.verified,
+            dateFrom: filters.dateFrom?.toISOString(),
+            dateTo: filters.dateTo?.toISOString(),
+            sort: filters.sort,
+            page: filters.page,
+            limit: filters.limit,
+          },
+        }),
       staleTime: 30 * 1000,
     }),
 
@@ -124,9 +135,8 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'roadmap', 'statuses'],
       queryFn: async () => {
-        const result = await listPublicStatuses()
-        if (!result.success) throw new Error(result.error.message)
-        return result.value.filter((s) => s.showOnRoadmap)
+        const statuses = await fetchPublicStatuses()
+        return statuses.filter((s) => s.showOnRoadmap)
       },
       staleTime: 2 * 60 * 1000,
     }),

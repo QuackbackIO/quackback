@@ -1,19 +1,22 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { UserId } from '@quackback/ids'
 import {
-  getBrandingConfig,
-  getCustomCss,
-  getPortalConfig,
-  getPublicPortalConfig,
-  getPublicAuthConfig,
-  DEFAULT_PORTAL_CONFIG,
-} from '@/lib/settings'
-import { getSettingsLogoData, getSettingsHeaderLogoData } from '@/lib/settings-utils'
-import { fetchTeamMembersAndInvitations, fetchUserProfile } from '@/lib/server-functions/settings'
+  fetchBrandingConfig,
+  fetchCustomCss,
+  fetchPortalConfig,
+  fetchPublicPortalConfig,
+  fetchPublicAuthConfig,
+  fetchTeamMembersAndInvitations,
+  fetchUserProfile,
+} from '@/lib/server-functions/settings'
+import {
+  fetchSettingsLogoData,
+  fetchSettingsHeaderLogoData,
+} from '@/lib/server-functions/settings-utils'
 
 /**
  * Query options factory for settings routes.
- * Uses service functions that return Result<T, E> types.
+ * Uses server functions (createServerFn) to keep database code server-only.
  * These are used with ensureQueryData() in loaders and useSuspenseQuery() in components.
  */
 export const settingsQueries = {
@@ -23,11 +26,7 @@ export const settingsQueries = {
   branding: () =>
     queryOptions({
       queryKey: ['settings', 'branding'],
-      queryFn: async () => {
-        const result = await getBrandingConfig()
-        if (!result.success) throw new Error(result.error.message)
-        return result.value
-      },
+      queryFn: () => fetchBrandingConfig(),
       staleTime: 5 * 60 * 1000, // 5min - branding doesn't change often
     }),
 
@@ -37,10 +36,7 @@ export const settingsQueries = {
   logo: () =>
     queryOptions({
       queryKey: ['settings', 'logo'],
-      queryFn: async () => {
-        const logoData = await getSettingsLogoData()
-        return logoData
-      },
+      queryFn: () => fetchSettingsLogoData(),
       staleTime: 5 * 60 * 1000,
     }),
 
@@ -50,10 +46,7 @@ export const settingsQueries = {
   headerLogo: () =>
     queryOptions({
       queryKey: ['settings', 'headerLogo'],
-      queryFn: async () => {
-        const headerData = await getSettingsHeaderLogoData()
-        return headerData
-      },
+      queryFn: () => fetchSettingsHeaderLogoData(),
       staleTime: 5 * 60 * 1000,
     }),
 
@@ -64,9 +57,8 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'customCss'],
       queryFn: async () => {
-        const result = await getCustomCss()
-        if (!result.success) throw new Error(result.error.message)
-        return result.value ?? ''
+        const css = await fetchCustomCss()
+        return css ?? ''
       },
       staleTime: 5 * 60 * 1000,
     }),
@@ -77,11 +69,7 @@ export const settingsQueries = {
   portalConfig: () =>
     queryOptions({
       queryKey: ['settings', 'portalConfig'],
-      queryFn: async () => {
-        const result = await getPortalConfig()
-        if (!result.success) throw new Error(result.error.message)
-        return result.value ?? DEFAULT_PORTAL_CONFIG
-      },
+      queryFn: () => fetchPortalConfig(),
       staleTime: 5 * 60 * 1000,
     }),
 
@@ -91,11 +79,7 @@ export const settingsQueries = {
   publicPortalConfig: () =>
     queryOptions({
       queryKey: ['settings', 'publicPortalConfig'],
-      queryFn: async () => {
-        const result = await getPublicPortalConfig()
-        if (!result.success) throw new Error(result.error.message)
-        return result.value
-      },
+      queryFn: () => fetchPublicPortalConfig(),
       staleTime: 5 * 60 * 1000,
     }),
 
@@ -105,11 +89,7 @@ export const settingsQueries = {
   publicAuthConfig: () =>
     queryOptions({
       queryKey: ['settings', 'publicAuthConfig'],
-      queryFn: async () => {
-        const result = await getPublicAuthConfig()
-        if (!result.success) throw new Error(result.error.message)
-        return result.value
-      },
+      queryFn: () => fetchPublicAuthConfig(),
       staleTime: 5 * 60 * 1000,
     }),
 
