@@ -74,13 +74,23 @@ export function CommentsSection({ postId, comments }: CommentsSectionProps) {
   const commentMemberIds = useMemo(() => collectCommentMemberIds(comments), [comments])
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
+  // Use postId as query key (stable) - we'll refetch member IDs as needed
+  // The queryFn will use the latest commentMemberIds
   const { data, isLoading } = useQuery({
-    queryKey: ['comments-section', postId, commentMemberIds],
+    queryKey: ['comments-section', postId],
     queryFn: () =>
       getCommentsSectionDataFn({ data: { commentMemberIds: commentMemberIds as MemberId[] } }),
+    // Keep previous data while refetching to avoid skeleton flash
+    placeholderData: (prev) => prev,
   })
 
-  if (isLoading || !data) {
+  // Only show skeleton on initial load, not on refetch
+  if (isLoading && !data) {
+    return <CommentsSectionSkeleton />
+  }
+
+  // If no data yet (shouldn't happen with placeholderData, but safety check)
+  if (!data) {
     return <CommentsSectionSkeleton />
   }
 
