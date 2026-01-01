@@ -124,13 +124,14 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
 export const toggleReactionFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleReactionSchema)
   .handler(async ({ data }) => {
-    const { getSession } = await import('./auth')
+    const { requireAuth } = await import('./auth-helpers')
     const { toggleReaction } = await import('@/lib/comments/comment.service')
+    const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-    const session = await getSession()
-    if (!session?.user) throw new Error('Authentication required')
+    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const userIdentifier = getMemberIdentifier(auth.member.id)
 
-    const result = await toggleReaction(data.commentId as CommentId, data.emoji, session.user.id)
+    const result = await toggleReaction(data.commentId as CommentId, data.emoji, userIdentifier)
     if (!result.success) throw new Error(result.error.message)
     return result.value
   })
@@ -165,7 +166,7 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
     }
 
     const ctx = await getOptionalAuth()
-    if (!ctx.user || !ctx.member) {
+    if (!ctx?.user || !ctx?.member) {
       return { canEdit: false, canDelete: false }
     }
 
