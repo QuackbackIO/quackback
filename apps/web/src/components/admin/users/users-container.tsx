@@ -19,17 +19,8 @@ interface UsersContainerProps {
 
 export function UsersContainer({ initialUsers, currentMemberRole }: UsersContainerProps) {
   // URL-based filter state
-  const {
-    filters,
-    setFilters,
-    clearFilters,
-    selectedUserId,
-    setSelectedUserId: setSelectedUserIdAsync,
-    hasActiveFilters,
-  } = useUsersFilters()
-
-  // Simple wrapper - nuqs returns Promise but we don't need to await
-  const setSelectedUserId = (id: string | null) => void setSelectedUserIdAsync(id)
+  const { filters, setFilters, clearFilters, selectedUserId, setSelectedUserId, hasActiveFilters } =
+    useUsersFilters()
 
   // Server state - Users list (with infinite query for pagination)
   const {

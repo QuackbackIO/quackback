@@ -1,14 +1,6 @@
-import {
-  useQueryState,
-  useQueryStates,
-  parseAsArrayOf,
-  parseAsString,
-  parseAsInteger,
-  parseAsStringLiteral,
-} from 'nuqs'
+import { useNavigate } from '@tanstack/react-router'
+import { Route } from '@/routes/admin/feedback'
 import { useMemo, useCallback } from 'react'
-
-const SORT_OPTIONS = ['newest', 'oldest', 'votes'] as const
 
 export interface InboxFilters {
   search?: string
@@ -23,70 +15,73 @@ export interface InboxFilters {
   sort?: 'newest' | 'oldest' | 'votes'
 }
 
-// Define parsers for each filter
-const filterParsers = {
-  search: parseAsString,
-  status: parseAsArrayOf(parseAsString), // Status slugs (e.g., 'open', 'planned')
-  board: parseAsArrayOf(parseAsString),
-  tags: parseAsArrayOf(parseAsString),
-  owner: parseAsString,
-  dateFrom: parseAsString,
-  dateTo: parseAsString,
-  minVotes: parseAsInteger,
-  sort: parseAsStringLiteral(SORT_OPTIONS),
-}
-
 export function useInboxFilters() {
-  // Use useQueryStates for all filters at once
-  // shallow: true prevents server-side re-render when URL changes
-  const [filterState, setFilterState] = useQueryStates(filterParsers, {
-    shallow: true,
-  })
+  const navigate = useNavigate()
+  const search = Route.useSearch()
 
-  // Separate state for selected post
-  const [selectedPostId, setSelectedPostId] = useQueryState('selected', {
-    shallow: true,
-  })
-
-  // Convert null values to undefined for cleaner interface
   const filters: InboxFilters = useMemo(
     () => ({
-      search: filterState.search ?? undefined,
-      status: filterState.status?.length ? filterState.status : undefined,
-      board: filterState.board?.length ? filterState.board : undefined,
-      tags: filterState.tags?.length ? filterState.tags : undefined,
-      owner: filterState.owner ?? undefined,
-      dateFrom: filterState.dateFrom ?? undefined,
-      dateTo: filterState.dateTo ?? undefined,
-      minVotes: filterState.minVotes ?? undefined,
-      sort: filterState.sort ?? undefined,
+      search: search.search,
+      status: search.status?.length ? search.status : undefined,
+      board: search.board?.length ? search.board : undefined,
+      tags: search.tags?.length ? search.tags : undefined,
+      owner: search.owner,
+      dateFrom: search.dateFrom,
+      dateTo: search.dateTo,
+      minVotes: search.minVotes ? parseInt(search.minVotes, 10) : undefined,
+      sort: search.sort,
     }),
-    [filterState]
+    [search]
   )
+
+  const selectedPostId = search.selected ?? null
 
   const setFilters = useCallback(
     (updates: Partial<InboxFilters>) => {
-      // Convert undefined to null for nuqs
-      const nuqsUpdates: Record<string, unknown> = {}
-
-      if ('search' in updates) nuqsUpdates.search = updates.search ?? null
-      if ('status' in updates) nuqsUpdates.status = updates.status ?? null
-      if ('board' in updates) nuqsUpdates.board = updates.board ?? null
-      if ('tags' in updates) nuqsUpdates.tags = updates.tags ?? null
-      if ('owner' in updates) nuqsUpdates.owner = updates.owner ?? null
-      if ('dateFrom' in updates) nuqsUpdates.dateFrom = updates.dateFrom ?? null
-      if ('dateTo' in updates) nuqsUpdates.dateTo = updates.dateTo ?? null
-      if ('minVotes' in updates) nuqsUpdates.minVotes = updates.minVotes ?? null
-      if ('sort' in updates) nuqsUpdates.sort = updates.sort ?? null
-
-      setFilterState(nuqsUpdates as Partial<typeof filterState>)
+      void navigate({
+        to: '/admin/feedback',
+        search: {
+          ...search,
+          ...(updates.search !== undefined && { search: updates.search }),
+          ...(updates.status !== undefined && { status: updates.status }),
+          ...(updates.board !== undefined && { board: updates.board }),
+          ...(updates.tags !== undefined && { tags: updates.tags }),
+          ...(updates.owner !== undefined && { owner: updates.owner }),
+          ...(updates.dateFrom !== undefined && { dateFrom: updates.dateFrom }),
+          ...(updates.dateTo !== undefined && { dateTo: updates.dateTo }),
+          ...(updates.minVotes !== undefined && { minVotes: updates.minVotes?.toString() }),
+          ...(updates.sort !== undefined && { sort: updates.sort }),
+        },
+        replace: true,
+      })
     },
-    [setFilterState]
+    [navigate, search]
+  )
+
+  const setSelectedPostId = useCallback(
+    (postId: string | null) => {
+      void navigate({
+        to: '/admin/feedback',
+        search: {
+          ...search,
+          selected: postId ?? undefined,
+        },
+        replace: true,
+      })
+    },
+    [navigate, search]
   )
 
   const clearFilters = useCallback(() => {
-    setFilterState(null)
-  }, [setFilterState])
+    void navigate({
+      to: '/admin/feedback',
+      search: {
+        sort: search.sort,
+        selected: search.selected,
+      },
+      replace: true,
+    })
+  }, [navigate, search])
 
   const hasActiveFilters = useMemo(() => {
     return !!(

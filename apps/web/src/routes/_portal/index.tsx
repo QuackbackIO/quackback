@@ -10,6 +10,8 @@ const searchSchema = z.object({
   board: z.string().optional(),
   search: z.string().optional(),
   sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
+  status: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
 })
 
 /**

@@ -1,13 +1,6 @@
-import {
-  useQueryState,
-  useQueryStates,
-  parseAsString,
-  parseAsBoolean,
-  parseAsStringLiteral,
-} from 'nuqs'
+import { useNavigate } from '@tanstack/react-router'
+import { Route } from '@/routes/admin/users'
 import { useMemo, useCallback } from 'react'
-
-const SORT_OPTIONS = ['newest', 'oldest', 'most_active', 'name'] as const
 
 export interface UsersFilters {
   search?: string
@@ -17,58 +10,72 @@ export interface UsersFilters {
   sort?: 'newest' | 'oldest' | 'most_active' | 'name'
 }
 
-// Define parsers for each filter
-const filterParsers = {
-  search: parseAsString,
-  verified: parseAsBoolean,
-  dateFrom: parseAsString,
-  dateTo: parseAsString,
-  sort: parseAsStringLiteral(SORT_OPTIONS),
-}
-
 export function useUsersFilters() {
-  // Use useQueryStates for all filters at once
-  // shallow: true prevents server-side re-render when URL changes
-  const [filterState, setFilterState] = useQueryStates(filterParsers, {
-    shallow: true,
-  })
+  const navigate = useNavigate()
+  const search = Route.useSearch()
 
-  // Separate state for selected user
-  const [selectedUserId, setSelectedUserId] = useQueryState('selected', {
-    shallow: true,
-  })
-
-  // Convert null values to undefined for cleaner interface
   const filters: UsersFilters = useMemo(
     () => ({
-      search: filterState.search ?? undefined,
-      verified: filterState.verified ?? undefined,
-      dateFrom: filterState.dateFrom ?? undefined,
-      dateTo: filterState.dateTo ?? undefined,
-      sort: filterState.sort ?? undefined,
+      search: search.search,
+      verified: search.verified === 'true' ? true : search.verified === 'false' ? false : undefined,
+      dateFrom: search.dateFrom,
+      dateTo: search.dateTo,
+      sort: search.sort,
     }),
-    [filterState]
+    [search]
   )
+
+  const selectedUserId = search.selected ?? null
 
   const setFilters = useCallback(
     (updates: Partial<UsersFilters>) => {
-      // Convert undefined to null for nuqs
-      const nuqsUpdates: Record<string, unknown> = {}
-
-      if ('search' in updates) nuqsUpdates.search = updates.search ?? null
-      if ('verified' in updates) nuqsUpdates.verified = updates.verified ?? null
-      if ('dateFrom' in updates) nuqsUpdates.dateFrom = updates.dateFrom ?? null
-      if ('dateTo' in updates) nuqsUpdates.dateTo = updates.dateTo ?? null
-      if ('sort' in updates) nuqsUpdates.sort = updates.sort ?? null
-
-      setFilterState(nuqsUpdates as Partial<typeof filterState>)
+      void navigate({
+        to: '/admin/users',
+        search: {
+          ...search,
+          ...(updates.search !== undefined && { search: updates.search }),
+          ...(updates.verified !== undefined && {
+            verified:
+              updates.verified === true
+                ? ('true' as const)
+                : updates.verified === false
+                  ? ('false' as const)
+                  : undefined,
+          }),
+          ...(updates.dateFrom !== undefined && { dateFrom: updates.dateFrom }),
+          ...(updates.dateTo !== undefined && { dateTo: updates.dateTo }),
+          ...(updates.sort !== undefined && { sort: updates.sort }),
+        },
+        replace: true,
+      })
     },
-    [setFilterState]
+    [navigate, search]
+  )
+
+  const setSelectedUserId = useCallback(
+    (userId: string | null) => {
+      void navigate({
+        to: '/admin/users',
+        search: {
+          ...search,
+          selected: userId ?? undefined,
+        },
+        replace: true,
+      })
+    },
+    [navigate, search]
   )
 
   const clearFilters = useCallback(() => {
-    setFilterState(null)
-  }, [setFilterState])
+    void navigate({
+      to: '/admin/users',
+      search: {
+        sort: search.sort,
+        selected: search.selected,
+      },
+      replace: true,
+    })
+  }, [navigate, search])
 
   const hasActiveFilters = useMemo(() => {
     return !!(

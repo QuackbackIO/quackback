@@ -1,9 +1,8 @@
 /**
- * Auth helper functions for inline use in server functions.
- * These replace the auth-middleware.ts wrappers with simpler, inline checks.
+ * Auth helper functions for server functions.
  *
- * NOTE: All DB and server-only imports are done dynamically inside functions
- * to prevent client bundling issues with TanStack Start.
+ * These provide role-based authentication checks for use in server function handlers.
+ * All imports are done dynamically to prevent client bundling issues.
  */
 
 import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
@@ -20,6 +19,7 @@ export interface AuthContext {
     id: UserId
     email: string
     name: string
+    image: string | null
   }
   member: {
     id: MemberId
@@ -27,19 +27,19 @@ export interface AuthContext {
   }
 }
 
-export interface PartialAuthContext {
-  settings: {
-    id: WorkspaceId
-    slug: string
-    name: string
-  }
-  user: null
-  member: null
-}
-
 /**
- * Get auth context for authenticated requests.
- * Throws if user is not authenticated or not a team member.
+ * Require authentication with optional role check.
+ * Throws if user is not authenticated or doesn't have required role.
+ *
+ * @example
+ * // Require any team member
+ * const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+ *
+ * // Require admin or owner
+ * const auth = await requireAuth({ roles: ['owner', 'admin'] })
+ *
+ * // Just require authentication (any role)
+ * const auth = await requireAuth()
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
   const { getSession } = await import('./auth')
@@ -53,19 +53,19 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
 
   const appSettings = await getSettings()
   if (!appSettings) {
-    throw new Error('Workspace settings not found')
+    throw new Error('Workspace not configured')
   }
 
   const memberRecord = await db.query.member.findFirst({
     where: eq(member.userId, session.user.id as UserId),
   })
   if (!memberRecord) {
-    throw new Error('Access denied: Member record not found')
+    throw new Error('Access denied: Not a team member')
   }
 
   if (options?.roles && !options.roles.includes(memberRecord.role as Role)) {
     throw new Error(
-      `Access denied: Requires one of [${options.roles.join(', ')}], got ${memberRecord.role}`
+      `Access denied: Requires [${options.roles.join(', ')}], got ${memberRecord.role}`
     )
   }
 
@@ -79,6 +79,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       id: session.user.id,
       email: session.user.email,
       name: session.user.name,
+      image: session.user.image,
     },
     member: {
       id: memberRecord.id as MemberId,
@@ -88,46 +89,29 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
 }
 
 /**
- * Get auth context for requests that allow unauthenticated access.
- * Returns partial context with null user/member if not authenticated.
+ * Get auth context if authenticated, null otherwise.
+ * Useful for public endpoints that behave differently for logged-in users.
  */
-export async function getOptionalAuth(): Promise<AuthContext | PartialAuthContext> {
+export async function getOptionalAuth(): Promise<AuthContext | null> {
   const { getSession } = await import('./auth')
   const { getSettings } = await import('./workspace')
   const { db, member, eq } = await import('@/lib/db')
 
   const session = await getSession()
-  const appSettings = await getSettings()
-  if (!appSettings) {
-    throw new Error('Workspace settings not found')
+  if (!session?.user) {
+    return null
   }
 
-  if (!session?.user) {
-    return {
-      settings: {
-        id: appSettings.id as WorkspaceId,
-        slug: appSettings.slug,
-        name: appSettings.name,
-      },
-      user: null,
-      member: null,
-    }
+  const appSettings = await getSettings()
+  if (!appSettings) {
+    return null
   }
 
   const memberRecord = await db.query.member.findFirst({
     where: eq(member.userId, session.user.id as UserId),
   })
-
   if (!memberRecord) {
-    return {
-      settings: {
-        id: appSettings.id as WorkspaceId,
-        slug: appSettings.slug,
-        name: appSettings.name,
-      },
-      user: null,
-      member: null,
-    }
+    return null
   }
 
   return {
@@ -140,6 +124,7 @@ export async function getOptionalAuth(): Promise<AuthContext | PartialAuthContex
       id: session.user.id,
       email: session.user.email,
       name: session.user.name,
+      image: session.user.image,
     },
     member: {
       id: memberRecord.id as MemberId,

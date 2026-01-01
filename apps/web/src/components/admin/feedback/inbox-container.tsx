@@ -44,18 +44,9 @@ export function InboxContainer({
 }: InboxContainerProps) {
   const queryClient = useQueryClient()
 
-  // URL-based filter state (unchanged)
-  const {
-    filters,
-    setFilters,
-    clearFilters,
-    selectedPostId,
-    setSelectedPostId: setSelectedPostIdAsync,
-    hasActiveFilters,
-  } = useInboxFilters()
-
-  // Simple wrapper - nuqs returns Promise but we don't need to await
-  const setSelectedPostId = (id: string | null) => void setSelectedPostIdAsync(id)
+  // URL-based filter state
+  const { filters, setFilters, clearFilters, selectedPostId, setSelectedPostId, hasActiveFilters } =
+    useInboxFilters()
 
   // UI state from Zustand
   const { isEditDialogOpen, setEditDialogOpen } = useInboxUIStore()

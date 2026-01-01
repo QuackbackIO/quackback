@@ -19,6 +19,9 @@ export function getRouter() {
     routeTree,
     defaultPreload: 'intent',
     scrollRestoration: true,
+    context: {
+      queryClient,
+    },
     defaultNotFoundComponent: () => (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">

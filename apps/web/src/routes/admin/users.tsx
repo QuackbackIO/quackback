@@ -13,6 +13,7 @@ const searchSchema = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional().default('newest'),
+  selected: z.string().optional(),
 })
 
 export const Route = createFileRoute('/admin/users')({

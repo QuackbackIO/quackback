@@ -18,6 +18,7 @@ const searchSchema = z.object({
   dateTo: z.string().optional(),
   minVotes: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
+  selected: z.string().optional(),
 })
 
 export const Route = createFileRoute('/admin/feedback')({

@@ -1,16 +1,28 @@
 /// <reference types="vite/client" />
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { Outlet, createRootRouteWithContext, HeadContent, Scripts } from '@tanstack/react-router'
-// import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
-// import { Toaster } from '@/components/ui/sonner'
-// import { ThemeProvider } from '@/components/theme-provider'
-// import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-// import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-// import { getSession } from '@/lib/server-functions/auth'
-// import { getSettings } from '@/lib/server-functions/workspace'
+import { getSession } from '@/lib/server-functions/auth'
+import { getSettings } from '@/lib/server-functions/workspace'
+
+// Lazy load devtools in development only
+const TanStackRouterDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import('@tanstack/react-router-devtools').then((mod) => ({
+        default: mod.TanStackRouterDevtools,
+      }))
+    )
+  : () => null
+
+const ReactQueryDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import('@tanstack/react-query-devtools').then((mod) => ({
+        default: mod.ReactQueryDevtools,
+      }))
+    )
+  : () => null
 
 // Script to handle system theme preference when theme is set to 'system'
 const systemThemeScript = `
@@ -25,19 +37,13 @@ const systemThemeScript = `
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
-  // session: Awaited<ReturnType<typeof getSession>>
-  // settings: Awaited<ReturnType<typeof getSettings>>
+  session: Awaited<ReturnType<typeof getSession>>
+  settings: Awaited<ReturnType<typeof getSettings>>
 }>()({
-  // beforeLoad: async () => {
-  //   // Fetch session and settings at the root level
-  //   // These will be available to all child routes via context
-  //   const [session, settings] = await Promise.all([getSession(), getSettings()])
-
-  //   return {
-  //     session,
-  //     settings,
-  //   }
-  // },
+  beforeLoad: async () => {
+    const [session, settings] = await Promise.all([getSession(), getSettings()])
+    return { session, settings }
+  },
   head: () => ({
     meta: [
       {
@@ -79,23 +85,13 @@ export const Route = createRootRouteWithContext<{
 })
 
 function RootComponent() {
-  // const { queryClient } = Route.useRouteContext()
-
   return (
     <RootDocument>
-      {/* <NuqsAdapter> */}
-      {/* <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        > */}
       <Outlet />
-      {/* <Toaster /> */}
-      {/* <ReactQueryDevtools client={queryClient} buttonPosition="bottom-left" /> */}
-      {/* <TanStackRouterDevtools position="bottom-right" /> */}
-      {/* </ThemeProvider> */}
-      {/* </NuqsAdapter> */}
+      <Suspense>
+        <ReactQueryDevtools buttonPosition="bottom-left" />
+        <TanStackRouterDevtools position="bottom-right" />
+      </Suspense>
     </RootDocument>
   )
 }
