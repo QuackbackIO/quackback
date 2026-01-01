@@ -22,7 +22,7 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
               {/* View all posts */}
               <Link
                 to="/"
-                search={{}}
+                search={(prev) => ({ ...prev, board: undefined })}
                 className={cn(
                   'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
                   !currentBoard
@@ -41,7 +41,7 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
                   <Link
                     key={board.id}
                     to="/"
-                    search={{ board: board.slug }}
+                    search={(prev) => ({ ...prev, board: board.slug })}
                     className={cn(
                       'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
                       isActive
