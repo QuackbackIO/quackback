@@ -781,7 +781,7 @@ export async function listPostsForExport(
  */
 export async function canEditPost(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' },
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<Result<PermissionCheckResult, PostError>> {
   const { db } = await import('@quackback/db')
@@ -800,8 +800,8 @@ export async function canEditPost(
     return ok({ allowed: false, reason: 'Cannot edit a deleted post' })
   }
 
-  // Team members (owner, admin, member) can always edit
-  if (['owner', 'admin', 'member'].includes(actor.role)) {
+  // Team members (admin, member) can always edit
+  if (['admin', 'member'].includes(actor.role)) {
     return ok({ allowed: true })
   }
 
@@ -847,7 +847,7 @@ export async function canEditPost(
  */
 export async function canDeletePost(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' },
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<Result<PermissionCheckResult, PostError>> {
   const { db } = await import('@quackback/db')
@@ -866,8 +866,8 @@ export async function canDeletePost(
     return ok({ allowed: false, reason: 'Post has already been deleted' })
   }
 
-  // Team members (owner, admin, member) can always delete
-  if (['owner', 'admin', 'member'].includes(actor.role)) {
+  // Team members (admin, member) can always delete
+  if (['admin', 'member'].includes(actor.role)) {
     return ok({ allowed: true })
   }
 
@@ -916,7 +916,7 @@ export async function canDeletePost(
 export async function userEditPost(
   postId: PostId,
   input: UserEditPostInput,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<Post, PostError>> {
   // Check permission first
   const permResult = await canEditPost(postId, actor)
@@ -992,7 +992,7 @@ export async function userEditPost(
  */
 export async function softDeletePost(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<void, PostError>> {
   // Check permission first
   const permResult = await canDeletePost(postId, actor)

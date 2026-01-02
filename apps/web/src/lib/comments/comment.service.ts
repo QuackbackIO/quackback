@@ -86,7 +86,7 @@ export async function createComment(
     memberId: MemberId
     name: string
     email: string
-    role: 'owner' | 'admin' | 'member' | 'user'
+    role: 'admin' | 'member' | 'user'
   }
 ): Promise<Result<CreateCommentResult, CommentError>> {
   return db.transaction(async (tx) => {
@@ -130,7 +130,7 @@ export async function createComment(
     }
 
     // Determine if user is a team member
-    const isTeamMember = ['owner', 'admin', 'member'].includes(author.role)
+    const isTeamMember = ['admin', 'member'].includes(author.role)
 
     // Create the comment
     const [comment] = await tx
@@ -174,7 +174,7 @@ export async function createComment(
 export async function updateComment(
   id: CommentId,
   input: UpdateCommentInput,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<Comment, CommentError>> {
   return db.transaction(async (tx) => {
     // Get existing comment
@@ -202,7 +202,7 @@ export async function updateComment(
 
     // Authorization check - user must be comment author or team member
     const isAuthor = existingComment.memberId === actor.memberId
-    const isTeamMember = ['owner', 'admin', 'member'].includes(actor.role)
+    const isTeamMember = ['admin', 'member'].includes(actor.role)
 
     if (!isAuthor && !isTeamMember) {
       return err(CommentError.unauthorized('update this comment'))
@@ -252,7 +252,7 @@ export async function updateComment(
  */
 export async function deleteComment(
   id: CommentId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<void, CommentError>> {
   return db.transaction(async (tx) => {
     // Get existing comment
@@ -280,7 +280,7 @@ export async function deleteComment(
 
     // Authorization check - user must be comment author or team member
     const isAuthor = existingComment.memberId === actor.memberId
-    const isTeamMember = ['owner', 'admin', 'member'].includes(actor.role)
+    const isTeamMember = ['admin', 'member'].includes(actor.role)
 
     if (!isAuthor && !isTeamMember) {
       return err(CommentError.unauthorized('delete this comment'))
@@ -612,7 +612,7 @@ export async function toggleReaction(
  */
 export async function canEditComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<CommentPermissionCheckResult, CommentError>> {
   // Get the comment
   const comment = await db.query.comments.findFirst({
@@ -629,7 +629,7 @@ export async function canEditComment(
   }
 
   // Team members (owner, admin, member) can always edit
-  if (actor.role && ['owner', 'admin', 'member'].includes(actor.role)) {
+  if (actor.role && ['admin', 'member'].includes(actor.role)) {
     return ok({ allowed: true })
   }
 
@@ -660,7 +660,7 @@ export async function canEditComment(
  */
 export async function canDeleteComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<CommentPermissionCheckResult, CommentError>> {
   // Get the comment
   const comment = await db.query.comments.findFirst({
@@ -677,7 +677,7 @@ export async function canDeleteComment(
   }
 
   // Team members (owner, admin, member) can always delete
-  if (actor.role && ['owner', 'admin', 'member'].includes(actor.role)) {
+  if (actor.role && ['admin', 'member'].includes(actor.role)) {
     return ok({ allowed: true })
   }
 
@@ -710,7 +710,7 @@ export async function canDeleteComment(
 export async function userEditComment(
   commentId: CommentId,
   content: string,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<Comment, CommentError>> {
   // Check permission first
   const permResult = await canEditComment(commentId, actor)
@@ -774,7 +774,7 @@ export async function userEditComment(
  */
 export async function softDeleteComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'owner' | 'admin' | 'member' | 'user' }
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Result<void, CommentError>> {
   // Check permission first
   const permResult = await canDeleteComment(commentId, actor)
