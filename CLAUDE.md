@@ -53,20 +53,35 @@ bun run db:reset      # Reset database (destructive)
 Quackback follows a **modular monolith** architecture:
 
 ```
-apps/web/           # Next.js app (API routes, pages, components)
-├── app/            # App Router (route groups below)
-└── lib/            # Utilities, auth config
+apps/web/               # TanStack Start app (routes, pages, components)
+├── routes/             # File-based routing
+└── lib/                # Utilities, auth config, services
 
-packages/
-├── db/             # Drizzle schema, migrations, repositories, Unit of Work
-├── domain/         # Business logic services with Result<T,E> error handling
-├── ids/            # TypeID system (branded UUIDs: post_xxx, board_xxx)
-├── email/          # Email service (Resend)
-├── integrations/   # GitHub, Slack, Discord
-└── shared/         # Types, constants, utilities
+packages/               # Open source packages (AGPL-3.0)
+├── db/                 # Drizzle schema, migrations, repositories
+├── ids/                # TypeID system (branded UUIDs: post_xxx, board_xxx)
+├── email/              # Email service (Resend)
+└── integrations/       # Slack, Discord, Linear
 
-ee/                 # Enterprise features (SSO, SCIM) - proprietary license
+ee/                     # Enterprise Edition (proprietary license)
+└── packages/
+    ├── sso/            # @quackback/ee-sso - SSO/SAML authentication
+    ├── scim/           # @quackback/ee-scim - User provisioning
+    └── audit/          # @quackback/ee-audit - Audit logging
 ```
+
+### Feature Tiers
+
+| Deployment      | Tiers                                                  |
+| --------------- | ------------------------------------------------------ |
+| **Self-hosted** | Community (free, unlimited) → Enterprise (license key) |
+| **Cloud**       | Free → Pro → Team → Enterprise (subscription)          |
+
+Enterprise-only features (require license or enterprise subscription):
+
+- SSO/SAML authentication
+- SCIM user provisioning
+- Audit logs
 
 ### Service Layer (`packages/domain/`)
 
