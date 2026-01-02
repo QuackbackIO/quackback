@@ -44,7 +44,7 @@ export interface SetupWorkspaceResult {
 /**
  * Setup workspace during onboarding.
  * Creates settings and default statuses in a transaction.
- * Requires authentication and owner role.
+ * Requires authentication and admin role.
  */
 export const setupWorkspaceFn = createServerFn({ method: 'POST' })
   .inputValidator(setupWorkspaceSchema)
@@ -55,16 +55,16 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       await import('@/lib/db')
     const { generateId } = await import('@quackback/ids')
 
-    const ctx = await requireAuth({ roles: ['owner'] })
+    const ctx = await requireAuth({ roles: ['admin'] })
     const { workspaceName, userName } = data
 
-    // Verify user is owner
+    // Verify user is admin
     const memberRecord = await db.query.member.findFirst({
       where: eq(member.userId, ctx.user.id as UserId),
     })
 
-    if (!memberRecord || memberRecord.role !== 'owner') {
-      throw new Error('Only owner can complete setup')
+    if (!memberRecord || memberRecord.role !== 'admin') {
+      throw new Error('Only admin can complete setup')
     }
 
     // Check if settings already exist

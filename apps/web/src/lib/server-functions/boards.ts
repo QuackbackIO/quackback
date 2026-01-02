@@ -59,7 +59,7 @@ export const fetchBoards = createServerFn({ method: 'GET' }).handler(async () =>
   const { requireAuth } = await import('./auth-helpers')
   const { listBoards } = await import('@/lib/boards/board.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listBoards()
   if (!result.success) {
@@ -83,7 +83,7 @@ export const fetchBoard = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getBoardById } = await import('@/lib/boards/board.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getBoardById(data.id as BoardId)
     if (!result.success) {
@@ -110,7 +110,7 @@ export const createBoardFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { createBoard } = await import('@/lib/boards/board.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await createBoard({
       name: data.name,
@@ -137,7 +137,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateBoard } = await import('@/lib/boards/board.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await updateBoard(data.id as BoardId, {
       name: data.name,
@@ -165,7 +165,7 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { deleteBoard } = await import('@/lib/boards/board.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await deleteBoard(data.id as BoardId)
     if (!result.success) {

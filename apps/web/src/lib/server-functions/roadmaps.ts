@@ -53,7 +53,7 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
   const { requireAuth } = await import('./auth-helpers')
   const { listRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listRoadmaps()
   if (!result.success) throw new Error(result.error.message)
@@ -71,7 +71,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getRoadmap(data.id as RoadmapId)
     if (!result.success) throw new Error(result.error.message)
@@ -90,7 +90,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { createRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await createRoadmap({
       name: data.name,
@@ -113,7 +113,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await updateRoadmap(data.id as RoadmapId, {
       name: data.name,
@@ -135,7 +135,7 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { deleteRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await deleteRoadmap(data.id as RoadmapId)
     if (!result.success) throw new Error(result.error.message)
@@ -151,7 +151,7 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { addPostToRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await addPostToRoadmap({
       roadmapId: data.roadmapId as RoadmapId,
@@ -170,7 +170,7 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { removePostFromRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
     if (!result.success) throw new Error(result.error.message)
@@ -192,7 +192,7 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { reorderRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await reorderRoadmaps(data.roadmapIds as RoadmapId[])
     if (!result.success) throw new Error(result.error.message)
@@ -217,7 +217,7 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {})
     if (!result.success) throw new Error(result.error.message)

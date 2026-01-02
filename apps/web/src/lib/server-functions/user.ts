@@ -179,7 +179,7 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
  * Only requires authentication - returns null if user has no member record.
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<{ role: 'owner' | 'admin' | 'member' | 'user' | null }> => {
+  async (): Promise<{ role: 'admin' | 'member' | 'user' | null }> => {
     const { getSession } = await import('./auth')
     const { getCurrentUserRole } = await import('./workspace')
 

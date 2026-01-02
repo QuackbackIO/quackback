@@ -47,7 +47,7 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
       where: eq(member.userId, session.user.id),
     })
 
-    if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
+    if (!memberRecord || memberRecord.role !== 'admin') {
       throw new Error('Forbidden')
     }
 

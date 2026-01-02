@@ -39,7 +39,7 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     return await getSubscriptionStatus(auth.member.id, data.postId as PostId)
   })
@@ -51,7 +51,7 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { subscribeToPost } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual')
     return { postId: data.postId }
@@ -63,7 +63,7 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { unsubscribeFromPost } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     await unsubscribeFromPost(auth.member.id, data.postId as PostId)
     return { postId: data.postId }
@@ -75,7 +75,7 @@ export const muteSubscriptionFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { setSubscriptionMuted } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     await setSubscriptionMuted(auth.member.id, data.postId as PostId, data.muted ?? true)
     return { postId: data.postId }

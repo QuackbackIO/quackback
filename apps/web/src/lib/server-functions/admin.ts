@@ -13,7 +13,7 @@ import type { TiptapContent } from '@/lib/schemas/posts'
 
 /**
  * Server functions for admin data fetching.
- * All functions require authentication and team member role (owner, admin, or member).
+ * All functions require authentication and team member role (admin or member).
  *
  * NOTE: All DB and server-only imports are done dynamically inside handlers
  * to prevent client bundling issues with TanStack Start.
@@ -61,7 +61,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { listInboxPosts } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listInboxPosts(data)
     if (!result.success) {
@@ -88,7 +88,7 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
   const { requireAuth } = await import('./auth-helpers')
   const { listBoards } = await import('@/lib/boards/board.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listBoards()
   if (!result.success) {
@@ -110,7 +110,7 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
   const { requireAuth } = await import('./auth-helpers')
   const { listTags } = await import('@/lib/tags/tag.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listTags()
   if (!result.success) {
@@ -126,7 +126,7 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
   const { requireAuth } = await import('./auth-helpers')
   const { listStatuses } = await import('@/lib/statuses/status.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listStatuses()
   if (!result.success) {
@@ -142,7 +142,7 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
   const { requireAuth } = await import('./auth-helpers')
   const { listTeamMembers } = await import('@/lib/members/member.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listTeamMembers()
   if (!result.success) {
@@ -158,7 +158,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const { requireAuth } = await import('./auth-helpers')
   const { db, member } = await import('@/lib/db')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const [orgBoards, members] = await Promise.all([
     db.query.boards.findMany({
@@ -180,7 +180,7 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
   const { requireAuth } = await import('./auth-helpers')
   const { db } = await import('@/lib/db')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const orgBoards = await db.query.boards.findMany()
   return orgBoards.map((b) => ({
@@ -198,7 +198,7 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
   const { requireAuth } = await import('./auth-helpers')
   const { db } = await import('@/lib/db')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const integrations = await db.query.integrations.findMany()
   return integrations
@@ -231,12 +231,12 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
     })
 
     if (!memberRecord) {
-      // Check if any owner exists
-      const existingOwner = await db.query.member.findFirst({
-        where: eq(member.role, 'owner'),
+      // Check if any admin exists
+      const existingAdmin = await db.query.member.findFirst({
+        where: eq(member.role, 'admin'),
       })
 
-      if (existingOwner) {
+      if (existingAdmin) {
         // Not first user - they need an invitation
         return {
           memberRecord: null,
@@ -246,13 +246,13 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
         }
       }
 
-      // First user - create owner member record
+      // First user - create admin member record
       const [newMember] = await db
         .insert(member)
         .values({
           id: generateId('member'),
           userId: userId as UserId,
-          role: 'owner',
+          role: 'admin',
           createdAt: new Date(),
         })
         .returning()
@@ -290,7 +290,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { listPortalUsers } = await import('@/lib/users/user.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listPortalUsers({
       search: data.search,
@@ -325,7 +325,7 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getPortalUserDetail } = await import('@/lib/users/user.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getPortalUserDetail(data.memberId as MemberId)
 
@@ -359,7 +359,7 @@ export const deletePortalUserFn = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { removePortalUser } = await import('@/lib/users/user.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const result = await removePortalUser(data.memberId as MemberId)
 
@@ -405,7 +405,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
     const { sendInvitationEmail } = await import('@quackback/email')
     const { getRootUrl } = await import('@/lib/routing')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const session = await getSession()
     if (!session?.user) {
@@ -474,7 +474,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { db, invitation, eq, and } = await import('@/lib/db')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const invitationId = data.invitationId as InviteId
 
@@ -504,7 +504,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
     const { sendInvitationEmail } = await import('@quackback/email')
     const { getRootUrl } = await import('@/lib/routing')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const session = await getSession()
     if (!session?.user) {

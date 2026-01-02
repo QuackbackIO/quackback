@@ -59,7 +59,7 @@ export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
   const { requireAuth } = await import('./auth-helpers')
   const { listTags } = await import('@/lib/tags/tag.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listTags()
   if (!result.success) {
@@ -77,7 +77,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getTagById } = await import('@/lib/tags/tag.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getTagById(data.id as TagId)
     if (!result.success) {
@@ -99,7 +99,7 @@ export const createTagFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { createTag } = await import('@/lib/tags/tag.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await createTag({
       name: data.name,
@@ -120,7 +120,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateTag } = await import('@/lib/tags/tag.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await updateTag(data.id as TagId, {
       name: data.name,
@@ -141,7 +141,7 @@ export const deleteTagFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { deleteTag } = await import('@/lib/tags/tag.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await deleteTag(data.id as TagId)
     if (!result.success) {

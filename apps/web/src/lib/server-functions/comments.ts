@@ -49,7 +49,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
     const { createComment } = await import('@/lib/comments/comment.service')
     const { dispatchCommentCreated } = await import('@/lib/events/dispatch')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     const result = await createComment(
       {
@@ -89,7 +89,7 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateComment } = await import('@/lib/comments/comment.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     const result = await updateComment(
       data.id as CommentId,
@@ -111,7 +111,7 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { deleteComment } = await import('@/lib/comments/comment.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
     const result = await deleteComment(data.id as CommentId, {
       memberId: auth.member.id,
@@ -128,7 +128,7 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
     const { toggleReaction } = await import('@/lib/comments/comment.service')
     const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
+    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
     const userIdentifier = getMemberIdentifier(auth.member.id)
 
     const result = await toggleReaction(data.commentId as CommentId, data.emoji, userIdentifier)

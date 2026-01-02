@@ -111,7 +111,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { listInboxPosts } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listInboxPosts({
       boardIds: data.boardIds as BoardId[] | undefined,
@@ -152,7 +152,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getPostWithDetails } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getPostWithDetails(data.id as PostId)
     if (!result.success) {
@@ -181,7 +181,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { createPost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await createPost(
       {
@@ -220,7 +220,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updatePost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await updatePost(
       data.id as PostId,
@@ -256,7 +256,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { softDeletePost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await softDeletePost(data.id as PostId, {
       memberId: auth.member.id,
@@ -278,7 +278,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
     const { changeStatus } = await import('@/lib/posts/post.service')
     const { dispatchPostStatusChanged } = await import('@/lib/events/dispatch')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
     if (!result.success) {
@@ -316,7 +316,7 @@ export const restorePostFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { restorePost } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await restorePost(data.id as PostId)
     if (!result.success) {
@@ -341,7 +341,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updatePost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await updatePost(
       data.id as PostId,

@@ -74,7 +74,7 @@ export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () 
   const { requireAuth } = await import('./auth-helpers')
   const { listStatuses } = await import('@/lib/statuses/status.service')
 
-  await requireAuth({ roles: ['owner', 'admin', 'member'] })
+  await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listStatuses()
   if (!result.success) {
@@ -92,7 +92,7 @@ export const fetchStatus = createServerFn({ method: 'GET' })
     const { requireAuth } = await import('./auth-helpers')
     const { getStatusById } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getStatusById(data.id as StatusId)
     if (!result.success) {
@@ -114,7 +114,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { createStatus } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await createStatus({
       name: data.name,
@@ -140,7 +140,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateStatus } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await updateStatus(data.id as StatusId, {
       name: data.name,
@@ -163,7 +163,7 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { deleteStatus } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await deleteStatus(data.id as StatusId)
     if (!result.success) {
@@ -181,7 +181,7 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { reorderStatuses } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await reorderStatuses(data.statusIds as StatusId[])
     if (!result.success) {

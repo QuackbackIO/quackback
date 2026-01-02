@@ -29,7 +29,7 @@ export const getSettings = createServerFn({ method: 'GET' }).handler(async () =>
  * Get current user's role if logged in
  */
 export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<'owner' | 'admin' | 'member' | 'user' | null> => {
+  async (): Promise<'admin' | 'member' | 'user' | null> => {
     const { getSession } = await import('./auth')
     const { db, member, eq } = await import('@/lib/db')
 
@@ -41,7 +41,7 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!memberRecord) return null
-    return memberRecord.role as 'owner' | 'admin' | 'member' | 'user'
+    return memberRecord.role as 'admin' | 'member' | 'user'
   }
 )
 

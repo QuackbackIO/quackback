@@ -85,7 +85,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
     const { requireAuth } = await import('./auth-helpers')
     const { db, member, user, invitation, eq, ne } = await import('@/lib/db')
 
-    await requireAuth({ roles: ['owner', 'admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
     // Only show team members (owner, admin, member) - exclude portal users (role='user')
     const members = await db
@@ -261,7 +261,7 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateCustomCss } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const result = await updateCustomCss(data.customCss)
     if (!result.success) throw new Error(result.error.message)
@@ -277,7 +277,7 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateBrandingConfig } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const result = await updateBrandingConfig(data.brandingConfig as BrandingConfig)
     if (!result.success) throw new Error(result.error.message)
@@ -293,31 +293,12 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updatePortalConfig } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const result = await updatePortalConfig(data as UpdatePortalConfigInput)
     if (!result.success) throw new Error(result.error.message)
     return result.value
   })
-
-/**
- * Get workspace features (edition, tier, enabled features, limits)
- */
-export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { getWorkspaceFeatures } = await import('@/lib/features/server')
-
-  await requireAuth({ roles: ['owner', 'admin', 'member', 'user'] })
-
-  const features = await getWorkspaceFeatures()
-  // Remove non-serializable hasFeature function
-  return {
-    edition: features.edition,
-    tier: features.tier,
-    enabledFeatures: features.enabledFeatures,
-    limits: features.limits,
-  }
-})
 
 // ============================================
 // Logo Operations
@@ -355,7 +336,7 @@ export const uploadLogoFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { uploadLogo } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
     const result = await uploadLogo({
@@ -373,7 +354,7 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
   const { requireAuth } = await import('./auth-helpers')
   const { deleteLogo } = await import('@/lib/settings/settings.service')
 
-  await requireAuth({ roles: ['owner', 'admin'] })
+  await requireAuth({ roles: ['admin'] })
 
   const result = await deleteLogo()
   if (!result.success) throw new Error(result.error.message)
@@ -389,7 +370,7 @@ export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { uploadHeaderLogo } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
     const result = await uploadHeaderLogo({
@@ -407,7 +388,7 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
   const { requireAuth } = await import('./auth-helpers')
   const { deleteHeaderLogo } = await import('@/lib/settings/settings.service')
 
-  await requireAuth({ roles: ['owner', 'admin'] })
+  await requireAuth({ roles: ['admin'] })
 
   const result = await deleteHeaderLogo()
   if (!result.success) throw new Error(result.error.message)
@@ -423,7 +404,7 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateHeaderDisplayMode } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const result = await updateHeaderDisplayMode(data.mode)
     if (!result.success) throw new Error(result.error.message)
@@ -439,7 +420,7 @@ export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
     const { requireAuth } = await import('./auth-helpers')
     const { updateHeaderDisplayName } = await import('@/lib/settings/settings.service')
 
-    await requireAuth({ roles: ['owner', 'admin'] })
+    await requireAuth({ roles: ['admin'] })
 
     const result = await updateHeaderDisplayName(data.name)
     if (!result.success) throw new Error(result.error.message)

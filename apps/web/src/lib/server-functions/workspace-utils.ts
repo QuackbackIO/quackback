@@ -21,7 +21,7 @@ const requireWorkspaceRoleSchema = z.object({
  * @example
  * beforeLoad: async () => {
  *   const { user, member } = await requireWorkspaceRole({
- *     data: { allowedRoles: ['owner', 'admin', 'member'] }
+ *     data: { allowedRoles: ['admin', 'member'] }
  *   })
  *   return { user, member }
  * }

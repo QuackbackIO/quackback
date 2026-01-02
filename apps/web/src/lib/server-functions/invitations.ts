@@ -71,7 +71,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
     if (existingMember) {
       // Update existing member's role if the invitation grants a higher role
-      const roleHierarchy = ['user', 'member', 'admin', 'owner']
+      const roleHierarchy = ['user', 'member', 'admin']
       const existingRoleIndex = roleHierarchy.indexOf(existingMember.role)
       const newRoleIndex = roleHierarchy.indexOf(role)
 
