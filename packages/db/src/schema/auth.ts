@@ -201,12 +201,11 @@ export const settings = pgTable('settings', {
  * Member table - Unified membership for all user types
  *
  * All users have a member record with a role:
- * - 'owner': Full administrative access, can manage settings
- * - 'admin': Administrative access, can manage team and settings
+ * - 'admin': Full administrative access, can manage settings and team
  * - 'member': Team member access, can manage feedback
  * - 'user': Portal user access only, can vote/comment on public portal
  *
- * The role determines access level: owner/admin/member can access /admin dashboard,
+ * The role determines access level: admin/member can access /admin dashboard,
  * while 'user' role can only interact with the public portal.
  */
 export const member = pgTable(
@@ -216,7 +215,7 @@ export const member = pgTable(
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    // Unified roles: 'owner' | 'admin' | 'member' | 'user'
+    // Unified roles: 'admin' | 'member' | 'user'
     // 'user' role = portal users (public portal access only, no admin dashboard)
     role: text('role').default('member').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
