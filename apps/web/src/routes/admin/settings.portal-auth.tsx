@@ -9,7 +9,7 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
     // Settings is validated in root layout
     // Only owners and admins can access portal auth settings (more restrictive than parent)
     const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
-    await requireWorkspaceRole({ data: { allowedRoles: ['owner', 'admin'] } })
+    await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
 
     const { queryClient } = context
 

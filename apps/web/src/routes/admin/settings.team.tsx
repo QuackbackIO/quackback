@@ -66,7 +66,7 @@ function TeamPage() {
                   <Badge
                     variant="outline"
                     className={
-                      m.role === 'owner'
+                      m.role === 'admin'
                         ? 'bg-primary/10 text-primary border-primary/30'
                         : 'bg-muted/50'
                     }

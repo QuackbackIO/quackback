@@ -19,12 +19,12 @@ export const Route = createFileRoute('/api/integrations/slack/channels')({
           return Response.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Check user has admin/owner role
+        // Check user has admin role
         const memberRecord = await db.query.member.findFirst({
           where: eq(member.userId, session.user.id as UserId),
         })
 
-        if (!memberRecord || !['owner', 'admin'].includes(memberRecord.role)) {
+        if (!memberRecord || memberRecord.role !== 'admin') {
           return Response.json({ error: 'Forbidden - admin role required' }, { status: 403 })
         }
 

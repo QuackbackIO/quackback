@@ -8,7 +8,7 @@ export const Route = createFileRoute('/admin')({
     // Portal users don't have member records, so they can't access this
     const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
     const { user, member } = await requireWorkspaceRole({
-      data: { allowedRoles: ['owner', 'admin', 'member'] },
+      data: { allowedRoles: ['admin', 'member'] },
     })
 
     return {
