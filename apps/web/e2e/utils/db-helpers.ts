@@ -38,13 +38,13 @@ export function getOtpCode(email: string, host: string): string {
 /**
  * Ensure a test user has the required role for E2E testing
  *
- * This is a test utility that ensures the demo user has the 'owner' role
+ * This is a test utility that ensures the demo user has the 'admin' role
  * even if the database wasn't properly seeded. Should only be used in tests.
  *
  * @param email - The email address of the user
- * @param role - The role to ensure (default: 'owner')
+ * @param role - The role to ensure (default: 'admin')
  */
-export function ensureTestUserHasRole(email: string, role: string = 'owner'): void {
+export function ensureTestUserHasRole(email: string, role: string = 'admin'): void {
   const scriptPath = resolve(__dirname, '../scripts/ensure-role.ts')
 
   try {
