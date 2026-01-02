@@ -46,7 +46,6 @@ async function createAuth() {
     member: memberTable,
     invitation: invitationTable,
   } = await import('@/lib/db')
-  const { trustLogin } = await import('./plugins/trust-login')
   const { sendSigninCodeEmail } = await import('@quackback/email')
 
   return betterAuth({
@@ -118,9 +117,6 @@ async function createAuth() {
         expiresIn: 600, // 10 minutes
       }),
 
-      // Trust login plugin for cross-domain session transfer
-      trustLogin(),
-
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),
     ],
@@ -160,3 +156,23 @@ export const auth = {
 }
 
 export type Auth = ReturnType<typeof betterAuth>
+
+// Role-based access control
+
+export type Role = 'admin' | 'member' | 'user'
+
+const levels: Record<Role, number> = {
+  admin: 3,
+  member: 2,
+  user: 1,
+}
+
+/** Check if role meets minimum level: hasRole('admin', 'member') → true */
+export function hasRole(role: Role, minimum: Role): boolean {
+  return levels[role] >= levels[minimum]
+}
+
+/** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
+export function canAccess(role: Role, allowed: Role[]): boolean {
+  return allowed.includes(role)
+}

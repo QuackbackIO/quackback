@@ -6,8 +6,9 @@
  */
 
 import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
+import type { Role } from '@/lib/auth'
 
-export type Role = 'owner' | 'admin' | 'member' | 'user'
+export type { Role }
 
 export interface AuthContext {
   settings: {
@@ -33,10 +34,10 @@ export interface AuthContext {
  *
  * @example
  * // Require any team member
- * const auth = await requireAuth({ roles: ['owner', 'admin', 'member'] })
+ * const auth = await requireAuth({ roles: ['admin', 'member'] })
  *
- * // Require admin or owner
- * const auth = await requireAuth({ roles: ['owner', 'admin'] })
+ * // Require admin only
+ * const auth = await requireAuth({ roles: ['admin'] })
  *
  * // Just require authentication (any role)
  * const auth = await requireAuth()
