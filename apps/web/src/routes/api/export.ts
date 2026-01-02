@@ -35,7 +35,8 @@ export const Route = createFileRoute('/api/export')({
        */
       GET: async ({ request }) => {
         const { validateApiWorkspaceAccess } = await import('@/lib/server-functions/workspace')
-        const { requireRole } = await import('@/lib/api-handler')
+        const { canAccess } = await import('@/lib/auth')
+        type Role = 'admin' | 'member' | 'user'
         const { listPostsForExport } = await import('@/lib/posts/post.service')
         const { getBoardById } = await import('@/lib/boards/board.service')
 
@@ -49,8 +50,8 @@ export const Route = createFileRoute('/api/export')({
             return Response.json({ error: validation.error }, { status: validation.status })
           }
 
-          // Check role - only admin/owner can export
-          if (!requireRole(validation.member.role, ['owner', 'admin'])) {
+          // Check role - only admin can export
+          if (!canAccess(validation.member.role as Role, ['admin'])) {
             return Response.json({ error: 'Only admins can export data' }, { status: 403 })
           }
 
