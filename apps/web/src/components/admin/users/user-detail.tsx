@@ -160,7 +160,7 @@ export function UserDetail({
   currentMemberRole,
 }: UserDetailProps) {
   // Check if current user can manage portal users
-  const canManageUsers = ['owner', 'admin'].includes(currentMemberRole)
+  const canManageUsers = currentMemberRole === 'admin'
 
   if (isLoading) {
     return (

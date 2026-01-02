@@ -28,7 +28,7 @@ interface PortalHeaderProps {
   /** Custom display name shown in header (falls back to orgName when not provided) */
   headerDisplayName?: string | null
   /** User's role in the organization (passed from server) */
-  userRole?: 'owner' | 'admin' | 'member' | 'user' | null
+  userRole?: 'admin' | 'member' | 'user' | null
   /** Initial user data for SSR (store values override these after hydration) */
   initialUserData?: {
     name: string | null
@@ -80,8 +80,8 @@ export function PortalHeader({
   const email = user?.email ?? null
   const avatarUrl = user?.image ?? null
 
-  // Team members (owner, admin, member) can access admin dashboard
-  const canAccessAdmin = isLoggedIn && ['owner', 'admin', 'member'].includes(userRole || '')
+  // Team members (admin, member) can access admin dashboard
+  const canAccessAdmin = isLoggedIn && ['admin', 'member'].includes(userRole || '')
 
   const handleSignOut = async () => {
     await signOut()
