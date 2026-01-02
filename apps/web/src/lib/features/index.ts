@@ -1,33 +1,83 @@
 /**
- * Feature flags and pricing tier system
+ * Feature flags and tier system
  *
- * Business model:
- * - Self-hosted: All features enabled (no restrictions)
- * - Managed cloud: Features gated by subscription tier
+ * Two-dimensional model:
+ * 1. Deployment: self-hosted vs cloud
+ * 2. Tier:
+ *    - Self-hosted: community (free) vs enterprise (license key)
+ *    - Cloud: free → pro → team → enterprise (subscription-based)
  */
 
-/**
- * Edition detection
- * OSS (self-hosted) deployments get ALL features without restrictions
- */
-export type Edition = 'oss' | 'cloud'
+// ============================================================================
+// Build-time Constants (set by Vite define)
+// ============================================================================
+
+declare const __EDITION__: 'self-hosted' | 'cloud' | undefined
+declare const __INCLUDE_EE__: boolean | undefined
+
+// ============================================================================
+// Edition & Tier Types
+// ============================================================================
 
 /**
- * Check if running in OSS (self-hosted) mode
- * OSS = all features enabled, no tier checks needed
- *
- * @returns true if OSS/self-hosted (default), false if cloud
+ * Deployment edition
+ */
+export type Edition = 'self-hosted' | 'cloud'
+
+/**
+ * Self-hosted tiers
+ * - community: Free, all standard features, no limits
+ * - enterprise: Requires license key, adds SSO/SAML, SCIM, Audit Logs
+ */
+export type SelfHostedTier = 'community' | 'enterprise'
+
+/**
+ * Cloud subscription tiers
+ */
+export type CloudTier = 'free' | 'pro' | 'team' | 'enterprise'
+
+// ============================================================================
+// Edition Detection
+// ============================================================================
+
+/**
+ * Check if running in self-hosted mode
+ * Uses build-time constant for tree-shaking, falls back to env var
  */
 export function isSelfHosted(): boolean {
-  // Default to OSS (more permissive) if not specified
+  if (typeof __EDITION__ !== 'undefined') {
+    return __EDITION__ !== 'cloud'
+  }
   return process.env.EDITION !== 'cloud'
 }
 
 /**
  * Check if running in cloud mode
+ * Uses build-time constant for tree-shaking, falls back to env var
  */
 export function isCloud(): boolean {
+  if (typeof __EDITION__ !== 'undefined') {
+    return __EDITION__ === 'cloud'
+  }
   return process.env.EDITION === 'cloud'
+}
+
+/**
+ * Get current edition
+ */
+export function getEdition(): Edition {
+  return isCloud() ? 'cloud' : 'self-hosted'
+}
+
+/**
+ * Check if EE packages are included in this build
+ * Used for conditional loading of EE features
+ */
+export function hasEEPackages(): boolean {
+  if (typeof __INCLUDE_EE__ !== 'undefined') {
+    return __INCLUDE_EE__
+  }
+  return false
 }
 
 /**
@@ -38,19 +88,15 @@ export function isWorkspacePerDatabase(): boolean {
   return isCloud() && Boolean(process.env.NEON_API_KEY)
 }
 
-/**
- * Get current edition
- */
-export function getEdition(): Edition {
-  return isCloud() ? 'cloud' : 'oss'
-}
+// ============================================================================
+// Feature Definitions
+// ============================================================================
 
 /**
  * All available features in Quackback
- * Note: Self-hosted gets ALL features. Tiers only apply to cloud.
  */
 export enum Feature {
-  // Free tier - $0/mo
+  // Core features (available to all)
   BOARDS = 'boards',
   POSTS = 'posts',
   VOTING = 'voting',
@@ -59,36 +105,65 @@ export enum Feature {
   ROADMAP = 'roadmap',
   CHANGELOG = 'changelog',
 
-  // Pro tier - $49/mo
+  // Pro tier (cloud) - included in self-hosted community
   CUSTOM_DOMAIN = 'custom_domain',
   CUSTOM_BRANDING = 'custom_branding',
   CUSTOM_STATUSES = 'custom_statuses',
 
-  // Team tier - $149/mo
+  // Team tier (cloud) - included in self-hosted community
   INTEGRATIONS = 'integrations',
   CSV_IMPORT_EXPORT = 'csv_import_export',
 
-  // Enterprise tier - $499/mo
+  // Enterprise-only (requires license for self-hosted, enterprise tier for cloud)
   SSO_SAML = 'sso_saml',
   SCIM = 'scim',
   AUDIT_LOGS = 'audit_logs',
+
+  // Enterprise tier extras (cloud only)
   API_ACCESS = 'api_access',
   WEBHOOKS = 'webhooks',
   WHITE_LABEL = 'white_label',
   SLA_GUARANTEE = 'sla_guarantee',
   DEDICATED_SUPPORT = 'dedicated_support',
+}
 
-  // Legacy features (kept for backwards compatibility)
-  BASIC_ANALYTICS = 'basic_analytics',
-  TEAM_ROLES = 'team_roles',
-  EXTENDED_AUDIT_LOGS = 'extended_audit_logs',
-  CUSTOM_SSO = 'custom_sso',
+// ============================================================================
+// Feature Categories
+// ============================================================================
+
+/**
+ * Enterprise-only features
+ * These require a license key (self-hosted) or enterprise subscription (cloud)
+ */
+export const ENTERPRISE_ONLY_FEATURES: Feature[] = [
+  Feature.SSO_SAML,
+  Feature.SCIM,
+  Feature.AUDIT_LOGS,
+]
+
+/**
+ * Check if a feature requires enterprise tier
+ */
+export function isEnterpriseOnlyFeature(feature: Feature): boolean {
+  return ENTERPRISE_ONLY_FEATURES.includes(feature)
 }
 
 /**
- * Pricing tiers
+ * All features except enterprise-only
+ * Available to self-hosted community and various cloud tiers
  */
-export type PricingTier = 'free' | 'pro' | 'team' | 'enterprise'
+const COMMUNITY_FEATURES: Feature[] = Object.values(Feature).filter(
+  (f) => !ENTERPRISE_ONLY_FEATURES.includes(f)
+)
+
+/**
+ * All features including enterprise
+ */
+const ALL_FEATURES: Feature[] = Object.values(Feature)
+
+// ============================================================================
+// Tier Limits
+// ============================================================================
 
 /**
  * Tier limits configuration
@@ -96,15 +171,52 @@ export type PricingTier = 'free' | 'pro' | 'team' | 'enterprise'
 export interface TierLimits {
   boards: number | 'unlimited'
   roadmaps: number | 'unlimited'
-  /** Included seats (owner + admin roles). Additional seats are billed per SEAT_PRICING. */
+  /** Included seats (admin roles). Additional seats may be billed. */
   seats: number | 'unlimited'
   posts: number | 'unlimited'
 }
 
 /**
- * Tier configuration with pricing and limits
+ * Unlimited limits for self-hosted deployments
  */
-export interface TierConfig {
+const UNLIMITED_LIMITS: TierLimits = {
+  boards: 'unlimited',
+  roadmaps: 'unlimited',
+  seats: 'unlimited',
+  posts: 'unlimited',
+}
+
+// ============================================================================
+// Self-Hosted Tier Configuration
+// ============================================================================
+
+export interface SelfHostedTierConfig {
+  name: string
+  features: Feature[]
+  limits: TierLimits
+  requiresLicense: boolean
+}
+
+export const SELF_HOSTED_TIER_CONFIG: Record<SelfHostedTier, SelfHostedTierConfig> = {
+  community: {
+    name: 'Community',
+    features: COMMUNITY_FEATURES,
+    limits: UNLIMITED_LIMITS,
+    requiresLicense: false,
+  },
+  enterprise: {
+    name: 'Enterprise',
+    features: ALL_FEATURES,
+    limits: UNLIMITED_LIMITS,
+    requiresLicense: true,
+  },
+}
+
+// ============================================================================
+// Cloud Tier Configuration
+// ============================================================================
+
+export interface CloudTierConfig {
   name: string
   price: number
   features: Feature[]
@@ -112,19 +224,10 @@ export interface TierConfig {
 }
 
 /**
- * Seat pricing per tier (additional seats beyond included)
- */
-export const SEAT_PRICING: Record<Exclude<PricingTier, 'free'>, number> = {
-  pro: 15,
-  team: 20,
-  enterprise: 30,
-}
-
-/**
- * Features available at each tier
+ * Features available at each cloud tier
  * Each tier includes all features from previous tiers
  */
-const FREE_FEATURES: Feature[] = [
+const CLOUD_FREE_FEATURES: Feature[] = [
   Feature.BOARDS,
   Feature.POSTS,
   Feature.VOTING,
@@ -134,17 +237,21 @@ const FREE_FEATURES: Feature[] = [
   Feature.CHANGELOG,
 ]
 
-const PRO_FEATURES: Feature[] = [
-  ...FREE_FEATURES,
+const CLOUD_PRO_FEATURES: Feature[] = [
+  ...CLOUD_FREE_FEATURES,
   Feature.CUSTOM_DOMAIN,
   Feature.CUSTOM_BRANDING,
   Feature.CUSTOM_STATUSES,
 ]
 
-const TEAM_FEATURES: Feature[] = [...PRO_FEATURES, Feature.INTEGRATIONS, Feature.CSV_IMPORT_EXPORT]
+const CLOUD_TEAM_FEATURES: Feature[] = [
+  ...CLOUD_PRO_FEATURES,
+  Feature.INTEGRATIONS,
+  Feature.CSV_IMPORT_EXPORT,
+]
 
-const ENTERPRISE_FEATURES: Feature[] = [
-  ...TEAM_FEATURES,
+const CLOUD_ENTERPRISE_FEATURES: Feature[] = [
+  ...CLOUD_TEAM_FEATURES,
   Feature.SSO_SAML,
   Feature.SCIM,
   Feature.AUDIT_LOGS,
@@ -156,18 +263,18 @@ const ENTERPRISE_FEATURES: Feature[] = [
 ]
 
 /**
- * Tier order for comparison (lowest to highest)
+ * Cloud tier order for comparison (lowest to highest)
  */
-export const TIER_ORDER: PricingTier[] = ['free', 'pro', 'team', 'enterprise']
+export const CLOUD_TIER_ORDER: CloudTier[] = ['free', 'pro', 'team', 'enterprise']
 
 /**
- * Complete tier configuration
+ * Complete cloud tier configuration
  */
-export const TIER_CONFIG: Record<PricingTier, TierConfig> = {
+export const CLOUD_TIER_CONFIG: Record<CloudTier, CloudTierConfig> = {
   free: {
     name: 'Free',
     price: 0,
-    features: FREE_FEATURES,
+    features: CLOUD_FREE_FEATURES,
     limits: {
       boards: 1,
       roadmaps: 1,
@@ -178,7 +285,7 @@ export const TIER_CONFIG: Record<PricingTier, TierConfig> = {
   pro: {
     name: 'Pro',
     price: 49,
-    features: PRO_FEATURES,
+    features: CLOUD_PRO_FEATURES,
     limits: {
       boards: 5,
       roadmaps: 5,
@@ -189,7 +296,7 @@ export const TIER_CONFIG: Record<PricingTier, TierConfig> = {
   team: {
     name: 'Team',
     price: 149,
-    features: TEAM_FEATURES,
+    features: CLOUD_TEAM_FEATURES,
     limits: {
       boards: 'unlimited',
       roadmaps: 'unlimited',
@@ -200,7 +307,7 @@ export const TIER_CONFIG: Record<PricingTier, TierConfig> = {
   enterprise: {
     name: 'Enterprise',
     price: 499,
-    features: ENTERPRISE_FEATURES,
+    features: CLOUD_ENTERPRISE_FEATURES,
     limits: {
       boards: 'unlimited',
       roadmaps: 'unlimited',
@@ -211,59 +318,97 @@ export const TIER_CONFIG: Record<PricingTier, TierConfig> = {
 }
 
 /**
- * Get all features available for a tier (including inherited features)
+ * Seat pricing per cloud tier (additional seats beyond included)
  */
-export function getFeaturesForTier(tier: PricingTier): Feature[] {
-  return TIER_CONFIG[tier].features
+export const CLOUD_SEAT_PRICING: Record<Exclude<CloudTier, 'free'>, number> = {
+  pro: 15,
+  team: 20,
+  enterprise: 30,
+}
+
+// ============================================================================
+// Cloud Tier Helpers
+// ============================================================================
+
+/**
+ * Get all features available for a cloud tier
+ */
+export function getFeaturesForCloudTier(tier: CloudTier): Feature[] {
+  return CLOUD_TIER_CONFIG[tier].features
 }
 
 /**
- * Check if a feature is available for a tier
+ * Check if a feature is available for a cloud tier
  */
-export function tierHasFeature(tier: PricingTier, feature: Feature): boolean {
-  return TIER_CONFIG[tier].features.includes(feature)
+export function cloudTierHasFeature(tier: CloudTier, feature: Feature): boolean {
+  return CLOUD_TIER_CONFIG[tier].features.includes(feature)
 }
 
 /**
- * Get the minimum tier required for a feature
+ * Get the minimum cloud tier required for a feature
  */
-export function getMinimumTierForFeature(feature: Feature): PricingTier | null {
-  for (const tier of TIER_ORDER) {
-    if (tierHasFeature(tier, feature)) {
+export function getMinimumCloudTierForFeature(feature: Feature): CloudTier | null {
+  for (const tier of CLOUD_TIER_ORDER) {
+    if (cloudTierHasFeature(tier, feature)) {
       return tier
     }
   }
-
   return null
 }
 
 /**
- * Get tier configuration
+ * Get cloud tier configuration
  */
-export function getTierConfig(tier: PricingTier): TierConfig {
-  return TIER_CONFIG[tier]
+export function getCloudTierConfig(tier: CloudTier): CloudTierConfig {
+  return CLOUD_TIER_CONFIG[tier]
 }
 
 /**
- * Check if one tier is higher than or equal to another
+ * Check if one cloud tier is higher than or equal to another
  */
-export function isTierAtLeast(currentTier: PricingTier, requiredTier: PricingTier): boolean {
-  return TIER_ORDER.indexOf(currentTier) >= TIER_ORDER.indexOf(requiredTier)
+export function isCloudTierAtLeast(currentTier: CloudTier, requiredTier: CloudTier): boolean {
+  return CLOUD_TIER_ORDER.indexOf(currentTier) >= CLOUD_TIER_ORDER.indexOf(requiredTier)
+}
+
+// ============================================================================
+// Self-Hosted Tier Helpers
+// ============================================================================
+
+/**
+ * Get all features available for a self-hosted tier
+ */
+export function getFeaturesForSelfHostedTier(tier: SelfHostedTier): Feature[] {
+  return SELF_HOSTED_TIER_CONFIG[tier].features
 }
 
 /**
- * Features that require enterprise code from ee/
+ * Check if a feature is available for a self-hosted tier
  */
-export const ENTERPRISE_CODE_FEATURES: Feature[] = [
-  Feature.SSO_SAML,
-  Feature.SCIM,
-  Feature.AUDIT_LOGS,
-  Feature.WHITE_LABEL,
-]
+export function selfHostedTierHasFeature(tier: SelfHostedTier, feature: Feature): boolean {
+  return SELF_HOSTED_TIER_CONFIG[tier].features.includes(feature)
+}
 
 /**
- * Check if a feature requires enterprise code
+ * Get self-hosted tier configuration
  */
-export function requiresEnterpriseCode(feature: Feature): boolean {
-  return ENTERPRISE_CODE_FEATURES.includes(feature)
+export function getSelfHostedTierConfig(tier: SelfHostedTier): SelfHostedTierConfig {
+  return SELF_HOSTED_TIER_CONFIG[tier]
+}
+
+// ============================================================================
+// Feature Requirement Helpers
+// ============================================================================
+
+/**
+ * Get human-readable requirement for a feature
+ */
+export function getFeatureRequirement(feature: Feature): string {
+  if (isEnterpriseOnlyFeature(feature)) {
+    return 'Requires Enterprise'
+  }
+  const minTier = getMinimumCloudTierForFeature(feature)
+  if (minTier && minTier !== 'free') {
+    return `Requires ${CLOUD_TIER_CONFIG[minTier].name}`
+  }
+  return 'Available'
 }

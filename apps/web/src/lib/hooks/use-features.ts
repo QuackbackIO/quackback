@@ -1,5 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Feature, type PricingTier } from '@/lib/features'
+import {
+  Feature,
+  type Edition,
+  type SelfHostedTier,
+  type CloudTier,
+  type TierLimits,
+} from '@/lib/features'
+import type { LicenseInfo } from '@/lib/license'
 import { getWorkspaceFeaturesFn } from '@/lib/server-functions/settings'
 
 // ============================================================================
@@ -16,16 +23,20 @@ export const featuresKeys = {
 // ============================================================================
 
 export interface WorkspaceFeaturesData {
-  edition: 'oss' | 'cloud'
-  tier: PricingTier | null
+  /** Deployment edition */
+  edition: Edition
+  /** Self-hosted tier (community or enterprise) - null for cloud */
+  selfHostedTier: SelfHostedTier | null
+  /** Cloud subscription tier - null for self-hosted */
+  cloudTier: CloudTier | null
+  /** All features available to this workspace */
   enabledFeatures: Feature[]
-  limits: {
-    boards: number | 'unlimited'
-    posts: number | 'unlimited'
-    /** Included seats (owner + admin roles). Additional seats are billed per-seat. */
-    seats: number | 'unlimited'
-    roadmaps: number | 'unlimited'
-  } | null
+  /** Resource limits */
+  limits: TierLimits
+  /** Whether workspace has enterprise features (license or subscription) */
+  hasEnterprise: boolean
+  /** License info for self-hosted enterprise - null otherwise */
+  license: LicenseInfo | null
 }
 
 // ============================================================================
@@ -33,7 +44,7 @@ export interface WorkspaceFeaturesData {
 // ============================================================================
 
 /**
- * Query hook to fetch organization features.
+ * Query hook to fetch workspace features.
  * Uses SSR-provided initial data when available to prevent flash.
  */
 export function useWorkspaceFeatures() {
@@ -48,7 +59,7 @@ export function useWorkspaceFeatures() {
 
 /**
  * Hook to check if a specific feature is enabled.
- * Returns { enabled, isLoading, tier, edition } for conditional rendering.
+ * Returns { enabled, isLoading, edition, hasEnterprise } for conditional rendering.
  */
 export function useFeature(feature: Feature) {
   const { data, isLoading, error } = useWorkspaceFeatures()
@@ -57,8 +68,43 @@ export function useFeature(feature: Feature) {
     enabled: data?.enabledFeatures.includes(feature) ?? false,
     isLoading,
     error,
-    tier: data?.tier ?? null,
     edition: data?.edition ?? 'cloud',
+    selfHostedTier: data?.selfHostedTier ?? null,
+    cloudTier: data?.cloudTier ?? null,
+    hasEnterprise: data?.hasEnterprise ?? false,
+  }
+}
+
+/**
+ * Hook to check if the workspace has enterprise access
+ */
+export function useHasEnterprise() {
+  const { data, isLoading } = useWorkspaceFeatures()
+  return {
+    hasEnterprise: data?.hasEnterprise ?? false,
+    isLoading,
+  }
+}
+
+/**
+ * Hook to check if running in cloud mode
+ */
+export function useIsCloud() {
+  const { data, isLoading } = useWorkspaceFeatures()
+  return {
+    isCloud: data?.edition === 'cloud',
+    isLoading,
+  }
+}
+
+/**
+ * Hook to check if running in self-hosted mode
+ */
+export function useIsSelfHosted() {
+  const { data, isLoading } = useWorkspaceFeatures()
+  return {
+    isSelfHosted: data?.edition === 'self-hosted',
+    isLoading,
   }
 }
 
