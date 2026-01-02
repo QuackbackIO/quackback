@@ -42,9 +42,9 @@ interface LicenseClaims {
 }
 
 // Cache the imported public key
-let cachedPublicKey: jose.KeyLike | null = null
+let cachedPublicKey: Awaited<ReturnType<typeof jose.importSPKI>> | null = null
 
-async function getPublicKey(): Promise<jose.KeyLike> {
+async function getPublicKey() {
   if (!cachedPublicKey) {
     cachedPublicKey = await jose.importSPKI(LICENSE_PUBLIC_KEY, 'RS256')
   }

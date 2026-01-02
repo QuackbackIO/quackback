@@ -9,7 +9,8 @@
     "build": "bun --env-file=../../.env --bun vite build",
     "start": "bun --env-file=../../.env .output/server/index.mjs",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "generate:routes": "bunx @tanstack/router-cli generate",
+    "typecheck": "bun run generate:routes && tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"

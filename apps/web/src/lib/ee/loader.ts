@@ -65,25 +65,30 @@ export async function isEEModuleAvailable(packageName: string): Promise<boolean>
   return result.available
 }
 
+// Re-export stub types for use when modules aren't available
+export type { SAMLConfig, SSOProvider, SSOConnection } from './stubs/sso'
+export type { SCIMConfig, SCIMUser, SCIMGroup } from './stubs/scim'
+export type { AuditEventType, AuditLogEntry, AuditLog, AuditLogger } from './stubs/audit'
+
 /**
  * Load SSO module
  */
 export async function loadSSOModule() {
-  return loadEEModule<typeof import('@quackback/ee-sso')>('sso')
+  return loadEEModule<typeof import('./stubs/sso')>('sso')
 }
 
 /**
  * Load SCIM module
  */
 export async function loadSCIMModule() {
-  return loadEEModule<typeof import('@quackback/ee-scim')>('scim')
+  return loadEEModule<typeof import('./stubs/scim')>('scim')
 }
 
 /**
  * Load Audit module
  */
 export async function loadAuditModule() {
-  return loadEEModule<typeof import('@quackback/ee-audit')>('audit')
+  return loadEEModule<typeof import('./stubs/audit')>('audit')
 }
 
 /**
