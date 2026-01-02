@@ -2,10 +2,10 @@ import { CheckCircle2, MessageSquare, FileText, ThumbsUp } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
-import type { PortalUserListItem } from '@/lib/users'
+import type { PortalUserListItemView } from '@/lib/users'
 
 interface UserCardProps {
-  user: PortalUserListItem
+  user: PortalUserListItemView
   isSelected: boolean
   onClick: () => void
 }

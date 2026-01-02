@@ -5,7 +5,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 interface OfficialResponseProps {
   content: string
   authorName: string | null
-  respondedAt: Date
+  respondedAt: Date | string
   workspaceName: string
 }
 

@@ -1,4 +1,4 @@
-import type { PublicPostDetail } from '@/lib/posts'
+import type { PublicPostDetailView } from '@/lib/queries/portal-detail'
 import { PostContent } from '@/components/public/post-content'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -38,7 +38,7 @@ export function PostContentSectionSkeleton() {
 }
 
 interface PostContentSectionProps {
-  post: PublicPostDetail
+  post: PublicPostDetailView
   currentStatus?: { name: string; color: string | null }
 }
 

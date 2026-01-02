@@ -91,10 +91,8 @@ function UsersPage() {
     })
   )
 
-  // Handle error state from service Result type
-  const initialUsers = usersQuery.data.success
-    ? usersQuery.data.value
-    : { items: [], total: 0, hasMore: false }
+  // Server function already returns the unwrapped result (not Result type)
+  const initialUsers = usersQuery.data
 
   return <UsersContainer initialUsers={initialUsers} currentMemberRole={currentMemberRole} />
 }

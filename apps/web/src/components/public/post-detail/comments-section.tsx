@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import type { PublicComment } from '@/lib/posts'
+import type { PublicCommentView } from '@/lib/queries/portal-detail'
 import { getCommentsSectionDataFn } from '@/lib/server-functions/portal'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,7 +9,7 @@ import type { PostId, MemberId } from '@quackback/ids'
 /**
  * Recursively collect all member IDs from comments and their nested replies
  */
-function collectCommentMemberIds(comments: PublicComment[]): string[] {
+function collectCommentMemberIds(comments: PublicCommentView[]): string[] {
   const memberIds: string[] = []
   for (const comment of comments) {
     if (comment.memberId) {
@@ -25,7 +25,7 @@ function collectCommentMemberIds(comments: PublicComment[]): string[] {
 /**
  * Recursively count all comments including nested replies
  */
-function countAllComments(comments: PublicComment[]): number {
+function countAllComments(comments: PublicCommentView[]): number {
   let count = 0
   for (const comment of comments) {
     count += 1
@@ -67,7 +67,7 @@ export function CommentsSectionSkeleton() {
 
 interface CommentsSectionProps {
   postId: PostId
-  comments: PublicComment[]
+  comments: PublicCommentView[]
 }
 
 export function CommentsSection({ postId, comments }: CommentsSectionProps) {

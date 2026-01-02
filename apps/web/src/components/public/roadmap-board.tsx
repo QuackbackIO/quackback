@@ -4,12 +4,12 @@ import { RoadmapColumn } from './roadmap-column'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { usePublicRoadmaps } from '@/lib/hooks/use-roadmaps-query'
-import type { PostStatusEntity, Roadmap } from '@/lib/db-types'
+import { usePublicRoadmaps, type RoadmapView } from '@/lib/hooks/use-roadmaps-query'
+import type { PostStatusEntity } from '@/lib/db-types'
 
 interface RoadmapBoardProps {
   statuses: PostStatusEntity[]
-  initialRoadmaps?: Roadmap[]
+  initialRoadmaps?: RoadmapView[]
   initialSelectedRoadmapId?: string | null
 }
 

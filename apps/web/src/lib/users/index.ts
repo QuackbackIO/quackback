@@ -16,8 +16,10 @@ export type { UserErrorCode } from './user.errors'
 // Types (no DB dependency)
 export type {
   PortalUserListItem,
+  PortalUserListItemView,
   PortalUserListParams,
   PortalUserListResult,
+  PortalUserListResultView,
   PortalUserDetail,
   EngagedPost,
   EngagementType,

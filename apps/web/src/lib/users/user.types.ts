@@ -26,6 +26,22 @@ export interface PortalUserListItem {
 }
 
 /**
+ * Portal user list item for client components (Date fields may be strings after serialization)
+ */
+export interface PortalUserListItemView {
+  memberId: MemberId
+  userId: string
+  name: string | null
+  email: string
+  image: string | null
+  emailVerified: boolean
+  joinedAt: Date | string
+  postCount: number
+  commentCount: number
+  voteCount: number
+}
+
+/**
  * Parameters for listing portal users
  */
 export interface PortalUserListParams {
@@ -43,6 +59,15 @@ export interface PortalUserListParams {
  */
 export interface PortalUserListResult {
   items: PortalUserListItem[]
+  total: number
+  hasMore: boolean
+}
+
+/**
+ * Paginated result for portal user list (client view with serialized dates)
+ */
+export interface PortalUserListResultView {
+  items: PortalUserListItemView[]
   total: number
   hasMore: boolean
 }

@@ -1,6 +1,44 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId } from '@quackback/ids'
+import type { PostId, StatusId, CommentId } from '@quackback/ids'
 import { fetchPublicBoardBySlug, fetchPublicPostDetail } from '@/lib/server-functions/portal'
+import type { CommentReactionCount } from '@/lib/shared'
+
+/**
+ * Comment type for client components (Date fields may be strings after serialization)
+ */
+export interface PublicCommentView {
+  id: CommentId
+  content: string
+  authorName: string | null
+  memberId: string | null
+  createdAt: Date | string
+  parentId: CommentId | null
+  isTeamMember: boolean
+  replies: PublicCommentView[]
+  reactions: CommentReactionCount[]
+}
+
+/**
+ * Post detail type for client components (Date fields may be strings after serialization)
+ */
+export interface PublicPostDetailView {
+  id: string
+  title: string
+  content: string
+  contentJson: unknown
+  statusId: StatusId | null
+  voteCount: number
+  authorName: string | null
+  createdAt: Date | string
+  board: { id: string; name: string; slug: string }
+  tags: Array<{ id: string; name: string; color: string }>
+  comments: PublicCommentView[]
+  officialResponse: {
+    content: string
+    authorName: string | null
+    respondedAt: Date | string
+  } | null
+}
 
 /**
  * Query options factory for portal detail pages (board, post detail).
@@ -28,10 +66,10 @@ export const portalDetailQueries = {
   postDetail: (postId: PostId) =>
     queryOptions({
       queryKey: ['portal', 'post', postId],
-      queryFn: async () => {
+      queryFn: async (): Promise<PublicPostDetailView> => {
         const result = await fetchPublicPostDetail({ data: { postId } })
         if (!result) throw new Error('Post not found')
-        return result
+        return result as PublicPostDetailView
       },
       staleTime: 30 * 1000, // 30s
     }),

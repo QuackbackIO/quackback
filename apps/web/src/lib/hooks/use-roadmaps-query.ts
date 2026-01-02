@@ -10,6 +10,18 @@ import {
 } from '@/lib/server-functions/roadmaps'
 import { listPublicRoadmapsFn } from '@/lib/server-functions/public-posts'
 
+/** Roadmap type for client components (Date fields may be strings after serialization) */
+export interface RoadmapView {
+  id: RoadmapId
+  name: string
+  description: string | null
+  slug: string
+  isPublic: boolean
+  position: number
+  createdAt: Date | string
+  updatedAt: Date | string
+}
+
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
   list: () => [...roadmapsKeys.all, 'list'] as const,
@@ -40,7 +52,10 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
 export function usePublicRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.publicList(),
-    queryFn: (): Promise<Roadmap[]> => listPublicRoadmapsFn() as unknown as Promise<Roadmap[]>,
+    queryFn: async (): Promise<RoadmapView[]> => {
+      const result = await listPublicRoadmapsFn()
+      return result as RoadmapView[]
+    },
     enabled,
   })
 }

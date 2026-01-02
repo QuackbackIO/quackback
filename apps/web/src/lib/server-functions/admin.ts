@@ -39,7 +39,7 @@ const listPortalUsersSchema = z.object({
   verified: z.boolean().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'most_active']).optional(),
+  sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional(),
   page: z.number().optional(),
   limit: z.number().optional(),
 })

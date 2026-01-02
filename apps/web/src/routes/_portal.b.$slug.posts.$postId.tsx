@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import { portalDetailQueries } from '@/lib/queries/portal-detail'
+import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
 import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
@@ -75,16 +75,16 @@ function PostDetailPage() {
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
 
-  // Type the serialized fields for rendering
-  const serializedPost = {
+  // Create properly typed post with TipTap content
+  const typedPost: PublicPostDetailView = {
     ...post,
-    contentJson: (post.contentJson ?? {}) as TiptapContent,
+    contentJson: (post.contentJson ?? { type: 'doc' }) as TiptapContent,
   }
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6">
       {/* Unsubscribe confirmation banner */}
-      <UnsubscribeBanner postId={post.id} />
+      <UnsubscribeBanner postId={post.id as PostId} />
 
       {/* Back link */}
       <Link
@@ -106,7 +106,7 @@ function PostDetailPage() {
           </Suspense>
 
           {/* Content section */}
-          <PostContentSection post={serializedPost} currentStatus={currentStatus} />
+          <PostContentSection post={typedPost} currentStatus={currentStatus} />
         </div>
 
         {/* Official Response (if exists) */}
@@ -115,7 +115,7 @@ function PostDetailPage() {
             content={post.officialResponse.content}
             authorName={post.officialResponse.authorName}
             respondedAt={post.officialResponse.respondedAt}
-            workspaceName={settings.name}
+            workspaceName={settings?.name ?? 'Team'}
           />
         )}
 

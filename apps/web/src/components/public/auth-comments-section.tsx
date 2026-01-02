@@ -3,29 +3,12 @@ import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useCreateComment } from '@/lib/hooks/use-comment-actions'
-import type { PostId, CommentId, MemberId } from '@quackback/ids'
-
-interface CommentReaction {
-  emoji: string
-  count: number
-  hasReacted: boolean
-}
-
-interface Comment {
-  id: CommentId
-  content: string
-  authorName: string | null
-  memberId: string | null
-  createdAt: Date
-  parentId: string | null
-  isTeamMember: boolean
-  replies: Comment[]
-  reactions: CommentReaction[]
-}
+import type { PublicCommentView } from '@/lib/queries/portal-detail'
+import type { PostId, MemberId } from '@quackback/ids'
 
 interface AuthCommentsSectionProps {
   postId: PostId
-  comments: Comment[]
+  comments: PublicCommentView[]
   /** Server-determined: user is authenticated member who can comment */
   allowCommenting?: boolean
   /** Map of memberId to avatar URL (base64 or external URL) */

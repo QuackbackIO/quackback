@@ -74,7 +74,7 @@ export const getMemberIdForUser = createServerFn({ method: 'GET' })
     const { db, member, eq } = await import('@/lib/db')
 
     const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, data.userId),
+      where: eq(member.userId, data.userId as UserId),
     })
 
     return memberRecord?.id ?? null
@@ -140,7 +140,12 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     }
 
     // Helper to serialize comment dates recursively
-    const serializeComment = (c: (typeof result.value.comments)[0]): unknown => ({
+    type CommentType = (typeof result.value.comments)[0]
+    type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
+      createdAt: string
+      replies: SerializedComment[]
+    }
+    const serializeComment = (c: CommentType): SerializedComment => ({
       ...c,
       createdAt: c.createdAt.toISOString(),
       replies: c.replies.map(serializeComment),
@@ -149,6 +154,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     // Serialize Date fields
     return {
       ...result.value,
+      contentJson: result.value.contentJson ?? {},
       createdAt: result.value.createdAt.toISOString(),
       comments: result.value.comments.map(serializeComment),
       officialResponse: result.value.officialResponse

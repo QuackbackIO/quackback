@@ -24,7 +24,7 @@ export function OfficialResponseSectionSkeleton() {
 interface OfficialResponseSectionProps {
   content: string
   authorName: string | null
-  respondedAt: Date
+  respondedAt: Date | string
   workspaceName: string
 }
 

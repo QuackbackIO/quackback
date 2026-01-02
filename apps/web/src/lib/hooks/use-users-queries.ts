@@ -6,7 +6,11 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
-import type { PortalUserListResult, PortalUserListItem, PortalUserDetail } from '@/lib/users'
+import type {
+  PortalUserListResultView,
+  PortalUserListItemView,
+  PortalUserDetail,
+} from '@/lib/users'
 import type { MemberId } from '@quackback/ids'
 import {
   listPortalUsersFn,
@@ -32,7 +36,7 @@ export const usersKeys = {
 
 interface UsePortalUsersOptions {
   filters: UsersFilters
-  initialData?: PortalUserListResult
+  initialData?: PortalUserListResultView
 }
 
 export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) {
@@ -48,7 +52,7 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
 
   return useInfiniteQuery({
     queryKey: usersKeys.list(filters),
-    queryFn: async ({ pageParam }): Promise<PortalUserListResult> => {
+    queryFn: async ({ pageParam }): Promise<PortalUserListResultView> => {
       return (await listPortalUsersFn({
         data: {
           search: filters.search,
@@ -59,7 +63,7 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
           page: pageParam,
           limit: 20,
         },
-      })) as unknown as PortalUserListResult
+      })) as PortalUserListResultView
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
@@ -75,8 +79,8 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
 
 // Helper to flatten paginated users into a single array
 export function flattenUsers(
-  data: InfiniteData<PortalUserListResult> | undefined
-): PortalUserListItem[] {
+  data: InfiniteData<PortalUserListResultView> | undefined
+): PortalUserListItemView[] {
   if (!data) return []
   return data.pages.flatMap((page) => page.items)
 }
@@ -125,12 +129,12 @@ export function useRemovePortalUser() {
       await queryClient.cancelQueries({ queryKey: usersKeys.lists() })
 
       // Snapshot previous state
-      const previousLists = queryClient.getQueriesData<InfiniteData<PortalUserListResult>>({
+      const previousLists = queryClient.getQueriesData<InfiniteData<PortalUserListResultView>>({
         queryKey: usersKeys.lists(),
       })
 
       // Optimistically remove from list caches
-      queryClient.setQueriesData<InfiniteData<PortalUserListResult>>(
+      queryClient.setQueriesData<InfiniteData<PortalUserListResultView>>(
         { queryKey: usersKeys.lists() },
         (old) => {
           if (!old) return old
@@ -138,7 +142,9 @@ export function useRemovePortalUser() {
             ...old,
             pages: old.pages.map((page) => ({
               ...page,
-              items: page.items.filter((user) => user.memberId !== memberId),
+              items: page.items.filter(
+                (user: PortalUserListItemView) => user.memberId !== memberId
+              ),
               total: page.total - 1,
             })),
           }

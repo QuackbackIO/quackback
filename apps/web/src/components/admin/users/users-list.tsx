@@ -10,11 +10,11 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { UserCard } from '@/components/admin/users/user-card'
-import type { PortalUserListItem } from '@/lib/users'
+import type { PortalUserListItemView } from '@/lib/users'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 
 interface UsersListProps {
-  users: PortalUserListItem[]
+  users: PortalUserListItemView[]
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean

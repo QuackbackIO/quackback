@@ -9,11 +9,11 @@ import {
   useRemovePortalUser,
   flattenUsers,
 } from '@/lib/hooks/use-users-queries'
-import type { PortalUserListResult } from '@/lib/users'
+import type { PortalUserListResultView } from '@/lib/users'
 import type { MemberId } from '@quackback/ids'
 
 interface UsersContainerProps {
-  initialUsers: PortalUserListResult
+  initialUsers: PortalUserListResultView
   currentMemberRole: string
 }
 

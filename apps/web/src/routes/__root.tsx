@@ -35,11 +35,16 @@ const systemThemeScript = `
   })()
 `
 
-export const Route = createRootRouteWithContext<{
+// RouterContext is what's available in the context at different points:
+// - queryClient: always available (provided in createRouter)
+// - session/settings: available after beforeLoad runs (optional in type, guaranteed in child routes)
+export interface RouterContext {
   queryClient: QueryClient
-  session: Awaited<ReturnType<typeof getSession>>
-  settings: Awaited<ReturnType<typeof getSettings>>
-}>()({
+  session?: Awaited<ReturnType<typeof getSession>>
+  settings?: Awaited<ReturnType<typeof getSettings>>
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
     const [session, settings] = await Promise.all([getSession(), getSettings()])
     return { session, settings }

@@ -9,29 +9,13 @@ import { CommentForm, type CreateCommentMutation } from './comment-form'
 import { cn, getInitials } from '@/lib/utils'
 import { REACTION_EMOJIS } from '@/lib/db-types'
 import { toggleReactionFn } from '@/lib/server-functions/comments'
-import type { CommentId, PostId } from '@quackback/ids'
-
-interface CommentReaction {
-  emoji: string
-  count: number
-  hasReacted: boolean
-}
-
-interface Comment {
-  id: CommentId
-  content: string
-  authorName: string | null
-  memberId: string | null
-  createdAt: Date
-  parentId: string | null
-  isTeamMember: boolean
-  replies: Comment[]
-  reactions: CommentReaction[]
-}
+import type { PublicCommentView } from '@/lib/queries/portal-detail'
+import type { CommentReactionCount } from '@/lib/shared'
+import type { PostId } from '@quackback/ids'
 
 interface CommentThreadProps {
   postId: PostId
-  comments: Comment[]
+  comments: PublicCommentView[]
   allowCommenting?: boolean
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
@@ -93,7 +77,7 @@ export function CommentThread({
 
 interface CommentItemProps {
   postId: PostId
-  comment: Comment
+  comment: PublicCommentView
   allowCommenting: boolean
   avatarUrls?: Record<string, string | null>
   depth?: number
@@ -112,7 +96,7 @@ function CommentItem({
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [reactions, setReactions] = useState<CommentReaction[]>(comment.reactions)
+  const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
   const [isPending, startTransition] = useTransition()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
