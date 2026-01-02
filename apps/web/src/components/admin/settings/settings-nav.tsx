@@ -1,12 +1,17 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Settings, Users, Layout, Shield, Lock, Brush, Plug2, Globe } from 'lucide-react'
+import { Settings, Users, Layout, Shield, Lock, Brush, Plug2, Globe, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
   label: string
   to: string
   icon: typeof Settings
+  /** Show only for cloud deployments */
   cloudOnly?: boolean
+  /** Show only for self-hosted deployments */
+  selfHostedOnly?: boolean
+  /** Show only for enterprise tier (cloud subscription or self-hosted with license) */
+  enterpriseOnly?: boolean
 }
 
 interface NavSection {
@@ -20,7 +25,8 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Team Members', to: '/admin/settings/team', icon: Users },
       { label: 'Integrations', to: '/admin/settings/integrations', icon: Plug2 },
-      { label: 'Security', to: '/admin/settings/security', icon: Shield, cloudOnly: true },
+      { label: 'License', to: '/admin/settings/license', icon: KeyRound, selfHostedOnly: true },
+      { label: 'Security', to: '/admin/settings/security', icon: Shield, enterpriseOnly: true },
       { label: 'Domains', to: '/admin/settings/domains', icon: Globe, cloudOnly: true },
     ],
   },
@@ -37,15 +43,24 @@ const navSections: NavSection[] = [
 
 interface SettingsNavProps {
   isCloud: boolean
+  hasEnterprise: boolean
 }
 
-export function SettingsNav({ isCloud }: SettingsNavProps) {
+export function SettingsNav({ isCloud, hasEnterprise }: SettingsNavProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
-  // Filter sections to remove cloud-only items when not in cloud mode
+  // Filter sections based on edition and tier
   const filteredSections = navSections.map((section) => ({
     ...section,
-    items: section.items.filter((item) => !item.cloudOnly || isCloud),
+    items: section.items.filter((item) => {
+      // Cloud-only items hidden for self-hosted
+      if (item.cloudOnly && !isCloud) return false
+      // Self-hosted-only items hidden for cloud
+      if (item.selfHostedOnly && isCloud) return false
+      // Enterprise-only items hidden without enterprise access
+      if (item.enterpriseOnly && !hasEnterprise) return false
+      return true
+    }),
   }))
 
   return (

@@ -1,12 +1,12 @@
 import { cache } from 'react'
-import { isCloud, type PricingTier } from '@/lib/features'
+import { isCloud, type CloudTier } from '@/lib/features'
 import type { SubscriptionId } from '@quackback/ids'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
 
 export interface WorkspaceSubscription {
   id: SubscriptionId
-  tier: PricingTier
+  tier: CloudTier
   status: SubscriptionStatus
   stripeCustomerId: string | null
   stripeSubscriptionId: string | null

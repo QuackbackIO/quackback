@@ -21,6 +21,26 @@ import { userIdSchema, type UserId } from '@quackback/ids'
 // ============================================
 
 /**
+ * Get workspace features and tier information
+ * Used by useWorkspaceFeatures hook for feature gating
+ */
+export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getWorkspaceFeatures } = await import('@/lib/features/server')
+  const features = await getWorkspaceFeatures()
+
+  // Return serializable data (remove function)
+  return {
+    edition: features.edition,
+    selfHostedTier: features.selfHostedTier,
+    cloudTier: features.cloudTier,
+    enabledFeatures: features.enabledFeatures,
+    limits: features.limits,
+    hasEnterprise: features.hasEnterprise,
+    license: features.license,
+  }
+})
+
+/**
  * Fetch branding configuration (public - used for theming)
  */
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
