@@ -8,49 +8,58 @@
  * import { db, eq, and, posts } from '@/lib/db'
  */
 
-import { setDbGetter, createDb, type Database } from '@quackback/db/client'
-
-// Track initialization to avoid duplicate setup in hot reload
-let initialized = false
+import { createDb, type Database } from '@quackback/db/client'
+import { tenantStorage } from '@/lib/tenant'
 
 // Use globalThis to persist database instance across hot reloads in development
 declare global {
-  var __db_instance: Database | undefined
+  var __db: Database | undefined
 }
 
 /**
- * Initialize the database connection.
- * Uses DATABASE_URL environment variable.
+ * Get the database instance.
+ *
+ * For self-hosted deployments: Returns a singleton using DATABASE_URL.
+ * For cloud multi-tenant: Returns tenant DB from AsyncLocalStorage context.
  */
-function initializeDb(): void {
-  if (initialized) return
-  initialized = true
-
-  setDbGetter((): Database => {
-    // Return cached instance if available (persists across hot reloads)
-    if (globalThis.__db_instance) {
-      return globalThis.__db_instance
+function getDatabase(): Database {
+  // Cloud multi-tenant mode: get tenant database from request context
+  if (process.env.TENANT_API_URL) {
+    const ctx = tenantStorage.getStore()
+    if (ctx?.db) {
+      return ctx.db
     }
+    // No tenant context in cloud mode - this is an error
+    // Requests must go through server.ts which sets up tenant context
+    throw new Error(
+      'No tenant context available. In cloud mode, all database access must occur within a request that has been resolved to a tenant.'
+    )
+  }
 
+  // Self-hosted singleton mode
+  if (!globalThis.__db) {
     const connectionString = process.env.DATABASE_URL
     if (!connectionString) {
       throw new Error('DATABASE_URL environment variable is required')
     }
-
-    // Create and cache the database instance
-    globalThis.__db_instance = createDb(connectionString, { max: 50 })
-    return globalThis.__db_instance
-  })
+    globalThis.__db = createDb(connectionString, { max: 50 })
+  }
+  return globalThis.__db
 }
 
-// Initialize on module load
-initializeDb()
+/**
+ * Database instance.
+ * Uses a Proxy to lazily resolve the database on first access.
+ */
+export const db: Database = new Proxy({} as Database, {
+  get(_, prop) {
+    const database = getDatabase()
+    return (database as unknown as Record<string | symbol, unknown>)[prop]
+  },
+})
 
 // Re-export everything from the db package
 export * from '@quackback/db'
-
-// Re-export client utilities for advanced use cases
-export { createDb, setDbGetter, getDb } from '@quackback/db/client'
 
 // Re-export types (for client components that need types without side effects)
 export * from '@quackback/db/types'

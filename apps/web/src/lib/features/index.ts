@@ -88,6 +88,15 @@ export function isWorkspacePerDatabase(): boolean {
   return isCloud() && Boolean(process.env.NEON_API_KEY)
 }
 
+/**
+ * Check if multi-tenant mode is enabled (cloud with database-per-tenant).
+ * When true, tenant context is resolved via website API on each request.
+ * When false (self-hosted), uses DATABASE_URL singleton.
+ */
+export function isMultiTenant(): boolean {
+  return isCloud() && Boolean(process.env.TENANT_API_URL)
+}
+
 // ============================================================================
 // Feature Definitions
 // ============================================================================
