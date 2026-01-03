@@ -61,11 +61,7 @@ export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listTags()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listTags()
 })
 
 /**
@@ -79,11 +75,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getTagById(data.id as TagId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
+    return await getTagById(data.id as TagId)
   })
 
 // ============================================
@@ -101,14 +93,10 @@ export const createTagFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await createTag({
+    return await createTag({
       name: data.name,
       color: data.color,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
   })
 
 /**
@@ -122,14 +110,10 @@ export const updateTagFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await updateTag(data.id as TagId, {
+    return await updateTag(data.id as TagId, {
       name: data.name,
       color: data.color,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
   })
 
 /**
@@ -143,9 +127,6 @@ export const deleteTagFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await deleteTag(data.id as TagId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
+    await deleteTag(data.id as TagId)
     return { id: data.id }
   })

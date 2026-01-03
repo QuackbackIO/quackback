@@ -76,11 +76,7 @@ export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () 
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listStatuses()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listStatuses()
 })
 
 /**
@@ -94,11 +90,7 @@ export const fetchStatus = createServerFn({ method: 'GET' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getStatusById(data.id as StatusId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
+    return await getStatusById(data.id as StatusId)
   })
 
 // ============================================
@@ -116,7 +108,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await createStatus({
+    return await createStatus({
       name: data.name,
       slug: data.slug,
       color: data.color,
@@ -125,10 +117,6 @@ export const createStatusFn = createServerFn({ method: 'POST' })
       showOnRoadmap: data.showOnRoadmap,
       isDefault: data.isDefault,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
   })
 
 /**
@@ -142,16 +130,12 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await updateStatus(data.id as StatusId, {
+    return await updateStatus(data.id as StatusId, {
       name: data.name,
       color: data.color,
       showOnRoadmap: data.showOnRoadmap,
       isDefault: data.isDefault,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
   })
 
 /**
@@ -165,10 +149,7 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await deleteStatus(data.id as StatusId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
+    await deleteStatus(data.id as StatusId)
     return { id: data.id }
   })
 
@@ -183,9 +164,6 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await reorderStatuses(data.statusIds as StatusId[])
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
+    await reorderStatuses(data.statusIds as StatusId[])
+    return { success: true }
   })

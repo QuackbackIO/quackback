@@ -46,9 +46,7 @@ export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getBrandingConfig } = await import('@/lib/settings/settings.service')
 
-  const result = await getBrandingConfig()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value
+  return await getBrandingConfig()
 })
 
 /**
@@ -57,9 +55,7 @@ export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(asy
 export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async () => {
   const { getCustomCss } = await import('@/lib/settings/settings.service')
 
-  const result = await getCustomCss()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value
+  return await getCustomCss()
 })
 
 /**
@@ -68,9 +64,8 @@ export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async ()
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getPortalConfig } = await import('@/lib/settings/settings.service')
 
-  const result = await getPortalConfig()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value ?? DEFAULT_PORTAL_CONFIG
+  const config = await getPortalConfig()
+  return config ?? DEFAULT_PORTAL_CONFIG
 })
 
 /**
@@ -79,9 +74,7 @@ export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getPublicPortalConfig } = await import('@/lib/settings/settings.service')
 
-  const result = await getPublicPortalConfig()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value
+  return await getPublicPortalConfig()
 })
 
 /**
@@ -90,9 +83,7 @@ export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getPublicAuthConfig } = await import('@/lib/settings/settings.service')
 
-  const result = await getPublicAuthConfig()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value
+  return await getPublicAuthConfig()
 })
 
 const fetchUserProfileSchema = userIdSchema
@@ -283,9 +274,7 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin'] })
 
-    const result = await updateCustomCss(data.customCss)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await updateCustomCss(data.customCss)
   })
 
 /**
@@ -299,9 +288,7 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin'] })
 
-    const result = await updateBrandingConfig(data.brandingConfig as BrandingConfig)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
   })
 
 /**
@@ -315,9 +302,7 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin'] })
 
-    const result = await updatePortalConfig(data as UpdatePortalConfigInput)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await updatePortalConfig(data as UpdatePortalConfigInput)
   })
 
 // ============================================
@@ -359,12 +344,10 @@ export const uploadLogoFn = createServerFn({ method: 'POST' })
     await requireAuth({ roles: ['admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
-    const result = await uploadLogo({
+    return await uploadLogo({
       blob,
       mimeType: data.mimeType,
     })
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
   })
 
 /**
@@ -376,9 +359,7 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
 
   await requireAuth({ roles: ['admin'] })
 
-  const result = await deleteLogo()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value
+  return await deleteLogo()
 })
 
 /**
@@ -393,12 +374,10 @@ export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
     await requireAuth({ roles: ['admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
-    const result = await uploadHeaderLogo({
+    return await uploadHeaderLogo({
       blob,
       mimeType: data.mimeType,
     })
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
   })
 
 /**
@@ -410,9 +389,7 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
 
   await requireAuth({ roles: ['admin'] })
 
-  const result = await deleteHeaderLogo()
-  if (!result.success) throw new Error(result.error.message)
-  return result.value
+  return await deleteHeaderLogo()
 })
 
 /**
@@ -426,9 +403,7 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin'] })
 
-    const result = await updateHeaderDisplayMode(data.mode)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await updateHeaderDisplayMode(data.mode)
   })
 
 /**
@@ -442,7 +417,5 @@ export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin'] })
 
-    const result = await updateHeaderDisplayName(data.name)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await updateHeaderDisplayName(data.name)
   })

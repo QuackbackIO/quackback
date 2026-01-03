@@ -61,12 +61,9 @@ export const fetchBoards = createServerFn({ method: 'GET' }).handler(async () =>
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listBoards()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
+  const boards = await listBoards()
   // Serialize settings field and Date fields
-  return result.value.map((b) => ({
+  return boards.map((b) => ({
     ...b,
     settings: (b.settings ?? {}) as BoardSettings,
     createdAt: b.createdAt.toISOString(),
@@ -85,15 +82,12 @@ export const fetchBoard = createServerFn({ method: 'GET' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getBoardById(data.id as BoardId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
+    const board = await getBoardById(data.id as BoardId)
     return {
-      ...result.value,
-      settings: (result.value.settings ?? {}) as BoardSettings,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
+      ...board,
+      settings: (board.settings ?? {}) as BoardSettings,
+      createdAt: board.createdAt.toISOString(),
+      updatedAt: board.updatedAt.toISOString(),
     }
   })
 
@@ -112,19 +106,16 @@ export const createBoardFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await createBoard({
+    const board = await createBoard({
       name: data.name,
       description: data.description,
       isPublic: data.isPublic,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
+      ...board,
+      createdAt: board.createdAt.toISOString(),
+      updatedAt: board.updatedAt.toISOString(),
     }
   })
 
@@ -139,20 +130,17 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await updateBoard(data.id as BoardId, {
+    const board = await updateBoard(data.id as BoardId, {
       name: data.name,
       description: data.description,
       isPublic: data.isPublic,
       settings: data.settings,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
+      ...board,
+      createdAt: board.createdAt.toISOString(),
+      updatedAt: board.updatedAt.toISOString(),
     }
   })
 
@@ -167,9 +155,6 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await deleteBoard(data.id as BoardId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
+    await deleteBoard(data.id as BoardId)
     return { id: data.id }
   })

@@ -127,12 +127,9 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
       page: data.page,
       limit: data.limit,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     return {
-      ...result.value,
-      items: result.value.items.map((p) => ({
+      ...result,
+      items: result.items.map((p) => ({
         ...p,
         contentJson: (p.contentJson ?? {}) as TiptapContent,
         createdAt: p.createdAt.toISOString(),
@@ -155,16 +152,13 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await getPostWithDetails(data.id as PostId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-      deletedAt: result.value.deletedAt?.toISOString() || null,
-      officialResponseAt: result.value.officialResponseAt?.toISOString() || null,
+      ...result,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      deletedAt: result.deletedAt?.toISOString() || null,
+      officialResponseAt: result.officialResponseAt?.toISOString() || null,
     }
   })
 
@@ -198,16 +192,13 @@ export const createPostFn = createServerFn({ method: 'POST' })
         email: auth.user.email,
       }
     )
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-      deletedAt: result.value.deletedAt?.toISOString() || null,
-      officialResponseAt: result.value.officialResponseAt?.toISOString() || null,
+      ...result,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      deletedAt: result.deletedAt?.toISOString() || null,
+      officialResponseAt: result.officialResponseAt?.toISOString() || null,
     }
   })
 
@@ -234,16 +225,13 @@ export const updatePostFn = createServerFn({ method: 'POST' })
         name: auth.user.name,
       }
     )
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-      deletedAt: result.value.deletedAt?.toISOString() || null,
-      officialResponseAt: result.value.officialResponseAt?.toISOString() || null,
+      ...result,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      deletedAt: result.deletedAt?.toISOString() || null,
+      officialResponseAt: result.officialResponseAt?.toISOString() || null,
     }
   })
 
@@ -258,13 +246,10 @@ export const deletePostFn = createServerFn({ method: 'POST' })
 
     const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await softDeletePost(data.id as PostId, {
+    await softDeletePost(data.id as PostId, {
       memberId: auth.member.id,
       role: auth.member.role,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     return { id: data.id }
   })
 
@@ -281,29 +266,26 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
     const auth = await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
 
     // Dispatch post.status_changed event (fire-and-forget)
     dispatchPostStatusChanged(
       { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
       {
-        id: result.value.id,
-        title: result.value.title,
-        boardSlug: result.value.boardSlug,
+        id: result.id,
+        title: result.title,
+        boardSlug: result.boardSlug,
       },
-      result.value.previousStatus,
-      result.value.newStatus
+      result.previousStatus,
+      result.newStatus
     )
 
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-      deletedAt: result.value.deletedAt?.toISOString() || null,
-      officialResponseAt: result.value.officialResponseAt?.toISOString() || null,
+      ...result,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      deletedAt: result.deletedAt?.toISOString() || null,
+      officialResponseAt: result.officialResponseAt?.toISOString() || null,
     }
   })
 
@@ -319,16 +301,13 @@ export const restorePostFn = createServerFn({ method: 'POST' })
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await restorePost(data.id as PostId)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-      deletedAt: result.value.deletedAt?.toISOString() || null,
-      officialResponseAt: result.value.officialResponseAt?.toISOString() || null,
+      ...result,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      deletedAt: result.deletedAt?.toISOString() || null,
+      officialResponseAt: result.officialResponseAt?.toISOString() || null,
     }
   })
 
@@ -343,7 +322,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
 
     const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await updatePost(
+    await updatePost(
       data.id as PostId,
       {
         tagIds: data.tagIds as TagId[],
@@ -353,8 +332,5 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
         name: auth.user.name,
       }
     )
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     return { id: data.id }
   })

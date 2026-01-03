@@ -121,14 +121,10 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
       limit: data.limit,
     })
 
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-
     // Serialize Date fields
     return {
-      ...result.value,
-      items: result.value.items.map((post) => ({
+      ...result,
+      items: result.items.map((post) => ({
         ...post,
         createdAt: post.createdAt.toISOString(),
       })),
@@ -169,16 +165,21 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
       }
 
       // Check permissions
-      const [editResult, deleteResult] = await Promise.all([
-        canEditPost(postId, actor),
-        canDeletePost(postId, actor),
-      ])
+      try {
+        const [editResult, deleteResult] = await Promise.all([
+          canEditPost(postId, actor),
+          canDeletePost(postId, actor),
+        ])
 
-      return {
-        canEdit: editResult.success ? editResult.value.allowed : false,
-        canDelete: deleteResult.success ? deleteResult.value.allowed : false,
-        editReason: editResult.success ? editResult.value.reason : undefined,
-        deleteReason: deleteResult.success ? deleteResult.value.reason : undefined,
+        return {
+          canEdit: editResult.allowed,
+          canDelete: deleteResult.allowed,
+          editReason: editResult.reason,
+          deleteReason: deleteResult.reason,
+        }
+      } catch {
+        // Post not found or other error - return no permissions
+        return { canEdit: false, canDelete: false }
       }
     }
   )
@@ -203,17 +204,14 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
     }
 
     const result = await userEditPost(postId, { title, content, contentJson }, actor)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
 
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-      deletedAt: result.value.deletedAt?.toISOString() || null,
-      officialResponseAt: result.value.officialResponseAt?.toISOString() || null,
+      ...result,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      deletedAt: result.deletedAt?.toISOString() || null,
+      officialResponseAt: result.officialResponseAt?.toISOString() || null,
     }
   })
 
@@ -235,10 +233,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
       role: ctx.member.role,
     }
 
-    const result = await softDeletePost(postId, actor)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
+    await softDeletePost(postId, actor)
 
     return { id: postId }
   })
@@ -266,16 +261,10 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
       const ipHash =
         clientIpHash || hashIP('unknown', process.env.BETTER_AUTH_SECRET || 'default-salt')
 
-      const result = await voteOnPost(postId, userIdentifier, {
+      return await voteOnPost(postId, userIdentifier, {
         memberId,
         ipHash,
       })
-
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
-
-      return result.value
     }
   )
 
@@ -298,18 +287,16 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
     const boardId = boardIdRaw as BoardId
 
     // Get board and verify it exists and is public
-    const boardResult = await getPublicBoardById(boardId)
-    if (!boardResult.success || !boardResult.value.isPublic) {
+    const board = await getPublicBoardById(boardId)
+    if (!board || !board.isPublic) {
       throw new Error('Board not found')
     }
-    const board = boardResult.value
 
     // Get member record (re-query for full details)
-    const memberResult = await getMemberByUser(ctx.user.id as UserId)
-    if (!memberResult.success || !memberResult.value) {
+    const memberRecord = await getMemberByUser(ctx.user.id as UserId)
+    if (!memberRecord) {
       throw new Error('You must be a member to submit feedback.')
     }
-    const memberRecord = memberResult.value
 
     // Build author info
     const author = {
@@ -319,14 +306,10 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
     }
 
     // Get default status
-    const defaultStatusResult = await getDefaultStatus()
-    if (!defaultStatusResult.success) {
-      throw new Error('Failed to retrieve default status')
-    }
-    const defaultStatus = defaultStatusResult.value
+    const defaultStatus = await getDefaultStatus()
 
     // Create the post
-    const createResult = await createPost(
+    const post = await createPost(
       {
         boardId,
         title,
@@ -336,12 +319,6 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       },
       author
     )
-
-    if (!createResult.success) {
-      throw new Error(createResult.error.message)
-    }
-
-    const post = createResult.value
 
     // Get settings for organization info
     const settings = await getSettings()
@@ -397,11 +374,7 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
     const userIdentifier = getMemberIdentifier(ctx.member.id)
     const result = await getAllUserVotedPostIds(userIdentifier)
 
-    if (!result.success) {
-      return { votedPostIds: [] }
-    }
-
-    return { votedPostIds: Array.from(result.value) }
+    return { votedPostIds: Array.from(result) }
   }
 )
 
@@ -415,12 +388,9 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
   await getOptionalAuth()
 
   const result = await listPublicRoadmaps()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
 
   // Serialize Date fields
-  return result.value.map((roadmap) => ({
+  return result.map((roadmap) => ({
     ...roadmap,
     createdAt: roadmap.createdAt.toISOString(),
     updatedAt: roadmap.updatedAt.toISOString(),
@@ -440,17 +410,11 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
 
     const { roadmapId, statusId, limit, offset } = data
 
-    const result = await getPublicRoadmapPosts(roadmapId as RoadmapId, {
+    return await getPublicRoadmapPosts(roadmapId as RoadmapId, {
       statusId: statusId as StatusId | undefined,
       limit,
       offset,
     })
-
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-
-    return result.value
   })
 
 /**
@@ -466,17 +430,11 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 
     const { statusId, page, limit } = data
 
-    const result = await getPublicRoadmapPostsPaginated({
+    return await getPublicRoadmapPostsPaginated({
       statusId: statusId as StatusId,
       page,
       limit,
     })
-
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-
-    return result.value
   })
 
 /**
@@ -511,8 +469,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       userIdentifier = getMemberIdentifier(ctx.member.id)
       isMember = true
 
-      const voteResult = await hasUserVoted(postId, userIdentifier)
-      hasVoted = voteResult.success ? voteResult.value : false
+      hasVoted = await hasUserVoted(postId, userIdentifier)
 
       subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
     }

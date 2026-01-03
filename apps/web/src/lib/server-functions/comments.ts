@@ -64,23 +64,22 @@ export const createCommentFn = createServerFn({ method: 'POST' })
         role: auth.member.role,
       }
     )
-    if (!result.success) throw new Error(result.error.message)
 
     // Dispatch comment.created event (fire-and-forget)
     dispatchCommentCreated(
       { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
       {
-        id: result.value.comment.id,
-        content: result.value.comment.content,
+        id: result.comment.id,
+        content: result.comment.content,
         authorEmail: auth.user.email,
       },
       {
-        id: result.value.post.id,
-        title: result.value.post.title,
+        id: result.post.id,
+        title: result.post.title,
       }
     )
 
-    return result.value
+    return result
   })
 
 export const updateCommentFn = createServerFn({ method: 'POST' })
@@ -91,7 +90,7 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
 
     const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    const result = await updateComment(
+    return await updateComment(
       data.id as CommentId,
       {
         content: data.content,
@@ -101,8 +100,6 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
         role: auth.member.role,
       }
     )
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
   })
 
 export const deleteCommentFn = createServerFn({ method: 'POST' })
@@ -113,11 +110,10 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
 
     const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    const result = await deleteComment(data.id as CommentId, {
+    await deleteComment(data.id as CommentId, {
       memberId: auth.member.id,
       role: auth.member.role,
     })
-    if (!result.success) throw new Error(result.error.message)
     return { id: data.id }
   })
 
@@ -131,9 +127,7 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
     const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
     const userIdentifier = getMemberIdentifier(auth.member.id)
 
-    const result = await toggleReaction(data.commentId as CommentId, data.emoji, userIdentifier)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await toggleReaction(data.commentId as CommentId, data.emoji, userIdentifier)
   })
 
 const getCommentPermissionsSchema = z.object({
@@ -171,14 +165,19 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
     }
 
     const actor = { memberId: ctx.member.id, role: ctx.member.role }
-    const [editResult, deleteResult] = await Promise.all([
-      canEditComment(data.commentId as CommentId, actor),
-      canDeleteComment(data.commentId as CommentId, actor),
-    ])
+    try {
+      const [editResult, deleteResult] = await Promise.all([
+        canEditComment(data.commentId as CommentId, actor),
+        canDeleteComment(data.commentId as CommentId, actor),
+      ])
 
-    return {
-      canEdit: editResult.success ? editResult.value.allowed : false,
-      canDelete: deleteResult.success ? deleteResult.value.allowed : false,
+      return {
+        canEdit: editResult.allowed,
+        canDelete: deleteResult.allowed,
+      }
+    } catch {
+      // Comment not found or other error - return no permissions
+      return { canEdit: false, canDelete: false }
     }
   })
 
@@ -191,9 +190,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth()
     const actor = { memberId: ctx.member.id, role: ctx.member.role }
 
-    const result = await userEditComment(data.commentId as CommentId, data.content, actor)
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await userEditComment(data.commentId as CommentId, data.content, actor)
   })
 
 export const userDeleteCommentFn = createServerFn({ method: 'POST' })
@@ -205,7 +202,6 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth()
     const actor = { memberId: ctx.member.id, role: ctx.member.role }
 
-    const result = await softDeleteComment(data.commentId as CommentId, actor)
-    if (!result.success) throw new Error(result.error.message)
+    await softDeleteComment(data.commentId as CommentId, actor)
     return { id: data.commentId }
   })

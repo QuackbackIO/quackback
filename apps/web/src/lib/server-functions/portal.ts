@@ -84,11 +84,8 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
   const { listPublicBoardsWithStats } = await import('@/lib/boards/board.public')
 
   const result = await listPublicBoardsWithStats()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
   // Serialize settings field for client
-  return result.value.map((b) => ({
+  return result.map((b) => ({
     ...b,
     settings: (b.settings ?? {}) as BoardSettings,
   }))
@@ -104,15 +101,12 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
     const { getPublicBoardBySlug } = await import('@/lib/boards/board.public')
 
     const result = await getPublicBoardBySlug(data.slug)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    if (!result.value) {
+    if (!result) {
       return null
     }
     return {
-      ...result.value,
-      settings: (result.value.settings ?? {}) as BoardSettings,
+      ...result,
+      settings: (result.settings ?? {}) as BoardSettings,
     }
   })
 
@@ -132,15 +126,12 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     const userIdentifier = ctx?.member ? getMemberIdentifier(ctx.member.id) : undefined
 
     const result = await getPublicPostDetail(data.postId as PostId, userIdentifier)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    if (!result.value) {
+    if (!result) {
       return null
     }
 
     // Helper to serialize comment dates recursively
-    type CommentType = (typeof result.value.comments)[0]
+    type CommentType = (typeof result.comments)[0]
     type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
       createdAt: string
       replies: SerializedComment[]
@@ -153,14 +144,14 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
 
     // Serialize Date fields
     return {
-      ...result.value,
-      contentJson: result.value.contentJson ?? {},
-      createdAt: result.value.createdAt.toISOString(),
-      comments: result.value.comments.map(serializeComment),
-      officialResponse: result.value.officialResponse
+      ...result,
+      contentJson: result.contentJson ?? {},
+      createdAt: result.createdAt.toISOString(),
+      comments: result.comments.map(serializeComment),
+      officialResponse: result.officialResponse
         ? {
-            ...result.value.officialResponse,
-            respondedAt: result.value.officialResponse.respondedAt.toISOString(),
+            ...result.officialResponse,
+            respondedAt: result.officialResponse.respondedAt.toISOString(),
           }
         : null,
     }
@@ -183,13 +174,10 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
         page: 1,
         limit: 20,
       })
-      if (!result.success) {
-        throw new Error(result.error.message)
-      }
       // Serialize Date fields
       return {
-        ...result.value,
-        items: result.value.items.map((post) => ({
+        ...result,
+        items: result.items.map((post) => ({
           ...post,
           createdAt: post.createdAt.toISOString(),
         })),
@@ -200,21 +188,13 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
 export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(async () => {
   const { listPublicStatuses } = await import('@/lib/statuses/status.service')
 
-  const result = await listPublicStatuses()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listPublicStatuses()
 })
 
 export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async () => {
   const { listPublicTags } = await import('@/lib/tags/tag.service')
 
-  const result = await listPublicTags()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listPublicTags()
 })
 
 export const fetchVotedPosts = createServerFn({ method: 'GET' })
@@ -223,10 +203,7 @@ export const fetchVotedPosts = createServerFn({ method: 'GET' })
     const { getUserVotedPostIds } = await import('@/lib/posts/post.public')
 
     const result = await getUserVotedPostIds(data.postIds as PostId[], data.userIdentifier)
-    if (!result.success) {
-      return []
-    }
-    return Array.from(result.value)
+    return Array.from(result)
   })
 
 /**
@@ -346,12 +323,9 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
   const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-  const result = await listPublicRoadmaps()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
+  const roadmaps = await listPublicRoadmaps()
   // Serialize Date fields
-  return result.value.map((roadmap) => ({
+  return roadmaps.map((roadmap) => ({
     ...roadmap,
     createdAt: roadmap.createdAt.toISOString(),
     updatedAt: roadmap.updatedAt.toISOString(),
@@ -366,15 +340,11 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const { getPublicRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
 
-    const result = await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
+    return await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
       statusId: data.statusId as StatusId | undefined,
       limit: data.limit ?? 20,
       offset: data.offset ?? 0,
     })
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-    return result.value
   })
 
 /**

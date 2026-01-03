@@ -55,10 +55,9 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listRoadmaps()
-  if (!result.success) throw new Error(result.error.message)
+  const roadmaps = await listRoadmaps()
   // Serialize Date fields
-  return result.value.map((roadmap) => ({
+  return roadmaps.map((roadmap) => ({
     ...roadmap,
     createdAt: roadmap.createdAt.toISOString(),
     updatedAt: roadmap.updatedAt.toISOString(),
@@ -73,13 +72,12 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getRoadmap(data.id as RoadmapId)
-    if (!result.success) throw new Error(result.error.message)
+    const roadmap = await getRoadmap(data.id as RoadmapId)
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
+      ...roadmap,
+      createdAt: roadmap.createdAt.toISOString(),
+      updatedAt: roadmap.updatedAt.toISOString(),
     }
   })
 
@@ -92,18 +90,17 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await createRoadmap({
+    const roadmap = await createRoadmap({
       name: data.name,
       slug: data.slug,
       description: data.description,
       isPublic: data.isPublic,
     })
-    if (!result.success) throw new Error(result.error.message)
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
+      ...roadmap,
+      createdAt: roadmap.createdAt.toISOString(),
+      updatedAt: roadmap.updatedAt.toISOString(),
     }
   })
 
@@ -115,17 +112,16 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await updateRoadmap(data.id as RoadmapId, {
+    const roadmap = await updateRoadmap(data.id as RoadmapId, {
       name: data.name,
       description: data.description,
       isPublic: data.isPublic,
     })
-    if (!result.success) throw new Error(result.error.message)
     // Serialize Date fields
     return {
-      ...result.value,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
+      ...roadmap,
+      createdAt: roadmap.createdAt.toISOString(),
+      updatedAt: roadmap.updatedAt.toISOString(),
     }
   })
 
@@ -137,8 +133,7 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await deleteRoadmap(data.id as RoadmapId)
-    if (!result.success) throw new Error(result.error.message)
+    await deleteRoadmap(data.id as RoadmapId)
     return { id: data.id }
   })
 
@@ -153,11 +148,10 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await addPostToRoadmap({
+    await addPostToRoadmap({
       roadmapId: data.roadmapId as RoadmapId,
       postId: data.postId as PostId,
     })
-    if (!result.success) throw new Error(result.error.message)
     return { roadmapId: data.roadmapId, postId: data.postId }
   })
 
@@ -172,8 +166,7 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
-    if (!result.success) throw new Error(result.error.message)
+    await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
     return { roadmapId: data.roadmapId, postId: data.postId }
   })
 
@@ -194,8 +187,7 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await reorderRoadmaps(data.roadmapIds as RoadmapId[])
-    if (!result.success) throw new Error(result.error.message)
+    await reorderRoadmaps(data.roadmapIds as RoadmapId[])
     return { success: true }
   })
 
@@ -219,7 +211,5 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
 
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {})
-    if (!result.success) throw new Error(result.error.message)
-    return result.value
+    return await getRoadmapPosts(data.roadmapId as RoadmapId, {})
   })

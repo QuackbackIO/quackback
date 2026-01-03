@@ -64,13 +64,10 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listInboxPosts(data)
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
     // Serialize contentJson field and Date fields
     return {
-      ...result.value,
-      items: result.value.items.map((p) => ({
+      ...result,
+      items: result.items.map((p) => ({
         ...p,
         contentJson: (p.contentJson ?? {}) as TiptapContent,
         createdAt: p.createdAt.toISOString(),
@@ -91,11 +88,8 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
   await requireAuth({ roles: ['admin', 'member'] })
 
   const result = await listBoards()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
   // Serialize settings field and Date fields
-  return result.value.map((b) => ({
+  return result.map((b) => ({
     ...b,
     settings: (b.settings ?? {}) as BoardSettings,
     createdAt: b.createdAt.toISOString(),
@@ -112,11 +106,7 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listTags()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listTags()
 })
 
 /**
@@ -128,11 +118,7 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listStatuses()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listStatuses()
 })
 
 /**
@@ -144,11 +130,7 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
 
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listTeamMembers()
-  if (!result.success) {
-    throw new Error(result.error.message)
-  }
-  return result.value
+  return await listTeamMembers()
 })
 
 /**
@@ -302,14 +284,10 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
       limit: data.limit,
     })
 
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-
     // Serialize Date fields for client
     return {
-      ...result.value,
-      items: result.value.items.map((user) => ({
+      ...result,
+      items: result.items.map((user) => ({
         ...user,
         joinedAt: user.joinedAt.toISOString(),
       })),
@@ -329,20 +307,16 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 
     const result = await getPortalUserDetail(data.memberId as MemberId)
 
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
-
     // Serialize Date fields for client
-    if (!result.value) {
+    if (!result) {
       return null
     }
 
     return {
-      ...result.value,
-      joinedAt: result.value.joinedAt.toISOString(),
-      createdAt: result.value.createdAt.toISOString(),
-      engagedPosts: result.value.engagedPosts.map((post) => ({
+      ...result,
+      joinedAt: result.joinedAt.toISOString(),
+      createdAt: result.createdAt.toISOString(),
+      engagedPosts: result.engagedPosts.map((post) => ({
         ...post,
         createdAt: post.createdAt.toISOString(),
         engagedAt: post.engagedAt.toISOString(),
@@ -361,11 +335,7 @@ export const deletePortalUserFn = createServerFn({ method: 'GET' })
 
     await requireAuth({ roles: ['admin'] })
 
-    const result = await removePortalUser(data.memberId as MemberId)
-
-    if (!result.success) {
-      throw new Error(result.error.message)
-    }
+    await removePortalUser(data.memberId as MemberId)
 
     return { memberId: data.memberId }
   })
