@@ -63,20 +63,21 @@ export const Route = createFileRoute('/api/import/')({
           // Validate board exists
           let targetBoardId: BoardId | null = boardId
           if (boardId) {
-            const boardResult = await getBoardById(boardId)
-            if (!boardResult.success) {
+            try {
+              await getBoardById(boardId)
+            } catch {
               return Response.json({ error: 'Board not found' }, { status: 400 })
             }
           } else {
             // Use first board if none specified
-            const boardsResult = await listBoards()
-            if (!boardsResult.success || boardsResult.value.length === 0) {
+            const boards = await listBoards()
+            if (boards.length === 0) {
               return Response.json(
                 { error: 'No boards found. Create a board first.' },
                 { status: 400 }
               )
             }
-            targetBoardId = boardsResult.value[0].id
+            targetBoardId = boards[0].id
           }
 
           // Read file content

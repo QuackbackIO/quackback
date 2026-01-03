@@ -62,20 +62,16 @@ export const Route = createFileRoute('/api/export')({
               return Response.json({ error: 'Invalid board ID format' }, { status: 400 })
             }
             boardId = boardIdParam as BoardId
-            // Verify board exists
-            const boardResult = await getBoardById(boardId)
-            if (!boardResult.success) {
+            // Verify board exists (throws NotFoundError if not found)
+            try {
+              await getBoardById(boardId)
+            } catch {
               return Response.json({ error: 'Board not found' }, { status: 400 })
             }
           }
 
           // Get all posts for export
-          const postsResult = await listPostsForExport(boardId)
-          if (!postsResult.success) {
-            return Response.json({ error: postsResult.error.message }, { status: 500 })
-          }
-
-          const orgPosts = postsResult.value
+          const orgPosts = await listPostsForExport(boardId)
 
           // Build CSV content
           const headers = [
