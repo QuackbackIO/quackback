@@ -25,7 +25,7 @@ import {
   comments,
   votes,
   postStatuses,
-} from '@quackback/db'
+} from '@/lib/db'
 import type { PostId, StatusId, TagId, CommentId } from '@quackback/ids'
 import { buildCommentTree } from '@/lib/shared'
 import type {

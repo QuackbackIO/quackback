@@ -4,7 +4,7 @@
  * This module contains the business logic for sending email notifications.
  */
 
-import { db, eq, member, posts } from '@quackback/db'
+import { db, eq, member, posts } from '@/lib/db'
 import type {
   UserNotificationData,
   UserNotificationResult,

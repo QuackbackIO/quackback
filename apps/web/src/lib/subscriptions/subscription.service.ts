@@ -19,7 +19,7 @@ import {
   member,
   user,
   type Database,
-} from '@quackback/db'
+} from '@/lib/db'
 import type { MemberId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
 import type {

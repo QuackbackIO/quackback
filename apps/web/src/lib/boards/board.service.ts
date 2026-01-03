@@ -8,17 +8,7 @@
  * - Validation
  */
 
-import {
-  db,
-  type Board,
-  type BoardSettings,
-  eq,
-  posts,
-  boards,
-  sql,
-  inArray,
-  asc,
-} from '@quackback/db'
+import { db, type Board, type BoardSettings, eq, posts, boards, sql, inArray, asc } from '@/lib/db'
 import type { BoardId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'

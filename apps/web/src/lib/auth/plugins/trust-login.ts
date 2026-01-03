@@ -68,8 +68,7 @@ export const trustLogin = () => {
             return ctx.redirect('/admin/login?error=invalid_token')
           }
 
-          const { getDb, user, member, session, eq } = await import('@/lib/db')
-          const db = getDb()
+          const { db, user, member, session, eq } = await import('@/lib/db')
 
           // 2. Find or create user
           let existingUser = await db.query.user.findFirst({

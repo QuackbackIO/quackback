@@ -9,7 +9,7 @@
  * - Validation
  */
 
-import { db, eq, sql, posts, postStatuses, asc } from '@quackback/db'
+import { db, eq, sql, posts, postStatuses, asc } from '@/lib/db'
 import type { StatusId } from '@quackback/ids'
 import {
   NotFoundError,

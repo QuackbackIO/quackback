@@ -25,7 +25,7 @@ import {
   comments,
   postEditHistory,
   type Post,
-} from '@quackback/db'
+} from '@/lib/db'
 import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/settings'

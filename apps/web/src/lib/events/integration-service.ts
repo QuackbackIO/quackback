@@ -4,7 +4,7 @@
  * This module contains the business logic for processing integration events.
  */
 
-import { db, integrations, integrationEventMappings, decryptToken, eq } from '@quackback/db'
+import { db, integrations, integrationEventMappings, decryptToken, eq } from '@/lib/db'
 import {
   integrationRegistry,
   type IntegrationContext,

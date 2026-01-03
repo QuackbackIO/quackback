@@ -21,7 +21,7 @@ import {
   posts,
   boards,
   type Comment,
-} from '@quackback/db'
+} from '@/lib/db'
 import type { CommentId, PostId, MemberId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/subscriptions/subscription.service'

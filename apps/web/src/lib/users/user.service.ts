@@ -27,7 +27,7 @@ import {
   votes,
   postStatuses,
   boards,
-} from '@quackback/db'
+} from '@/lib/db'
 import type { MemberId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type {

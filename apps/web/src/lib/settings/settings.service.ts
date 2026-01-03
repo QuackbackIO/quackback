@@ -8,7 +8,7 @@
  * - Custom CSS
  */
 
-import { db, eq, settings } from '@quackback/db'
+import { db, eq, settings } from '@/lib/db'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import type {
   AuthConfig,

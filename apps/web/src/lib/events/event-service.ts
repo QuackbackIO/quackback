@@ -5,7 +5,7 @@
  * flow, used for inline event processing.
  */
 
-import { db, integrations, integrationEventMappings, eq } from '@quackback/db'
+import { db, integrations, integrationEventMappings, eq } from '@/lib/db'
 import type { IntegrationId, EventMappingId } from '@quackback/ids'
 import type { EventData, EventResult, IntegrationData, DomainEventPayload } from './types'
 import { processIntegration } from './integration-service'

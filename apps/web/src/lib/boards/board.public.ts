@@ -9,7 +9,7 @@
  * All methods in this file are safe for unauthenticated access.
  */
 
-import { db, eq, sql, inArray, boards, posts, type Board } from '@quackback/db'
+import { db, eq, sql, inArray, boards, posts, type Board } from '@/lib/db'
 import type { BoardId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type { BoardWithStats } from './board.types'

@@ -6,7 +6,7 @@
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { db, posts, tags, postTags, postStatuses, eq } from '@quackback/db'
+import { db, posts, tags, postTags, postStatuses, eq } from '@/lib/db'
 import { boardIdSchema, type BoardId, type PostId, type TagId, type StatusId } from '@quackback/ids'
 import type { ImportInput, ImportResult, ImportRowError } from './types'
 

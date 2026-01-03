@@ -19,7 +19,7 @@ import {
   postRoadmaps,
   boards,
   type Roadmap,
-} from '@quackback/db'
+} from '@/lib/db'
 import type { RoadmapId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type {
