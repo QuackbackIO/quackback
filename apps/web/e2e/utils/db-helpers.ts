@@ -6,7 +6,11 @@
  */
 
 import { execSync } from 'child_process'
-import { resolve } from 'path'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 /**
  * Get OTP code for an email address from the database
