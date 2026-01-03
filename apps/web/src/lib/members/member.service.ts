@@ -7,58 +7,46 @@
 import { db, eq, sql, member, user } from '@quackback/db'
 import type { Member } from '@quackback/db'
 import type { MemberId, UserId } from '@quackback/ids'
-import { ok, err } from '@/lib/shared'
-import type { Result } from '@/lib/shared'
-import type { MemberError, TeamMember } from './member.types'
+import { InternalError } from '@/lib/shared/errors'
+import type { TeamMember } from './member.types'
 
 // Re-export types for backwards compatibility
-export type { MemberError, TeamMember } from './member.types'
+export type { TeamMember } from './member.types'
 
 /**
  * Find a member by user ID
  */
-export async function getMemberByUser(userId: UserId): Promise<Result<Member | null, MemberError>> {
+export async function getMemberByUser(userId: UserId): Promise<Member | null> {
   try {
     const foundMember = await db.query.member.findFirst({
       where: eq(member.userId, userId),
     })
-    return ok(foundMember ?? null)
+    return foundMember ?? null
   } catch (error) {
     console.error('Error looking up member:', error)
-    return err({
-      code: 'DATABASE_ERROR',
-      message: 'Failed to lookup member',
-    })
+    throw new InternalError('DATABASE_ERROR', 'Failed to lookup member', error)
   }
 }
 
 /**
  * Find a member by ID
  */
-export async function getMemberById(
-  memberId: MemberId
-): Promise<Result<Member | null, MemberError>> {
+export async function getMemberById(memberId: MemberId): Promise<Member | null> {
   try {
     const foundMember = await db.query.member.findFirst({
       where: eq(member.id, memberId),
     })
-    return ok(foundMember ?? null)
+    return foundMember ?? null
   } catch (error) {
     console.error('Error looking up member:', error)
-    return err({
-      code: 'DATABASE_ERROR',
-      message: 'Failed to lookup member',
-    })
+    throw new InternalError('DATABASE_ERROR', 'Failed to lookup member', error)
   }
 }
 
 /**
  * List all team members with user details
- *
- * Returns user info (id, name, email, image) for all members.
- * Used for member assignment dropdowns and team lists.
  */
-export async function listTeamMembers(): Promise<Result<TeamMember[], MemberError>> {
+export async function listTeamMembers(): Promise<TeamMember[]> {
   try {
     const teamMembers = await db
       .select({
@@ -70,31 +58,23 @@ export async function listTeamMembers(): Promise<Result<TeamMember[], MemberErro
       .from(member)
       .innerJoin(user, eq(member.userId, user.id))
 
-    return ok(teamMembers)
+    return teamMembers
   } catch (error) {
     console.error('Error listing team members:', error)
-    return err({
-      code: 'DATABASE_ERROR',
-      message: 'Failed to list team members',
-    })
+    throw new InternalError('DATABASE_ERROR', 'Failed to list team members', error)
   }
 }
 
 /**
  * Count all members (no auth required)
- *
- * Used by getting-started page.
  */
-export async function countMembers(): Promise<Result<number, MemberError>> {
+export async function countMembers(): Promise<number> {
   try {
     const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(member)
 
-    return ok(Number(result[0]?.count ?? 0))
+    return Number(result[0]?.count ?? 0)
   } catch (error) {
     console.error('Error counting members:', error)
-    return err({
-      code: 'DATABASE_ERROR',
-      message: 'Failed to count members',
-    })
+    throw new InternalError('DATABASE_ERROR', 'Failed to count members', error)
   }
 }

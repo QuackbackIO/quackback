@@ -29,8 +29,7 @@ import {
   boards,
 } from '@quackback/db'
 import type { MemberId } from '@quackback/ids'
-import { ok, err, type Result } from '@/lib/shared'
-import { UserError } from './user.errors'
+import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type {
   PortalUserListParams,
   PortalUserListResult,
@@ -49,7 +48,7 @@ import type {
  */
 export async function listPortalUsers(
   params: PortalUserListParams = {}
-): Promise<Result<PortalUserListResult, UserError>> {
+): Promise<PortalUserListResult> {
   try {
     const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20 } = params
 
@@ -177,14 +176,14 @@ export async function listPortalUsers(
       voteCount: Number(row.voteCount),
     }))
 
-    return ok({
+    return {
       items,
       total,
       hasMore: page * limit < total,
-    })
+    }
   } catch (error) {
     console.error('Error listing portal users:', error)
-    return err(UserError.databaseError('Failed to list portal users'))
+    throw new InternalError('DATABASE_ERROR', 'Failed to list portal users', error)
   }
 }
 
@@ -193,9 +192,7 @@ export async function listPortalUsers(
  *
  * Returns user info and all posts they've engaged with (authored, commented on, or voted on).
  */
-export async function getPortalUserDetail(
-  memberId: MemberId
-): Promise<Result<PortalUserDetail | null, UserError>> {
+export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUserDetail | null> {
   try {
     // Get member with user details (filter for role='user')
     const memberResult = await db
@@ -215,7 +212,7 @@ export async function getPortalUserDetail(
       .limit(1)
 
     if (memberResult.length === 0) {
-      return ok(null)
+      return null
     }
 
     const memberData = memberResult[0]
@@ -418,7 +415,7 @@ export async function getPortalUserDetail(
     const commentCount = engagementData.commentedPostIds.length
     const voteCount = engagementData.votedPostIds.length
 
-    return ok({
+    return {
       memberId: memberData.memberId,
       userId: memberData.userId,
       name: memberData.name,
@@ -431,10 +428,10 @@ export async function getPortalUserDetail(
       commentCount,
       voteCount,
       engagedPosts,
-    })
+    }
   } catch (error) {
     console.error('Error getting portal user detail:', error)
-    return err(UserError.databaseError('Failed to get portal user detail'))
+    throw new InternalError('DATABASE_ERROR', 'Failed to get portal user detail', error)
   }
 }
 
@@ -444,7 +441,7 @@ export async function getPortalUserDetail(
  * Deletes the member record with role='user'.
  * Since users are org-scoped, this also deletes the user record (CASCADE).
  */
-export async function removePortalUser(memberId: MemberId): Promise<Result<void, UserError>> {
+export async function removePortalUser(memberId: MemberId): Promise<void> {
   try {
     // Verify member exists and has role='user'
     const existingMember = await db.query.member.findFirst({
@@ -452,15 +449,17 @@ export async function removePortalUser(memberId: MemberId): Promise<Result<void,
     })
 
     if (!existingMember) {
-      return err(UserError.memberNotFound(memberId))
+      throw new NotFoundError(
+        'MEMBER_NOT_FOUND',
+        `Portal user with member ID ${memberId} not found`
+      )
     }
 
     // Delete member record (user record will be deleted via CASCADE since user is org-scoped)
     await db.delete(member).where(eq(member.id, memberId))
-
-    return ok(undefined)
   } catch (error) {
+    if (error instanceof NotFoundError) throw error
     console.error('Error removing portal user:', error)
-    return err(UserError.databaseError('Failed to remove portal user'))
+    throw new InternalError('DATABASE_ERROR', 'Failed to remove portal user', error)
   }
 }

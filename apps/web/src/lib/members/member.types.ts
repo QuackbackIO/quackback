@@ -7,11 +7,6 @@
 
 import type { UserId } from '@quackback/ids'
 
-export type MemberError = {
-  code: 'MEMBER_NOT_FOUND' | 'DATABASE_ERROR'
-  message: string
-}
-
 /**
  * Team member info with user details
  */

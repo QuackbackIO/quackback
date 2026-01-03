@@ -27,8 +27,6 @@ import {
   postStatuses,
 } from '@quackback/db'
 import type { PostId, StatusId, TagId, CommentId } from '@quackback/ids'
-import { ok, type Result } from '@/lib/shared'
-import { PostError } from './post.errors'
 import { buildCommentTree } from '@/lib/shared'
 import type {
   PublicPostListResult,
@@ -42,7 +40,7 @@ import type {
  * List posts for public portal (no authentication required)
  *
  * @param params - Query parameters including boardSlug, search, statusIds/statusSlugs, sort, pagination
- * @returns Result containing public post list or an error
+ * @returns Public post list
  */
 export async function listPublicPosts(params: {
   boardSlug?: string
@@ -55,7 +53,7 @@ export async function listPublicPosts(params: {
   sort?: 'top' | 'new' | 'trending'
   page?: number
   limit?: number
-}): Promise<Result<PublicPostListResult, PostError>> {
+}): Promise<PublicPostListResult> {
   const {
     boardSlug,
     search,
@@ -99,7 +97,7 @@ export async function listPublicPosts(params: {
     const postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
 
     if (postIdsWithTags.length === 0) {
-      return ok({ items: [], total: 0, hasMore: false })
+      return { items: [], total: 0, hasMore: false }
     }
     conditions.push(inArray(posts.id, postIdsWithTags))
   }
@@ -207,11 +205,11 @@ export async function listPublicPosts(params: {
     },
   }))
 
-  return ok({
+  return {
     items,
     total,
     hasMore: offset + items.length < total,
-  })
+  }
 }
 
 /**
@@ -220,12 +218,12 @@ export async function listPublicPosts(params: {
  *
  * @param postId - Post ID to fetch
  * @param userIdentifier - Optional user identifier for reaction tracking
- * @returns Result containing post detail or null if not found/not public
+ * @returns Post detail or null if not found/not public
  */
 export async function getPublicPostDetail(
   postId: PostId,
   userIdentifier?: string
-): Promise<Result<PublicPostDetail | null, PostError>> {
+): Promise<PublicPostDetail | null> {
   const postResult = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     with: {
@@ -234,7 +232,7 @@ export async function getPublicPostDetail(
   })
 
   if (!postResult || !postResult.board.isPublic) {
-    return ok(null)
+    return null
   }
 
   // Get tags
@@ -275,7 +273,7 @@ export async function getPublicPostDetail(
 
   const rootComments = commentTree.map(mapToPublicComment)
 
-  return ok({
+  return {
     id: postResult.id,
     title: postResult.title,
     content: postResult.content,
@@ -298,20 +296,18 @@ export async function getPublicPostDetail(
           respondedAt: postResult.officialResponseAt!,
         }
       : null,
-  })
+  }
 }
 
 /**
  * Get posts for roadmap view across all public boards
  *
  * @param statusIds - Array of status IDs to filter by
- * @returns Result containing roadmap posts
+ * @returns Roadmap posts
  */
-export async function getPublicRoadmapPosts(
-  statusIds: StatusId[]
-): Promise<Result<RoadmapPost[], PostError>> {
+export async function getPublicRoadmapPosts(statusIds: StatusId[]): Promise<RoadmapPost[]> {
   if (statusIds.length === 0) {
-    return ok([])
+    return []
   }
 
   const result = await db
@@ -329,32 +325,30 @@ export async function getPublicRoadmapPosts(
     .where(and(eq(boards.isPublic, true), inArray(posts.statusId, statusIds)))
     .orderBy(desc(posts.voteCount))
 
-  return ok(
-    result.map((row) => ({
-      id: row.id,
-      title: row.title,
-      statusId: row.statusId,
-      voteCount: row.voteCount,
-      board: {
-        id: row.boardId,
-        name: row.boardName,
-        slug: row.boardSlug,
-      },
-    }))
-  )
+  return result.map((row) => ({
+    id: row.id,
+    title: row.title,
+    statusId: row.statusId,
+    voteCount: row.voteCount,
+    board: {
+      id: row.boardId,
+      name: row.boardName,
+      slug: row.boardSlug,
+    },
+  }))
 }
 
 /**
  * Get paginated posts for roadmap view filtered by a single status
  *
  * @param params - Query parameters
- * @returns Result containing paginated roadmap posts
+ * @returns Paginated roadmap posts
  */
 export async function getPublicRoadmapPostsPaginated(params: {
   statusId: StatusId
   page?: number
   limit?: number
-}): Promise<Result<RoadmapPostListResult, PostError>> {
+}): Promise<RoadmapPostListResult> {
   const { statusId, page = 1, limit = 10 } = params
   const offset = (page - 1) * limit
 
@@ -397,11 +391,11 @@ export async function getPublicRoadmapPostsPaginated(params: {
     },
   }))
 
-  return ok({
+  return {
     items,
     total,
     hasMore: offset + items.length < total,
-  })
+  }
 }
 
 /**
@@ -409,17 +403,14 @@ export async function getPublicRoadmapPostsPaginated(params: {
  *
  * @param postId - Post ID to check
  * @param userIdentifier - User's identifier
- * @returns Result containing boolean
+ * @returns True if user has voted
  */
-export async function hasUserVoted(
-  postId: PostId,
-  userIdentifier: string
-): Promise<Result<boolean, PostError>> {
+export async function hasUserVoted(postId: PostId, userIdentifier: string): Promise<boolean> {
   const vote = await db.query.votes.findFirst({
     where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
   })
 
-  return ok(!!vote)
+  return !!vote
 }
 
 /**
@@ -427,14 +418,14 @@ export async function hasUserVoted(
  *
  * @param postIds - List of post IDs to check
  * @param userIdentifier - User's identifier
- * @returns Result containing Set of voted post IDs
+ * @returns Set of voted post IDs
  */
 export async function getUserVotedPostIds(
   postIds: PostId[],
   userIdentifier: string
-): Promise<Result<Set<PostId>, PostError>> {
+): Promise<Set<PostId>> {
   if (postIds.length === 0) {
-    return ok(new Set())
+    return new Set()
   }
 
   const result = await db
@@ -442,39 +433,37 @@ export async function getUserVotedPostIds(
     .from(votes)
     .where(and(inArray(votes.postId, postIds), eq(votes.userIdentifier, userIdentifier)))
 
-  return ok(new Set(result.map((r) => r.postId)))
+  return new Set(result.map((r) => r.postId))
 }
 
 /**
  * Get all posts a user has voted on
  *
  * @param userIdentifier - User's identifier
- * @returns Result containing Set of all voted post IDs
+ * @returns Set of all voted post IDs
  */
-export async function getAllUserVotedPostIds(
-  userIdentifier: string
-): Promise<Result<Set<PostId>, PostError>> {
+export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Set<PostId>> {
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
     .where(eq(votes.userIdentifier, userIdentifier))
 
-  return ok(new Set(result.map((r) => r.postId)))
+  return new Set(result.map((r) => r.postId))
 }
 
 /**
  * Get board by post ID
  *
  * @param postId - Post ID to lookup
- * @returns Result containing Board or null
+ * @returns Board or null
  */
 export async function getBoardByPostId(
   postId: PostId
-): Promise<Result<import('@quackback/db').Board | null, PostError>> {
+): Promise<import('@quackback/db').Board | null> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     with: { board: true },
   })
 
-  return ok(post?.board || null)
+  return post?.board || null
 }

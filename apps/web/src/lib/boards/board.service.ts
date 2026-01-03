@@ -20,8 +20,7 @@ import {
   asc,
 } from '@quackback/db'
 import type { BoardId, PostId } from '@quackback/ids'
-import { ok, err, type Result } from '@/lib/shared'
-import { BoardError } from './board.errors'
+import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 
 /**
@@ -38,26 +37,18 @@ function slugify(text: string): string {
 
 /**
  * Create a new board
- *
- * Validates that:
- * - Board name is valid
- * - Generated/provided slug is unique
- * - Input data is valid
- *
- * @param input - Board creation data
- * @returns Result containing the created board or an error
  */
-export async function createBoard(input: CreateBoardInput): Promise<Result<Board, BoardError>> {
+export async function createBoard(input: CreateBoardInput): Promise<Board> {
   return db.transaction(async (tx) => {
     // Validate input
     if (!input.name?.trim()) {
-      return err(BoardError.validationError('Board name is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Board name is required')
     }
     if (input.name.length > 100) {
-      return err(BoardError.validationError('Board name must be 100 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
     }
     if (input.description && input.description.length > 500) {
-      return err(BoardError.validationError('Description must be 500 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
     }
 
     // Generate or validate slug
@@ -65,7 +56,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Result<Board
 
     // Ensure slug is not empty after slugification
     if (!slug) {
-      return err(BoardError.validationError('Could not generate valid slug from name'))
+      throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
     }
 
     // Check for slug uniqueness and generate a unique one if needed
@@ -97,47 +88,35 @@ export async function createBoard(input: CreateBoardInput): Promise<Result<Board
       })
       .returning()
 
-    return ok(board)
+    return board
   })
 }
 
 /**
  * Update an existing board
- *
- * Validates that:
- * - Board exists
- * - Update data is valid
- * - New slug (if provided) is unique
- *
- * @param id - Board ID to update
- * @param input - Update data
- * @returns Result containing the updated board or an error
  */
-export async function updateBoard(
-  id: BoardId,
-  input: UpdateBoardInput
-): Promise<Result<Board, BoardError>> {
+export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise<Board> {
   return db.transaction(async (tx) => {
     // Get existing board
     const existingBoard = await tx.query.boards.findFirst({
       where: eq(boards.id, id),
     })
     if (!existingBoard) {
-      return err(BoardError.notFound(id))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
     }
 
     // Validate input
     if (input.name !== undefined) {
       if (!input.name.trim()) {
-        return err(BoardError.validationError('Board name cannot be empty'))
+        throw new ValidationError('VALIDATION_ERROR', 'Board name cannot be empty')
       }
       if (input.name.length > 100) {
-        return err(BoardError.validationError('Board name must be 100 characters or less'))
+        throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
       }
     }
     if (input.description !== undefined && input.description !== null) {
       if (input.description.length > 500) {
-        return err(BoardError.validationError('Description must be 500 characters or less'))
+        throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
       }
     }
 
@@ -147,7 +126,7 @@ export async function updateBoard(
       slug = slugify(input.slug)
 
       if (!slug) {
-        return err(BoardError.validationError('Could not generate valid slug'))
+        throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug')
       }
 
       // Check uniqueness if slug is changing
@@ -156,7 +135,7 @@ export async function updateBoard(
           where: eq(boards.slug, slug),
         })
         if (existingWithSlug && existingWithSlug.id !== id) {
-          return err(BoardError.duplicateSlug(slug))
+          throw new ConflictError('DUPLICATE_SLUG', `A board with slug "${slug}" already exists`)
         }
       }
     } else if (input.name !== undefined) {
@@ -188,101 +167,83 @@ export async function updateBoard(
       .returning()
 
     if (!updatedBoard) {
-      return err(BoardError.notFound(id))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
     }
 
-    return ok(updatedBoard)
+    return updatedBoard
   })
 }
 
 /**
  * Delete a board
- *
- * Validates that:
- * - Board exists
- *
- * @param id - Board ID to delete
- * @returns Result containing void or an error
  */
-export async function deleteBoard(id: BoardId): Promise<Result<void, BoardError>> {
+export async function deleteBoard(id: BoardId): Promise<void> {
   return db.transaction(async (tx) => {
     // Get existing board
     const existingBoard = await tx.query.boards.findFirst({
       where: eq(boards.id, id),
     })
     if (!existingBoard) {
-      return err(BoardError.notFound(id))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
     }
 
     // Delete the board
     const result = await tx.delete(boards).where(eq(boards.id, id)).returning()
     if (result.length === 0) {
-      return err(BoardError.notFound(id))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
     }
-
-    return ok(undefined)
   })
 }
 
 /**
  * Get a board by ID
- *
- * @param id - Board ID to fetch
- * @returns Result containing the board or an error
  */
-export async function getBoardById(id: BoardId): Promise<Result<Board, BoardError>> {
+export async function getBoardById(id: BoardId): Promise<Board> {
   const board = await db.query.boards.findFirst({
     where: eq(boards.id, id),
   })
   if (!board) {
-    return err(BoardError.notFound(id))
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
 
-  return ok(board)
+  return board
 }
 
 /**
  * Get a board by slug
- *
- * @param slug - Board slug to fetch
- * @returns Result containing the board or an error
  */
-export async function getBoardBySlug(slug: string): Promise<Result<Board, BoardError>> {
+export async function getBoardBySlug(slug: string): Promise<Board> {
   const board = await db.query.boards.findFirst({
     where: eq(boards.slug, slug),
   })
   if (!board) {
-    return err(BoardError.notFound(slug))
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with slug "${slug}" not found`)
   }
 
-  return ok(board)
+  return board
 }
 
 /**
  * List all boards
- *
- * @returns Result containing array of boards or an error
  */
-export async function listBoards(): Promise<Result<Board[], BoardError>> {
+export async function listBoards(): Promise<Board[]> {
   const boardList = await db.query.boards.findMany({
     orderBy: [asc(boards.name)],
   })
-  return ok(boardList)
+  return boardList
 }
 
 /**
  * List all boards with post counts
- *
- * @returns Result containing array of boards with details or an error
  */
-export async function listBoardsWithDetails(): Promise<Result<BoardWithDetails[], BoardError>> {
+export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
   // Get all boards ordered by name
   const allBoards = await db.query.boards.findMany({
     orderBy: [asc(boards.name)],
   })
 
   if (allBoards.length === 0) {
-    return ok([])
+    return []
   }
 
   // Get post counts for all boards
@@ -305,30 +266,20 @@ export async function listBoardsWithDetails(): Promise<Result<BoardWithDetails[]
     postCount: postCountMap.get(board.id) ?? 0,
   }))
 
-  return ok(boardsWithDetails)
+  return boardsWithDetails
 }
 
 /**
  * Update board settings
- *
- * Validates that:
- * - Board exists
- *
- * @param id - Board ID to update
- * @param settings - New settings to merge with existing settings
- * @returns Result containing the updated board or an error
  */
-export async function updateBoardSettings(
-  id: BoardId,
-  settings: BoardSettings
-): Promise<Result<Board, BoardError>> {
+export async function updateBoardSettings(id: BoardId, settings: BoardSettings): Promise<Board> {
   return db.transaction(async (tx) => {
     // Get existing board
     const existingBoard = await tx.query.boards.findFirst({
       where: eq(boards.id, id),
     })
     if (!existingBoard) {
-      return err(BoardError.notFound(id))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
     }
 
     // Merge settings with existing settings
@@ -346,29 +297,24 @@ export async function updateBoardSettings(
       .returning()
 
     if (!updatedBoard) {
-      return err(BoardError.notFound(id))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
     }
 
-    return ok(updatedBoard)
+    return updatedBoard
   })
 }
 
 /**
  * Get a board by post ID
- *
- * Finds the post and returns its associated board.
- *
- * @param postId - Post ID to lookup
- * @returns Result containing the board or an error
  */
-export async function getBoardByPostId(postId: PostId): Promise<Result<Board, BoardError>> {
+export async function getBoardByPostId(postId: PostId): Promise<Board> {
   // Find the post first
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
   })
 
   if (!post) {
-    return err(BoardError.notFound(`Post with ID ${postId}`))
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
   // Get the board
@@ -376,8 +322,8 @@ export async function getBoardByPostId(postId: PostId): Promise<Result<Board, Bo
     where: eq(boards.id, post.boardId),
   })
   if (!board) {
-    return err(BoardError.notFound(post.boardId))
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
-  return ok(board)
+  return board
 }

@@ -9,8 +9,7 @@
  */
 
 import { db, eq, settings } from '@quackback/db'
-import { ok, err, type Result } from '@/lib/shared'
-import { SettingsError } from './settings.errors'
+import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -87,21 +86,22 @@ async function getSettings() {
  * Get auth configuration
  * Public method - no auth required
  */
-export async function getAuthConfig(): Promise<Result<AuthConfig, SettingsError>> {
+export async function getAuthConfig(): Promise<AuthConfig> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const config = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
-    return ok(config)
+    return config
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to fetch auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch auth config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -109,15 +109,13 @@ export async function getAuthConfig(): Promise<Result<AuthConfig, SettingsError>
 /**
  * Update auth configuration
  */
-export async function updateAuthConfig(
-  input: UpdateAuthConfigInput
-): Promise<Result<AuthConfig, SettingsError>> {
+export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<AuthConfig> {
   try {
     // Get existing config
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
@@ -132,15 +130,16 @@ export async function updateAuthConfig(
       .returning()
 
     if (!result) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(updated)
+    return updated
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to update auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to update auth config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -153,21 +152,22 @@ export async function updateAuthConfig(
  * Get portal configuration
  * Public method - no auth required
  */
-export async function getPortalConfig(): Promise<Result<PortalConfig, SettingsError>> {
+export async function getPortalConfig(): Promise<PortalConfig> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const config = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-    return ok(config)
+    return config
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -175,15 +175,13 @@ export async function getPortalConfig(): Promise<Result<PortalConfig, SettingsEr
 /**
  * Update portal configuration
  */
-export async function updatePortalConfig(
-  input: UpdatePortalConfigInput
-): Promise<Result<PortalConfig, SettingsError>> {
+export async function updatePortalConfig(input: UpdatePortalConfigInput): Promise<PortalConfig> {
   try {
     // Get existing config
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
@@ -198,15 +196,16 @@ export async function updatePortalConfig(
       .returning()
 
     if (!result) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(updated)
+    return updated
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to update portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to update portal config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -219,21 +218,22 @@ export async function updatePortalConfig(
  * Get branding configuration
  * Public method - no auth required
  */
-export async function getBrandingConfig(): Promise<Result<BrandingConfig, SettingsError>> {
+export async function getBrandingConfig(): Promise<BrandingConfig> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const config = parseJsonConfigNullable<BrandingConfig>(org.brandingConfig) || {}
-    return ok(config)
+    return config
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to fetch branding config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch branding config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -241,14 +241,12 @@ export async function getBrandingConfig(): Promise<Result<BrandingConfig, Settin
 /**
  * Update branding configuration
  */
-export async function updateBrandingConfig(
-  config: BrandingConfig
-): Promise<Result<BrandingConfig, SettingsError>> {
+export async function updateBrandingConfig(config: BrandingConfig): Promise<BrandingConfig> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const [updated] = await db
@@ -258,15 +256,16 @@ export async function updateBrandingConfig(
       .returning()
 
     if (!updated) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(config)
+    return config
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to update branding config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to update branding config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -279,20 +278,21 @@ export async function updateBrandingConfig(
  * Get custom CSS
  * Public method - no auth required
  */
-export async function getCustomCss(): Promise<Result<string | null, SettingsError>> {
+export async function getCustomCss(): Promise<string | null> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(org.customCss)
+    return org.customCss
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to fetch custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -300,14 +300,12 @@ export async function getCustomCss(): Promise<Result<string | null, SettingsErro
 /**
  * Update custom CSS
  */
-export async function updateCustomCss(
-  css: string | null
-): Promise<Result<string | null, SettingsError>> {
+export async function updateCustomCss(css: string | null): Promise<string | null> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     // Basic sanitization - strip script tags and javascript: URLs
@@ -329,15 +327,16 @@ export async function updateCustomCss(
       .returning({ customCss: settings.customCss })
 
     if (!updated) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(updated.customCss)
+    return updated.customCss
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to update custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to update custom CSS: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -352,11 +351,11 @@ export async function updateCustomCss(
 export async function uploadLogo(data: {
   blob: Buffer
   mimeType: string
-}): Promise<Result<{ success: true }, SettingsError>> {
+}): Promise<{ success: true }> {
   try {
     const org = await getSettings()
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     await db
@@ -367,12 +366,13 @@ export async function uploadLogo(data: {
       })
       .where(eq(settings.id, org.id))
 
-    return ok({ success: true })
+    return { success: true }
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to upload logo: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to upload logo: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -380,11 +380,11 @@ export async function uploadLogo(data: {
 /**
  * Delete logo
  */
-export async function deleteLogo(): Promise<Result<{ success: true }, SettingsError>> {
+export async function deleteLogo(): Promise<{ success: true }> {
   try {
     const org = await getSettings()
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     await db
@@ -395,12 +395,13 @@ export async function deleteLogo(): Promise<Result<{ success: true }, SettingsEr
       })
       .where(eq(settings.id, org.id))
 
-    return ok({ success: true })
+    return { success: true }
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to delete logo: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to delete logo: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -411,11 +412,11 @@ export async function deleteLogo(): Promise<Result<{ success: true }, SettingsEr
 export async function uploadHeaderLogo(data: {
   blob: Buffer
   mimeType: string
-}): Promise<Result<{ success: true }, SettingsError>> {
+}): Promise<{ success: true }> {
   try {
     const org = await getSettings()
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     await db
@@ -426,12 +427,13 @@ export async function uploadHeaderLogo(data: {
       })
       .where(eq(settings.id, org.id))
 
-    return ok({ success: true })
+    return { success: true }
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to upload header logo: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to upload header logo: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -439,11 +441,11 @@ export async function uploadHeaderLogo(data: {
 /**
  * Delete header logo
  */
-export async function deleteHeaderLogo(): Promise<Result<{ success: true }, SettingsError>> {
+export async function deleteHeaderLogo(): Promise<{ success: true }> {
   try {
     const org = await getSettings()
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     await db
@@ -454,12 +456,13 @@ export async function deleteHeaderLogo(): Promise<Result<{ success: true }, Sett
       })
       .where(eq(settings.id, org.id))
 
-    return ok({ success: true })
+    return { success: true }
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to delete header logo: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to delete header logo: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -471,20 +474,18 @@ export async function deleteHeaderLogo(): Promise<Result<{ success: true }, Sett
 /**
  * Update header display mode
  */
-export async function updateHeaderDisplayMode(
-  mode: string
-): Promise<Result<string, SettingsError>> {
+export async function updateHeaderDisplayMode(mode: string): Promise<string> {
   // Validate mode
   const validModes = ['logo_and_name', 'logo_only', 'custom_logo']
   if (!validModes.includes(mode)) {
-    return err(SettingsError.validationError(`Invalid header display mode: ${mode}`))
+    throw new ValidationError('VALIDATION_ERROR', `Invalid header display mode: ${mode}`)
   }
 
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const [updated] = await db
@@ -494,15 +495,16 @@ export async function updateHeaderDisplayMode(
       .returning({ headerDisplayMode: settings.headerDisplayMode })
 
     if (!updated) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(updated.headerDisplayMode || 'logo_and_name')
+    return updated.headerDisplayMode || 'logo_and_name'
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to update header display mode: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError || error instanceof ValidationError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to update header display mode: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -510,14 +512,12 @@ export async function updateHeaderDisplayMode(
 /**
  * Update header display name
  */
-export async function updateHeaderDisplayName(
-  name: string | null
-): Promise<Result<string | null, SettingsError>> {
+export async function updateHeaderDisplayName(name: string | null): Promise<string | null> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     // Trim and sanitize name
@@ -530,15 +530,16 @@ export async function updateHeaderDisplayName(
       .returning({ headerDisplayName: settings.headerDisplayName })
 
     if (!updated) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
-    return ok(updated.headerDisplayName)
+    return updated.headerDisplayName
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to update header display name: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to update header display name: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -551,25 +552,26 @@ export async function updateHeaderDisplayName(
  * Get public auth configuration for login forms
  * No authentication required - returns only non-sensitive information
  */
-export async function getPublicAuthConfig(): Promise<Result<PublicAuthConfig, SettingsError>> {
+export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
-    return ok({
+    return {
       oauth: authConfig.oauth,
       openSignup: authConfig.openSignup,
-    })
+    }
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to fetch public auth config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch public auth config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }
@@ -578,25 +580,26 @@ export async function getPublicAuthConfig(): Promise<Result<PublicAuthConfig, Se
  * Get public portal configuration
  * No authentication required - returns only non-sensitive information
  */
-export async function getPublicPortalConfig(): Promise<Result<PublicPortalConfig, SettingsError>> {
+export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
     const org = await getSettings()
 
     if (!org) {
-      return err(SettingsError.notFound())
+      throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     }
 
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
 
-    return ok({
+    return {
       oauth: portalConfig.oauth,
       features: portalConfig.features,
-    })
+    }
   } catch (error) {
-    return err(
-      SettingsError.validationError(
-        `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    if (error instanceof NotFoundError) throw error
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch portal config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }

@@ -11,43 +11,41 @@
 
 import { db, eq, sql, posts, postStatuses, asc } from '@quackback/db'
 import type { StatusId } from '@quackback/ids'
-import { ok, err, type Result } from '@/lib/shared'
-import { StatusError } from './status.errors'
+import {
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+  ForbiddenError,
+  InternalError,
+} from '@/lib/shared/errors'
 import type { Status, CreateStatusInput, UpdateStatusInput } from './status.types'
 
 /**
  * Create a new status
- *
- * Validates that:
- * - Input data is valid
- * - Slug is unique within the organization
- *
- * @param input - Status creation data
- * @returns Result containing the created status or an error
  */
-export async function createStatus(input: CreateStatusInput): Promise<Result<Status, StatusError>> {
+export async function createStatus(input: CreateStatusInput): Promise<Status> {
   return db.transaction(async (tx) => {
     // Validate input
     if (!input.name?.trim()) {
-      return err(StatusError.validationError('Name is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Name is required')
     }
     if (input.name.length > 50) {
-      return err(StatusError.validationError('Name must be 50 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Name must be 50 characters or less')
     }
     if (!input.slug?.trim()) {
-      return err(StatusError.validationError('Slug is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Slug is required')
     }
     if (input.slug.length > 50) {
-      return err(StatusError.validationError('Slug must be 50 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Slug must be 50 characters or less')
     }
     if (!/^[a-z0-9_]+$/.test(input.slug)) {
-      return err(StatusError.validationError('Slug must be lowercase with underscores only'))
+      throw new ValidationError('VALIDATION_ERROR', 'Slug must be lowercase with underscores only')
     }
     if (!input.color?.trim()) {
-      return err(StatusError.validationError('Color is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Color is required')
     }
     if (!/^#[0-9a-fA-F]{6}$/.test(input.color)) {
-      return err(StatusError.validationError('Color must be in hex format (e.g., #3b82f6)'))
+      throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
     }
 
     // Check if slug already exists
@@ -55,7 +53,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Result<Sta
       where: eq(postStatuses.slug, input.slug),
     })
     if (existingStatus) {
-      return err(StatusError.duplicateSlug(input.slug))
+      throw new ConflictError('DUPLICATE_SLUG', `A status with slug '${input.slug}' already exists`)
     }
 
     // Create the status
@@ -80,49 +78,38 @@ export async function createStatus(input: CreateStatusInput): Promise<Result<Sta
       await tx.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, status.id))
     }
 
-    return ok(status)
+    return status
   })
 }
 
 /**
  * Update an existing status
- *
- * Validates that:
- * - Status exists and belongs to the organization
- * - Update data is valid
- *
- * @param id - Status ID to update
- * @param input - Update data
- * @returns Result containing the updated status or an error
  */
-export async function updateStatus(
-  id: StatusId,
-  input: UpdateStatusInput
-): Promise<Result<Status, StatusError>> {
+export async function updateStatus(id: StatusId, input: UpdateStatusInput): Promise<Status> {
   return db.transaction(async (tx) => {
     // Get existing status
     const existingStatus = await tx.query.postStatuses.findFirst({
       where: eq(postStatuses.id, id),
     })
     if (!existingStatus) {
-      return err(StatusError.notFound(id))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
     }
 
     // Validate input
     if (input.name !== undefined) {
       if (!input.name.trim()) {
-        return err(StatusError.validationError('Name cannot be empty'))
+        throw new ValidationError('VALIDATION_ERROR', 'Name cannot be empty')
       }
       if (input.name.length > 50) {
-        return err(StatusError.validationError('Name must be 50 characters or less'))
+        throw new ValidationError('VALIDATION_ERROR', 'Name must be 50 characters or less')
       }
     }
     if (input.color !== undefined) {
       if (!input.color.trim()) {
-        return err(StatusError.validationError('Color cannot be empty'))
+        throw new ValidationError('VALIDATION_ERROR', 'Color cannot be empty')
       }
       if (!/^#[0-9a-fA-F]{6}$/.test(input.color)) {
-        return err(StatusError.validationError('Color must be in hex format (e.g., #3b82f6)'))
+        throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
       }
     }
 
@@ -149,37 +136,32 @@ export async function updateStatus(
       .returning()
 
     if (!updatedStatus) {
-      return err(StatusError.notFound(id))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
     }
 
-    return ok(updatedStatus)
+    return updatedStatus
   })
 }
 
 /**
  * Delete a status
- *
- * Validates that:
- * - Status exists and belongs to the organization
- * - Status is not the default status
- * - No posts are using this status
- *
- * @param id - Status ID to delete
- * @returns Result containing void or an error
  */
-export async function deleteStatus(id: StatusId): Promise<Result<void, StatusError>> {
+export async function deleteStatus(id: StatusId): Promise<void> {
   return db.transaction(async (tx) => {
     // Get existing status
     const existingStatus = await tx.query.postStatuses.findFirst({
       where: eq(postStatuses.id, id),
     })
     if (!existingStatus) {
-      return err(StatusError.notFound(id))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
     }
 
     // Check if status is the default
     if (existingStatus.isDefault) {
-      return err(StatusError.cannotDeleteDefault())
+      throw new ForbiddenError(
+        'CANNOT_DELETE_DEFAULT',
+        'Cannot delete the default status. Set another status as default first.'
+      )
     }
 
     // Check if any posts are using this status
@@ -190,44 +172,38 @@ export async function deleteStatus(id: StatusId): Promise<Result<void, StatusErr
 
     const usageCount = Number(result[0].count)
     if (usageCount > 0) {
-      return err(StatusError.cannotDeleteInUse(usageCount))
+      throw new ForbiddenError(
+        'CANNOT_DELETE_IN_USE',
+        `Cannot delete status. ${usageCount} post(s) are using this status. Reassign them first.`
+      )
     }
 
     // Delete the status
     const deleteResult = await tx.delete(postStatuses).where(eq(postStatuses.id, id)).returning()
     if (deleteResult.length === 0) {
-      return err(StatusError.notFound(id))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
     }
-
-    return ok(undefined)
   })
 }
 
 /**
  * Get a status by ID
- *
- * @param id - Status ID to fetch
- * @returns Result containing the status or an error
  */
-export async function getStatusById(id: StatusId): Promise<Result<Status, StatusError>> {
+export async function getStatusById(id: StatusId): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
   })
   if (!status) {
-    return err(StatusError.notFound(id))
+    throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
   }
 
-  return ok(status)
+  return status
 }
 
 /**
  * List all statuses for the organization
- *
- * Returns statuses ordered by category (active, complete, closed) and position.
- *
- * @returns Result containing array of statuses or an error
  */
-export async function listStatuses(): Promise<Result<Status[], StatusError>> {
+export async function listStatuses(): Promise<Status[]> {
   const statuses = await db.query.postStatuses.findMany({
     orderBy: [
       // Order by category (active, complete, closed) then position
@@ -240,25 +216,17 @@ export async function listStatuses(): Promise<Result<Status[], StatusError>> {
     ],
   })
 
-  return ok(statuses)
+  return statuses
 }
 
 /**
  * Reorder statuses within a category
- *
- * Takes an array of status IDs in the desired order and updates their positions.
- *
- * Validates that:
- * - All status IDs are provided
- *
- * @param ids - Array of status IDs in desired order
- * @returns Result containing void or an error
  */
-export async function reorderStatuses(ids: StatusId[]): Promise<Result<void, StatusError>> {
+export async function reorderStatuses(ids: StatusId[]): Promise<void> {
   return db.transaction(async (tx) => {
     // Validate input
     if (!ids || ids.length === 0) {
-      return err(StatusError.validationError('Status IDs are required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Status IDs are required')
     }
 
     // Reorder the statuses by updating their positions
@@ -267,30 +235,20 @@ export async function reorderStatuses(ids: StatusId[]): Promise<Result<void, Sta
         tx.update(postStatuses).set({ position: index }).where(eq(postStatuses.id, id))
       )
     )
-
-    return ok(undefined)
   })
 }
 
 /**
  * Set a status as the default for new posts
- *
- * This will unset any other default status in the organization.
- *
- * Validates that:
- * - Status exists and belongs to the organization
- *
- * @param id - Status ID to set as default
- * @returns Result containing the updated status or an error
  */
-export async function setDefaultStatus(id: StatusId): Promise<Result<Status, StatusError>> {
+export async function setDefaultStatus(id: StatusId): Promise<Status> {
   return db.transaction(async (tx) => {
     // Get existing status to verify it exists
     const existingStatus = await tx.query.postStatuses.findFirst({
       where: eq(postStatuses.id, id),
     })
     if (!existingStatus) {
-      return err(StatusError.notFound(id))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
     }
 
     // Set as default (unset all others first, then set this one)
@@ -302,56 +260,42 @@ export async function setDefaultStatus(id: StatusId): Promise<Result<Status, Sta
       where: eq(postStatuses.id, id),
     })
     if (!updatedStatus) {
-      return err(StatusError.notFound(id))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
     }
 
-    return ok(updatedStatus)
+    return updatedStatus
   })
 }
 
 /**
  * Get the default status for new posts
- *
- * Returns null if no default status is set for the organization.
- *
- * @returns Result containing the default status, null if not found, or an error
  */
-export async function getDefaultStatus(): Promise<Result<Status | null, StatusError>> {
+export async function getDefaultStatus(): Promise<Status | null> {
   const defaultStatus = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.isDefault, true),
   })
 
-  return ok(defaultStatus ?? null)
+  return defaultStatus ?? null
 }
 
 /**
  * Get a status by slug
- *
- * This method is useful for public endpoints that reference statuses by slug.
- *
- * @param slug - Status slug to find
- * @returns Result containing the status or an error
  */
-export async function getStatusBySlug(slug: string): Promise<Result<Status, StatusError>> {
+export async function getStatusBySlug(slug: string): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.slug, slug),
   })
   if (!status) {
-    return err(StatusError.notFound(slug))
+    throw new NotFoundError('STATUS_NOT_FOUND', `Status with slug '${slug}' not found`)
   }
 
-  return ok(status)
+  return status
 }
 
 /**
  * List all statuses (public, no authentication required)
- *
- * Returns statuses ordered by category (active, complete, closed) and position.
- * This method is used for public endpoints like roadmap and post detail pages.
- *
- * @returns Result containing array of statuses or an error
  */
-export async function listPublicStatuses(): Promise<Result<Status[], StatusError>> {
+export async function listPublicStatuses(): Promise<Status[]> {
   try {
     const { db, postStatuses, asc } = await import('@quackback/db')
 
@@ -359,12 +303,12 @@ export async function listPublicStatuses(): Promise<Result<Status[], StatusError
       orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
     })
 
-    return ok(statuses)
+    return statuses
   } catch (error) {
-    return err(
-      StatusError.validationError(
-        `Failed to fetch statuses: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch statuses: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }

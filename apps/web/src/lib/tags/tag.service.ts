@@ -12,8 +12,7 @@
 
 import { db, eq, asc, type Tag, tags, boards, postTags, posts } from '@quackback/db'
 import type { TagId, BoardId } from '@quackback/ids'
-import { ok, err, type Result } from '@/lib/shared'
-import { TagError } from './tag.errors'
+import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
 
 /**
@@ -25,17 +24,17 @@ import type { CreateTagInput, UpdateTagInput } from './tag.types'
  *
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
-export async function createTag(input: CreateTagInput): Promise<Result<Tag, TagError>> {
+export async function createTag(input: CreateTagInput): Promise<Tag> {
   return db.transaction(async (tx) => {
     // Basic validation
     if (!input.name || !input.name.trim()) {
-      return err(TagError.validationError('Tag name is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
     }
 
     const trimmedName = input.name.trim()
 
     if (trimmedName.length > 50) {
-      return err(TagError.validationError('Tag name must not exceed 50 characters'))
+      throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
     }
 
     // Check for duplicate name in the organization
@@ -46,7 +45,7 @@ export async function createTag(input: CreateTagInput): Promise<Result<Tag, TagE
       (tag) => tag.name.toLowerCase() === trimmedName.toLowerCase()
     )
     if (duplicate) {
-      return err(TagError.duplicateName(trimmedName))
+      throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
     }
 
     const color = input.color || '#6b7280'
@@ -54,7 +53,10 @@ export async function createTag(input: CreateTagInput): Promise<Result<Tag, TagE
     // Validate color format
     const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
     if (!hexColorRegex.test(color)) {
-      return err(TagError.validationError('Color must be a valid hex color (e.g., #6b7280)'))
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Color must be a valid hex color (e.g., #6b7280)'
+      )
     }
 
     // Create the tag
@@ -66,7 +68,7 @@ export async function createTag(input: CreateTagInput): Promise<Result<Tag, TagE
       })
       .returning()
 
-    return ok(tag)
+    return tag
   })
 }
 
@@ -79,19 +81,19 @@ export async function createTag(input: CreateTagInput): Promise<Result<Tag, TagE
  *
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
-export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Result<Tag, TagError>> {
+export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> {
   return db.transaction(async (tx) => {
     // Get existing tag
     const existingTag = await tx.query.tags.findFirst({
       where: eq(tags.id, id),
     })
     if (!existingTag) {
-      return err(TagError.notFound(id))
+      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
     }
 
     // Basic validation
     if (input.name !== undefined && !input.name.trim()) {
-      return err(TagError.validationError('Tag name cannot be empty'))
+      throw new ValidationError('VALIDATION_ERROR', 'Tag name cannot be empty')
     }
 
     // Check for duplicate name (excluding current tag)
@@ -99,7 +101,7 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Resul
       const trimmedName = input.name.trim()
 
       if (trimmedName.length > 50) {
-        return err(TagError.validationError('Tag name must not exceed 50 characters'))
+        throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
       }
       const existingTags = await tx.query.tags.findMany({
         orderBy: [asc(tags.name)],
@@ -108,7 +110,7 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Resul
         (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
       )
       if (duplicate) {
-        return err(TagError.duplicateName(trimmedName))
+        throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
       }
     }
 
@@ -116,7 +118,10 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Resul
     if (input.color !== undefined) {
       const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
       if (!hexColorRegex.test(input.color)) {
-        return err(TagError.validationError('Color must be a valid hex color (e.g., #6b7280)'))
+        throw new ValidationError(
+          'VALIDATION_ERROR',
+          'Color must be a valid hex color (e.g., #6b7280)'
+        )
       }
     }
 
@@ -129,10 +134,10 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Resul
     const [updatedTag] = await tx.update(tags).set(updateData).where(eq(tags.id, id)).returning()
 
     if (!updatedTag) {
-      return err(TagError.notFound(id))
+      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
     }
 
-    return ok(updatedTag)
+    return updatedTag
   })
 }
 
@@ -145,49 +150,47 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Resul
  * Note: This will remove the tag from all posts that use it.
  * Authorization should be checked at the action/API layer before calling this.
  */
-export async function deleteTag(id: TagId): Promise<Result<void, TagError>> {
+export async function deleteTag(id: TagId): Promise<void> {
   return db.transaction(async (tx) => {
     // Verify tag exists
     const existingTag = await tx.query.tags.findFirst({
       where: eq(tags.id, id),
     })
     if (!existingTag) {
-      return err(TagError.notFound(id))
+      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
     }
 
     // Delete the tag (cascade will remove from post_tags junction table)
     const result = await tx.delete(tags).where(eq(tags.id, id)).returning()
     if (result.length === 0) {
-      return err(TagError.notFound(id))
+      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
     }
-
-    return ok(undefined)
   })
 }
 
 /**
  * Get a tag by ID
  */
-export async function getTagById(id: TagId): Promise<Result<Tag, TagError>> {
+export async function getTagById(id: TagId): Promise<Tag> {
   const tag = await db.query.tags.findFirst({
     where: eq(tags.id, id),
   })
   if (!tag) {
-    return err(TagError.notFound(id))
+    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
   }
 
-  return ok(tag)
+  return tag
 }
 
 /**
  * List all tags for the organization
  */
-export async function listTags(): Promise<Result<Tag[], TagError>> {
+export async function listTags(): Promise<Tag[]> {
   const tagList = await db.query.tags.findMany({
     orderBy: [asc(tags.name)],
   })
 
-  return ok(tagList)
+  return tagList
 }
 
 /**
@@ -195,13 +198,13 @@ export async function listTags(): Promise<Result<Tag[], TagError>> {
  *
  * This returns only tags that are actually used by posts in the board.
  */
-export async function getTagsByBoard(boardId: BoardId): Promise<Result<Tag[], TagError>> {
+export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
   // Validate board exists
   const board = await db.query.boards.findFirst({
     where: eq(boards.id, boardId),
   })
   if (!board) {
-    return err(TagError.validationError(`Board with ID ${boardId} not found`))
+    throw new ValidationError('VALIDATION_ERROR', `Board with ID ${boardId} not found`)
   }
 
   // Get unique tag IDs used by posts in this board
@@ -213,7 +216,7 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Result<Tag[], Ta
     .where(eq(posts.boardId, boardId))
 
   if (tagResults.length === 0) {
-    return ok([])
+    return []
   }
 
   // Fetch full tag details
@@ -223,7 +226,7 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Result<Tag[], Ta
     orderBy: [asc(tags.name)],
   })
 
-  return ok(tagList)
+  return tagList
 }
 
 /**
@@ -232,18 +235,18 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Result<Tag[], Ta
  * Returns tags ordered by name.
  * This method is used for public endpoints like feedback portal filtering.
  */
-export async function listPublicTags(): Promise<Result<Tag[], TagError>> {
+export async function listPublicTags(): Promise<Tag[]> {
   try {
     const tagList = await db.query.tags.findMany({
       orderBy: [asc(tags.name)],
     })
 
-    return ok(tagList)
+    return tagList
   } catch (error) {
-    return err(
-      TagError.validationError(
-        `Failed to fetch tags: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+    throw new InternalError(
+      'DATABASE_ERROR',
+      `Failed to fetch tags: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
     )
   }
 }

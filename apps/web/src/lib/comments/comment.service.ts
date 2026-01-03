@@ -23,8 +23,7 @@ import {
   type Comment,
 } from '@quackback/db'
 import type { CommentId, PostId, MemberId } from '@quackback/ids'
-import { ok, err, type Result } from '@/lib/shared'
-import { CommentError } from './comment.errors'
+import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
 import type {
   CreateCommentInput,
@@ -88,14 +87,14 @@ export async function createComment(
     email: string
     role: 'admin' | 'member' | 'user'
   }
-): Promise<Result<CreateCommentResult, CommentError>> {
+): Promise<CreateCommentResult> {
   return db.transaction(async (tx) => {
     // Validate post exists
     const post = await tx.query.posts.findFirst({
       where: eq(posts.id, input.postId),
     })
     if (!post) {
-      return err(CommentError.postNotFound(input.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
     }
 
     // Verify post belongs to this organization (via its board)
@@ -103,7 +102,7 @@ export async function createComment(
       where: eq(boards.id, post.boardId),
     })
     if (!board) {
-      return err(CommentError.postNotFound(input.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
     }
 
     // Validate parent comment exists if specified
@@ -112,21 +111,24 @@ export async function createComment(
         where: eq(comments.id, input.parentId),
       })
       if (!parentComment) {
-        return err(CommentError.invalidParent(input.parentId))
+        throw new ValidationError(
+          'INVALID_PARENT',
+          `Parent comment with ID ${input.parentId} not found`
+        )
       }
 
       // Ensure parent comment belongs to the same post
       if (parentComment.postId !== input.postId) {
-        return err(CommentError.validationError('Parent comment belongs to a different post'))
+        throw new ValidationError('VALIDATION_ERROR', 'Parent comment belongs to a different post')
       }
     }
 
     // Validate input
     if (!input.content?.trim()) {
-      return err(CommentError.validationError('Content is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
     }
     if (input.content.length > 5000) {
-      return err(CommentError.validationError('Content must be 5,000 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
     }
 
     // Determine if user is a team member
@@ -154,7 +156,7 @@ export async function createComment(
     }
 
     // Return comment with post info for event building in API route
-    return ok({ comment, post: { id: post.id, title: post.title } })
+    return { comment, post: { id: post.id, title: post.title } }
   })
 }
 
@@ -175,14 +177,14 @@ export async function updateComment(
   id: CommentId,
   input: UpdateCommentInput,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<Comment, CommentError>> {
+): Promise<Comment> {
   return db.transaction(async (tx) => {
     // Get existing comment
     const existingComment = await tx.query.comments.findFirst({
       where: eq(comments.id, id),
     })
     if (!existingComment) {
-      return err(CommentError.notFound(id))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
     // Verify comment belongs to this organization (via its post's board)
@@ -190,14 +192,14 @@ export async function updateComment(
       where: eq(posts.id, existingComment.postId),
     })
     if (!post) {
-      return err(CommentError.postNotFound(existingComment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({
       where: eq(boards.id, post.boardId),
     })
     if (!board) {
-      return err(CommentError.postNotFound(existingComment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
     }
 
     // Authorization check - user must be comment author or team member
@@ -205,16 +207,16 @@ export async function updateComment(
     const isTeamMember = ['admin', 'member'].includes(actor.role)
 
     if (!isAuthor && !isTeamMember) {
-      return err(CommentError.unauthorized('update this comment'))
+      throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to update this comment')
     }
 
     // Validate input
     if (input.content !== undefined) {
       if (!input.content.trim()) {
-        return err(CommentError.validationError('Content cannot be empty'))
+        throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
       }
       if (input.content.length > 5000) {
-        return err(CommentError.validationError('Content must be 5,000 characters or less'))
+        throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
       }
     }
 
@@ -230,10 +232,10 @@ export async function updateComment(
       .returning()
 
     if (!updatedComment) {
-      return err(CommentError.notFound(id))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
-    return ok(updatedComment)
+    return updatedComment
   })
 }
 
@@ -253,14 +255,14 @@ export async function updateComment(
 export async function deleteComment(
   id: CommentId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<void, CommentError>> {
+): Promise<void> {
   return db.transaction(async (tx) => {
     // Get existing comment
     const existingComment = await tx.query.comments.findFirst({
       where: eq(comments.id, id),
     })
     if (!existingComment) {
-      return err(CommentError.notFound(id))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
     // Verify comment belongs to this organization (via its post's board)
@@ -268,14 +270,14 @@ export async function deleteComment(
       where: eq(posts.id, existingComment.postId),
     })
     if (!post) {
-      return err(CommentError.postNotFound(existingComment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({
       where: eq(boards.id, post.boardId),
     })
     if (!board) {
-      return err(CommentError.postNotFound(existingComment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
     }
 
     // Authorization check - user must be comment author or team member
@@ -283,16 +285,14 @@ export async function deleteComment(
     const isTeamMember = ['admin', 'member'].includes(actor.role)
 
     if (!isAuthor && !isTeamMember) {
-      return err(CommentError.unauthorized('delete this comment'))
+      throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
     }
 
     // Delete the comment
     const result = await tx.delete(comments).where(eq(comments.id, id)).returning()
     if (result.length === 0) {
-      return err(CommentError.notFound(id))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
-
-    return ok(undefined)
   })
 }
 
@@ -302,25 +302,25 @@ export async function deleteComment(
  * @param id - Comment ID to fetch
  * @returns Result containing the comment or an error
  */
-export async function getCommentById(id: CommentId): Promise<Result<Comment, CommentError>> {
+export async function getCommentById(id: CommentId): Promise<Comment> {
   return db.transaction(async (tx) => {
     const comment = await tx.query.comments.findFirst({ where: eq(comments.id, id) })
     if (!comment) {
-      return err(CommentError.notFound(id))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
     // Verify comment belongs to this organization (via its post's board)
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
     if (!post) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
-    return ok(comment)
+    return comment
   })
 }
 
@@ -337,18 +337,18 @@ export async function getCommentById(id: CommentId): Promise<Result<Comment, Com
 export async function getCommentsByPost(
   postId: PostId,
   userIdentifier: string
-): Promise<Result<CommentThread[], CommentError>> {
+): Promise<CommentThread[]> {
   return db.transaction(async (tx) => {
     // Verify post exists
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!post) {
-      return err(CommentError.postNotFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Verify post belongs to this organization
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(CommentError.postNotFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Fetch all comments with reactions using a single query
@@ -381,7 +381,7 @@ export async function getCommentsByPost(
     // Build comment tree with reaction aggregation
     const commentTree = buildCommentTree(formattedComments, userIdentifier)
 
-    return ok(commentTree as CommentThread[])
+    return commentTree as CommentThread[]
   })
 }
 
@@ -404,23 +404,23 @@ export async function addReaction(
   commentId: CommentId,
   emoji: string,
   userIdentifier: string
-): Promise<Result<ReactionResult, CommentError>> {
+): Promise<ReactionResult> {
   return db.transaction(async (tx) => {
     // Verify comment exists
     const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
     if (!comment) {
-      return err(CommentError.notFound(commentId))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
 
     // Verify comment belongs to this organization (via its post's board)
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
     if (!post) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     // Check if reaction already exists
@@ -456,7 +456,7 @@ export async function addReaction(
       userIdentifier
     )
 
-    return ok({ added, reactions: aggregatedReactions })
+    return { added, reactions: aggregatedReactions }
   })
 }
 
@@ -474,23 +474,23 @@ export async function removeReaction(
   commentId: CommentId,
   emoji: string,
   userIdentifier: string
-): Promise<Result<ReactionResult, CommentError>> {
+): Promise<ReactionResult> {
   return db.transaction(async (tx) => {
     // Verify comment exists
     const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
     if (!comment) {
-      return err(CommentError.notFound(commentId))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
 
     // Verify comment belongs to this organization (via its post's board)
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
     if (!post) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     // Check if reaction exists
@@ -520,7 +520,7 @@ export async function removeReaction(
       userIdentifier
     )
 
-    return ok({ added: false, reactions: aggregatedReactions })
+    return { added: false, reactions: aggregatedReactions }
   })
 }
 
@@ -538,23 +538,23 @@ export async function toggleReaction(
   commentId: CommentId,
   emoji: string,
   userIdentifier: string
-): Promise<Result<ReactionResult, CommentError>> {
+): Promise<ReactionResult> {
   return db.transaction(async (tx) => {
     // Verify comment exists
     const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
     if (!comment) {
-      return err(CommentError.notFound(commentId))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
 
     // Verify comment belongs to this organization (via its post's board)
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
     if (!post) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(CommentError.postNotFound(comment.postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
     }
 
     // Check if reaction already exists
@@ -594,7 +594,7 @@ export async function toggleReaction(
       userIdentifier
     )
 
-    return ok({ added, reactions: aggregatedReactions })
+    return { added, reactions: aggregatedReactions }
   })
 }
 
@@ -613,41 +613,41 @@ export async function toggleReaction(
 export async function canEditComment(
   commentId: CommentId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<CommentPermissionCheckResult, CommentError>> {
+): Promise<CommentPermissionCheckResult> {
   // Get the comment
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
   })
 
   if (!comment) {
-    return err(CommentError.notFound(commentId))
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
 
   // Check if comment is deleted
   if (comment.deletedAt) {
-    return ok({ allowed: false, reason: 'Cannot edit a deleted comment' })
+    return { allowed: false, reason: 'Cannot edit a deleted comment' }
   }
 
   // Team members (owner, admin, member) can always edit
   if (actor.role && ['admin', 'member'].includes(actor.role)) {
-    return ok({ allowed: true })
+    return { allowed: true }
   }
 
   // Must be the author
   if (comment.memberId !== actor.memberId) {
-    return ok({ allowed: false, reason: 'You can only edit your own comments' })
+    return { allowed: false, reason: 'You can only edit your own comments' }
   }
 
   // Check if any team member has replied to this comment
   const hasTeamReply = await hasTeamMemberReply(commentId)
   if (hasTeamReply) {
-    return ok({
+    return {
       allowed: false,
       reason: 'Cannot edit comments that have received team member replies',
-    })
+    }
   }
 
-  return ok({ allowed: true })
+  return { allowed: true }
 }
 
 /**
@@ -661,41 +661,41 @@ export async function canEditComment(
 export async function canDeleteComment(
   commentId: CommentId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<CommentPermissionCheckResult, CommentError>> {
+): Promise<CommentPermissionCheckResult> {
   // Get the comment
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
   })
 
   if (!comment) {
-    return err(CommentError.notFound(commentId))
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
 
   // Check if comment is already deleted
   if (comment.deletedAt) {
-    return ok({ allowed: false, reason: 'Comment has already been deleted' })
+    return { allowed: false, reason: 'Comment has already been deleted' }
   }
 
   // Team members (owner, admin, member) can always delete
   if (actor.role && ['admin', 'member'].includes(actor.role)) {
-    return ok({ allowed: true })
+    return { allowed: true }
   }
 
   // Must be the author
   if (comment.memberId !== actor.memberId) {
-    return ok({ allowed: false, reason: 'You can only delete your own comments' })
+    return { allowed: false, reason: 'You can only delete your own comments' }
   }
 
   // Check if any team member has replied to this comment
   const hasTeamReply = await hasTeamMemberReply(commentId)
   if (hasTeamReply) {
-    return ok({
+    return {
       allowed: false,
       reason: 'Cannot delete comments that have received team member replies',
-    })
+    }
   }
 
-  return ok({ allowed: true })
+  return { allowed: true }
 }
 
 /**
@@ -711,14 +711,11 @@ export async function userEditComment(
   commentId: CommentId,
   content: string,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<Comment, CommentError>> {
+): Promise<Comment> {
   // Check permission first
   const permResult = await canEditComment(commentId, actor)
-  if (!permResult.success) {
-    return err(permResult.error)
-  }
-  if (!permResult.value.allowed) {
-    return err(CommentError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
+  if (!permResult.allowed) {
+    throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
   return db.transaction(async (tx) => {
@@ -727,15 +724,15 @@ export async function userEditComment(
       where: eq(comments.id, commentId),
     })
     if (!existingComment) {
-      return err(CommentError.notFound(commentId))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
 
     // Validate input
     if (!content?.trim()) {
-      return err(CommentError.validationError('Content is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
     }
     if (content.length > 5000) {
-      return err(CommentError.validationError('Content must be 5,000 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
     }
 
     // Record edit history (always record for comments)
@@ -757,10 +754,10 @@ export async function userEditComment(
       .returning()
 
     if (!updatedComment) {
-      return err(CommentError.notFound(commentId))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
 
-    return ok(updatedComment)
+    return updatedComment
   })
 }
 
@@ -775,14 +772,11 @@ export async function userEditComment(
 export async function softDeleteComment(
   commentId: CommentId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<void, CommentError>> {
+): Promise<void> {
   // Check permission first
   const permResult = await canDeleteComment(commentId, actor)
-  if (!permResult.success) {
-    return err(permResult.error)
-  }
-  if (!permResult.value.allowed) {
-    return err(CommentError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
+  if (!permResult.allowed) {
+    throw new ForbiddenError('DELETE_NOT_ALLOWED', permResult.reason || 'Delete not allowed')
   }
 
   return db.transaction(async (tx) => {
@@ -796,9 +790,7 @@ export async function softDeleteComment(
       .returning()
 
     if (!updatedComment) {
-      return err(CommentError.notFound(commentId))
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
-
-    return ok(undefined)
   })
 }

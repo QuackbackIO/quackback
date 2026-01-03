@@ -27,8 +27,7 @@ import {
   type Post,
 } from '@quackback/db'
 import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
-import { ok, err, type Result } from '@/lib/shared'
-import { PostError } from './post.errors'
+import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/settings'
 import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
 import { buildCommentTree, type CommentTreeNode } from '@/lib/shared'
@@ -61,29 +60,29 @@ import type {
 export async function createPost(
   input: CreatePostInput,
   author: { memberId: MemberId; name: string; email: string }
-): Promise<Result<CreatePostResult, PostError>> {
+): Promise<CreatePostResult> {
   return db.transaction(async (tx) => {
     // Basic validation (also done at action layer, but enforced here for direct service calls)
     const title = input.title?.trim()
     const content = input.content?.trim()
 
     if (!title) {
-      return err(PostError.validationError('Title is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Title is required')
     }
     if (!content) {
-      return err(PostError.validationError('Content is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
     }
     if (title.length > 200) {
-      return err(PostError.validationError('Title must not exceed 200 characters'))
+      throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
     }
     if (content.length > 10000) {
-      return err(PostError.validationError('Content must not exceed 10,000 characters'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
     }
 
     // Validate board exists and belongs to this organization
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, input.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(input.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
     }
 
     // Determine statusId - either from input or use default "open" status
@@ -97,10 +96,9 @@ export async function createPost(
         .limit(1)
 
       if (!defaultStatus) {
-        return err(
-          PostError.validationError(
-            'Default "open" status not found. Please ensure post statuses are configured for this organization.'
-          )
+        throw new ValidationError(
+          'VALIDATION_ERROR',
+          'Default "open" status not found. Please ensure post statuses are configured for this organization.'
         )
       }
 
@@ -137,7 +135,7 @@ export async function createPost(
     })
 
     // Return post with board info for event building in API route
-    return ok({ ...post, boardSlug: board.slug })
+    return { ...post, boardSlug: board.slug }
   })
 }
 
@@ -159,35 +157,35 @@ export async function updatePost(
   id: PostId,
   input: UpdatePostInput,
   responder?: { memberId: MemberId; name: string }
-): Promise<Result<Post, PostError>> {
+): Promise<Post> {
   return db.transaction(async (tx) => {
     // Get existing post
     const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, id) })
     if (!existingPost) {
-      return err(PostError.notFound(id))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
     }
 
     // Verify post belongs to this organization (via its board)
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(existingPost.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${existingPost.boardId} not found`)
     }
 
     // Validate input
     if (input.title !== undefined) {
       if (!input.title.trim()) {
-        return err(PostError.validationError('Title cannot be empty'))
+        throw new ValidationError('VALIDATION_ERROR', 'Title cannot be empty')
       }
       if (input.title.length > 200) {
-        return err(PostError.validationError('Title must be 200 characters or less'))
+        throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
       }
     }
     if (input.content !== undefined) {
       if (!input.content.trim()) {
-        return err(PostError.validationError('Content cannot be empty'))
+        throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
       }
       if (input.content.length > 10000) {
-        return err(PostError.validationError('Content must be 10,000 characters or less'))
+        throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
       }
     }
 
@@ -221,7 +219,7 @@ export async function updatePost(
     // Update the post
     const [updatedPost] = await tx.update(posts).set(updateData).where(eq(posts.id, id)).returning()
     if (!updatedPost) {
-      return err(PostError.notFound(id))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
     }
 
     // Update tags if provided
@@ -234,7 +232,7 @@ export async function updatePost(
       }
     }
 
-    return ok(updatedPost)
+    return updatedPost
   })
 }
 
@@ -255,18 +253,18 @@ export async function voteOnPost(
   postId: PostId,
   userIdentifier: string,
   options?: { memberId?: MemberId; ipHash?: string }
-): Promise<Result<VoteResult, PostError>> {
+): Promise<VoteResult> {
   return db.transaction(async (tx) => {
     // Verify post exists
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!post) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Verify post belongs to this organization
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(post.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
     }
 
     // Single atomic operation: check existing vote, then insert or delete + update count
@@ -318,10 +316,10 @@ export async function voteOnPost(
       })
     }
 
-    return ok({
+    return {
       voted,
       voteCount: row?.vote_count ?? post.voteCount,
-    })
+    }
   })
 }
 
@@ -341,18 +339,18 @@ export async function voteOnPost(
 export async function changeStatus(
   postId: PostId,
   statusId: StatusId
-): Promise<Result<ChangeStatusResult, PostError>> {
+): Promise<ChangeStatusResult> {
   return db.transaction(async (tx) => {
     // Get existing post
     const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!existingPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Verify post belongs to this organization
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(existingPost.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${existingPost.boardId} not found`)
     }
 
     // Validate status exists (query the postStatuses table)
@@ -360,7 +358,7 @@ export async function changeStatus(
       where: eq(postStatuses.id, statusId),
     })
     if (!newStatus) {
-      return err(PostError.statusNotFound(statusId))
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${statusId} not found`)
     }
 
     // Get previous status name for event
@@ -381,16 +379,16 @@ export async function changeStatus(
       .where(eq(posts.id, postId))
       .returning()
     if (!updatedPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Return post with status change info for event building in API route
-    return ok({
+    return {
       ...updatedPost,
       boardSlug: board.slug,
       previousStatus: previousStatusName,
       newStatus: newStatus.name,
-    })
+    }
   })
 }
 
@@ -400,20 +398,20 @@ export async function changeStatus(
  * @param postId - Post ID to fetch
  * @returns Result containing the post with details or an error
  */
-export async function getPostById(postId: PostId): Promise<Result<Post, PostError>> {
+export async function getPostById(postId: PostId): Promise<Post> {
   return db.transaction(async (tx) => {
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!post) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Verify post belongs to this organization
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(post.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
     }
 
-    return ok(post)
+    return post
   })
 }
 
@@ -423,20 +421,18 @@ export async function getPostById(postId: PostId): Promise<Result<Post, PostErro
  * @param postId - Post ID to fetch
  * @returns Result containing the post with details or an error
  */
-export async function getPostWithDetails(
-  postId: PostId
-): Promise<Result<PostWithDetails, PostError>> {
+export async function getPostWithDetails(postId: PostId): Promise<PostWithDetails> {
   return db.transaction(async (tx) => {
     // Get the post
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!post) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Get the board and verify it belongs to this organization
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(post.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
     }
 
     // Get tags via postTags junction table
@@ -469,7 +465,7 @@ export async function getPostWithDetails(
       commentCount,
     }
 
-    return ok(postWithDetails)
+    return postWithDetails
   })
 }
 
@@ -483,17 +479,17 @@ export async function getPostWithDetails(
 export async function getCommentsWithReplies(
   postId: PostId,
   userIdentifier: string
-): Promise<Result<CommentTreeNode[], PostError>> {
+): Promise<CommentTreeNode[]> {
   return db.transaction(async (tx) => {
     // Verify post exists and belongs to organization
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!post) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
     if (!board) {
-      return err(PostError.boardNotFound(post.boardId))
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
     }
 
     // Get all comments with reactions
@@ -508,7 +504,7 @@ export async function getCommentsWithReplies(
     // Build nested tree using the utility function from @quackback/db
     const commentTree = buildCommentTree(allComments, userIdentifier)
 
-    return ok(commentTree)
+    return commentTree
   })
 }
 
@@ -518,9 +514,7 @@ export async function getCommentsWithReplies(
  * @param params - Query parameters including filters, sort, and pagination
  * @returns Result containing inbox post list or an error
  */
-export async function listInboxPosts(
-  params: InboxPostListParams
-): Promise<Result<InboxPostListResult, PostError>> {
+export async function listInboxPosts(params: InboxPostListParams): Promise<InboxPostListResult> {
   return db.transaction(async (tx) => {
     const {
       boardIds,
@@ -550,7 +544,7 @@ export async function listInboxPosts(
         ).map((b) => b.id)
 
     if (allBoardIds.length === 0) {
-      return ok({ items: [], total: 0, hasMore: false })
+      return { items: [], total: 0, hasMore: false }
     }
 
     conditions.push(inArray(posts.boardId, allBoardIds))
@@ -606,7 +600,7 @@ export async function listInboxPosts(
       postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
 
       if (postIdsWithTags.length === 0) {
-        return ok({ items: [], total: 0, hasMore: false })
+        return { items: [], total: 0, hasMore: false }
       }
       conditions.push(inArray(posts.id, postIdsWithTags))
     }
@@ -672,11 +666,11 @@ export async function listInboxPosts(
 
     const total = Number(countResult[0].count)
 
-    return ok({
+    return {
       items,
       total,
       hasMore: page * limit < total,
-    })
+    }
   })
 }
 
@@ -686,9 +680,7 @@ export async function listInboxPosts(
  * @param boardId - Optional board ID to filter by
  * @returns Result containing posts for export or an error
  */
-export async function listPostsForExport(
-  boardId: BoardId | undefined
-): Promise<Result<PostForExport[], PostError>> {
+export async function listPostsForExport(boardId: BoardId | undefined): Promise<PostForExport[]> {
   return db.transaction(async (tx) => {
     // Build conditions
     const conditions = []
@@ -703,7 +695,7 @@ export async function listPostsForExport(
         ).map((b) => b.id)
 
     if (allBoardIds.length === 0) {
-      return ok([])
+      return []
     }
 
     conditions.push(inArray(posts.boardId, allBoardIds))
@@ -763,7 +755,7 @@ export async function listPostsForExport(
       statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
     }))
 
-    return ok(exportPosts)
+    return exportPosts
   })
 }
 
@@ -777,13 +769,13 @@ export async function listPostsForExport(
  * @param postId - Post ID to check
  * @param actor - Actor information (memberId, role)
  * @param portalConfig - Optional portal config (will fetch if not provided)
- * @returns Result containing permission check result
+ * @returns Permission check result
  */
 export async function canEditPost(
   postId: PostId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
-): Promise<Result<PermissionCheckResult, PostError>> {
+): Promise<PermissionCheckResult> {
   const { db } = await import('@quackback/db')
 
   // Get the post
@@ -792,22 +784,22 @@ export async function canEditPost(
   })
 
   if (!post) {
-    return err(PostError.notFound(postId))
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
   // Check if post is deleted
   if (post.deletedAt) {
-    return ok({ allowed: false, reason: 'Cannot edit a deleted post' })
+    return { allowed: false, reason: 'Cannot edit a deleted post' }
   }
 
   // Team members (admin, member) can always edit
   if (['admin', 'member'].includes(actor.role)) {
-    return ok({ allowed: true })
+    return { allowed: true }
   }
 
   // Must be the author
   if (post.memberId !== actor.memberId) {
-    return ok({ allowed: false, reason: 'You can only edit your own posts' })
+    return { allowed: false, reason: 'You can only edit your own posts' }
   }
 
   // Get portal config if not provided
@@ -816,25 +808,25 @@ export async function canEditPost(
   // Check if status is default (Open)
   const isDefault = await isDefaultStatus(post.statusId)
   if (!isDefault && !config.features.allowEditAfterEngagement) {
-    return ok({ allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' })
+    return { allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' }
   }
 
   // Check for engagement (votes, comments from others)
   if (!config.features.allowEditAfterEngagement) {
     if (post.voteCount > 0) {
-      return ok({ allowed: false, reason: 'Cannot edit posts that have received votes' })
+      return { allowed: false, reason: 'Cannot edit posts that have received votes' }
     }
 
     const hasOtherComments = await hasCommentsFromOthers(postId, actor.memberId)
     if (hasOtherComments) {
-      return ok({
+      return {
         allowed: false,
         reason: 'Cannot edit posts that have comments from other users',
-      })
+      }
     }
   }
 
-  return ok({ allowed: true })
+  return { allowed: true }
 }
 
 /**
@@ -843,13 +835,13 @@ export async function canEditPost(
  * @param postId - Post ID to check
  * @param actor - Actor information (memberId, role)
  * @param portalConfig - Optional portal config (will fetch if not provided)
- * @returns Result containing permission check result
+ * @returns Permission check result
  */
 export async function canDeletePost(
   postId: PostId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
-): Promise<Result<PermissionCheckResult, PostError>> {
+): Promise<PermissionCheckResult> {
   const { db } = await import('@quackback/db')
 
   // Get the post
@@ -858,22 +850,22 @@ export async function canDeletePost(
   })
 
   if (!post) {
-    return err(PostError.notFound(postId))
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
   // Check if post is already deleted
   if (post.deletedAt) {
-    return ok({ allowed: false, reason: 'Post has already been deleted' })
+    return { allowed: false, reason: 'Post has already been deleted' }
   }
 
   // Team members (admin, member) can always delete
   if (['admin', 'member'].includes(actor.role)) {
-    return ok({ allowed: true })
+    return { allowed: true }
   }
 
   // Must be the author
   if (post.memberId !== actor.memberId) {
-    return ok({ allowed: false, reason: 'You can only delete your own posts' })
+    return { allowed: false, reason: 'You can only delete your own posts' }
   }
 
   // Get portal config if not provided
@@ -882,26 +874,26 @@ export async function canDeletePost(
   // Check if status is default (Open)
   const isDefault = await isDefaultStatus(post.statusId)
   if (!isDefault && !config.features.allowDeleteAfterEngagement) {
-    return ok({
+    return {
       allowed: false,
       reason: 'Cannot delete posts that have been reviewed by the team',
-    })
+    }
   }
 
   // Check for engagement (votes, comments)
   if (!config.features.allowDeleteAfterEngagement) {
     if (post.voteCount > 0) {
-      return ok({ allowed: false, reason: 'Cannot delete posts that have received votes' })
+      return { allowed: false, reason: 'Cannot delete posts that have received votes' }
     }
 
     // Check for any comments (not just from others)
     const commentCount = await getCommentCount(postId)
     if (commentCount > 0) {
-      return ok({ allowed: false, reason: 'Cannot delete posts that have comments' })
+      return { allowed: false, reason: 'Cannot delete posts that have comments' }
     }
   }
 
-  return ok({ allowed: true })
+  return { allowed: true }
 }
 
 /**
@@ -911,41 +903,38 @@ export async function canDeletePost(
  * @param postId - Post ID to edit
  * @param input - Edit data (title, content, contentJson)
  * @param actor - Actor information (memberId, role)
- * @returns Result containing updated post or error
+ * @returns Updated post
  */
 export async function userEditPost(
   postId: PostId,
   input: UserEditPostInput,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<Post, PostError>> {
-  // Check permission first
+): Promise<Post> {
+  // Check permission first (throws NotFoundError if post doesn't exist)
   const permResult = await canEditPost(postId, actor)
-  if (!permResult.success) {
-    return err(permResult.error)
-  }
-  if (!permResult.value.allowed) {
-    return err(PostError.editNotAllowed(permResult.value.reason || 'Edit not allowed'))
+  if (!permResult.allowed) {
+    throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
   return db.transaction(async (tx) => {
     // Get the existing post
     const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!existingPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     // Validate input
     if (!input.title?.trim()) {
-      return err(PostError.validationError('Title is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Title is required')
     }
     if (!input.content?.trim()) {
-      return err(PostError.validationError('Content is required'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
     }
     if (input.title.length > 200) {
-      return err(PostError.validationError('Title must be 200 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
     }
     if (input.content.length > 10000) {
-      return err(PostError.validationError('Content must be 10,000 characters or less'))
+      throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
     }
 
     // Get portal config to check if edit history is enabled
@@ -975,10 +964,10 @@ export async function userEditPost(
       .returning()
 
     if (!updatedPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
-    return ok(updatedPost)
+    return updatedPost
   })
 }
 
@@ -988,19 +977,15 @@ export async function userEditPost(
  *
  * @param postId - Post ID to delete
  * @param actor - Actor information (memberId, role)
- * @returns Result indicating success or error
  */
 export async function softDeletePost(
   postId: PostId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
-): Promise<Result<void, PostError>> {
-  // Check permission first
+): Promise<void> {
+  // Check permission first (throws NotFoundError if post doesn't exist)
   const permResult = await canDeletePost(postId, actor)
-  if (!permResult.success) {
-    return err(permResult.error)
-  }
-  if (!permResult.value.allowed) {
-    return err(PostError.deleteNotAllowed(permResult.value.reason || 'Delete not allowed'))
+  if (!permResult.allowed) {
+    throw new ForbiddenError('DELETE_NOT_ALLOWED', permResult.reason || 'Delete not allowed')
   }
 
   return db.transaction(async (tx) => {
@@ -1015,10 +1000,8 @@ export async function softDeletePost(
       .returning()
 
     if (!updatedPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
-
-    return ok(undefined)
   })
 }
 
@@ -1028,18 +1011,18 @@ export async function softDeletePost(
  * Note: Authorization is handled at the action layer before calling this function.
  *
  * @param postId - Post ID to restore
- * @returns Result containing restored post or error
+ * @returns Restored post
  */
-export async function restorePost(postId: PostId): Promise<Result<Post, PostError>> {
+export async function restorePost(postId: PostId): Promise<Post> {
   return db.transaction(async (tx) => {
     // Get the post
     const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
     if (!existingPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
     if (!existingPost.deletedAt) {
-      return err(PostError.validationError('Post is not deleted'))
+      throw new ValidationError('VALIDATION_ERROR', 'Post is not deleted')
     }
 
     // Clear deletedAt and deletedByMemberId
@@ -1053,10 +1036,10 @@ export async function restorePost(postId: PostId): Promise<Result<Post, PostErro
       .returning()
 
     if (!restoredPost) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
 
-    return ok(restoredPost)
+    return restoredPost
   })
 }
 
@@ -1067,16 +1050,13 @@ export async function restorePost(postId: PostId): Promise<Result<Post, PostErro
  * Note: Authorization is handled at the action layer before calling this function.
  *
  * @param postId - Post ID to permanently delete
- * @returns Result indicating success or error
  */
-export async function permanentDeletePost(postId: PostId): Promise<Result<void, PostError>> {
+export async function permanentDeletePost(postId: PostId): Promise<void> {
   return db.transaction(async (tx) => {
     const [deleted] = await tx.delete(posts).where(eq(posts.id, postId)).returning()
     if (!deleted) {
-      return err(PostError.notFound(postId))
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
     }
-
-    return ok(undefined)
   })
 }
 
