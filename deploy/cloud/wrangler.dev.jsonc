@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "quackback-web-dev",
+  "account_id": "67cf7d5c8b797bfd5cbd417b233cc0d0",
+  "main": "../../apps/web/dist/server/server.js",
+  "compatibility_date": "2025-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "../../apps/web/dist/client"
+  },
+  "routes": [
+    {
+      "pattern": "main.dev.quackback.io/*",
+      "zone_name": "quackback.io"
+    },
+    {
+      "pattern": "storefeeder.dev.quackback.io/*",
+      "zone_name": "quackback.io"
+    }
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "56c4bf10a30e4256933db862515204a0",
+      "localConnectionString": "postgresql://postgres:password@localhost:5432/quackback"
+    }
+  ],
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "quackback-web-dev"
+    }
+  ],
+  "vars": {
+    "ROOT_URL": "https://main.dev.quackback.io",
+    "BETTER_AUTH_URL": "https://main.dev.quackback.io",
+    "EMAIL_FROM": "Quackback Dev <dev@quackback.io>",
+    "NODE_ENV": "development",
+    "EDITION": "cloud",
+    "TENANT_API_URL": "https://quackback.io"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  }
+}

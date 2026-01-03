@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import { nitro } from 'nitro/vite'
 import viteReact from '@vitejs/plugin-react'
@@ -6,12 +6,16 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   // Build-time edition configuration
   const EDITION = env.EDITION || 'self-hosted'
   const INCLUDE_EE = env.INCLUDE_EE === 'true'
+
+  // Deployment target: 'bun' (self-hosted) or 'cloudflare' (cloud)
+  const DEPLOY_TARGET = env.DEPLOY_TARGET || 'bun'
+  const isCloudflare = DEPLOY_TARGET === 'cloudflare'
 
   // EE package aliases - point to stubs when EE not included
   const eeAliases = !INCLUDE_EE
@@ -21,6 +25,13 @@ export default defineConfig(({ mode }) => {
         '@quackback/ee-audit': path.resolve(__dirname, 'src/lib/ee/stubs/audit.ts'),
       }
     : {}
+
+  // Conditionally load Cloudflare plugin for cloud deployments
+  const cloudflarePlugins: PluginOption[] = []
+  if (isCloudflare) {
+    const { cloudflare } = await import('@cloudflare/vite-plugin')
+    cloudflarePlugins.push(cloudflare())
+  }
 
   return {
     server: {
@@ -45,7 +56,9 @@ export default defineConfig(({ mode }) => {
           routesDirectory: 'routes',
         },
       }),
-      nitro({ preset: 'bun' }),
+      // For Cloudflare, the cloudflare plugin handles everything
+      // For self-hosted, use nitro with bun preset
+      ...(isCloudflare ? cloudflarePlugins : [nitro({ preset: 'bun' })]),
       viteReact(),
     ],
   }

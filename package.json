@@ -21,6 +21,8 @@
     "build:community": "EDITION=self-hosted INCLUDE_EE=false bun run build",
     "build:enterprise": "EDITION=self-hosted INCLUDE_EE=true bun run build",
     "build:cloud": "EDITION=cloud INCLUDE_EE=true bun run build",
+    "deploy:cloud:dev": "EDITION=cloud INCLUDE_EE=true bun run --filter @quackback/web deploy:dev",
+    "deploy:cloud:production": "EDITION=cloud INCLUDE_EE=true bun run --filter @quackback/web deploy:production",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest",
     "test:e2e": "bun run --filter @quackback/web test:e2e",

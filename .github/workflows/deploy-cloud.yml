@@ -1,0 +1,96 @@
+name: Deploy Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+
+env:
+  # Build-time configuration for cloud edition
+  EDITION: cloud
+  INCLUDE_EE: true
+  DEPLOY_TARGET: cloudflare
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment || 'development' }}
+    # Only deploy from the official Quackback repository
+    if: github.repository == 'quackbackhq/quackback'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'development' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build for Cloudflare
+        run: bun run build:cf
+        working-directory: apps/web
+        env:
+          EDITION: ${{ env.EDITION }}
+          INCLUDE_EE: ${{ env.INCLUDE_EE }}
+          DEPLOY_TARGET: ${{ env.DEPLOY_TARGET }}
+          # Auth
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          # Multi-tenant
+          TENANT_API_URL: ${{ secrets.TENANT_API_URL }}
+          TENANT_API_SECRET: ${{ secrets.TENANT_API_SECRET }}
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/web
+          command: deploy -c ../../deploy/cloud/wrangler.${{ inputs.environment || 'development' }}.jsonc
+        env:
+          # Secrets are injected via Cloudflare dashboard, not here
+          # This just deploys the worker code
+
+  notify:
+    name: Deployment Summary
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Cloud Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment || 'development' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ needs.deploy.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ inputs.environment || 'development' }}" == "production" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Production URL:** https://app.quackback.io" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Development URL:** https://main.dev.quackback.io" >> $GITHUB_STEP_SUMMARY
+          fi

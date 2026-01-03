@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "fuser -k 3000/tcp 2>/dev/null; bun --env-file=../../.env --bun vite dev",
     "build": "bun --env-file=../../.env --bun vite build",
+    "build:cf": "DEPLOY_TARGET=cloudflare bun --env-file=../../.env --bun vite build",
     "start": "bun --env-file=../../.env .output/server/index.mjs",
+    "deploy:dev": "bun run build:cf && wrangler deploy -c ../../deploy/cloud/wrangler.dev.jsonc",
+    "deploy:production": "bun run build:cf && wrangler deploy -c ../../deploy/cloud/wrangler.production.jsonc",
     "lint": "eslint .",
     "generate:routes": "bunx @tanstack/router-cli generate",
     "typecheck": "bun run generate:routes && tsc --noEmit",
@@ -87,6 +90,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^7.3.0",
-    "vite-tsconfig-paths": "^6.0.3"
+    "vite-tsconfig-paths": "^6.0.3",
+    "wrangler": "^4.18.0",
+    "@cloudflare/vite-plugin": "^1.0.0"
   }
 }
