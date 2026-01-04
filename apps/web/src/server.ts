@@ -11,6 +11,9 @@ import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 import { isMultiTenant } from '@/lib/features'
 import { resolveTenantFromDomain, type TenantContext, tenantStorage } from '@/lib/tenant'
 
+// Stub DO class for Cloudflare migration - remove after delete-class migration completes
+export { IntegrationStateDO } from '@/lib/stubs/integration-state-do'
+
 // Type-safe request context (TanStack Start module augmentation)
 declare module '@tanstack/react-start' {
   interface Register {
