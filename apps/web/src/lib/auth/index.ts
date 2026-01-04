@@ -1,9 +1,19 @@
-import { betterAuth } from 'better-auth'
+import { betterAuth, type BetterAuthPlugin } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { emailOTP } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
-import { trustLogin } from './plugins/trust-login'
+
+// Build-time constants (defined in vite.config.ts)
+declare const __EDITION__: 'cloud' | 'self-hosted'
+
+// Conditionally import session-transfer only for cloud edition
+// This allows tree-shaking for self-hosted builds
+const getSessionTransferPlugin = async (): Promise<BetterAuthPlugin | null> => {
+  if (__EDITION__ !== 'cloud') return null
+  const { sessionTransfer } = await import('./plugins/session-transfer')
+  return sessionTransfer()
+}
 
 /**
  * Build trusted origins for CSRF protection.
@@ -48,6 +58,9 @@ async function createAuth() {
     invitation: invitationTable,
   } = await import('@/lib/db')
   const { sendSigninCodeEmail } = await import('@quackback/email')
+
+  // Get cloud-only plugins
+  const sessionTransferPlugin = await getSessionTransferPlugin()
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -118,8 +131,8 @@ async function createAuth() {
         expiresIn: 600, // 10 minutes
       }),
 
-      // Trust-login for cross-domain session transfer from website
-      trustLogin(),
+      // Session transfer for cross-domain handoff from website (cloud only)
+      ...(sessionTransferPlugin ? [sessionTransferPlugin] : []),
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),

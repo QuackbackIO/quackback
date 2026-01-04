@@ -1,16 +1,19 @@
 /**
- * Trust Login Plugin for Better-Auth
+ * Session Transfer Plugin for Better-Auth
  *
- * Enables cross-domain session transfer from the website to workspace apps.
- * The website creates a signed JWT containing user info, and this plugin
- * verifies it and creates a local session.
+ * Enables cross-domain session transfer from quackback.io to workspace apps.
+ * After workspace provisioning, the website creates a signed JWT containing
+ * user info and redirects to the new workspace. This plugin verifies the
+ * JWT and creates a local session, completing the handoff.
  *
  * Flow:
  * 1. Website provisions workspace and creates signed JWT
- * 2. Website redirects to: /api/auth/trust-login?token={JWT}
+ * 2. Website redirects to: /api/auth/session-transfer?token={JWT}
  * 3. This plugin verifies the JWT signature
  * 4. Creates/finds user and creates session
  * 5. Redirects to /admin with session cookie
+ *
+ * Cloud edition only - not included in self-hosted builds.
  */
 
 import { createAuthEndpoint } from 'better-auth/api'
@@ -42,12 +45,12 @@ const JwtPayloadSchema = z.object({
 
 type JwtPayload = z.infer<typeof JwtPayloadSchema>
 
-export const trustLogin = () => {
+export const sessionTransfer = () => {
   return {
-    id: 'trust-login',
+    id: 'session-transfer',
     endpoints: {
-      trustLogin: createAuthEndpoint(
-        '/trust-login',
+      sessionTransfer: createAuthEndpoint(
+        '/session-transfer',
         {
           method: 'GET',
           query: z.object({
@@ -58,10 +61,10 @@ export const trustLogin = () => {
           const { token } = ctx.query
           const { TRANSFER_TOKEN_SECRET: transferSecret, NODE_ENV } = getEnv()
 
-          // Check if trust-login is enabled (requires shared secret)
+          // Check if session-transfer is enabled (requires shared secret)
           if (!transferSecret) {
-            console.warn('Trust-login attempted but TRANSFER_TOKEN_SECRET not configured')
-            return ctx.redirect('/admin/login?error=trust_login_not_configured')
+            console.warn('Session transfer attempted but TRANSFER_TOKEN_SECRET not configured')
+            return ctx.redirect('/admin/login?error=session_transfer_not_configured')
           }
 
           const secret = new TextEncoder().encode(transferSecret)
@@ -72,7 +75,7 @@ export const trustLogin = () => {
             const { payload: rawPayload } = await jwtVerify(token, secret)
             payload = JwtPayloadSchema.parse(rawPayload)
           } catch (err) {
-            console.error('Trust-login JWT verification failed:', err)
+            console.error('Session transfer JWT verification failed:', err)
             if (err instanceof Error && err.message.includes('expired')) {
               return ctx.redirect('/admin/login?error=token_expired')
             }
