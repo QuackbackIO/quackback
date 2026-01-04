@@ -3,6 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { emailOTP } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
+import { trustLogin } from './plugins/trust-login'
 
 /**
  * Build trusted origins for CSRF protection.
@@ -116,6 +117,9 @@ async function createAuth() {
         otpLength: 6,
         expiresIn: 600, // 10 minutes
       }),
+
+      // Trust-login for cross-domain session transfer from website
+      trustLogin(),
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),

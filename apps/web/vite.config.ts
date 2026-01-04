@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv, type PluginOption } from 'vite'
+import { defineConfig, loadEnv, type PluginOption, type UserConfig } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import { nitro } from 'nitro/vite'
 import viteReact from '@vitejs/plugin-react'
@@ -6,7 +6,7 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-export default defineConfig(async ({ mode }) => {
+export default defineConfig(async ({ mode }): Promise<UserConfig> => {
   const env = loadEnv(mode, process.cwd(), '')
 
   // Build-time edition configuration
@@ -18,7 +18,7 @@ export default defineConfig(async ({ mode }) => {
   const isCloudflare = DEPLOY_TARGET === 'cloudflare'
 
   // EE package aliases - point to stubs when EE not included
-  const eeAliases = !INCLUDE_EE
+  const eeAliases: Record<string, string> = !INCLUDE_EE
     ? {
         '@quackback/ee-sso': path.resolve(__dirname, 'src/lib/ee/stubs/sso.ts'),
         '@quackback/ee-scim': path.resolve(__dirname, 'src/lib/ee/stubs/scim.ts'),
