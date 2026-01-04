@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["dom", "dom.iterable", "ES2022"],
+    "types": ["node"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -14,22 +15,14 @@
     "jsx": "react-jsx",
     "incremental": true,
     "composite": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "resolvePackageJsonExports": true,
+    "resolvePackageJsonImports": true,
+    "customConditions": ["import", "module"]
   },
-  "include": [
-    "next-env.d.ts",
-    "worker-configuration.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": ["node_modules"]
+  "include": ["worker-configuration.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist", ".tanstack", "build"]
 }

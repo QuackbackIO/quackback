@@ -4,8 +4,7 @@ export {
   type DomainEventType,
   type IntegrationContext,
   type ProcessResult,
+  type PostCreatedPayload,
+  type PostStatusChangedPayload,
+  type CommentCreatedPayload,
 } from './integration'
-
-export { CircuitBreaker } from './circuit-breaker'
-
-export { isAlreadyProcessed, markAsProcessed, getProcessedResult } from './idempotency'

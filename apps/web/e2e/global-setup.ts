@@ -41,8 +41,8 @@ setup('authenticate as admin', async ({ page }) => {
   })
   expect(verifyResponse.ok()).toBeTruthy()
 
-  // Step 4: Ensure test user has owner role (user now exists after OTP verification)
-  ensureTestUserHasRole(ADMIN_EMAIL, 'owner')
+  // Step 4: Ensure test user has admin role (user now exists after OTP verification)
+  ensureTestUserHasRole(ADMIN_EMAIL, 'admin')
 
   // Step 5: Navigate to admin page
   // Session cookie is now set by Better-auth in the page context
