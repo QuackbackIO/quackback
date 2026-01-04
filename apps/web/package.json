@@ -77,6 +77,8 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.0.0",
+    "@cloudflare/workers-types": "^4.20260103.0",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/vite": "^4.1.18",
     "@types/bcryptjs": "^3.0.0",
@@ -91,7 +93,6 @@
     "typescript": "^5",
     "vite": "^7.3.0",
     "vite-tsconfig-paths": "^6.0.3",
-    "wrangler": "^4.18.0",
-    "@cloudflare/vite-plugin": "^1.0.0"
+    "wrangler": "^4.18.0"
   }
 }

@@ -6,6 +6,17 @@
  */
 import { getTenantDb } from './db-cache'
 import type { TenantContext } from './types'
+import { env as cfEnv } from 'cloudflare:workers'
+
+type CfEnv = { TENANT_API_URL?: string; TENANT_API_SECRET?: string }
+
+function getTenantApiConfig() {
+  const env = cfEnv as CfEnv | undefined
+  return {
+    url: env?.TENANT_API_URL || process.env.TENANT_API_URL,
+    secret: env?.TENANT_API_SECRET || process.env.TENANT_API_SECRET,
+  }
+}
 
 // Cache resolved tenants for 5 minutes
 const tenantCache = new Map<string, { data: TenantApiResponse | null; expiresAt: number }>()
@@ -25,8 +36,7 @@ interface TenantApiResponse {
  * @returns TenantContext if domain maps to a valid workspace, null otherwise
  */
 export async function resolveTenantFromDomain(request: Request): Promise<TenantContext | null> {
-  const tenantApiUrl = process.env.TENANT_API_URL
-  const tenantApiSecret = process.env.TENANT_API_SECRET
+  const { url: tenantApiUrl, secret: tenantApiSecret } = getTenantApiConfig()
 
   if (!tenantApiUrl || !tenantApiSecret) {
     console.error('Tenant API not configured: missing TENANT_API_URL or TENANT_API_SECRET')
