@@ -19,6 +19,17 @@ import { jwtVerify } from 'jose'
 import { z } from 'zod'
 import crypto from 'crypto'
 import { generateId } from '@quackback/ids'
+import { env as cfEnv } from 'cloudflare:workers'
+
+type CfEnv = { TRANSFER_TOKEN_SECRET?: string; NODE_ENV?: string }
+
+function getEnv() {
+  const env = cfEnv as CfEnv | undefined
+  return {
+    TRANSFER_TOKEN_SECRET: env?.TRANSFER_TOKEN_SECRET || process.env.TRANSFER_TOKEN_SECRET,
+    NODE_ENV: env?.NODE_ENV || process.env.NODE_ENV,
+  }
+}
 
 // JWT payload schema
 const JwtPayloadSchema = z.object({
@@ -45,7 +56,7 @@ export const trustLogin = () => {
         },
         async (ctx) => {
           const { token } = ctx.query
-          const transferSecret = process.env.TRANSFER_TOKEN_SECRET
+          const { TRANSFER_TOKEN_SECRET: transferSecret, NODE_ENV } = getEnv()
 
           // Check if trust-login is enabled (requires shared secret)
           if (!transferSecret) {
@@ -118,7 +129,7 @@ export const trustLogin = () => {
           // 4. Set session cookie
           ctx.setCookie('better-auth.session_token', sessionToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: NODE_ENV === 'production',
             sameSite: 'lax',
             maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
             path: '/',

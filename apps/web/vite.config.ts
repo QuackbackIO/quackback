@@ -47,6 +47,12 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => {
         ...eeAliases,
       },
     },
+    build: {
+      rollupOptions: {
+        // cloudflare:workers is a runtime module provided by Cloudflare Workers
+        external: isCloudflare ? ['cloudflare:workers'] : [],
+      },
+    },
     plugins: [
       tailwindcss(),
       tsconfigPaths(),
