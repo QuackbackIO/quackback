@@ -37,7 +37,7 @@
     "EMAIL_FROM": "Quackback Dev <dev@quackback.io>",
     "NODE_ENV": "development",
     "EDITION": "cloud",
-    "TENANT_API_URL": "https://quackback.io"
+    "TENANT_API_URL": "https://dev.quackback.io"
   },
   "observability": {
     "enabled": true,
