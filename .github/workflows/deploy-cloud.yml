@@ -8,11 +8,11 @@ on:
       environment:
         description: 'Environment to deploy'
         required: true
-        default: 'development'
+        default: 'cloud-development'
         type: choice
         options:
-          - development
-          - production
+          - cloud-development
+          - cloud-production
 
 env:
   # Build-time configuration for cloud edition
@@ -22,11 +22,11 @@ env:
 
 jobs:
   deploy:
-    name: Deploy to ${{ inputs.environment || 'development' }}
+    name: Deploy to ${{ inputs.environment || 'cloud-development' }}
     # Only deploy from the official Quackback repository
     if: github.repository == 'quackbackhq/quackback'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'development' }}
+    environment: ${{ inputs.environment || 'cloud-development' }}
 
     steps:
       - name: Checkout
@@ -66,7 +66,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/web
-          command: deploy -c ../../deploy/cloud/wrangler.${{ inputs.environment || 'development' }}.jsonc
+          # Map environment names to wrangler config files
+          command: deploy -c ../../deploy/cloud/wrangler.${{ (inputs.environment || 'cloud-development') == 'cloud-production' && 'production' || 'dev' }}.jsonc
         env:
           # Secrets are injected via Cloudflare dashboard, not here
           # This just deploys the worker code
@@ -83,11 +84,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | ${{ inputs.environment || 'development' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment || 'cloud-development' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | ${{ needs.deploy.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ inputs.environment || 'development' }}" == "production" ]]; then
+          if [[ "${{ inputs.environment || 'cloud-development' }}" == "cloud-production" ]]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Production URL:** https://app.quackback.io" >> $GITHUB_STEP_SUMMARY
           else
