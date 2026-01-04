@@ -32,7 +32,8 @@
     "BETTER_AUTH_URL": "https://app.quackback.io",
     "EMAIL_FROM": "Quackback <hello@quackback.io>",
     "NODE_ENV": "production",
-    "EDITION": "cloud"
+    "EDITION": "cloud",
+    "TENANT_API_URL": "https://quackback.io"
   },
   "observability": {
     "enabled": true

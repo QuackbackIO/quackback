@@ -55,11 +55,6 @@ jobs:
           EDITION: ${{ env.EDITION }}
           INCLUDE_EE: ${{ env.INCLUDE_EE }}
           DEPLOY_TARGET: ${{ env.DEPLOY_TARGET }}
-          # Auth
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          # Multi-tenant
-          TENANT_API_URL: ${{ secrets.TENANT_API_URL }}
-          TENANT_API_SECRET: ${{ secrets.TENANT_API_SECRET }}
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
