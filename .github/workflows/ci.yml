@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
   pull_request:
-    branches: [master]
+    branches: [master, main]
 
 env:
   # Database
@@ -126,6 +126,8 @@ jobs:
 
   e2e-setup:
     name: E2E Setup (Seed DB)
+    # Only run E2E on push to main/master, not on PRs
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       cache-hit: ${{ steps.db-cache.outputs.cache-hit }}
@@ -195,6 +197,8 @@ jobs:
 
   e2e-tests:
     name: E2E Tests (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+    # Only run E2E on push to main/master, not on PRs
+    if: github.event_name == 'push'
     needs: [e2e-setup]
     runs-on: ubuntu-latest
     strategy:
@@ -281,7 +285,8 @@ jobs:
 
   merge-e2e-reports:
     name: Merge E2E Reports
-    if: ${{ !cancelled() }}
+    # Only run E2E on push to main/master, not on PRs
+    if: github.event_name == 'push' && !cancelled()
     needs: [e2e-tests]
     runs-on: ubuntu-latest
     steps:
@@ -340,17 +345,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Cache Next.js build
+      - name: Cache Vite build
         uses: actions/cache@v4
         with:
-          path: apps/web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx') }}
+          path: apps/web/node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx') }}
           restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-
-            nextjs-${{ runner.os }}-
+            vite-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}-
+            vite-${{ runner.os }}-
 
+      # Build community edition (default) - validates core build works
       - name: Build application
         run: bun run build
         env:
-          # Skip database connection during build
           SKIP_ENV_VALIDATION: true

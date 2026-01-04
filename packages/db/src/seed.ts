@@ -253,7 +253,7 @@ async function seed() {
   await db.insert(member).values({
     id: demoMemberId,
     userId: demoUserId,
-    role: 'owner',
+    role: 'admin',
     createdAt: new Date(),
   })
 

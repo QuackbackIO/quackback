@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+
+# Build outputs
+.output
+dist
+build
+.vinxi
+
+# TanStack Router
+.tanstack
+routeTree.gen.ts
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+.cache

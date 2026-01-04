@@ -79,16 +79,14 @@ async function reset() {
 
   // Force remove containers if they still exist
   await $`docker rm -f quackback-db`.quiet().nothrow()
-  await $`docker rm -f quackback-dragonfly`.quiet().nothrow()
 
   // Remove volumes (Docker prefixes with project directory name)
   console.log('Removing volumes...')
   await $`docker volume rm quackback_postgres_data`.quiet().nothrow()
-  await $`docker volume rm quackback_dragonfly_data`.quiet().nothrow()
 
   // Recreate containers
   console.log('Starting fresh containers...')
-  await $`docker compose up -d postgres dragonfly`
+  await $`docker compose up -d postgres`
 
   // Give containers a moment to initialize
   console.log('Waiting for containers to initialize...')
@@ -122,23 +120,6 @@ async function reset() {
   } else {
     console.log('✓ PostgreSQL is ready')
   }
-
-  // Wait for dragonfly container to be running
-  if (!(await waitForContainer('quackback-dragonfly', 30))) {
-    console.error('\n❌ Dragonfly container failed to start')
-    console.error('Check container logs: docker compose logs dragonfly')
-    process.exit(1)
-  }
-
-  // Wait for dragonfly to be healthy
-  const dragonflyHealthy = await waitForHealthy('quackback-dragonfly', 60)
-
-  if (!dragonflyHealthy) {
-    console.error('\n❌ Dragonfly did not become healthy in time')
-    console.error('Check container logs: docker compose logs dragonfly')
-    process.exit(1)
-  }
-  console.log('✓ Dragonfly is ready')
 
   console.log('\n✅ Reset complete!')
   console.log('')

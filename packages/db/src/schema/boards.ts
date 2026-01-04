@@ -19,7 +19,7 @@ export const boards = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     isPublic: boolean('is_public').default(true).notNull(),
-    settings: jsonb('settings').default({}).notNull(),
+    settings: jsonb('settings').$type<Record<string, any>>().default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

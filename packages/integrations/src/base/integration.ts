@@ -2,7 +2,6 @@
  * Base class for all integrations.
  * Provides common utilities and defines the interface for integration processors.
  */
-import type { Redis } from 'ioredis'
 
 export type DomainEventType =
   | 'post.created'
@@ -27,8 +26,43 @@ export interface IntegrationContext {
   integrationId: string
   accessToken: string
   config: Record<string, unknown>
-  /** Redis client (optional - not available in Cloudflare Workers) */
-  redis?: Redis
+}
+
+/**
+ * Event payload types for integration processing
+ */
+export interface PostCreatedPayload {
+  post: {
+    id: string
+    title: string
+    content: string
+    boardId: string
+    boardSlug: string
+    authorEmail?: string
+    voteCount: number
+  }
+}
+
+export interface PostStatusChangedPayload {
+  post: {
+    id: string
+    title: string
+    boardSlug: string
+  }
+  previousStatus: string
+  newStatus: string
+}
+
+export interface CommentCreatedPayload {
+  comment: {
+    id: string
+    content: string
+    authorEmail?: string
+  }
+  post: {
+    id: string
+    title: string
+  }
 }
 
 export interface ProcessResult {
@@ -68,23 +102,6 @@ export abstract class BaseIntegration {
   }
 
   /**
-   * Determines if an error is retryable (temporary failures).
-   */
-  protected isRetryableError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false
-    const msg = error.message.toLowerCase()
-    return (
-      msg.includes('timeout') ||
-      msg.includes('rate') ||
-      msg.includes('503') ||
-      msg.includes('502') ||
-      msg.includes('temporarily') ||
-      msg.includes('econnreset') ||
-      msg.includes('enotfound')
-    )
-  }
-
-  /**
    * Strips HTML tags from text (useful for Slack/Discord formatting).
    */
   protected stripHtml(html: string): string {
@@ -107,5 +124,25 @@ export abstract class BaseIntegration {
           return char
       }
     })
+  }
+
+  /**
+   * Determines if an error is retryable (network errors, rate limits, temporary failures).
+   */
+  protected isRetryableError(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      // Check for HTTP status codes that indicate retryable errors
+      if ('status' in error) {
+        const status = (error as { status?: number }).status
+        // 429 (rate limit), 500-599 (server errors)
+        return status === 429 || (status !== undefined && status >= 500 && status < 600)
+      }
+      // Check for network errors
+      if ('code' in error) {
+        const code = (error as { code?: string }).code
+        return code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ENOTFOUND'
+      }
+    }
+    return false
   }
 }

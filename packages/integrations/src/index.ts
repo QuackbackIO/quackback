@@ -47,7 +47,5 @@ export {
   type ProcessResult,
 } from './base'
 
-export { CircuitBreaker, isAlreadyProcessed, markAsProcessed, getProcessedResult } from './base'
-
 // Re-export Slack utilities
 export { SlackIntegration, getSlackOAuthUrl, exchangeSlackCode, listSlackChannels } from './slack'

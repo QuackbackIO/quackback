@@ -32,7 +32,7 @@ export const integrations = pgTable(
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
 
     // Configuration (channel IDs, team IDs, etc.)
-    config: jsonb('config').notNull().default({}),
+    config: jsonb('config').$type<Record<string, any>>().notNull().default({}),
 
     // External workspace info (for Slack team, GitHub org, etc.)
     externalWorkspaceId: varchar('external_workspace_id', { length: 255 }),
@@ -70,8 +70,8 @@ export const integrationEventMappings = pgTable(
     integrationId: typeIdColumn('integration')('integration_id').notNull(),
     eventType: varchar('event_type', { length: 100 }).notNull(),
     actionType: varchar('action_type', { length: 50 }).notNull(),
-    actionConfig: jsonb('action_config').notNull().default({}),
-    filters: jsonb('filters'),
+    actionConfig: jsonb('action_config').$type<Record<string, any>>().notNull().default({}),
+    filters: jsonb('filters').$type<Record<string, any>>(),
     enabled: boolean('enabled').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

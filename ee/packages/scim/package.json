@@ -1,0 +1,17 @@
+{
+  "name": "@quackback/ee-scim",
+  "version": "0.1.0",
+  "private": true,
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./handlers": "./src/handlers.ts",
+    "./schemas": "./src/schemas.ts"
+  },
+  "dependencies": {
+    "@quackback/db": "workspace:*",
+    "@quackback/ids": "workspace:*",
+    "zod": "^4.1.12"
+  }
+}

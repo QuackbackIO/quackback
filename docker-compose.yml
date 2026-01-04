@@ -21,23 +21,5 @@ services:
       timeout: 5s
       retries: 5
 
-  dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly
-    container_name: quackback-dragonfly
-    restart: unless-stopped
-    ports:
-      - '6379:6379'
-    volumes:
-      - dragonfly_data:/data
-    ulimits:
-      memlock: -1
-    command: dragonfly --default_lua_flags=allow-undeclared-keys --cluster_mode=emulated
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
-  dragonfly_data:

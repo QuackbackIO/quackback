@@ -10,7 +10,7 @@ import postgres from 'postgres'
 import { randomUUID } from 'crypto'
 
 const email = process.argv[2]
-const role = process.argv[3] || 'owner'
+const role = process.argv[3] || 'admin'
 
 if (!email) {
   console.error('Usage: bun ensure-role.ts <email> [role]')
