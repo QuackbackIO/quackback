@@ -13,9 +13,12 @@ export const Route = createFileRoute('/api/integrations/slack/channels')({
         const { db, member, integrations, decryptToken, eq } = await import('@/lib/db')
         const { listSlackChannels } = await import('@quackback/integrations')
 
+        console.log(`[slack] Fetching channels`)
+
         // Validate session
         const session = await getSession()
         if (!session?.user) {
+          console.warn(`[slack] ⚠️ Unauthorized channel fetch`)
           return Response.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
@@ -46,13 +49,13 @@ export const Route = createFileRoute('/api/integrations/slack/channels')({
           const accessToken = decryptToken(integration.accessTokenEncrypted, '')
           const channels = await listSlackChannels(accessToken)
 
+          console.log(`[slack] ✅ Channels fetched: ${channels.length} channels`)
           return Response.json({ channels })
         } catch (err) {
           console.error(
-            '[Slack Channels] Error fetching channels:',
+            `[slack] ❌ Channel fetch failed:`,
             err instanceof Error ? err.message : err
           )
-          console.error('[Slack Channels] Stack:', err instanceof Error ? err.stack : '')
           return Response.json({ error: 'Failed to fetch channels' }, { status: 500 })
         }
       },

@@ -55,6 +55,7 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
         const { signOAuthState } = await import('@/lib/auth/oauth-state')
 
         const { provider } = params
+        console.log(`[oauth] Initiating OAuth: provider=${provider}`)
         const url = new URL(request.url)
         const searchParams = url.searchParams
 
@@ -75,10 +76,12 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
         // Validate provider
         const config = OAUTH_CONFIGS[provider]
         if (!config) {
+          console.warn(`[oauth] ⚠️ Invalid provider: ${provider}`)
           return Response.json({ error: 'Invalid OAuth provider' }, { status: 400 })
         }
 
         if (!config.clientId) {
+          console.error(`[oauth] ❌ Provider not configured: ${provider}`)
           return Response.json({ error: `${provider} OAuth is not configured` }, { status: 500 })
         }
 
@@ -117,6 +120,7 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
           oauthUrl.searchParams.set('prompt', 'select_account')
         }
 
+        console.log(`[oauth] ✅ Redirecting to ${provider}`)
         return Response.redirect(oauthUrl.toString(), 302)
       },
     },

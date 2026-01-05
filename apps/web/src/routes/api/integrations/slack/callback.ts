@@ -94,6 +94,8 @@ export const Route = createFileRoute('/api/integrations/slack/callback')({
         const { db, encryptToken, integrations } = await import('@/lib/db')
         const { exchangeSlackCode } = await import('@quackback/integrations')
 
+        console.log(`[slack] OAuth callback received`)
+
         const { searchParams } = new URL(request.url)
         const code = searchParams.get('code')
         const state = searchParams.get('state')
@@ -114,25 +116,25 @@ export const Route = createFileRoute('/api/integrations/slack/callback')({
 
         // Check for Slack error
         if (error) {
-          console.error('[Slack OAuth] Error from Slack:', error)
+          console.error(`[slack] ❌ OAuth error from Slack: ${error}`)
           return redirectWithError(baseUrl, 'slack_denied')
         }
 
         if (!code || !state) {
-          console.error('[Slack OAuth] Missing code or state')
+          console.error(`[slack] ❌ Missing code or state`)
           return redirectWithError(baseUrl, 'invalid_request')
         }
 
         // Verify state cookie matches URL state
         if (!storedState || state !== storedState) {
-          console.error('[Slack OAuth] State mismatch')
+          console.error(`[slack] ❌ State mismatch`)
           return redirectWithError(baseUrl, 'state_mismatch')
         }
 
         // Verify state signature and expiry
         const stateResult = verifyState(state)
         if (!stateResult.valid) {
-          console.error('[Slack OAuth] Invalid state signature or expired')
+          console.error(`[slack] ❌ Invalid state signature or expired`)
           return redirectWithError(baseUrl, 'invalid_state')
         }
 
@@ -141,8 +143,10 @@ export const Route = createFileRoute('/api/integrations/slack/callback')({
 
         try {
           // Exchange code for token
+          console.log(`[slack] 🔄 Exchanging code for token`)
           const redirectUri = `${baseUrl}/api/integrations/slack/callback`
           const { accessToken, teamId, teamName } = await exchangeSlackCode(code, redirectUri)
+          console.log(`[slack] ✅ Token exchange complete: workspace=${teamName}`)
 
           // Encrypt the token (pass empty string for single workspace)
           const encryptedToken = encryptToken(accessToken, '')
@@ -189,9 +193,10 @@ export const Route = createFileRoute('/api/integrations/slack/callback')({
             `${cookieName}=; HttpOnly; ${isSecure ? 'Secure; ' : ''}SameSite=Lax; Max-Age=0; Path=/`
           )
 
+          console.log(`[slack] ✅ Integration saved`)
           return successResponse
         } catch (err) {
-          console.error('[Slack OAuth] Exchange error:', err)
+          console.error(`[slack] ❌ Exchange error:`, err)
           return redirectWithError(baseUrl, 'exchange_failed')
         }
       },

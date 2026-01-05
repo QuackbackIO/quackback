@@ -40,10 +40,11 @@ export const Route = createFileRoute('/api/export')({
         const { listPostsForExport } = await import('@/lib/posts/post.service')
         const { getBoardById } = await import('@/lib/boards/board.service')
 
-        try {
-          const url = new URL(request.url)
-          const boardIdParam = url.searchParams.get('boardId')
+        const url = new URL(request.url)
+        const boardIdParam = url.searchParams.get('boardId')
+        console.log(`[export] 📦 Starting CSV export: boardId=${boardIdParam || 'all'}`)
 
+        try {
           // Validate workspace access
           const validation = await validateApiWorkspaceAccess()
           if (!validation.success) {
@@ -52,6 +53,7 @@ export const Route = createFileRoute('/api/export')({
 
           // Check role - only admin can export
           if (!canAccess(validation.member.role as Role, ['admin'])) {
+            console.warn(`[export] ⚠️ Access denied: role=${validation.member.role}`)
             return Response.json({ error: 'Only admins can export data' }, { status: 403 })
           }
 
@@ -111,6 +113,7 @@ export const Route = createFileRoute('/api/export')({
             ? `posts-export-${boardId}-${Date.now()}.csv`
             : `posts-export-${validation.settings.slug}-${Date.now()}.csv`
 
+          console.log(`[export] ✅ Export complete: ${orgPosts.length} posts`)
           return new Response(csvContent, {
             headers: {
               'Content-Type': 'text/csv',
@@ -118,7 +121,7 @@ export const Route = createFileRoute('/api/export')({
             },
           })
         } catch (error) {
-          console.error('Error exporting posts:', error)
+          console.error(`[export] ❌ Export failed:`, error)
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },

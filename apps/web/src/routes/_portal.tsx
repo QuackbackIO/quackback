@@ -22,11 +22,13 @@ import { theme } from '@/lib/theme'
  */
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
+    console.log('[_portal] loader started', { context })
     // Session and settings are already available from root context
     const { session, settings: org } = context
 
     // Redirect to onboarding if no settings exist (fresh install)
     if (!org) {
+      console.log('[_portal] no org, redirecting to onboarding')
       throw redirect({ to: '/onboarding' })
     }
 
@@ -74,6 +76,7 @@ export const Route = createFileRoute('/_portal')({
       oauth: portalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
     }
 
+    console.log('[_portal] loader completed', { org, userRole, session: !!session })
     return {
       org,
       userRole,
@@ -106,6 +109,7 @@ export const Route = createFileRoute('/_portal')({
 })
 
 function PortalLayout() {
+  console.log('[_portal] PortalLayout render')
   const {
     org,
     userRole,

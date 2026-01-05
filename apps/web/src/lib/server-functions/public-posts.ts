@@ -105,29 +105,38 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
 export const listPublicPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(listPublicPostsSchema)
   .handler(async ({ data }: { data: ListPublicPostsInput }) => {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { listPublicPosts } = await import('@/lib/posts/post.public')
+    console.log(
+      `[fn:public-posts] listPublicPostsFn: sort=${data.sort}, board=${data.boardSlug || 'all'}`
+    )
+    try {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { listPublicPosts } = await import('@/lib/posts/post.public')
 
-    await getOptionalAuth()
+      await getOptionalAuth()
 
-    const result = await listPublicPosts({
-      boardSlug: data.boardSlug,
-      search: data.search,
-      statusIds: data.statusIds as StatusId[] | undefined,
-      statusSlugs: data.statusSlugs,
-      tagIds: data.tagIds as TagId[] | undefined,
-      sort: data.sort,
-      page: data.page,
-      limit: data.limit,
-    })
+      const result = await listPublicPosts({
+        boardSlug: data.boardSlug,
+        search: data.search,
+        statusIds: data.statusIds as StatusId[] | undefined,
+        statusSlugs: data.statusSlugs,
+        tagIds: data.tagIds as TagId[] | undefined,
+        sort: data.sort,
+        page: data.page,
+        limit: data.limit,
+      })
 
-    // Serialize Date fields
-    return {
-      ...result,
-      items: result.items.map((post) => ({
-        ...post,
-        createdAt: post.createdAt.toISOString(),
-      })),
+      console.log(`[fn:public-posts] listPublicPostsFn: count=${result.items.length}`)
+      // Serialize Date fields
+      return {
+        ...result,
+        items: result.items.map((post) => ({
+          ...post,
+          createdAt: post.createdAt.toISOString(),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ listPublicPostsFn failed:`, error)
+      throw error
     }
   })
 
@@ -147,38 +156,44 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
       editReason?: string
       deleteReason?: string
     }> => {
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { canEditPost, canDeletePost } = await import('@/lib/posts/post.service')
-
-      const ctx = await getOptionalAuth()
-      const postId = data.postId as PostId
-
-      // If no user/member, return no permissions
-      if (!ctx?.user || !ctx?.member) {
-        return { canEdit: false, canDelete: false }
-      }
-
-      // Build actor info for permission checks
-      const actor = {
-        memberId: ctx.member.id,
-        role: ctx.member.role,
-      }
-
-      // Check permissions
+      console.log(`[fn:public-posts] getPostPermissionsFn: postId=${data.postId}`)
       try {
+        const { getOptionalAuth } = await import('./auth-helpers')
+        const { canEditPost, canDeletePost } = await import('@/lib/posts/post.service')
+
+        const ctx = await getOptionalAuth()
+        const postId = data.postId as PostId
+
+        // If no user/member, return no permissions
+        if (!ctx?.user || !ctx?.member) {
+          console.log(`[fn:public-posts] getPostPermissionsFn: no auth context`)
+          return { canEdit: false, canDelete: false }
+        }
+
+        // Build actor info for permission checks
+        const actor = {
+          memberId: ctx.member.id,
+          role: ctx.member.role,
+        }
+
+        // Check permissions
         const [editResult, deleteResult] = await Promise.all([
           canEditPost(postId, actor),
           canDeletePost(postId, actor),
         ])
 
+        console.log(
+          `[fn:public-posts] getPostPermissionsFn: canEdit=${editResult.allowed}, canDelete=${deleteResult.allowed}`
+        )
         return {
           canEdit: editResult.allowed,
           canDelete: deleteResult.allowed,
           editReason: editResult.reason,
           deleteReason: deleteResult.reason,
         }
-      } catch {
+      } catch (error) {
         // Post not found or other error - return no permissions
+        console.error(`[fn:public-posts] ❌ getPostPermissionsFn failed:`, error)
         return { canEdit: false, canDelete: false }
       }
     }
@@ -190,28 +205,35 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
 export const userEditPostFn = createServerFn({ method: 'POST' })
   .inputValidator(userEditPostSchema)
   .handler(async ({ data }: { data: UserEditPostInput }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { userEditPost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:public-posts] userEditPostFn: postId=${data.postId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { userEditPost } = await import('@/lib/posts/post.service')
 
-    const ctx = await requireAuth()
-    const { postId: postIdRaw, title, content, contentJson } = data
-    const postId = postIdRaw as PostId
+      const ctx = await requireAuth()
+      const { postId: postIdRaw, title, content, contentJson } = data
+      const postId = postIdRaw as PostId
 
-    // Build actor info for permission check
-    const actor = {
-      memberId: ctx.member.id,
-      role: ctx.member.role,
-    }
+      // Build actor info for permission check
+      const actor = {
+        memberId: ctx.member.id,
+        role: ctx.member.role,
+      }
 
-    const result = await userEditPost(postId, { title, content, contentJson }, actor)
+      const result = await userEditPost(postId, { title, content, contentJson }, actor)
 
-    // Serialize Date fields
-    return {
-      ...result,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
-      deletedAt: result.deletedAt?.toISOString() || null,
-      officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      console.log(`[fn:public-posts] userEditPostFn: edited id=${result.id}`)
+      // Serialize Date fields
+      return {
+        ...result,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+        deletedAt: result.deletedAt?.toISOString() || null,
+        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      }
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ userEditPostFn failed:`, error)
+      throw error
     }
   })
 
@@ -221,21 +243,28 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
 export const userDeletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(userDeletePostSchema)
   .handler(async ({ data }: { data: UserDeletePostInput }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { softDeletePost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:public-posts] userDeletePostFn: postId=${data.postId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { softDeletePost } = await import('@/lib/posts/post.service')
 
-    const ctx = await requireAuth()
-    const postId = data.postId as PostId
+      const ctx = await requireAuth()
+      const postId = data.postId as PostId
 
-    // Build actor info for permission check
-    const actor = {
-      memberId: ctx.member.id,
-      role: ctx.member.role,
+      // Build actor info for permission check
+      const actor = {
+        memberId: ctx.member.id,
+        role: ctx.member.role,
+      }
+
+      await softDeletePost(postId, actor)
+
+      console.log(`[fn:public-posts] userDeletePostFn: deleted id=${postId}`)
+      return { id: postId }
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ userDeletePostFn failed:`, error)
+      throw error
     }
-
-    await softDeletePost(postId, actor)
-
-    return { id: postId }
   })
 
 /**
@@ -245,26 +274,36 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleVoteSchema)
   .handler(
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
-      const { requireAuth } = await import('./auth-helpers')
-      const { voteOnPost } = await import('@/lib/posts/post.service')
-      const { getMemberIdentifier } = await import('@/lib/user-identifier')
-      const { hashIP } = await import('@/lib/utils/ip-hash')
+      console.log(`[fn:public-posts] toggleVoteFn: postId=${data.postId}`)
+      try {
+        const { requireAuth } = await import('./auth-helpers')
+        const { voteOnPost } = await import('@/lib/posts/post.service')
+        const { getMemberIdentifier } = await import('@/lib/user-identifier')
+        const { hashIP } = await import('@/lib/utils/ip-hash')
 
-      const ctx = await requireAuth()
-      const postId = data.postId as PostId
-      const clientIpHash = data.ipHash
+        const ctx = await requireAuth()
+        const postId = data.postId as PostId
+        const clientIpHash = data.ipHash
 
-      const memberId = ctx.member.id as MemberId
-      const userIdentifier = getMemberIdentifier(memberId)
+        const memberId = ctx.member.id as MemberId
+        const userIdentifier = getMemberIdentifier(memberId)
 
-      // Generate IP hash if not provided (for privacy-preserving storage)
-      const ipHash =
-        clientIpHash || hashIP('unknown', process.env.BETTER_AUTH_SECRET || 'default-salt')
+        // Generate IP hash if not provided (for privacy-preserving storage)
+        const ipHash =
+          clientIpHash || hashIP('unknown', process.env.BETTER_AUTH_SECRET || 'default-salt')
 
-      return await voteOnPost(postId, userIdentifier, {
-        memberId,
-        ipHash,
-      })
+        const result = await voteOnPost(postId, userIdentifier, {
+          memberId,
+          ipHash,
+        })
+        console.log(
+          `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}`
+        )
+        return result
+      } catch (error) {
+        console.error(`[fn:public-posts] ❌ toggleVoteFn failed:`, error)
+        throw error
+      }
     }
   )
 
@@ -274,84 +313,91 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
 export const createPublicPostFn = createServerFn({ method: 'POST' })
   .inputValidator(createPublicPostSchema)
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getSettings } = await import('./workspace')
-    const { createPost } = await import('@/lib/posts/post.service')
-    const { getPublicBoardById } = await import('@/lib/boards/board.public')
-    const { getDefaultStatus } = await import('@/lib/statuses/status.service')
-    const { getMemberByUser } = await import('@/lib/members/member.service')
-    const { dispatchPostCreated } = await import('@/lib/events/dispatch')
+    console.log(`[fn:public-posts] createPublicPostFn: boardId=${data.boardId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getSettings } = await import('./workspace')
+      const { createPost } = await import('@/lib/posts/post.service')
+      const { getPublicBoardById } = await import('@/lib/boards/board.public')
+      const { getDefaultStatus } = await import('@/lib/statuses/status.service')
+      const { getMemberByUser } = await import('@/lib/members/member.service')
+      const { dispatchPostCreated } = await import('@/lib/events/dispatch')
 
-    const ctx = await requireAuth()
-    const { boardId: boardIdRaw, title, content, contentJson } = data
-    const boardId = boardIdRaw as BoardId
+      const ctx = await requireAuth()
+      const { boardId: boardIdRaw, title, content, contentJson } = data
+      const boardId = boardIdRaw as BoardId
 
-    // Get board and verify it exists and is public
-    const board = await getPublicBoardById(boardId)
-    if (!board || !board.isPublic) {
-      throw new Error('Board not found')
-    }
+      // Get board and verify it exists and is public
+      const board = await getPublicBoardById(boardId)
+      if (!board || !board.isPublic) {
+        throw new Error('Board not found')
+      }
 
-    // Get member record (re-query for full details)
-    const memberRecord = await getMemberByUser(ctx.user.id as UserId)
-    if (!memberRecord) {
-      throw new Error('You must be a member to submit feedback.')
-    }
+      // Get member record (re-query for full details)
+      const memberRecord = await getMemberByUser(ctx.user.id as UserId)
+      if (!memberRecord) {
+        throw new Error('You must be a member to submit feedback.')
+      }
 
-    // Build author info
-    const author = {
-      memberId: memberRecord.id as MemberId,
-      name: ctx.user.name || ctx.user.email,
-      email: ctx.user.email,
-    }
+      // Build author info
+      const author = {
+        memberId: memberRecord.id as MemberId,
+        name: ctx.user.name || ctx.user.email,
+        email: ctx.user.email,
+      }
 
-    // Get default status
-    const defaultStatus = await getDefaultStatus()
+      // Get default status
+      const defaultStatus = await getDefaultStatus()
 
-    // Create the post
-    const post = await createPost(
-      {
-        boardId,
-        title,
-        content,
-        contentJson,
-        statusId: defaultStatus?.id,
-      },
-      author
-    )
+      // Create the post
+      const post = await createPost(
+        {
+          boardId,
+          title,
+          content,
+          contentJson,
+          statusId: defaultStatus?.id,
+        },
+        author
+      )
 
-    // Get settings for organization info
-    const settings = await getSettings()
-    if (!settings) {
-      throw new Error('Organization settings not found')
-    }
+      // Get settings for organization info
+      const settings = await getSettings()
+      if (!settings) {
+        throw new Error('Organization settings not found')
+      }
 
-    // Dispatch post.created event (fire-and-forget)
-    dispatchPostCreated(
-      { type: 'user', userId: ctx.user.id as UserId, email: ctx.user.email },
-      {
+      // Dispatch post.created event (fire-and-forget)
+      dispatchPostCreated(
+        { type: 'user', userId: ctx.user.id as UserId, email: ctx.user.email },
+        {
+          id: post.id,
+          title: post.title,
+          content: post.content,
+          boardId: post.boardId,
+          boardSlug: board.slug,
+          authorEmail: ctx.user.email,
+          voteCount: post.voteCount,
+        }
+      )
+
+      console.log(`[fn:public-posts] createPublicPostFn: id=${post.id}`)
+      return {
         id: post.id,
         title: post.title,
         content: post.content,
-        boardId: post.boardId,
-        boardSlug: board.slug,
-        authorEmail: ctx.user.email,
+        statusId: post.statusId,
         voteCount: post.voteCount,
+        createdAt: post.createdAt.toISOString(),
+        board: {
+          id: board.id,
+          name: board.name,
+          slug: board.slug,
+        },
       }
-    )
-
-    return {
-      id: post.id,
-      title: post.title,
-      content: post.content,
-      statusId: post.statusId,
-      voteCount: post.voteCount,
-      createdAt: post.createdAt.toISOString(),
-      board: {
-        id: board.id,
-        name: board.name,
-        slug: board.slug,
-      },
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ createPublicPostFn failed:`, error)
+      throw error
     }
   })
 
@@ -360,21 +406,29 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
  */
 export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { getAllUserVotedPostIds } = await import('@/lib/posts/post.public')
-    const { getMemberIdentifier } = await import('@/lib/user-identifier')
+    console.log(`[fn:public-posts] getVotedPostsFn`)
+    try {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { getAllUserVotedPostIds } = await import('@/lib/posts/post.public')
+      const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-    const ctx = await getOptionalAuth()
+      const ctx = await getOptionalAuth()
 
-    // Optional auth - return empty if not authenticated
-    if (!ctx?.user || !ctx?.member) {
-      return { votedPostIds: [] }
+      // Optional auth - return empty if not authenticated
+      if (!ctx?.user || !ctx?.member) {
+        console.log(`[fn:public-posts] getVotedPostsFn: no auth`)
+        return { votedPostIds: [] }
+      }
+
+      const userIdentifier = getMemberIdentifier(ctx.member.id)
+      const result = await getAllUserVotedPostIds(userIdentifier)
+
+      console.log(`[fn:public-posts] getVotedPostsFn: count=${result.size}`)
+      return { votedPostIds: Array.from(result) }
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ getVotedPostsFn failed:`, error)
+      throw error
     }
-
-    const userIdentifier = getMemberIdentifier(ctx.member.id)
-    const result = await getAllUserVotedPostIds(userIdentifier)
-
-    return { votedPostIds: Array.from(result) }
   }
 )
 
@@ -382,19 +436,26 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
  * List public roadmaps for a workspace (no auth required).
  */
 export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getOptionalAuth } = await import('./auth-helpers')
-  const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+  console.log(`[fn:public-posts] listPublicRoadmapsFn`)
+  try {
+    const { getOptionalAuth } = await import('./auth-helpers')
+    const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-  await getOptionalAuth()
+    await getOptionalAuth()
 
-  const result = await listPublicRoadmaps()
+    const result = await listPublicRoadmaps()
 
-  // Serialize Date fields
-  return result.map((roadmap) => ({
-    ...roadmap,
-    createdAt: roadmap.createdAt.toISOString(),
-    updatedAt: roadmap.updatedAt.toISOString(),
-  }))
+    console.log(`[fn:public-posts] listPublicRoadmapsFn: count=${result.length}`)
+    // Serialize Date fields
+    return result.map((roadmap) => ({
+      ...roadmap,
+      createdAt: roadmap.createdAt.toISOString(),
+      updatedAt: roadmap.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:public-posts] ❌ listPublicRoadmapsFn failed:`, error)
+    throw error
+  }
 })
 
 /**
@@ -403,18 +464,26 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
 export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getPublicRoadmapPostsSchema)
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { getPublicRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:public-posts] getPublicRoadmapPostsFn: roadmapId=${data.roadmapId}`)
+    try {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { getPublicRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
 
-    await getOptionalAuth()
+      await getOptionalAuth()
 
-    const { roadmapId, statusId, limit, offset } = data
+      const { roadmapId, statusId, limit, offset } = data
 
-    return await getPublicRoadmapPosts(roadmapId as RoadmapId, {
-      statusId: statusId as StatusId | undefined,
-      limit,
-      offset,
-    })
+      const result = await getPublicRoadmapPosts(roadmapId as RoadmapId, {
+        statusId: statusId as StatusId | undefined,
+        limit,
+        offset,
+      })
+      console.log(`[fn:public-posts] getPublicRoadmapPostsFn: count=${result.posts.length}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ getPublicRoadmapPostsFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -423,18 +492,26 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
 export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsByStatusSchema)
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { getPublicRoadmapPostsPaginated } = await import('@/lib/posts/post.public')
+    console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: statusId=${data.statusId}`)
+    try {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { getPublicRoadmapPostsPaginated } = await import('@/lib/posts/post.public')
 
-    await getOptionalAuth()
+      await getOptionalAuth()
 
-    const { statusId, page, limit } = data
+      const { statusId, page, limit } = data
 
-    return await getPublicRoadmapPostsPaginated({
-      statusId: statusId as StatusId,
-      page,
-      limit,
-    })
+      const result = await getPublicRoadmapPostsPaginated({
+        statusId: statusId as StatusId,
+        page,
+        limit,
+      })
+      console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: count=${result.items.length}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ getRoadmapPostsByStatusFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -444,40 +521,49 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { hasUserVoted } = await import('@/lib/posts/post.public')
-    const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
-    const { getMemberIdentifier } = await import('@/lib/user-identifier')
+    console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
+    try {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { hasUserVoted } = await import('@/lib/posts/post.public')
+      const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
+      const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-    const ctx = await getOptionalAuth()
-    const postId = data.postId as PostId
+      const ctx = await getOptionalAuth()
+      const postId = data.postId as PostId
 
-    let userIdentifier = ''
-    let isMember = false
-    let hasVoted = false
-    let subscriptionStatus: {
-      subscribed: boolean
-      muted: boolean
-      reason: string | null
-    } = {
-      subscribed: false,
-      muted: false,
-      reason: null,
-    }
+      let userIdentifier = ''
+      let isMember = false
+      let hasVoted = false
+      let subscriptionStatus: {
+        subscribed: boolean
+        muted: boolean
+        reason: string | null
+      } = {
+        subscribed: false,
+        muted: false,
+        reason: null,
+      }
 
-    if (ctx?.user && ctx?.member) {
-      userIdentifier = getMemberIdentifier(ctx.member.id)
-      isMember = true
+      if (ctx?.user && ctx?.member) {
+        userIdentifier = getMemberIdentifier(ctx.member.id)
+        isMember = true
 
-      hasVoted = await hasUserVoted(postId, userIdentifier)
+        hasVoted = await hasUserVoted(postId, userIdentifier)
 
-      subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
-    }
+        subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
+      }
 
-    return {
-      userIdentifier,
-      isMember,
-      hasVoted,
-      subscriptionStatus,
+      console.log(
+        `[fn:public-posts] getVoteSidebarDataFn: isMember=${isMember}, hasVoted=${hasVoted}`
+      )
+      return {
+        userIdentifier,
+        isMember,
+        hasVoted,
+        subscriptionStatus,
+      }
+    } catch (error) {
+      console.error(`[fn:public-posts] ❌ getVoteSidebarDataFn failed:`, error)
+      throw error
     }
   })

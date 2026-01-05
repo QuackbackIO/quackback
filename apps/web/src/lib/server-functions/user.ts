@@ -56,50 +56,57 @@ export interface NotificationPreferences {
  */
 export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserProfile> => {
-    const { getSession } = await import('./auth')
-    const { db, user, member, eq } = await import('@/lib/db')
+    console.log(`[fn:user] getProfileFn`)
+    try {
+      const { getSession } = await import('./auth')
+      const { db, user, member, eq } = await import('@/lib/db')
 
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
 
-    const userRecord = await db.query.user.findFirst({
-      where: eq(user.id, session.user.id),
-      columns: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        imageType: true,
-      },
-    })
+      const userRecord = await db.query.user.findFirst({
+        where: eq(user.id, session.user.id),
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          imageType: true,
+        },
+      })
 
-    if (!userRecord) {
-      throw new Error('User not found')
-    }
+      if (!userRecord) {
+        throw new Error('User not found')
+      }
 
-    // Get member record to determine userType
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id as UserId),
-      columns: { role: true },
-    })
+      // Get member record to determine userType
+      const memberRecord = await db.query.member.findFirst({
+        where: eq(member.userId, session.user.id as UserId),
+        columns: { role: true },
+      })
 
-    const memberRole = memberRecord?.role
-    const userType: 'team' | 'portal' | undefined = memberRole
-      ? memberRole === 'user'
-        ? 'portal'
-        : 'team'
-      : undefined
+      const memberRole = memberRecord?.role
+      const userType: 'team' | 'portal' | undefined = memberRole
+        ? memberRole === 'user'
+          ? 'portal'
+          : 'team'
+        : undefined
 
-    return {
-      id: userRecord.id,
-      name: userRecord.name,
-      email: userRecord.email,
-      image: userRecord.image,
-      imageType: userRecord.imageType,
-      hasCustomAvatar: !!userRecord.imageType,
-      userType,
+      console.log(`[fn:user] getProfileFn: id=${userRecord.id}, userType=${userType}`)
+      return {
+        id: userRecord.id,
+        name: userRecord.name,
+        email: userRecord.email,
+        image: userRecord.image,
+        imageType: userRecord.imageType,
+        hasCustomAvatar: !!userRecord.imageType,
+        userType,
+      }
+    } catch (error) {
+      console.error(`[fn:user] ❌ getProfileFn failed:`, error)
+      throw error
     }
   }
 )
@@ -111,30 +118,37 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
-    const { getSession } = await import('./auth')
-    const { db, user, eq } = await import('@/lib/db')
+    console.log(`[fn:user] updateProfileNameFn`)
+    try {
+      const { getSession } = await import('./auth')
+      const { db, user, eq } = await import('@/lib/db')
 
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
-    const { name } = data
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
+      const { name } = data
 
-    const [updated] = await db
-      .update(user)
-      .set({ name: name.trim() })
-      .where(eq(user.id, session.user.id))
-      .returning({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        imageType: user.imageType,
-      })
+      const [updated] = await db
+        .update(user)
+        .set({ name: name.trim() })
+        .where(eq(user.id, session.user.id))
+        .returning({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          imageType: user.imageType,
+        })
 
-    return {
-      ...updated,
-      hasCustomAvatar: !!updated.imageType,
+      console.log(`[fn:user] updateProfileNameFn: updated id=${updated.id}`)
+      return {
+        ...updated,
+        hasCustomAvatar: !!updated.imageType,
+      }
+    } catch (error) {
+      console.error(`[fn:user] ❌ updateProfileNameFn failed:`, error)
+      throw error
     }
   })
 
@@ -144,32 +158,39 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
-    const { getSession } = await import('./auth')
-    const { db, user, eq } = await import('@/lib/db')
+    console.log(`[fn:user] removeAvatarFn`)
+    try {
+      const { getSession } = await import('./auth')
+      const { db, user, eq } = await import('@/lib/db')
 
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
 
-    const [updated] = await db
-      .update(user)
-      .set({
-        imageBlob: null,
-        imageType: null,
-      })
-      .where(eq(user.id, session.user.id))
-      .returning({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        imageType: user.imageType,
-      })
+      const [updated] = await db
+        .update(user)
+        .set({
+          imageBlob: null,
+          imageType: null,
+        })
+        .where(eq(user.id, session.user.id))
+        .returning({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          imageType: user.imageType,
+        })
 
-    return {
-      ...updated,
-      hasCustomAvatar: false,
+      console.log(`[fn:user] removeAvatarFn: removed for id=${updated.id}`)
+      return {
+        ...updated,
+        hasCustomAvatar: false,
+      }
+    } catch (error) {
+      console.error(`[fn:user] ❌ removeAvatarFn failed:`, error)
+      throw error
     }
   }
 )
@@ -180,16 +201,23 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ role: 'admin' | 'member' | 'user' | null }> => {
-    const { getSession } = await import('./auth')
-    const { getCurrentUserRole } = await import('./workspace')
+    console.log(`[fn:user] getUserRoleFn`)
+    try {
+      const { getSession } = await import('./auth')
+      const { getCurrentUserRole } = await import('./workspace')
 
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
+
+      const role = await getCurrentUserRole()
+      console.log(`[fn:user] getUserRoleFn: role=${role}`)
+      return { role }
+    } catch (error) {
+      console.error(`[fn:user] ❌ getUserRoleFn failed:`, error)
+      throw error
     }
-
-    const role = await getCurrentUserRole()
-    return { role }
   }
 )
 
@@ -198,22 +226,30 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
  */
 export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NotificationPreferences> => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { db, member, eq } = await import('@/lib/db')
-    const { getNotificationPreferences } = await import('@/lib/subscriptions/subscription.service')
+    console.log(`[fn:user] getNotificationPreferencesFn`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { db, member, eq } = await import('@/lib/db')
+      const { getNotificationPreferences } =
+        await import('@/lib/subscriptions/subscription.service')
 
-    const ctx = await requireAuth()
+      const ctx = await requireAuth()
 
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, ctx.user.id as UserId),
-    })
+      const memberRecord = await db.query.member.findFirst({
+        where: eq(member.userId, ctx.user.id as UserId),
+      })
 
-    if (!memberRecord) {
-      throw new Error('You must be a member')
+      if (!memberRecord) {
+        throw new Error('You must be a member')
+      }
+
+      const preferences = await getNotificationPreferences(memberRecord.id as MemberId)
+      console.log(`[fn:user] getNotificationPreferencesFn: fetched`)
+      return preferences
+    } catch (error) {
+      console.error(`[fn:user] ❌ getNotificationPreferencesFn failed:`, error)
+      throw error
     }
-
-    const preferences = await getNotificationPreferences(memberRecord.id as MemberId)
-    return preferences
   }
 )
 
@@ -228,43 +264,53 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }: {
       data: UpdateNotificationPreferencesInput
     }): Promise<NotificationPreferences> => {
-      const { requireAuth } = await import('./auth-helpers')
-      const { db, member, eq } = await import('@/lib/db')
-      const { updateNotificationPreferences } =
-        await import('@/lib/subscriptions/subscription.service')
+      console.log(`[fn:user] updateNotificationPreferencesFn`)
+      try {
+        const { requireAuth } = await import('./auth-helpers')
+        const { db, member, eq } = await import('@/lib/db')
+        const { updateNotificationPreferences } =
+          await import('@/lib/subscriptions/subscription.service')
 
-      const ctx = await requireAuth()
-      const { emailStatusChange, emailNewComment, emailMuted } = data
+        const ctx = await requireAuth()
+        const { emailStatusChange, emailNewComment, emailMuted } = data
 
-      const memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, ctx.user.id as UserId),
-      })
+        const memberRecord = await db.query.member.findFirst({
+          where: eq(member.userId, ctx.user.id as UserId),
+        })
 
-      if (!memberRecord) {
-        throw new Error('You must be a member')
+        if (!memberRecord) {
+          throw new Error('You must be a member')
+        }
+
+        const updates: {
+          emailStatusChange?: boolean
+          emailNewComment?: boolean
+          emailMuted?: boolean
+        } = {}
+
+        if (typeof emailStatusChange === 'boolean') {
+          updates.emailStatusChange = emailStatusChange
+        }
+        if (typeof emailNewComment === 'boolean') {
+          updates.emailNewComment = emailNewComment
+        }
+        if (typeof emailMuted === 'boolean') {
+          updates.emailMuted = emailMuted
+        }
+
+        if (Object.keys(updates).length === 0) {
+          throw new Error('No fields to update')
+        }
+
+        const preferences = await updateNotificationPreferences(
+          memberRecord.id as MemberId,
+          updates
+        )
+        console.log(`[fn:user] updateNotificationPreferencesFn: updated`)
+        return preferences
+      } catch (error) {
+        console.error(`[fn:user] ❌ updateNotificationPreferencesFn failed:`, error)
+        throw error
       }
-
-      const updates: {
-        emailStatusChange?: boolean
-        emailNewComment?: boolean
-        emailMuted?: boolean
-      } = {}
-
-      if (typeof emailStatusChange === 'boolean') {
-        updates.emailStatusChange = emailStatusChange
-      }
-      if (typeof emailNewComment === 'boolean') {
-        updates.emailNewComment = emailNewComment
-      }
-      if (typeof emailMuted === 'boolean') {
-        updates.emailMuted = emailMuted
-      }
-
-      if (Object.keys(updates).length === 0) {
-        throw new Error('No fields to update')
-      }
-
-      const preferences = await updateNotificationPreferences(memberRecord.id as MemberId, updates)
-      return preferences
     }
   )

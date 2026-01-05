@@ -71,12 +71,20 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
  * List all statuses for the workspace
  */
 export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { listStatuses } = await import('@/lib/statuses/status.service')
+  console.log(`[fn:statuses] fetchStatuses`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listStatuses } = await import('@/lib/statuses/status.service')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  return await listStatuses()
+    const statuses = await listStatuses()
+    console.log(`[fn:statuses] fetchStatuses: count=${statuses.length}`)
+    return statuses
+  } catch (error) {
+    console.error(`[fn:statuses] ❌ fetchStatuses failed:`, error)
+    throw error
+  }
 })
 
 /**
@@ -85,12 +93,20 @@ export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchStatus = createServerFn({ method: 'GET' })
   .inputValidator(getStatusSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getStatusById } = await import('@/lib/statuses/status.service')
+    console.log(`[fn:statuses] fetchStatus: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getStatusById } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    return await getStatusById(data.id as StatusId)
+      const status = await getStatusById(data.id as StatusId)
+      console.log(`[fn:statuses] fetchStatus: found=${!!status}`)
+      return status
+    } catch (error) {
+      console.error(`[fn:statuses] ❌ fetchStatus failed:`, error)
+      throw error
+    }
   })
 
 // ============================================
@@ -103,20 +119,28 @@ export const fetchStatus = createServerFn({ method: 'GET' })
 export const createStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(createStatusSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { createStatus } = await import('@/lib/statuses/status.service')
+    console.log(`[fn:statuses] createStatusFn: name=${data.name}, category=${data.category}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { createStatus } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    return await createStatus({
-      name: data.name,
-      slug: data.slug,
-      color: data.color,
-      category: data.category,
-      position: data.position,
-      showOnRoadmap: data.showOnRoadmap,
-      isDefault: data.isDefault,
-    })
+      const status = await createStatus({
+        name: data.name,
+        slug: data.slug,
+        color: data.color,
+        category: data.category,
+        position: data.position,
+        showOnRoadmap: data.showOnRoadmap,
+        isDefault: data.isDefault,
+      })
+      console.log(`[fn:statuses] createStatusFn: id=${status.id}`)
+      return status
+    } catch (error) {
+      console.error(`[fn:statuses] ❌ createStatusFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -125,17 +149,25 @@ export const createStatusFn = createServerFn({ method: 'POST' })
 export const updateStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(updateStatusSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updateStatus } = await import('@/lib/statuses/status.service')
+    console.log(`[fn:statuses] updateStatusFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { updateStatus } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    return await updateStatus(data.id as StatusId, {
-      name: data.name,
-      color: data.color,
-      showOnRoadmap: data.showOnRoadmap,
-      isDefault: data.isDefault,
-    })
+      const status = await updateStatus(data.id as StatusId, {
+        name: data.name,
+        color: data.color,
+        showOnRoadmap: data.showOnRoadmap,
+        isDefault: data.isDefault,
+      })
+      console.log(`[fn:statuses] updateStatusFn: updated id=${status.id}`)
+      return status
+    } catch (error) {
+      console.error(`[fn:statuses] ❌ updateStatusFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -144,13 +176,20 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
 export const deleteStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteStatusSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { deleteStatus } = await import('@/lib/statuses/status.service')
+    console.log(`[fn:statuses] deleteStatusFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { deleteStatus } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await deleteStatus(data.id as StatusId)
-    return { id: data.id }
+      await deleteStatus(data.id as StatusId)
+      console.log(`[fn:statuses] deleteStatusFn: deleted`)
+      return { id: data.id }
+    } catch (error) {
+      console.error(`[fn:statuses] ❌ deleteStatusFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -159,11 +198,18 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
 export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderStatusesSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { reorderStatuses } = await import('@/lib/statuses/status.service')
+    console.log(`[fn:statuses] reorderStatusesFn: count=${data.statusIds.length}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { reorderStatuses } = await import('@/lib/statuses/status.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await reorderStatuses(data.statusIds as StatusId[])
-    return { success: true }
+      await reorderStatuses(data.statusIds as StatusId[])
+      console.log(`[fn:statuses] reorderStatusesFn: reordered`)
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:statuses] ❌ reorderStatusesFn failed:`, error)
+      throw error
+    }
   })

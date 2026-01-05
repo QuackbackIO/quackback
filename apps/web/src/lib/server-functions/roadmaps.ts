@@ -50,34 +50,48 @@ export type RemovePostFromRoadmapInput = z.infer<typeof removePostFromRoadmapSch
 
 // Read Operations
 export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { listRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+  console.log(`[fn:roadmaps] fetchRoadmaps`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  const roadmaps = await listRoadmaps()
-  // Serialize Date fields
-  return roadmaps.map((roadmap) => ({
-    ...roadmap,
-    createdAt: roadmap.createdAt.toISOString(),
-    updatedAt: roadmap.updatedAt.toISOString(),
-  }))
+    const roadmaps = await listRoadmaps()
+    console.log(`[fn:roadmaps] fetchRoadmaps: count=${roadmaps.length}`)
+    // Serialize Date fields
+    return roadmaps.map((roadmap) => ({
+      ...roadmap,
+      createdAt: roadmap.createdAt.toISOString(),
+      updatedAt: roadmap.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:roadmaps] ❌ fetchRoadmaps failed:`, error)
+    throw error
+  }
 })
 
 export const fetchRoadmap = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:roadmaps] fetchRoadmap: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await getRoadmap(data.id as RoadmapId)
-    // Serialize Date fields
-    return {
-      ...roadmap,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      const roadmap = await getRoadmap(data.id as RoadmapId)
+      console.log(`[fn:roadmaps] fetchRoadmap: found=${!!roadmap}`)
+      // Serialize Date fields
+      return {
+        ...roadmap,
+        createdAt: roadmap.createdAt.toISOString(),
+        updatedAt: roadmap.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ fetchRoadmap failed:`, error)
+      throw error
     }
   })
 
@@ -85,56 +99,77 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
 export const createRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(createRoadmapSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { createRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:roadmaps] createRoadmapFn: name=${data.name}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { createRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await createRoadmap({
-      name: data.name,
-      slug: data.slug,
-      description: data.description,
-      isPublic: data.isPublic,
-    })
-    // Serialize Date fields
-    return {
-      ...roadmap,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      const roadmap = await createRoadmap({
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+        isPublic: data.isPublic,
+      })
+      console.log(`[fn:roadmaps] createRoadmapFn: id=${roadmap.id}`)
+      // Serialize Date fields
+      return {
+        ...roadmap,
+        createdAt: roadmap.createdAt.toISOString(),
+        updatedAt: roadmap.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ createRoadmapFn failed:`, error)
+      throw error
     }
   })
 
 export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(updateRoadmapSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updateRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:roadmaps] updateRoadmapFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { updateRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await updateRoadmap(data.id as RoadmapId, {
-      name: data.name,
-      description: data.description,
-      isPublic: data.isPublic,
-    })
-    // Serialize Date fields
-    return {
-      ...roadmap,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      const roadmap = await updateRoadmap(data.id as RoadmapId, {
+        name: data.name,
+        description: data.description,
+        isPublic: data.isPublic,
+      })
+      console.log(`[fn:roadmaps] updateRoadmapFn: updated id=${roadmap.id}`)
+      // Serialize Date fields
+      return {
+        ...roadmap,
+        createdAt: roadmap.createdAt.toISOString(),
+        updatedAt: roadmap.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ updateRoadmapFn failed:`, error)
+      throw error
     }
   })
 
 export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteRoadmapSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { deleteRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:roadmaps] deleteRoadmapFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { deleteRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await deleteRoadmap(data.id as RoadmapId)
-    return { id: data.id }
+      await deleteRoadmap(data.id as RoadmapId)
+      console.log(`[fn:roadmaps] deleteRoadmapFn: deleted`)
+      return { id: data.id }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ deleteRoadmapFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -143,16 +178,25 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
 export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(addPostToRoadmapSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { addPostToRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(
+      `[fn:roadmaps] addPostToRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
+    )
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { addPostToRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await addPostToRoadmap({
-      roadmapId: data.roadmapId as RoadmapId,
-      postId: data.postId as PostId,
-    })
-    return { roadmapId: data.roadmapId, postId: data.postId }
+      await addPostToRoadmap({
+        roadmapId: data.roadmapId as RoadmapId,
+        postId: data.postId as PostId,
+      })
+      console.log(`[fn:roadmaps] addPostToRoadmapFn: added`)
+      return { roadmapId: data.roadmapId, postId: data.postId }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ addPostToRoadmapFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -161,13 +205,22 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
 export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(removePostFromRoadmapSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { removePostFromRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(
+      `[fn:roadmaps] removePostFromRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
+    )
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { removePostFromRoadmap } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
-    return { roadmapId: data.roadmapId, postId: data.postId }
+      await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
+      console.log(`[fn:roadmaps] removePostFromRoadmapFn: removed`)
+      return { roadmapId: data.roadmapId, postId: data.postId }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ removePostFromRoadmapFn failed:`, error)
+      throw error
+    }
   })
 
 const reorderRoadmapsSchema = z.object({
@@ -182,13 +235,20 @@ export type ReorderRoadmapsInput = z.infer<typeof reorderRoadmapsSchema>
 export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderRoadmapsSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { reorderRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:roadmaps] reorderRoadmapsFn: count=${data.roadmapIds.length}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { reorderRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await reorderRoadmaps(data.roadmapIds as RoadmapId[])
-    return { success: true }
+      await reorderRoadmaps(data.roadmapIds as RoadmapId[])
+      console.log(`[fn:roadmaps] reorderRoadmapsFn: reordered`)
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ reorderRoadmapsFn failed:`, error)
+      throw error
+    }
   })
 
 const getRoadmapPostsSchema = z.object({
@@ -206,10 +266,18 @@ export type GetRoadmapPostsInput = z.infer<typeof getRoadmapPostsSchema>
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
+    console.log(`[fn:roadmaps] getRoadmapPostsFn: roadmapId=${data.roadmapId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    return await getRoadmapPosts(data.roadmapId as RoadmapId, {})
+      const posts = await getRoadmapPosts(data.roadmapId as RoadmapId, {})
+      console.log(`[fn:roadmaps] getRoadmapPostsFn: count=${posts.length}`)
+      return posts
+    } catch (error) {
+      console.error(`[fn:roadmaps] ❌ getRoadmapPostsFn failed:`, error)
+      throw error
+    }
   })

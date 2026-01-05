@@ -36,47 +36,76 @@ export type MuteSubscriptionInput = z.infer<typeof muteSubscriptionSchema>
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .inputValidator(getSubscriptionStatusSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
+    console.log(`[fn:subscriptions] fetchSubscriptionStatus: postId=${data.postId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    return await getSubscriptionStatus(auth.member.id, data.postId as PostId)
+      const result = await getSubscriptionStatus(auth.member.id, data.postId as PostId)
+      console.log(`[fn:subscriptions] fetchSubscriptionStatus: subscribed=${result.subscribed}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:subscriptions] ❌ fetchSubscriptionStatus failed:`, error)
+      throw error
+    }
   })
 
 // Write Operations
 export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .inputValidator(subscribeToPostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { subscribeToPost } = await import('@/lib/subscriptions/subscription.service')
+    console.log(`[fn:subscriptions] subscribeToPostFn: postId=${data.postId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { subscribeToPost } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual')
-    return { postId: data.postId }
+      await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual')
+      console.log(`[fn:subscriptions] subscribeToPostFn: subscribed`)
+      return { postId: data.postId }
+    } catch (error) {
+      console.error(`[fn:subscriptions] ❌ subscribeToPostFn failed:`, error)
+      throw error
+    }
   })
 
 export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   .inputValidator(unsubscribeFromPostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { unsubscribeFromPost } = await import('@/lib/subscriptions/subscription.service')
+    console.log(`[fn:subscriptions] unsubscribeFromPostFn: postId=${data.postId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { unsubscribeFromPost } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    await unsubscribeFromPost(auth.member.id, data.postId as PostId)
-    return { postId: data.postId }
+      await unsubscribeFromPost(auth.member.id, data.postId as PostId)
+      console.log(`[fn:subscriptions] unsubscribeFromPostFn: unsubscribed`)
+      return { postId: data.postId }
+    } catch (error) {
+      console.error(`[fn:subscriptions] ❌ unsubscribeFromPostFn failed:`, error)
+      throw error
+    }
   })
 
 export const muteSubscriptionFn = createServerFn({ method: 'POST' })
   .inputValidator(muteSubscriptionSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { setSubscriptionMuted } = await import('@/lib/subscriptions/subscription.service')
+    console.log(`[fn:subscriptions] muteSubscriptionFn: postId=${data.postId}, muted=${data.muted}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { setSubscriptionMuted } = await import('@/lib/subscriptions/subscription.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    await setSubscriptionMuted(auth.member.id, data.postId as PostId, data.muted ?? true)
-    return { postId: data.postId }
+      await setSubscriptionMuted(auth.member.id, data.postId as PostId, data.muted ?? true)
+      console.log(`[fn:subscriptions] muteSubscriptionFn: updated`)
+      return { postId: data.postId }
+    } catch (error) {
+      console.error(`[fn:subscriptions] ❌ muteSubscriptionFn failed:`, error)
+      throw error
+    }
   })

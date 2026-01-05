@@ -27,6 +27,10 @@ export const Route = createFileRoute('/api/import/')({
           const file = formData.get('file') as File | null
           const boardIdParam = formData.get('boardId') as string | null
 
+          console.log(
+            `[import] 📦 Starting CSV import: file=${file?.name || 'none'}, size=${file?.size || 0} bytes`
+          )
+
           // Validate workspace access
           const validation = await validateApiWorkspaceAccess()
           if (!validation.success) {
@@ -35,6 +39,7 @@ export const Route = createFileRoute('/api/import/')({
 
           // Check role - only admin can import
           if (!canAccess(validation.member.role as Role, ['admin'])) {
+            console.warn(`[import] ⚠️ Access denied: role=${validation.member.role}`)
             return Response.json({ error: 'Only admins can import data' }, { status: 403 })
           }
 
@@ -126,6 +131,8 @@ export const Route = createFileRoute('/api/import/')({
             )
           }
 
+          console.log(`[import] 🔄 Processing ${totalRows} rows`)
+
           // Encode CSV as base64 for job queue
           const csvContent = Buffer.from(csvText).toString('base64')
 
@@ -140,6 +147,9 @@ export const Route = createFileRoute('/api/import/')({
           // Process import inline (synchronous)
           const result = await processImport(importData)
 
+          console.log(
+            `[import] ✅ Import complete: ${result.imported} imported, ${result.skipped} skipped`
+          )
           return Response.json({
             imported: result.imported,
             skipped: result.skipped,
@@ -148,7 +158,7 @@ export const Route = createFileRoute('/api/import/')({
             totalRows,
           })
         } catch (error) {
-          console.error('Error processing import:', error)
+          console.error(`[import] ❌ Import failed:`, error)
           const errorMessage = error instanceof Error ? error.message : 'Internal server error'
           return Response.json({ error: errorMessage }, { status: 500 })
         }

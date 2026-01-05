@@ -11,11 +11,13 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
       GET: async ({ request: _request, params }) => {
         const { db, invitation, eq } = await import('@/lib/db')
 
-        try {
-          const { invitationId: invitationIdParam } = params
+        const { invitationId: invitationIdParam } = params
+        console.log(`[auth] GET invitation: id=${invitationIdParam.slice(0, 12)}...`)
 
+        try {
           // Validate TypeID format
           if (!isValidTypeId(invitationIdParam, 'invite')) {
+            console.warn(`[auth] ⚠️ Invalid invitation ID format`)
             return Response.json({ error: 'Invalid invitation ID format' }, { status: 400 })
           }
           const invitationId = invitationIdParam as InviteId
@@ -55,6 +57,8 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
           }
 
           // Return invitation details (limited info for security)
+          const maskedEmail = inv.email.replace(/(.{2}).*@/, '$1***@')
+          console.log(`[auth] ✅ Invitation found: email=${maskedEmail}, role=${inv.role}`)
           return Response.json({
             id: inv.id,
             email: inv.email,
@@ -64,7 +68,7 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
             inviterName: inv.inviter?.name || null,
           })
         } catch (error) {
-          console.error('[Get Invitation] Error:', error)
+          console.error(`[auth] ❌ Get invitation error:`, error)
           return Response.json({ error: 'Failed to get invitation' }, { status: 500 })
         }
       },

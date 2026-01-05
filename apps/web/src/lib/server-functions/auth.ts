@@ -39,34 +39,42 @@ export interface Session {
  */
 export const getSession = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Session | null> => {
-    const { auth } = await import('@/lib/auth/index')
-    const session = await auth.api.getSession({
-      headers: getRequestHeaders(),
-    })
+    console.log(`[fn:auth] getSession`)
+    try {
+      const { auth } = await import('@/lib/auth/index')
+      const session = await auth.api.getSession({
+        headers: getRequestHeaders(),
+      })
 
-    if (!session?.user) {
-      return null
-    }
+      if (!session?.user) {
+        console.log(`[fn:auth] getSession: authenticated=false`)
+        return null
+      }
 
-    // Serialize dates for client transport
-    return {
-      session: {
-        id: session.session.id as SessionId,
-        expiresAt: session.session.expiresAt.toISOString(),
-        token: session.session.token,
-        createdAt: session.session.createdAt.toISOString(),
-        updatedAt: session.session.updatedAt.toISOString(),
-        userId: session.session.userId as UserId,
-      },
-      user: {
-        id: session.user.id as UserId,
-        name: session.user.name,
-        email: session.user.email,
-        emailVerified: session.user.emailVerified,
-        image: session.user.image ?? null,
-        createdAt: session.user.createdAt.toISOString(),
-        updatedAt: session.user.updatedAt.toISOString(),
-      },
+      console.log(`[fn:auth] getSession: authenticated=true, userId=${session.user.id}`)
+      // Serialize dates for client transport
+      return {
+        session: {
+          id: session.session.id as SessionId,
+          expiresAt: session.session.expiresAt.toISOString(),
+          token: session.session.token,
+          createdAt: session.session.createdAt.toISOString(),
+          updatedAt: session.session.updatedAt.toISOString(),
+          userId: session.session.userId as UserId,
+        },
+        user: {
+          id: session.user.id as UserId,
+          name: session.user.name,
+          email: session.user.email,
+          emailVerified: session.user.emailVerified,
+          image: session.user.image ?? null,
+          createdAt: session.user.createdAt.toISOString(),
+          updatedAt: session.user.updatedAt.toISOString(),
+        },
+      }
+    } catch (error) {
+      console.error(`[fn:auth] ❌ getSession failed:`, error)
+      throw error
     }
   }
 )

@@ -108,35 +108,44 @@ export type RestorePostInput = z.infer<typeof restorePostSchema>
 export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .inputValidator(listInboxPostsSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listInboxPosts } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] fetchInboxPostsForAdmin`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { listInboxPosts } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await listInboxPosts({
-      boardIds: data.boardIds as BoardId[] | undefined,
-      statusIds: data.statusIds as StatusId[] | undefined,
-      statusSlugs: data.statusSlugs,
-      tagIds: data.tagIds as TagId[] | undefined,
-      ownerId: data.ownerId as MemberId | null | undefined,
-      search: data.search,
-      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-      minVotes: data.minVotes,
-      sort: data.sort,
-      page: data.page,
-      limit: data.limit,
-    })
-    return {
-      ...result,
-      items: result.items.map((p) => ({
-        ...p,
-        contentJson: (p.contentJson ?? {}) as TiptapContent,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-        deletedAt: p.deletedAt?.toISOString() || null,
-        officialResponseAt: p.officialResponseAt?.toISOString() || null,
-      })),
+      const result = await listInboxPosts({
+        boardIds: data.boardIds as BoardId[] | undefined,
+        statusIds: data.statusIds as StatusId[] | undefined,
+        statusSlugs: data.statusSlugs,
+        tagIds: data.tagIds as TagId[] | undefined,
+        ownerId: data.ownerId as MemberId | null | undefined,
+        search: data.search,
+        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        minVotes: data.minVotes,
+        sort: data.sort,
+        page: data.page,
+        limit: data.limit,
+      })
+      console.log(
+        `[fn:posts] fetchInboxPostsForAdmin: count=${result.items.length}, page=${data.page}`
+      )
+      return {
+        ...result,
+        items: result.items.map((p) => ({
+          ...p,
+          contentJson: (p.contentJson ?? {}) as TiptapContent,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+          deletedAt: p.deletedAt?.toISOString() || null,
+          officialResponseAt: p.officialResponseAt?.toISOString() || null,
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ fetchInboxPostsForAdmin failed:`, error)
+      throw error
     }
   })
 
@@ -146,19 +155,26 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
 export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   .inputValidator(getPostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getPostWithDetails } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] fetchPostWithDetails: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getPostWithDetails } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getPostWithDetails(data.id as PostId)
-    // Serialize Date fields
-    return {
-      ...result,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
-      deletedAt: result.deletedAt?.toISOString() || null,
-      officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      const result = await getPostWithDetails(data.id as PostId)
+      console.log(`[fn:posts] fetchPostWithDetails: found=${!!result}`)
+      // Serialize Date fields
+      return {
+        ...result,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+        deletedAt: result.deletedAt?.toISOString() || null,
+        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ fetchPostWithDetails failed:`, error)
+      throw error
     }
   })
 
@@ -172,33 +188,40 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 export const createPostFn = createServerFn({ method: 'POST' })
   .inputValidator(createPostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { createPost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] createPostFn: boardId=${data.boardId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { createPost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await createPost(
-      {
-        title: data.title,
-        content: data.content,
-        contentJson: data.contentJson,
-        boardId: data.boardId as BoardId,
-        statusId: data.statusId as StatusId | undefined,
-        tagIds: data.tagIds as TagId[] | undefined,
-      },
-      {
-        memberId: auth.member.id,
-        name: auth.user.name,
-        email: auth.user.email,
+      const result = await createPost(
+        {
+          title: data.title,
+          content: data.content,
+          contentJson: data.contentJson,
+          boardId: data.boardId as BoardId,
+          statusId: data.statusId as StatusId | undefined,
+          tagIds: data.tagIds as TagId[] | undefined,
+        },
+        {
+          memberId: auth.member.id,
+          name: auth.user.name,
+          email: auth.user.email,
+        }
+      )
+      console.log(`[fn:posts] createPostFn: id=${result.id}`)
+      // Serialize Date fields
+      return {
+        ...result,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+        deletedAt: result.deletedAt?.toISOString() || null,
+        officialResponseAt: result.officialResponseAt?.toISOString() || null,
       }
-    )
-    // Serialize Date fields
-    return {
-      ...result,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
-      deletedAt: result.deletedAt?.toISOString() || null,
-      officialResponseAt: result.officialResponseAt?.toISOString() || null,
+    } catch (error) {
+      console.error(`[fn:posts] ❌ createPostFn failed:`, error)
+      throw error
     }
   })
 
@@ -208,30 +231,37 @@ export const createPostFn = createServerFn({ method: 'POST' })
 export const updatePostFn = createServerFn({ method: 'POST' })
   .inputValidator(updatePostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updatePost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] updatePostFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { updatePost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await updatePost(
-      data.id as PostId,
-      {
-        title: data.title,
-        content: data.content,
-        contentJson: data.contentJson,
-      },
-      {
-        memberId: auth.member.id,
-        name: auth.user.name,
+      const result = await updatePost(
+        data.id as PostId,
+        {
+          title: data.title,
+          content: data.content,
+          contentJson: data.contentJson,
+        },
+        {
+          memberId: auth.member.id,
+          name: auth.user.name,
+        }
+      )
+      console.log(`[fn:posts] updatePostFn: updated id=${result.id}`)
+      // Serialize Date fields
+      return {
+        ...result,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+        deletedAt: result.deletedAt?.toISOString() || null,
+        officialResponseAt: result.officialResponseAt?.toISOString() || null,
       }
-    )
-    // Serialize Date fields
-    return {
-      ...result,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
-      deletedAt: result.deletedAt?.toISOString() || null,
-      officialResponseAt: result.officialResponseAt?.toISOString() || null,
+    } catch (error) {
+      console.error(`[fn:posts] ❌ updatePostFn failed:`, error)
+      throw error
     }
   })
 
@@ -241,16 +271,23 @@ export const updatePostFn = createServerFn({ method: 'POST' })
 export const deletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(deletePostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { softDeletePost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] deletePostFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { softDeletePost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    await softDeletePost(data.id as PostId, {
-      memberId: auth.member.id,
-      role: auth.member.role,
-    })
-    return { id: data.id }
+      await softDeletePost(data.id as PostId, {
+        memberId: auth.member.id,
+        role: auth.member.role,
+      })
+      console.log(`[fn:posts] deletePostFn: deleted id=${data.id}`)
+      return { id: data.id }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ deletePostFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -259,33 +296,42 @@ export const deletePostFn = createServerFn({ method: 'POST' })
 export const changePostStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(changeStatusSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { changeStatus } = await import('@/lib/posts/post.service')
-    const { dispatchPostStatusChanged } = await import('@/lib/events/dispatch')
+    console.log(`[fn:posts] changePostStatusFn: id=${data.id}, statusId=${data.statusId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { changeStatus } = await import('@/lib/posts/post.service')
+      const { dispatchPostStatusChanged } = await import('@/lib/events/dispatch')
 
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
+      const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
 
-    // Dispatch post.status_changed event (fire-and-forget)
-    dispatchPostStatusChanged(
-      { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
-      {
-        id: result.id,
-        title: result.title,
-        boardSlug: result.boardSlug,
-      },
-      result.previousStatus,
-      result.newStatus
-    )
+      // Dispatch post.status_changed event (fire-and-forget)
+      dispatchPostStatusChanged(
+        { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
+        {
+          id: result.id,
+          title: result.title,
+          boardSlug: result.boardSlug,
+        },
+        result.previousStatus,
+        result.newStatus
+      )
 
-    // Serialize Date fields
-    return {
-      ...result,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
-      deletedAt: result.deletedAt?.toISOString() || null,
-      officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      console.log(
+        `[fn:posts] changePostStatusFn: id=${data.id}, newStatus=${result.newStatus.name}`
+      )
+      // Serialize Date fields
+      return {
+        ...result,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+        deletedAt: result.deletedAt?.toISOString() || null,
+        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ changePostStatusFn failed:`, error)
+      throw error
     }
   })
 
@@ -295,19 +341,26 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
 export const restorePostFn = createServerFn({ method: 'POST' })
   .inputValidator(restorePostSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { restorePost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] restorePostFn: id=${data.id}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { restorePost } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await restorePost(data.id as PostId)
-    // Serialize Date fields
-    return {
-      ...result,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
-      deletedAt: result.deletedAt?.toISOString() || null,
-      officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      const result = await restorePost(data.id as PostId)
+      console.log(`[fn:posts] restorePostFn: restored id=${result.id}`)
+      // Serialize Date fields
+      return {
+        ...result,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+        deletedAt: result.deletedAt?.toISOString() || null,
+        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+      }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ restorePostFn failed:`, error)
+      throw error
     }
   })
 
@@ -317,20 +370,27 @@ export const restorePostFn = createServerFn({ method: 'POST' })
 export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .inputValidator(updateTagsSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updatePost } = await import('@/lib/posts/post.service')
+    console.log(`[fn:posts] updatePostTagsFn: id=${data.id}, tagCount=${data.tagIds.length}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { updatePost } = await import('@/lib/posts/post.service')
 
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    await updatePost(
-      data.id as PostId,
-      {
-        tagIds: data.tagIds as TagId[],
-      },
-      {
-        memberId: auth.member.id,
-        name: auth.user.name,
-      }
-    )
-    return { id: data.id }
+      await updatePost(
+        data.id as PostId,
+        {
+          tagIds: data.tagIds as TagId[],
+        },
+        {
+          memberId: auth.member.id,
+          name: auth.user.name,
+        }
+      )
+      console.log(`[fn:posts] updatePostTagsFn: updated id=${data.id}`)
+      return { id: data.id }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ updatePostTagsFn failed:`, error)
+      throw error
+    }
   })

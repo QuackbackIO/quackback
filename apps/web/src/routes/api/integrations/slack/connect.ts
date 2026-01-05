@@ -76,16 +76,20 @@ export const Route = createFileRoute('/api/integrations/slack/connect')({
        * Redirect to Slack OAuth with state cookie
        */
       GET: async ({ request }) => {
+        console.log(`[slack] Initiating OAuth connection`)
+
         const url = new URL(request.url)
         const state = url.searchParams.get('state')
 
         if (!state) {
+          console.warn(`[slack] ⚠️ Missing state parameter`)
           return Response.json({ error: 'state is required' }, { status: 400 })
         }
 
         // Verify the state signature
         const stateData = verifyState(state)
         if (!stateData) {
+          console.error(`[slack] ❌ Invalid or expired state`)
           return Response.json({ error: 'Invalid or expired state' }, { status: 400 })
         }
 
@@ -108,6 +112,7 @@ export const Route = createFileRoute('/api/integrations/slack/connect')({
           `${cookieName}=${state}; HttpOnly; ${isSecure ? 'Secure; ' : ''}SameSite=Lax; Max-Age=${STATE_EXPIRY_MS / 1000}; Path=/`
         )
 
+        console.log(`[slack] ✅ Redirecting to Slack OAuth`)
         return response
       },
     },

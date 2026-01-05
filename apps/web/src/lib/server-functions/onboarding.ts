@@ -45,92 +45,109 @@ export interface SetupWorkspaceResult {
  * Setup workspace during onboarding.
  * Creates settings and default statuses in a transaction.
  * Requires authentication and admin role.
+ *
+ * NOTE: Cannot use requireAuth() here because it requires settings to exist,
+ * but we're creating settings. We manually check auth and admin role instead.
  */
 export const setupWorkspaceFn = createServerFn({ method: 'POST' })
   .inputValidator(setupWorkspaceSchema)
   .handler(async ({ data }: { data: SetupWorkspaceInput }): Promise<SetupWorkspaceResult> => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getSettings } = await import('./workspace')
-    const { db, settings, member, user, postStatuses, eq, DEFAULT_STATUSES } =
-      await import('@/lib/db')
-    const { generateId } = await import('@quackback/ids')
+    console.log(`[fn:onboarding] setupWorkspaceFn: workspaceName=${data.workspaceName}`)
+    try {
+      const { getSession } = await import('./auth')
+      const { getSettings } = await import('./workspace')
+      const { db, settings, member, user, postStatuses, eq, DEFAULT_STATUSES } =
+        await import('@/lib/db')
+      const { generateId } = await import('@quackback/ids')
 
-    const ctx = await requireAuth({ roles: ['admin'] })
-    const { workspaceName, userName } = data
+      // Check authentication manually (can't use requireAuth - it needs settings to exist)
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
 
-    // Verify user is admin
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, ctx.user.id as UserId),
-    })
+      const { workspaceName, userName } = data
 
-    if (!memberRecord || memberRecord.role !== 'admin') {
-      throw new Error('Only admin can complete setup')
-    }
+      // Verify user has admin member record
+      const memberRecord = await db.query.member.findFirst({
+        where: eq(member.userId, session.user.id as UserId),
+      })
 
-    // Check if settings already exist
-    const existingSettings = await getSettings()
-    if (existingSettings) {
-      throw new Error('Workspace already initialized')
-    }
+      if (!memberRecord || memberRecord.role !== 'admin') {
+        throw new Error('Only admin can complete setup')
+      }
 
-    // Update user's name if provided (for users created via emailOTP without a name)
-    if (userName) {
-      await db
-        .update(user)
-        .set({
-          name: userName.trim(),
-          updatedAt: new Date(),
-        })
-        .where(eq(user.id, ctx.user.id as UserId))
-    }
+      // Check if settings already exist
+      const existingSettings = await getSettings()
+      if (existingSettings) {
+        throw new Error('Workspace already initialized')
+      }
 
-    // Generate slug from workspace name
-    const slug = workspaceName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
+      // Update user's name if provided (for users created via emailOTP without a name)
+      if (userName) {
+        await db
+          .update(user)
+          .set({
+            name: userName.trim(),
+            updatedAt: new Date(),
+          })
+          .where(eq(user.id, session.user.id as UserId))
+      }
 
-    if (slug.length < 2) {
-      throw new Error('Invalid workspace name - cannot generate valid slug')
-    }
+      // Generate slug from workspace name
+      const slug = workspaceName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
 
-    // Use transaction to ensure atomicity - settings and statuses are created together
-    const newSettings = await db.transaction(async (tx) => {
-      // Create settings
-      const [createdSettings] = await tx
-        .insert(settings)
-        .values({
-          id: generateId('workspace'),
-          name: workspaceName.trim(),
-          slug,
+      if (slug.length < 2) {
+        throw new Error('Invalid workspace name - cannot generate valid slug')
+      }
+
+      // Use transaction to ensure atomicity - settings and statuses are created together
+      const newSettings = await db.transaction(async (tx) => {
+        // Create settings
+        const [createdSettings] = await tx
+          .insert(settings)
+          .values({
+            id: generateId('workspace'),
+            name: workspaceName.trim(),
+            slug,
+            createdAt: new Date(),
+            // Default portal config - all features enabled
+            portalConfig: JSON.stringify({
+              oauth: { google: true, github: true },
+              features: { publicView: true, submissions: true, comments: true, voting: true },
+            }),
+            // Default auth config
+            authConfig: JSON.stringify({
+              oauth: { google: true, github: true, microsoft: false },
+              openSignup: true,
+            }),
+          })
+          .returning()
+
+        // Create default post statuses
+        const statusValues = DEFAULT_STATUSES.map((status) => ({
+          id: generateId('status') as StatusId,
+          ...status,
           createdAt: new Date(),
-          // Default portal config - all features enabled
-          portalConfig: JSON.stringify({
-            oauth: { google: true, github: true },
-            features: { publicView: true, submissions: true, comments: true, voting: true },
-          }),
-          // Default auth config
-          authConfig: JSON.stringify({
-            oauth: { google: true, github: true, microsoft: false },
-            openSignup: true,
-          }),
-        })
-        .returning()
+        }))
+        await tx.insert(postStatuses).values(statusValues)
 
-      // Create default post statuses
-      const statusValues = DEFAULT_STATUSES.map((status) => ({
-        id: generateId('status') as StatusId,
-        ...status,
-        createdAt: new Date(),
-      }))
-      await tx.insert(postStatuses).values(statusValues)
+        return createdSettings
+      })
 
-      return createdSettings
-    })
-
-    return {
-      id: newSettings.id,
-      name: newSettings.name,
-      slug: newSettings.slug,
+      console.log(
+        `[fn:onboarding] setupWorkspaceFn: id=${newSettings.id}, slug=${newSettings.slug}`
+      )
+      return {
+        id: newSettings.id,
+        name: newSettings.name,
+        slug: newSettings.slug,
+      }
+    } catch (error) {
+      console.error(`[fn:onboarding] ❌ setupWorkspaceFn failed:`, error)
+      throw error
     }
   })

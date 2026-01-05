@@ -71,24 +71,38 @@ const getMemberIdForUserSchema = z.object({
 export const getMemberIdForUser = createServerFn({ method: 'GET' })
   .inputValidator(getMemberIdForUserSchema)
   .handler(async ({ data }): Promise<MemberId | null> => {
-    const { db, member, eq } = await import('@/lib/db')
+    console.log(`[fn:portal] getMemberIdForUser: userId=${data.userId}`)
+    try {
+      const { db, member, eq } = await import('@/lib/db')
 
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, data.userId as UserId),
-    })
+      const memberRecord = await db.query.member.findFirst({
+        where: eq(member.userId, data.userId as UserId),
+      })
 
-    return memberRecord?.id ?? null
+      console.log(`[fn:portal] getMemberIdForUser: found=${!!memberRecord}`)
+      return memberRecord?.id ?? null
+    } catch (error) {
+      console.error(`[fn:portal] ❌ getMemberIdForUser failed:`, error)
+      throw error
+    }
   })
 
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
-  const { listPublicBoardsWithStats } = await import('@/lib/boards/board.public')
+  console.log(`[fn:portal] fetchPublicBoards`)
+  try {
+    const { listPublicBoardsWithStats } = await import('@/lib/boards/board.public')
 
-  const result = await listPublicBoardsWithStats()
-  // Serialize settings field for client
-  return result.map((b) => ({
-    ...b,
-    settings: (b.settings ?? {}) as BoardSettings,
-  }))
+    const result = await listPublicBoardsWithStats()
+    console.log(`[fn:portal] fetchPublicBoards: count=${result.length}`)
+    // Serialize settings field for client
+    return result.map((b) => ({
+      ...b,
+      settings: (b.settings ?? {}) as BoardSettings,
+    }))
+  } catch (error) {
+    console.error(`[fn:portal] ❌ fetchPublicBoards failed:`, error)
+    throw error
+  }
 })
 
 const fetchPublicBoardBySlugSchema = z.object({
@@ -98,15 +112,22 @@ const fetchPublicBoardBySlugSchema = z.object({
 export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicBoardBySlugSchema)
   .handler(async ({ data }) => {
-    const { getPublicBoardBySlug } = await import('@/lib/boards/board.public')
+    console.log(`[fn:portal] fetchPublicBoardBySlug: slug=${data.slug}`)
+    try {
+      const { getPublicBoardBySlug } = await import('@/lib/boards/board.public')
 
-    const result = await getPublicBoardBySlug(data.slug)
-    if (!result) {
-      return null
-    }
-    return {
-      ...result,
-      settings: (result.settings ?? {}) as BoardSettings,
+      const result = await getPublicBoardBySlug(data.slug)
+      console.log(`[fn:portal] fetchPublicBoardBySlug: found=${!!result}`)
+      if (!result) {
+        return null
+      }
+      return {
+        ...result,
+        settings: (result.settings ?? {}) as BoardSettings,
+      }
+    } catch (error) {
+      console.error(`[fn:portal] ❌ fetchPublicBoardBySlug failed:`, error)
+      throw error
     }
   })
 
@@ -117,43 +138,50 @@ const fetchPublicPostDetailSchema = z.object({
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicPostDetailSchema)
   .handler(async ({ data }) => {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { getPublicPostDetail } = await import('@/lib/posts/post.public')
-    const { getMemberIdentifier } = await import('@/lib/user-identifier')
+    console.log(`[fn:portal] fetchPublicPostDetail: postId=${data.postId}`)
+    try {
+      const { getOptionalAuth } = await import('./auth-helpers')
+      const { getPublicPostDetail } = await import('@/lib/posts/post.public')
+      const { getMemberIdentifier } = await import('@/lib/user-identifier')
 
-    // Get user identifier for reaction highlighting (optional auth)
-    const ctx = await getOptionalAuth()
-    const userIdentifier = ctx?.member ? getMemberIdentifier(ctx.member.id) : undefined
+      // Get user identifier for reaction highlighting (optional auth)
+      const ctx = await getOptionalAuth()
+      const userIdentifier = ctx?.member ? getMemberIdentifier(ctx.member.id) : undefined
 
-    const result = await getPublicPostDetail(data.postId as PostId, userIdentifier)
-    if (!result) {
-      return null
-    }
+      const result = await getPublicPostDetail(data.postId as PostId, userIdentifier)
+      if (!result) {
+        return null
+      }
 
-    // Helper to serialize comment dates recursively
-    type CommentType = (typeof result.comments)[0]
-    type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
-      createdAt: string
-      replies: SerializedComment[]
-    }
-    const serializeComment = (c: CommentType): SerializedComment => ({
-      ...c,
-      createdAt: c.createdAt.toISOString(),
-      replies: c.replies.map(serializeComment),
-    })
+      // Helper to serialize comment dates recursively
+      type CommentType = (typeof result.comments)[0]
+      type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
+        createdAt: string
+        replies: SerializedComment[]
+      }
+      const serializeComment = (c: CommentType): SerializedComment => ({
+        ...c,
+        createdAt: c.createdAt.toISOString(),
+        replies: c.replies.map(serializeComment),
+      })
 
-    // Serialize Date fields
-    return {
-      ...result,
-      contentJson: result.contentJson ?? {},
-      createdAt: result.createdAt.toISOString(),
-      comments: result.comments.map(serializeComment),
-      officialResponse: result.officialResponse
-        ? {
-            ...result.officialResponse,
-            respondedAt: result.officialResponse.respondedAt.toISOString(),
-          }
-        : null,
+      // Serialize Date fields
+      console.log(`[fn:portal] fetchPublicPostDetail: found, comments=${result.comments.length}`)
+      return {
+        ...result,
+        contentJson: result.contentJson ?? {},
+        createdAt: result.createdAt.toISOString(),
+        comments: result.comments.map(serializeComment),
+        officialResponse: result.officialResponse
+          ? {
+              ...result.officialResponse,
+              respondedAt: result.officialResponse.respondedAt.toISOString(),
+            }
+          : null,
+      }
+    } catch (error) {
+      console.error(`[fn:portal] ❌ fetchPublicPostDetail failed:`, error)
+      throw error
     }
   })
 
@@ -165,36 +193,61 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
     }: {
       data: { boardSlug?: string; search?: string; sort: 'top' | 'new' | 'trending' }
     }) => {
-      const { listPublicPosts } = await import('@/lib/posts/post.public')
+      console.log(
+        `[fn:portal] fetchPublicPosts: sort=${data.sort}, board=${data.boardSlug || 'all'}`
+      )
+      try {
+        const { listPublicPosts } = await import('@/lib/posts/post.public')
 
-      const result = await listPublicPosts({
-        boardSlug: data.boardSlug,
-        search: data.search,
-        sort: data.sort,
-        page: 1,
-        limit: 20,
-      })
-      // Serialize Date fields
-      return {
-        ...result,
-        items: result.items.map((post) => ({
-          ...post,
-          createdAt: post.createdAt.toISOString(),
-        })),
+        const result = await listPublicPosts({
+          boardSlug: data.boardSlug,
+          search: data.search,
+          sort: data.sort,
+          page: 1,
+          limit: 20,
+        })
+        console.log(`[fn:portal] fetchPublicPosts: count=${result.items.length}`)
+        // Serialize Date fields
+        return {
+          ...result,
+          items: result.items.map((post) => ({
+            ...post,
+            createdAt: post.createdAt.toISOString(),
+          })),
+        }
+      } catch (error) {
+        console.error(`[fn:portal] ❌ fetchPublicPosts failed:`, error)
+        throw error
       }
     }
   )
 
 export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(async () => {
-  const { listPublicStatuses } = await import('@/lib/statuses/status.service')
+  console.log(`[fn:portal] fetchPublicStatuses`)
+  try {
+    const { listPublicStatuses } = await import('@/lib/statuses/status.service')
 
-  return await listPublicStatuses()
+    const result = await listPublicStatuses()
+    console.log(`[fn:portal] fetchPublicStatuses: count=${result.length}`)
+    return result
+  } catch (error) {
+    console.error(`[fn:portal] ❌ fetchPublicStatuses failed:`, error)
+    throw error
+  }
 })
 
 export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async () => {
-  const { listPublicTags } = await import('@/lib/tags/tag.service')
+  console.log(`[fn:portal] fetchPublicTags`)
+  try {
+    const { listPublicTags } = await import('@/lib/tags/tag.service')
 
-  return await listPublicTags()
+    const result = await listPublicTags()
+    console.log(`[fn:portal] fetchPublicTags: count=${result.length}`)
+    return result
+  } catch (error) {
+    console.error(`[fn:portal] ❌ fetchPublicTags failed:`, error)
+    throw error
+  }
 })
 
 export const fetchVotedPosts = createServerFn({ method: 'GET' })
@@ -302,8 +355,7 @@ export const checkUserVoted = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const { hasUserVoted } = await import('@/lib/posts/post.public')
 
-    const result = await hasUserVoted(data.postId as PostId, data.userIdentifier)
-    return result.success ? result.value : false
+    return await hasUserVoted(data.postId as PostId, data.userIdentifier)
   })
 
 /**
@@ -321,15 +373,22 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
  * Fetch all public roadmaps
  */
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
-  const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+  console.log(`[fn:portal] fetchPublicRoadmaps`)
+  try {
+    const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
 
-  const roadmaps = await listPublicRoadmaps()
-  // Serialize Date fields
-  return roadmaps.map((roadmap) => ({
-    ...roadmap,
-    createdAt: roadmap.createdAt.toISOString(),
-    updatedAt: roadmap.updatedAt.toISOString(),
-  }))
+    const roadmaps = await listPublicRoadmaps()
+    console.log(`[fn:portal] fetchPublicRoadmaps: count=${roadmaps.length}`)
+    // Serialize Date fields
+    return roadmaps.map((roadmap) => ({
+      ...roadmap,
+      createdAt: roadmap.createdAt.toISOString(),
+      updatedAt: roadmap.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:portal] ❌ fetchPublicRoadmaps failed:`, error)
+    throw error
+  }
 })
 
 /**

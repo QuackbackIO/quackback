@@ -25,18 +25,25 @@ import { userIdSchema, type UserId } from '@quackback/ids'
  * Used by useWorkspaceFeatures hook for feature gating
  */
 export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getWorkspaceFeatures } = await import('@/lib/features/server')
-  const features = await getWorkspaceFeatures()
+  console.log(`[fn:settings] getWorkspaceFeatures`)
+  try {
+    const { getWorkspaceFeatures } = await import('@/lib/features/server')
+    const features = await getWorkspaceFeatures()
 
-  // Return serializable data (remove function)
-  return {
-    edition: features.edition,
-    selfHostedTier: features.selfHostedTier,
-    cloudTier: features.cloudTier,
-    enabledFeatures: features.enabledFeatures,
-    limits: features.limits,
-    hasEnterprise: features.hasEnterprise,
-    license: features.license,
+    console.log(`[fn:settings] getWorkspaceFeatures: edition=${features.edition}`)
+    // Return serializable data (remove function)
+    return {
+      edition: features.edition,
+      selfHostedTier: features.selfHostedTier,
+      cloudTier: features.cloudTier,
+      enabledFeatures: features.enabledFeatures,
+      limits: features.limits,
+      hasEnterprise: features.hasEnterprise,
+      license: features.license,
+    }
+  } catch (error) {
+    console.error(`[fn:settings] ❌ getWorkspaceFeatures failed:`, error)
+    throw error
   }
 })
 
@@ -44,46 +51,85 @@ export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(
  * Fetch branding configuration (public - used for theming)
  */
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getBrandingConfig } = await import('@/lib/settings/settings.service')
+  console.log(`[fn:settings] fetchBrandingConfig`)
+  try {
+    const { getBrandingConfig } = await import('@/lib/settings/settings.service')
 
-  return await getBrandingConfig()
+    const config = await getBrandingConfig()
+    console.log(`[fn:settings] fetchBrandingConfig: success`)
+    return config
+  } catch (error) {
+    console.error(`[fn:settings] ❌ fetchBrandingConfig failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch custom CSS (public - used for portal styling)
  */
 export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getCustomCss } = await import('@/lib/settings/settings.service')
+  console.log(`[fn:settings] fetchCustomCss`)
+  try {
+    const { getCustomCss } = await import('@/lib/settings/settings.service')
 
-  return await getCustomCss()
+    const css = await getCustomCss()
+    console.log(`[fn:settings] fetchCustomCss: hasCustomCss=${!!css}`)
+    return css
+  } catch (error) {
+    console.error(`[fn:settings] ❌ fetchCustomCss failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch portal configuration (admin - full config)
  */
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getPortalConfig } = await import('@/lib/settings/settings.service')
+  console.log(`[fn:settings] fetchPortalConfig`)
+  try {
+    const { getPortalConfig } = await import('@/lib/settings/settings.service')
 
-  const config = await getPortalConfig()
-  return config ?? DEFAULT_PORTAL_CONFIG
+    const config = await getPortalConfig()
+    console.log(`[fn:settings] fetchPortalConfig: hasConfig=${!!config}`)
+    return config ?? DEFAULT_PORTAL_CONFIG
+  } catch (error) {
+    console.error(`[fn:settings] ❌ fetchPortalConfig failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch public portal configuration (public - for login pages)
  */
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getPublicPortalConfig } = await import('@/lib/settings/settings.service')
+  console.log(`[fn:settings] fetchPublicPortalConfig`)
+  try {
+    const { getPublicPortalConfig } = await import('@/lib/settings/settings.service')
 
-  return await getPublicPortalConfig()
+    const config = await getPublicPortalConfig()
+    console.log(`[fn:settings] fetchPublicPortalConfig: success`)
+    return config
+  } catch (error) {
+    console.error(`[fn:settings] ❌ fetchPublicPortalConfig failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch public auth configuration (public - for admin login)
  */
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getPublicAuthConfig } = await import('@/lib/settings/settings.service')
+  console.log(`[fn:settings] fetchPublicAuthConfig`)
+  try {
+    const { getPublicAuthConfig } = await import('@/lib/settings/settings.service')
 
-  return await getPublicAuthConfig()
+    const config = await getPublicAuthConfig()
+    console.log(`[fn:settings] fetchPublicAuthConfig: success`)
+    return config
+  } catch (error) {
+    console.error(`[fn:settings] ❌ fetchPublicAuthConfig failed:`, error)
+    throw error
+  }
 })
 
 const fetchUserProfileSchema = userIdSchema

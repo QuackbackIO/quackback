@@ -218,6 +218,8 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
         const { db, settings, user, account, member, session, eq, and } = await import('@/lib/db')
         const { verifyOAuthState } = await import('@/lib/auth/oauth-state')
 
+        console.log(`[oauth] Callback received`)
+
         const url = new URL(request.url)
         const searchParams = url.searchParams
         const code = searchParams.get('code')
@@ -226,7 +228,10 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
 
         // Handle OAuth errors from provider
         if (error) {
-          console.error('OAuth error from provider:', error, searchParams.get('error_description'))
+          console.error(
+            `[oauth] ❌ Provider error: ${error}`,
+            searchParams.get('error_description')
+          )
           // Can't redirect without state, just show error
           return Response.json({ error: `OAuth error: ${error}` }, { status: 400 })
         }
@@ -247,7 +252,7 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
         // Verify HMAC signature and decode state
         const state = verifyOAuthState<OAuthState>(signedState)
         if (!state) {
-          console.error('OAuth state signature verification failed')
+          console.error(`[oauth] ❌ State signature verification failed`)
           return Response.json({ error: 'Invalid or tampered state' }, { status: 400 })
         }
 
@@ -266,10 +271,11 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
         }
 
         // Exchange code for token
+        console.log(`[oauth] 🔄 Exchanging code for token: provider=${provider}`)
         const redirectUri = buildCallbackUrl(request)
         const tokenResult = await exchangeCodeForToken(provider, code, redirectUri)
         if ('error' in tokenResult) {
-          console.error('Token exchange error:', tokenResult.error)
+          console.error(`[oauth] ❌ Token exchange failed:`, tokenResult.error)
           return Response.redirect(
             buildErrorRedirect(state.callbackUrl, 'token_exchange_failed'),
             302
@@ -277,13 +283,16 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
         }
 
         // Get user info
+        console.log(`[oauth] ✅ Token exchange complete`)
         const userInfoResult = await getUserInfo(provider, tokenResult.accessToken)
         if ('error' in userInfoResult) {
-          console.error('User info error:', userInfoResult.error)
+          console.error(`[oauth] ❌ User info failed:`, userInfoResult.error)
           return Response.redirect(buildErrorRedirect(state.callbackUrl, 'user_info_failed'), 302)
         }
 
         const { email, name, image, providerId, providerAccountId } = userInfoResult
+        const maskedEmail = email.replace(/(.{2}).*@/, '$1***@')
+        console.log(`[oauth] User info: email=${maskedEmail}, provider=${provider}`)
 
         try {
           // Check if user already exists by email (OSS: no workspace scoping needed)
@@ -394,9 +403,10 @@ export const Route = createFileRoute('/api/auth/oauth-callback')({
             `better-auth.session_token=${sessionToken}; HttpOnly; ${isSecure ? 'Secure; ' : ''}SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}; Path=/`
           )
 
+          console.log(`[oauth] ✅ Session created for user=${userId}`)
           return response
         } catch (error) {
-          console.error('OAuth callback error:', error)
+          console.error(`[oauth] ❌ Callback error:`, error)
           return Response.redirect(buildErrorRedirect(state.callbackUrl, 'signup_failed'), 302)
         }
       },

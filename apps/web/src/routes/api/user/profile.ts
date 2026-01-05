@@ -14,9 +14,12 @@ export const Route = createFileRoute('/api/user/profile')({
         const { db, user, eq } = await import('@/lib/db')
         const { getSession } = await import('@/lib/server-functions/auth')
 
+        console.log(`[api] GET /user/profile`)
+
         try {
           const session = await getSession()
           if (!session?.user) {
+            console.warn(`[api] ⚠️ Unauthorized profile access`)
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
@@ -41,7 +44,7 @@ export const Route = createFileRoute('/api/user/profile')({
             hasCustomAvatar: !!userRecord.imageType,
           })
         } catch (error) {
-          console.error('Error fetching user profile:', error)
+          console.error(`[api] ❌ Profile fetch failed:`, error)
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },
@@ -54,9 +57,12 @@ export const Route = createFileRoute('/api/user/profile')({
         const { db, user, eq } = await import('@/lib/db')
         const { getSession } = await import('@/lib/server-functions/auth')
 
+        console.log(`[api] PATCH /user/profile`)
+
         try {
           const session = await getSession()
           if (!session?.user) {
+            console.warn(`[api] ⚠️ Unauthorized profile update`)
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
@@ -137,6 +143,7 @@ export const Route = createFileRoute('/api/user/profile')({
               imageType: user.imageType,
             })
 
+          console.log(`[api] ✅ Profile updated: user=${session.user.id}`)
           return Response.json({
             success: true,
             user: {
@@ -145,7 +152,7 @@ export const Route = createFileRoute('/api/user/profile')({
             },
           })
         } catch (error) {
-          console.error('Error updating user profile:', error)
+          console.error(`[api] ❌ Profile update failed:`, error)
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },
@@ -158,9 +165,12 @@ export const Route = createFileRoute('/api/user/profile')({
         const { db, user, eq } = await import('@/lib/db')
         const { getSession } = await import('@/lib/server-functions/auth')
 
+        console.log(`[api] DELETE /user/profile (avatar)`)
+
         try {
           const session = await getSession()
           if (!session?.user) {
+            console.warn(`[api] ⚠️ Unauthorized avatar delete`)
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
@@ -179,6 +189,7 @@ export const Route = createFileRoute('/api/user/profile')({
               imageType: user.imageType,
             })
 
+          console.log(`[api] ✅ Avatar removed: user=${session.user.id}`)
           return Response.json({
             success: true,
             user: {
@@ -187,7 +198,7 @@ export const Route = createFileRoute('/api/user/profile')({
             },
           })
         } catch (error) {
-          console.error('Error removing avatar:', error)
+          console.error(`[api] ❌ Avatar removal failed:`, error)
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },

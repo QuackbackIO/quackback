@@ -47,10 +47,13 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
   const { getSettings } = await import('./workspace')
   const { db, member, eq } = await import('@/lib/db')
 
+  console.log(`[auth] Checking session...`)
   const session = await getSession()
   if (!session?.user) {
+    console.warn(`[auth] ⚠️ No session`)
     throw new Error('Authentication required')
   }
+  console.log(`[auth] Session: user=${session.user.id}`)
 
   const appSettings = await getSettings()
   if (!appSettings) {
@@ -65,11 +68,15 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
   }
 
   if (options?.roles && !options.roles.includes(memberRecord.role as Role)) {
+    console.warn(
+      `[auth] ⚠️ Role denied: required=[${options.roles.join(',')}], actual=${memberRecord.role}`
+    )
     throw new Error(
       `Access denied: Requires [${options.roles.join(', ')}], got ${memberRecord.role}`
     )
   }
 
+  console.log(`[auth] ✅ Authorized: role=${memberRecord.role}`)
   return {
     settings: {
       id: appSettings.id as WorkspaceId,
@@ -104,8 +111,10 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 
   const session = await getSession()
   if (!session?.user) {
+    console.log(`[auth] Optional auth: no session`)
     return null
   }
+  console.log(`[auth] Optional auth: user=${session.user.id}`)
 
   const appSettings = await getSettings()
   if (!appSettings) {
@@ -118,6 +127,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 
   // Auto-create member record for authenticated users without one
   if (!memberRecord) {
+    console.log(`[auth] 📦 Creating member record for user=${session.user.id}`)
     const newMemberId = generateId('member')
     const [created] = await db
       .insert(member)
@@ -129,6 +139,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       })
       .returning()
     memberRecord = created
+    console.log(`[auth] ✅ Member created: id=${newMemberId}`)
   }
 
   return {

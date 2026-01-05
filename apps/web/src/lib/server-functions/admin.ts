@@ -58,23 +58,30 @@ const deletePortalUserSchema = z.object({
 export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .inputValidator(inboxPostListSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listInboxPosts } = await import('@/lib/posts/post.service')
+    console.log(`[fn:admin] fetchInboxPosts: sort=${data.sort}, page=${data.page}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { listInboxPosts } = await import('@/lib/posts/post.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await listInboxPosts(data)
-    // Serialize contentJson field and Date fields
-    return {
-      ...result,
-      items: result.items.map((p) => ({
-        ...p,
-        contentJson: (p.contentJson ?? {}) as TiptapContent,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-        deletedAt: p.deletedAt?.toISOString() || null,
-        officialResponseAt: p.officialResponseAt?.toISOString() || null,
-      })),
+      const result = await listInboxPosts(data)
+      console.log(`[fn:admin] fetchInboxPosts: count=${result.items.length}`)
+      // Serialize contentJson field and Date fields
+      return {
+        ...result,
+        items: result.items.map((p) => ({
+          ...p,
+          contentJson: (p.contentJson ?? {}) as TiptapContent,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+          deletedAt: p.deletedAt?.toISOString() || null,
+          officialResponseAt: p.officialResponseAt?.toISOString() || null,
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ fetchInboxPosts failed:`, error)
+      throw error
     }
   })
 
@@ -82,76 +89,116 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
  * Fetch all boards for the organization
  */
 export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { listBoards } = await import('@/lib/boards/board.service')
+  console.log(`[fn:admin] fetchBoardsList`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listBoards } = await import('@/lib/boards/board.service')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  const result = await listBoards()
-  // Serialize settings field and Date fields
-  return result.map((b) => ({
-    ...b,
-    settings: (b.settings ?? {}) as BoardSettings,
-    createdAt: b.createdAt.toISOString(),
-    updatedAt: b.updatedAt.toISOString(),
-  }))
+    const result = await listBoards()
+    console.log(`[fn:admin] fetchBoardsList: count=${result.length}`)
+    // Serialize settings field and Date fields
+    return result.map((b) => ({
+      ...b,
+      settings: (b.settings ?? {}) as BoardSettings,
+      createdAt: b.createdAt.toISOString(),
+      updatedAt: b.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchBoardsList failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch all tags for the organization
  */
 export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { listTags } = await import('@/lib/tags/tag.service')
+  console.log(`[fn:admin] fetchTagsList`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listTags } = await import('@/lib/tags/tag.service')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  return await listTags()
+    const result = await listTags()
+    console.log(`[fn:admin] fetchTagsList: count=${result.length}`)
+    return result
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchTagsList failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch all statuses for the organization
  */
 export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { listStatuses } = await import('@/lib/statuses/status.service')
+  console.log(`[fn:admin] fetchStatusesList`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listStatuses } = await import('@/lib/statuses/status.service')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  return await listStatuses()
+    const result = await listStatuses()
+    console.log(`[fn:admin] fetchStatusesList: count=${result.length}`)
+    return result
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchStatusesList failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch team members (not portal users)
  */
 export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { listTeamMembers } = await import('@/lib/members/member.service')
+  console.log(`[fn:admin] fetchTeamMembers`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { listTeamMembers } = await import('@/lib/members/member.service')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  return await listTeamMembers()
+    const result = await listTeamMembers()
+    console.log(`[fn:admin] fetchTeamMembers: count=${result.length}`)
+    return result
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchTeamMembers failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Check onboarding completion status
  */
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { db, member } = await import('@/lib/db')
+  console.log(`[fn:admin] fetchOnboardingStatus`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db, member } = await import('@/lib/db')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  const [orgBoards, members] = await Promise.all([
-    db.query.boards.findMany({
-      columns: { id: true },
-    }),
-    db.select({ id: member.id }).from(member),
-  ])
+    const [orgBoards, members] = await Promise.all([
+      db.query.boards.findMany({
+        columns: { id: true },
+      }),
+      db.select({ id: member.id }).from(member),
+    ])
 
-  return {
-    hasBoards: orgBoards.length > 0,
-    memberCount: members.length,
+    console.log(
+      `[fn:admin] fetchOnboardingStatus: hasBoards=${orgBoards.length > 0}, memberCount=${members.length}`
+    )
+    return {
+      hasBoards: orgBoards.length > 0,
+      memberCount: members.length,
+    }
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchOnboardingStatus failed:`, error)
+    throw error
   }
 })
 
@@ -159,31 +206,45 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
  * Fetch boards list for settings page
  */
 export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { db } = await import('@/lib/db')
+  console.log(`[fn:admin] fetchBoardsForSettings`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db } = await import('@/lib/db')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  const orgBoards = await db.query.boards.findMany()
-  return orgBoards.map((b) => ({
-    ...b,
-    settings: (b.settings ?? {}) as BoardSettings,
-    createdAt: b.createdAt.toISOString(),
-    updatedAt: b.updatedAt.toISOString(),
-  }))
+    const orgBoards = await db.query.boards.findMany()
+    console.log(`[fn:admin] fetchBoardsForSettings: count=${orgBoards.length}`)
+    return orgBoards.map((b) => ({
+      ...b,
+      settings: (b.settings ?? {}) as BoardSettings,
+      createdAt: b.createdAt.toISOString(),
+      updatedAt: b.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchBoardsForSettings failed:`, error)
+    throw error
+  }
 })
 
 /**
  * Fetch integrations list
  */
 export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { db } = await import('@/lib/db')
+  console.log(`[fn:admin] fetchIntegrationsList`)
+  try {
+    const { requireAuth } = await import('./auth-helpers')
+    const { db } = await import('@/lib/db')
 
-  await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ roles: ['admin', 'member'] })
 
-  const integrations = await db.query.integrations.findMany()
-  return integrations
+    const integrations = await db.query.integrations.findMany()
+    console.log(`[fn:admin] fetchIntegrationsList: count=${integrations.length}`)
+    return integrations
+  } catch (error) {
+    console.error(`[fn:admin] ❌ fetchIntegrationsList failed:`, error)
+    throw error
+  }
 })
 
 /**
@@ -194,68 +255,78 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
 export const checkOnboardingState = createServerFn({ method: 'GET' })
   .inputValidator(z.string().optional())
   .handler(async ({ data }) => {
-    const { db, member, eq } = await import('@/lib/db')
+    console.log(`[fn:admin] checkOnboardingState`)
+    try {
+      const { db, member, eq } = await import('@/lib/db')
 
-    // Allow unauthenticated access for onboarding
-    const userId = data
+      // Allow unauthenticated access for onboarding
+      const userId = data
 
-    if (!userId) {
-      return {
-        memberRecord: null,
-        hasSettings: false,
-        hasBoards: false,
-      }
-    }
-
-    // Check if user has a member record
-    let memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, userId as UserId),
-    })
-
-    if (!memberRecord) {
-      // Check if any admin exists
-      const existingAdmin = await db.query.member.findFirst({
-        where: eq(member.role, 'admin'),
-      })
-
-      if (existingAdmin) {
-        // Not first user - they need an invitation
+      if (!userId) {
+        console.log(`[fn:admin] checkOnboardingState: no userId`)
         return {
           memberRecord: null,
-          needsInvitation: true,
           hasSettings: false,
           hasBoards: false,
         }
       }
 
-      // First user - create admin member record
-      const [newMember] = await db
-        .insert(member)
-        .values({
-          id: generateId('member'),
-          userId: userId as UserId,
-          role: 'admin',
-          createdAt: new Date(),
+      // Check if user has a member record
+      let memberRecord = await db.query.member.findFirst({
+        where: eq(member.userId, userId as UserId),
+      })
+
+      if (!memberRecord) {
+        // Check if any admin exists
+        const existingAdmin = await db.query.member.findFirst({
+          where: eq(member.role, 'admin'),
         })
-        .returning()
 
-      memberRecord = newMember
-    }
-
-    // Check if boards exist
-    const existingBoards = await db.query.boards.findFirst()
-
-    return {
-      memberRecord: memberRecord
-        ? {
-            id: memberRecord.id,
-            userId: memberRecord.userId,
-            role: memberRecord.role,
+        if (existingAdmin) {
+          // Not first user - they need an invitation
+          console.log(`[fn:admin] checkOnboardingState: needsInvitation=true`)
+          return {
+            memberRecord: null,
+            needsInvitation: true,
+            hasSettings: false,
+            hasBoards: false,
           }
-        : null,
-      needsInvitation: false,
-      hasSettings: true,
-      hasBoards: !!existingBoards,
+        }
+
+        // First user - create admin member record
+        const [newMember] = await db
+          .insert(member)
+          .values({
+            id: generateId('member'),
+            userId: userId as UserId,
+            role: 'admin',
+            createdAt: new Date(),
+          })
+          .returning()
+
+        memberRecord = newMember
+        console.log(`[fn:admin] checkOnboardingState: created admin member`)
+      }
+
+      // Check if boards exist
+      const existingBoards = await db.query.boards.findFirst()
+
+      console.log(`[fn:admin] checkOnboardingState: hasBoards=${!!existingBoards}`)
+      return {
+        memberRecord: memberRecord
+          ? {
+              id: memberRecord.id,
+              userId: memberRecord.userId,
+              role: memberRecord.role,
+            }
+          : null,
+        needsInvitation: false,
+        hasSettings: true,
+        hasBoards: !!existingBoards,
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ checkOnboardingState failed:`, error)
+      throw error
     }
   })
 
@@ -269,28 +340,35 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
 export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .inputValidator(listPortalUsersSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listPortalUsers } = await import('@/lib/users/user.service')
+    console.log(`[fn:admin] listPortalUsersFn`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { listPortalUsers } = await import('@/lib/users/user.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await listPortalUsers({
-      search: data.search,
-      verified: data.verified,
-      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-      sort: data.sort,
-      page: data.page,
-      limit: data.limit,
-    })
+      const result = await listPortalUsers({
+        search: data.search,
+        verified: data.verified,
+        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        sort: data.sort,
+        page: data.page,
+        limit: data.limit,
+      })
 
-    // Serialize Date fields for client
-    return {
-      ...result,
-      items: result.items.map((user) => ({
-        ...user,
-        joinedAt: user.joinedAt.toISOString(),
-      })),
+      console.log(`[fn:admin] listPortalUsersFn: count=${result.items.length}`)
+      // Serialize Date fields for client
+      return {
+        ...result,
+        items: result.items.map((user) => ({
+          ...user,
+          joinedAt: user.joinedAt.toISOString(),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ listPortalUsersFn failed:`, error)
+      throw error
     }
   })
 
@@ -300,27 +378,35 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
 export const getPortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(getPortalUserSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getPortalUserDetail } = await import('@/lib/users/user.service')
+    console.log(`[fn:admin] getPortalUserFn: memberId=${data.memberId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getPortalUserDetail } = await import('@/lib/users/user.service')
 
-    await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getPortalUserDetail(data.memberId as MemberId)
+      const result = await getPortalUserDetail(data.memberId as MemberId)
 
-    // Serialize Date fields for client
-    if (!result) {
-      return null
-    }
+      // Serialize Date fields for client
+      if (!result) {
+        console.log(`[fn:admin] getPortalUserFn: not found`)
+        return null
+      }
 
-    return {
-      ...result,
-      joinedAt: result.joinedAt.toISOString(),
-      createdAt: result.createdAt.toISOString(),
-      engagedPosts: result.engagedPosts.map((post) => ({
-        ...post,
-        createdAt: post.createdAt.toISOString(),
-        engagedAt: post.engagedAt.toISOString(),
-      })),
+      console.log(`[fn:admin] getPortalUserFn: found`)
+      return {
+        ...result,
+        joinedAt: result.joinedAt.toISOString(),
+        createdAt: result.createdAt.toISOString(),
+        engagedPosts: result.engagedPosts.map((post) => ({
+          ...post,
+          createdAt: post.createdAt.toISOString(),
+          engagedAt: post.engagedAt.toISOString(),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ getPortalUserFn failed:`, error)
+      throw error
     }
   })
 
@@ -330,14 +416,21 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 export const deletePortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(deletePortalUserSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { removePortalUser } = await import('@/lib/users/user.service')
+    console.log(`[fn:admin] deletePortalUserFn: memberId=${data.memberId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { removePortalUser } = await import('@/lib/users/user.service')
 
-    await requireAuth({ roles: ['admin'] })
+      await requireAuth({ roles: ['admin'] })
 
-    await removePortalUser(data.memberId as MemberId)
+      await removePortalUser(data.memberId as MemberId)
 
-    return { memberId: data.memberId }
+      console.log(`[fn:admin] deletePortalUserFn: deleted`)
+      return { memberId: data.memberId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ deletePortalUserFn failed:`, error)
+      throw error
+    }
   })
 
 // ============================================
@@ -368,71 +461,78 @@ export type ResendInvitationInput = z.infer<typeof resendInvitationSchema>
 export const sendInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(sendInvitationSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getSession } = await import('./auth')
-    const { getSettings } = await import('./workspace')
-    const { db, invitation, user, eq, and } = await import('@/lib/db')
-    const { sendInvitationEmail } = await import('@quackback/email')
-    const { getRootUrl } = await import('@/lib/routing')
+    console.log(`[fn:admin] sendInvitationFn: role=${data.role}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getSession } = await import('./auth')
+      const { getSettings } = await import('./workspace')
+      const { db, invitation, user, eq, and } = await import('@/lib/db')
+      const { sendInvitationEmail } = await import('@quackback/email')
+      const { getRootUrl } = await import('@/lib/routing')
 
-    await requireAuth({ roles: ['admin'] })
+      await requireAuth({ roles: ['admin'] })
 
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
+
+      const settings = await getSettings()
+      if (!settings) {
+        throw new Error('Settings not found')
+      }
+
+      const email = data.email.toLowerCase()
+
+      const existingInvitation = await db.query.invitation.findFirst({
+        where: and(eq(invitation.email, email), eq(invitation.status, 'pending')),
+      })
+
+      if (existingInvitation) {
+        throw new Error('An invitation has already been sent to this email')
+      }
+
+      const existingUser = await db.query.user.findFirst({
+        where: eq(user.email, email),
+      })
+
+      if (existingUser) {
+        throw new Error('A user with this email already exists')
+      }
+
+      const invitationId = generateId('invite')
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      const now = new Date()
+
+      await db.insert(invitation).values({
+        id: invitationId,
+        email,
+        name: data.name || null,
+        role: data.role,
+        status: 'pending',
+        expiresAt,
+        lastSentAt: now,
+        inviterId: session.user.id,
+        createdAt: now,
+      })
+
+      const rootUrl = getRootUrl()
+      const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
+
+      await sendInvitationEmail({
+        to: email,
+        invitedByName: session.user.name,
+        inviteeName: data.name || undefined,
+        workspaceName: settings.name,
+        inviteLink,
+      })
+
+      console.log(`[fn:admin] sendInvitationFn: sent id=${invitationId}`)
+      return { invitationId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ sendInvitationFn failed:`, error)
+      throw error
     }
-
-    const settings = await getSettings()
-    if (!settings) {
-      throw new Error('Settings not found')
-    }
-
-    const email = data.email.toLowerCase()
-
-    const existingInvitation = await db.query.invitation.findFirst({
-      where: and(eq(invitation.email, email), eq(invitation.status, 'pending')),
-    })
-
-    if (existingInvitation) {
-      throw new Error('An invitation has already been sent to this email')
-    }
-
-    const existingUser = await db.query.user.findFirst({
-      where: eq(user.email, email),
-    })
-
-    if (existingUser) {
-      throw new Error('A user with this email already exists')
-    }
-
-    const invitationId = generateId('invite')
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    const now = new Date()
-
-    await db.insert(invitation).values({
-      id: invitationId,
-      email,
-      name: data.name || null,
-      role: data.role,
-      status: 'pending',
-      expiresAt,
-      lastSentAt: now,
-      inviterId: session.user.id,
-      createdAt: now,
-    })
-
-    const rootUrl = getRootUrl()
-    const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
-
-    await sendInvitationEmail({
-      to: email,
-      invitedByName: session.user.name,
-      inviteeName: data.name || undefined,
-      workspaceName: settings.name,
-      inviteLink,
-    })
-
-    return { invitationId }
   })
 
 /**
@@ -441,24 +541,31 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
 export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(cancelInvitationSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { db, invitation, eq, and } = await import('@/lib/db')
+    console.log(`[fn:admin] cancelInvitationFn: id=${data.invitationId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { db, invitation, eq, and } = await import('@/lib/db')
 
-    await requireAuth({ roles: ['admin'] })
+      await requireAuth({ roles: ['admin'] })
 
-    const invitationId = data.invitationId as InviteId
+      const invitationId = data.invitationId as InviteId
 
-    const invitationRecord = await db.query.invitation.findFirst({
-      where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
-    })
+      const invitationRecord = await db.query.invitation.findFirst({
+        where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
+      })
 
-    if (!invitationRecord) {
-      throw new Error('Invitation not found')
+      if (!invitationRecord) {
+        throw new Error('Invitation not found')
+      }
+
+      await db.update(invitation).set({ status: 'canceled' }).where(eq(invitation.id, invitationId))
+
+      console.log(`[fn:admin] cancelInvitationFn: canceled`)
+      return { invitationId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ cancelInvitationFn failed:`, error)
+      throw error
     }
-
-    await db.update(invitation).set({ status: 'canceled' }).where(eq(invitation.id, invitationId))
-
-    return { invitationId }
   })
 
 /**
@@ -467,50 +574,57 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
 export const resendInvitationFn = createServerFn({ method: 'POST' })
   .inputValidator(resendInvitationSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { getSession } = await import('./auth')
-    const { getSettings } = await import('./workspace')
-    const { db, invitation, eq, and } = await import('@/lib/db')
-    const { sendInvitationEmail } = await import('@quackback/email')
-    const { getRootUrl } = await import('@/lib/routing')
+    console.log(`[fn:admin] resendInvitationFn: id=${data.invitationId}`)
+    try {
+      const { requireAuth } = await import('./auth-helpers')
+      const { getSession } = await import('./auth')
+      const { getSettings } = await import('./workspace')
+      const { db, invitation, eq, and } = await import('@/lib/db')
+      const { sendInvitationEmail } = await import('@quackback/email')
+      const { getRootUrl } = await import('@/lib/routing')
 
-    await requireAuth({ roles: ['admin'] })
+      await requireAuth({ roles: ['admin'] })
 
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
+
+      const settings = await getSettings()
+      if (!settings) {
+        throw new Error('Settings not found')
+      }
+
+      const invitationId = data.invitationId as InviteId
+
+      const invitationRecord = await db.query.invitation.findFirst({
+        where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
+      })
+
+      if (!invitationRecord) {
+        throw new Error('Invitation not found')
+      }
+
+      const rootUrl = getRootUrl()
+      const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
+
+      await sendInvitationEmail({
+        to: invitationRecord.email,
+        invitedByName: session.user.name,
+        inviteeName: invitationRecord.name || undefined,
+        workspaceName: settings.name,
+        inviteLink,
+      })
+
+      await db
+        .update(invitation)
+        .set({ lastSentAt: new Date() })
+        .where(eq(invitation.id, invitationId))
+
+      console.log(`[fn:admin] resendInvitationFn: resent`)
+      return { invitationId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ resendInvitationFn failed:`, error)
+      throw error
     }
-
-    const settings = await getSettings()
-    if (!settings) {
-      throw new Error('Settings not found')
-    }
-
-    const invitationId = data.invitationId as InviteId
-
-    const invitationRecord = await db.query.invitation.findFirst({
-      where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
-    })
-
-    if (!invitationRecord) {
-      throw new Error('Invitation not found')
-    }
-
-    const rootUrl = getRootUrl()
-    const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
-
-    await sendInvitationEmail({
-      to: invitationRecord.email,
-      invitedByName: session.user.name,
-      inviteeName: invitationRecord.name || undefined,
-      workspaceName: settings.name,
-      inviteLink,
-    })
-
-    await db
-      .update(invitation)
-      .set({ lastSentAt: new Date() })
-      .where(eq(invitation.id, invitationId))
-
-    return { invitationId }
   })

@@ -19,10 +19,17 @@ import { createServerFn } from '@tanstack/react-start'
  * Returns the singleton settings record from the database.
  */
 export const getSettings = createServerFn({ method: 'GET' }).handler(async () => {
-  const { db } = await import('@/lib/db')
+  console.log(`[fn:workspace] getSettings`)
+  try {
+    const { db } = await import('@/lib/db')
 
-  const org = await db.query.settings.findFirst()
-  return org ?? null
+    const org = await db.query.settings.findFirst()
+    console.log(`[fn:workspace] getSettings: found=${!!org}`)
+    return org ?? null
+  } catch (error) {
+    console.error(`[fn:workspace] ❌ getSettings failed:`, error)
+    throw error
+  }
 })
 
 /**
@@ -30,18 +37,31 @@ export const getSettings = createServerFn({ method: 'GET' }).handler(async () =>
  */
 export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
   async (): Promise<'admin' | 'member' | 'user' | null> => {
-    const { getSession } = await import('./auth')
-    const { db, member, eq } = await import('@/lib/db')
+    console.log(`[fn:workspace] getCurrentUserRole`)
+    try {
+      const { getSession } = await import('./auth')
+      const { db, member, eq } = await import('@/lib/db')
 
-    const session = await getSession()
-    if (!session?.user) return null
+      const session = await getSession()
+      if (!session?.user) {
+        console.log(`[fn:workspace] getCurrentUserRole: no session`)
+        return null
+      }
 
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id),
-    })
+      const memberRecord = await db.query.member.findFirst({
+        where: eq(member.userId, session.user.id),
+      })
 
-    if (!memberRecord) return null
-    return memberRecord.role as 'admin' | 'member' | 'user'
+      if (!memberRecord) {
+        console.log(`[fn:workspace] getCurrentUserRole: no member`)
+        return null
+      }
+      console.log(`[fn:workspace] getCurrentUserRole: role=${memberRecord.role}`)
+      return memberRecord.role as 'admin' | 'member' | 'user'
+    } catch (error) {
+      console.error(`[fn:workspace] ❌ getCurrentUserRole failed:`, error)
+      throw error
+    }
   }
 )
 
@@ -49,32 +69,42 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
  * Validate API workspace access
  */
 export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getSession } = await import('./auth')
-  const { db, member, eq } = await import('@/lib/db')
+  console.log(`[fn:workspace] validateApiWorkspaceAccess`)
+  try {
+    const { getSession } = await import('./auth')
+    const { db, member, eq } = await import('@/lib/db')
 
-  const session = await getSession()
-  if (!session?.user) {
-    return { success: false as const, error: 'Unauthorized', status: 401 as const }
-  }
+    const session = await getSession()
+    if (!session?.user) {
+      console.log(`[fn:workspace] validateApiWorkspaceAccess: no session`)
+      return { success: false as const, error: 'Unauthorized', status: 401 as const }
+    }
 
-  const memberRecord = await db.query.member.findFirst({
-    where: eq(member.userId, session.user.id),
-  })
+    const memberRecord = await db.query.member.findFirst({
+      where: eq(member.userId, session.user.id),
+    })
 
-  if (!memberRecord) {
-    return { success: false as const, error: 'Forbidden', status: 403 as const }
-  }
+    if (!memberRecord) {
+      console.log(`[fn:workspace] validateApiWorkspaceAccess: no member`)
+      return { success: false as const, error: 'Forbidden', status: 403 as const }
+    }
 
-  const appSettings = await db.query.settings.findFirst()
-  if (!appSettings) {
-    return { success: false as const, error: 'Settings not found', status: 403 as const }
-  }
+    const appSettings = await db.query.settings.findFirst()
+    if (!appSettings) {
+      console.log(`[fn:workspace] validateApiWorkspaceAccess: no settings`)
+      return { success: false as const, error: 'Settings not found', status: 403 as const }
+    }
 
-  return {
-    success: true as const,
-    settings: appSettings,
-    member: memberRecord,
-    user: session.user,
+    console.log(`[fn:workspace] validateApiWorkspaceAccess: success, role=${memberRecord.role}`)
+    return {
+      success: true as const,
+      settings: appSettings,
+      member: memberRecord,
+      user: session.user,
+    }
+  } catch (error) {
+    console.error(`[fn:workspace] ❌ validateApiWorkspaceAccess failed:`, error)
+    throw error
   }
 })
 
