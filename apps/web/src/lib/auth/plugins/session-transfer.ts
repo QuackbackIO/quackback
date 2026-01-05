@@ -22,15 +22,23 @@ import { jwtVerify } from 'jose'
 import { z } from 'zod'
 import crypto from 'crypto'
 import { generateId } from '@quackback/ids'
-import { env as cfEnv } from 'cloudflare:workers'
 
 type CfEnv = { TRANSFER_TOKEN_SECRET?: string; NODE_ENV?: string }
 
+// Cloudflare Workers env - only available at runtime in CF Workers
+let cfEnv: CfEnv | undefined
+try {
+  // Dynamic import to avoid build-time errors in non-CF environments
+  const cf = await import('cloudflare:workers')
+  cfEnv = cf.env as CfEnv
+} catch {
+  // Not running in Cloudflare Workers - use process.env only
+}
+
 function getEnv() {
-  const env = cfEnv as CfEnv | undefined
   return {
-    TRANSFER_TOKEN_SECRET: env?.TRANSFER_TOKEN_SECRET || process.env.TRANSFER_TOKEN_SECRET,
-    NODE_ENV: env?.NODE_ENV || process.env.NODE_ENV,
+    TRANSFER_TOKEN_SECRET: cfEnv?.TRANSFER_TOKEN_SECRET || process.env.TRANSFER_TOKEN_SECRET,
+    NODE_ENV: cfEnv?.NODE_ENV || process.env.NODE_ENV,
   }
 }
 

@@ -297,8 +297,6 @@ export async function getStatusBySlug(slug: string): Promise<Status> {
  */
 export async function listPublicStatuses(): Promise<Status[]> {
   try {
-    const { db, postStatuses, asc } = await import('@quackback/db')
-
     const statuses = await db.query.postStatuses.findMany({
       orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
     })

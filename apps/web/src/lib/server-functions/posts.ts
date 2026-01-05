@@ -150,7 +150,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   })
 
 /**
- * Get a single post with full details
+ * Get a single post with full details including comments
  */
 export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   .inputValidator(getPostSchema)
@@ -158,19 +158,33 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
     console.log(`[fn:posts] fetchPostWithDetails: id=${data.id}`)
     try {
       const { requireAuth } = await import('./auth-helpers')
-      const { getPostWithDetails } = await import('@/lib/posts/post.service')
+      const { getPostWithDetails, getCommentsWithReplies } =
+        await import('@/lib/posts/post.service')
 
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await getPostWithDetails(data.id as PostId)
-      console.log(`[fn:posts] fetchPostWithDetails: found=${!!result}`)
-      // Serialize Date fields
+      const postId = data.id as PostId
+      const [result, comments] = await Promise.all([
+        getPostWithDetails(postId),
+        getCommentsWithReplies(postId, `member:${auth.member.id}`),
+      ])
+      console.log(`[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}`)
+
+      // Serialize Date fields in comments
+      const serializeComment = (comment: (typeof comments)[0]): unknown => ({
+        ...comment,
+        createdAt: comment.createdAt.toISOString(),
+        deletedAt: comment.deletedAt?.toISOString() || null,
+        replies: comment.replies.map(serializeComment),
+      })
+
       return {
         ...result,
         createdAt: result.createdAt.toISOString(),
         updatedAt: result.updatedAt.toISOString(),
         deletedAt: result.deletedAt?.toISOString() || null,
         officialResponseAt: result.officialResponseAt?.toISOString() || null,
+        comments: comments.map(serializeComment),
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ fetchPostWithDetails failed:`, error)

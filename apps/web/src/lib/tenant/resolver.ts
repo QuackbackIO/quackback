@@ -6,15 +6,23 @@
  */
 import { getTenantDb } from './db-cache'
 import type { TenantContext } from './types'
-import { env as cfEnv } from 'cloudflare:workers'
 
 type CfEnv = { TENANT_API_URL?: string; TENANT_API_SECRET?: string }
 
+// Cloudflare Workers env - only available at runtime in CF Workers
+let cfEnv: CfEnv | undefined
+try {
+  // Dynamic import to avoid build-time errors in non-CF environments
+  const cf = await import('cloudflare:workers')
+  cfEnv = cf.env as CfEnv
+} catch {
+  // Not running in Cloudflare Workers - use process.env only
+}
+
 function getTenantApiConfig() {
-  const env = cfEnv as CfEnv | undefined
   return {
-    url: env?.TENANT_API_URL || process.env.TENANT_API_URL,
-    secret: env?.TENANT_API_SECRET || process.env.TENANT_API_SECRET,
+    url: cfEnv?.TENANT_API_URL || process.env.TENANT_API_URL,
+    secret: cfEnv?.TENANT_API_SECRET || process.env.TENANT_API_SECRET,
   }
 }
 
