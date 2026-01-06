@@ -6,10 +6,10 @@
  * Fetches connection strings from Neon API using project ID.
  */
 import { env as cfEnv } from 'cloudflare:workers'
-import { drizzle } from 'drizzle-orm/postgres-js'
+import { drizzle } from 'drizzle-orm/neon-http'
+import { neon } from '@neondatabase/serverless'
 import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
 import { eq } from 'drizzle-orm'
-import postgres from 'postgres'
 import { getTenantDb } from './db-cache'
 import type { TenantContext } from './types'
 
@@ -62,7 +62,7 @@ let catalogDb: ReturnType<typeof drizzle<typeof catalogSchema>> | null = null
 
 function getCatalogDb(connectionUrl: string) {
   if (!catalogDb) {
-    const sql = postgres(connectionUrl, { max: 5 })
+    const sql = neon(connectionUrl)
     catalogDb = drizzle(sql, { schema: catalogSchema })
   }
   return catalogDb
