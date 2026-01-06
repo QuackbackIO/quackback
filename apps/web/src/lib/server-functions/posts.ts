@@ -3,9 +3,6 @@
  *
  * This file consolidates all post-related operations from actions/posts.ts
  * using the new auth middleware pattern.
- *
- * NOTE: All DB and server-only imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
@@ -19,6 +16,18 @@ import {
   type UserId,
 } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/schemas/posts'
+import { requireAuth } from './auth-helpers'
+import {
+  listInboxPosts,
+  getPostWithDetails,
+  getCommentsWithReplies,
+  createPost,
+  updatePost,
+  softDeletePost,
+  changeStatus,
+  restorePost,
+} from '@/lib/posts/post.service'
+import { dispatchPostStatusChanged } from '@/lib/events/dispatch'
 
 // ============================================
 // Schemas
@@ -110,9 +119,6 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] fetchInboxPostsForAdmin`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { listInboxPosts } = await import('@/lib/posts/post.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await listInboxPosts({
@@ -157,10 +163,6 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] fetchPostWithDetails: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getPostWithDetails, getCommentsWithReplies } =
-        await import('@/lib/posts/post.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const postId = data.id as PostId
@@ -171,10 +173,13 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       console.log(`[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}`)
 
       // Serialize Date fields in comments
-      const serializeComment = (comment: (typeof comments)[0]): unknown => ({
+      type SerializedComment = Omit<(typeof comments)[0], 'createdAt' | 'replies'> & {
+        createdAt: string
+        replies: SerializedComment[]
+      }
+      const serializeComment = (comment: (typeof comments)[0]): SerializedComment => ({
         ...comment,
         createdAt: comment.createdAt.toISOString(),
-        deletedAt: comment.deletedAt?.toISOString() || null,
         replies: comment.replies.map(serializeComment),
       })
 
@@ -204,9 +209,6 @@ export const createPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] createPostFn: boardId=${data.boardId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { createPost } = await import('@/lib/posts/post.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await createPost(
@@ -247,9 +249,6 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { updatePost } = await import('@/lib/posts/post.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await updatePost(
@@ -287,9 +286,6 @@ export const deletePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] deletePostFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { softDeletePost } = await import('@/lib/posts/post.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await softDeletePost(data.id as PostId, {
@@ -312,10 +308,6 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] changePostStatusFn: id=${data.id}, statusId=${data.statusId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { changeStatus } = await import('@/lib/posts/post.service')
-      const { dispatchPostStatusChanged } = await import('@/lib/events/dispatch')
-
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
@@ -332,9 +324,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
         result.newStatus
       )
 
-      console.log(
-        `[fn:posts] changePostStatusFn: id=${data.id}, newStatus=${result.newStatus.name}`
-      )
+      console.log(`[fn:posts] changePostStatusFn: id=${data.id}, newStatus=${result.newStatus}`)
       // Serialize Date fields
       return {
         ...result,
@@ -357,9 +347,6 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] restorePostFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { restorePost } = await import('@/lib/posts/post.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await restorePost(data.id as PostId)
@@ -386,9 +373,6 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostTagsFn: id=${data.id}, tagCount=${data.tagIds.length}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { updatePost } = await import('@/lib/posts/post.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await updatePost(

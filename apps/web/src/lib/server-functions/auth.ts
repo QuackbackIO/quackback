@@ -7,6 +7,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { UserId, SessionId } from '@quackback/ids'
+import { auth } from '@/lib/auth/index'
 
 /**
  * Session user type with TypeID types
@@ -41,7 +42,6 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Session | null> => {
     console.log(`[fn:auth] getSession`)
     try {
-      const { auth } = await import('@/lib/auth/index')
       const session = await auth.api.getSession({
         headers: getRequestHeaders(),
       })

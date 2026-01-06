@@ -1,8 +1,5 @@
 /**
  * Server functions for public post operations
- *
- * NOTE: All service imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
@@ -16,6 +13,30 @@ import {
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
+import { getOptionalAuth, requireAuth } from './auth-helpers'
+import { getSettings } from './workspace'
+import {
+  listPublicPosts,
+  hasUserVoted,
+  getAllUserVotedPostIds,
+  getPublicRoadmapPostsPaginated,
+} from '@/lib/posts/post.public'
+import {
+  canEditPost,
+  canDeletePost,
+  userEditPost,
+  softDeletePost,
+  voteOnPost,
+  createPost,
+} from '@/lib/posts/post.service'
+import { getMemberIdentifier } from '@/lib/user-identifier'
+import { hashIP } from '@/lib/utils/ip-hash'
+import { getPublicBoardById } from '@/lib/boards/board.public'
+import { getDefaultStatus } from '@/lib/statuses/status.service'
+import { getMemberByUser } from '@/lib/members/member.service'
+import { dispatchPostCreated } from '@/lib/events/dispatch'
+import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps/roadmap.service'
+import { getSubscriptionStatus } from '@/lib/subscriptions/subscription.service'
 
 // ============================================
 // Schemas
@@ -109,9 +130,6 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
       `[fn:public-posts] listPublicPostsFn: sort=${data.sort}, board=${data.boardSlug || 'all'}`
     )
     try {
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { listPublicPosts } = await import('@/lib/posts/post.public')
-
       await getOptionalAuth()
 
       const result = await listPublicPosts({
@@ -158,9 +176,6 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
     }> => {
       console.log(`[fn:public-posts] getPostPermissionsFn: postId=${data.postId}`)
       try {
-        const { getOptionalAuth } = await import('./auth-helpers')
-        const { canEditPost, canDeletePost } = await import('@/lib/posts/post.service')
-
         const ctx = await getOptionalAuth()
         const postId = data.postId as PostId
 
@@ -207,9 +222,6 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: UserEditPostInput }) => {
     console.log(`[fn:public-posts] userEditPostFn: postId=${data.postId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { userEditPost } = await import('@/lib/posts/post.service')
-
       const ctx = await requireAuth()
       const { postId: postIdRaw, title, content, contentJson } = data
       const postId = postIdRaw as PostId
@@ -245,9 +257,6 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: UserDeletePostInput }) => {
     console.log(`[fn:public-posts] userDeletePostFn: postId=${data.postId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { softDeletePost } = await import('@/lib/posts/post.service')
-
       const ctx = await requireAuth()
       const postId = data.postId as PostId
 
@@ -276,11 +285,6 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
       console.log(`[fn:public-posts] toggleVoteFn: postId=${data.postId}`)
       try {
-        const { requireAuth } = await import('./auth-helpers')
-        const { voteOnPost } = await import('@/lib/posts/post.service')
-        const { getMemberIdentifier } = await import('@/lib/user-identifier')
-        const { hashIP } = await import('@/lib/utils/ip-hash')
-
         const ctx = await requireAuth()
         const postId = data.postId as PostId
         const clientIpHash = data.ipHash
@@ -315,14 +319,6 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
     console.log(`[fn:public-posts] createPublicPostFn: boardId=${data.boardId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getSettings } = await import('./workspace')
-      const { createPost } = await import('@/lib/posts/post.service')
-      const { getPublicBoardById } = await import('@/lib/boards/board.public')
-      const { getDefaultStatus } = await import('@/lib/statuses/status.service')
-      const { getMemberByUser } = await import('@/lib/members/member.service')
-      const { dispatchPostCreated } = await import('@/lib/events/dispatch')
-
       const ctx = await requireAuth()
       const { boardId: boardIdRaw, title, content, contentJson } = data
       const boardId = boardIdRaw as BoardId
@@ -408,10 +404,6 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
     console.log(`[fn:public-posts] getVotedPostsFn`)
     try {
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { getAllUserVotedPostIds } = await import('@/lib/posts/post.public')
-      const { getMemberIdentifier } = await import('@/lib/user-identifier')
-
       const ctx = await getOptionalAuth()
 
       // Optional auth - return empty if not authenticated
@@ -438,9 +430,6 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
 export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:public-posts] listPublicRoadmapsFn`)
   try {
-    const { getOptionalAuth } = await import('./auth-helpers')
-    const { listPublicRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
-
     await getOptionalAuth()
 
     const result = await listPublicRoadmaps()
@@ -466,9 +455,6 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
     console.log(`[fn:public-posts] getPublicRoadmapPostsFn: roadmapId=${data.roadmapId}`)
     try {
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { getPublicRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
-
       await getOptionalAuth()
 
       const { roadmapId, statusId, limit, offset } = data
@@ -478,7 +464,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
         limit,
         offset,
       })
-      console.log(`[fn:public-posts] getPublicRoadmapPostsFn: count=${result.posts.length}`)
+      console.log(`[fn:public-posts] getPublicRoadmapPostsFn: count=${result.items.length}`)
       return result
     } catch (error) {
       console.error(`[fn:public-posts] ❌ getPublicRoadmapPostsFn failed:`, error)
@@ -494,9 +480,6 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
     console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: statusId=${data.statusId}`)
     try {
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { getPublicRoadmapPostsPaginated } = await import('@/lib/posts/post.public')
-
       await getOptionalAuth()
 
       const { statusId, page, limit } = data
@@ -523,11 +506,6 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
     try {
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { hasUserVoted } = await import('@/lib/posts/post.public')
-      const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
-      const { getMemberIdentifier } = await import('@/lib/user-identifier')
-
       const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
 

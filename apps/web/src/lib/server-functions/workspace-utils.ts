@@ -9,6 +9,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSelfHosted, isCloud } from '@/lib/features'
+import { getSession } from './auth'
+import { db, member, eq } from '@/lib/db'
 
 const requireWorkspaceRoleSchema = z.object({
   allowedRoles: z.array(z.string()),
@@ -32,9 +34,6 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:workspace-utils] requireWorkspaceRole: roles=${data.allowedRoles.join(',')}`)
     try {
-      const { getSession } = await import('./auth')
-      const { db, member, eq } = await import('@/lib/db')
-
       const session = await getSession()
       if (!session?.user) {
         console.log(`[fn:workspace-utils] requireWorkspaceRole: not authenticated, redirecting`)

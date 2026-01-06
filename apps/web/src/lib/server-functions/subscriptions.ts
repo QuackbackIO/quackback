@@ -1,13 +1,17 @@
 /**
  * Server functions for subscription operations
- *
- * NOTE: All service imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type PostId } from '@quackback/ids'
+import { requireAuth } from './auth-helpers'
+import {
+  getSubscriptionStatus,
+  subscribeToPost,
+  unsubscribeFromPost,
+  setSubscriptionMuted,
+} from '@/lib/subscriptions/subscription.service'
 
 const getSubscriptionStatusSchema = z.object({
   postId: z.string(),
@@ -38,9 +42,6 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:subscriptions] fetchSubscriptionStatus: postId=${data.postId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getSubscriptionStatus } = await import('@/lib/subscriptions/subscription.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       const result = await getSubscriptionStatus(auth.member.id, data.postId as PostId)
@@ -58,9 +59,6 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:subscriptions] subscribeToPostFn: postId=${data.postId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { subscribeToPost } = await import('@/lib/subscriptions/subscription.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual')
@@ -77,9 +75,6 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:subscriptions] unsubscribeFromPostFn: postId=${data.postId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { unsubscribeFromPost } = await import('@/lib/subscriptions/subscription.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       await unsubscribeFromPost(auth.member.id, data.postId as PostId)
@@ -96,9 +91,6 @@ export const muteSubscriptionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:subscriptions] muteSubscriptionFn: postId=${data.postId}, muted=${data.muted}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { setSubscriptionMuted } = await import('@/lib/subscriptions/subscription.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       await setSubscriptionMuted(auth.member.id, data.postId as PostId, data.muted ?? true)

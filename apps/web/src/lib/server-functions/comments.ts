@@ -1,13 +1,24 @@
 /**
  * Server functions for comment operations
- *
- * NOTE: All service imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type CommentId, type PostId, type UserId } from '@quackback/ids'
+import { requireAuth, getOptionalAuth } from './auth-helpers'
+import { getSession } from './auth'
+import {
+  createComment,
+  updateComment,
+  deleteComment,
+  toggleReaction,
+  canEditComment,
+  canDeleteComment,
+  userEditComment,
+  softDeleteComment,
+} from '@/lib/comments/comment.service'
+import { dispatchCommentCreated } from '@/lib/events/dispatch'
+import { getMemberIdentifier } from '@/lib/user-identifier'
 
 const tiptapContentSchema = z.object({
   type: z.literal('doc'),
@@ -47,10 +58,6 @@ export const createCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] createCommentFn: postId=${data.postId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { createComment } = await import('@/lib/comments/comment.service')
-      const { dispatchCommentCreated } = await import('@/lib/events/dispatch')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       const result = await createComment(
@@ -94,9 +101,6 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] updateCommentFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { updateComment } = await import('@/lib/comments/comment.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       const result = await updateComment(
@@ -122,9 +126,6 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] deleteCommentFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { deleteComment } = await import('@/lib/comments/comment.service')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       await deleteComment(data.id as CommentId, {
@@ -144,10 +145,6 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] toggleReactionFn: commentId=${data.commentId}, emoji=${data.emoji}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { toggleReaction } = await import('@/lib/comments/comment.service')
-      const { getMemberIdentifier } = await import('@/lib/user-identifier')
-
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
       const userIdentifier = getMemberIdentifier(auth.member.id)
 
@@ -182,10 +179,6 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] getCommentPermissionsFn: commentId=${data.commentId}`)
     try {
-      const { getSession } = await import('./auth')
-      const { getOptionalAuth } = await import('./auth-helpers')
-      const { canEditComment, canDeleteComment } = await import('@/lib/comments/comment.service')
-
       const session = await getSession()
       if (!session?.user) {
         console.log(`[fn:comments] getCommentPermissionsFn: no session`)
@@ -223,9 +216,6 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] userEditCommentFn: commentId=${data.commentId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { userEditComment } = await import('@/lib/comments/comment.service')
-
       const ctx = await requireAuth()
       const actor = { memberId: ctx.member.id, role: ctx.member.role }
 
@@ -243,9 +233,6 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] userDeleteCommentFn: commentId=${data.commentId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { softDeleteComment } = await import('@/lib/comments/comment.service')
-
       const ctx = await requireAuth()
       const actor = { memberId: ctx.member.id, role: ctx.member.role }
 

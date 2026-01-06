@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { UserId, StatusId } from '@quackback/ids'
+import { generateId } from '@quackback/ids'
+import { getSession } from './auth'
+import { getSettings } from './workspace'
+import { db, settings, member, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/db'
 
 /**
  * Server functions for onboarding workflow.
- *
- * NOTE: All DB and server-only imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 // ============================================
@@ -54,12 +55,6 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: SetupWorkspaceInput }): Promise<SetupWorkspaceResult> => {
     console.log(`[fn:onboarding] setupWorkspaceFn: workspaceName=${data.workspaceName}`)
     try {
-      const { getSession } = await import('./auth')
-      const { getSettings } = await import('./workspace')
-      const { db, settings, member, user, postStatuses, eq, DEFAULT_STATUSES } =
-        await import('@/lib/db')
-      const { generateId } = await import('@quackback/ids')
-
       // Check authentication manually (can't use requireAuth - it needs settings to exist)
       const session = await getSession()
       if (!session?.user) {

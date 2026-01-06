@@ -6,13 +6,12 @@
  * - getCurrentUserRole: Get current user's role
  * - validateApiWorkspaceAccess: Validate API access
  *
- * NOTE: All DB and server-only imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
- *
  * See also: workspace-utils.ts for requireWorkspace and requireWorkspaceRole.
  */
 
 import { createServerFn } from '@tanstack/react-start'
+import { db, member, eq } from '@/lib/db'
+import { getSession } from './auth'
 
 /**
  * Get the app settings.
@@ -21,8 +20,6 @@ import { createServerFn } from '@tanstack/react-start'
 export const getSettings = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:workspace] getSettings`)
   try {
-    const { db } = await import('@/lib/db')
-
     const org = await db.query.settings.findFirst()
     console.log(`[fn:workspace] getSettings: found=${!!org}`)
     return org ?? null
@@ -39,9 +36,6 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
   async (): Promise<'admin' | 'member' | 'user' | null> => {
     console.log(`[fn:workspace] getCurrentUserRole`)
     try {
-      const { getSession } = await import('./auth')
-      const { db, member, eq } = await import('@/lib/db')
-
       const session = await getSession()
       if (!session?.user) {
         console.log(`[fn:workspace] getCurrentUserRole: no session`)
@@ -71,9 +65,6 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
 export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:workspace] validateApiWorkspaceAccess`)
   try {
-    const { getSession } = await import('./auth')
-    const { db, member, eq } = await import('@/lib/db')
-
     const session = await getSession()
     if (!session?.user) {
       console.log(`[fn:workspace] validateApiWorkspaceAccess: no session`)

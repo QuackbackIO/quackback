@@ -324,7 +324,7 @@ export async function updateCustomCss(css: string | null): Promise<string | null
       .update(settings)
       .set({ customCss: sanitized })
       .where(eq(settings.id, org.id))
-      .returning({ customCss: settings.customCss })
+      .returning()
 
     if (!updated) {
       throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
@@ -492,7 +492,7 @@ export async function updateHeaderDisplayMode(mode: string): Promise<string> {
       .update(settings)
       .set({ headerDisplayMode: mode })
       .where(eq(settings.id, org.id))
-      .returning({ headerDisplayMode: settings.headerDisplayMode })
+      .returning()
 
     if (!updated) {
       throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
@@ -527,7 +527,7 @@ export async function updateHeaderDisplayName(name: string | null): Promise<stri
       .update(settings)
       .set({ headerDisplayName: sanitizedName })
       .where(eq(settings.id, org.id))
-      .returning({ headerDisplayName: settings.headerDisplayName })
+      .returning()
 
     if (!updated) {
       throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')

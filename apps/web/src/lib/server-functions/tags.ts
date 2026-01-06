@@ -1,13 +1,12 @@
 /**
  * Server functions for tag operations
- *
- * NOTE: All service imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type TagId } from '@quackback/ids'
+import { requireAuth } from './auth-helpers'
+import { listTags, getTagById, createTag, updateTag, deleteTag } from '@/lib/tags/tag.service'
 
 // ============================================
 // Schemas
@@ -58,9 +57,6 @@ export type DeleteTagInput = z.infer<typeof deleteTagSchema>
 export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:tags] fetchTags`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listTags } = await import('@/lib/tags/tag.service')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const tags = await listTags()
@@ -80,9 +76,6 @@ export const fetchTag = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:tags] fetchTag: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getTagById } = await import('@/lib/tags/tag.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const tag = await getTagById(data.id as TagId)
@@ -106,9 +99,6 @@ export const createTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:tags] createTagFn: name=${data.name}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { createTag } = await import('@/lib/tags/tag.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const tag = await createTag({
@@ -131,9 +121,6 @@ export const updateTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:tags] updateTagFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { updateTag } = await import('@/lib/tags/tag.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const tag = await updateTag(data.id as TagId, {
@@ -156,9 +143,6 @@ export const deleteTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:tags] deleteTagFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { deleteTag } = await import('@/lib/tags/tag.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       await deleteTag(data.id as TagId)

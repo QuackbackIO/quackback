@@ -7,13 +7,30 @@ import {
   type UpdatePortalConfigInput,
 } from '@/lib/settings'
 import { userIdSchema, type UserId } from '@quackback/ids'
+import { getWorkspaceFeatures } from '@/lib/features/server'
+import {
+  getBrandingConfig,
+  getCustomCss,
+  getPortalConfig,
+  getPublicPortalConfig,
+  getPublicAuthConfig,
+  updateCustomCss,
+  updateBrandingConfig,
+  updatePortalConfig,
+  uploadLogo,
+  deleteLogo,
+  uploadHeaderLogo,
+  deleteHeaderLogo,
+  updateHeaderDisplayMode,
+  updateHeaderDisplayName,
+} from '@/lib/settings/settings.service'
+import { requireAuth } from './auth-helpers'
+import { getSession } from './auth'
+import { db, member, user, invitation, eq, ne } from '@/lib/db'
 
 /**
  * Server functions for settings data fetching.
  * All functions require authentication.
- *
- * NOTE: All DB and server-only imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 // ============================================
@@ -27,7 +44,6 @@ import { userIdSchema, type UserId } from '@quackback/ids'
 export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] getWorkspaceFeatures`)
   try {
-    const { getWorkspaceFeatures } = await import('@/lib/features/server')
     const features = await getWorkspaceFeatures()
 
     console.log(`[fn:settings] getWorkspaceFeatures: edition=${features.edition}`)
@@ -53,8 +69,6 @@ export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] fetchBrandingConfig`)
   try {
-    const { getBrandingConfig } = await import('@/lib/settings/settings.service')
-
     const config = await getBrandingConfig()
     console.log(`[fn:settings] fetchBrandingConfig: success`)
     return config
@@ -70,8 +84,6 @@ export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(asy
 export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] fetchCustomCss`)
   try {
-    const { getCustomCss } = await import('@/lib/settings/settings.service')
-
     const css = await getCustomCss()
     console.log(`[fn:settings] fetchCustomCss: hasCustomCss=${!!css}`)
     return css
@@ -87,8 +99,6 @@ export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async ()
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] fetchPortalConfig`)
   try {
-    const { getPortalConfig } = await import('@/lib/settings/settings.service')
-
     const config = await getPortalConfig()
     console.log(`[fn:settings] fetchPortalConfig: hasConfig=${!!config}`)
     return config ?? DEFAULT_PORTAL_CONFIG
@@ -104,8 +114,6 @@ export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] fetchPublicPortalConfig`)
   try {
-    const { getPublicPortalConfig } = await import('@/lib/settings/settings.service')
-
     const config = await getPublicPortalConfig()
     console.log(`[fn:settings] fetchPublicPortalConfig: success`)
     return config
@@ -121,8 +129,6 @@ export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] fetchPublicAuthConfig`)
   try {
-    const { getPublicAuthConfig } = await import('@/lib/settings/settings.service')
-
     const config = await getPublicAuthConfig()
     console.log(`[fn:settings] fetchPublicAuthConfig: success`)
     return config
@@ -139,9 +145,6 @@ const fetchUserProfileSchema = userIdSchema
  */
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { db, member, user, invitation, eq, ne } = await import('@/lib/db')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     // Only show team members (owner, admin, member) - exclude portal users (role='user')
@@ -222,9 +225,6 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 export const fetchUserProfile = createServerFn({ method: 'GET' })
   .inputValidator(fetchUserProfileSchema)
   .handler(async ({ data }) => {
-    const { getSession } = await import('./auth')
-    const { db, user, eq } = await import('@/lib/db')
-
     const session = await getSession()
     if (!session?.user) {
       throw new Error('Authentication required')
@@ -315,9 +315,6 @@ export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSch
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .inputValidator(updateCustomCssSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updateCustomCss } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     return await updateCustomCss(data.customCss)
@@ -329,9 +326,6 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
 export const updateThemeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateThemeSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updateBrandingConfig } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
@@ -343,9 +337,6 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updatePortalConfigSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updatePortalConfig } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     return await updatePortalConfig(data as UpdatePortalConfigInput)
@@ -384,9 +375,6 @@ export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNam
 export const uploadLogoFn = createServerFn({ method: 'POST' })
   .inputValidator(uploadLogoSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { uploadLogo } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
@@ -400,9 +388,6 @@ export const uploadLogoFn = createServerFn({ method: 'POST' })
  * Delete logo
  */
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { deleteLogo } = await import('@/lib/settings/settings.service')
-
   await requireAuth({ roles: ['admin'] })
 
   return await deleteLogo()
@@ -414,9 +399,6 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
 export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
   .inputValidator(uploadHeaderLogoSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { uploadHeaderLogo } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     const blob = Buffer.from(data.base64, 'base64')
@@ -430,9 +412,6 @@ export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
  * Delete header logo
  */
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { requireAuth } = await import('./auth-helpers')
-  const { deleteHeaderLogo } = await import('@/lib/settings/settings.service')
-
   await requireAuth({ roles: ['admin'] })
 
   return await deleteHeaderLogo()
@@ -444,9 +423,6 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayModeSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updateHeaderDisplayMode } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     return await updateHeaderDisplayMode(data.mode)
@@ -458,9 +434,6 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayNameSchema)
   .handler(async ({ data }) => {
-    const { requireAuth } = await import('./auth-helpers')
-    const { updateHeaderDisplayName } = await import('@/lib/settings/settings.service')
-
     await requireAuth({ roles: ['admin'] })
 
     return await updateHeaderDisplayName(data.name)

@@ -1,12 +1,17 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type UserId, type MemberId } from '@quackback/ids'
+import { getSession } from './auth'
+import { requireAuth } from './auth-helpers'
+import { getCurrentUserRole } from './workspace'
+import { db, user, member, eq } from '@/lib/db'
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+} from '@/lib/subscriptions/subscription.service'
 
 /**
  * User profile and notification preferences server functions.
- *
- * NOTE: All DB and server-only imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 // ============================================
@@ -58,9 +63,6 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserProfile> => {
     console.log(`[fn:user] getProfileFn`)
     try {
-      const { getSession } = await import('./auth')
-      const { db, user, member, eq } = await import('@/lib/db')
-
       const session = await getSession()
       if (!session?.user) {
         throw new Error('Authentication required')
@@ -120,9 +122,6 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
     console.log(`[fn:user] updateProfileNameFn`)
     try {
-      const { getSession } = await import('./auth')
-      const { db, user, eq } = await import('@/lib/db')
-
       const session = await getSession()
       if (!session?.user) {
         throw new Error('Authentication required')
@@ -133,13 +132,7 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
         .update(user)
         .set({ name: name.trim() })
         .where(eq(user.id, session.user.id))
-        .returning({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          imageType: user.imageType,
-        })
+        .returning()
 
       console.log(`[fn:user] updateProfileNameFn: updated id=${updated.id}`)
       return {
@@ -160,9 +153,6 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
     console.log(`[fn:user] removeAvatarFn`)
     try {
-      const { getSession } = await import('./auth')
-      const { db, user, eq } = await import('@/lib/db')
-
       const session = await getSession()
       if (!session?.user) {
         throw new Error('Authentication required')
@@ -175,13 +165,7 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
           imageType: null,
         })
         .where(eq(user.id, session.user.id))
-        .returning({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          imageType: user.imageType,
-        })
+        .returning()
 
       console.log(`[fn:user] removeAvatarFn: removed for id=${updated.id}`)
       return {
@@ -203,9 +187,6 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ role: 'admin' | 'member' | 'user' | null }> => {
     console.log(`[fn:user] getUserRoleFn`)
     try {
-      const { getSession } = await import('./auth')
-      const { getCurrentUserRole } = await import('./workspace')
-
       const session = await getSession()
       if (!session?.user) {
         throw new Error('Authentication required')
@@ -228,11 +209,6 @@ export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).ha
   async (): Promise<NotificationPreferences> => {
     console.log(`[fn:user] getNotificationPreferencesFn`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { db, member, eq } = await import('@/lib/db')
-      const { getNotificationPreferences } =
-        await import('@/lib/subscriptions/subscription.service')
-
       const ctx = await requireAuth()
 
       const memberRecord = await db.query.member.findFirst({
@@ -266,11 +242,6 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }): Promise<NotificationPreferences> => {
       console.log(`[fn:user] updateNotificationPreferencesFn`)
       try {
-        const { requireAuth } = await import('./auth-helpers')
-        const { db, member, eq } = await import('@/lib/db')
-        const { updateNotificationPreferences } =
-          await import('@/lib/subscriptions/subscription.service')
-
         const ctx = await requireAuth()
         const { emailStatusChange, emailNewComment, emailMuted } = data
 

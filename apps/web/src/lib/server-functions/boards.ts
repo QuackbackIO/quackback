@@ -1,14 +1,19 @@
 /**
  * Server functions for board operations
- *
- * NOTE: All service imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type BoardId } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
+import { requireAuth } from './auth-helpers'
+import {
+  listBoards,
+  getBoardById,
+  createBoard,
+  updateBoard,
+  deleteBoard,
+} from '@/lib/boards/board.service'
 
 // ============================================
 // Schemas
@@ -58,9 +63,6 @@ export type DeleteBoardInput = z.infer<typeof deleteBoardSchema>
 export const fetchBoards = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:boards] fetchBoards`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listBoards } = await import('@/lib/boards/board.service')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const boards = await listBoards()
@@ -86,9 +88,6 @@ export const fetchBoard = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:boards] fetchBoard: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getBoardById } = await import('@/lib/boards/board.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const board = await getBoardById(data.id as BoardId)
@@ -117,9 +116,6 @@ export const createBoardFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:boards] createBoardFn: name=${data.name}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { createBoard } = await import('@/lib/boards/board.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const board = await createBoard({
@@ -148,9 +144,6 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:boards] updateBoardFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { updateBoard } = await import('@/lib/boards/board.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const board = await updateBoard(data.id as BoardId, {
@@ -180,9 +173,6 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:boards] deleteBoardFn: id=${data.id}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { deleteBoard } = await import('@/lib/boards/board.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       await deleteBoard(data.id as BoardId)

@@ -2,11 +2,14 @@
  * Auth helper functions for server functions.
  *
  * These provide role-based authentication checks for use in server function handlers.
- * All imports are done dynamically to prevent client bundling issues.
  */
 
 import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
+import { generateId } from '@quackback/ids'
 import type { Role } from '@/lib/auth'
+import { getSession } from './auth'
+import { getSettings } from './workspace'
+import { db, member, eq } from '@/lib/db'
 
 export type { Role }
 
@@ -43,10 +46,6 @@ export interface AuthContext {
  * const auth = await requireAuth()
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
-  const { getSession } = await import('./auth')
-  const { getSettings } = await import('./workspace')
-  const { db, member, eq } = await import('@/lib/db')
-
   console.log(`[auth] Checking session...`)
   const session = await getSession()
   if (!session?.user) {
@@ -104,11 +103,6 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
  * who don't have one (e.g., users who signed up via OTP).
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
-  const { getSession } = await import('./auth')
-  const { getSettings } = await import('./workspace')
-  const { db, member, eq } = await import('@/lib/db')
-  const { generateId } = await import('@quackback/ids')
-
   const session = await getSession()
   if (!session?.user) {
     console.log(`[auth] Optional auth: no session`)

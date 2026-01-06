@@ -10,13 +10,22 @@ import {
 import type { InboxPostListParams } from '@/lib/posts/post.types'
 import type { BoardSettings } from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
+import { requireAuth } from './auth-helpers'
+import { getSession } from './auth'
+import { getSettings } from './workspace'
+import { db, invitation, member, user, eq, and } from '@/lib/db'
+import { listInboxPosts } from '@/lib/posts/post.service'
+import { listBoards } from '@/lib/boards/board.service'
+import { listTags } from '@/lib/tags/tag.service'
+import { listStatuses } from '@/lib/statuses/status.service'
+import { listTeamMembers } from '@/lib/members/member.service'
+import { listPortalUsers, getPortalUserDetail, removePortalUser } from '@/lib/users/user.service'
+import { sendInvitationEmail } from '@quackback/email'
+import { getRootUrl } from '@/lib/routing'
 
 /**
  * Server functions for admin data fetching.
  * All functions require authentication and team member role (admin or member).
- *
- * NOTE: All DB and server-only imports are done dynamically inside handlers
- * to prevent client bundling issues with TanStack Start.
  */
 
 // Schemas for GET request parameters
@@ -60,9 +69,6 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] fetchInboxPosts: sort=${data.sort}, page=${data.page}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { listInboxPosts } = await import('@/lib/posts/post.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await listInboxPosts(data)
@@ -91,9 +97,6 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
 export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchBoardsList`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listBoards } = await import('@/lib/boards/board.service')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listBoards()
@@ -117,9 +120,6 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
 export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchTagsList`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listTags } = await import('@/lib/tags/tag.service')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listTags()
@@ -137,9 +137,6 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchStatusesList`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listStatuses } = await import('@/lib/statuses/status.service')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listStatuses()
@@ -157,9 +154,6 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
 export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchTeamMembers`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { listTeamMembers } = await import('@/lib/members/member.service')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listTeamMembers()
@@ -177,9 +171,6 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchOnboardingStatus`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { db, member } = await import('@/lib/db')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const [orgBoards, members] = await Promise.all([
@@ -208,9 +199,6 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
 export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchBoardsForSettings`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { db } = await import('@/lib/db')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const orgBoards = await db.query.boards.findMany()
@@ -233,9 +221,6 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
 export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:admin] fetchIntegrationsList`)
   try {
-    const { requireAuth } = await import('./auth-helpers')
-    const { db } = await import('@/lib/db')
-
     await requireAuth({ roles: ['admin', 'member'] })
 
     const integrations = await db.query.integrations.findMany()
@@ -257,8 +242,6 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] checkOnboardingState`)
     try {
-      const { db, member, eq } = await import('@/lib/db')
-
       // Allow unauthenticated access for onboarding
       const userId = data
 
@@ -342,9 +325,6 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] listPortalUsersFn`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { listPortalUsers } = await import('@/lib/users/user.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await listPortalUsers({
@@ -380,9 +360,6 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] getPortalUserFn: memberId=${data.memberId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getPortalUserDetail } = await import('@/lib/users/user.service')
-
       await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await getPortalUserDetail(data.memberId as MemberId)
@@ -418,9 +395,6 @@ export const deletePortalUserFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] deletePortalUserFn: memberId=${data.memberId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { removePortalUser } = await import('@/lib/users/user.service')
-
       await requireAuth({ roles: ['admin'] })
 
       await removePortalUser(data.memberId as MemberId)
@@ -463,13 +437,6 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] sendInvitationFn: role=${data.role}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getSession } = await import('./auth')
-      const { getSettings } = await import('./workspace')
-      const { db, invitation, user, eq, and } = await import('@/lib/db')
-      const { sendInvitationEmail } = await import('@quackback/email')
-      const { getRootUrl } = await import('@/lib/routing')
-
       await requireAuth({ roles: ['admin'] })
 
       const session = await getSession()
@@ -543,9 +510,6 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] cancelInvitationFn: id=${data.invitationId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { db, invitation, eq, and } = await import('@/lib/db')
-
       await requireAuth({ roles: ['admin'] })
 
       const invitationId = data.invitationId as InviteId
@@ -576,13 +540,6 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] resendInvitationFn: id=${data.invitationId}`)
     try {
-      const { requireAuth } = await import('./auth-helpers')
-      const { getSession } = await import('./auth')
-      const { getSettings } = await import('./workspace')
-      const { db, invitation, eq, and } = await import('@/lib/db')
-      const { sendInvitationEmail } = await import('@quackback/email')
-      const { getRootUrl } = await import('@/lib/routing')
-
       await requireAuth({ roles: ['admin'] })
 
       const session = await getSession()

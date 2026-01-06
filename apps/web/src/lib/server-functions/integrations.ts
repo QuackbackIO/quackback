@@ -1,4 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
+import { createHmac, randomBytes } from 'crypto'
+import { db, member, eq } from '@/lib/db'
+import { getSession } from './auth'
 
 /**
  * Generate a signed OAuth connect URL for Slack.
@@ -8,11 +11,6 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
   async (): Promise<string> => {
     console.log(`[fn:integrations] getSlackConnectUrl`)
     try {
-      // Dynamic imports to avoid client bundling of DB code
-      const { createHmac, randomBytes } = await import('crypto')
-      const { db, member, eq } = await import('@/lib/db')
-      const { getSession } = await import('./auth')
-
       function getHmacSecret(): string {
         const secret = process.env.BETTER_AUTH_SECRET
         if (!secret) {
