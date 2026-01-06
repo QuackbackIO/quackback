@@ -37,7 +37,8 @@
     "EMAIL_FROM": "Quackback Dev <dev@quackback.io>",
     "NODE_ENV": "development",
     "EDITION": "cloud",
-    "TENANT_BASE_DOMAIN": "dev.quackback.io"
+    "TENANT_BASE_DOMAIN": "dev.quackback.io",
+    "NEON_DEFAULT_REGION": "aws-eu-west-2"
   },
   "observability": {
     "enabled": true,
