@@ -3,8 +3,14 @@
  *
  * LRU cache for Drizzle database instances per tenant.
  * Reuses connections across requests for the same tenant.
+ *
+ * Uses @neondatabase/serverless for Cloudflare Workers compatibility.
  */
-import { createDb, type Database } from '@quackback/db/client'
+import { drizzle } from 'drizzle-orm/neon-http'
+import { neon } from '@neondatabase/serverless'
+import * as schema from '@quackback/db/schema'
+
+export type Database = ReturnType<typeof drizzle<typeof schema>>
 
 interface CacheEntry {
   db: Database
@@ -43,9 +49,9 @@ export function getTenantDb(workspaceId: string, connectionString: string): Data
     cache.delete(workspaceId)
   }
 
-  // Create new connection
-  // prepare: false for PgBouncer/Neon connection pooler compatibility
-  const db = createDb(connectionString, { max: 5, prepare: false })
+  // Create new connection using Neon HTTP driver (for Cloudflare Workers)
+  const sql = neon(connectionString)
+  const db = drizzle(sql, { schema })
 
   // Evict old entries if at capacity
   if (cache.size >= MAX_CONNECTIONS) {
