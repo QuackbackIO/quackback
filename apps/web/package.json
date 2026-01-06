@@ -5,6 +5,8 @@
   "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
+    "cf-typegen": "wrangler types",
+    "postinstall": "bun run cf-typegen",
     "dev": "bun --env-file=../../.env --bun vite dev",
     "build": "bun --env-file=../../.env --bun vite build",
     "build:cf": "DEPLOY_TARGET=cloudflare bun --env-file=../../.env --bun vite build",

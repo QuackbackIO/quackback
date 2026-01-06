@@ -1,7 +1,7 @@
 /**
  * Tenant Context Types
  */
-import type { Database } from '@quackback/db/client'
+import type { Database } from './db-cache'
 
 /**
  * Tenant context available during request processing.

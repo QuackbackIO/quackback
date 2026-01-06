@@ -84,9 +84,9 @@ describe('resolver', () => {
 
   describe('resolveTenantFromDomain', () => {
     it('should return null when CATALOG_DATABASE_URL not configured', async () => {
-      delete process.env.CATALOG_DATABASE_URL
-      delete process.env.TENANT_BASE_DOMAIN
-      delete process.env.NEON_API_KEY
+      process.env.CATALOG_DATABASE_URL = undefined as unknown as string
+      process.env.TENANT_BASE_DOMAIN = undefined as unknown as string
+      process.env.NEON_API_KEY = undefined as unknown as string
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -96,7 +96,7 @@ describe('resolver', () => {
 
     it('should return null when TENANT_BASE_DOMAIN not configured', async () => {
       process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      delete process.env.TENANT_BASE_DOMAIN
+      process.env.TENANT_BASE_DOMAIN = undefined as unknown as string
       process.env.NEON_API_KEY = 'test-key'
 
       const request = createRequest('https://acme.quackback.io/dashboard')

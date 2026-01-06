@@ -8,12 +8,15 @@
  * import { db, eq, and, posts } from '@/lib/db'
  */
 
-import { createDb, type Database } from '@quackback/db/client'
-import { tenantStorage } from '@/lib/tenant'
+import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
+import { tenantStorage, type Database as NeonDatabase } from '@/lib/tenant'
+
+// Database can be either postgres.js (self-hosted) or neon-http (cloud)
+export type Database = PostgresDatabase | NeonDatabase
 
 // Use globalThis to persist database instance across hot reloads in development
 declare global {
-  var __db: Database | undefined
+  var __db: PostgresDatabase | undefined
 }
 
 /**
