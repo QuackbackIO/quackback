@@ -26,10 +26,10 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => {
     : {}
 
   // Conditionally load Cloudflare plugin for cloud deployments
-  const cloudflarePlugins: PluginOption[] = []
+  let cloudflarePlugin: PluginOption = []
   if (isCloudflare) {
     const { cloudflare } = await import('@cloudflare/vite-plugin')
-    cloudflarePlugins.push(cloudflare())
+    cloudflarePlugin = cloudflare({ viteEnvironment: { name: 'ssr' } })
   }
 
   return {
@@ -47,12 +47,21 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => {
         ...eeAliases,
       },
     },
+    // Externalize Cloudflare-specific imports for SSR build
+    ssr: {
+      external: isCloudflare ? ['cloudflare:workers'] : [],
+    },
+    build: {
+      rollupOptions: {
+        external: isCloudflare ? ['cloudflare:workers'] : [],
+      },
+    },
     plugins: [
       tailwindcss(),
       tsconfigPaths({
         projects: ['./tsconfig.json'],
       }),
-      isCloudflare ? cloudflare({ viteEnvironment: { name: 'ssr' } }) : [],
+      cloudflarePlugin,
       tanstackStart({
         srcDirectory: 'src',
         router: {
