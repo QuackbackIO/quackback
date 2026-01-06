@@ -142,6 +142,20 @@ export const verification = pgTable(
 )
 
 /**
+ * One-time token table - Used by better-auth oneTimeToken plugin
+ * for secure cross-domain session transfer after workspace provisioning
+ */
+export const oneTimeToken = pgTable('one_time_token', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull(),
+  userId: typeIdColumn('user')('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
  * Settings table - Application settings and branding configuration
  *
  * For single-tenant OSS deployments, this table has one row containing

@@ -1,41 +1,194 @@
 /**
  * Tenant Resolver
  *
- * Resolves request domain to tenant context by calling the website API.
- * Results are cached for 5 minutes to reduce API calls.
+ * Resolves request domain to tenant context by querying the catalog database.
+ * Extracts slug from subdomain and looks up workspace connection info.
+ * Fetches connection strings from Neon API using project ID.
  */
+import { drizzle } from 'drizzle-orm/postgres-js'
+import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
+import { eq } from 'drizzle-orm'
+import postgres from 'postgres'
 import { getTenantDb } from './db-cache'
 import type { TenantContext } from './types'
 
-type CfEnv = { TENANT_API_URL?: string; TENANT_API_SECRET?: string }
+// ============================================
+// Catalog Schema (inline - matches get-started.ts)
+// ============================================
 
-// Cloudflare Workers env - only available at runtime in CF Workers
+const workspace = pgTable('workspace', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  neonProjectId: text('neon_project_id'),
+  neonRegion: text('neon_region').default('aws-us-east-1'),
+  migrationStatus: text('migration_status').default('pending'), // 'pending' | 'in_progress' | 'completed'
+})
+
+const workspaceDomain = pgTable(
+  'workspace_domain',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull().unique(),
+    domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
+    isPrimary: boolean('is_primary').default(false).notNull(),
+    verified: boolean('verified').default(true).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('workspace_domain_workspace_id_idx').on(table.workspaceId)]
+)
+
+const catalogSchema = { workspace, workspaceDomain }
+
+// ============================================
+// Catalog Database Connection
+// ============================================
+
+type CfEnv = { CATALOG_DATABASE_URL?: string; TENANT_BASE_DOMAIN?: string; NEON_API_KEY?: string }
+
+// Cloudflare Workers env - lazily initialized at runtime
 let cfEnv: CfEnv | undefined
-try {
-  // Dynamic import to avoid build-time errors in non-CF environments
-  const cf = await import('cloudflare:workers')
-  cfEnv = cf.env as CfEnv
-} catch {
-  // Not running in Cloudflare Workers - use process.env only
+let cfEnvInitialized = false
+
+async function getCfEnv(): Promise<CfEnv | undefined> {
+  if (cfEnvInitialized) return cfEnv
+  cfEnvInitialized = true
+
+  try {
+    // Dynamic import to avoid build-time errors in non-CF environments
+    const cf = await import('cloudflare:workers')
+    cfEnv = cf.env as CfEnv
+  } catch {
+    // Not running in Cloudflare Workers - use process.env only
+  }
+  return cfEnv
 }
 
-function getTenantApiConfig() {
+async function getConfig() {
+  const env = await getCfEnv()
   return {
-    url: cfEnv?.TENANT_API_URL || process.env.TENANT_API_URL,
-    secret: cfEnv?.TENANT_API_SECRET || process.env.TENANT_API_SECRET,
+    catalogDbUrl: env?.CATALOG_DATABASE_URL || process.env.CATALOG_DATABASE_URL,
+    baseDomain: env?.TENANT_BASE_DOMAIN || process.env.TENANT_BASE_DOMAIN,
+    neonApiKey: env?.NEON_API_KEY || process.env.NEON_API_KEY,
   }
 }
 
-// Cache resolved tenants for 5 minutes
-const tenantCache = new Map<string, { data: TenantApiResponse | null; expiresAt: number }>()
-const CACHE_TTL_MS = 5 * 60 * 1000
-const NEGATIVE_CACHE_TTL_MS = 60 * 1000 // Cache 404s for 1 minute
+// Singleton catalog database connection
+let catalogDb: ReturnType<typeof drizzle<typeof catalogSchema>> | null = null
 
-interface TenantApiResponse {
-  workspaceId: string
-  slug: string
-  connectionString: string
+function getCatalogDb(connectionUrl: string) {
+  if (!catalogDb) {
+    const sql = postgres(connectionUrl, { max: 5 })
+    catalogDb = drizzle(sql, { schema: catalogSchema })
+  }
+  return catalogDb
 }
+
+/** Reset catalog db connection (for testing) */
+export function resetCatalogDb(): void {
+  catalogDb = null
+}
+
+// ============================================
+// Neon API Connection String Fetcher
+// ============================================
+
+// Cache connection strings in memory (projectId -> connectionString)
+const connectionStringCache = new Map<string, { value: string; expiresAt: number }>()
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour (connection strings rarely change)
+
+/**
+ * Fetch connection string from Neon API for a given project ID.
+ * Results are cached for 1 hour to reduce API calls.
+ * Includes retry logic for transient failures.
+ */
+async function fetchConnectionString(projectId: string, apiKey: string): Promise<string> {
+  // Check cache first
+  const cached = connectionStringCache.get(projectId)
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log(`[resolver] Cache hit for project ${projectId}`)
+    return cached.value
+  }
+
+  console.log(`[resolver] Cache miss for project ${projectId}, fetching from Neon API`)
+
+  // Retry logic for transient failures
+  let lastError: Error | null = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(
+        `https://console.neon.tech/api/v2/projects/${projectId}/connection_uri?role_name=neondb_owner&database_name=neondb`,
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: 'application/json',
+          },
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.text()
+        throw new Error(`Neon API error (${response.status}): ${error}`)
+      }
+
+      const data = (await response.json()) as { uri: string }
+      const connectionString = data.uri
+
+      console.log(`[resolver] Successfully fetched connection string for project ${projectId}`)
+
+      // Cache the result
+      connectionStringCache.set(projectId, {
+        value: connectionString,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      })
+
+      return connectionString
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`[resolver] Neon API attempt ${attempt + 1} failed:`, error)
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed to fetch connection string from Neon API')
+}
+
+// ============================================
+// Subdomain Extraction
+// ============================================
+
+/**
+ * Extract slug from subdomain if host matches base domain pattern.
+ * e.g., "acme.quackback.io" with base "quackback.io" returns "acme"
+ */
+function extractSlugFromHost(host: string, baseDomain: string): string | null {
+  const normalizedHost = host.toLowerCase()
+  const normalizedBase = baseDomain.toLowerCase()
+
+  const suffix = `.${normalizedBase}`
+  if (!normalizedHost.endsWith(suffix)) {
+    return null
+  }
+
+  const slug = normalizedHost.slice(0, -suffix.length)
+
+  // Validate slug (should be non-empty and not contain dots)
+  if (!slug || slug.includes('.')) {
+    return null
+  }
+
+  return slug
+}
+
+// ============================================
+// Public API
+// ============================================
 
 /**
  * Resolve a domain to tenant context.
@@ -44,100 +197,77 @@ interface TenantApiResponse {
  * @returns TenantContext if domain maps to a valid workspace, null otherwise
  */
 export async function resolveTenantFromDomain(request: Request): Promise<TenantContext | null> {
-  const { url: tenantApiUrl, secret: tenantApiSecret } = getTenantApiConfig()
+  const config = await getConfig()
 
-  if (!tenantApiUrl || !tenantApiSecret) {
-    console.error('Tenant API not configured: missing TENANT_API_URL or TENANT_API_SECRET')
+  if (!config.catalogDbUrl || !config.baseDomain || !config.neonApiKey) {
+    console.error(
+      '[resolver] Tenant resolution not configured: missing CATALOG_DATABASE_URL, TENANT_BASE_DOMAIN, or NEON_API_KEY'
+    )
     return null
   }
 
   // Extract host from request
   const host = request.headers.get('host')?.split(':')[0]
   if (!host) {
+    console.warn('[resolver] No host header in request')
     return null
   }
 
-  // Check cache first
-  const cached = tenantCache.get(host)
-  if (cached && cached.expiresAt > Date.now()) {
-    // Negative cache hit - domain was previously not found
-    if (cached.data === null) {
-      return null
-    }
-    const db = getTenantDb(cached.data.workspaceId, cached.data.connectionString)
-    return {
-      workspaceId: cached.data.workspaceId,
-      slug: cached.data.slug,
-      db,
-    }
+  // Extract slug from subdomain
+  const slug = extractSlugFromHost(host, config.baseDomain)
+  if (!slug) {
+    // Not a subdomain of base domain - skip tenant resolution
+    return null
   }
+
+  console.log(`[resolver] Resolving tenant for slug: ${slug}`)
 
   try {
-    // Call website API to resolve domain
-    const response = await fetch(
-      `${tenantApiUrl}/api/internal/resolve-domain?domain=${encodeURIComponent(host)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${tenantApiSecret}`,
-        },
-      }
-    )
+    const db = getCatalogDb(config.catalogDbUrl)
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        // Domain not found - cache negative result to avoid repeated lookups
-        tenantCache.set(host, {
-          data: null,
-          expiresAt: Date.now() + NEGATIVE_CACHE_TTL_MS,
-        })
-        return null
-      }
+    // Query workspace by slug
+    const workspaceRecord = await db.query.workspace.findFirst({
+      where: eq(workspace.slug, slug),
+    })
 
-      if (response.status === 503) {
-        // Workspace not ready (migrations in progress) - don't cache, may resolve soon
-        console.warn(`Workspace for ${host} is not ready`)
-        return null
-      }
-
-      // Other errors - clear stale cache but don't cache negative
-      tenantCache.delete(host)
-      console.error(`Tenant API error: ${response.status} ${response.statusText}`)
+    if (!workspaceRecord) {
+      console.warn(`[resolver] No workspace found for slug: ${slug}`)
       return null
     }
 
-    const data: TenantApiResponse = await response.json()
+    console.log(`[resolver] Found workspace: ${workspaceRecord.id} (${workspaceRecord.name})`)
 
-    // Cache the successful response
-    tenantCache.set(host, {
-      data,
-      expiresAt: Date.now() + CACHE_TTL_MS,
-    })
+    // Check migration status
+    if (workspaceRecord.migrationStatus !== 'completed') {
+      console.warn(
+        `[resolver] Workspace ${slug} is not ready (status: ${workspaceRecord.migrationStatus})`
+      )
+      return null
+    }
 
-    // Get or create Drizzle instance
-    const db = getTenantDb(data.workspaceId, data.connectionString)
+    if (!workspaceRecord.neonProjectId) {
+      console.error(`[resolver] Workspace ${slug} has no Neon project ID`)
+      return null
+    }
+
+    // Fetch connection string from Neon API
+    const connectionString = await fetchConnectionString(
+      workspaceRecord.neonProjectId,
+      config.neonApiKey
+    )
+
+    // Get or create Drizzle instance for tenant
+    const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
+
+    console.log(`[resolver] Successfully resolved tenant: ${workspaceRecord.id}`)
 
     return {
-      workspaceId: data.workspaceId,
-      slug: data.slug,
-      db,
+      workspaceId: workspaceRecord.id,
+      slug: workspaceRecord.slug,
+      db: tenantDb,
     }
   } catch (error) {
-    console.error('Failed to resolve tenant:', error)
+    console.error('[resolver] Failed to resolve tenant:', error)
     return null
   }
-}
-
-/**
- * Clear cached tenant for a specific domain.
- * Use when a domain mapping changes.
- */
-export function clearTenantCache(domain: string): void {
-  tenantCache.delete(domain)
-}
-
-/**
- * Clear all cached tenant mappings.
- */
-export function clearAllTenantCache(): void {
-  tenantCache.clear()
 }

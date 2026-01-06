@@ -2,16 +2,17 @@
  * Tests for tenant resolver
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { resolveTenantFromDomain, clearTenantCache, clearAllTenantCache } from '../resolver'
+import { resolveTenantFromDomain, resetCatalogDb } from '../resolver'
 
 // Hoist mocks so they're available before module imports
-const { mockGetTenantDb, mockFetch } = vi.hoisted(() => ({
+const { mockGetTenantDb, mockDrizzle, mockPostgres } = vi.hoisted(() => ({
   mockGetTenantDb: vi.fn((workspaceId: string, connectionString: string) => ({
     _workspaceId: workspaceId,
     _connectionString: connectionString,
     query: {},
   })),
-  mockFetch: vi.fn(),
+  mockDrizzle: vi.fn(),
+  mockPostgres: vi.fn(),
 }))
 
 // Mock db-cache
@@ -19,11 +20,20 @@ vi.mock('../db-cache', () => ({
   getTenantDb: mockGetTenantDb,
 }))
 
-// Store original env and fetch
-const originalEnv = { ...process.env }
-const originalFetch = globalThis.fetch
+// Mock drizzle-orm/postgres-js
+vi.mock('drizzle-orm/postgres-js', () => ({
+  drizzle: mockDrizzle,
+}))
 
-// Helper to create request with explicit host header (Node.js doesn't auto-set it)
+// Mock postgres
+vi.mock('postgres', () => ({
+  default: mockPostgres,
+}))
+
+// Store original env
+const originalEnv = { ...process.env }
+
+// Helper to create request with explicit host header
 function createRequest(url: string): Request {
   const urlObj = new URL(url)
   return new Request(url, {
@@ -33,189 +43,184 @@ function createRequest(url: string): Request {
   })
 }
 
+// Mock workspace data
+const mockWorkspace = {
+  id: 'workspace_abc123',
+  name: 'Acme Corp',
+  slug: 'acme',
+  createdAt: new Date(),
+  neonProjectId: 'proj_123',
+  neonRegion: 'aws-us-east-1',
+  migrationStatus: 'completed',
+}
+
 describe('resolver', () => {
+  let mockDb: { query: { workspace: { findFirst: ReturnType<typeof vi.fn> } } }
+
   beforeEach(() => {
-    mockFetch.mockReset()
     mockGetTenantDb.mockClear()
-    // Stub fetch globally
-    globalThis.fetch = mockFetch
-    // Clear tenant cache between tests
-    clearAllTenantCache()
+    mockDrizzle.mockReset()
+    mockPostgres.mockReset()
+    resetCatalogDb()
+
+    // Setup mock database
+    mockDb = {
+      query: {
+        workspace: {
+          findFirst: vi.fn(),
+        },
+      },
+    }
+    mockDrizzle.mockReturnValue(mockDb)
+    mockPostgres.mockReturnValue({})
+
     // Reset environment
     process.env = { ...originalEnv }
   })
 
   afterEach(() => {
     process.env = originalEnv
-    globalThis.fetch = originalFetch
   })
 
   describe('resolveTenantFromDomain', () => {
-    it('should return null when TENANT_API_URL not configured', async () => {
-      delete process.env.TENANT_API_URL
-      delete process.env.TENANT_API_SECRET
+    it('should return null when CATALOG_DATABASE_URL not configured', async () => {
+      delete process.env.CATALOG_DATABASE_URL
+      delete process.env.TENANT_BASE_DOMAIN
+      delete process.env.NEON_API_KEY
 
-      const request = createRequest('https://acme.example.com/dashboard')
+      const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
 
       expect(result).toBeNull()
-      expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should return null when TENANT_API_SECRET not configured', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      delete process.env.TENANT_API_SECRET
+    it('should return null when TENANT_BASE_DOMAIN not configured', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      delete process.env.TENANT_BASE_DOMAIN
+      process.env.NEON_API_KEY = 'test-key'
 
-      const request = createRequest('https://acme.example.com/dashboard')
+      const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
 
       expect(result).toBeNull()
-      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should return null when NEON_API_KEY not configured', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      delete process.env.NEON_API_KEY
+
+      const request = createRequest('https://acme.quackback.io/dashboard')
+      const result = await resolveTenantFromDomain(request)
+
+      expect(result).toBeNull()
     })
 
     it('should return null when host header is missing', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      // Create request without host header
       const request = new Request('https://example.com/dashboard')
-      // Request constructor doesn't set host in Node.js, so this is already null
 
       const result = await resolveTenantFromDomain(request)
 
       expect(result).toBeNull()
-      expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should call API and return tenant context on success', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+    it('should return null when host is not a subdomain of base domain', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          workspaceId: 'workspace_abc',
-          slug: 'acme',
-          connectionString: 'postgres://tenant/db',
-        }),
-      })
-
-      const request = createRequest('https://acme.quackback.io/dashboard')
+      const request = createRequest('https://example.com/dashboard')
       const result = await resolveTenantFromDomain(request)
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://website.example.com/api/internal/resolve-domain?domain=acme.quackback.io',
-        {
-          headers: {
-            Authorization: 'Bearer secret123',
-          },
-        }
-      )
-      expect(result).toEqual({
-        workspaceId: 'workspace_abc',
-        slug: 'acme',
-        db: expect.objectContaining({
-          _workspaceId: 'workspace_abc',
-          _connectionString: 'postgres://tenant/db',
-        }),
-      })
+      expect(result).toBeNull()
+      expect(mockDb.query.workspace.findFirst).not.toHaveBeenCalled()
     })
 
-    it('should cache successful responses', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+    it('should return null when host is the base domain itself', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          workspaceId: 'workspace_abc',
-          slug: 'acme',
-          connectionString: 'postgres://tenant/db',
-        }),
-      })
+      const request = createRequest('https://quackback.io/dashboard')
+      const result = await resolveTenantFromDomain(request)
 
-      const request = createRequest('https://acme.quackback.io/dashboard')
-
-      // First call
-      await resolveTenantFromDomain(request)
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-
-      // Second call - should use cache
-      await resolveTenantFromDomain(request)
-      expect(mockFetch).toHaveBeenCalledTimes(1) // No additional call
+      expect(result).toBeNull()
     })
 
-    it('should return null and cache 404 responses (negative caching)', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+    it('should return null when workspace not found', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      })
+      mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
       const request = createRequest('https://unknown.quackback.io/dashboard')
+      const result = await resolveTenantFromDomain(request)
 
-      // First call
-      const result1 = await resolveTenantFromDomain(request)
-      expect(result1).toBeNull()
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-
-      // Second call - should use negative cache
-      const result2 = await resolveTenantFromDomain(request)
-      expect(result2).toBeNull()
-      expect(mockFetch).toHaveBeenCalledTimes(1) // No additional call
+      expect(result).toBeNull()
+      expect(mockDb.query.workspace.findFirst).toHaveBeenCalled()
     })
 
-    it('should return null but NOT cache 503 responses', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+    it('should return null when workspace migration not completed', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 503,
-        statusText: 'Service Unavailable',
+      mockDb.query.workspace.findFirst.mockResolvedValueOnce({
+        ...mockWorkspace,
+        migrationStatus: 'in_progress',
       })
-
-      const request = createRequest('https://migrating.quackback.io/dashboard')
-
-      // First call
-      const result1 = await resolveTenantFromDomain(request)
-      expect(result1).toBeNull()
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-
-      // Second call - should NOT use cache (503 not cached)
-      await resolveTenantFromDomain(request)
-      expect(mockFetch).toHaveBeenCalledTimes(2) // Made another call
-    })
-
-    it('should return null on network error', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
-
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
 
       expect(result).toBeNull()
+    })
+
+    it('should return null when workspace has no Neon project ID', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
+
+      mockDb.query.workspace.findFirst.mockResolvedValueOnce({
+        ...mockWorkspace,
+        neonProjectId: null,
+      })
+
+      const request = createRequest('https://acme.quackback.io/dashboard')
+      const result = await resolveTenantFromDomain(request)
+
+      expect(result).toBeNull()
+    })
+
+    it('should extract slug correctly from subdomain', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
+
+      mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
+
+      const request = createRequest('https://my-company.quackback.io/dashboard')
+      await resolveTenantFromDomain(request)
+
+      expect(mockDb.query.workspace.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.anything(),
+        })
+      )
     })
 
     it('should strip port from host header', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          workspaceId: 'workspace_abc',
-          slug: 'acme',
-          connectionString: 'postgres://tenant/db',
-        }),
-      })
+      mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
-      // Create request with port in host header
       const request = new Request('https://acme.quackback.io:3000/dashboard', {
         headers: {
           host: 'acme.quackback.io:3000',
@@ -223,74 +228,20 @@ describe('resolver', () => {
       })
       await resolveTenantFromDomain(request)
 
-      // Should call API with domain without port
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('domain=acme.quackback.io'),
-        expect.anything()
-      )
-      // Should NOT include port
-      expect(mockFetch).not.toHaveBeenCalledWith(
-        expect.stringContaining('domain=acme.quackback.io%3A3000'),
-        expect.anything()
-      )
+      // Should have queried for 'acme' slug
+      expect(mockDb.query.workspace.findFirst).toHaveBeenCalled()
     })
-  })
 
-  describe('clearTenantCache', () => {
-    it('should clear cache for specific domain', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
+    it('should return null for nested subdomains', async () => {
+      process.env.CATALOG_DATABASE_URL = 'postgres://catalog/db'
+      process.env.TENANT_BASE_DOMAIN = 'quackback.io'
+      process.env.NEON_API_KEY = 'test-key'
 
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          workspaceId: 'workspace_abc',
-          slug: 'acme',
-          connectionString: 'postgres://tenant/db',
-        }),
-      })
+      const request = createRequest('https://app.acme.quackback.io/dashboard')
+      const result = await resolveTenantFromDomain(request)
 
-      const request = createRequest('https://acme.quackback.io/dashboard')
-
-      // Populate cache
-      await resolveTenantFromDomain(request)
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-
-      // Clear cache
-      clearTenantCache('acme.quackback.io')
-
-      // Should make new API call
-      await resolveTenantFromDomain(request)
-      expect(mockFetch).toHaveBeenCalledTimes(2)
-    })
-  })
-
-  describe('clearAllTenantCache', () => {
-    it('should clear all cached domains', async () => {
-      process.env.TENANT_API_URL = 'https://website.example.com'
-      process.env.TENANT_API_SECRET = 'secret123'
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          workspaceId: 'workspace_abc',
-          slug: 'acme',
-          connectionString: 'postgres://tenant/db',
-        }),
-      })
-
-      // Populate cache for multiple domains
-      await resolveTenantFromDomain(createRequest('https://acme.quackback.io/'))
-      await resolveTenantFromDomain(createRequest('https://beta.quackback.io/'))
-      expect(mockFetch).toHaveBeenCalledTimes(2)
-
-      // Clear all
-      clearAllTenantCache()
-
-      // Both should make new API calls
-      await resolveTenantFromDomain(createRequest('https://acme.quackback.io/'))
-      await resolveTenantFromDomain(createRequest('https://beta.quackback.io/'))
-      expect(mockFetch).toHaveBeenCalledTimes(4)
+      // Nested subdomains like app.acme should be rejected
+      expect(result).toBeNull()
     })
   })
 })

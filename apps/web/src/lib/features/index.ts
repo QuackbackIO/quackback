@@ -90,11 +90,11 @@ export function isWorkspacePerDatabase(): boolean {
 
 /**
  * Check if multi-tenant mode is enabled (cloud with database-per-tenant).
- * When true, tenant context is resolved via website API on each request.
+ * When true, tenant context is resolved from catalog database on each request.
  * When false (self-hosted), uses DATABASE_URL singleton.
  */
 export function isMultiTenant(): boolean {
-  return isCloud() && Boolean(process.env.TENANT_API_URL)
+  return isCloud() && Boolean(process.env.CATALOG_DATABASE_URL)
 }
 
 // ============================================================================

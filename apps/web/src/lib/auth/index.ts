@@ -1,6 +1,6 @@
 import { betterAuth, type BetterAuthPlugin } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { emailOTP } from 'better-auth/plugins'
+import { emailOTP, oneTimeToken } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 
@@ -53,6 +53,7 @@ async function createAuth() {
     session: sessionTable,
     account: accountTable,
     verification: verificationTable,
+    oneTimeToken: oneTimeTokenTable,
     settings: settingsTable,
     member: memberTable,
     invitation: invitationTable,
@@ -71,6 +72,7 @@ async function createAuth() {
         session: sessionTable,
         account: accountTable,
         verification: verificationTable,
+        oneTimeToken: oneTimeTokenTable,
         // Better-Auth expects 'workspace' name for organization-like table
         workspace: settingsTable,
         member: memberTable,
@@ -129,6 +131,11 @@ async function createAuth() {
         },
         otpLength: 6,
         expiresIn: 600, // 10 minutes
+      }),
+
+      // One-time token plugin for cross-domain session transfer (used by /get-started)
+      oneTimeToken({
+        expiresIn: 60, // 1 minute - tokens are used immediately after generation
       }),
 
       // Session transfer for cross-domain handoff from website (cloud only)

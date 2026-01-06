@@ -5,14 +5,6 @@
   "main": "../../apps/web/dist/server/server.js",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "INTEGRATION_STATE",
-        "class_name": "IntegrationStateDO"
-      }
-    ]
-  },
   "assets": {
     "directory": "../../apps/web/dist/client"
   },
@@ -41,7 +33,7 @@
     "EMAIL_FROM": "Quackback <hello@quackback.io>",
     "NODE_ENV": "production",
     "EDITION": "cloud",
-    "TENANT_API_URL": "https://quackback.io"
+    "TENANT_BASE_DOMAIN": "quackback.io"
   },
   "observability": {
     "enabled": true

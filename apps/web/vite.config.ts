@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv, type PluginOption, type UserConfig } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
-import { nitro } from 'nitro/vite'
 import viteReact from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
@@ -36,6 +35,7 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => {
   return {
     server: {
       port: 3000,
+      allowedHosts: true,
     },
     define: {
       // Build-time constants for tree-shaking
@@ -47,24 +47,18 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => {
         ...eeAliases,
       },
     },
-    build: {
-      rollupOptions: {
-        // cloudflare:workers is a runtime module provided by Cloudflare Workers
-        external: isCloudflare ? ['cloudflare:workers'] : [],
-      },
-    },
     plugins: [
       tailwindcss(),
-      tsconfigPaths(),
+      tsconfigPaths({
+        projects: ['./tsconfig.json'],
+      }),
+      isCloudflare ? cloudflare({ viteEnvironment: { name: 'ssr' } }) : [],
       tanstackStart({
         srcDirectory: 'src',
         router: {
           routesDirectory: 'routes',
         },
       }),
-      // For Cloudflare, the cloudflare plugin handles everything
-      // For self-hosted, use nitro with bun preset
-      ...(isCloudflare ? cloudflarePlugins : [nitro({ preset: 'bun' })]),
       viteReact(),
     ],
   }

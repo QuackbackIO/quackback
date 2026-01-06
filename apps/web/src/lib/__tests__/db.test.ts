@@ -39,9 +39,9 @@ describe('db module', () => {
     delete (globalThis as Record<string, unknown>).__db
   })
 
-  describe('Self-hosted mode (no TENANT_API_URL)', () => {
+  describe('Self-hosted mode (no CATALOG_DATABASE_URL)', () => {
     it('should create singleton database from DATABASE_URL', async () => {
-      delete process.env.TENANT_API_URL
+      delete process.env.CATALOG_DATABASE_URL
       process.env.DATABASE_URL = 'postgres://localhost/quackback'
 
       const { db } = await import('../db')
@@ -55,7 +55,7 @@ describe('db module', () => {
     })
 
     it('should reuse singleton on subsequent accesses', async () => {
-      delete process.env.TENANT_API_URL
+      delete process.env.CATALOG_DATABASE_URL
       process.env.DATABASE_URL = 'postgres://localhost/quackback'
 
       const { db } = await import('../db')
@@ -69,7 +69,7 @@ describe('db module', () => {
     })
 
     it('should throw error when DATABASE_URL not set', async () => {
-      delete process.env.TENANT_API_URL
+      delete process.env.CATALOG_DATABASE_URL
       delete process.env.DATABASE_URL
 
       const { db } = await import('../db')
@@ -80,7 +80,7 @@ describe('db module', () => {
 
   describe('db proxy behavior', () => {
     it('should lazily access database on property access', async () => {
-      delete process.env.TENANT_API_URL
+      delete process.env.CATALOG_DATABASE_URL
       process.env.DATABASE_URL = 'postgres://localhost/quackback'
 
       const { db } = await import('../db')

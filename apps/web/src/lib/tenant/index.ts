@@ -5,5 +5,5 @@
  */
 export type { TenantContext } from './types'
 export { tenantStorage } from './storage'
-export { resolveTenantFromDomain, clearTenantCache, clearAllTenantCache } from './resolver'
+export { resolveTenantFromDomain } from './resolver'
 export { getTenantDb, clearTenantDb, clearAllTenantDbs } from './db-cache'

@@ -27,7 +27,7 @@ Quackback Cloud runs on Cloudflare Workers with:
 | **Framework**          | TanStack Start (React)                           |
 | **Database**           | Neon PostgreSQL (per-tenant)                     |
 | **Connection Pooling** | Cloudflare Hyperdrive                            |
-| **Multi-tenancy**      | Domain-based resolution via Website API          |
+| **Multi-tenancy**      | Domain-based resolution via catalog database     |
 
 ### Environments
 
@@ -48,7 +48,7 @@ Before deploying, ensure you have:
    - Account: Cloudflare Workers Scripts:Edit
    - Zone: quackback.io - Workers Routes:Edit
 4. **Hyperdrive** configured in Cloudflare dashboard (already set up)
-5. **Website API** deployed and configured for tenant resolution
+5. **Catalog Database** PostgreSQL database for workspace registry
 
 ---
 
@@ -74,8 +74,8 @@ Edit `.dev.vars` with your development secrets:
 ```bash
 # Required
 BETTER_AUTH_SECRET=your-dev-secret-at-least-32-characters
-TENANT_API_URL=https://quackback.io
-TENANT_API_SECRET=your-tenant-api-secret
+CATALOG_DATABASE_URL=postgres://user:pass@host/catalog
+NEON_API_KEY=napi_xxxxxxxxxxxx
 RESEND_API_KEY=re_xxxxxxxxxxxx
 INTEGRATION_ENCRYPTION_KEY=base64-encoded-32-byte-key
 
@@ -92,13 +92,15 @@ Secrets must be set via wrangler for each environment:
 # Development environment
 cd apps/web
 wrangler secret put BETTER_AUTH_SECRET -c ../../deploy/cloud/wrangler.dev.jsonc
-wrangler secret put TENANT_API_SECRET -c ../../deploy/cloud/wrangler.dev.jsonc
+wrangler secret put CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.dev.jsonc
+wrangler secret put NEON_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 wrangler secret put RESEND_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 wrangler secret put INTEGRATION_ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 
 # Production environment
 wrangler secret put BETTER_AUTH_SECRET -c ../../deploy/cloud/wrangler.production.jsonc
-wrangler secret put TENANT_API_SECRET -c ../../deploy/cloud/wrangler.production.jsonc
+wrangler secret put CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.production.jsonc
+wrangler secret put NEON_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 wrangler secret put RESEND_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 wrangler secret put INTEGRATION_ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 ```
@@ -210,13 +212,13 @@ Automated deployments are configured in `.github/workflows/deploy-cloud.yml`.
 
 ### Required Secrets per Environment
 
-| Secret                 | Description                                    |
-| ---------------------- | ---------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN` | API token with Workers permissions             |
-| `BETTER_AUTH_SECRET`   | Auth encryption key (32+ chars)                |
-| `TENANT_API_URL`       | Website API URL (e.g., `https://quackback.io`) |
-| `TENANT_API_SECRET`    | Secret for tenant resolution API               |
-| `RESEND_API_KEY`       | Email service API key                          |
+| Secret                 | Description                                         |
+| ---------------------- | --------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN` | API token with Workers permissions                  |
+| `BETTER_AUTH_SECRET`   | Auth encryption key (32+ chars)                     |
+| `CATALOG_DATABASE_URL` | Catalog database connection string                  |
+| `NEON_API_KEY`         | Neon API key for fetching tenant connection strings |
+| `RESEND_API_KEY`       | Email service API key                               |
 
 ### Manual Production Deploy
 
