@@ -16,41 +16,13 @@
  * Cloud edition only - not included in self-hosted builds.
  */
 
+import { env as cfEnv } from 'cloudflare:workers'
 import { createAuthEndpoint } from 'better-auth/api'
 import type { BetterAuthPlugin } from 'better-auth'
 import { jwtVerify } from 'jose'
 import { z } from 'zod'
 import crypto from 'crypto'
 import { generateId } from '@quackback/ids'
-
-type CfEnv = { TRANSFER_TOKEN_SECRET?: string; NODE_ENV?: string }
-
-// Cloudflare Workers env - lazily initialized at runtime
-let cfEnv: CfEnv | undefined
-let cfEnvInitialized = false
-
-async function getCfEnv(): Promise<CfEnv | undefined> {
-  if (cfEnvInitialized) return cfEnv
-  cfEnvInitialized = true
-
-  try {
-    // Dynamic import to avoid build-time errors in non-CF environments
-    // @ts-expect-error - cloudflare:workers is only available in CF Workers runtime
-    const cf = await import(/* @vite-ignore */ 'cloudflare:workers')
-    cfEnv = cf.env as CfEnv
-  } catch {
-    // Not running in Cloudflare Workers - use process.env only
-  }
-  return cfEnv
-}
-
-async function getEnv() {
-  const env = await getCfEnv()
-  return {
-    TRANSFER_TOKEN_SECRET: env?.TRANSFER_TOKEN_SECRET || process.env.TRANSFER_TOKEN_SECRET,
-    NODE_ENV: env?.NODE_ENV || process.env.NODE_ENV,
-  }
-}
 
 // JWT payload schema
 const JwtPayloadSchema = z.object({
@@ -77,7 +49,8 @@ export const sessionTransfer = () => {
         },
         async (ctx) => {
           const { token } = ctx.query
-          const { TRANSFER_TOKEN_SECRET: transferSecret, NODE_ENV } = await getEnv()
+          const transferSecret = cfEnv.TRANSFER_TOKEN_SECRET
+          const NODE_ENV = cfEnv.NODE_ENV
 
           // Check if session-transfer is enabled (requires shared secret)
           if (!transferSecret) {

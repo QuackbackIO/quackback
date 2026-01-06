@@ -5,6 +5,7 @@
  * Extracts slug from subdomain and looks up workspace connection info.
  * Fetches connection strings from Neon API using project ID.
  */
+import { env as cfEnv } from 'cloudflare:workers'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
 import { eq } from 'drizzle-orm'
@@ -48,32 +49,11 @@ const catalogSchema = { workspace, workspaceDomain }
 // Catalog Database Connection
 // ============================================
 
-type CfEnv = { CATALOG_DATABASE_URL?: string; TENANT_BASE_DOMAIN?: string; NEON_API_KEY?: string }
-
-// Cloudflare Workers env - lazily initialized at runtime
-let cfEnv: CfEnv | undefined
-let cfEnvInitialized = false
-
-async function getCfEnv(): Promise<CfEnv | undefined> {
-  if (cfEnvInitialized) return cfEnv
-  cfEnvInitialized = true
-
-  try {
-    // Dynamic import to avoid build-time errors in non-CF environments
-    const cf = await import('cloudflare:workers')
-    cfEnv = cf.env as CfEnv
-  } catch {
-    // Not running in Cloudflare Workers - use process.env only
-  }
-  return cfEnv
-}
-
-async function getConfig() {
-  const env = await getCfEnv()
+function getConfig() {
   return {
-    catalogDbUrl: env?.CATALOG_DATABASE_URL || process.env.CATALOG_DATABASE_URL,
-    baseDomain: env?.TENANT_BASE_DOMAIN || process.env.TENANT_BASE_DOMAIN,
-    neonApiKey: env?.NEON_API_KEY || process.env.NEON_API_KEY,
+    catalogDbUrl: cfEnv.CATALOG_DATABASE_URL,
+    baseDomain: cfEnv.TENANT_BASE_DOMAIN,
+    neonApiKey: cfEnv.NEON_API_KEY,
   }
 }
 
@@ -197,7 +177,7 @@ function extractSlugFromHost(host: string, baseDomain: string): string | null {
  * @returns TenantContext if domain maps to a valid workspace, null otherwise
  */
 export async function resolveTenantFromDomain(request: Request): Promise<TenantContext | null> {
-  const config = await getConfig()
+  const config = getConfig()
 
   if (!config.catalogDbUrl || !config.baseDomain || !config.neonApiKey) {
     console.error(
