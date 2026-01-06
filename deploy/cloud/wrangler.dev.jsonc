@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "quackback-web-dev",
   "account_id": "67cf7d5c8b797bfd5cbd417b233cc0d0",
-  "main": "../../apps/web/dist/server/server.js",
+  "main": "../../apps/web/dist/server/index.js",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
