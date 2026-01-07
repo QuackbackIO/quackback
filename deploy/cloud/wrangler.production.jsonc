@@ -5,6 +5,9 @@
   "main": "../../apps/web/dist/server/index.js",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Disable esbuild's keepNames to prevent __name helper from leaking into
+  // seroval's serialized stream code. See: https://opennext.js.org/cloudflare/howtos/keep_names
+  "keep_names": false,
   "assets": {
     "directory": "../../apps/web/dist/client"
   },
