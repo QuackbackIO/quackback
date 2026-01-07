@@ -29,160 +29,144 @@ function slugify(text: string): string {
  * Create a new board
  */
 export async function createBoard(input: CreateBoardInput): Promise<Board> {
-  return db.transaction(async (tx) => {
-    // Validate input
-    if (!input.name?.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Board name is required')
+  // Validate input
+  if (!input.name?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Board name is required')
+  }
+  if (input.name.length > 100) {
+    throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
+  }
+  if (input.description && input.description.length > 500) {
+    throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
+  }
+
+  // Generate or validate slug
+  const baseSlug = input.slug ? slugify(input.slug) : slugify(input.name)
+
+  // Ensure slug is not empty after slugification
+  if (!baseSlug) {
+    throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
+  }
+
+  // Check for slug uniqueness and generate a unique one if needed
+  let slug = baseSlug
+  let counter = 0
+
+  while (true) {
+    const existingBoard = await db.query.boards.findFirst({
+      where: eq(boards.slug, slug),
+    })
+    if (!existingBoard) {
+      break
     }
-    if (input.name.length > 100) {
-      throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
-    }
-    if (input.description && input.description.length > 500) {
-      throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
-    }
+    counter++
+    slug = `${baseSlug}-${counter}`
+  }
 
-    // Generate or validate slug
-    let slug = input.slug ? slugify(input.slug) : slugify(input.name)
+  // Create the board
+  const [board] = await db
+    .insert(boards)
+    .values({
+      name: input.name.trim(),
+      slug,
+      description: input.description?.trim() || null,
+      isPublic: input.isPublic ?? true, // default to public
+      settings: input.settings || {},
+    })
+    .returning()
 
-    // Ensure slug is not empty after slugification
-    if (!slug) {
-      throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
-    }
-
-    // Check for slug uniqueness and generate a unique one if needed
-    let counter = 0
-    let isUnique = false
-    const baseSlug = slug
-
-    while (!isUnique) {
-      const existingBoard = await tx.query.boards.findFirst({
-        where: eq(boards.slug, slug),
-      })
-      if (!existingBoard) {
-        isUnique = true
-      } else {
-        counter++
-        slug = `${baseSlug}-${counter}`
-      }
-    }
-
-    // Create the board
-    const [board] = await tx
-      .insert(boards)
-      .values({
-        name: input.name.trim(),
-        slug,
-        description: input.description?.trim() || null,
-        isPublic: input.isPublic ?? true, // default to public
-        settings: input.settings || {},
-      })
-      .returning()
-
-    return board
-  })
+  return board
 }
 
 /**
  * Update an existing board
  */
 export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise<Board> {
-  return db.transaction(async (tx) => {
-    // Get existing board
-    const existingBoard = await tx.query.boards.findFirst({
-      where: eq(boards.id, id),
-    })
-    if (!existingBoard) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
-    }
-
-    // Validate input
-    if (input.name !== undefined) {
-      if (!input.name.trim()) {
-        throw new ValidationError('VALIDATION_ERROR', 'Board name cannot be empty')
-      }
-      if (input.name.length > 100) {
-        throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
-      }
-    }
-    if (input.description !== undefined && input.description !== null) {
-      if (input.description.length > 500) {
-        throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
-      }
-    }
-
-    // Handle slug update
-    let slug = existingBoard.slug
-    if (input.slug !== undefined) {
-      slug = slugify(input.slug)
-
-      if (!slug) {
-        throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug')
-      }
-
-      // Check uniqueness if slug is changing
-      if (slug !== existingBoard.slug) {
-        const existingWithSlug = await tx.query.boards.findFirst({
-          where: eq(boards.slug, slug),
-        })
-        if (existingWithSlug && existingWithSlug.id !== id) {
-          throw new ConflictError('DUPLICATE_SLUG', `A board with slug "${slug}" already exists`)
-        }
-      }
-    } else if (input.name !== undefined) {
-      // Auto-update slug if name changes but slug is not explicitly provided
-      const newSlug = slugify(input.name)
-      if (newSlug !== existingBoard.slug) {
-        const existingWithSlug = await tx.query.boards.findFirst({
-          where: eq(boards.slug, newSlug),
-        })
-        if (!existingWithSlug || existingWithSlug.id === id) {
-          slug = newSlug
-        }
-      }
-    }
-
-    // Build update data
-    const updateData: Partial<Board> = {}
-    if (input.name !== undefined) updateData.name = input.name.trim()
-    if (input.description !== undefined) updateData.description = input.description?.trim() || null
-    if (slug !== existingBoard.slug) updateData.slug = slug
-    if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
-    if (input.settings !== undefined) updateData.settings = input.settings
-
-    // Update the board
-    const [updatedBoard] = await tx
-      .update(boards)
-      .set({ ...updateData, updatedAt: new Date() })
-      .where(eq(boards.id, id))
-      .returning()
-
-    if (!updatedBoard) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
-    }
-
-    return updatedBoard
+  // Get existing board
+  const existingBoard = await db.query.boards.findFirst({
+    where: eq(boards.id, id),
   })
+  if (!existingBoard) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
+
+  // Validate input
+  if (input.name !== undefined) {
+    if (!input.name.trim()) {
+      throw new ValidationError('VALIDATION_ERROR', 'Board name cannot be empty')
+    }
+    if (input.name.length > 100) {
+      throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
+    }
+  }
+  if (input.description !== undefined && input.description !== null) {
+    if (input.description.length > 500) {
+      throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
+    }
+  }
+
+  // Handle slug update
+  let slug = existingBoard.slug
+  if (input.slug !== undefined) {
+    slug = slugify(input.slug)
+
+    if (!slug) {
+      throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug')
+    }
+
+    // Check uniqueness if slug is changing
+    if (slug !== existingBoard.slug) {
+      const existingWithSlug = await db.query.boards.findFirst({
+        where: eq(boards.slug, slug),
+      })
+      if (existingWithSlug && existingWithSlug.id !== id) {
+        throw new ConflictError('DUPLICATE_SLUG', `A board with slug "${slug}" already exists`)
+      }
+    }
+  } else if (input.name !== undefined) {
+    // Auto-update slug if name changes but slug is not explicitly provided
+    const newSlug = slugify(input.name)
+    if (newSlug !== existingBoard.slug) {
+      const existingWithSlug = await db.query.boards.findFirst({
+        where: eq(boards.slug, newSlug),
+      })
+      if (!existingWithSlug || existingWithSlug.id === id) {
+        slug = newSlug
+      }
+    }
+  }
+
+  // Build update data
+  const updateData: Partial<Board> = {}
+  if (input.name !== undefined) updateData.name = input.name.trim()
+  if (input.description !== undefined) updateData.description = input.description?.trim() || null
+  if (slug !== existingBoard.slug) updateData.slug = slug
+  if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
+  if (input.settings !== undefined) updateData.settings = input.settings
+
+  // Update the board
+  const [updatedBoard] = await db
+    .update(boards)
+    .set({ ...updateData, updatedAt: new Date() })
+    .where(eq(boards.id, id))
+    .returning()
+
+  if (!updatedBoard) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
+
+  return updatedBoard
 }
 
 /**
  * Delete a board
  */
 export async function deleteBoard(id: BoardId): Promise<void> {
-  return db.transaction(async (tx) => {
-    // Get existing board
-    const existingBoard = await tx.query.boards.findFirst({
-      where: eq(boards.id, id),
-    })
-    if (!existingBoard) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
-    }
-
-    // Delete the board
-    const result = await tx.delete(boards).where(eq(boards.id, id)).returning()
-    if (result.length === 0) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
-    }
-  })
+  // Delete the board and check if it existed
+  const result = await db.delete(boards).where(eq(boards.id, id)).returning()
+  if (result.length === 0) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
 }
 
 /**
@@ -263,35 +247,33 @@ export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
  * Update board settings
  */
 export async function updateBoardSettings(id: BoardId, settings: BoardSettings): Promise<Board> {
-  return db.transaction(async (tx) => {
-    // Get existing board
-    const existingBoard = await tx.query.boards.findFirst({
-      where: eq(boards.id, id),
-    })
-    if (!existingBoard) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
-    }
-
-    // Merge settings with existing settings
-    const currentSettings = (existingBoard.settings || {}) as BoardSettings
-    const updatedSettings = {
-      ...currentSettings,
-      ...settings,
-    }
-
-    // Update the board
-    const [updatedBoard] = await tx
-      .update(boards)
-      .set({ settings: updatedSettings, updatedAt: new Date() })
-      .where(eq(boards.id, id))
-      .returning()
-
-    if (!updatedBoard) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
-    }
-
-    return updatedBoard
+  // Get existing board
+  const existingBoard = await db.query.boards.findFirst({
+    where: eq(boards.id, id),
   })
+  if (!existingBoard) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
+
+  // Merge settings with existing settings
+  const currentSettings = (existingBoard.settings || {}) as BoardSettings
+  const updatedSettings = {
+    ...currentSettings,
+    ...settings,
+  }
+
+  // Update the board
+  const [updatedBoard] = await db
+    .update(boards)
+    .set({ settings: updatedSettings, updatedAt: new Date() })
+    .where(eq(boards.id, id))
+    .returning()
+
+  if (!updatedBoard) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
+
+  return updatedBoard
 }
 
 /**

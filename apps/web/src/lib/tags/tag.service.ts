@@ -25,51 +25,44 @@ import type { CreateTagInput, UpdateTagInput } from './tag.types'
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
 export async function createTag(input: CreateTagInput): Promise<Tag> {
-  return db.transaction(async (tx) => {
-    // Basic validation
-    if (!input.name || !input.name.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
-    }
+  // Basic validation
+  if (!input.name || !input.name.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
+  }
 
-    const trimmedName = input.name.trim()
+  const trimmedName = input.name.trim()
 
-    if (trimmedName.length > 50) {
-      throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
-    }
+  if (trimmedName.length > 50) {
+    throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
+  }
 
-    // Check for duplicate name in the organization
-    const existingTags = await tx.query.tags.findMany({
-      orderBy: [asc(tags.name)],
-    })
-    const duplicate = existingTags.find(
-      (tag) => tag.name.toLowerCase() === trimmedName.toLowerCase()
-    )
-    if (duplicate) {
-      throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
-    }
-
-    const color = input.color || '#6b7280'
-
-    // Validate color format
-    const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
-    if (!hexColorRegex.test(color)) {
-      throw new ValidationError(
-        'VALIDATION_ERROR',
-        'Color must be a valid hex color (e.g., #6b7280)'
-      )
-    }
-
-    // Create the tag
-    const [tag] = await tx
-      .insert(tags)
-      .values({
-        name: trimmedName,
-        color,
-      })
-      .returning()
-
-    return tag
+  // Check for duplicate name in the organization
+  const existingTags = await db.query.tags.findMany({
+    orderBy: [asc(tags.name)],
   })
+  const duplicate = existingTags.find((tag) => tag.name.toLowerCase() === trimmedName.toLowerCase())
+  if (duplicate) {
+    throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
+  }
+
+  const color = input.color || '#6b7280'
+
+  // Validate color format
+  const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
+  if (!hexColorRegex.test(color)) {
+    throw new ValidationError('VALIDATION_ERROR', 'Color must be a valid hex color (e.g., #6b7280)')
+  }
+
+  // Create the tag
+  const [tag] = await db
+    .insert(tags)
+    .values({
+      name: trimmedName,
+      color,
+    })
+    .returning()
+
+  return tag
 }
 
 /**
@@ -82,63 +75,61 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
 export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> {
-  return db.transaction(async (tx) => {
-    // Get existing tag
-    const existingTag = await tx.query.tags.findFirst({
-      where: eq(tags.id, id),
-    })
-    if (!existingTag) {
-      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
-    }
-
-    // Basic validation
-    if (input.name !== undefined && !input.name.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Tag name cannot be empty')
-    }
-
-    // Check for duplicate name (excluding current tag)
-    if (input.name !== undefined) {
-      const trimmedName = input.name.trim()
-
-      if (trimmedName.length > 50) {
-        throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
-      }
-      const existingTags = await tx.query.tags.findMany({
-        orderBy: [asc(tags.name)],
-      })
-      const duplicate = existingTags.find(
-        (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
-      )
-      if (duplicate) {
-        throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
-      }
-    }
-
-    // Validate color format if provided
-    if (input.color !== undefined) {
-      const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
-      if (!hexColorRegex.test(input.color)) {
-        throw new ValidationError(
-          'VALIDATION_ERROR',
-          'Color must be a valid hex color (e.g., #6b7280)'
-        )
-      }
-    }
-
-    // Build update data
-    const updateData: Partial<Tag> = {}
-    if (input.name !== undefined) updateData.name = input.name.trim()
-    if (input.color !== undefined) updateData.color = input.color
-
-    // Update the tag
-    const [updatedTag] = await tx.update(tags).set(updateData).where(eq(tags.id, id)).returning()
-
-    if (!updatedTag) {
-      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
-    }
-
-    return updatedTag
+  // Get existing tag
+  const existingTag = await db.query.tags.findFirst({
+    where: eq(tags.id, id),
   })
+  if (!existingTag) {
+    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+  }
+
+  // Basic validation
+  if (input.name !== undefined && !input.name.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Tag name cannot be empty')
+  }
+
+  // Check for duplicate name (excluding current tag)
+  if (input.name !== undefined) {
+    const trimmedName = input.name.trim()
+
+    if (trimmedName.length > 50) {
+      throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
+    }
+    const existingTags = await db.query.tags.findMany({
+      orderBy: [asc(tags.name)],
+    })
+    const duplicate = existingTags.find(
+      (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
+    )
+    if (duplicate) {
+      throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
+    }
+  }
+
+  // Validate color format if provided
+  if (input.color !== undefined) {
+    const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
+    if (!hexColorRegex.test(input.color)) {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Color must be a valid hex color (e.g., #6b7280)'
+      )
+    }
+  }
+
+  // Build update data
+  const updateData: Partial<Tag> = {}
+  if (input.name !== undefined) updateData.name = input.name.trim()
+  if (input.color !== undefined) updateData.color = input.color
+
+  // Update the tag
+  const [updatedTag] = await db.update(tags).set(updateData).where(eq(tags.id, id)).returning()
+
+  if (!updatedTag) {
+    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+  }
+
+  return updatedTag
 }
 
 /**
@@ -151,21 +142,12 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
  * Authorization should be checked at the action/API layer before calling this.
  */
 export async function deleteTag(id: TagId): Promise<void> {
-  return db.transaction(async (tx) => {
-    // Verify tag exists
-    const existingTag = await tx.query.tags.findFirst({
-      where: eq(tags.id, id),
-    })
-    if (!existingTag) {
-      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
-    }
-
-    // Delete the tag (cascade will remove from post_tags junction table)
-    const result = await tx.delete(tags).where(eq(tags.id, id)).returning()
-    if (result.length === 0) {
-      throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
-    }
-  })
+  // Delete the tag (cascade will remove from post_tags junction table)
+  // Just delete and check the result - no need for separate existence check
+  const result = await db.delete(tags).where(eq(tags.id, id)).returning()
+  if (result.length === 0) {
+    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+  }
 }
 
 /**

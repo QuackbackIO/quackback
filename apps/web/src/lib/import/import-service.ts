@@ -7,7 +7,14 @@
 import Papa from 'papaparse'
 import { z } from 'zod'
 import { db, posts, tags, postTags, postStatuses, eq } from '@/lib/db'
-import { boardIdSchema, type BoardId, type PostId, type TagId, type StatusId } from '@quackback/ids'
+import {
+  boardIdSchema,
+  createId,
+  type BoardId,
+  type PostId,
+  type TagId,
+  type StatusId,
+} from '@quackback/ids'
 import type { ImportInput, ImportResult, ImportRowError } from './types'
 
 // Constants
@@ -118,6 +125,10 @@ export function validateImportInput(
  *
  * This is the core business logic that processes a batch of rows,
  * creating tags and posts in the database.
+ *
+ * Note: This implementation is compatible with neon-http driver which does NOT
+ * support interactive transactions. We pre-generate all IDs using TypeIDs (UUIDv7)
+ * and build all insert data upfront before executing sequential inserts.
  */
 export async function processBatch(
   rows: Record<string, string>[],
@@ -131,158 +142,164 @@ export async function processBatch(
     createdTags: [],
   }
 
-  // Use transaction for batch atomicity
-  await db.transaction(async (tx) => {
-    // Get default status for the organization
-    const defaultStatus = await tx.query.postStatuses.findFirst({
-      where: eq(postStatuses.isDefault, true),
-    })
+  // Fetch initial data outside of any transaction (neon-http compatible)
+  // Get default status for the organization
+  const defaultStatus = await db.query.postStatuses.findFirst({
+    where: eq(postStatuses.isDefault, true),
+  })
 
-    // Get all existing statuses for lookup
-    const existingStatuses = await tx.query.postStatuses.findMany()
-    const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
+  // Get all existing statuses for lookup
+  const existingStatuses = await db.query.postStatuses.findMany()
+  const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
 
-    // Get all existing tags for lookup
-    const existingTags = await tx.query.tags.findMany()
-    const tagMap = new Map(existingTags.map((t) => [t.name.toLowerCase(), t]))
+  // Get all existing tags for lookup (we only need id for junction records)
+  const existingTags = await db.query.tags.findMany()
+  const tagMap = new Map<string, { id: TagId }>(
+    existingTags.map((t) => [t.name.toLowerCase(), { id: t.id as TagId }])
+  )
 
-    // Collect all unique tag names that need to be created
-    const tagsToCreate = new Set<string>()
+  // Collect all unique tag names that need to be created
+  const tagsToCreate = new Set<string>()
 
-    // Validate and prepare rows
-    const validRows: { row: ProcessedRow; index: number }[] = []
+  // Validate and prepare rows
+  const validRows: { row: ProcessedRow; index: number }[] = []
 
-    for (let i = 0; i < rows.length; i++) {
-      const rowIndex = startIndex + i + 1 // 1-indexed, excluding header
-      const rawRow = rows[i]
+  for (let i = 0; i < rows.length; i++) {
+    const rowIndex = startIndex + i + 1 // 1-indexed, excluding header
+    const rawRow = rows[i]
 
-      // Validate row
-      const parseResult = csvRowSchema.safeParse(rawRow)
-      if (!parseResult.success) {
-        result.errors.push({
-          row: rowIndex,
-          message: parseResult.error.issues[0].message,
-          field: parseResult.error.issues[0].path[0] as string,
-        })
-        result.skipped++
-        continue
-      }
-
-      const row = parseResult.data
-
-      // Resolve status
-      let statusId: StatusId | null = (defaultStatus?.id ?? null) as StatusId | null
-      let legacyStatus:
-        | 'open'
-        | 'under_review'
-        | 'planned'
-        | 'in_progress'
-        | 'complete'
-        | 'closed' = 'open'
-
-      if (row.status) {
-        const status = statusMap.get(row.status.toLowerCase())
-        if (status) {
-          statusId = status.id as StatusId
-          // Map to legacy status based on category
-          if (status.category === 'complete') legacyStatus = 'complete'
-          else if (status.category === 'closed') legacyStatus = 'closed'
-          else if (status.slug === 'planned') legacyStatus = 'planned'
-          else if (status.slug === 'in-progress' || status.slug === 'in_progress')
-            legacyStatus = 'in_progress'
-          else if (status.slug === 'under-review' || status.slug === 'under_review')
-            legacyStatus = 'under_review'
-        }
-      }
-
-      // Parse tags (limit to MAX_TAGS_PER_POST)
-      const tagNames = row.tags
-        ? row.tags
-            .split(',')
-            .map((t) => t.trim())
-            .filter((t) => t.length > 0 && t.length <= 50)
-            .slice(0, MAX_TAGS_PER_POST)
-        : []
-
-      // Check for new tags
-      for (const tagName of tagNames) {
-        if (!tagMap.has(tagName.toLowerCase())) {
-          tagsToCreate.add(tagName)
-        }
-      }
-
-      validRows.push({
-        row: {
-          title: row.title,
-          content: row.content,
-          boardId: defaultBoardId, // Always use the specified board
-          statusId,
-          status: legacyStatus,
-          authorName: row.author_name || null,
-          authorEmail: row.author_email || null,
-          voteCount: row.vote_count,
-          createdAt: row.created_at,
-          tagNames,
-        },
-        index: rowIndex,
+    // Validate row
+    const parseResult = csvRowSchema.safeParse(rawRow)
+    if (!parseResult.success) {
+      result.errors.push({
+        row: rowIndex,
+        message: parseResult.error.issues[0].message,
+        field: parseResult.error.issues[0].path[0] as string,
       })
+      result.skipped++
+      continue
     }
 
-    // Create missing tags
-    if (tagsToCreate.size > 0) {
-      const newTags = Array.from(tagsToCreate).map((name) => ({
-        name,
-        color: '#6b7280', // Default gray color
-      }))
+    const row = parseResult.data
 
-      const insertedTags = await tx.insert(tags).values(newTags).returning()
+    // Resolve status
+    let statusId: StatusId | null = (defaultStatus?.id ?? null) as StatusId | null
+    let legacyStatus: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed' =
+      'open'
 
-      // Update tag map with new tags
-      for (const tag of insertedTags) {
-        tagMap.set(tag.name.toLowerCase(), tag)
+    if (row.status) {
+      const status = statusMap.get(row.status.toLowerCase())
+      if (status) {
+        statusId = status.id as StatusId
+        // Map to legacy status based on category
+        if (status.category === 'complete') legacyStatus = 'complete'
+        else if (status.category === 'closed') legacyStatus = 'closed'
+        else if (status.slug === 'planned') legacyStatus = 'planned'
+        else if (status.slug === 'in-progress' || status.slug === 'in_progress')
+          legacyStatus = 'in_progress'
+        else if (status.slug === 'under-review' || status.slug === 'under_review')
+          legacyStatus = 'under_review'
       }
-
-      result.createdTags = Array.from(tagsToCreate)
     }
 
-    // Insert posts
-    if (validRows.length > 0) {
-      const postsToInsert = validRows.map(({ row }) => ({
-        boardId: row.boardId,
+    // Parse tags (limit to MAX_TAGS_PER_POST)
+    const tagNames = row.tags
+      ? row.tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0 && t.length <= 50)
+          .slice(0, MAX_TAGS_PER_POST)
+      : []
+
+    // Check for new tags
+    for (const tagName of tagNames) {
+      if (!tagMap.has(tagName.toLowerCase())) {
+        tagsToCreate.add(tagName)
+      }
+    }
+
+    validRows.push({
+      row: {
         title: row.title,
         content: row.content,
-        statusId: row.statusId,
-        authorName: row.authorName,
-        authorEmail: row.authorEmail,
-        voteCount: row.voteCount,
-        createdAt: row.createdAt,
-        updatedAt: row.createdAt,
-      }))
+        boardId: defaultBoardId, // Always use the specified board
+        statusId,
+        status: legacyStatus,
+        authorName: row.author_name || null,
+        authorEmail: row.author_email || null,
+        voteCount: row.vote_count,
+        createdAt: row.created_at,
+        tagNames,
+      },
+      index: rowIndex,
+    })
+  }
 
-      const insertedPosts = await tx.insert(posts).values(postsToInsert).returning()
+  // Pre-generate IDs for all new tags (neon-http compatible approach)
+  const tagsToCreateArray = Array.from(tagsToCreate)
+  const newTagIds = tagsToCreateArray.map(() => createId('tag'))
 
-      // Insert post tags
-      const postTagsToInsert: { postId: PostId; tagId: TagId }[] = []
+  // Build tag map with pre-generated IDs for new tags
+  const newTagsWithIds = tagsToCreateArray.map((name, index) => ({
+    id: newTagIds[index],
+    name,
+    color: '#6b7280', // Default gray color
+  }))
 
-      for (let i = 0; i < validRows.length; i++) {
-        const { row } = validRows[i]
-        const postId = insertedPosts[i].id as PostId
+  // Add pre-generated tag IDs to the tag map before inserting
+  for (const newTag of newTagsWithIds) {
+    tagMap.set(newTag.name.toLowerCase(), { id: newTag.id })
+  }
 
-        for (const tagName of row.tagNames) {
-          const tag = tagMap.get(tagName.toLowerCase())
-          if (tag) {
-            postTagsToInsert.push({ postId, tagId: tag.id as TagId })
-          }
-        }
+  // Pre-generate IDs for all posts
+  const postIds = validRows.map(() => createId('post'))
+
+  // Build all post data with pre-generated IDs
+  const postsToInsert = validRows.map(({ row }, index) => ({
+    id: postIds[index],
+    boardId: row.boardId,
+    title: row.title,
+    content: row.content,
+    statusId: row.statusId,
+    authorName: row.authorName,
+    authorEmail: row.authorEmail,
+    voteCount: row.voteCount,
+    createdAt: row.createdAt,
+    updatedAt: row.createdAt,
+  }))
+
+  // Build all post-tag junction records (we now know all IDs upfront)
+  const postTagsToInsert: { postId: PostId; tagId: TagId }[] = []
+
+  for (let i = 0; i < validRows.length; i++) {
+    const { row } = validRows[i]
+    const postId = postIds[i]
+
+    for (const tagName of row.tagNames) {
+      const tag = tagMap.get(tagName.toLowerCase())
+      if (tag) {
+        postTagsToInsert.push({ postId, tagId: tag.id })
       }
-
-      if (postTagsToInsert.length > 0) {
-        await tx.insert(postTags).values(postTagsToInsert).onConflictDoNothing()
-      }
-
-      result.imported = validRows.length
     }
-  })
+  }
+
+  // Execute sequential inserts (no interactive transaction needed)
+  // Insert new tags first
+  if (newTagsWithIds.length > 0) {
+    await db.insert(tags).values(newTagsWithIds)
+    result.createdTags = tagsToCreateArray
+  }
+
+  // Insert posts
+  if (postsToInsert.length > 0) {
+    await db.insert(posts).values(postsToInsert)
+    result.imported = validRows.length
+  }
+
+  // Insert post-tag relationships
+  if (postTagsToInsert.length > 0) {
+    await db.insert(postTags).values(postTagsToInsert).onConflictDoNothing()
+  }
 
   return result
 }

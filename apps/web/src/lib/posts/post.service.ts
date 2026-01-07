@@ -61,80 +61,77 @@ export async function createPost(
   input: CreatePostInput,
   author: { memberId: MemberId; name: string; email: string }
 ): Promise<CreatePostResult> {
-  return db.transaction(async (tx) => {
-    // Basic validation (also done at action layer, but enforced here for direct service calls)
-    const title = input.title?.trim()
-    const content = input.content?.trim()
+  // Basic validation (also done at action layer, but enforced here for direct service calls)
+  const title = input.title?.trim()
+  const content = input.content?.trim()
 
-    if (!title) {
-      throw new ValidationError('VALIDATION_ERROR', 'Title is required')
-    }
-    if (!content) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
-    }
-    if (title.length > 200) {
-      throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
-    }
-    if (content.length > 10000) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
-    }
+  if (!title) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title is required')
+  }
+  if (!content) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
+  }
+  if (title.length > 200) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
+  }
+  if (content.length > 10000) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
+  }
 
-    // Validate board exists and belongs to this organization
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, input.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
-    }
+  // Validate board exists and belongs to this organization
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, input.boardId) })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
+  }
 
-    // Determine statusId - either from input or use default "open" status
-    let statusId = input.statusId
-    if (!statusId) {
-      // Look up default "open" status
-      const [defaultStatus] = await tx
-        .select()
-        .from(postStatuses)
-        .where(eq(postStatuses.slug, 'open'))
-        .limit(1)
+  // Determine statusId - either from input or use default "open" status
+  let statusId = input.statusId
+  if (!statusId) {
+    // Look up default "open" status
+    const [defaultStatus] = await db
+      .select()
+      .from(postStatuses)
+      .where(eq(postStatuses.slug, 'open'))
+      .limit(1)
 
-      if (!defaultStatus) {
-        throw new ValidationError(
-          'VALIDATION_ERROR',
-          'Default "open" status not found. Please ensure post statuses are configured for this organization.'
-        )
-      }
-
-      statusId = defaultStatus.id
+    if (!defaultStatus) {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Default "open" status not found. Please ensure post statuses are configured for this organization.'
+      )
     }
 
-    // Create the post with member-scoped identity
-    // Convert member TypeID back to raw UUID for database foreign key
-    const [post] = await tx
-      .insert(posts)
-      .values({
-        boardId: input.boardId,
-        title,
-        content,
-        contentJson: input.contentJson as Record<string, any> | null,
-        statusId,
-        memberId: author.memberId,
-        authorName: author.name,
-        authorEmail: author.email,
-      })
-      .returning()
+    statusId = defaultStatus.id
+  }
 
-    // Add tags if provided
-    if (input.tagIds && input.tagIds.length > 0) {
-      // Remove all existing tags
-      await tx.delete(postTags).where(eq(postTags.postId, post.id))
-      // Add new tags
-      await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: post.id, tagId })))
-    }
+  // Create the post with member-scoped identity
+  // Convert member TypeID back to raw UUID for database foreign key
+  const [post] = await db
+    .insert(posts)
+    .values({
+      boardId: input.boardId,
+      title,
+      content,
+      contentJson: input.contentJson as Record<string, any> | null,
+      statusId,
+      memberId: author.memberId,
+      authorName: author.name,
+      authorEmail: author.email,
+    })
+    .returning()
 
-    // Auto-subscribe the author to their own post
-    await subscribeToPost(author.memberId, post.id, 'author', { tx })
+  // Add tags if provided
+  if (input.tagIds && input.tagIds.length > 0) {
+    // Remove all existing tags then add new ones
+    await db.delete(postTags).where(eq(postTags.postId, post.id))
+    await db.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: post.id, tagId })))
+  }
 
-    // Return post with board info for event building in API route
-    return { ...post, boardSlug: board.slug }
-  })
+  // Auto-subscribe the author to their own post
+  await subscribeToPost(author.memberId, post.id, 'author')
+
+  // Return post with board info for event building in API route
+  return { ...post, boardSlug: board.slug }
 }
 
 /**
@@ -156,82 +153,79 @@ export async function updatePost(
   input: UpdatePostInput,
   responder?: { memberId: MemberId; name: string }
 ): Promise<Post> {
-  return db.transaction(async (tx) => {
-    // Get existing post
-    const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, id) })
-    if (!existingPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
-    }
+  // Get existing post
+  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, id) })
+  if (!existingPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+  }
 
-    // Verify post belongs to this organization (via its board)
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${existingPost.boardId} not found`)
-    }
+  // Verify post belongs to this organization (via its board)
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${existingPost.boardId} not found`)
+  }
 
-    // Validate input
-    if (input.title !== undefined) {
-      if (!input.title.trim()) {
-        throw new ValidationError('VALIDATION_ERROR', 'Title cannot be empty')
-      }
-      if (input.title.length > 200) {
-        throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
-      }
+  // Validate input
+  if (input.title !== undefined) {
+    if (!input.title.trim()) {
+      throw new ValidationError('VALIDATION_ERROR', 'Title cannot be empty')
     }
-    if (input.content !== undefined) {
-      if (!input.content.trim()) {
-        throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
-      }
-      if (input.content.length > 10000) {
-        throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
-      }
+    if (input.title.length > 200) {
+      throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
     }
-
-    // Build update data
-    const updateData: Partial<Post> = {}
-    if (input.title !== undefined) updateData.title = input.title.trim()
-    if (input.content !== undefined) updateData.content = input.content.trim()
-    if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
-    if (input.statusId !== undefined) updateData.statusId = input.statusId
-    if (input.ownerId !== undefined) updateData.ownerId = input.ownerId
-    if (input.ownerMemberId !== undefined) updateData.ownerMemberId = input.ownerMemberId
-
-    // Handle official response update
-    if (input.officialResponse !== undefined) {
-      if (input.officialResponse === null || input.officialResponse === '') {
-        // Clear the official response
-        updateData.officialResponse = null
-        updateData.officialResponseMemberId = null
-        updateData.officialResponseAuthorName = null
-        updateData.officialResponseAt = null
-      } else {
-        // Set or update official response with member-scoped identity
-        const responseMemberId = input.officialResponseMemberId || responder?.memberId
-        updateData.officialResponse = input.officialResponse
-        updateData.officialResponseMemberId = responseMemberId
-        updateData.officialResponseAuthorName = input.officialResponseAuthorName || responder?.name
-        updateData.officialResponseAt = new Date()
-      }
+  }
+  if (input.content !== undefined) {
+    if (!input.content.trim()) {
+      throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
     }
-
-    // Update the post
-    const [updatedPost] = await tx.update(posts).set(updateData).where(eq(posts.id, id)).returning()
-    if (!updatedPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+    if (input.content.length > 10000) {
+      throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
     }
+  }
 
-    // Update tags if provided
-    if (input.tagIds !== undefined) {
-      // Remove all existing tags
-      await tx.delete(postTags).where(eq(postTags.postId, id))
-      // Add new tags if any
-      if (input.tagIds.length > 0) {
-        await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
-      }
+  // Build update data
+  const updateData: Partial<Post> = {}
+  if (input.title !== undefined) updateData.title = input.title.trim()
+  if (input.content !== undefined) updateData.content = input.content.trim()
+  if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
+  if (input.statusId !== undefined) updateData.statusId = input.statusId
+  if (input.ownerId !== undefined) updateData.ownerId = input.ownerId
+  if (input.ownerMemberId !== undefined) updateData.ownerMemberId = input.ownerMemberId
+
+  // Handle official response update
+  if (input.officialResponse !== undefined) {
+    if (input.officialResponse === null || input.officialResponse === '') {
+      // Clear the official response
+      updateData.officialResponse = null
+      updateData.officialResponseMemberId = null
+      updateData.officialResponseAuthorName = null
+      updateData.officialResponseAt = null
+    } else {
+      // Set or update official response with member-scoped identity
+      const responseMemberId = input.officialResponseMemberId || responder?.memberId
+      updateData.officialResponse = input.officialResponse
+      updateData.officialResponseMemberId = responseMemberId
+      updateData.officialResponseAuthorName = input.officialResponseAuthorName || responder?.name
+      updateData.officialResponseAt = new Date()
     }
+  }
 
-    return updatedPost
-  })
+  // Update the post
+  const [updatedPost] = await db.update(posts).set(updateData).where(eq(posts.id, id)).returning()
+  if (!updatedPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+  }
+
+  // Update tags if provided
+  if (input.tagIds !== undefined) {
+    // Remove all existing tags then add new ones if any
+    await db.delete(postTags).where(eq(postTags.postId, id))
+    if (input.tagIds.length > 0) {
+      await db.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+    }
+  }
+
+  return updatedPost
 }
 
 /**
@@ -252,72 +246,70 @@ export async function voteOnPost(
   userIdentifier: string,
   options?: { memberId?: MemberId; ipHash?: string }
 ): Promise<VoteResult> {
-  return db.transaction(async (tx) => {
-    // Verify post exists
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Verify post exists
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Verify post belongs to this organization
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
-    }
+  // Verify post belongs to this organization
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
+  }
 
-    // Single atomic operation: check existing vote, then insert or delete + update count
-    // Uses existing unique index on (post_id, user_identifier)
-    // Convert TypeIDs to UUIDs for raw SQL query
-    const postUuid = toUuid(postId)
-    // Convert memberId TypeID to UUID for raw SQL
-    const memberUuid = options?.memberId ? toUuid(options.memberId) : null
-    const result = await tx.execute<{ vote_count: number; voted: boolean }>(sql`
-      WITH existing_vote AS (
-        SELECT id FROM votes
-        WHERE post_id = ${postUuid} AND user_identifier = ${userIdentifier}
-        FOR UPDATE
-      ),
-      vote_action AS (
-        -- Delete if vote exists, insert if it doesn't
-        DELETE FROM votes
-        WHERE id = (SELECT id FROM existing_vote)
-        RETURNING id, false AS is_new_vote
-      ),
-      insert_vote AS (
-        -- Only insert if no existing vote was found (and thus not deleted)
-        INSERT INTO votes (id, post_id, user_identifier, member_id, ip_hash, updated_at)
-        SELECT gen_random_uuid(), ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
-        WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
-        RETURNING id, true AS is_new_vote
-      ),
-      combined AS (
-        SELECT is_new_vote FROM vote_action
-        UNION ALL
-        SELECT is_new_vote FROM insert_vote
-      )
-      UPDATE posts
-      SET vote_count = GREATEST(0, vote_count + CASE
-        WHEN (SELECT is_new_vote FROM combined LIMIT 1) THEN 1
-        ELSE -1
-      END)
-      WHERE id = ${postUuid}
-      RETURNING vote_count, (SELECT is_new_vote FROM combined LIMIT 1) AS voted
-    `)
+  // Single atomic operation: check existing vote, then insert or delete + update count
+  // Uses existing unique index on (post_id, user_identifier)
+  // Convert TypeIDs to UUIDs for raw SQL query
+  const postUuid = toUuid(postId)
+  // Convert memberId TypeID to UUID for raw SQL
+  const memberUuid = options?.memberId ? toUuid(options.memberId) : null
+  const result = await db.execute<{ vote_count: number; voted: boolean }>(sql`
+    WITH existing_vote AS (
+      SELECT id FROM votes
+      WHERE post_id = ${postUuid} AND user_identifier = ${userIdentifier}
+      FOR UPDATE
+    ),
+    vote_action AS (
+      -- Delete if vote exists, insert if it doesn't
+      DELETE FROM votes
+      WHERE id = (SELECT id FROM existing_vote)
+      RETURNING id, false AS is_new_vote
+    ),
+    insert_vote AS (
+      -- Only insert if no existing vote was found (and thus not deleted)
+      INSERT INTO votes (id, post_id, user_identifier, member_id, ip_hash, updated_at)
+      SELECT gen_random_uuid(), ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
+      WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
+      RETURNING id, true AS is_new_vote
+    ),
+    combined AS (
+      SELECT is_new_vote FROM vote_action
+      UNION ALL
+      SELECT is_new_vote FROM insert_vote
+    )
+    UPDATE posts
+    SET vote_count = GREATEST(0, vote_count + CASE
+      WHEN (SELECT is_new_vote FROM combined LIMIT 1) THEN 1
+      ELSE -1
+    END)
+    WHERE id = ${postUuid}
+    RETURNING vote_count, (SELECT is_new_vote FROM combined LIMIT 1) AS voted
+  `)
 
-    const rows = Array.from(result as Iterable<{ vote_count: number; voted: boolean }>)
-    const row = rows[0]
-    const voted = row?.voted ?? false
+  const rows = Array.from(result as Iterable<{ vote_count: number; voted: boolean }>)
+  const row = rows[0]
+  const voted = row?.voted ?? false
 
-    // Auto-subscribe voter when they upvote
-    if (voted && options?.memberId) {
-      await subscribeToPost(options.memberId, postId, 'vote', { tx })
-    }
+  // Auto-subscribe voter when they upvote
+  if (voted && options?.memberId) {
+    await subscribeToPost(options.memberId, postId, 'vote')
+  }
 
-    return {
-      voted,
-      voteCount: row?.vote_count ?? post.voteCount,
-    }
-  })
+  return {
+    voted,
+    voteCount: row?.vote_count ?? post.voteCount,
+  }
 }
 
 /**
@@ -337,56 +329,48 @@ export async function changeStatus(
   postId: PostId,
   statusId: StatusId
 ): Promise<ChangeStatusResult> {
-  return db.transaction(async (tx) => {
-    // Get existing post
-    const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!existingPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Get existing post
+  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!existingPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Verify post belongs to this organization
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${existingPost.boardId} not found`)
-    }
+  // Verify post belongs to this organization and get status info in parallel
+  const [board, newStatus, prevStatus] = await Promise.all([
+    db.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) }),
+    db.query.postStatuses.findFirst({ where: eq(postStatuses.id, statusId) }),
+    existingPost.statusId
+      ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, existingPost.statusId) })
+      : Promise.resolve(null),
+  ])
 
-    // Validate status exists (query the postStatuses table)
-    const newStatus = await tx.query.postStatuses.findFirst({
-      where: eq(postStatuses.id, statusId),
-    })
-    if (!newStatus) {
-      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${statusId} not found`)
-    }
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${existingPost.boardId} not found`)
+  }
 
-    // Get previous status name for event
-    let previousStatusName = 'Open'
-    if (existingPost.statusId) {
-      const prevStatus = await tx.query.postStatuses.findFirst({
-        where: eq(postStatuses.id, existingPost.statusId),
-      })
-      if (prevStatus) {
-        previousStatusName = prevStatus.name
-      }
-    }
+  if (!newStatus) {
+    throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${statusId} not found`)
+  }
 
-    // Update the post status
-    const [updatedPost] = await tx
-      .update(posts)
-      .set({ statusId })
-      .where(eq(posts.id, postId))
-      .returning()
-    if (!updatedPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  const previousStatusName = prevStatus?.name ?? 'Open'
 
-    // Return post with status change info for event building in API route
-    return {
-      ...updatedPost,
-      boardSlug: board.slug,
-      previousStatus: previousStatusName,
-      newStatus: newStatus.name,
-    }
-  })
+  // Update the post status
+  const [updatedPost] = await db
+    .update(posts)
+    .set({ statusId })
+    .where(eq(posts.id, postId))
+    .returning()
+  if (!updatedPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  // Return post with status change info for event building in API route
+  return {
+    ...updatedPost,
+    boardSlug: board.slug,
+    previousStatus: previousStatusName,
+    newStatus: newStatus.name,
+  }
 }
 
 /**
@@ -396,20 +380,18 @@ export async function changeStatus(
  * @returns Result containing the post with details or an error
  */
 export async function getPostById(postId: PostId): Promise<Post> {
-  return db.transaction(async (tx) => {
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Verify post belongs to this organization
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
-    }
+  // Verify post belongs to this organization
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
+  }
 
-    return post
-  })
+  return post
 }
 
 /**
@@ -419,21 +401,16 @@ export async function getPostById(postId: PostId): Promise<Post> {
  * @returns Result containing the post with details or an error
  */
 export async function getPostWithDetails(postId: PostId): Promise<PostWithDetails> {
-  return db.transaction(async (tx) => {
-    // Get the post
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Get the post
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Get the board and verify it belongs to this organization
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
-    }
-
-    // Get tags via postTags junction table
-    const postTagsResult = await tx
+  // Get the board, tags, and comment count in parallel
+  const [board, postTagsResult, commentCountResult] = await Promise.all([
+    db.query.boards.findFirst({ where: eq(boards.id, post.boardId) }),
+    db
       .select({
         id: tags.id,
         name: tags.name,
@@ -441,29 +418,31 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       })
       .from(postTags)
       .innerJoin(tags, eq(tags.id, postTags.tagId))
-      .where(eq(postTags.postId, postId))
-
-    // Get comment count
-    const [commentCountResult] = await tx
+      .where(eq(postTags.postId, postId)),
+    db
       .select({ count: sql<number>`count(*)::int` })
       .from(comments)
-      .where(eq(comments.postId, postId))
+      .where(eq(comments.postId, postId)),
+  ])
 
-    const commentCount = commentCountResult?.count || 0
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
+  }
 
-    const postWithDetails: PostWithDetails = {
-      ...post,
-      board: {
-        id: board.id,
-        name: board.name,
-        slug: board.slug,
-      },
-      tags: postTagsResult,
-      commentCount,
-    }
+  const commentCount = commentCountResult[0]?.count || 0
 
-    return postWithDetails
-  })
+  const postWithDetails: PostWithDetails = {
+    ...post,
+    board: {
+      id: board.id,
+      name: board.name,
+      slug: board.slug,
+    },
+    tags: postTagsResult,
+    commentCount,
+  }
+
+  return postWithDetails
 }
 
 /**
@@ -477,32 +456,30 @@ export async function getCommentsWithReplies(
   postId: PostId,
   userIdentifier: string
 ): Promise<CommentTreeNode[]> {
-  return db.transaction(async (tx) => {
-    // Verify post exists and belongs to organization
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Verify post exists and belongs to organization
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
-    }
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
+  }
 
-    // Get all comments with reactions
-    const allComments = await tx.query.comments.findMany({
-      where: eq(comments.postId, postId),
-      with: {
-        reactions: true,
-      },
-      orderBy: asc(comments.createdAt),
-    })
-
-    // Build nested tree using the utility function from @quackback/db
-    const commentTree = buildCommentTree(allComments, userIdentifier)
-
-    return commentTree
+  // Get all comments with reactions
+  const allComments = await db.query.comments.findMany({
+    where: eq(comments.postId, postId),
+    with: {
+      reactions: true,
+    },
+    orderBy: asc(comments.createdAt),
   })
+
+  // Build nested tree using the utility function from @quackback/db
+  const commentTree = buildCommentTree(allComments, userIdentifier)
+
+  return commentTree
 }
 
 /**
@@ -512,197 +489,111 @@ export async function getCommentsWithReplies(
  * @returns Result containing inbox post list or an error
  */
 export async function listInboxPosts(params: InboxPostListParams): Promise<InboxPostListResult> {
-  return db.transaction(async (tx) => {
-    const {
-      boardIds,
-      statusIds,
-      statusSlugs,
-      tagIds,
-      ownerId,
-      search,
-      dateFrom,
-      dateTo,
-      minVotes,
-      sort = 'newest',
-      page = 1,
-      limit = 20,
-    } = params
+  const {
+    boardIds,
+    statusIds,
+    statusSlugs,
+    tagIds,
+    ownerId,
+    search,
+    dateFrom,
+    dateTo,
+    minVotes,
+    sort = 'newest',
+    page = 1,
+    limit = 20,
+  } = params
 
-    // Build conditions array
-    const conditions = []
+  // Build conditions array
+  const conditions = []
 
-    // Get board IDs - either use provided list or get all boards
-    const allBoardIds = boardIds?.length
-      ? boardIds
-      : (
-          await tx.query.boards.findMany({
-            columns: { id: true },
-          })
-        ).map((b) => b.id)
+  // Get board IDs - either use provided list or get all boards
+  const allBoardIds = boardIds?.length
+    ? boardIds
+    : (
+        await db.query.boards.findMany({
+          columns: { id: true },
+        })
+      ).map((b) => b.id)
 
-    if (allBoardIds.length === 0) {
+  if (allBoardIds.length === 0) {
+    return { items: [], total: 0, hasMore: false }
+  }
+
+  conditions.push(inArray(posts.boardId, allBoardIds))
+
+  // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
+  let resolvedStatusIds = statusIds
+  if (statusSlugs && statusSlugs.length > 0) {
+    const statusesBySlug = await db.query.postStatuses.findMany({
+      where: inArray(postStatuses.slug, statusSlugs),
+      columns: { id: true },
+    })
+    resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
+  }
+
+  if (resolvedStatusIds && resolvedStatusIds.length > 0) {
+    conditions.push(inArray(posts.statusId, resolvedStatusIds))
+  }
+
+  // Owner filter
+  if (ownerId === null) {
+    conditions.push(sql`${posts.ownerId} IS NULL`)
+  } else if (ownerId) {
+    conditions.push(eq(posts.ownerId, ownerId))
+  }
+
+  // Search filter
+  // Full-text search using tsvector (much faster than ILIKE)
+  if (search) {
+    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
+  }
+
+  // Date range filters
+  if (dateFrom) {
+    conditions.push(sql`${posts.createdAt} >= ${dateFrom}`)
+  }
+  if (dateTo) {
+    conditions.push(sql`${posts.createdAt} <= ${dateTo}`)
+  }
+
+  // Min votes filter
+  if (minVotes !== undefined && minVotes > 0) {
+    conditions.push(sql`${posts.voteCount} >= ${minVotes}`)
+  }
+
+  // Tag filter - posts must have at least one of the selected tags
+  let postIdsWithTags: PostId[] | null = null
+  if (tagIds && tagIds.length > 0) {
+    const postsWithSelectedTags = await db
+      .selectDistinct({ postId: postTags.postId })
+      .from(postTags)
+      .where(inArray(postTags.tagId, tagIds))
+
+    postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
+
+    if (postIdsWithTags.length === 0) {
       return { items: [], total: 0, hasMore: false }
     }
+    conditions.push(inArray(posts.id, postIdsWithTags))
+  }
 
-    conditions.push(inArray(posts.boardId, allBoardIds))
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-    // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
-    let resolvedStatusIds = statusIds
-    if (statusSlugs && statusSlugs.length > 0) {
-      const statusesBySlug = await tx.query.postStatuses.findMany({
-        where: inArray(postStatuses.slug, statusSlugs),
-        columns: { id: true },
-      })
-      resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
-    }
+  // Sort order
+  const orderByMap = {
+    newest: desc(posts.createdAt),
+    oldest: asc(posts.createdAt),
+    votes: desc(posts.voteCount),
+  }
 
-    if (resolvedStatusIds && resolvedStatusIds.length > 0) {
-      conditions.push(inArray(posts.statusId, resolvedStatusIds))
-    }
-
-    // Owner filter
-    if (ownerId === null) {
-      conditions.push(sql`${posts.ownerId} IS NULL`)
-    } else if (ownerId) {
-      conditions.push(eq(posts.ownerId, ownerId))
-    }
-
-    // Search filter
-    // Full-text search using tsvector (much faster than ILIKE)
-    if (search) {
-      conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
-    }
-
-    // Date range filters
-    if (dateFrom) {
-      conditions.push(sql`${posts.createdAt} >= ${dateFrom}`)
-    }
-    if (dateTo) {
-      conditions.push(sql`${posts.createdAt} <= ${dateTo}`)
-    }
-
-    // Min votes filter
-    if (minVotes !== undefined && minVotes > 0) {
-      conditions.push(sql`${posts.voteCount} >= ${minVotes}`)
-    }
-
-    // Tag filter - posts must have at least one of the selected tags
-    let postIdsWithTags: PostId[] | null = null
-    if (tagIds && tagIds.length > 0) {
-      const postsWithSelectedTags = await tx
-        .selectDistinct({ postId: postTags.postId })
-        .from(postTags)
-        .where(inArray(postTags.tagId, tagIds))
-
-      postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
-
-      if (postIdsWithTags.length === 0) {
-        return { items: [], total: 0, hasMore: false }
-      }
-      conditions.push(inArray(posts.id, postIdsWithTags))
-    }
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-
-    // Sort order
-    const orderByMap = {
-      newest: desc(posts.createdAt),
-      oldest: asc(posts.createdAt),
-      votes: desc(posts.voteCount),
-    }
-
-    // Fetch posts with pagination
-    const [rawPosts, countResult] = await Promise.all([
-      tx.query.posts.findMany({
-        where: whereClause,
-        orderBy: orderByMap[sort],
-        limit,
-        offset: (page - 1) * limit,
-        with: {
-          board: {
-            columns: { id: true, name: true, slug: true },
-          },
-          tags: {
-            with: {
-              tag: {
-                columns: { id: true, name: true, color: true },
-              },
-            },
-          },
-        },
-      }),
-      tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(posts)
-        .where(whereClause),
-    ])
-
-    // Get comment counts for all posts
-    const postIds = rawPosts.map((p) => p.id)
-    const commentCounts =
-      postIds.length > 0
-        ? await tx
-            .select({
-              postId: comments.postId,
-              count: sql<number>`count(*)::int`.as('count'),
-            })
-            .from(comments)
-            .where(inArray(comments.postId, postIds))
-            .groupBy(comments.postId)
-        : []
-
-    const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
-
-    // Transform to PostListItem format
-    const items = rawPosts.map((post) => ({
-      ...post,
-      board: post.board,
-      tags: post.tags.map((pt) => pt.tag),
-      commentCount: commentCountMap.get(post.id) ?? 0,
-    }))
-
-    const total = Number(countResult[0].count)
-
-    return {
-      items,
-      total,
-      hasMore: page * limit < total,
-    }
-  })
-}
-
-/**
- * List posts for export (all posts with full details)
- *
- * @param boardId - Optional board ID to filter by
- * @returns Result containing posts for export or an error
- */
-export async function listPostsForExport(boardId: BoardId | undefined): Promise<PostForExport[]> {
-  return db.transaction(async (tx) => {
-    // Build conditions
-    const conditions = []
-
-    // Get board IDs - either specific board or all boards
-    const allBoardIds = boardId
-      ? [boardId]
-      : (
-          await tx.query.boards.findMany({
-            columns: { id: true },
-          })
-        ).map((b) => b.id)
-
-    if (allBoardIds.length === 0) {
-      return []
-    }
-
-    conditions.push(inArray(posts.boardId, allBoardIds))
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-
-    // Get all posts with board and tags
-    const rawPosts = await tx.query.posts.findMany({
+  // Fetch posts with pagination and count in parallel
+  const [rawPosts, countResult] = await Promise.all([
+    db.query.posts.findMany({
       where: whereClause,
-      orderBy: desc(posts.createdAt),
+      orderBy: orderByMap[sort],
+      limit,
+      offset: (page - 1) * limit,
       with: {
         board: {
           columns: { id: true, name: true, slug: true },
@@ -715,45 +606,127 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
           },
         },
       },
-    })
+    }),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(posts)
+      .where(whereClause),
+  ])
 
-    // Get status details for posts that have a statusId
-    const postStatusIds = rawPosts
-      .filter((p) => p.statusId)
-      .map((p) => p.statusId!)
-      .filter((id, index, self) => self.indexOf(id) === index) // unique
-
-    const statusDetails =
-      postStatusIds.length > 0
-        ? await tx.query.postStatuses.findMany({
-            where: inArray(postStatuses.id, postStatusIds),
+  // Get comment counts for all posts
+  const postIds = rawPosts.map((p) => p.id)
+  const commentCounts =
+    postIds.length > 0
+      ? await db
+          .select({
+            postId: comments.postId,
+            count: sql<number>`count(*)::int`.as('count'),
           })
-        : []
+          .from(comments)
+          .where(inArray(comments.postId, postIds))
+          .groupBy(comments.postId)
+      : []
 
-    const statusMap = new Map(statusDetails.map((s) => [s.id, { name: s.name, color: s.color }]))
+  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
 
-    // Transform to export format
-    const exportPosts: PostForExport[] = rawPosts.map((post) => ({
-      id: post.id,
-      title: post.title,
-      content: post.content,
-      statusId: post.statusId,
-      voteCount: post.voteCount,
-      authorName: post.authorName,
-      authorEmail: post.authorEmail,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
+  // Transform to PostListItem format
+  const items = rawPosts.map((post) => ({
+    ...post,
+    board: post.board,
+    tags: post.tags.map((pt) => pt.tag),
+    commentCount: commentCountMap.get(post.id) ?? 0,
+  }))
+
+  const total = Number(countResult[0].count)
+
+  return {
+    items,
+    total,
+    hasMore: page * limit < total,
+  }
+}
+
+/**
+ * List posts for export (all posts with full details)
+ *
+ * @param boardId - Optional board ID to filter by
+ * @returns Result containing posts for export or an error
+ */
+export async function listPostsForExport(boardId: BoardId | undefined): Promise<PostForExport[]> {
+  // Build conditions
+  const conditions = []
+
+  // Get board IDs - either specific board or all boards
+  const allBoardIds = boardId
+    ? [boardId]
+    : (
+        await db.query.boards.findMany({
+          columns: { id: true },
+        })
+      ).map((b) => b.id)
+
+  if (allBoardIds.length === 0) {
+    return []
+  }
+
+  conditions.push(inArray(posts.boardId, allBoardIds))
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+  // Get all posts with board and tags
+  const rawPosts = await db.query.posts.findMany({
+    where: whereClause,
+    orderBy: desc(posts.createdAt),
+    with: {
       board: {
-        id: post.board.id,
-        name: post.board.name,
-        slug: post.board.slug,
+        columns: { id: true, name: true, slug: true },
       },
-      tags: post.tags.map((pt) => pt.tag),
-      statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
-    }))
-
-    return exportPosts
+      tags: {
+        with: {
+          tag: {
+            columns: { id: true, name: true, color: true },
+          },
+        },
+      },
+    },
   })
+
+  // Get status details for posts that have a statusId
+  const postStatusIds = rawPosts
+    .filter((p) => p.statusId)
+    .map((p) => p.statusId!)
+    .filter((id, index, self) => self.indexOf(id) === index) // unique
+
+  const statusDetails =
+    postStatusIds.length > 0
+      ? await db.query.postStatuses.findMany({
+          where: inArray(postStatuses.id, postStatusIds),
+        })
+      : []
+
+  const statusMap = new Map(statusDetails.map((s) => [s.id, { name: s.name, color: s.color }]))
+
+  // Transform to export format
+  const exportPosts: PostForExport[] = rawPosts.map((post) => ({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    statusId: post.statusId,
+    voteCount: post.voteCount,
+    authorName: post.authorName,
+    authorEmail: post.authorEmail,
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    board: {
+      id: post.board.id,
+      name: post.board.name,
+      slug: post.board.slug,
+    },
+    tags: post.tags.map((pt) => pt.tag),
+    statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
+  }))
+
+  return exportPosts
 }
 
 // ============================================================================
@@ -913,59 +886,57 @@ export async function userEditPost(
     throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
-  return db.transaction(async (tx) => {
-    // Get the existing post
-    const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!existingPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Get the existing post
+  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!existingPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Validate input
-    if (!input.title?.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Title is required')
-    }
-    if (!input.content?.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
-    }
-    if (input.title.length > 200) {
-      throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
-    }
-    if (input.content.length > 10000) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
-    }
+  // Validate input
+  if (!input.title?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title is required')
+  }
+  if (!input.content?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
+  }
+  if (input.title.length > 200) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
+  }
+  if (input.content.length > 10000) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
+  }
 
-    // Get portal config to check if edit history is enabled
-    const config = await getPortalConfig()
+  // Get portal config to check if edit history is enabled
+  const config = await getPortalConfig()
 
-    // Record edit history if enabled
-    if (config.features.showPublicEditHistory) {
-      await tx.insert(postEditHistory).values({
-        postId: postId,
-        editorMemberId: actor.memberId,
-        previousTitle: existingPost.title,
-        previousContent: existingPost.content,
-        previousContentJson: existingPost.contentJson,
-      })
-    }
+  // Record edit history if enabled
+  if (config.features.showPublicEditHistory) {
+    await db.insert(postEditHistory).values({
+      postId: postId,
+      editorMemberId: actor.memberId,
+      previousTitle: existingPost.title,
+      previousContent: existingPost.content,
+      previousContentJson: existingPost.contentJson,
+    })
+  }
 
-    // Update the post
-    const [updatedPost] = await tx
-      .update(posts)
-      .set({
-        title: input.title.trim(),
-        content: input.content.trim(),
-        contentJson: input.contentJson as Record<string, any> | null,
-        updatedAt: new Date(),
-      })
-      .where(eq(posts.id, postId))
-      .returning()
+  // Update the post
+  const [updatedPost] = await db
+    .update(posts)
+    .set({
+      title: input.title.trim(),
+      content: input.content.trim(),
+      contentJson: input.contentJson as Record<string, any> | null,
+      updatedAt: new Date(),
+    })
+    .where(eq(posts.id, postId))
+    .returning()
 
-    if (!updatedPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  if (!updatedPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    return updatedPost
-  })
+  return updatedPost
 }
 
 /**
@@ -985,21 +956,19 @@ export async function softDeletePost(
     throw new ForbiddenError('DELETE_NOT_ALLOWED', permResult.reason || 'Delete not allowed')
   }
 
-  return db.transaction(async (tx) => {
-    // Set deletedAt and deletedByMemberId
-    const [updatedPost] = await tx
-      .update(posts)
-      .set({
-        deletedAt: new Date(),
-        deletedByMemberId: actor.memberId,
-      })
-      .where(eq(posts.id, postId))
-      .returning()
+  // Set deletedAt and deletedByMemberId
+  const [updatedPost] = await db
+    .update(posts)
+    .set({
+      deletedAt: new Date(),
+      deletedByMemberId: actor.memberId,
+    })
+    .where(eq(posts.id, postId))
+    .returning()
 
-    if (!updatedPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
-  })
+  if (!updatedPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 }
 
 /**
@@ -1011,33 +980,31 @@ export async function softDeletePost(
  * @returns Restored post
  */
 export async function restorePost(postId: PostId): Promise<Post> {
-  return db.transaction(async (tx) => {
-    // Get the post
-    const existingPost = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!existingPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Get the post first to validate it exists and is deleted
+  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!existingPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    if (!existingPost.deletedAt) {
-      throw new ValidationError('VALIDATION_ERROR', 'Post is not deleted')
-    }
+  if (!existingPost.deletedAt) {
+    throw new ValidationError('VALIDATION_ERROR', 'Post is not deleted')
+  }
 
-    // Clear deletedAt and deletedByMemberId
-    const [restoredPost] = await tx
-      .update(posts)
-      .set({
-        deletedAt: null,
-        deletedByMemberId: null,
-      })
-      .where(eq(posts.id, postId))
-      .returning()
+  // Clear deletedAt and deletedByMemberId
+  const [restoredPost] = await db
+    .update(posts)
+    .set({
+      deletedAt: null,
+      deletedByMemberId: null,
+    })
+    .where(eq(posts.id, postId))
+    .returning()
 
-    if (!restoredPost) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  if (!restoredPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    return restoredPost
-  })
+  return restoredPost
 }
 
 /**
@@ -1049,12 +1016,10 @@ export async function restorePost(postId: PostId): Promise<Post> {
  * @param postId - Post ID to permanently delete
  */
 export async function permanentDeletePost(postId: PostId): Promise<void> {
-  return db.transaction(async (tx) => {
-    const [deleted] = await tx.delete(posts).where(eq(posts.id, postId)).returning()
-    if (!deleted) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
-  })
+  const [deleted] = await db.delete(posts).where(eq(posts.id, postId)).returning()
+  if (!deleted) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 }
 
 // ============================================================================

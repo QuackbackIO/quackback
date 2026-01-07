@@ -99,39 +99,38 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
         throw new Error('Invalid workspace name - cannot generate valid slug')
       }
 
-      // Use transaction to ensure atomicity - settings and statuses are created together
-      const newSettings = await db.transaction(async (tx) => {
-        // Create settings
-        const [createdSettings] = await tx
-          .insert(settings)
-          .values({
-            id: generateId('workspace'),
-            name: workspaceName.trim(),
-            slug,
-            createdAt: new Date(),
-            // Default portal config - all features enabled
-            portalConfig: JSON.stringify({
-              oauth: { google: true, github: true },
-              features: { publicView: true, submissions: true, comments: true, voting: true },
-            }),
-            // Default auth config
-            authConfig: JSON.stringify({
-              oauth: { google: true, github: true, microsoft: false },
-              openSignup: true,
-            }),
-          })
-          .returning()
-
-        // Create default post statuses
-        const statusValues = DEFAULT_STATUSES.map((status) => ({
-          id: generateId('status') as StatusId,
-          ...status,
+      // Create settings
+      // Note: Not using transaction because neon-http driver doesn't support interactive transactions.
+      // These inserts are independent (postStatuses doesn't depend on settings result).
+      const [createdSettings] = await db
+        .insert(settings)
+        .values({
+          id: generateId('workspace'),
+          name: workspaceName.trim(),
+          slug,
           createdAt: new Date(),
-        }))
-        await tx.insert(postStatuses).values(statusValues)
+          // Default portal config - all features enabled
+          portalConfig: JSON.stringify({
+            oauth: { google: true, github: true },
+            features: { publicView: true, submissions: true, comments: true, voting: true },
+          }),
+          // Default auth config
+          authConfig: JSON.stringify({
+            oauth: { google: true, github: true, microsoft: false },
+            openSignup: true,
+          }),
+        })
+        .returning()
 
-        return createdSettings
-      })
+      // Create default post statuses
+      const statusValues = DEFAULT_STATUSES.map((status) => ({
+        id: generateId('status') as StatusId,
+        ...status,
+        createdAt: new Date(),
+      }))
+      await db.insert(postStatuses).values(statusValues)
+
+      const newSettings = createdSettings
 
       console.log(
         `[fn:onboarding] setupWorkspaceFn: id=${newSettings.id}, slug=${newSettings.slug}`

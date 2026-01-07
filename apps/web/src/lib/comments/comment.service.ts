@@ -88,74 +88,72 @@ export async function createComment(
     role: 'admin' | 'member' | 'user'
   }
 ): Promise<CreateCommentResult> {
-  return db.transaction(async (tx) => {
-    // Validate post exists
-    const post = await tx.query.posts.findFirst({
-      where: eq(posts.id, input.postId),
-    })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
-    }
-
-    // Verify post belongs to this organization (via its board)
-    const board = await tx.query.boards.findFirst({
-      where: eq(boards.id, post.boardId),
-    })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
-    }
-
-    // Validate parent comment exists if specified
-    if (input.parentId) {
-      const parentComment = await tx.query.comments.findFirst({
-        where: eq(comments.id, input.parentId),
-      })
-      if (!parentComment) {
-        throw new ValidationError(
-          'INVALID_PARENT',
-          `Parent comment with ID ${input.parentId} not found`
-        )
-      }
-
-      // Ensure parent comment belongs to the same post
-      if (parentComment.postId !== input.postId) {
-        throw new ValidationError('VALIDATION_ERROR', 'Parent comment belongs to a different post')
-      }
-    }
-
-    // Validate input
-    if (!input.content?.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
-    }
-    if (input.content.length > 5000) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
-    }
-
-    // Determine if user is a team member
-    const isTeamMember = ['admin', 'member'].includes(author.role)
-
-    // Create the comment
-    const [comment] = await tx
-      .insert(comments)
-      .values({
-        postId: input.postId,
-        content: input.content.trim(),
-        parentId: input.parentId || null,
-        memberId: author.memberId,
-        authorName: input.authorName || author.name,
-        authorEmail: input.authorEmail || author.email,
-        isTeamMember,
-      })
-      .returning()
-
-    // Auto-subscribe commenter to the post
-    if (author.memberId) {
-      await subscribeToPost(author.memberId, input.postId, 'comment', { tx })
-    }
-
-    // Return comment with post info for event building in API route
-    return { comment, post: { id: post.id, title: post.title } }
+  // Validate post exists
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, input.postId),
   })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
+  }
+
+  // Verify post belongs to this organization (via its board)
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, post.boardId),
+  })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
+  }
+
+  // Validate parent comment exists if specified
+  if (input.parentId) {
+    const parentComment = await db.query.comments.findFirst({
+      where: eq(comments.id, input.parentId),
+    })
+    if (!parentComment) {
+      throw new ValidationError(
+        'INVALID_PARENT',
+        `Parent comment with ID ${input.parentId} not found`
+      )
+    }
+
+    // Ensure parent comment belongs to the same post
+    if (parentComment.postId !== input.postId) {
+      throw new ValidationError('VALIDATION_ERROR', 'Parent comment belongs to a different post')
+    }
+  }
+
+  // Validate input
+  if (!input.content?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
+  }
+  if (input.content.length > 5000) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
+  }
+
+  // Determine if user is a team member
+  const isTeamMember = ['admin', 'member'].includes(author.role)
+
+  // Create the comment
+  const [comment] = await db
+    .insert(comments)
+    .values({
+      postId: input.postId,
+      content: input.content.trim(),
+      parentId: input.parentId || null,
+      memberId: author.memberId,
+      authorName: input.authorName || author.name,
+      authorEmail: input.authorEmail || author.email,
+      isTeamMember,
+    })
+    .returning()
+
+  // Auto-subscribe commenter to the post
+  if (author.memberId) {
+    await subscribeToPost(author.memberId, input.postId, 'comment')
+  }
+
+  // Return comment with post info for event building in API route
+  return { comment, post: { id: post.id, title: post.title } }
 }
 
 /**
@@ -176,65 +174,63 @@ export async function updateComment(
   input: UpdateCommentInput,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Comment> {
-  return db.transaction(async (tx) => {
-    // Get existing comment
-    const existingComment = await tx.query.comments.findFirst({
-      where: eq(comments.id, id),
-    })
-    if (!existingComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
-    }
-
-    // Verify comment belongs to this organization (via its post's board)
-    const post = await tx.query.posts.findFirst({
-      where: eq(posts.id, existingComment.postId),
-    })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
-    }
-
-    const board = await tx.query.boards.findFirst({
-      where: eq(boards.id, post.boardId),
-    })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
-    }
-
-    // Authorization check - user must be comment author or team member
-    const isAuthor = existingComment.memberId === actor.memberId
-    const isTeamMember = ['admin', 'member'].includes(actor.role)
-
-    if (!isAuthor && !isTeamMember) {
-      throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to update this comment')
-    }
-
-    // Validate input
-    if (input.content !== undefined) {
-      if (!input.content.trim()) {
-        throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
-      }
-      if (input.content.length > 5000) {
-        throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
-      }
-    }
-
-    // Build update data
-    const updateData: Partial<Comment> = {}
-    if (input.content !== undefined) updateData.content = input.content.trim()
-
-    // Update the comment
-    const [updatedComment] = await tx
-      .update(comments)
-      .set(updateData)
-      .where(eq(comments.id, id))
-      .returning()
-
-    if (!updatedComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
-    }
-
-    return updatedComment
+  // Get existing comment
+  const existingComment = await db.query.comments.findFirst({
+    where: eq(comments.id, id),
   })
+  if (!existingComment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
+  }
+
+  // Verify comment belongs to this organization (via its post's board)
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, existingComment.postId),
+  })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
+  }
+
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, post.boardId),
+  })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
+  }
+
+  // Authorization check - user must be comment author or team member
+  const isAuthor = existingComment.memberId === actor.memberId
+  const isTeamMember = ['admin', 'member'].includes(actor.role)
+
+  if (!isAuthor && !isTeamMember) {
+    throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to update this comment')
+  }
+
+  // Validate input
+  if (input.content !== undefined) {
+    if (!input.content.trim()) {
+      throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
+    }
+    if (input.content.length > 5000) {
+      throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
+    }
+  }
+
+  // Build update data
+  const updateData: Partial<Comment> = {}
+  if (input.content !== undefined) updateData.content = input.content.trim()
+
+  // Update the comment
+  const [updatedComment] = await db
+    .update(comments)
+    .set(updateData)
+    .where(eq(comments.id, id))
+    .returning()
+
+  if (!updatedComment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
+  }
+
+  return updatedComment
 }
 
 /**
@@ -254,44 +250,42 @@ export async function deleteComment(
   id: CommentId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
-  return db.transaction(async (tx) => {
-    // Get existing comment
-    const existingComment = await tx.query.comments.findFirst({
-      where: eq(comments.id, id),
-    })
-    if (!existingComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
-    }
-
-    // Verify comment belongs to this organization (via its post's board)
-    const post = await tx.query.posts.findFirst({
-      where: eq(posts.id, existingComment.postId),
-    })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
-    }
-
-    const board = await tx.query.boards.findFirst({
-      where: eq(boards.id, post.boardId),
-    })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
-    }
-
-    // Authorization check - user must be comment author or team member
-    const isAuthor = existingComment.memberId === actor.memberId
-    const isTeamMember = ['admin', 'member'].includes(actor.role)
-
-    if (!isAuthor && !isTeamMember) {
-      throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
-    }
-
-    // Delete the comment
-    const result = await tx.delete(comments).where(eq(comments.id, id)).returning()
-    if (result.length === 0) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
-    }
+  // Get existing comment
+  const existingComment = await db.query.comments.findFirst({
+    where: eq(comments.id, id),
   })
+  if (!existingComment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
+  }
+
+  // Verify comment belongs to this organization (via its post's board)
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, existingComment.postId),
+  })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
+  }
+
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, post.boardId),
+  })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
+  }
+
+  // Authorization check - user must be comment author or team member
+  const isAuthor = existingComment.memberId === actor.memberId
+  const isTeamMember = ['admin', 'member'].includes(actor.role)
+
+  if (!isAuthor && !isTeamMember) {
+    throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
+  }
+
+  // Delete the comment
+  const result = await db.delete(comments).where(eq(comments.id, id)).returning()
+  if (result.length === 0) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
+  }
 }
 
 /**
@@ -301,25 +295,23 @@ export async function deleteComment(
  * @returns Result containing the comment or an error
  */
 export async function getCommentById(id: CommentId): Promise<Comment> {
-  return db.transaction(async (tx) => {
-    const comment = await tx.query.comments.findFirst({ where: eq(comments.id, id) })
-    if (!comment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
-    }
+  const comment = await db.query.comments.findFirst({ where: eq(comments.id, id) })
+  if (!comment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
+  }
 
-    // Verify comment belongs to this organization (via its post's board)
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  // Verify comment belongs to this organization (via its post's board)
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    return comment
-  })
+  return comment
 }
 
 /**
@@ -336,51 +328,49 @@ export async function getCommentsByPost(
   postId: PostId,
   userIdentifier: string
 ): Promise<CommentThread[]> {
-  return db.transaction(async (tx) => {
-    // Verify post exists
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Verify post exists
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Verify post belongs to this organization
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-    }
+  // Verify post belongs to this organization
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
 
-    // Fetch all comments with reactions using a single query
-    const commentsWithReactions = await tx.query.comments.findMany({
-      where: eq(comments.postId, postId),
-      with: {
-        reactions: true,
-      },
-      orderBy: asc(comments.createdAt),
-    })
-
-    // Transform to the format expected by buildCommentTree
-    const formattedComments = commentsWithReactions.map((comment) => ({
-      id: comment.id,
-      postId: comment.postId,
-      parentId: comment.parentId,
-      memberId: comment.memberId,
-      authorId: comment.authorId,
-      authorName: comment.authorName,
-      authorEmail: comment.authorEmail,
-      content: comment.content,
-      isTeamMember: comment.isTeamMember,
-      createdAt: comment.createdAt,
-      reactions: comment.reactions.map((r) => ({
-        emoji: r.emoji,
-        userIdentifier: r.userIdentifier,
-      })),
-    }))
-
-    // Build comment tree with reaction aggregation
-    const commentTree = buildCommentTree(formattedComments, userIdentifier)
-
-    return commentTree as CommentThread[]
+  // Fetch all comments with reactions using a single query
+  const commentsWithReactions = await db.query.comments.findMany({
+    where: eq(comments.postId, postId),
+    with: {
+      reactions: true,
+    },
+    orderBy: asc(comments.createdAt),
   })
+
+  // Transform to the format expected by buildCommentTree
+  const formattedComments = commentsWithReactions.map((comment) => ({
+    id: comment.id,
+    postId: comment.postId,
+    parentId: comment.parentId,
+    memberId: comment.memberId,
+    authorId: comment.authorId,
+    authorName: comment.authorName,
+    authorEmail: comment.authorEmail,
+    content: comment.content,
+    isTeamMember: comment.isTeamMember,
+    createdAt: comment.createdAt,
+    reactions: comment.reactions.map((r) => ({
+      emoji: r.emoji,
+      userIdentifier: r.userIdentifier,
+    })),
+  }))
+
+  // Build comment tree with reaction aggregation
+  const commentTree = buildCommentTree(formattedComments, userIdentifier)
+
+  return commentTree as CommentThread[]
 }
 
 // ============================================================================
@@ -403,59 +393,57 @@ export async function addReaction(
   emoji: string,
   userIdentifier: string
 ): Promise<ReactionResult> {
-  return db.transaction(async (tx) => {
-    // Verify comment exists
-    const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
-    if (!comment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-    }
+  // Verify comment exists
+  const comment = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+  if (!comment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
 
-    // Verify comment belongs to this organization (via its post's board)
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  // Verify comment belongs to this organization (via its post's board)
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    // Check if reaction already exists
-    const existingReaction = await tx.query.commentReactions.findFirst({
-      where: and(
-        eq(commentReactions.commentId, commentId),
-        eq(commentReactions.userIdentifier, userIdentifier),
-        eq(commentReactions.emoji, emoji)
-      ),
-    })
-
-    let added = false
-    if (!existingReaction) {
-      // Add reaction
-      await tx.insert(commentReactions).values({
-        commentId,
-        userIdentifier,
-        emoji,
-      })
-      added = true
-    }
-
-    // Fetch updated reactions
-    const reactions = await tx.query.commentReactions.findMany({
-      where: eq(commentReactions.commentId, commentId),
-    })
-
-    const aggregatedReactions = aggregateReactions(
-      reactions.map((r) => ({
-        emoji: r.emoji,
-        userIdentifier: r.userIdentifier,
-      })),
-      userIdentifier
-    )
-
-    return { added, reactions: aggregatedReactions }
+  // Check if reaction already exists
+  const existingReaction = await db.query.commentReactions.findFirst({
+    where: and(
+      eq(commentReactions.commentId, commentId),
+      eq(commentReactions.userIdentifier, userIdentifier),
+      eq(commentReactions.emoji, emoji)
+    ),
   })
+
+  let added = false
+  if (!existingReaction) {
+    // Add reaction
+    await db.insert(commentReactions).values({
+      commentId,
+      userIdentifier,
+      emoji,
+    })
+    added = true
+  }
+
+  // Fetch updated reactions
+  const reactions = await db.query.commentReactions.findMany({
+    where: eq(commentReactions.commentId, commentId),
+  })
+
+  const aggregatedReactions = aggregateReactions(
+    reactions.map((r) => ({
+      emoji: r.emoji,
+      userIdentifier: r.userIdentifier,
+    })),
+    userIdentifier
+  )
+
+  return { added, reactions: aggregatedReactions }
 }
 
 /**
@@ -473,53 +461,51 @@ export async function removeReaction(
   emoji: string,
   userIdentifier: string
 ): Promise<ReactionResult> {
-  return db.transaction(async (tx) => {
-    // Verify comment exists
-    const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
-    if (!comment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-    }
+  // Verify comment exists
+  const comment = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+  if (!comment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
 
-    // Verify comment belongs to this organization (via its post's board)
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  // Verify comment belongs to this organization (via its post's board)
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    // Check if reaction exists
-    const existingReaction = await tx.query.commentReactions.findFirst({
-      where: and(
-        eq(commentReactions.commentId, commentId),
-        eq(commentReactions.userIdentifier, userIdentifier),
-        eq(commentReactions.emoji, emoji)
-      ),
-    })
-
-    if (existingReaction) {
-      // Remove reaction
-      await tx.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
-    }
-
-    // Fetch updated reactions
-    const reactions = await tx.query.commentReactions.findMany({
-      where: eq(commentReactions.commentId, commentId),
-    })
-
-    const aggregatedReactions = aggregateReactions(
-      reactions.map((r) => ({
-        emoji: r.emoji,
-        userIdentifier: r.userIdentifier,
-      })),
-      userIdentifier
-    )
-
-    return { added: false, reactions: aggregatedReactions }
+  // Check if reaction exists
+  const existingReaction = await db.query.commentReactions.findFirst({
+    where: and(
+      eq(commentReactions.commentId, commentId),
+      eq(commentReactions.userIdentifier, userIdentifier),
+      eq(commentReactions.emoji, emoji)
+    ),
   })
+
+  if (existingReaction) {
+    // Remove reaction
+    await db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
+  }
+
+  // Fetch updated reactions
+  const reactions = await db.query.commentReactions.findMany({
+    where: eq(commentReactions.commentId, commentId),
+  })
+
+  const aggregatedReactions = aggregateReactions(
+    reactions.map((r) => ({
+      emoji: r.emoji,
+      userIdentifier: r.userIdentifier,
+    })),
+    userIdentifier
+  )
+
+  return { added: false, reactions: aggregatedReactions }
 }
 
 /**
@@ -537,63 +523,61 @@ export async function toggleReaction(
   emoji: string,
   userIdentifier: string
 ): Promise<ReactionResult> {
-  return db.transaction(async (tx) => {
-    // Verify comment exists
-    const comment = await tx.query.comments.findFirst({ where: eq(comments.id, commentId) })
-    if (!comment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-    }
+  // Verify comment exists
+  const comment = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+  if (!comment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
 
-    // Verify comment belongs to this organization (via its post's board)
-    const post = await tx.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-    if (!post) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  // Verify comment belongs to this organization (via its post's board)
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    const board = await tx.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-    if (!board) {
-      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-    }
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
+  }
 
-    // Check if reaction already exists
-    const existingReaction = await tx.query.commentReactions.findFirst({
-      where: and(
-        eq(commentReactions.commentId, commentId),
-        eq(commentReactions.userIdentifier, userIdentifier),
-        eq(commentReactions.emoji, emoji)
-      ),
-    })
-
-    let added: boolean
-    if (existingReaction) {
-      // Remove existing reaction
-      await tx.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
-      added = false
-    } else {
-      // Add new reaction
-      await tx.insert(commentReactions).values({
-        commentId,
-        userIdentifier,
-        emoji,
-      })
-      added = true
-    }
-
-    // Fetch updated reactions
-    const reactions = await tx.query.commentReactions.findMany({
-      where: eq(commentReactions.commentId, commentId),
-    })
-
-    const aggregatedReactions = aggregateReactions(
-      reactions.map((r) => ({
-        emoji: r.emoji,
-        userIdentifier: r.userIdentifier,
-      })),
-      userIdentifier
-    )
-
-    return { added, reactions: aggregatedReactions }
+  // Check if reaction already exists
+  const existingReaction = await db.query.commentReactions.findFirst({
+    where: and(
+      eq(commentReactions.commentId, commentId),
+      eq(commentReactions.userIdentifier, userIdentifier),
+      eq(commentReactions.emoji, emoji)
+    ),
   })
+
+  let added: boolean
+  if (existingReaction) {
+    // Remove existing reaction
+    await db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
+    added = false
+  } else {
+    // Add new reaction
+    await db.insert(commentReactions).values({
+      commentId,
+      userIdentifier,
+      emoji,
+    })
+    added = true
+  }
+
+  // Fetch updated reactions
+  const reactions = await db.query.commentReactions.findMany({
+    where: eq(commentReactions.commentId, commentId),
+  })
+
+  const aggregatedReactions = aggregateReactions(
+    reactions.map((r) => ({
+      emoji: r.emoji,
+      userIdentifier: r.userIdentifier,
+    })),
+    userIdentifier
+  )
+
+  return { added, reactions: aggregatedReactions }
 }
 
 // ============================================================================
@@ -716,47 +700,45 @@ export async function userEditComment(
     throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
-  return db.transaction(async (tx) => {
-    // Get the existing comment
-    const existingComment = await tx.query.comments.findFirst({
-      where: eq(comments.id, commentId),
-    })
-    if (!existingComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-    }
-
-    // Validate input
-    if (!content?.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content is required')
-    }
-    if (content.length > 5000) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
-    }
-
-    // Record edit history (always record for comments)
-    if (actor.memberId) {
-      await tx.insert(commentEditHistory).values({
-        commentId: commentId,
-        editorMemberId: actor.memberId,
-        previousContent: existingComment.content,
-      })
-    }
-
-    // Update the comment (content only, not timestamps per PRD)
-    const [updatedComment] = await tx
-      .update(comments)
-      .set({
-        content: content.trim(),
-      })
-      .where(eq(comments.id, commentId))
-      .returning()
-
-    if (!updatedComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-    }
-
-    return updatedComment
+  // Get the existing comment
+  const existingComment = await db.query.comments.findFirst({
+    where: eq(comments.id, commentId),
   })
+  if (!existingComment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
+
+  // Validate input
+  if (!content?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
+  }
+  if (content.length > 5000) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
+  }
+
+  // Record edit history (always record for comments)
+  if (actor.memberId) {
+    await db.insert(commentEditHistory).values({
+      commentId: commentId,
+      editorMemberId: actor.memberId,
+      previousContent: existingComment.content,
+    })
+  }
+
+  // Update the comment (content only, not timestamps per PRD)
+  const [updatedComment] = await db
+    .update(comments)
+    .set({
+      content: content.trim(),
+    })
+    .where(eq(comments.id, commentId))
+    .returning()
+
+  if (!updatedComment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
+
+  return updatedComment
 }
 
 /**
@@ -777,18 +759,16 @@ export async function softDeleteComment(
     throw new ForbiddenError('DELETE_NOT_ALLOWED', permResult.reason || 'Delete not allowed')
   }
 
-  return db.transaction(async (tx) => {
-    // Set deletedAt
-    const [updatedComment] = await tx
-      .update(comments)
-      .set({
-        deletedAt: new Date(),
-      })
-      .where(eq(comments.id, commentId))
-      .returning()
+  // Set deletedAt
+  const [updatedComment] = await db
+    .update(comments)
+    .set({
+      deletedAt: new Date(),
+    })
+    .where(eq(comments.id, commentId))
+    .returning()
 
-    if (!updatedComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-    }
-  })
+  if (!updatedComment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
 }
