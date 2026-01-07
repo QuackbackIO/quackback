@@ -148,11 +148,9 @@ export async function createComment(
       })
       .returning()
 
-    // Auto-subscribe commenter to the post (within the same transaction)
+    // Auto-subscribe commenter to the post
     if (author.memberId) {
-      await subscribeToPost(author.memberId, input.postId, 'comment', {
-        db: tx,
-      })
+      await subscribeToPost(author.memberId, input.postId, 'comment', { tx })
     }
 
     // Return comment with post info for event building in API route

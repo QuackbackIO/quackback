@@ -18,7 +18,7 @@ import {
   posts,
   member,
   user,
-  type Database,
+  type Transaction,
 } from '@/lib/db'
 import type { MemberId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
@@ -38,8 +38,8 @@ export type {
 } from './subscription.types'
 
 interface SubscribeOptions {
-  /** Optional: pass an existing transaction to run within the same context */
-  db?: Database
+  /** Pass an existing transaction to run within the same context */
+  tx?: Transaction
 }
 
 /**
@@ -56,8 +56,8 @@ export async function subscribeToPost(
   reason: SubscriptionReason,
   options?: SubscribeOptions
 ): Promise<void> {
-  const dbToUse = options?.db ?? db
-  await dbToUse
+  const executor = options?.tx ?? db
+  await executor
     .insert(postSubscriptions)
     .values({
       postId,

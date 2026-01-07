@@ -259,7 +259,7 @@ export async function processBatch(
         updatedAt: row.createdAt,
       }))
 
-      const insertedPosts = await tx.insert(posts).values(postsToInsert).returning({ id: posts.id })
+      const insertedPosts = await tx.insert(posts).values(postsToInsert).returning()
 
       // Insert post tags
       const postTagsToInsert: { postId: PostId; tagId: TagId }[] = []

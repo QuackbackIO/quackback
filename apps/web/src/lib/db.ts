@@ -13,6 +13,7 @@ import { tenantStorage, type Database as NeonDatabase } from '@/lib/tenant'
 
 // Database can be either postgres.js (self-hosted) or neon-http (cloud)
 export type Database = PostgresDatabase | NeonDatabase
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 // Use globalThis to persist database instance across hot reloads in development
 declare global {

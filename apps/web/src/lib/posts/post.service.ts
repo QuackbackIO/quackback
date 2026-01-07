@@ -129,10 +129,8 @@ export async function createPost(
       await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: post.id, tagId })))
     }
 
-    // Auto-subscribe the author to their own post (within the same transaction)
-    await subscribeToPost(author.memberId, post.id, 'author', {
-      db: tx,
-    })
+    // Auto-subscribe the author to their own post
+    await subscribeToPost(author.memberId, post.id, 'author', { tx })
 
     // Return post with board info for event building in API route
     return { ...post, boardSlug: board.slug }
@@ -306,14 +304,13 @@ export async function voteOnPost(
       RETURNING vote_count, (SELECT is_new_vote FROM combined LIMIT 1) AS voted
     `)
 
-    const row = result[0]
+    const rows = Array.from(result as Iterable<{ vote_count: number; voted: boolean }>)
+    const row = rows[0]
     const voted = row?.voted ?? false
 
-    // Auto-subscribe voter when they upvote (not when they remove vote)
+    // Auto-subscribe voter when they upvote
     if (voted && options?.memberId) {
-      await subscribeToPost(options.memberId, postId, 'vote', {
-        db: tx,
-      })
+      await subscribeToPost(options.memberId, postId, 'vote', { tx })
     }
 
     return {
@@ -776,7 +773,7 @@ export async function canEditPost(
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
-  const { db } = await import('@quackback/db')
+  const { db } = await import('@/lib/db')
 
   // Get the post
   const post = await db.query.posts.findFirst({
@@ -842,7 +839,7 @@ export async function canDeletePost(
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
-  const { db } = await import('@quackback/db')
+  const { db } = await import('@/lib/db')
 
   // Get the post
   const post = await db.query.posts.findFirst({
@@ -1070,7 +1067,7 @@ export async function permanentDeletePost(postId: PostId): Promise<void> {
 async function isDefaultStatus(statusId: StatusId | null): Promise<boolean> {
   if (!statusId) return true // No status = treat as default
 
-  const { db } = await import('@quackback/db')
+  const { db } = await import('@/lib/db')
 
   const status = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.id, statusId), eq(postStatuses.isDefault, true)),
@@ -1088,7 +1085,7 @@ async function hasCommentsFromOthers(
 ): Promise<boolean> {
   if (!authorMemberId) return false // Anonymous author can't have "other" comments
 
-  const { db } = await import('@quackback/db')
+  const { db } = await import('@/lib/db')
 
   // Find any comment not from the author and not deleted
   const otherComment = await db.query.comments.findFirst({
@@ -1106,7 +1103,7 @@ async function hasCommentsFromOthers(
  * Get the count of comments on a post (excluding deleted)
  */
 async function getCommentCount(postId: PostId): Promise<number> {
-  const { db } = await import('@quackback/db')
+  const { db } = await import('@/lib/db')
 
   const result = await db
     .select({ count: sql<number>`count(*)` })
@@ -1120,7 +1117,7 @@ async function getCommentCount(postId: PostId): Promise<number> {
  * Get portal config (single workspace mode - returns global config)
  */
 async function getPortalConfig(): Promise<PortalConfig> {
-  const { db } = await import('@quackback/db')
+  const { db } = await import('@/lib/db')
 
   // Get the global settings config
   const org = await db.query.settings.findFirst()

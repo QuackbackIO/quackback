@@ -10,4 +10,4 @@
  */
 
 // Types (no DB dependency)
-export type { MemberError, TeamMember } from './member.types'
+export type { TeamMember } from './member.types'

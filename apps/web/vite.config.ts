@@ -7,7 +7,8 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  // Load env from monorepo root where .env file lives
+  const env = loadEnv(mode, path.resolve(__dirname, '../../'), '')
 
   const EDITION = env.EDITION || 'self-hosted'
   const INCLUDE_EE = env.INCLUDE_EE === 'true'
@@ -26,6 +27,11 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       allowedHosts: true,
     },
+    // Using Vite defaults for build (website doesn't set these explicitly)
+    // NOTE: Removed environments.ssr config that was causing __name helper to leak
+    // into SSR dehydration. The noExternal setting caused @tanstack/react-router
+    // to be re-bundled through esbuild, which added __name calls to seroval's
+    // stream code. These calls aren't defined in the browser, causing runtime errors.
     define: {
       __EDITION__: JSON.stringify(EDITION),
       __INCLUDE_EE__: JSON.stringify(INCLUDE_EE),
