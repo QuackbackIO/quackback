@@ -33,7 +33,7 @@ export const Route = createFileRoute('/admin/login')({
     // Settings already available from root context
     const { settings, queryClient } = context
     if (!settings) {
-      throw redirect({ to: '/workspace-not-found' })
+      throw redirect({ to: '/onboarding' })
     }
 
     const { callbackUrl, error } = deps

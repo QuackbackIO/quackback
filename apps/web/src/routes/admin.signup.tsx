@@ -22,7 +22,7 @@ export const Route = createFileRoute('/admin/signup')({
     // Settings already available from root context
     const { settings, queryClient } = context
     if (!settings) {
-      throw redirect({ to: '/workspace-not-found' })
+      throw redirect({ to: '/onboarding' })
     }
 
     const { invitation: invitationId } = deps

@@ -14,7 +14,7 @@ export const Route = createFileRoute('/auth/login')({
     // Settings already available from root context
     const { settings, queryClient } = context
     if (!settings) {
-      throw redirect({ to: '/workspace-not-found' })
+      throw redirect({ to: '/onboarding' })
     }
 
     // Pre-fetch portal config using React Query
