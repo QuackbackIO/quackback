@@ -59,7 +59,7 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
     return
   }
 
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: FROM_EMAIL,
     to,
     subject: `You've been invited to join ${workspaceName} on Quackback`,
@@ -70,6 +70,16 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
       inviteLink,
     }),
   })
+
+  if (result.error) {
+    console.error(
+      `[Email] Resend API error for invitation to ${to}:`,
+      JSON.stringify(result.error, null, 2)
+    )
+    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
+  }
+
+  console.log(`[Email] Invitation sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
@@ -99,12 +109,22 @@ export async function sendWelcomeEmail(params: SendWelcomeParams) {
     return
   }
 
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: FROM_EMAIL,
     to,
     subject: `Welcome to ${workspaceName} on Quackback!`,
     react: WelcomeEmail({ name, workspaceName, dashboardUrl }),
   })
+
+  if (result.error) {
+    console.error(
+      `[Email] Resend API error for welcome to ${to}:`,
+      JSON.stringify(result.error, null, 2)
+    )
+    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
+  }
+
+  console.log(`[Email] Welcome email sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
@@ -131,6 +151,7 @@ export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
   }
 
   console.log(`[Email] Sending sign-in code to ${to}`)
+  console.log(`[Email] Using from address: ${FROM_EMAIL}`)
   try {
     const result = await resend.emails.send({
       from: FROM_EMAIL,
@@ -138,7 +159,22 @@ export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
       subject: `Your Quackback sign-in code is ${code}`,
       react: SigninCodeEmail({ code }),
     })
-    console.log(`[Email] Sign-in code sent successfully to ${to}, id: ${result.data?.id}`)
+
+    // Resend SDK returns { data, error } - check both
+    if (result.error) {
+      console.error(`[Email] Resend API error for ${to}:`, JSON.stringify(result.error, null, 2))
+      throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
+    }
+
+    if (!result.data?.id) {
+      console.error(
+        `[Email] Resend returned no email ID for ${to}. Full result:`,
+        JSON.stringify(result, null, 2)
+      )
+      throw new Error('Resend API returned no email ID - email may not have been sent')
+    }
+
+    console.log(`[Email] Sign-in code sent successfully to ${to}, id: ${result.data.id}`)
   } catch (error) {
     console.error(`[Email] Failed to send sign-in code to ${to}:`, error)
     throw error
@@ -179,7 +215,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
 
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
 
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: FROM_EMAIL,
     to,
     subject: `Your feedback is now ${formattedNewStatus}!`,
@@ -192,6 +228,16 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
       unsubscribeUrl,
     }),
   })
+
+  if (result.error) {
+    console.error(
+      `[Email] Resend API error for status change to ${to}:`,
+      JSON.stringify(result.error, null, 2)
+    )
+    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
+  }
+
+  console.log(`[Email] Status change email sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
@@ -236,7 +282,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     return
   }
 
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: FROM_EMAIL,
     to,
     subject: `New comment on "${postTitle}"`,
@@ -250,6 +296,16 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
       unsubscribeUrl,
     }),
   })
+
+  if (result.error) {
+    console.error(
+      `[Email] Resend API error for new comment to ${to}:`,
+      JSON.stringify(result.error, null, 2)
+    )
+    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
+  }
+
+  console.log(`[Email] New comment email sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
