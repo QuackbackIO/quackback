@@ -11,7 +11,21 @@
 
 import { createServerFn } from '@tanstack/react-start'
 import { db, member, eq } from '@/lib/db'
+import { tenantStorage } from '@/lib/tenant'
+import { isMultiTenant } from '@/lib/features'
 import { getSession } from './auth'
+
+/**
+ * Check if tenant is available for database access.
+ * Returns false only in multi-tenant mode when no tenant was resolved.
+ * Use this to guard database calls in routes.
+ */
+export const checkTenantAvailable = createServerFn({ method: 'GET' }).handler(async () => {
+  if (isMultiTenant() && !tenantStorage.getStore()) {
+    return false
+  }
+  return true
+})
 
 /**
  * Get the app settings.

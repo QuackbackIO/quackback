@@ -5,7 +5,8 @@ import { Outlet, createRootRouteWithContext, HeadContent, Scripts } from '@tanst
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
 import { getSession } from '@/lib/server-functions/auth'
-import { getSettings } from '@/lib/server-functions/workspace'
+import { checkTenantAvailable, getSettings } from '@/lib/server-functions/workspace'
+import { WorkspaceNotFoundPage } from '@/components/workspace-not-found'
 
 // Lazy load devtools in development only
 const TanStackRouterDevtools = import.meta.env.DEV
@@ -38,14 +39,24 @@ const systemThemeScript = `
 // RouterContext is what's available in the context at different points:
 // - queryClient: always available (provided in createRouter)
 // - session/settings: available after beforeLoad runs (optional in type, guaranteed in child routes)
+// - workspaceNotFound: true when in multi-tenant mode with no resolved tenant
 export interface RouterContext {
   queryClient: QueryClient
   session?: Awaited<ReturnType<typeof getSession>>
   settings?: Awaited<ReturnType<typeof getSettings>>
+  workspaceNotFound?: boolean
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
+    // Check tenant availability BEFORE any database calls
+    // Returns false only in multi-tenant mode when no tenant was resolved
+    const tenantAvailable = await checkTenantAvailable()
+    if (!tenantAvailable) {
+      return { workspaceNotFound: true }
+    }
+
+    // Safe to query database now
     const [session, settings] = await Promise.all([getSession(), getSettings()])
     return { session, settings }
   },
@@ -90,6 +101,17 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootComponent() {
+  const { workspaceNotFound } = Route.useRouteContext()
+
+  // Multi-tenant mode with no resolved tenant - show workspace not found
+  if (workspaceNotFound) {
+    return (
+      <RootDocument>
+        <WorkspaceNotFoundPage />
+      </RootDocument>
+    )
+  }
+
   return (
     <RootDocument>
       <Outlet />
