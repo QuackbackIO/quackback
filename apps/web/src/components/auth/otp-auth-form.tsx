@@ -84,11 +84,11 @@ export function OTPAuthForm({
       try {
         const response = await fetch(`/api/auth/invitation/${invitationId}`)
         if (response.ok) {
-          const data = await response.json()
+          const data = (await response.json()) as InvitationInfo
           setInvitation(data)
           setEmail(data.email) // Pre-fill email from invitation
         } else {
-          const data = await response.json()
+          const data = (await response.json()) as { error?: string }
           setError(data.error || 'Invalid or expired invitation')
         }
       } catch {

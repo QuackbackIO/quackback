@@ -19,9 +19,12 @@ let resendClient: Resend | null = null
 
 function getResend(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) return null
+  if (!apiKey) {
+    return null
+  }
 
   if (!resendClient) {
+    console.log('[Email] Initializing Resend client')
     resendClient = new Resend(apiKey)
   }
   return resendClient
@@ -127,12 +130,19 @@ export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
     return
   }
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to,
-    subject: `Your Quackback sign-in code is ${code}`,
-    react: SigninCodeEmail({ code }),
-  })
+  console.log(`[Email] Sending sign-in code to ${to}`)
+  try {
+    const result = await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Your Quackback sign-in code is ${code}`,
+      react: SigninCodeEmail({ code }),
+    })
+    console.log(`[Email] Sign-in code sent successfully to ${to}, id: ${result.data?.id}`)
+  } catch (error) {
+    console.error(`[Email] Failed to send sign-in code to ${to}:`, error)
+    throw error
+  }
 }
 
 // ============================================================================

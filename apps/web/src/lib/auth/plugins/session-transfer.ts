@@ -14,9 +14,11 @@
  * 5. Redirects to /admin with session cookie
  *
  * Cloud edition only - not included in self-hosted builds.
+ *
+ * Note: Uses process.env which works in both Cloudflare Workers (with nodejs_compat)
+ * and Node.js/Bun environments.
  */
 
-import { env as cfEnv } from 'cloudflare:workers'
 import { createAuthEndpoint } from 'better-auth/api'
 import type { BetterAuthPlugin } from 'better-auth'
 import { jwtVerify } from 'jose'
@@ -49,8 +51,8 @@ export const sessionTransfer = () => {
         },
         async (ctx) => {
           const { token } = ctx.query
-          const transferSecret = cfEnv.TRANSFER_TOKEN_SECRET
-          const NODE_ENV = cfEnv.NODE_ENV
+          const transferSecret = process.env.TRANSFER_TOKEN_SECRET
+          const NODE_ENV = process.env.NODE_ENV
 
           // Check if session-transfer is enabled (requires shared secret)
           if (!transferSecret) {

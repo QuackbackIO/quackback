@@ -125,9 +125,15 @@ async function createAuth() {
     plugins: [
       // Email OTP plugin for passwordless authentication
       emailOTP({
-        async sendVerificationOTP({ email, otp, type: _type }) {
-          // We use the same email template for all OTP types
-          await sendSigninCodeEmail({ to: email, code: otp })
+        async sendVerificationOTP({ email, otp, type }) {
+          console.log(`[auth] sendVerificationOTP called for ${email}, type: ${type}`)
+          try {
+            await sendSigninCodeEmail({ to: email, code: otp })
+            console.log(`[auth] OTP email sent successfully to ${email}`)
+          } catch (error) {
+            console.error(`[auth] Failed to send OTP email to ${email}:`, error)
+            throw error
+          }
         },
         otpLength: 6,
         expiresIn: 600, // 10 minutes

@@ -4,8 +4,10 @@
  * Resolves request domain to tenant context by querying the catalog database.
  * Extracts slug from subdomain and looks up workspace connection info.
  * Fetches connection strings from Neon API using project ID.
+ *
+ * Note: Uses process.env which works in both Cloudflare Workers (with nodejs_compat)
+ * and Node.js/Bun environments.
  */
-import { env as cfEnv } from 'cloudflare:workers'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { neon } from '@neondatabase/serverless'
 import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
@@ -51,9 +53,9 @@ const catalogSchema = { workspace, workspaceDomain }
 
 function getConfig() {
   return {
-    catalogDbUrl: cfEnv.CATALOG_DATABASE_URL,
-    baseDomain: cfEnv.TENANT_BASE_DOMAIN,
-    neonApiKey: cfEnv.NEON_API_KEY,
+    catalogDbUrl: process.env.CATALOG_DATABASE_URL,
+    baseDomain: process.env.TENANT_BASE_DOMAIN,
+    neonApiKey: process.env.NEON_API_KEY,
   }
 }
 
