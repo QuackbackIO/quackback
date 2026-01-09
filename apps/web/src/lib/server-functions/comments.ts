@@ -5,37 +5,32 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type CommentId, type PostId, type UserId } from '@quackback/ids'
-import { requireAuth, getOptionalAuth } from './auth-helpers'
-import { getSession } from './auth'
+
 import {
-  createComment,
-  updateComment,
-  deleteComment,
-  toggleReaction,
-  canEditComment,
   canDeleteComment,
-  userEditComment,
+  canEditComment,
+  createComment,
+  deleteComment,
   softDeleteComment,
+  toggleReaction,
+  updateComment,
+  userEditComment,
 } from '@/lib/comments/comment.service'
 import { dispatchCommentCreated } from '@/lib/events/dispatch'
 import { getMemberIdentifier } from '@/lib/user-identifier'
 
-const tiptapContentSchema = z.object({
-  type: z.literal('doc'),
-  content: z.array(z.any()).optional(),
-})
+import { getOptionalAuth, requireAuth } from './auth-helpers'
 
+// Schemas
 const createCommentSchema = z.object({
   postId: z.string(),
-  content: z.string().min(1).max(10000),
-  contentJson: tiptapContentSchema.optional(),
+  content: z.string().min(1).max(5000),
   parentId: z.string().optional(),
 })
 
 const updateCommentSchema = z.object({
   id: z.string(),
-  content: z.string().min(1).max(10000),
-  contentJson: tiptapContentSchema.optional(),
+  content: z.string().min(1).max(5000),
 })
 
 const deleteCommentSchema = z.object({
@@ -47,10 +42,27 @@ const toggleReactionSchema = z.object({
   emoji: z.string(),
 })
 
+const getCommentPermissionsSchema = z.object({
+  commentId: z.string(),
+})
+
+const userEditCommentSchema = z.object({
+  commentId: z.string(),
+  content: z.string(),
+})
+
+const userDeleteCommentSchema = z.object({
+  commentId: z.string(),
+})
+
+// Types
 export type CreateCommentInput = z.infer<typeof createCommentSchema>
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>
 export type DeleteCommentInput = z.infer<typeof deleteCommentSchema>
 export type ToggleReactionInput = z.infer<typeof toggleReactionSchema>
+export type GetCommentPermissionsInput = z.infer<typeof getCommentPermissionsSchema>
+export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
+export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
 
 // Write Operations
 export const createCommentFn = createServerFn({ method: 'POST' })
@@ -157,36 +169,14 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
     }
   })
 
-const getCommentPermissionsSchema = z.object({
-  commentId: z.string(),
-})
-
-const userEditCommentSchema = z.object({
-  commentId: z.string(),
-  content: z.string(),
-})
-
-const userDeleteCommentSchema = z.object({
-  commentId: z.string(),
-})
-
-export type GetCommentPermissionsInput = z.infer<typeof getCommentPermissionsSchema>
-export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
-export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
-
+// Read Operations
 export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
   .inputValidator(getCommentPermissionsSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:comments] getCommentPermissionsFn: commentId=${data.commentId}`)
     try {
-      const session = await getSession()
-      if (!session?.user) {
-        console.log(`[fn:comments] getCommentPermissionsFn: no session`)
-        return { canEdit: false, canDelete: false }
-      }
-
       const ctx = await getOptionalAuth()
-      if (!ctx?.user || !ctx?.member) {
+      if (!ctx?.member) {
         console.log(`[fn:comments] getCommentPermissionsFn: no auth context`)
         return { canEdit: false, canDelete: false }
       }
@@ -205,8 +195,7 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
         canDelete: deleteResult.allowed,
       }
     } catch (error) {
-      // Comment not found or other error - return no permissions
-      console.error(`[fn:comments] ❌ getCommentPermissionsFn failed:`, error)
+      console.error(`[fn:comments] getCommentPermissionsFn failed:`, error)
       return { canEdit: false, canDelete: false }
     }
   })

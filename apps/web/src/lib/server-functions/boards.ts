@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type BoardId } from '@quackback/ids'
+import { boardIdSchema, statusIdSchema } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
 import { requireAuth } from './auth-helpers'
 import {
@@ -29,19 +29,25 @@ const createBoardSchema = z.object({
 })
 
 const getBoardSchema = z.object({
-  id: z.string(),
+  id: boardIdSchema,
 })
 
+const boardSettingsSchema = z
+  .object({
+    roadmapStatusIds: z.array(statusIdSchema).optional(),
+  })
+  .strict()
+
 const updateBoardSchema = z.object({
-  id: z.string(),
+  id: boardIdSchema,
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
   isPublic: z.boolean().optional(),
-  settings: z.record(z.string(), z.unknown()).optional(),
+  settings: boardSettingsSchema.optional(),
 })
 
 const deleteBoardSchema = z.object({
-  id: z.string(),
+  id: boardIdSchema,
 })
 
 // ============================================
@@ -90,7 +96,7 @@ export const fetchBoard = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const board = await getBoardById(data.id as BoardId)
+      const board = await getBoardById(data.id)
       console.log(`[fn:boards] fetchBoard: found=${!!board}`)
       return {
         ...board,
@@ -146,7 +152,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const board = await updateBoard(data.id as BoardId, {
+      const board = await updateBoard(data.id, {
         name: data.name,
         description: data.description,
         isPublic: data.isPublic,
@@ -175,7 +181,7 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      await deleteBoard(data.id as BoardId)
+      await deleteBoard(data.id)
       console.log(`[fn:boards] deleteBoardFn: deleted id=${data.id}`)
       return { id: data.id }
     } catch (error) {

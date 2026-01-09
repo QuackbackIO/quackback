@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type StatusId } from '@quackback/ids'
+import { statusIdSchema } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   listStatuses,
@@ -36,11 +36,11 @@ const createStatusSchema = z.object({
 })
 
 const getStatusSchema = z.object({
-  id: z.string(),
+  id: statusIdSchema,
 })
 
 const updateStatusSchema = z.object({
-  id: z.string(),
+  id: statusIdSchema,
   name: z.string().min(1).max(50).optional(),
   color: z
     .string()
@@ -51,11 +51,11 @@ const updateStatusSchema = z.object({
 })
 
 const deleteStatusSchema = z.object({
-  id: z.string(),
+  id: statusIdSchema,
 })
 
 const reorderStatusesSchema = z.object({
-  statusIds: z.array(z.string()).min(1, 'At least one status ID is required'),
+  statusIds: z.array(statusIdSchema).min(1, 'At least one status ID is required'),
 })
 
 // ============================================
@@ -100,7 +100,7 @@ export const fetchStatus = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const status = await getStatusById(data.id as StatusId)
+      const status = await getStatusById(data.id)
       console.log(`[fn:statuses] fetchStatus: found=${!!status}`)
       return status
     } catch (error) {
@@ -123,15 +123,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const status = await createStatus({
-        name: data.name,
-        slug: data.slug,
-        color: data.color,
-        category: data.category,
-        position: data.position,
-        showOnRoadmap: data.showOnRoadmap,
-        isDefault: data.isDefault,
-      })
+      const status = await createStatus(data)
       console.log(`[fn:statuses] createStatusFn: id=${status.id}`)
       return status
     } catch (error) {
@@ -150,7 +142,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const status = await updateStatus(data.id as StatusId, {
+      const status = await updateStatus(data.id, {
         name: data.name,
         color: data.color,
         showOnRoadmap: data.showOnRoadmap,
@@ -174,7 +166,7 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      await deleteStatus(data.id as StatusId)
+      await deleteStatus(data.id)
       console.log(`[fn:statuses] deleteStatusFn: deleted`)
       return { id: data.id }
     } catch (error) {
@@ -193,7 +185,7 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      await reorderStatuses(data.statusIds as StatusId[])
+      await reorderStatuses(data.statusIds)
       console.log(`[fn:statuses] reorderStatusesFn: reordered`)
       return { success: true }
     } catch (error) {

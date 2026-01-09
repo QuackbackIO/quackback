@@ -1,8 +1,5 @@
 /**
  * Server functions for post operations
- *
- * This file consolidates all post-related operations from actions/posts.ts
- * using the new auth middleware pattern.
  */
 
 import { z } from 'zod'
@@ -27,6 +24,8 @@ import {
   changeStatus,
   restorePost,
 } from '@/lib/posts/post.service'
+import { hasUserVoted } from '@/lib/posts/post.public'
+import { getMemberIdentifier } from '@/lib/user-identifier'
 import { dispatchPostStatusChanged } from '@/lib/events/dispatch'
 
 // ============================================
@@ -96,7 +95,6 @@ const updatePostSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().max(10000).optional(),
   contentJson: tiptapContentSchema.optional(),
-  boardId: z.string().optional(),
   ownerId: z.string().nullable().optional(),
   officialResponse: z.string().max(5000).nullable().optional(),
 })
@@ -191,11 +189,16 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const postId = data.id as PostId
-      const [result, comments] = await Promise.all([
+      const userIdentifier = getMemberIdentifier(auth.member.id)
+
+      const [result, comments, hasVoted] = await Promise.all([
         getPostWithDetails(postId),
-        getCommentsWithReplies(postId, `member:${auth.member.id}`),
+        getCommentsWithReplies(postId, userIdentifier),
+        hasUserVoted(postId, userIdentifier),
       ])
-      console.log(`[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}`)
+      console.log(
+        `[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}, hasVoted=${hasVoted}`
+      )
 
       // Serialize Date fields in comments
       type SerializedComment = Omit<(typeof comments)[0], 'createdAt' | 'replies'> & {
@@ -210,6 +213,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
       return {
         ...result,
+        hasVoted,
         createdAt: toIsoString(result.createdAt),
         updatedAt: toIsoString(result.updatedAt),
         deletedAt: toIsoStringOrNull(result.deletedAt),
@@ -282,6 +286,8 @@ export const updatePostFn = createServerFn({ method: 'POST' })
           title: data.title,
           content: data.content,
           contentJson: data.contentJson,
+          ownerId: data.ownerId,
+          officialResponse: data.officialResponse,
         },
         {
           memberId: auth.member.id,

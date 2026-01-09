@@ -53,11 +53,7 @@ const listPortalUsersSchema = z.object({
   limit: z.number().optional(),
 })
 
-const getPortalUserSchema = z.object({
-  memberId: z.string(),
-})
-
-const deletePortalUserSchema = z.object({
+const portalUserByIdSchema = z.object({
   memberId: z.string(),
 })
 
@@ -356,7 +352,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
  * Get a portal user's details.
  */
 export const getPortalUserFn = createServerFn({ method: 'GET' })
-  .inputValidator(getPortalUserSchema)
+  .inputValidator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:admin] getPortalUserFn: memberId=${data.memberId}`)
     try {
@@ -390,8 +386,8 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 /**
  * Delete (remove) a portal user.
  */
-export const deletePortalUserFn = createServerFn({ method: 'GET' })
-  .inputValidator(deletePortalUserSchema)
+export const deletePortalUserFn = createServerFn({ method: 'POST' })
+  .inputValidator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:admin] deletePortalUserFn: memberId=${data.memberId}`)
     try {
@@ -417,17 +413,12 @@ const sendInvitationSchema = z.object({
   role: z.enum(['admin', 'member']),
 })
 
-const cancelInvitationSchema = z.object({
-  invitationId: inviteIdSchema,
-})
-
-const resendInvitationSchema = z.object({
+const invitationByIdSchema = z.object({
   invitationId: inviteIdSchema,
 })
 
 export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
-export type CancelInvitationInput = z.infer<typeof cancelInvitationSchema>
-export type ResendInvitationInput = z.infer<typeof resendInvitationSchema>
+export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
 
 /**
  * Send a team invitation
@@ -506,7 +497,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
  * Cancel a pending invitation
  */
 export const cancelInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator(cancelInvitationSchema)
+  .inputValidator(invitationByIdSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:admin] cancelInvitationFn: id=${data.invitationId}`)
     try {
@@ -536,7 +527,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
  * Resend an invitation email
  */
 export const resendInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator(resendInvitationSchema)
+  .inputValidator(invitationByIdSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:admin] resendInvitationFn: id=${data.invitationId}`)
     try {

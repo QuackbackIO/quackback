@@ -30,7 +30,6 @@ import {
   createPost,
 } from '@/lib/posts/post.service'
 import { getMemberIdentifier } from '@/lib/user-identifier'
-import { hashIP } from '@/lib/utils/ip-hash'
 import { getPublicBoardById } from '@/lib/boards/board.public'
 import { getDefaultStatus } from '@/lib/statuses/status.service'
 import { getMemberByUser } from '@/lib/members/member.service'
@@ -75,7 +74,6 @@ const userDeletePostSchema = z.object({
 
 const toggleVoteSchema = z.object({
   postId: z.string(),
-  ipHash: z.string().optional(),
 })
 
 const createPublicPostSchema = z.object({
@@ -287,18 +285,12 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
       try {
         const ctx = await requireAuth()
         const postId = data.postId as PostId
-        const clientIpHash = data.ipHash
 
         const memberId = ctx.member.id as MemberId
         const userIdentifier = getMemberIdentifier(memberId)
 
-        // Generate IP hash if not provided (for privacy-preserving storage)
-        const ipHash =
-          clientIpHash || hashIP('unknown', process.env.BETTER_AUTH_SECRET || 'default-salt')
-
         const result = await voteOnPost(postId, userIdentifier, {
           memberId,
-          ipHash,
         })
         console.log(
           `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}`
@@ -499,7 +491,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 
 /**
  * Get vote sidebar data for a post (optional auth).
- * Returns user identifier, membership status, vote status, and subscription status.
+ * Returns membership status, vote status, and subscription status.
  */
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
@@ -509,7 +501,6 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
 
-      let userIdentifier = ''
       let isMember = false
       let hasVoted = false
       let subscriptionStatus: {
@@ -523,7 +514,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       }
 
       if (ctx?.user && ctx?.member) {
-        userIdentifier = getMemberIdentifier(ctx.member.id)
+        const userIdentifier = getMemberIdentifier(ctx.member.id)
         isMember = true
 
         hasVoted = await hasUserVoted(postId, userIdentifier)
@@ -535,7 +526,6 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         `[fn:public-posts] getVoteSidebarDataFn: isMember=${isMember}, hasVoted=${hasVoted}`
       )
       return {
-        userIdentifier,
         isMember,
         hasVoted,
         subscriptionStatus,

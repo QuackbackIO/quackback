@@ -238,13 +238,13 @@ export async function updatePost(
  *
  * @param postId - Post ID to vote on
  * @param userIdentifier - Unique identifier for the voter (member:id or anon:uuid)
- * @param options - Optional audit data (memberId, ipHash)
+ * @param options - Optional audit data (memberId)
  * @returns Result containing vote status and new count, or an error
  */
 export async function voteOnPost(
   postId: PostId,
   userIdentifier: string,
-  options?: { memberId?: MemberId; ipHash?: string }
+  options?: { memberId?: MemberId }
 ): Promise<VoteResult> {
   // Verify post exists
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -278,8 +278,8 @@ export async function voteOnPost(
     ),
     insert_vote AS (
       -- Only insert if no existing vote was found (and thus not deleted)
-      INSERT INTO votes (id, post_id, user_identifier, member_id, ip_hash, updated_at)
-      SELECT gen_random_uuid(), ${postUuid}, ${userIdentifier}, ${memberUuid}, ${options?.ipHash ?? null}, NOW()
+      INSERT INTO votes (id, post_id, user_identifier, member_id, updated_at)
+      SELECT gen_random_uuid(), ${postUuid}, ${userIdentifier}, ${memberUuid}, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
       RETURNING id, true AS is_new_vote
     ),

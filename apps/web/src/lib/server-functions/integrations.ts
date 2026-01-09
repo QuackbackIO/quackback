@@ -1,7 +1,27 @@
 import { createServerFn } from '@tanstack/react-start'
 import { createHmac, randomBytes } from 'crypto'
-import { db, member, eq } from '@/lib/db'
-import { getSession } from './auth'
+import { requireAuth } from './auth-helpers'
+
+function getHmacSecret(): string {
+  const secret = process.env.BETTER_AUTH_SECRET
+  if (!secret) {
+    throw new Error('BETTER_AUTH_SECRET not set')
+  }
+  return secret
+}
+
+function signState(data: {
+  orgId: string
+  memberId: string
+  nonce: string
+  timestamp: number
+}): string {
+  const payload = JSON.stringify(data)
+  const hmac = createHmac('sha256', getHmacSecret())
+  hmac.update(payload)
+  const signature = hmac.digest('base64url')
+  return `${Buffer.from(payload).toString('base64url')}.${signature}`
+}
 
 /**
  * Generate a signed OAuth connect URL for Slack.
@@ -9,65 +29,19 @@ import { getSession } from './auth'
  */
 export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
   async (): Promise<string> => {
-    console.log(`[fn:integrations] getSlackConnectUrl`)
-    try {
-      function getHmacSecret(): string {
-        const secret = process.env.BETTER_AUTH_SECRET
-        if (!secret) {
-          throw new Error('BETTER_AUTH_SECRET not set')
-        }
-        return secret
-      }
+    const auth = await requireAuth({ roles: ['admin'] })
 
-      function signState(data: {
-        orgId: string
-        memberId: string
-        nonce: string
-        timestamp: number
-      }): string {
-        const payload = JSON.stringify(data)
-        const hmac = createHmac('sha256', getHmacSecret())
-        hmac.update(payload)
-        const signature = hmac.digest('base64url')
-        return `${Buffer.from(payload).toString('base64url')}.${signature}`
-      }
+    // Generate signed state
+    const nonce = randomBytes(16).toString('base64url')
+    const timestamp = Date.now()
+    const state = signState({
+      orgId: auth.settings.id,
+      memberId: auth.member.id,
+      nonce,
+      timestamp,
+    })
 
-      // Validate user has admin/owner role
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Not authenticated')
-      }
-
-      const appSettings = await db.query.settings.findFirst()
-      if (!appSettings) {
-        throw new Error('Settings not found')
-      }
-
-      const memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, session.user.id),
-      })
-
-      if (!memberRecord || memberRecord.role !== 'admin') {
-        throw new Error('Forbidden')
-      }
-
-      // Generate signed state
-      const nonce = randomBytes(16).toString('base64url')
-      const timestamp = Date.now()
-      const state = signState({
-        orgId: appSettings.id,
-        memberId: memberRecord.id,
-        nonce,
-        timestamp,
-      })
-
-      // Return relative URL to connect endpoint with signed state
-      const url = `/api/integrations/slack/connect?state=${encodeURIComponent(state)}`
-      console.log(`[fn:integrations] getSlackConnectUrl: url generated`)
-      return url
-    } catch (error) {
-      console.error(`[fn:integrations] ❌ getSlackConnectUrl failed:`, error)
-      throw error
-    }
+    // Return relative URL to connect endpoint with signed state
+    return `/api/integrations/slack/connect?state=${encodeURIComponent(state)}`
   }
 )

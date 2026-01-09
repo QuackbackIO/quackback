@@ -163,7 +163,7 @@ export function useVoteMutation() {
       }
     },
     onSuccess: (data, postId) => {
-      // Update voteCount with server response for accuracy
+      // Update voteCount in all list queries
       queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
         { queryKey: publicPostsKeys.lists() },
         (old) => {
@@ -179,6 +179,17 @@ export function useVoteMutation() {
           }
         }
       )
+
+      // Update the votedPosts cache (single source of truth for hasVoted)
+      queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(), (old) => {
+        const next = new Set(old || [])
+        if (data.voted) {
+          next.add(postId)
+        } else {
+          next.delete(postId)
+        }
+        return next
+      })
     },
   })
 }
@@ -192,16 +203,6 @@ interface CreatePostInput {
   title: string
   content: string
   contentJson: unknown
-}
-
-interface _CreatePostResponse {
-  id: string
-  title: string
-  content: string
-  statusId: StatusId | null
-  voteCount: number
-  createdAt: string
-  board: { id: BoardId; name: string; slug: string }
 }
 
 export function useCreatePublicPost() {
