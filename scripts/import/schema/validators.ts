@@ -15,12 +15,12 @@ const optionalEmail = z
 
 const booleanFromString = z
   .union([z.boolean(), z.string()])
-  .transform((val) => {
+  .optional()
+  .transform((val): boolean => {
+    if (val === undefined) return false
     if (typeof val === 'boolean') return val
     return val.toLowerCase() === 'true' || val === '1'
   })
-  .optional()
-  .default(false)
 
 export const intermediatePostSchema = z.object({
   id: z.string().min(1, 'Post ID is required'),
@@ -30,7 +30,10 @@ export const intermediatePostSchema = z.object({
   authorName: z.string().optional(),
   board: z.string().optional(),
   status: z.string().optional(),
-  moderation: z.enum(['published', 'pending', 'spam', 'archived']).optional().default('published'),
+  moderation: z
+    .enum(['published', 'pending', 'spam', 'archived'])
+    .optional()
+    .transform((val): 'published' | 'pending' | 'spam' | 'archived' => val ?? 'published'),
   tags: z.string().optional(),
   roadmap: z.string().optional(),
   voteCount: z.coerce.number().int().min(0).optional(),

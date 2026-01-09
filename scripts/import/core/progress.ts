@@ -74,20 +74,19 @@ export class Progress {
   }
 
   private logStats(label: string, stats: ImportStats): void {
-    const parts = []
+    const parts: string[] = []
     if (stats.imported > 0) parts.push(`${stats.imported} imported`)
     if (stats.skipped > 0) parts.push(`${stats.skipped} skipped`)
     if (stats.errors > 0) parts.push(`${stats.errors} errors`)
 
-    let status: string
-    if (stats.errors > 0) {
-      status = '⚠️'
-    } else if (stats.imported > 0) {
-      status = '✅'
-    } else {
-      status = '➖'
-    }
+    const status = this.getStatusIcon(stats)
     console.log(`${status} ${label}: ${parts.join(', ') || 'none'}`)
+  }
+
+  private getStatusIcon(stats: ImportStats): string {
+    if (stats.errors > 0) return '⚠️'
+    if (stats.imported > 0) return '✅'
+    return '➖'
   }
 }
 

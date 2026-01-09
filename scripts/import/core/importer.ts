@@ -41,6 +41,15 @@ import { Progress } from './progress'
 
 type Database = PostgresJsDatabase<typeof schema>
 
+type AnyTable =
+  | typeof posts
+  | typeof comments
+  | typeof votes
+  | typeof postNotes
+  | typeof tags
+  | typeof postTags
+  | typeof postRoadmaps
+
 interface ResolvedReferences {
   board: { id: BoardId; slug: string }
   statuses: Map<string, StatusId>
@@ -220,7 +229,6 @@ export class Importer {
     const stats = { imported: 0, skipped: 0, errors: 0 }
     if (!this.refs) throw new Error('References not resolved')
 
-    const batchSize = this.options.batchSize ?? 100
     const postInserts: (typeof posts.$inferInsert)[] = []
     const postTagInserts: (typeof postTags.$inferInsert)[] = []
     const postRoadmapInserts: (typeof postRoadmaps.$inferInsert)[] = []
@@ -332,38 +340,19 @@ export class Importer {
 
     // Insert new tags first
     if (newTags.length > 0) {
-      for (let i = 0; i < newTags.length; i += batchSize) {
-        const batch = newTags.slice(i, i + batchSize)
-        await this.db
-          .insert(tags)
-          .values(batch.map((t) => ({ id: t.id, name: t.name })))
-          .onConflictDoNothing()
-      }
+      await this.batchInsert(
+        tags,
+        newTags.map((t) => ({ id: t.id, name: t.name })),
+        'Tags',
+        'ignore'
+      )
       this.progress.step(`Created ${newTags.length} new tags`)
     }
 
-    // Insert posts
-    for (let i = 0; i < postInserts.length; i += batchSize) {
-      const batch = postInserts.slice(i, i + batchSize)
-      await this.db.insert(posts).values(batch)
-      this.progress.progress(
-        Math.min(i + batchSize, postInserts.length),
-        postInserts.length,
-        'Posts'
-      )
-    }
-
-    // Insert post-tag relations
-    for (let i = 0; i < postTagInserts.length; i += batchSize) {
-      const batch = postTagInserts.slice(i, i + batchSize)
-      await this.db.insert(postTags).values(batch).onConflictDoNothing()
-    }
-
-    // Insert post-roadmap relations
-    for (let i = 0; i < postRoadmapInserts.length; i += batchSize) {
-      const batch = postRoadmapInserts.slice(i, i + batchSize)
-      await this.db.insert(postRoadmaps).values(batch).onConflictDoNothing()
-    }
+    // Insert posts and relations
+    await this.batchInsert(posts, postInserts, 'Posts')
+    await this.batchInsert(postTags, postTagInserts, 'Post-Tags', 'ignore')
+    await this.batchInsert(postRoadmaps, postRoadmapInserts, 'Post-Roadmaps', 'ignore')
 
     return stats
   }
@@ -375,14 +364,11 @@ export class Importer {
     commentData: IntermediateComment[]
   ): Promise<{ imported: number; skipped: number; errors: number }> {
     const stats = { imported: 0, skipped: 0, errors: 0 }
-
-    const batchSize = this.options.batchSize ?? 100
     const commentInserts: (typeof comments.$inferInsert)[] = []
 
     for (let i = 0; i < commentData.length; i++) {
       const comment = commentData[i]
 
-      // Resolve post ID
       const postId = this.idMaps.posts.get(comment.postId)
       if (!postId) {
         stats.skipped++
@@ -393,24 +379,19 @@ export class Importer {
       }
 
       try {
-        const commentId = generateId('comment')
-
-        // Resolve member
         const memberId = comment.authorEmail
           ? await this.userResolver.resolve(comment.authorEmail, comment.authorName)
           : null
 
-        const createdAt = comment.createdAt ? new Date(comment.createdAt) : new Date()
-
         commentInserts.push({
-          id: commentId,
+          id: generateId('comment'),
           postId,
           memberId,
           authorName: comment.authorName,
           authorEmail: comment.authorEmail,
           content: comment.body,
           isTeamMember: comment.isStaff ?? false,
-          createdAt,
+          createdAt: comment.createdAt ? new Date(comment.createdAt) : new Date(),
         })
 
         stats.imported++
@@ -430,17 +411,7 @@ export class Importer {
       return stats
     }
 
-    // Insert comments
-    for (let i = 0; i < commentInserts.length; i += batchSize) {
-      const batch = commentInserts.slice(i, i + batchSize)
-      await this.db.insert(comments).values(batch)
-      this.progress.progress(
-        Math.min(i + batchSize, commentInserts.length),
-        commentInserts.length,
-        'Comments'
-      )
-    }
-
+    await this.batchInsert(comments, commentInserts, 'Comments')
     return stats
   }
 
@@ -451,22 +422,18 @@ export class Importer {
     voteData: IntermediateVote[]
   ): Promise<{ imported: number; skipped: number; errors: number }> {
     const stats = { imported: 0, skipped: 0, errors: 0 }
-
-    const batchSize = this.options.batchSize ?? 100
     const voteInserts: (typeof votes.$inferInsert)[] = []
-    const seenVotes = new Set<string>() // Track duplicates
+    const seenVotes = new Set<string>()
 
     for (let i = 0; i < voteData.length; i++) {
       const vote = voteData[i]
 
-      // Resolve post ID
       const postId = this.idMaps.posts.get(vote.postId)
       if (!postId) {
         stats.skipped++
         continue
       }
 
-      // Check for duplicate (same user, same post)
       const voteKey = `${postId}:${vote.voterEmail.toLowerCase()}`
       if (seenVotes.has(voteKey)) {
         stats.skipped++
@@ -475,16 +442,13 @@ export class Importer {
       seenVotes.add(voteKey)
 
       try {
-        // Resolve member
         const memberId = await this.userResolver.resolve(vote.voterEmail)
-
-        const createdAt = vote.createdAt ? new Date(vote.createdAt) : new Date()
 
         voteInserts.push({
           postId,
           userIdentifier: `email:${vote.voterEmail.toLowerCase()}`,
           memberId,
-          createdAt,
+          createdAt: vote.createdAt ? new Date(vote.createdAt) : new Date(),
           updatedAt: new Date(),
         })
 
@@ -505,17 +469,7 @@ export class Importer {
       return stats
     }
 
-    // Insert votes (with conflict handling for duplicates)
-    for (let i = 0; i < voteInserts.length; i += batchSize) {
-      const batch = voteInserts.slice(i, i + batchSize)
-      await this.db.insert(votes).values(batch).onConflictDoNothing()
-      this.progress.progress(
-        Math.min(i + batchSize, voteInserts.length),
-        voteInserts.length,
-        'Votes'
-      )
-    }
-
+    await this.batchInsert(votes, voteInserts, 'Votes', 'ignore')
     return stats
   }
 
@@ -526,14 +480,11 @@ export class Importer {
     noteData: IntermediateNote[]
   ): Promise<{ imported: number; skipped: number; errors: number }> {
     const stats = { imported: 0, skipped: 0, errors: 0 }
-
-    const batchSize = this.options.batchSize ?? 100
     const noteInserts: (typeof postNotes.$inferInsert)[] = []
 
     for (let i = 0; i < noteData.length; i++) {
       const note = noteData[i]
 
-      // Resolve post ID
       const postId = this.idMaps.posts.get(note.postId)
       if (!postId) {
         stats.skipped++
@@ -544,23 +495,18 @@ export class Importer {
       }
 
       try {
-        const noteId = generateId('note')
-
-        // Resolve member
         const memberId = note.authorEmail
           ? await this.userResolver.resolve(note.authorEmail, note.authorName)
           : null
 
-        const createdAt = note.createdAt ? new Date(note.createdAt) : new Date()
-
         noteInserts.push({
-          id: noteId,
+          id: generateId('note'),
           postId,
           memberId,
           authorName: note.authorName,
           authorEmail: note.authorEmail,
           content: note.body,
-          createdAt,
+          createdAt: note.createdAt ? new Date(note.createdAt) : new Date(),
         })
 
         stats.imported++
@@ -580,17 +526,7 @@ export class Importer {
       return stats
     }
 
-    // Insert notes
-    for (let i = 0; i < noteInserts.length; i += batchSize) {
-      const batch = noteInserts.slice(i, i + batchSize)
-      await this.db.insert(postNotes).values(batch)
-      this.progress.progress(
-        Math.min(i + batchSize, noteInserts.length),
-        noteInserts.length,
-        'Notes'
-      )
-    }
-
+    await this.batchInsert(postNotes, noteInserts, 'Notes')
     return stats
   }
 
@@ -602,7 +538,8 @@ export class Importer {
     const postIds = this.getImportedPostIds()
     if (postIds.length === 0) return
 
-    await this.db.execute(sql`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Raw SQL execution requires flexible typing
+    await (this.db as any).execute(sql`
       UPDATE posts
       SET vote_count = (
         SELECT COUNT(*) FROM votes WHERE votes.post_id = posts.id
@@ -615,7 +552,8 @@ export class Importer {
     const postIds = this.getImportedPostIds()
     if (postIds.length === 0) return
 
-    await this.db.execute(sql`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Raw SQL execution requires flexible typing
+    await (this.db as any).execute(sql`
       UPDATE posts
       SET comment_count = (
         SELECT COUNT(*) FROM comments
@@ -623,6 +561,32 @@ export class Importer {
       )
       WHERE id = ANY(${postIds})
     `)
+  }
+
+  /**
+   * Batch insert helper with progress tracking
+   */
+  private async batchInsert<T extends AnyTable>(
+    table: T,
+    values: T['$inferInsert'][],
+    label: string,
+    onConflict: 'error' | 'ignore' = 'error'
+  ): Promise<void> {
+    const batchSize = this.options.batchSize ?? 100
+
+    for (let i = 0; i < values.length; i += batchSize) {
+      const batch = values.slice(i, i + batchSize)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic table insert requires flexible typing
+      const query = (this.db as any).insert(table).values(batch)
+
+      if (onConflict === 'ignore') {
+        await query.onConflictDoNothing()
+      } else {
+        await query
+      }
+
+      this.progress.progress(Math.min(i + batchSize, values.length), values.length, label)
+    }
   }
 
   /**

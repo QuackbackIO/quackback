@@ -26,7 +26,12 @@ import {
   intermediateVoteSchema,
   intermediateNoteSchema,
 } from './schema/validators'
-import type { IntermediateData, ImportOptions } from './schema/types'
+import type {
+  IntermediateData,
+  IntermediatePost,
+  IntermediateComment,
+  ImportOptions,
+} from './schema/types'
 import { convertUserVoice, printStats as printUserVoiceStats } from './adapters/uservoice'
 
 // CLI argument parsing
@@ -243,11 +248,17 @@ async function runIntermediateImport(args: CliArgs): Promise<void> {
     notes: [],
   }
 
-  // Parse posts
-  if (postsFile) {
-    console.log(`📄 Parsing posts from: ${postsFile}`)
-    const result = parseCSV(postsFile, intermediatePostSchema)
-    data.posts = result.data
+  // Helper to parse and log a file
+  function parseFile<T>(
+    file: string | undefined,
+    label: string,
+    schema: Parameters<typeof parseCSV<T>>[1]
+  ): T[] {
+    if (!file) return []
+
+    console.log(`📄 Parsing ${label} from: ${file}`)
+    const result = parseCSV(file, schema)
+
     if (result.errors.length > 0) {
       console.warn(`   ⚠️  ${result.errors.length} validation errors`)
       if (args.verbose) {
@@ -259,32 +270,22 @@ async function runIntermediateImport(args: CliArgs): Promise<void> {
         }
       }
     }
-    console.log(`   ✓ ${data.posts.length} posts parsed`)
+    console.log(`   ✓ ${result.data.length} ${label} parsed`)
+    return result.data
   }
 
-  // Parse comments
-  if (commentsFile) {
-    console.log(`📄 Parsing comments from: ${commentsFile}`)
-    const result = parseCSV(commentsFile, intermediateCommentSchema)
-    data.comments = result.data
-    console.log(`   ✓ ${data.comments.length} comments parsed`)
-  }
-
-  // Parse votes
-  if (votesFile) {
-    console.log(`📄 Parsing votes from: ${votesFile}`)
-    const result = parseCSV(votesFile, intermediateVoteSchema)
-    data.votes = result.data
-    console.log(`   ✓ ${data.votes.length} votes parsed`)
-  }
-
-  // Parse notes
-  if (notesFile) {
-    console.log(`📄 Parsing notes from: ${notesFile}`)
-    const result = parseCSV(notesFile, intermediateNoteSchema)
-    data.notes = result.data
-    console.log(`   ✓ ${data.notes.length} notes parsed`)
-  }
+  data.posts = parseFile(
+    postsFile,
+    'posts',
+    intermediatePostSchema as Parameters<typeof parseCSV<IntermediatePost>>[1]
+  )
+  data.comments = parseFile(
+    commentsFile,
+    'comments',
+    intermediateCommentSchema as Parameters<typeof parseCSV<IntermediateComment>>[1]
+  )
+  data.votes = parseFile(votesFile, 'votes', intermediateVoteSchema)
+  data.notes = parseFile(notesFile, 'notes', intermediateNoteSchema)
 
   await executeImport(data, args)
 }

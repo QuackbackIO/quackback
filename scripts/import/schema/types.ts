@@ -33,8 +33,8 @@ export interface IntermediatePost {
   board?: string
   /** Status slug (e.g., 'open', 'planned', 'in_progress', 'complete', 'closed') */
   status?: string
-  /** Moderation state */
-  moderation?: ModerationState
+  /** Moderation state (defaults to 'published' if not provided) */
+  moderation: ModerationState
   /** Comma-separated tag names */
   tags?: string
   /** Roadmap slug (for roadmap assignment) */
@@ -63,8 +63,8 @@ export interface IntermediateComment {
   authorName?: string
   /** Comment text content */
   body: string
-  /** Whether the author is a staff/team member */
-  isStaff?: boolean
+  /** Whether the author is a staff/team member (defaults to false if not provided) */
+  isStaff: boolean
   /** Creation timestamp (ISO 8601) */
   createdAt?: string
 }

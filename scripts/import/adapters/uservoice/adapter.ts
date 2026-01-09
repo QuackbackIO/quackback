@@ -36,6 +36,7 @@ export interface AdapterResult {
  * Convert UserVoice exports to intermediate format
  */
 export function convertUserVoice(options: UserVoiceAdapterOptions): AdapterResult {
+  const log = options.verbose ? console.log.bind(console) : () => {}
   const stats = {
     suggestionsRows: 0,
     uniquePosts: 0,
@@ -46,94 +47,28 @@ export function convertUserVoice(options: UserVoiceAdapterOptions): AdapterResul
   }
 
   // Parse the main suggestions export
-  if (options.verbose) {
-    console.log(`Reading suggestions from: ${options.suggestionsFile}`)
-  }
-
+  log(`Reading suggestions from: ${options.suggestionsFile}`)
   const suggestionsRaw = parseCSVRaw(options.suggestionsFile)
   stats.suggestionsRows = suggestionsRaw.data.length
-
-  if (options.verbose) {
-    console.log(`  Found ${suggestionsRaw.data.length} rows`)
-    console.log(`  Fields: ${suggestionsRaw.fields.slice(0, 10).join(', ')}...`)
-  }
+  log(`  Found ${suggestionsRaw.data.length} rows`)
+  log(`  Fields: ${suggestionsRaw.fields.slice(0, 10).join(', ')}...`)
 
   // Convert to typed rows and deduplicate
-  const rows = suggestionsRaw.data.map((row) => {
-    const typed: UserVoiceRow = {
-      ideaId: row.ideaId ?? row.id ?? '',
-      ideaTitle: row.ideaTitle ?? row.title ?? '',
-      ideaDescription: row.ideaDescription ?? row.description ?? '',
-      ideaCreatorEmailAddress: row.ideaCreatorEmailAddress,
-      ideaCreatorName: row.ideaCreatorName,
-      forumName: row.forumName,
-      labels: row.labels,
-      ideaListNames: row.ideaListNames,
-      publicStatusName: row.publicStatusName,
-      moderationState: row.moderationState,
-      votersCount: row.votersCount,
-      createdTimestamp: row.createdTimestamp,
-      publicStatusUpdateMessage: row.publicStatusUpdateMessage,
-      publicStatusUpdatedTimestamp: row.publicStatusUpdatedTimestamp,
-      publicStatusCreatorEmailAddress: row.publicStatusCreatorEmailAddress,
-      userEmailAddress: row.userEmailAddress,
-      userName: row.userName,
-      linkedIdeaCreationDate: row.linkedIdeaCreationDate,
-    }
-    return typed
-  })
-
+  const rows = suggestionsRaw.data.map((row) => toUserVoiceRow(row))
   const deduped = deduplicateRows(rows)
   stats.uniquePosts = deduped.stats.uniquePosts
   stats.extractedVotes = deduped.stats.totalVotes
   stats.duplicateVotes = deduped.stats.duplicateVotes
-
-  if (options.verbose) {
-    console.log(`  Deduplicated to ${deduped.posts.length} unique posts`)
-    console.log(`  Extracted ${deduped.votes.length} votes`)
-  }
+  log(`  Deduplicated to ${deduped.posts.length} unique posts`)
+  log(`  Extracted ${deduped.votes.length} votes`)
 
   // Parse comments if provided
-  const commentsData: IntermediateComment[] = []
-  if (options.commentsFile) {
-    if (options.verbose) {
-      console.log(`Reading comments from: ${options.commentsFile}`)
-    }
-
-    const commentsRaw = parseCSVRaw(options.commentsFile)
-    for (const row of commentsRaw.data) {
-      const comment = convertComment(row)
-      if (comment) {
-        commentsData.push(comment)
-      }
-    }
-    stats.comments = commentsData.length
-
-    if (options.verbose) {
-      console.log(`  Parsed ${commentsData.length} comments`)
-    }
-  }
+  const commentsData = parseOptionalFile(options.commentsFile, convertComment, 'comments', log)
+  stats.comments = commentsData.length
 
   // Parse notes if provided
-  const notesData: IntermediateNote[] = []
-  if (options.notesFile) {
-    if (options.verbose) {
-      console.log(`Reading notes from: ${options.notesFile}`)
-    }
-
-    const notesRaw = parseCSVRaw(options.notesFile)
-    for (const row of notesRaw.data) {
-      const note = convertNote(row)
-      if (note) {
-        notesData.push(note)
-      }
-    }
-    stats.notes = notesData.length
-
-    if (options.verbose) {
-      console.log(`  Parsed ${notesData.length} notes`)
-    }
-  }
+  const notesData = parseOptionalFile(options.notesFile, convertNote, 'notes', log)
+  stats.notes = notesData.length
 
   return {
     data: {
@@ -144,6 +79,50 @@ export function convertUserVoice(options: UserVoiceAdapterOptions): AdapterResul
     },
     stats,
   }
+}
+
+function toUserVoiceRow(row: Record<string, string>): UserVoiceRow {
+  return {
+    ideaId: row.ideaId ?? row.id ?? '',
+    ideaTitle: row.ideaTitle ?? row.title ?? '',
+    ideaDescription: row.ideaDescription ?? row.description ?? '',
+    ideaCreatorEmailAddress: row.ideaCreatorEmailAddress,
+    ideaCreatorName: row.ideaCreatorName,
+    forumName: row.forumName,
+    labels: row.labels,
+    ideaListNames: row.ideaListNames,
+    publicStatusName: row.publicStatusName,
+    moderationState: row.moderationState,
+    votersCount: row.votersCount,
+    createdTimestamp: row.createdTimestamp,
+    publicStatusUpdateMessage: row.publicStatusUpdateMessage,
+    publicStatusUpdatedTimestamp: row.publicStatusUpdatedTimestamp,
+    publicStatusCreatorEmailAddress: row.publicStatusCreatorEmailAddress,
+    userEmailAddress: row.userEmailAddress,
+    userName: row.userName,
+    linkedIdeaCreationDate: row.linkedIdeaCreationDate,
+  }
+}
+
+function parseOptionalFile<T>(
+  filePath: string | undefined,
+  converter: (row: Record<string, string>) => T | null,
+  label: string,
+  log: (msg: string) => void
+): T[] {
+  if (!filePath) return []
+
+  log(`Reading ${label} from: ${filePath}`)
+  const raw = parseCSVRaw(filePath)
+  const results: T[] = []
+
+  for (const row of raw.data) {
+    const converted = converter(row)
+    if (converted) results.push(converted)
+  }
+
+  log(`  Parsed ${results.length} ${label}`)
+  return results
 }
 
 /**

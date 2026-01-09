@@ -11,7 +11,7 @@
     "@quackback/db": "workspace:*",
     "@quackback/ids": "workspace:*",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "^0.44.2",
+    "drizzle-orm": "^0.45.1",
     "papaparse": "^5.5.2",
     "postgres": "^3.4.7",
     "zod": "^3.24.2"
