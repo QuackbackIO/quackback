@@ -1,11 +1,11 @@
 import { useTheme } from 'next-themes'
-import { Monitor, Moon, Sun } from 'lucide-react'
+import { ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/react/24/solid'
 import { useEffect, useState } from 'react'
 
 const themes = [
-  { value: 'system', label: 'System', icon: Monitor },
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: ComputerDesktopIcon },
+  { value: 'light', label: 'Light', icon: SunIcon },
+  { value: 'dark', label: 'Dark', icon: MoonIcon },
 ] as const
 
 export function ThemeSwitcher() {

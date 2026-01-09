@@ -1,19 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import {
-  Check,
-  MessageSquare,
-  ArrowRight,
-  ArrowLeft,
-  LayoutDashboard,
-  Globe,
-  Sparkles,
-  Building2,
-  Mail,
-  User,
-  Loader2,
-  Rocket,
-} from 'lucide-react'
+  CheckIcon,
+  ChatBubbleLeftIcon,
+  ArrowRightIcon,
+  ArrowLeftIcon,
+  Squares2X2Icon,
+  GlobeAltIcon,
+  SparklesIcon,
+  BuildingOffice2Icon,
+  EnvelopeIcon,
+  UserIcon,
+  ArrowPathIcon,
+  RocketLaunchIcon,
+} from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -325,7 +325,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                         htmlFor="email"
                         className="text-sm font-medium flex items-center gap-2"
                       >
-                        <Mail className="h-4 w-4 text-primary" />
+                        <EnvelopeIcon className="h-4 w-4 text-primary" />
                         Email address
                       </label>
                       <Input
@@ -347,13 +347,13 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                     >
                       {isLoading ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                           Sending code...
                         </>
                       ) : (
                         <>
                           Continue with email
-                          <ArrowRight className="ml-2 h-4 w-4" />
+                          <ArrowRightIcon className="ml-2 h-4 w-4" />
                         </>
                       )}
                     </Button>
@@ -379,7 +379,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                       }}
                       className="flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      <ArrowLeftIcon className="mr-2 h-4 w-4" />
                       Back to email
                     </button>
 
@@ -496,7 +496,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
 
                     {code.length === 6 && isLoading && (
                       <div className="flex items-center justify-center gap-2 text-primary py-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
                         <span className="text-sm font-medium">Verifying...</span>
                       </div>
                     )}
@@ -540,7 +540,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
             {/* Header */}
             <div className="flex flex-col items-center space-y-4 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                <Building2 className="h-6 w-6 text-primary" />
+                <BuildingOffice2Icon className="h-6 w-6 text-primary" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
@@ -572,7 +572,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                         htmlFor="userName"
                         className="text-sm font-medium flex items-center gap-2"
                       >
-                        <User className="h-4 w-4 text-primary" />
+                        <UserIcon className="h-4 w-4 text-primary" />
                         Your name
                       </label>
                       <Input
@@ -593,7 +593,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                       htmlFor="workspaceName"
                       className="text-sm font-medium flex items-center gap-2"
                     >
-                      <Building2 className="h-4 w-4 text-primary" />
+                      <BuildingOffice2Icon className="h-4 w-4 text-primary" />
                       Workspace name
                     </label>
                     <Input
@@ -615,13 +615,13 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                         Creating workspace...
                       </>
                     ) : (
                       <>
                         Continue
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRightIcon className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
@@ -644,7 +644,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
             {/* Header */}
             <div className="flex flex-col items-center space-y-4 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                <MessageSquare className="h-6 w-6 text-primary" />
+                <ChatBubbleLeftIcon className="h-6 w-6 text-primary" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
@@ -707,13 +707,13 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                         Creating board...
                       </>
                     ) : (
                       <>
                         Create board
-                        <Rocket className="ml-2 h-4 w-4" />
+                        <RocketLaunchIcon className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
@@ -736,7 +736,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
             {/* Success state */}
             <div className="flex flex-col items-center space-y-4 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary shadow-sm">
-                <Check className="h-8 w-8 text-white" />
+                <CheckIcon className="h-8 w-8 text-white" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-4xl font-bold tracking-tight text-foreground">
@@ -759,17 +759,17 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                 <div className="space-y-3">
                   {[
                     {
-                      icon: LayoutDashboard,
+                      icon: Squares2X2Icon,
                       title: 'Manage feedback',
                       desc: 'Review, organize, and respond to submissions',
                     },
                     {
-                      icon: Globe,
+                      icon: GlobeAltIcon,
                       title: 'Share your portal',
                       desc: 'Invite users to submit and vote on ideas',
                     },
                     {
-                      icon: Sparkles,
+                      icon: SparklesIcon,
                       title: 'Customize your portal',
                       desc: 'Add statuses, tags, and roadmap views',
                     },
@@ -794,7 +794,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                   className="w-full bg-primary hover:bg-primary text-white"
                 >
                   Go to dashboard
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRightIcon className="ml-2 h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>

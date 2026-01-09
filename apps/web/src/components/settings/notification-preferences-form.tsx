@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Switch } from '@/components/ui/switch'
-import { Loader2 } from 'lucide-react'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import {
   getNotificationPreferencesFn,
   updateNotificationPreferencesFn,
@@ -64,7 +64,7 @@ export function NotificationPreferencesForm() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <ArrowPathIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -99,7 +99,7 @@ export function NotificationPreferencesForm() {
         </div>
         <div className="flex items-center gap-2">
           {saving === 'emailStatusChange' && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           )}
           <Switch
             checked={preferences.emailStatusChange}
@@ -119,7 +119,7 @@ export function NotificationPreferencesForm() {
         </div>
         <div className="flex items-center gap-2">
           {saving === 'emailNewComment' && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           )}
           <Switch
             checked={preferences.emailNewComment}

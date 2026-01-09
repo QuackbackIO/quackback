@@ -1,10 +1,10 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { User, Settings } from 'lucide-react'
+import { UserIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { label: 'Profile', to: '/settings/profile', icon: User },
-  { label: 'Preferences', to: '/settings/preferences', icon: Settings },
+  { label: 'Profile', to: '/settings/profile', icon: UserIcon },
+  { label: 'Preferences', to: '/settings/preferences', icon: Cog6ToothIcon },
 ]
 
 export function SettingsNav() {

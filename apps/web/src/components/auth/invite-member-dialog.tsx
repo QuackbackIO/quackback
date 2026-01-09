@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { inviteSchema, type InviteInput } from '@/lib/schemas/auth'
 import {
   Dialog,
@@ -89,7 +89,7 @@ export function InviteMemberDialog({ open, onClose }: InviteMemberDialogProps) {
         {success ? (
           <div className="py-8 flex flex-col items-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
-              <CheckCircle2 className="h-6 w-6 text-primary" />
+              <CheckCircleIcon className="h-6 w-6 text-primary" />
             </div>
             <div className="text-lg font-semibold text-foreground">Invitation sent!</div>
             <p className="mt-2 text-sm text-muted-foreground text-center">

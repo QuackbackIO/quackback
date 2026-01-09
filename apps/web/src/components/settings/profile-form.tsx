@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
-import { Camera, Loader2, Trash2 } from 'lucide-react'
+import { CameraIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -201,7 +201,7 @@ export function ProfileForm({
             </Avatar>
             {isUploadingAvatar && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
-                <Loader2 className="h-6 w-6 animate-spin text-white" />
+                <ArrowPathIcon className="h-6 w-6 animate-spin text-white" />
               </div>
             )}
           </div>
@@ -214,12 +214,12 @@ export function ProfileForm({
             >
               {isUploadingAvatar ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
                   Uploading...
                 </>
               ) : (
                 <>
-                  <Camera className="h-4 w-4 mr-2" />
+                  <CameraIcon className="h-4 w-4 mr-2" />
                   Change avatar
                 </>
               )}
@@ -233,9 +233,9 @@ export function ProfileForm({
                 className="text-destructive hover:text-destructive"
               >
                 {isDeletingAvatar ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Trash2 className="h-4 w-4" />
+                  <TrashIcon className="h-4 w-4" />
                 )}
               </Button>
             )}
@@ -279,7 +279,7 @@ export function ProfileForm({
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
                     Saving...
                   </>
                 ) : (

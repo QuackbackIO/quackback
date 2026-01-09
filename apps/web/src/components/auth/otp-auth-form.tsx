@@ -3,7 +3,12 @@ import { OAuthButtons } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, InfoIcon, Mail, ArrowLeft } from 'lucide-react'
+import {
+  ArrowPathIcon,
+  InformationCircleIcon,
+  EnvelopeIcon,
+  ArrowLeftIcon,
+} from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/auth/client'
 
 interface OrgAuthConfig {
@@ -197,7 +202,7 @@ export function OTPAuthForm({
   if (loadingInvitation) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <ArrowPathIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -206,7 +211,7 @@ export function OTPAuthForm({
   if (invitationId && !invitation && error) {
     return (
       <Alert variant="destructive">
-        <InfoIcon className="h-4 w-4" />
+        <InformationCircleIcon className="h-4 w-4" />
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     )
@@ -222,7 +227,7 @@ export function OTPAuthForm({
   ) {
     return (
       <Alert>
-        <InfoIcon className="h-4 w-4" />
+        <InformationCircleIcon className="h-4 w-4" />
         <AlertDescription>
           Signup is not enabled for this organization. Please contact your administrator for an
           invitation.
@@ -237,7 +242,7 @@ export function OTPAuthForm({
       {invitation && (
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
           <div className="flex items-start gap-3">
-            <Mail className="h-5 w-5 text-primary mt-0.5" />
+            <EnvelopeIcon className="h-5 w-5 text-primary mt-0.5" />
             <div>
               <p className="font-medium text-foreground">You&apos;ve been invited!</p>
               <p className="text-sm text-muted-foreground mt-1">
@@ -306,7 +311,7 @@ export function OTPAuthForm({
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                 Sending code...
               </>
             ) : (
@@ -324,7 +329,7 @@ export function OTPAuthForm({
             onClick={handleBack}
             className="flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="mr-1 h-4 w-4" />
+            <ArrowLeftIcon className="mr-1 h-4 w-4" />
             Back
           </button>
 
@@ -361,7 +366,7 @@ export function OTPAuthForm({
           <Button type="submit" disabled={loading || code.length !== 6} className="w-full">
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                 Verifying...
               </>
             ) : (
