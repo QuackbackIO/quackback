@@ -32,9 +32,9 @@ export function FilterList<T extends { id: string; name: string }>({
             aria-selected={isSelected}
             onClick={(e) => handleClick(item.id, e)}
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-md text-xs transition-colors',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
               isSelected
-                ? 'bg-muted text-foreground font-medium'
+                ? 'bg-muted text-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >

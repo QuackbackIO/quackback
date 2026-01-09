@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import {
   EllipsisHorizontalIcon,
   PencilIcon,
@@ -37,10 +37,10 @@ export function RowQuickActions({
   onStatusChange,
   onEdit,
   onDelete,
-}: RowQuickActionsProps) {
+}: RowQuickActionsProps): React.ReactElement {
   const [statusOpen, setStatusOpen] = useState(false)
 
-  const handleCopyLink = useCallback(async () => {
+  async function handleCopyLink(): Promise<void> {
     try {
       const url = `${window.location.origin}/admin/feedback/posts/${post.id}`
       await navigator.clipboard.writeText(url)
@@ -48,11 +48,7 @@ export function RowQuickActions({
     } catch {
       toast.error('Failed to copy link')
     }
-  }, [post.id])
-
-  const handleViewInPortal = useCallback(() => {
-    window.open(`/b/${post.board.slug}/posts/${post.id}`, '_blank')
-  }, [post.board.slug, post.id])
+  }
 
   return (
     <div className="flex items-center gap-0.5">
@@ -117,7 +113,9 @@ export function RowQuickActions({
               Edit
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={handleViewInPortal}>
+          <DropdownMenuItem
+            onClick={() => window.open(`/b/${post.board.slug}/posts/${post.id}`, '_blank')}
+          >
             <ArrowTopRightOnSquareIcon className="h-4 w-4" />
             View in Portal
           </DropdownMenuItem>

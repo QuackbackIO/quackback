@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -94,7 +94,7 @@ export function FeedbackTableView({
   onToggleStatus,
   onToggleBoard,
   onStatusChange,
-}: FeedbackTableViewProps) {
+}: FeedbackTableViewProps): React.ReactElement {
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [searchValue, setSearchValue] = useState(search || '')
 
@@ -103,18 +103,15 @@ export function FeedbackTableView({
     setSearchValue(search || '')
   }, [search])
 
-  // Update parent when search changes (debounced)
-  const prevSearchRef = useRef(searchValue)
+  // Debounce search input before updating parent
   useEffect(() => {
-    if (searchValue === prevSearchRef.current) return
-
     const timeoutId = setTimeout(() => {
-      prevSearchRef.current = searchValue
-      onSearchChange(searchValue || undefined)
-    }, 300) // 300ms debounce
-
+      if (searchValue !== (search || '')) {
+        onSearchChange(searchValue || undefined)
+      }
+    }, 300)
     return () => clearTimeout(timeoutId)
-  }, [searchValue, onSearchChange])
+  }, [searchValue, search, onSearchChange])
 
   // Infinite scroll observer
   useEffect(() => {
@@ -184,13 +181,6 @@ export function FeedbackTableView({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [posts, focusedPostId, onFocusPost, onNavigateToPost])
 
-  const handleStatusChange = useCallback(
-    (postId: string) => (statusId: StatusId) => {
-      onStatusChange(postId, statusId)
-    },
-    [onStatusChange]
-  )
-
   const headerContent = (
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
       {/* Search and Sort Row */}
@@ -231,22 +221,20 @@ export function FeedbackTableView({
         {headerAction}
       </div>
 
-      {/* Active Filters Bar */}
-      {hasActiveFilters && (
-        <div className="mt-2">
-          <ActiveFiltersBar
-            filters={filters}
-            onFiltersChange={onFiltersChange}
-            onClearAll={onClearFilters}
-            boards={boards}
-            tags={tags}
-            statuses={statuses}
-            members={members}
-            onToggleStatus={onToggleStatus}
-            onToggleBoard={onToggleBoard}
-          />
-        </div>
-      )}
+      {/* Active Filters Bar - Always visible */}
+      <div className="mt-2">
+        <ActiveFiltersBar
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          onClearAll={onClearFilters}
+          boards={boards}
+          tags={tags}
+          statuses={statuses}
+          members={members}
+          onToggleStatus={onToggleStatus}
+          onToggleBoard={onToggleBoard}
+        />
+      </div>
     </div>
   )
 
@@ -284,7 +272,7 @@ export function FeedbackTableView({
             statuses={statuses}
             isFocused={post.id === focusedPostId}
             onClick={() => onNavigateToPost(post.id)}
-            onStatusChange={handleStatusChange(post.id)}
+            onStatusChange={(statusId) => onStatusChange(post.id, statusId)}
           />
         ))}
       </div>
