@@ -115,7 +115,7 @@ function CommentItem({
   const canNest = depth < maxDepth
   const hasReplies = comment.replies.length > 0
 
-  const handleReaction = async (emoji: string) => {
+  async function handleReaction(emoji: string): Promise<void> {
     setShowEmojiPicker(false)
     startTransition(async () => {
       try {

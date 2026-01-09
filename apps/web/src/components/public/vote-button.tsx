@@ -25,7 +25,7 @@ export function VoteButton({
     initialHasVoted,
   })
 
-  const onClick = () => {
+  function onClick(): void {
     if (disabled && onAuthRequired) {
       onAuthRequired()
       return

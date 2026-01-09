@@ -85,7 +85,7 @@ export function FeedbackHeader({
 
   const selectedBoard = boards.find((b) => b.id === selectedBoardId)
 
-  const handleContentChange = useCallback((json: JSONContent) => {
+  const handleContentChange = useCallback(function (json: JSONContent): void {
     setContentJson(json)
   }, [])
 
@@ -143,7 +143,7 @@ export function FeedbackHeader({
     setExpanded(false)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  function handleKeyDown(e: React.KeyboardEvent): void {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
       handleSubmit()

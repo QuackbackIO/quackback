@@ -256,11 +256,10 @@ export function OTPAuthForm({
       )}
 
       {/* OAuth Providers (GitHub, Google) - show on initial email step for non-invitation flow */}
-      {/* If oauthConfig is provided, use it; otherwise fall back to showOAuth for backward compatibility */}
       {orgSlug &&
         step === 'email' &&
         !invitation &&
-        (oauthConfig ? oauthConfig.github || oauthConfig.google : showOAuth) && (
+        (oauthConfig?.github || oauthConfig?.google || showOAuth) && (
           <>
             <OAuthButtons
               orgSlug={orgSlug}

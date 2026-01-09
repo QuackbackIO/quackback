@@ -104,23 +104,28 @@ export function SubscriptionBell({
   )
 
   // Determine current subscription level
-  const getLevel = (): SubscriptionLevel => {
+  function getSubscriptionLevel(): SubscriptionLevel {
     if (!status.subscribed) return 'none'
     if (status.muted) return 'status_only'
     return 'all'
   }
 
-  const level = getLevel()
+  const level = getSubscriptionLevel()
 
   // Icon: Bell when not subscribed, BellRing when subscribed (any level)
   const isSubscribed = status.subscribed
   const BellIconComponent = isSubscribed ? BellAlertIcon : BellIcon
 
+  function getAriaLabel(): string {
+    if (!isSubscribed) return 'Subscribe to notifications'
+    if (level === 'status_only') return 'Subscribed to status changes only'
+    return 'Subscribed to all activity'
+  }
+
   // Button click handler for non-dropdown scenarios
-  const handleButtonClick = () => {
+  function handleButtonClick(): void {
     if (disabled && onAuthRequired) {
       onAuthRequired()
-      return
     }
   }
 
@@ -130,13 +135,7 @@ export function SubscriptionBell({
         <button
           onClick={handleButtonClick}
           disabled={loading}
-          aria-label={
-            !isSubscribed
-              ? 'Subscribe to notifications'
-              : level === 'status_only'
-                ? 'Subscribed to status changes only'
-                : 'Subscribed to all activity'
-          }
+          aria-label={getAriaLabel()}
           className={cn(
             'flex items-center justify-center [border-radius:calc(var(--radius)*0.8)] p-2 transition-colors',
             !isSubscribed

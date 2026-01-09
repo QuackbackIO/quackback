@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -60,11 +59,6 @@ export function PortalHeader({
   const { session } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
-
-  // DEBUG: Log context availability on mount
-  useEffect(() => {
-    console.log('[PortalHeader] authPopover context:', authPopover ? 'AVAILABLE' : 'NULL')
-  }, [authPopover])
 
   // Use custom display name if provided, otherwise fall back to org name
   const displayName = headerDisplayName || orgName
@@ -168,23 +162,10 @@ export function PortalHeader({
       ) : openAuthPopover ? (
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              console.log('[PortalHeader] Login button clicked')
-              openAuthPopover({ mode: 'login' })
-            }}
-          >
+          <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>
             Log in
           </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              console.log('[PortalHeader] Signup button clicked')
-              openAuthPopover({ mode: 'signup' })
-            }}
-          >
+          <Button size="sm" onClick={() => openAuthPopover({ mode: 'signup' })}>
             Sign up
           </Button>
         </div>

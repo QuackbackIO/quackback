@@ -49,7 +49,7 @@ export function FeedbackToolbar({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  function handleSearchSubmit(e: React.FormEvent): void {
     e.preventDefault()
     onSearchChange(searchValue)
     setSearchOpen(false)

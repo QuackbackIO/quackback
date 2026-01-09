@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/react/24/solid'
-import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 const themes = [
   { value: 'system', label: 'System', icon: ComputerDesktopIcon },
@@ -41,11 +42,12 @@ export function ThemeSwitcher() {
           <button
             key={t.value}
             onClick={() => setTheme(t.value)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg border transition-all',
               isActive
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-            }`}
+            )}
           >
             <t.icon className="h-4 w-4" />
             <span className="text-sm font-medium">{t.label}</span>

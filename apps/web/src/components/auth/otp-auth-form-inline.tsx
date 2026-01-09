@@ -35,8 +35,6 @@ interface OTPAuthFormInlineProps {
   invitationId?: string | null
   /** Organization slug for OAuth */
   orgSlug: string
-  /** Called when auth completes (popup broadcasts success) - handled by parent via BroadcastChannel */
-  _onSuccess?: () => void
   /** Called to switch between login/signup modes */
   onModeSwitch?: (mode: 'login' | 'signup') => void
 }
@@ -95,11 +93,11 @@ export function OTPAuthFormInline({
       try {
         const response = await fetch(`/api/auth/invitation/${invitationId}`)
         if (response.ok) {
-          const data = await response.json()
+          const data = (await response.json()) as InvitationInfo
           setInvitation(data)
           setEmail(data.email)
         } else {
-          const data = await response.json()
+          const data = (await response.json()) as { error?: string }
           setError(data.error || 'Invalid or expired invitation')
         }
       } catch {
