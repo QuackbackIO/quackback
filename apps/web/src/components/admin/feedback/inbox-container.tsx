@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
@@ -60,6 +60,20 @@ export function InboxContainer({
 
   // UI state from Zustand
   const { isEditDialogOpen, setEditDialogOpen } = useInboxUIStore()
+
+  // Memoize board/status ID arrays to avoid recreating on every render
+  const allBoardIds = useMemo(() => boards.map((b) => b.id), [boards])
+  const allStatusSlugs = useMemo(() => statuses.map((s) => s.slug), [statuses])
+
+  // Memoized toggle handlers
+  const handleToggleBoard = useCallback(
+    (boardId: string) => toggleBoard(boardId, allBoardIds),
+    [toggleBoard, allBoardIds]
+  )
+  const handleToggleStatus = useCallback(
+    (statusSlug: string) => toggleStatus(statusSlug, allStatusSlugs),
+    [toggleStatus, allStatusSlugs]
+  )
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -154,18 +168,8 @@ export function InboxContainer({
             tags={tags}
             statuses={statuses}
             members={members}
-            onToggleBoard={(boardId) =>
-              toggleBoard(
-                boardId,
-                boards.map((b) => b.id)
-              )
-            }
-            onToggleStatus={(statusSlug) =>
-              toggleStatus(
-                statusSlug,
-                statuses.map((s) => s.slug)
-              )
-            }
+            onToggleBoard={handleToggleBoard}
+            onToggleStatus={handleToggleStatus}
             isBoardSelected={isBoardSelected}
             isStatusSelected={isStatusSelected}
           />
