@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
@@ -54,26 +54,10 @@ export function InboxContainer({
     hasActiveFilters,
     toggleBoard,
     toggleStatus,
-    isBoardSelected,
-    isStatusSelected,
   } = useInboxFilters()
 
   // UI state from Zustand
   const { isEditDialogOpen, setEditDialogOpen } = useInboxUIStore()
-
-  // Memoize board/status ID arrays to avoid recreating on every render
-  const allBoardIds = useMemo(() => boards.map((b) => b.id), [boards])
-  const allStatusSlugs = useMemo(() => statuses.map((s) => s.slug), [statuses])
-
-  // Memoized toggle handlers
-  const handleToggleBoard = useCallback(
-    (boardId: string) => toggleBoard(boardId, allBoardIds),
-    [toggleBoard, allBoardIds]
-  )
-  const handleToggleStatus = useCallback(
-    (statusSlug: string) => toggleStatus(statusSlug, allStatusSlugs),
-    [toggleStatus, allStatusSlugs]
-  )
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -167,17 +151,17 @@ export function InboxContainer({
             boards={boards}
             tags={tags}
             statuses={statuses}
-            members={members}
-            onToggleBoard={handleToggleBoard}
-            onToggleStatus={handleToggleStatus}
-            isBoardSelected={isBoardSelected}
-            isStatusSelected={isStatusSelected}
           />
         }
         postList={
           <InboxPostList
             posts={posts}
             statuses={statuses}
+            boards={boards}
+            tags={tags}
+            members={members}
+            filters={filters}
+            onFiltersChange={setFilters}
             hasMore={!!hasMore}
             isLoading={isLoading}
             isLoadingMore={isLoadingMore}
@@ -190,6 +174,8 @@ export function InboxContainer({
             onSearchChange={(search) => setFilters({ search })}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
+            onToggleStatus={toggleStatus}
+            onToggleBoard={toggleBoard}
             headerAction={
               <CreatePostDialog
                 boards={boards}

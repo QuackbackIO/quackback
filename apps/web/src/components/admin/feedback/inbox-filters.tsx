@@ -1,17 +1,8 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
-import type { TeamMember } from '@/lib/members'
 
 interface InboxFiltersProps {
   filters: InboxFilters
@@ -19,15 +10,6 @@ interface InboxFiltersProps {
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
-  members: TeamMember[]
-  /** Toggle a board's selection using smart include/exclude logic */
-  onToggleBoard: (boardId: string) => void
-  /** Toggle a status's selection using smart include/exclude logic */
-  onToggleStatus: (statusSlug: string) => void
-  /** Check if a board is currently selected */
-  isBoardSelected: (boardId: string) => boolean
-  /** Check if a status is currently selected */
-  isStatusSelected: (statusSlug: string) => boolean
 }
 
 function FilterSection({
@@ -62,13 +44,21 @@ export function InboxFiltersPanel({
   boards,
   tags,
   statuses,
-  members,
-  onToggleBoard,
-  onToggleStatus,
-  isBoardSelected,
-  isStatusSelected,
 }: InboxFiltersProps) {
-  // Tag toggle still uses simple include logic (no exclude mode needed for tags)
+  // Get current single-select values from filters
+  // If multiple statuses/boards are selected (from URL), take the first one for sidebar display
+  const selectedStatusSlug = filters.status?.length === 1 ? filters.status[0] : undefined
+  const selectedBoardId = filters.board?.length === 1 ? filters.board[0] : undefined
+
+  const handleStatusSelect = (slug: string | undefined) => {
+    onFiltersChange({ status: slug ? [slug] : undefined })
+  }
+
+  const handleBoardSelect = (id: string | undefined) => {
+    onFiltersChange({ board: id ? [id] : undefined })
+  }
+
+  // Tag toggle (multi-select, kept as-is)
   const handleTagToggle = (tagId: string) => {
     const currentTags = filters.tags || []
     const newTags = currentTags.includes(tagId)
@@ -79,54 +69,44 @@ export function InboxFiltersPanel({
 
   return (
     <div className="space-y-4">
-      {/* Status Filter */}
+      {/* Status Filter - Single Select */}
       <FilterSection title="Status">
-        <div className="space-y-1.5">
-          {statuses.map((status) => (
-            <label
-              key={status.id}
-              className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
-            >
-              <Checkbox
-                checked={isStatusSelected(status.slug)}
-                onCheckedChange={() => onToggleStatus(status.slug)}
-              />
-              <span
-                className="h-2 w-2 rounded-full shrink-0"
-                style={{ backgroundColor: status.color }}
-                aria-hidden="true"
-              />
-              <span className="text-foreground/80 group-hover:text-foreground transition-colors">
-                {status.name}
-              </span>
-            </label>
-          ))}
-        </div>
+        <StatusFilterList
+          statuses={statuses.map((s) => ({
+            id: s.id,
+            slug: s.slug,
+            name: s.name,
+            color: s.color,
+          }))}
+          selectedSlug={selectedStatusSlug}
+          onSelect={handleStatusSelect}
+        />
+        {/* Show indicator if multiple statuses are selected via URL/advanced filter */}
+        {filters.status && filters.status.length > 1 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {filters.status.length} statuses selected via advanced filters
+          </p>
+        )}
       </FilterSection>
 
-      {/* Board Filter */}
+      {/* Board Filter - Single Select */}
       {boards.length > 0 && (
         <FilterSection title="Board">
-          <div className="space-y-1.5">
-            {boards.map((board) => (
-              <label
-                key={board.id}
-                className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
-              >
-                <Checkbox
-                  checked={isBoardSelected(board.id)}
-                  onCheckedChange={() => onToggleBoard(board.id)}
-                />
-                <span className="text-foreground/80 group-hover:text-foreground transition-colors truncate">
-                  {board.name}
-                </span>
-              </label>
-            ))}
-          </div>
+          <BoardFilterList
+            boards={boards}
+            selectedId={selectedBoardId}
+            onSelect={handleBoardSelect}
+          />
+          {/* Show indicator if multiple boards are selected via URL/advanced filter */}
+          {filters.board && filters.board.length > 1 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {filters.board.length} boards selected via advanced filters
+            </p>
+          )}
         </FilterSection>
       )}
 
-      {/* Tags Filter */}
+      {/* Tags Filter - Multi-select chips */}
       {tags.length > 0 && (
         <FilterSection title="Tags" defaultOpen={true}>
           <div className="flex flex-wrap gap-1.5">
@@ -150,69 +130,6 @@ export function InboxFiltersPanel({
           </div>
         </FilterSection>
       )}
-
-      {/* Owner Filter */}
-      {members.length > 0 && (
-        <FilterSection title="Assigned To" defaultOpen={true}>
-          <Select
-            value={filters.owner || 'all'}
-            onValueChange={(value) =>
-              onFiltersChange({ owner: value === 'all' ? undefined : value })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Anyone" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Anyone</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {members.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name || member.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FilterSection>
-      )}
-
-      {/* Date Range Filter */}
-      <FilterSection title="Date Range" defaultOpen={false}>
-        <div className="space-y-3">
-          <div>
-            <label className="text-[11px] text-muted-foreground mb-1 block">From</label>
-            <Input
-              type="date"
-              value={filters.dateFrom || ''}
-              onChange={(e) => onFiltersChange({ dateFrom: e.target.value || undefined })}
-              className="h-8 text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] text-muted-foreground mb-1 block">To</label>
-            <Input
-              type="date"
-              value={filters.dateTo || ''}
-              onChange={(e) => onFiltersChange({ dateTo: e.target.value || undefined })}
-              className="h-8 text-sm"
-            />
-          </div>
-        </div>
-      </FilterSection>
-
-      {/* Min Votes Filter */}
-      <FilterSection title="Minimum Votes" defaultOpen={false}>
-        <Input
-          type="number"
-          min={0}
-          placeholder="0"
-          value={filters.minVotes || ''}
-          onChange={(e) =>
-            onFiltersChange({ minVotes: e.target.value ? parseInt(e.target.value, 10) : undefined })
-          }
-          className="h-8 text-sm"
-        />
-      </FilterSection>
     </div>
   )
 }

@@ -12,12 +12,19 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { InboxPostCard } from '@/components/admin/feedback/inbox-post-card'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
-import type { PostListItem, PostStatusEntity } from '@/lib/db-types'
+import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
+import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/db-types'
+import type { TeamMember } from '@/lib/members'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 
 interface InboxPostListProps {
   posts: PostListItem[]
   statuses: PostStatusEntity[]
+  boards: Board[]
+  tags: Tag[]
+  members: TeamMember[]
+  filters: InboxFilters
+  onFiltersChange: (updates: Partial<InboxFilters>) => void
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean
@@ -31,6 +38,8 @@ interface InboxPostListProps {
   hasActiveFilters: boolean
   onClearFilters: () => void
   headerAction?: React.ReactNode
+  onToggleStatus: (slug: string) => void
+  onToggleBoard: (id: string) => void
 }
 
 function PostListSkeleton() {
@@ -73,6 +82,11 @@ function PostListSkeleton() {
 export function InboxPostList({
   posts,
   statuses,
+  boards,
+  tags,
+  members,
+  filters,
+  onFiltersChange,
   hasMore,
   isLoading,
   isLoadingMore,
@@ -86,6 +100,8 @@ export function InboxPostList({
   hasActiveFilters,
   onClearFilters,
   headerAction,
+  onToggleStatus,
+  onToggleBoard,
 }: InboxPostListProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [searchValue, setSearchValue] = useState(search || '')
@@ -167,42 +183,59 @@ export function InboxPostList({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [posts, selectedPostId, onSelectPost])
 
+  const activeFiltersBar = (
+    <ActiveFiltersBar
+      filters={filters}
+      onFiltersChange={onFiltersChange}
+      onClearAll={onClearFilters}
+      boards={boards}
+      tags={tags}
+      statuses={statuses}
+      members={members}
+      onToggleStatus={onToggleStatus}
+      onToggleBoard={onToggleBoard}
+    />
+  )
+
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5 flex items-center gap-2">
-      <div className="relative flex-1">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder="Search..."
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
-          data-search-input
-        />
-        {searchValue && (
-          <button
-            type="button"
-            onClick={() => setSearchValue('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
+      {activeFiltersBar}
+      <div className="border-b border-border/50 px-3 py-2.5 flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search..."
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
+            data-search-input
+          />
+          {searchValue && (
+            <button
+              type="button"
+              onClick={() => setSearchValue('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <Select
+          value={sort || 'newest'}
+          onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
+        >
+          <SelectTrigger className="h-8 w-[90px] text-xs border-border/50">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest</SelectItem>
+            <SelectItem value="oldest">Oldest</SelectItem>
+            <SelectItem value="votes">Top Votes</SelectItem>
+          </SelectContent>
+        </Select>
+        {headerAction}
       </div>
-      <Select
-        value={sort || 'newest'}
-        onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
-      >
-        <SelectTrigger className="h-8 w-[90px] text-xs border-border/50">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="newest">Newest</SelectItem>
-          <SelectItem value="oldest">Oldest</SelectItem>
-          <SelectItem value="votes">Top Votes</SelectItem>
-        </SelectContent>
-      </Select>
-      {headerAction}
     </div>
   )
 

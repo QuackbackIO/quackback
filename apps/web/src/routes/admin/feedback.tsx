@@ -10,10 +10,8 @@ import { Button } from '@/components/ui/button'
 
 const searchSchema = z.object({
   board: z.array(z.string()).optional(),
-  excludeBoard: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   status: z.array(z.string()).optional(),
-  excludeStatus: z.array(z.string()).optional(),
   owner: z.string().optional(),
   search: z.string().optional(),
   dateFrom: z.string().optional(),
@@ -27,10 +25,8 @@ export const Route = createFileRoute('/admin/feedback')({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({
     board: search.board,
-    excludeBoard: search.excludeBoard,
     tags: search.tags,
     status: search.status,
-    excludeStatus: search.excludeStatus,
     owner: search.owner,
     search: search.search,
     dateFrom: search.dateFrom,
@@ -52,10 +48,8 @@ export const Route = createFileRoute('/admin/feedback')({
 
     // Parse filter params
     const boardFilterIds = (deps.board || []) as BoardId[]
-    const excludeBoardIds = (deps.excludeBoard || []) as BoardId[]
     const tagFilterIds = (deps.tags || []) as TagId[]
     const statusFilterSlugs = deps.status || []
-    const excludeStatusSlugs = deps.excludeStatus || []
     const ownerFilterId = deps.owner
 
     // Pre-fetch all data in parallel using React Query
@@ -63,9 +57,7 @@ export const Route = createFileRoute('/admin/feedback')({
       queryClient.ensureQueryData(
         adminQueries.inboxPosts({
           boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
-          excludeBoardIds: excludeBoardIds.length > 0 ? excludeBoardIds : undefined,
           statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
-          excludeStatusSlugs: excludeStatusSlugs.length > 0 ? excludeStatusSlugs : undefined,
           tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
           ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
           search: deps.search,
@@ -116,10 +108,8 @@ function FeedbackInboxPage() {
 
   // Parse filter params (same logic as in loader)
   const boardFilterIds = (search.board || []) as BoardId[]
-  const excludeBoardIds = (search.excludeBoard || []) as BoardId[]
   const tagFilterIds = (search.tags || []) as TagId[]
   const statusFilterSlugs = search.status || []
-  const excludeStatusSlugs = search.excludeStatus || []
   const ownerFilterId = search.owner
 
   // Read pre-fetched data from React Query cache
@@ -127,9 +117,7 @@ function FeedbackInboxPage() {
   const postsQuery = useSuspenseQuery(
     adminQueries.inboxPosts({
       boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
-      excludeBoardIds: excludeBoardIds.length > 0 ? excludeBoardIds : undefined,
       statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
-      excludeStatusSlugs: excludeStatusSlugs.length > 0 ? excludeStatusSlugs : undefined,
       tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
       ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
       search: search.search,
