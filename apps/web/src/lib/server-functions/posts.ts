@@ -40,8 +40,10 @@ const tiptapContentSchema = z.object({
 
 const listInboxPostsSchema = z.object({
   boardIds: z.array(z.string()).optional(),
+  excludeBoardIds: z.array(z.string()).optional(),
   statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
+  excludeStatusSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   ownerId: z.union([z.string(), z.null()]).optional(),
   search: z.string().optional(),
@@ -123,8 +125,10 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
 
       const result = await listInboxPosts({
         boardIds: data.boardIds as BoardId[] | undefined,
+        excludeBoardIds: data.excludeBoardIds as BoardId[] | undefined,
         statusIds: data.statusIds as StatusId[] | undefined,
         statusSlugs: data.statusSlugs,
+        excludeStatusSlugs: data.excludeStatusSlugs,
         tagIds: data.tagIds as TagId[] | undefined,
         ownerId: data.ownerId as MemberId | null | undefined,
         search: data.search,

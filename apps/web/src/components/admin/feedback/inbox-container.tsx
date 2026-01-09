@@ -45,36 +45,29 @@ export function InboxContainer({
   const queryClient = useQueryClient()
 
   // URL-based filter state
-  const { filters, setFilters, clearFilters, selectedPostId, setSelectedPostId, hasActiveFilters } =
-    useInboxFilters()
+  const {
+    filters,
+    setFilters,
+    clearFilters,
+    selectedPostId,
+    setSelectedPostId,
+    hasActiveFilters,
+    toggleBoard,
+    toggleStatus,
+    isBoardSelected,
+    isStatusSelected,
+  } = useInboxFilters()
 
   // UI state from Zustand
   const { isEditDialogOpen, setEditDialogOpen } = useInboxUIStore()
 
-  // Track if defaults have been initialized
-  const hasInitializedDefaults = useRef(false)
-
-  // Track whether we're on the initial render (no URL filters yet)
+  // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
 
-  // Initialize default filters (all boards and statuses selected) on first mount
+  // Mark as no longer initial after first render
   useEffect(() => {
-    if (hasInitializedDefaults.current) return
-    hasInitializedDefaults.current = true
-
-    // Only set defaults if no board/status filters are in URL
-    const hasNoFiltersInUrl = !filters.board?.length && !filters.status?.length
-
-    if (hasNoFiltersInUrl && boards.length > 0 && statuses.length > 0) {
-      setFilters({
-        board: boards.map((b) => b.id),
-        status: statuses.map((s) => s.slug),
-      })
-    }
-
-    // After first render, mark as no longer initial
     isInitialRender.current = false
-  }, [boards, statuses, filters.board, filters.status, setFilters])
+  }, [])
 
   // Only use initialData on first render before any filter changes
   // This prevents stale data when user changes filters
@@ -161,6 +154,20 @@ export function InboxContainer({
             tags={tags}
             statuses={statuses}
             members={members}
+            onToggleBoard={(boardId) =>
+              toggleBoard(
+                boardId,
+                boards.map((b) => b.id)
+              )
+            }
+            onToggleStatus={(statusSlug) =>
+              toggleStatus(
+                statusSlug,
+                statuses.map((s) => s.slug)
+              )
+            }
+            isBoardSelected={isBoardSelected}
+            isStatusSelected={isStatusSelected}
           />
         }
         postList={

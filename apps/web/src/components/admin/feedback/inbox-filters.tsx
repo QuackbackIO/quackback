@@ -20,6 +20,14 @@ interface InboxFiltersProps {
   tags: Tag[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
+  /** Toggle a board's selection using smart include/exclude logic */
+  onToggleBoard: (boardId: string) => void
+  /** Toggle a status's selection using smart include/exclude logic */
+  onToggleStatus: (statusSlug: string) => void
+  /** Check if a board is currently selected */
+  isBoardSelected: (boardId: string) => boolean
+  /** Check if a status is currently selected */
+  isStatusSelected: (statusSlug: string) => boolean
 }
 
 function FilterSection({
@@ -55,24 +63,12 @@ export function InboxFiltersPanel({
   tags,
   statuses,
   members,
+  onToggleBoard,
+  onToggleStatus,
+  isBoardSelected,
+  isStatusSelected,
 }: InboxFiltersProps) {
-  // Simple toggle handlers - no useCallback needed for checkbox/button handlers
-  const handleStatusToggle = (statusSlug: string) => {
-    const currentStatuses = filters.status || []
-    const newStatuses = currentStatuses.includes(statusSlug)
-      ? currentStatuses.filter((s) => s !== statusSlug)
-      : [...currentStatuses, statusSlug]
-    onFiltersChange({ status: newStatuses.length > 0 ? newStatuses : undefined })
-  }
-
-  const handleBoardToggle = (boardId: string) => {
-    const currentBoards = filters.board || []
-    const newBoards = currentBoards.includes(boardId)
-      ? currentBoards.filter((b) => b !== boardId)
-      : [...currentBoards, boardId]
-    onFiltersChange({ board: newBoards.length > 0 ? newBoards : undefined })
-  }
-
+  // Tag toggle still uses simple include logic (no exclude mode needed for tags)
   const handleTagToggle = (tagId: string) => {
     const currentTags = filters.tags || []
     const newTags = currentTags.includes(tagId)
@@ -92,8 +88,8 @@ export function InboxFiltersPanel({
               className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
             >
               <Checkbox
-                checked={filters.status?.includes(status.slug) || false}
-                onCheckedChange={() => handleStatusToggle(status.slug)}
+                checked={isStatusSelected(status.slug)}
+                onCheckedChange={() => onToggleStatus(status.slug)}
               />
               <span
                 className="h-2 w-2 rounded-full shrink-0"
@@ -118,8 +114,8 @@ export function InboxFiltersPanel({
                 className="flex items-center gap-2.5 cursor-pointer text-sm py-0.5 group"
               >
                 <Checkbox
-                  checked={filters.board?.includes(board.id) || false}
-                  onCheckedChange={() => handleBoardToggle(board.id)}
+                  checked={isBoardSelected(board.id)}
+                  onCheckedChange={() => onToggleBoard(board.id)}
                 />
                 <span className="text-foreground/80 group-hover:text-foreground transition-colors truncate">
                   {board.name}

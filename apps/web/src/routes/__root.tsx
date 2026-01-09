@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { getSession } from '@/lib/server-functions/auth'
 import { checkTenantAvailable, getSettings } from '@/lib/server-functions/workspace'
 import { WorkspaceNotFoundPage } from '@/components/workspace-not-found'
+import { ThemeProvider } from '@/components/theme-provider'
 
 // Lazy load devtools in development only
 const TanStackRouterDevtools = import.meta.env.DEV
@@ -131,7 +132,14 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
       </head>
       <body className={cn('min-h-screen bg-background font-sans antialiased font-sans')}>
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>

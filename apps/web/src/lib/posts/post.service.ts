@@ -14,6 +14,7 @@ import {
   eq,
   and,
   inArray,
+  notInArray,
   desc,
   asc,
   sql,
@@ -491,8 +492,10 @@ export async function getCommentsWithReplies(
 export async function listInboxPosts(params: InboxPostListParams): Promise<InboxPostListResult> {
   const {
     boardIds,
+    excludeBoardIds,
     statusIds,
     statusSlugs,
+    excludeStatusSlugs,
     tagIds,
     ownerId,
     search,
@@ -507,23 +510,21 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   // Build conditions array
   const conditions = []
 
-  // Get board IDs - either use provided list or get all boards
-  const allBoardIds = boardIds?.length
-    ? boardIds
-    : (
-        await db.query.boards.findMany({
-          columns: { id: true },
-        })
-      ).map((b) => b.id)
-
-  if (allBoardIds.length === 0) {
-    return { items: [], total: 0, hasMore: false }
+  // Board filter - supports include mode, exclude mode, or all (no filter)
+  if (excludeBoardIds?.length) {
+    // Exclude mode: show all boards EXCEPT these
+    conditions.push(notInArray(posts.boardId, excludeBoardIds))
+  } else if (boardIds?.length) {
+    // Include mode: show only these boards
+    conditions.push(inArray(posts.boardId, boardIds))
   }
+  // No board filter = all boards (implicit)
 
-  conditions.push(inArray(posts.boardId, allBoardIds))
-
-  // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
+  // Status filter - supports include mode, exclude mode, or all (no filter)
+  // First resolve slugs to IDs if needed
   let resolvedStatusIds = statusIds
+  let resolvedExcludeStatusIds: StatusId[] | undefined
+
   if (statusSlugs && statusSlugs.length > 0) {
     const statusesBySlug = await db.query.postStatuses.findMany({
       where: inArray(postStatuses.slug, statusSlugs),
@@ -532,9 +533,22 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
   }
 
-  if (resolvedStatusIds && resolvedStatusIds.length > 0) {
+  if (excludeStatusSlugs && excludeStatusSlugs.length > 0) {
+    const statusesBySlug = await db.query.postStatuses.findMany({
+      where: inArray(postStatuses.slug, excludeStatusSlugs),
+      columns: { id: true },
+    })
+    resolvedExcludeStatusIds = (statusesBySlug ?? []).map((s) => s.id)
+  }
+
+  if (resolvedExcludeStatusIds && resolvedExcludeStatusIds.length > 0) {
+    // Exclude mode: show all statuses EXCEPT these
+    conditions.push(notInArray(posts.statusId, resolvedExcludeStatusIds))
+  } else if (resolvedStatusIds && resolvedStatusIds.length > 0) {
+    // Include mode: show only these statuses
     conditions.push(inArray(posts.statusId, resolvedStatusIds))
   }
+  // No status filter = all statuses (implicit)
 
   // Owner filter
   if (ownerId === null) {

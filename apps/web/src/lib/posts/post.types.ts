@@ -100,10 +100,14 @@ export interface PublicPostListResult {
  */
 export interface InboxPostListParams {
   boardIds?: BoardId[]
+  /** Exclude these board IDs (inverse of boardIds) */
+  excludeBoardIds?: BoardId[]
   /** Filter by status IDs (legacy, prefer statusSlugs) */
   statusIds?: StatusId[]
   /** Filter by status slugs - uses indexed lookup */
   statusSlugs?: string[]
+  /** Exclude these status slugs (inverse of statusSlugs) */
+  excludeStatusSlugs?: string[]
   tagIds?: TagId[]
   ownerId?: string | null
   search?: string

@@ -19,7 +19,11 @@ import type { PortalUserListParams } from '@/lib/users/user.types'
  */
 export interface InboxPostListParams {
   boardIds?: BoardId[]
+  /** Exclude these board IDs (inverse of boardIds) */
+  excludeBoardIds?: BoardId[]
   statusSlugs?: string[]
+  /** Exclude these status slugs (inverse of statusSlugs) */
+  excludeStatusSlugs?: string[]
   tagIds?: TagId[]
   ownerId?: MemberId | null | undefined
   search?: string
