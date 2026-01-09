@@ -5,8 +5,6 @@ import {
   ArrowPathIcon,
   CheckIcon,
   ChevronUpDownIcon,
-  ChatBubbleLeftIcon,
-  HandThumbUpIcon,
 } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -249,35 +247,6 @@ export function DetailProperties({
                 </p>
                 <p className="text-[10px] text-muted-foreground/70">
                   Submitted <TimeAgo date={post.createdAt} />
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Stats Section */}
-          <div className="border-t border-border/30 pt-5">
-            <SectionHeader>Engagement</SectionHeader>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="group relative p-2.5 rounded-lg bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30 hover:border-border/50 transition-all duration-150">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <HandThumbUpIcon className="h-3 w-3 text-muted-foreground/50" />
-                  <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/60">
-                    Votes
-                  </span>
-                </div>
-                <p className="text-xl font-bold tabular-nums text-foreground/90">
-                  {post.voteCount}
-                </p>
-              </div>
-              <div className="group relative p-2.5 rounded-lg bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30 hover:border-border/50 transition-all duration-150">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <ChatBubbleLeftIcon className="h-3 w-3 text-muted-foreground/50" />
-                  <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/60">
-                    Comments
-                  </span>
-                </div>
-                <p className="text-xl font-bold tabular-nums text-foreground/90">
-                  {post.comments?.length || 0}
                 </p>
               </div>
             </div>

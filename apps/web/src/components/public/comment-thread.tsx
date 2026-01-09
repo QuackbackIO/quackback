@@ -1,4 +1,4 @@
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
@@ -102,7 +102,7 @@ function CommentItem({
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
-  const [isPending, startTransition] = useTransition()
+  const [isPending, setIsPending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   // Sync reactions from props when they change (e.g., on page refresh)
@@ -117,20 +117,20 @@ function CommentItem({
 
   async function handleReaction(emoji: string): Promise<void> {
     setShowEmojiPicker(false)
-    startTransition(async () => {
-      try {
-        const result = await toggleReactionFn({
-          data: {
-            commentId: comment.id,
-            emoji,
-          },
-        })
-
-        setReactions(result.reactions)
-      } catch (error) {
-        console.error('Failed to toggle reaction:', error)
-      }
-    })
+    setIsPending(true)
+    try {
+      const result = await toggleReactionFn({
+        data: {
+          commentId: comment.id,
+          emoji,
+        },
+      })
+      setReactions(result.reactions)
+    } catch (error) {
+      console.error('Failed to toggle reaction:', error)
+    } finally {
+      setIsPending(false)
+    }
   }
 
   return (
