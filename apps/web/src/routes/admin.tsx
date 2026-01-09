@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { fetchUserAvatar } from '@/lib/server-functions/portal'
-import { AdminNav } from '@/components/admin/admin-nav'
+import { AdminSidebar } from '@/components/admin/admin-sidebar'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async () => {
@@ -43,9 +43,14 @@ function AdminLayout() {
   const { initialUserData } = Route.useLoaderData()
 
   return (
-    <div className="min-h-screen bg-background">
-      <AdminNav initialUserData={initialUserData} />
-      <Outlet />
+    <div className="flex h-screen bg-background">
+      <AdminSidebar initialUserData={initialUserData} />
+      <main className="flex-1 min-w-0 overflow-hidden sm:h-screen">
+        {/* Mobile: Add padding for fixed header */}
+        <div className="h-full sm:pt-0 pt-14">
+          <Outlet />
+        </div>
+      </main>
     </div>
   )
 }

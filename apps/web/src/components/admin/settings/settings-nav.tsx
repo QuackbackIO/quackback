@@ -1,11 +1,24 @@
+import { useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Settings, Users, Layout, Shield, Lock, Brush, Plug2, Globe, KeyRound } from 'lucide-react'
+import {
+  Cog6ToothIcon,
+  UsersIcon,
+  Squares2X2Icon,
+  ShieldCheckIcon,
+  LockClosedIcon,
+  PaintBrushIcon,
+  PuzzlePieceIcon,
+  GlobeAltIcon,
+  KeyIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
   label: string
   to: string
-  icon: typeof Settings
+  icon: typeof Cog6ToothIcon
   /** Show only for cloud deployments */
   cloudOnly?: boolean
   /** Show only for self-hosted deployments */
@@ -23,23 +36,54 @@ const navSections: NavSection[] = [
   {
     label: 'Workspace',
     items: [
-      { label: 'Team Members', to: '/admin/settings/team', icon: Users },
-      { label: 'Integrations', to: '/admin/settings/integrations', icon: Plug2 },
-      { label: 'License', to: '/admin/settings/license', icon: KeyRound, selfHostedOnly: true },
-      { label: 'Security', to: '/admin/settings/security', icon: Shield, enterpriseOnly: true },
-      { label: 'Domains', to: '/admin/settings/domains', icon: Globe, cloudOnly: true },
+      { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
+      { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+      { label: 'License', to: '/admin/settings/license', icon: KeyIcon, selfHostedOnly: true },
+      {
+        label: 'Security',
+        to: '/admin/settings/security',
+        icon: ShieldCheckIcon,
+        enterpriseOnly: true,
+      },
+      { label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon, cloudOnly: true },
     ],
   },
   {
     label: 'Portal',
     items: [
-      { label: 'Boards', to: '/admin/settings/boards', icon: Layout },
-      { label: 'Branding', to: '/admin/settings/branding', icon: Brush },
-      { label: 'Public Statuses', to: '/admin/settings/statuses', icon: Settings },
-      { label: 'Authentication', to: '/admin/settings/portal-auth', icon: Lock },
+      { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
+      { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
+      { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
+      { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
     ],
   },
 ]
+
+function NavSection({
+  label,
+  children,
+  defaultOpen = true,
+}: {
+  label: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <div className="pb-5 last:pb-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {label}
+        {isOpen ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+      </button>
+      {isOpen && <div className="mt-2 space-y-1">{children}</div>}
+    </div>
+  )
+}
 
 interface SettingsNavProps {
   isCloud: boolean
@@ -64,39 +108,31 @@ export function SettingsNav({ isCloud, hasEnterprise }: SettingsNavProps) {
   }))
 
   return (
-    <nav className="w-56 shrink-0">
-      <div className="sticky top-6 bg-card border border-border/50 rounded-lg p-4 shadow-sm space-y-5">
-        {filteredSections.map((section) => (
-          <div key={section.label}>
-            <h3 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2 px-3">
-              {section.label}
-            </h3>
-            <ul className="space-y-0.5">
-              {section.items.map((item) => {
-                const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
-                const Icon = item.icon
+    <div className="space-y-1">
+      {filteredSections.map((section) => (
+        <NavSection key={section.label} label={section.label}>
+          {section.items.map((item) => {
+            const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
+            const Icon = item.icon
 
-                return (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors',
-                        isActive
-                          ? 'bg-muted text-foreground font-medium'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                      )}
-                    >
-                      <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </nav>
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                  isActive
+                    ? 'bg-muted text-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                )}
+              >
+                <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            )
+          })}
+        </NavSection>
+      ))}
+    </div>
   )
 }
