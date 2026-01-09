@@ -63,16 +63,11 @@ function AdminLoginPage() {
   const { settings, errorMessage, safeCallbackUrl } = Route.useLoaderData()
 
   // Read pre-fetched data from React Query cache
-  const authConfigQuery = useSuspenseQuery(settingsQueries.publicAuthConfig())
-  const authConfig = authConfigQuery.data
-    ? {
-        found: true,
-        openSignup: authConfigQuery.data.openSignup,
-      }
-    : {
-        found: false,
-        openSignup: DEFAULT_AUTH_CONFIG.openSignup,
-      }
+  const { data } = useSuspenseQuery(settingsQueries.publicAuthConfig())
+  const authConfig = {
+    found: Boolean(data),
+    openSignup: data?.openSignup ?? DEFAULT_AUTH_CONFIG.openSignup,
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center">

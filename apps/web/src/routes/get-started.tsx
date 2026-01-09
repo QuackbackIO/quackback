@@ -33,6 +33,19 @@ interface ProvisioningStep {
   status: 'pending' | 'active' | 'complete' | 'error'
 }
 
+function ProvisioningStepIcon({ status }: { status: ProvisioningStep['status'] }): React.ReactNode {
+  switch (status) {
+    case 'pending':
+      return <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+    case 'active':
+      return <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-primary" />
+    case 'complete':
+      return <CheckIcon className="h-3.5 w-3.5 text-white" />
+    case 'error':
+      return <ExclamationCircleIcon className="h-3.5 w-3.5 text-white" />
+  }
+}
+
 function GetStartedPage() {
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
@@ -478,18 +491,7 @@ function GetStartedPage() {
                         pStep.status === 'error' && 'border-destructive bg-destructive'
                       )}
                     >
-                      {pStep.status === 'pending' && (
-                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
-                      )}
-                      {pStep.status === 'active' && (
-                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-primary" />
-                      )}
-                      {pStep.status === 'complete' && (
-                        <CheckIcon className="h-3.5 w-3.5 text-white" />
-                      )}
-                      {pStep.status === 'error' && (
-                        <ExclamationCircleIcon className="h-3.5 w-3.5 text-white" />
-                      )}
+                      <ProvisioningStepIcon status={pStep.status} />
                     </div>
                     <span
                       className={cn(

@@ -114,22 +114,21 @@ function GettingStartedPage() {
       <div className="space-y-3">
         {tasks.map((task: OnboardingTask, index: number) => {
           const Icon = taskIcons[task.id]
-          const isCompleted = task.isCompleted
           return (
             <Card
               key={task.id}
-              className={`transition-colors ${isCompleted ? 'bg-muted/30' : 'hover:bg-muted/50'}`}
+              className={`transition-colors ${task.isCompleted ? 'bg-muted/30' : 'hover:bg-muted/50'}`}
             >
               <CardContent className="py-4">
                 <div className="flex gap-3">
                   <div
                     className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                      isCompleted
+                      task.isCompleted
                         ? 'bg-primary text-primary-foreground'
                         : 'border-2 border-muted-foreground/25 text-muted-foreground'
                     }`}
                   >
-                    {isCompleted ? (
+                    {task.isCompleted ? (
                       <CheckIcon className="h-3.5 w-3.5" />
                     ) : (
                       <span className="text-xs font-medium">{index + 1}</span>
@@ -140,20 +139,20 @@ function GettingStartedPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <h3
-                          className={`font-medium ${isCompleted ? 'text-muted-foreground line-through' : 'text-foreground'}`}
+                          className={`font-medium ${task.isCompleted ? 'text-muted-foreground line-through' : 'text-foreground'}`}
                         >
                           {task.title}
                         </h3>
                         <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
                       </div>
                       <Icon
-                        className={`h-5 w-5 shrink-0 ${isCompleted ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}
+                        className={`h-5 w-5 shrink-0 ${task.isCompleted ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}
                       />
                     </div>
 
-                    <Button variant={isCompleted ? 'ghost' : 'default'} size="sm" asChild>
+                    <Button variant={task.isCompleted ? 'ghost' : 'default'} size="sm" asChild>
                       <Link to={task.href as any}>
-                        {isCompleted ? task.completedLabel : task.actionLabel}
+                        {task.isCompleted ? task.completedLabel : task.actionLabel}
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                     </Button>

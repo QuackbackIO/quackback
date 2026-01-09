@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { z } from 'zod'
 import { XCircleIcon } from '@heroicons/react/24/solid'
-// import { processUnsubscribeToken } from '@/lib/subscriptions'
 
 const searchSchema = z.object({
   token: z.string().optional(),
@@ -9,44 +8,10 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/unsubscribe')({
   validateSearch: searchSchema,
-  // loaderDeps: ({ search }) => ({ token: search.token }),
-  // loader: async ({ deps }) => {
-  //   const { token } = deps
-
-  //   if (!token) {
-  //     return { error: 'missing' }
-  //   }
-
-  //   try {
-  //     const result = await processUnsubscribeToken(token)
-
-  //     if (!result) {
-  //       return { error: 'invalid' }
-  //     }
-
-  //     // Redirect to the post (single workspace mode - no domain lookup needed)
-  //     if (result.postId && result.post) {
-  //       const postUrl = `/b/${result.post.boardSlug}/posts/${result.postId}?unsubscribed=true`
-  //       throw redirect({ to: postUrl as any })
-  //     }
-
-  //     // Fallback to home if no post info
-  //     throw redirect({ to: '/' })
-  //   } catch (error) {
-  //     // Check if it's a redirect (which is expected)
-  //     if (error && typeof error === 'object' && 'isRedirect' in error) {
-  //       throw error
-  //     }
-
-  //     console.error('Error processing unsubscribe:', error)
-  //     return { error: 'failed' }
-  //   }
-  // },
   component: UnsubscribePage,
 })
 
 function UnsubscribePage() {
-  // const { error } = Route.useLoaderData()
   const { title, message } = getErrorContent('missing')
 
   return (

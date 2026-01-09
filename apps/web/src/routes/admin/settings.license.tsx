@@ -40,7 +40,6 @@ function LicensePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">License</h1>
         <p className="text-muted-foreground mt-1">
@@ -48,7 +47,6 @@ function LicensePage() {
         </p>
       </div>
 
-      {/* Current License Status */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
           <h2 className="font-semibold">Current License</h2>
@@ -97,7 +95,6 @@ function LicensePage() {
         </div>
       </div>
 
-      {/* Feature Comparison */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border/50">
           <h2 className="font-semibold">Feature Comparison</h2>
@@ -109,7 +106,6 @@ function LicensePage() {
             description="Single sign-on with your identity provider"
             community={false}
             enterprise={true}
-            current={tier}
           />
           <FeatureRow
             icon={<UsersIcon className="h-4 w-4" />}
@@ -117,7 +113,6 @@ function LicensePage() {
             description="Automated user provisioning and deprovisioning"
             community={false}
             enterprise={true}
-            current={tier}
           />
           <FeatureRow
             icon={<ClipboardDocumentListIcon className="h-4 w-4" />}
@@ -125,12 +120,10 @@ function LicensePage() {
             description="Track all user actions for compliance"
             community={false}
             enterprise={true}
-            current={tier}
           />
         </div>
       </div>
 
-      {/* All Features Available */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border/50">
           <h2 className="font-semibold">All Features</h2>
@@ -162,7 +155,6 @@ interface FeatureRowProps {
   description: string
   community: boolean
   enterprise: boolean
-  current: 'community' | 'enterprise'
 }
 
 function FeatureRow({ icon, label, description, community, enterprise }: FeatureRowProps) {

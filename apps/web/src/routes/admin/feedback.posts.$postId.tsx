@@ -27,7 +27,6 @@ export const Route = createFileRoute('/admin/feedback/posts/$postId')({
       queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.tags()),
       queryClient.ensureQueryData(adminQueries.statuses()),
-      queryClient.ensureQueryData(adminQueries.teamMembers()),
     ])
 
     return {
@@ -59,15 +58,13 @@ function DetailErrorComponent({ error, reset }: { error: Error; reset: () => voi
   )
 }
 
-function FeedbackDetailRoute() {
+function FeedbackDetailRoute(): React.ReactElement {
   const { postId, currentUser } = Route.useLoaderData()
 
-  // Read pre-fetched data from React Query cache
   const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
   const tagsQuery = useSuspenseQuery(adminQueries.tags())
   const statusesQuery = useSuspenseQuery(adminQueries.statuses())
-  const membersQuery = useSuspenseQuery(adminQueries.teamMembers())
 
   return (
     <FeedbackDetailPage
@@ -75,7 +72,6 @@ function FeedbackDetailRoute() {
       boards={boardsQuery.data as any}
       tags={tagsQuery.data}
       statuses={statusesQuery.data}
-      members={membersQuery.data}
       currentUser={currentUser}
     />
   )
