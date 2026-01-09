@@ -4,7 +4,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/queries/admin'
 import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircle } from 'lucide-react'
+import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 
 const searchSchema = z.object({
@@ -57,7 +57,7 @@ function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Alert variant="destructive" className="max-w-2xl">
-        <AlertCircle className="h-4 w-4" />
+        <ExclamationCircleIcon className="h-4 w-4" />
         <AlertTitle>Failed to load users</AlertTitle>
         <AlertDescription className="mt-2">
           <p className="mb-4">{error.message}</p>

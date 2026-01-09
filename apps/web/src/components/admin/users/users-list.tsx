@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Search, X, Users } from 'lucide-react'
+import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon, UsersIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { UserCard } from '@/components/admin/users/user-card'
+import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
 import type { PortalUserListItemView } from '@/lib/users'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 
@@ -21,10 +22,8 @@ interface UsersListProps {
   selectedUserId: string | null
   onSelectUser: (id: string | null) => void
   onLoadMore: () => void
-  sort: UsersFilters['sort']
-  onSortChange: (sort: UsersFilters['sort']) => void
-  search: string | undefined
-  onSearchChange: (search: string | undefined) => void
+  filters: UsersFilters
+  onFiltersChange: (updates: Partial<UsersFilters>) => void
   hasActiveFilters: boolean
   onClearFilters: () => void
   total: number
@@ -57,7 +56,7 @@ function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <div className="rounded-full bg-muted p-3 mb-4">
-        <Users className="h-6 w-6 text-muted-foreground" />
+        <UsersIcon className="h-6 w-6 text-muted-foreground" />
       </div>
       <h3 className="font-medium text-foreground mb-1">
         {hasActiveFilters ? 'No users match your filters' : 'No portal users yet'}
@@ -88,16 +87,20 @@ export function UsersList({
   selectedUserId,
   onSelectUser,
   onLoadMore,
-  sort,
-  onSortChange,
-  search,
-  onSearchChange,
+  filters,
+  onFiltersChange,
   hasActiveFilters,
   onClearFilters,
   total,
 }: UsersListProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null)
-  const [searchValue, setSearchValue] = useState(search || '')
+  const [searchValue, setSearchValue] = useState(filters.search || '')
+
+  // Convenience accessors
+  const search = filters.search
+  const sort = filters.sort
+  const onSearchChange = (value: string | undefined) => onFiltersChange({ search: value })
+  const onSortChange = (value: UsersFilters['sort']) => onFiltersChange({ sort: value })
 
   // Sync input when parent search changes (e.g., clear filters)
   useEffect(() => {
@@ -179,9 +182,10 @@ export function UsersList({
 
   const headerContent = (
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+      {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
             placeholder="Search users..."
@@ -196,7 +200,7 @@ export function UsersList({
               onClick={() => setSearchValue('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <X className="h-3.5 w-3.5" />
+              <XMarkIcon className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -217,6 +221,19 @@ export function UsersList({
           </SelectContent>
         </Select>
       </div>
+
+      {/* Active Filters Bar */}
+      {hasActiveFilters && (
+        <div className="mt-2">
+          <UsersActiveFiltersBar
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            onClearFilters={onClearFilters}
+          />
+        </div>
+      )}
+
+      {/* Count */}
       <div className="mt-2 text-xs text-muted-foreground">
         {total} {total === 1 ? 'user' : 'users'}
       </div>
@@ -260,7 +277,7 @@ export function UsersList({
         {hasMore && (
           <div ref={loadMoreRef} className="py-4 flex justify-center">
             {isLoadingMore ? (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             ) : (
               <button
                 type="button"

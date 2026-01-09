@@ -79,10 +79,8 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
           selectedUserId={selectedUserId}
           onSelectUser={setSelectedUserId}
           onLoadMore={handleLoadMore}
-          sort={filters.sort}
-          onSortChange={(sort) => setFilters({ sort })}
-          search={filters.search}
-          onSearchChange={(search) => setFilters({ search })}
+          filters={filters}
+          onFiltersChange={setFilters}
           hasActiveFilters={hasActiveFilters}
           onClearFilters={clearFilters}
           total={usersData?.pages[0]?.total ?? 0}

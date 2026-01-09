@@ -1,17 +1,17 @@
 import { Link } from '@tanstack/react-router'
 import {
-  X,
-  CheckCircle2,
-  FileText,
-  MessageSquare,
-  ThumbsUp,
-  Loader2,
-  Calendar,
-  User,
-  Trash2,
-  ChevronUp,
-  PenLine,
-} from 'lucide-react'
+  XMarkIcon,
+  CheckCircleIcon,
+  DocumentTextIcon,
+  ChatBubbleLeftIcon,
+  HandThumbUpIcon,
+  ArrowPathIcon,
+  CalendarIcon,
+  UserIcon,
+  TrashIcon,
+  ChevronUpIcon,
+  PencilSquareIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -82,7 +82,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
           className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary"
           title="Authored this post"
         >
-          <PenLine className="h-2.5 w-2.5" />
+          <PencilSquareIcon className="h-2.5 w-2.5" />
         </span>
       )}
       {types.includes('commented') && (
@@ -90,7 +90,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
           className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
           title="Commented on this post"
         >
-          <MessageSquare className="h-2.5 w-2.5" />
+          <ChatBubbleLeftIcon className="h-2.5 w-2.5" />
         </span>
       )}
       {types.includes('voted') && (
@@ -98,7 +98,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
           className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400"
           title="Voted on this post"
         >
-          <ThumbsUp className="h-2.5 w-2.5" />
+          <HandThumbUpIcon className="h-2.5 w-2.5" />
         </span>
       )}
     </div>
@@ -114,7 +114,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
     >
       {/* Vote section - left column */}
       <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/30 py-3">
-        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        <ChevronUpIcon className="h-5 w-5 text-muted-foreground" />
         <span className="text-xs font-bold text-foreground">{post.voteCount}</span>
       </div>
 
@@ -139,7 +139,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
           <TimeAgo date={new Date(post.createdAt)} />
           <div className="flex-1" />
           <div className="flex items-center gap-1 text-muted-foreground/70">
-            <MessageSquare className="h-3 w-3" />
+            <ChatBubbleLeftIcon className="h-3 w-3" />
             <span>{post.commentCount}</span>
           </div>
           <Badge variant="secondary" className="text-[10px] font-normal bg-muted/50 px-1.5 py-0">
@@ -168,7 +168,7 @@ export function UserDetail({
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-2.5 flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Loading...</span>
           <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
+            <XMarkIcon className="h-4 w-4" />
           </Button>
         </div>
         <DetailSkeleton />
@@ -179,7 +179,7 @@ export function UserDetail({
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-69px)] text-center px-4">
-        <User className="h-12 w-12 text-muted-foreground/50 mb-4" />
+        <UserIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
         <h3 className="font-medium text-foreground mb-1">No user selected</h3>
         <p className="text-sm text-muted-foreground">
           Select a user from the list to view their details and activity
@@ -202,7 +202,7 @@ export function UserDetail({
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-2.5 flex items-center justify-between">
         <span className="text-sm font-medium">User Details</span>
         <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-4 w-4" />
+          <XMarkIcon className="h-4 w-4" />
         </Button>
       </div>
 
@@ -213,7 +213,7 @@ export function UserDetail({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-lg truncate">{user.name || 'Unnamed User'}</h2>
-              {user.emailVerified && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+              {user.emailVerified && <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />}
             </div>
             <p className="text-sm text-muted-foreground truncate">{user.email}</p>
             <Badge variant="secondary" className="mt-2 text-xs">
@@ -226,21 +226,21 @@ export function UserDetail({
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center p-3 bg-muted/30 rounded-lg">
             <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
-              <FileText className="h-4 w-4" />
+              <DocumentTextIcon className="h-4 w-4" />
             </div>
             <div className="text-2xl font-semibold">{user.postCount}</div>
             <div className="text-xs text-muted-foreground">Posts</div>
           </div>
           <div className="text-center p-3 bg-muted/30 rounded-lg">
             <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
-              <MessageSquare className="h-4 w-4" />
+              <ChatBubbleLeftIcon className="h-4 w-4" />
             </div>
             <div className="text-2xl font-semibold">{user.commentCount}</div>
             <div className="text-xs text-muted-foreground">Comments</div>
           </div>
           <div className="text-center p-3 bg-muted/30 rounded-lg">
             <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
-              <ThumbsUp className="h-4 w-4" />
+              <HandThumbUpIcon className="h-4 w-4" />
             </div>
             <div className="text-2xl font-semibold">{user.voteCount}</div>
             <div className="text-xs text-muted-foreground">Votes</div>
@@ -266,11 +266,11 @@ export function UserDetail({
           <h3 className="text-sm font-medium mb-3">Account</h3>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar className="h-4 w-4" />
+              <CalendarIcon className="h-4 w-4" />
               <span>Joined portal {formatDate(user.joinedAt)}</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-4 w-4" />
+              <UserIcon className="h-4 w-4" />
               <span>Account created {formatDate(user.createdAt)}</span>
             </div>
           </div>
@@ -291,9 +291,9 @@ export function UserDetail({
                   disabled={isRemovePending}
                 >
                   {isRemovePending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
                   ) : (
-                    <Trash2 className="h-4 w-4 mr-2" />
+                    <TrashIcon className="h-4 w-4 mr-2" />
                   )}
                   Remove from portal
                 </Button>
