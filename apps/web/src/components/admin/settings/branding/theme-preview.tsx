@@ -1,5 +1,14 @@
 import { useMemo } from 'react'
-import { ChevronUp, MessageSquare, Bell, User, Plus, TrendingUp, Clock, Flame } from 'lucide-react'
+import {
+  ChevronUpIcon,
+  ChatBubbleLeftIcon,
+  BellIcon,
+  UserIcon,
+  PlusIcon,
+  ArrowTrendingUpIcon,
+  ClockIcon,
+  FireIcon,
+} from '@heroicons/react/24/solid'
 import { oklchToHex, type ThemeVariables } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
@@ -183,10 +192,10 @@ function PortalPreview({
   const HeaderControls = () => (
     <div className="flex items-center gap-2">
       <div className="p-1.5 rounded text-[var(--muted-foreground)]">
-        <Bell className="h-4 w-4" />
+        <BellIcon className="h-4 w-4" />
       </div>
       <div className="h-6 w-6 rounded-full flex items-center justify-center bg-[var(--muted)] text-[var(--muted-foreground)]">
-        <User className="h-3.5 w-3.5" />
+        <UserIcon className="h-3.5 w-3.5" />
       </div>
     </div>
   )
@@ -286,13 +295,13 @@ function PortalPreview({
         <div className="flex items-center justify-between gap-4">
           {/* Sort Pills */}
           <div className="flex items-center gap-1">
-            <SortPill icon={TrendingUp} label="Top" active />
-            <SortPill icon={Clock} label="New" />
-            <SortPill icon={Flame} label="Trending" />
+            <SortPill icon={ArrowTrendingUpIcon} label="Top" active />
+            <SortPill icon={ClockIcon} label="New" />
+            <SortPill icon={FireIcon} label="Trending" />
           </div>
           {/* Create Post Button */}
           <button className="portal-submit-button inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90">
-            <Plus className="h-4 w-4" />
+            <PlusIcon className="h-4 w-4" />
             Create post
           </button>
         </div>
@@ -422,7 +431,9 @@ function PostCard({
           borderColor: 'color-mix(in srgb, var(--post-card-border) 30%, transparent)',
         }}
       >
-        <ChevronUp className={cn('h-5 w-5', hasVoted && 'fill-[var(--post-card-voted-color)]')} />
+        <ChevronUpIcon
+          className={cn('h-5 w-5', hasVoted && 'fill-[var(--post-card-voted-color)]')}
+        />
         <span className={cn('text-sm font-bold', hasVoted ? '' : 'text-[var(--foreground)]')}>
           {votes}
         </span>
@@ -492,7 +503,7 @@ function PostCard({
             className="flex items-center gap-1"
             style={{ color: 'color-mix(in srgb, var(--muted-foreground) 70%, transparent)' }}
           >
-            <MessageSquare className="h-3.5 w-3.5" />
+            <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
             <span>{comments}</span>
           </div>
           {/* Board name badge */}

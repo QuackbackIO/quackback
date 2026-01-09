@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -27,26 +27,30 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { CollapsibleSection } from '@/components/ui/collapsible'
 import {
-  Check,
-  Loader2,
-  RotateCcw,
-  Upload,
-  Download,
-  Sun,
-  Moon,
-  Copy,
-  ChevronDown,
-} from 'lucide-react'
+  CheckIcon,
+  ArrowPathIcon,
+  ArrowUturnLeftIcon,
+  ArrowUpTrayIcon,
+  ArrowDownTrayIcon,
+  SunIcon,
+  MoonIcon,
+  DocumentDuplicateIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  SwatchIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import {
   themePresets,
   primaryPresetIds,
   hexToOklch,
   oklchToHex,
+  expandTheme,
+  extractMinimal,
   type ThemeConfig,
   type ThemeVariables,
+  type MinimalThemeVariables,
 } from '@/lib/theme'
 import { useWorkspaceLogo, useWorkspaceHeaderLogo } from '@/lib/hooks/use-settings-queries'
 import { updateThemeFn } from '@/lib/server-functions/settings'
@@ -62,7 +66,6 @@ interface ThemeCustomizerProps {
   headerDisplayMode?: HeaderDisplayMode
 }
 
-/** Font options - Popular Google Fonts */
 const FONT_OPTIONS = [
   {
     id: 'inter',
@@ -227,139 +230,47 @@ const FONT_OPTIONS = [
   },
 ] as const
 
-/** Google Fonts URL with all fonts for the dropdown preview */
 const ALL_FONTS_URL = `https://fonts.googleapis.com/css2?family=${FONT_OPTIONS.filter(
   (f) => f.googleName
 )
   .map((f) => f.googleName)
   .join('&family=')}&display=swap`
 
-/** Color variable groups for organized palette editor - matching tweakcn structure */
-const COLOR_GROUPS = [
+const ESSENTIAL_COLOR_GROUPS = [
   {
-    name: 'Primary Colors',
+    name: 'Brand',
+    description: 'Your primary brand color',
+    variables: [{ key: 'primary' as const, label: 'Primary' }],
+  },
+  {
+    name: 'Backgrounds',
+    description: 'Surface colors for your portal',
     variables: [
-      { key: 'primary', label: 'Primary' },
-      { key: 'primaryForeground', label: 'Primary Foreground' },
+      { key: 'background' as const, label: 'Page' },
+      { key: 'card' as const, label: 'Cards' },
+      { key: 'muted' as const, label: 'Subtle' },
     ],
   },
   {
-    name: 'Secondary Colors',
+    name: 'Text',
+    description: 'Text colors',
     variables: [
-      { key: 'secondary', label: 'Secondary' },
-      { key: 'secondaryForeground', label: 'Secondary Foreground' },
+      { key: 'foreground' as const, label: 'Primary' },
+      { key: 'mutedForeground' as const, label: 'Secondary' },
     ],
   },
   {
-    name: 'Accent Colors',
+    name: 'Accents',
+    description: 'Borders and semantic colors',
     variables: [
-      { key: 'accent', label: 'Accent' },
-      { key: 'accentForeground', label: 'Accent Foreground' },
-    ],
-  },
-  {
-    name: 'Base Colors',
-    variables: [
-      { key: 'background', label: 'Background' },
-      { key: 'foreground', label: 'Foreground' },
-    ],
-  },
-  {
-    name: 'Card Colors',
-    variables: [
-      { key: 'card', label: 'Card' },
-      { key: 'cardForeground', label: 'Card Foreground' },
-    ],
-  },
-  {
-    name: 'Popover Colors',
-    variables: [
-      { key: 'popover', label: 'Popover' },
-      { key: 'popoverForeground', label: 'Popover Foreground' },
-    ],
-  },
-  {
-    name: 'Muted Colors',
-    variables: [
-      { key: 'muted', label: 'Muted' },
-      { key: 'mutedForeground', label: 'Muted Foreground' },
-    ],
-  },
-  {
-    name: 'Destructive Colors',
-    variables: [
-      { key: 'destructive', label: 'Destructive' },
-      { key: 'destructiveForeground', label: 'Destructive Foreground' },
-    ],
-  },
-  {
-    name: 'Border & Input',
-    variables: [
-      { key: 'border', label: 'Border' },
-      { key: 'input', label: 'Input' },
-      { key: 'ring', label: 'Ring' },
-    ],
-  },
-  {
-    name: 'Chart Colors',
-    variables: [
-      { key: 'chart1', label: 'Chart 1' },
-      { key: 'chart2', label: 'Chart 2' },
-      { key: 'chart3', label: 'Chart 3' },
-      { key: 'chart4', label: 'Chart 4' },
-      { key: 'chart5', label: 'Chart 5' },
-    ],
-  },
-  {
-    name: 'Sidebar Colors',
-    variables: [
-      { key: 'sidebarBackground', label: 'Sidebar' },
-      { key: 'sidebarForeground', label: 'Sidebar Foreground' },
-      { key: 'sidebarPrimary', label: 'Sidebar Primary' },
-      { key: 'sidebarPrimaryForeground', label: 'Sidebar Primary FG' },
-      { key: 'sidebarAccent', label: 'Sidebar Accent' },
-      { key: 'sidebarAccentForeground', label: 'Sidebar Accent FG' },
-      { key: 'sidebarBorder', label: 'Sidebar Border' },
-      { key: 'sidebarRing', label: 'Sidebar Ring' },
-    ],
-  },
-  {
-    name: 'Portal Header',
-    variables: [
-      { key: 'headerBackground', label: 'Header BG' },
-      { key: 'headerForeground', label: 'Header Text' },
-      { key: 'headerBorder', label: 'Header Border' },
-    ],
-  },
-  {
-    name: 'Post Cards',
-    variables: [
-      { key: 'postCardBackground', label: 'Card BG' },
-      { key: 'postCardBorder', label: 'Card Border' },
-      { key: 'postCardVotedColor', label: 'Voted Color' },
-    ],
-  },
-  {
-    name: 'Portal Navigation',
-    variables: [
-      { key: 'navActiveBackground', label: 'Active Tab BG' },
-      { key: 'navActiveForeground', label: 'Active Tab Text' },
-      { key: 'navInactiveColor', label: 'Inactive Tab' },
-    ],
-  },
-  {
-    name: 'Portal Button',
-    variables: [
-      { key: 'portalButtonBackground', label: 'Button BG' },
-      { key: 'portalButtonForeground', label: 'Button Text' },
+      { key: 'border' as const, label: 'Borders' },
+      { key: 'destructive' as const, label: 'Error' },
+      { key: 'success' as const, label: 'Success' },
     ],
   },
 ] as const
 
-/** Flat list of all color variables for type safety */
-const ALL_COLOR_KEYS = COLOR_GROUPS.flatMap((g) => g.variables.map((v) => v.key))
-
-type ColorVariable = (typeof ALL_COLOR_KEYS)[number]
+type EssentialColorKey = (typeof ESSENTIAL_COLOR_GROUPS)[number]['variables'][number]['key']
 
 export function ThemeCustomizer({
   initialThemeConfig,
@@ -367,87 +278,75 @@ export function ThemeCustomizer({
   workspaceName,
   headerLogoUrl: initialHeaderLogoUrl,
   headerDisplayMode: initialHeaderDisplayMode = 'logo_and_name',
-}: ThemeCustomizerProps) {
-  // Fetch logo data reactively so preview stays in sync
-  // when LogoUploader component updates the logo
+}: ThemeCustomizerProps): React.ReactElement {
   const { data: logoData } = useWorkspaceLogo()
-  const effectiveLogoUrl = logoData?.logoUrl ?? initialLogoUrl
-
-  // Fetch header branding data reactively so preview stays in sync
-  // when HeaderBranding component updates settings
   const { data: headerData } = useWorkspaceHeaderLogo()
+
+  const effectiveLogoUrl = logoData?.logoUrl ?? initialLogoUrl
   const effectiveHeaderLogoUrl = headerData?.headerLogoUrl ?? initialHeaderLogoUrl
   const effectiveHeaderDisplayMode =
     (headerData?.headerDisplayMode as HeaderDisplayMode) ?? initialHeaderDisplayMode
   const effectiveHeaderDisplayName = headerData?.headerDisplayName ?? null
 
-  // Preview mode (light/dark) - used for preview panel only
-  const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
+  const [editMode, setEditMode] = useState<'light' | 'dark'>('light')
+  const [appliedTemplate, setAppliedTemplate] = useState<string>(
+    () => initialThemeConfig.preset || 'default'
+  )
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-  // Track which template the theme is based on
-  const [appliedTemplate, setAppliedTemplate] = useState<string>(() => {
-    return initialThemeConfig.preset || 'default'
-  })
-
-  // Full theme values - expanded from saved config or preset
   const defaultPreset = themePresets.default
-  const [lightValues, setLightValues] = useState<ThemeVariables>(() => {
-    // If saved config has light values, use them directly
+  const [lightValues, setLightValues] = useState<MinimalThemeVariables>(() => {
     if (initialThemeConfig.light && Object.keys(initialThemeConfig.light).length > 0) {
-      return { ...defaultPreset.light, ...initialThemeConfig.light }
+      return extractMinimal({ ...defaultPreset.light, ...initialThemeConfig.light })
     }
-    // Otherwise expand from preset if specified
     if (initialThemeConfig.preset && themePresets[initialThemeConfig.preset]) {
-      return { ...themePresets[initialThemeConfig.preset].light }
+      return extractMinimal(themePresets[initialThemeConfig.preset].light)
     }
-    // Default preset
-    return { ...defaultPreset.light }
+    return extractMinimal(defaultPreset.light)
   })
-  const [darkValues, setDarkValues] = useState<ThemeVariables>(() => {
-    // If saved config has dark values, use them directly
+
+  const [darkValues, setDarkValues] = useState<MinimalThemeVariables>(() => {
     if (initialThemeConfig.dark && Object.keys(initialThemeConfig.dark).length > 0) {
-      return { ...defaultPreset.dark, ...initialThemeConfig.dark }
+      return extractMinimal({ ...defaultPreset.dark, ...initialThemeConfig.dark })
     }
-    // Otherwise expand from preset if specified
     if (initialThemeConfig.preset && themePresets[initialThemeConfig.preset]) {
-      return { ...themePresets[initialThemeConfig.preset].dark }
+      return extractMinimal(themePresets[initialThemeConfig.preset].dark)
     }
-    // Default preset
-    return { ...defaultPreset.dark }
+    return extractMinimal(defaultPreset.dark)
   })
 
-  // Typography settings - extracted from lightValues for convenience
-  const [font, setFont] = useState(() => {
-    return lightValues.fontSans || FONT_OPTIONS[0].value
-  })
+  const [font, setFont] = useState(() => lightValues.fontSans || FONT_OPTIONS[0].value)
   const [radius, setRadius] = useState(() => {
-    const r = lightValues.radius
-    if (r) {
-      const match = r.match(/^([\d.]+)rem$/)
-      if (match) return parseFloat(match[1])
-    }
-    return 0.625 // default
+    const match = lightValues.radius?.match(/^([\d.]+)rem$/)
+    return match ? parseFloat(match[1]) : 0.625
   })
 
-  // Save state
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
-
-  // Import/export state
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState<string | null>(null)
   const [exportCopied, setExportCopied] = useState(false)
 
-  // Apply a template - populate all values from a preset
+  const currentValues = editMode === 'light' ? lightValues : darkValues
+  const setCurrentValues = editMode === 'light' ? setLightValues : setDarkValues
+
+  const effectiveLight = useMemo(
+    () =>
+      expandTheme({ ...lightValues, fontSans: font, radius: `${radius}rem` }, { mode: 'light' }),
+    [lightValues, font, radius]
+  )
+
+  const effectiveDark = useMemo(
+    () => expandTheme({ ...darkValues, fontSans: font, radius: `${radius}rem` }, { mode: 'dark' }),
+    [darkValues, font, radius]
+  )
+
   const applyTemplate = useCallback((presetId: string) => {
     const preset = themePresets[presetId]
     if (preset) {
-      // Track which template is applied
       setAppliedTemplate(presetId)
-      // Apply all values from the preset
-      setLightValues({ ...preset.light })
-      setDarkValues({ ...preset.dark })
-      // Update typography convenience state
+      setLightValues(extractMinimal(preset.light))
+      setDarkValues(extractMinimal(preset.dark))
       if (preset.light.fontSans) setFont(preset.light.fontSans)
       if (preset.light.radius) {
         const match = preset.light.radius.match(/^([\d.]+)rem$/)
@@ -456,37 +355,13 @@ export function ThemeCustomizer({
     }
   }, [])
 
-  // Compute effective colors for preview (current values + typography)
-  const effectiveLight = useMemo(() => {
-    return {
-      ...lightValues,
-      fontSans: font,
-      radius: `${radius}rem`,
-    }
-  }, [lightValues, font, radius])
-
-  const effectiveDark = useMemo(() => {
-    return {
-      ...darkValues,
-      fontSans: font,
-      radius: `${radius}rem`,
-    }
-  }, [darkValues, font, radius])
-
-  // Handle color change for a variable
-  function handleColorChange(mode: 'light' | 'dark', variable: ColorVariable, hexColor: string) {
+  function handleColorChange(variable: EssentialColorKey, hexColor: string): void {
     const oklchColor = hexToOklch(hexColor)
-    if (mode === 'light') {
-      setLightValues((prev) => ({ ...prev, [variable]: oklchColor }))
-    } else {
-      setDarkValues((prev) => ({ ...prev, [variable]: oklchColor }))
-    }
+    setCurrentValues((prev: MinimalThemeVariables) => ({ ...prev, [variable]: oklchColor }))
   }
 
-  // Get hex value for color picker (convert from OKLCH)
-  function getHexValue(mode: 'light' | 'dark', variable: ColorVariable): string {
-    const vars = mode === 'light' ? lightValues : darkValues
-    const oklch = vars[variable as keyof ThemeVariables]
+  function getHexValue(variable: EssentialColorKey): string {
+    const oklch = currentValues[variable]
     if (!oklch || typeof oklch !== 'string') return '#000000'
     try {
       return oklchToHex(oklch)
@@ -495,114 +370,56 @@ export function ThemeCustomizer({
     }
   }
 
-  // Reset a variable to applied template value
-  function resetVariable(mode: 'light' | 'dark', variable: ColorVariable) {
-    const preset = themePresets[appliedTemplate] || defaultPreset
-    const templateValue =
-      mode === 'light'
-        ? preset.light[variable as keyof ThemeVariables]
-        : preset.dark[variable as keyof ThemeVariables]
-    if (mode === 'light') {
-      setLightValues((prev) => ({ ...prev, [variable]: templateValue }))
-    } else {
-      setDarkValues((prev) => ({ ...prev, [variable]: templateValue }))
-    }
-  }
-
-  // Get the current applied template preset
   const appliedPreset = themePresets[appliedTemplate] || defaultPreset
+  const appliedMinimal = extractMinimal(
+    editMode === 'light' ? appliedPreset.light : appliedPreset.dark
+  )
 
-  // Check if a variable differs from the applied template
-  function isCustomized(mode: 'light' | 'dark', variable: ColorVariable): boolean {
-    const currentValue =
-      mode === 'light'
-        ? lightValues[variable as keyof ThemeVariables]
-        : darkValues[variable as keyof ThemeVariables]
-    const templateValue =
-      mode === 'light'
-        ? appliedPreset.light[variable as keyof ThemeVariables]
-        : appliedPreset.dark[variable as keyof ThemeVariables]
-    return currentValue !== templateValue
+  function isCustomized(variable: EssentialColorKey): boolean {
+    return currentValues[variable] !== appliedMinimal[variable]
   }
 
-  // Check if theme has any customizations from the applied template
-  const isThemeCustomized = useMemo(() => {
-    // Check if font or radius differs
-    if (font !== appliedPreset.light.fontSans) return true
-    if (`${radius}rem` !== appliedPreset.light.radius) return true
-    // Check color values
-    for (const key of ALL_COLOR_KEYS) {
-      if (
-        lightValues[key as keyof ThemeVariables] !==
-        appliedPreset.light[key as keyof ThemeVariables]
-      )
-        return true
-      if (
-        darkValues[key as keyof ThemeVariables] !== appliedPreset.dark[key as keyof ThemeVariables]
-      )
-        return true
-    }
-    return false
-  }, [lightValues, darkValues, font, radius, appliedPreset])
-
-  // Reset all colors to applied template
-  function resetAllColors(mode: 'light' | 'dark') {
-    if (mode === 'light') {
-      setLightValues({ ...appliedPreset.light })
-      if (appliedPreset.light.fontSans) setFont(appliedPreset.light.fontSans)
-      if (appliedPreset.light.radius) {
-        const match = appliedPreset.light.radius.match(/^([\d.]+)rem$/)
-        if (match) setRadius(parseFloat(match[1]))
-      }
-    } else {
-      setDarkValues({ ...appliedPreset.dark })
-    }
+  function resetVariable(variable: EssentialColorKey): void {
+    setCurrentValues((prev: MinimalThemeVariables) => ({
+      ...prev,
+      [variable]: appliedMinimal[variable],
+    }))
   }
 
-  // Generate current theme config for saving
-  // Saves full expanded values (no preset reference)
-  const getCurrentThemeConfig = useCallback((): ThemeConfig => {
-    return {
-      light: {
-        ...lightValues,
-        fontSans: font,
-        radius: `${radius}rem`,
-      },
-      dark: {
-        ...darkValues,
-      },
-    }
-  }, [lightValues, darkValues, font, radius])
+  function resetAllColors(): void {
+    setCurrentValues(
+      extractMinimal(editMode === 'light' ? appliedPreset.light : appliedPreset.dark)
+    )
+  }
 
-  // Parse CSS variables from :root { } block
+  const getCurrentThemeConfig = useCallback(
+    (): ThemeConfig => ({
+      light: { ...lightValues, fontSans: font, radius: `${radius}rem` },
+      dark: { ...darkValues, fontSans: font, radius: `${radius}rem` },
+    }),
+    [lightValues, darkValues, font, radius]
+  )
+
   function parseCssVariables(css: string): Partial<ThemeVariables> | null {
     const vars: Partial<ThemeVariables> = {}
-
-    // Match CSS variable declarations like --primary: oklch(...);
     const varRegex = /--([\w-]+)\s*:\s*([^;]+);/g
     let match
-
     while ((match = varRegex.exec(css)) !== null) {
       const [, name, value] = match
-      // Convert kebab-case to camelCase
       const camelName = name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
       vars[camelName as keyof ThemeVariables] = value.trim()
     }
-
     return Object.keys(vars).length > 0 ? vars : null
   }
 
-  // Import theme from CSS and set as custom template
   function handleImportWithCustomTemplate(): boolean {
     setImportError(null)
-
     const trimmed = importText.trim()
     if (!trimmed) {
       setImportError('Please paste CSS variables')
       return false
     }
 
-    // Extract :root block
     const rootMatch = trimmed.match(/:root\s*\{([^}]+)\}/s)
     const darkMatch = trimmed.match(/\.dark\s*\{([^}]+)\}/s)
 
@@ -611,15 +428,12 @@ export function ThemeCustomizer({
       return false
     }
 
-    // Parse light mode variables
     if (rootMatch) {
       const lightVars = parseCssVariables(rootMatch[1])
       if (lightVars) {
-        setLightValues((prev) => ({ ...prev, ...lightVars }))
-        // Extract typography settings
-        if (lightVars.fontSans) {
-          setFont(lightVars.fontSans)
-        }
+        const merged = { ...defaultPreset.light, ...lightVars }
+        setLightValues(extractMinimal(merged))
+        if (lightVars.fontSans) setFont(lightVars.fontSans)
         if (lightVars.radius) {
           const match = lightVars.radius.match(/^([\d.]+)rem$/)
           if (match) setRadius(parseFloat(match[1]))
@@ -627,34 +441,29 @@ export function ThemeCustomizer({
       }
     }
 
-    // Parse dark mode variables
     if (darkMatch) {
       const darkVars = parseCssVariables(darkMatch[1])
       if (darkVars) {
-        setDarkValues((prev) => ({ ...prev, ...darkVars }))
+        const merged = { ...defaultPreset.dark, ...darkVars }
+        setDarkValues(extractMinimal(merged))
       }
     }
 
-    // Mark as custom import
     setAppliedTemplate('custom')
     setImportText('')
     setImportError(null)
     return true
   }
 
-  async function handleSave() {
+  async function handleSave(): Promise<void> {
     setIsSaving(true)
     setSaveSuccess(false)
 
     try {
       const themeConfig = getCurrentThemeConfig()
-
       await updateThemeFn({
-        data: {
-          brandingConfig: themeConfig as Record<string, unknown>,
-        },
+        data: { brandingConfig: themeConfig as Record<string, unknown> },
       })
-
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
     } catch (error) {
@@ -664,30 +473,21 @@ export function ThemeCustomizer({
     }
   }
 
-  // Find current font
   const currentFontId = FONT_OPTIONS.find((f) => f.value === font)?.id || 'inter'
 
-  // Generate CSS variables export
   const cssExport = useMemo(() => {
-    const toKebab = (str: string) => str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
+    function toKebab(str: string): string {
+      return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
+    }
 
-    const lightVars = Object.entries(effectiveLight)
-      .filter(([_, v]) => v !== undefined)
-      .map(([k, v]) => `  --${toKebab(k)}: ${v};`)
-      .join('\n')
+    function formatVars(vars: Record<string, unknown>): string {
+      return Object.entries(vars)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => `  --${toKebab(k)}: ${v};`)
+        .join('\n')
+    }
 
-    const darkVars = Object.entries(effectiveDark)
-      .filter(([_, v]) => v !== undefined)
-      .map(([k, v]) => `  --${toKebab(k)}: ${v};`)
-      .join('\n')
-
-    return `:root {
-${lightVars}
-}
-
-.dark {
-${darkVars}
-}`
+    return `:root {\n${formatVars(effectiveLight)}\n}\n\n.dark {\n${formatVars(effectiveDark)}\n}`
   }, [effectiveLight, effectiveDark])
 
   const handleCopyExport = useCallback(async () => {
@@ -712,46 +512,40 @@ ${darkVars}
 
   return (
     <>
-      {/* Preload all Google Fonts for dropdown preview */}
       <link rel="stylesheet" href={ALL_FONTS_URL} />
 
       <div className="rounded-xl border border-border bg-card">
-        <div className="grid grid-cols-1 xl:grid-cols-2">
-          {/* Left: Controls */}
-          <div className="xl:border-r border-border flex flex-col min-w-0 overflow-hidden">
-            {/* Template selector */}
-            <div className="p-4 border-b border-border">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Based on: </span>
-                  <span className="font-medium">
-                    {appliedTemplate === 'custom' ? 'Custom' : appliedPreset.name}
-                  </span>
-                  {isThemeCustomized && (
-                    <span className="text-muted-foreground ml-1">(customized)</span>
-                  )}
-                </p>
-                {/* Export dropdown */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr,400px]">
+          <div className="xl:border-r border-border flex flex-col min-w-0">
+            <div className="p-5 border-b border-border">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-medium">Template</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Start with a preset and customize
+                  </p>
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
-                      <Upload className="h-3.5 w-3.5" />
+                    <Button variant="ghost" size="sm" className="h-8 px-2.5 text-xs gap-1.5">
+                      <ArrowUpTrayIcon className="h-3.5 w-3.5" />
                       Export
-                      <ChevronDown className="h-3 w-3" />
+                      <ChevronDownIcon className="h-3 w-3 opacity-50" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={handleCopyExport}>
-                      <Copy className="h-4 w-4" />
+                      <DocumentDuplicateIcon className="h-4 w-4" />
                       {exportCopied ? 'Copied!' : 'Copy CSS'}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDownload}>
-                      <Download className="h-4 w-4" />
+                      <ArrowDownTrayIcon className="h-4 w-4" />
                       Download .css
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+
               <div className="flex flex-wrap gap-2">
                 {primaryPresetIds.map((presetId) => {
                   const preset = themePresets[presetId]
@@ -765,7 +559,6 @@ ${darkVars}
                     />
                   )
                 })}
-                {/* Import button with modal */}
                 <ImportDialog
                   importText={importText}
                   setImportText={setImportText}
@@ -777,14 +570,76 @@ ${darkVars}
               </div>
             </div>
 
-            {/* Collapsible Sections: Typography first, then Colors */}
-            <div className="divide-y divide-border flex-1 overflow-y-auto overflow-x-hidden">
-              {/* Typography Section */}
-              <CollapsibleSection title="Typography" defaultOpen>
-                <div className="space-y-4">
-                  {/* Font */}
+            <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg">
+                <button
+                  onClick={() => setEditMode('light')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                    editMode === 'light'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <SunIcon className="h-3.5 w-3.5" />
+                  Light
+                </button>
+                <button
+                  onClick={() => setEditMode('dark')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                    editMode === 'dark'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <MoonIcon className="h-3.5 w-3.5" />
+                  Dark
+                </button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetAllColors}
+                className="h-8 text-xs gap-1.5"
+              >
+                <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+                Reset
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {ESSENTIAL_COLOR_GROUPS.map((group) => (
+                <div key={group.name}>
+                  <div className="mb-3">
+                    <h4 className="text-sm font-medium">{group.name}</h4>
+                    <p className="text-xs text-muted-foreground">{group.description}</p>
+                  </div>
+                  <div className="grid gap-2">
+                    {group.variables.map(({ key, label }) => (
+                      <ColorInput
+                        key={key}
+                        label={label}
+                        value={getHexValue(key)}
+                        onChange={(hex) => handleColorChange(key, hex)}
+                        onReset={() => resetVariable(key)}
+                        isCustomized={isCustomized(key)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <div>
+                <div className="mb-3">
+                  <h4 className="text-sm font-medium">Typography</h4>
+                  <p className="text-xs text-muted-foreground">Font and border radius</p>
+                </div>
+                <div className="space-y-3">
                   <div>
-                    <Label className="text-xs mb-1.5 block text-muted-foreground">Font</Label>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">
+                      Font Family
+                    </Label>
                     <Select
                       value={currentFontId}
                       onValueChange={(id) => {
@@ -792,7 +647,7 @@ ${darkVars}
                         if (selectedFont) setFont(selectedFont.value)
                       }}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full h-10">
                         <SelectValue>
                           <span style={{ fontFamily: font }}>
                             {FONT_OPTIONS.find((f) => f.id === currentFontId)?.name ||
@@ -801,55 +656,20 @@ ${darkVars}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className="max-h-[300px]">
-                        <SelectGroup>
-                          <SelectLabel>Sans Serif</SelectLabel>
-                          {FONT_OPTIONS.filter((f) => f.category === 'Sans Serif').map((font) => (
-                            <SelectItem key={font.id} value={font.id}>
-                              <span className="text-base" style={{ fontFamily: font.value }}>
-                                {font.name}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Serif</SelectLabel>
-                          {FONT_OPTIONS.filter((f) => f.category === 'Serif').map((font) => (
-                            <SelectItem key={font.id} value={font.id}>
-                              <span className="text-base" style={{ fontFamily: font.value }}>
-                                {font.name}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Monospace</SelectLabel>
-                          {FONT_OPTIONS.filter((f) => f.category === 'Monospace').map((font) => (
-                            <SelectItem key={font.id} value={font.id}>
-                              <span className="text-base" style={{ fontFamily: font.value }}>
-                                {font.name}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>System</SelectLabel>
-                          {FONT_OPTIONS.filter((f) => f.category === 'System').map((font) => (
-                            <SelectItem key={font.id} value={font.id}>
-                              <span className="text-base" style={{ fontFamily: font.value }}>
-                                {font.name}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
+                        <FontSelectGroup category="Sans Serif" />
+                        <FontSelectGroup category="Serif" />
+                        <FontSelectGroup category="Monospace" />
+                        <FontSelectGroup category="System" />
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Border Radius */}
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Border Radius</Label>
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs text-muted-foreground w-12">Sharp</span>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">
+                      Border Radius
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-10">Sharp</span>
                       <Slider
                         value={[radius * 100]}
                         onValueChange={([v]) => setRadius(v / 100)}
@@ -858,148 +678,71 @@ ${darkVars}
                         step={5}
                         className="flex-1"
                       />
-                      <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
+                      <span className="text-xs text-muted-foreground w-10 text-right">Round</span>
                       <div
-                        className="h-8 w-12 bg-primary flex-shrink-0"
+                        className="h-8 w-10 bg-primary shrink-0"
                         style={{ borderRadius: `${radius}rem` }}
                       />
                     </div>
                   </div>
                 </div>
-              </CollapsibleSection>
+              </div>
 
-              {/* Light Mode Section */}
-              <CollapsibleSection
-                title="Light Mode"
-                icon={<Sun className="h-4 w-4" />}
-                defaultOpen
-                headerAction={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => resetAllColors('light')}
-                    className="h-6 px-2 text-xs"
-                  >
-                    <RotateCcw className="mr-1 h-3 w-3" />
-                    Reset
-                  </Button>
-                }
-              >
-                <div className="space-y-3">
-                  {COLOR_GROUPS.map((group) => (
-                    <div key={group.name}>
-                      <div className="text-xs font-medium text-muted-foreground mb-1.5">
-                        {group.name}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {group.variables.map(({ key, label }) => (
-                          <ColorPicker
-                            key={key}
-                            label={label}
-                            value={getHexValue('light', key as ColorVariable)}
-                            onChange={(hex) =>
-                              handleColorChange('light', key as ColorVariable, hex)
-                            }
-                            onReset={() => resetVariable('light', key as ColorVariable)}
-                            isCustomized={isCustomized('light', key as ColorVariable)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleSection>
+              <div className="border-t border-border pt-4">
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
+                >
+                  <ChevronRightIcon
+                    className={cn('h-4 w-4 transition-transform', showAdvanced && 'rotate-90')}
+                  />
+                  <SwatchIcon className="h-4 w-4" />
+                  Advanced options
+                </button>
 
-              {/* Dark Mode Section */}
-              <CollapsibleSection
-                title="Dark Mode"
-                icon={<Moon className="h-4 w-4" />}
-                defaultOpen
-                headerAction={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => resetAllColors('dark')}
-                    className="h-6 px-2 text-xs"
-                  >
-                    <RotateCcw className="mr-1 h-3 w-3" />
-                    Reset
-                  </Button>
-                }
-              >
-                <div className="space-y-3">
-                  {COLOR_GROUPS.map((group) => (
-                    <div key={group.name}>
-                      <div className="text-xs font-medium text-muted-foreground mb-1.5">
-                        {group.name}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {group.variables.map(({ key, label }) => (
-                          <ColorPicker
-                            key={key}
-                            label={label}
-                            value={getHexValue('dark', key as ColorVariable)}
-                            onChange={(hex) => handleColorChange('dark', key as ColorVariable, hex)}
-                            onReset={() => resetVariable('dark', key as ColorVariable)}
-                            isCustomized={isCustomized('dark', key as ColorVariable)}
+                {showAdvanced && (
+                  <div className="mt-4">
+                    <Label className="text-xs mb-2 block">Derived Colors (auto-generated)</Label>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[
+                        { label: 'Primary FG', value: effectiveLight.primaryForeground },
+                        { label: 'Card FG', value: effectiveLight.cardForeground },
+                        { label: 'Popover', value: effectiveLight.popover },
+                        { label: 'Secondary', value: effectiveLight.secondary },
+                        { label: 'Accent', value: effectiveLight.accent },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="text-center">
+                          <div
+                            className="h-6 w-full rounded border border-border mb-1"
+                            style={{ backgroundColor: value ? oklchToHex(value) : '#000' }}
                           />
-                        ))}
-                      </div>
+                          <span className="text-[10px] text-muted-foreground">{label}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CollapsibleSection>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Save Button - Always visible */}
             <div className="p-4 border-t border-border mt-auto">
-              <Button onClick={handleSave} disabled={isSaving} className="w-full">
-                {isSaving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : saveSuccess ? (
-                  <>
-                    <Check className="mr-2 h-4 w-4" />
-                    Saved!
-                  </>
-                ) : (
-                  'Save Theme'
-                )}
+              <Button onClick={handleSave} disabled={isSaving} className="w-full h-10">
+                <SaveButtonContent isSaving={isSaving} saveSuccess={saveSuccess} />
               </Button>
             </div>
           </div>
 
-          {/* Right: Preview (sticky - follows scroll) */}
-          <div className="border-t xl:border-t-0 xl:border-l border-border xl:sticky xl:top-4 xl:self-start p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-muted-foreground">Preview</span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setPreviewMode('light')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    previewMode === 'light' ? 'bg-muted' : 'hover:bg-muted/50'
-                  )}
-                >
-                  <Sun className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setPreviewMode('dark')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    previewMode === 'dark' ? 'bg-muted' : 'hover:bg-muted/50'
-                  )}
-                >
-                  <Moon className="h-4 w-4" />
-                </button>
-              </div>
+          <div className="border-t xl:border-t-0 border-border xl:sticky xl:top-4 xl:self-start p-5">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm font-medium">Preview</span>
+              <span className="text-xs text-muted-foreground">
+                {editMode === 'light' ? 'Light mode' : 'Dark mode'}
+              </span>
             </div>
             <ThemePreview
               lightVars={effectiveLight}
               darkVars={effectiveDark}
-              previewMode={previewMode}
+              previewMode={editMode}
               radius={`${radius}rem`}
               fontFamily={font}
               logoUrl={effectiveLogoUrl}
@@ -1015,47 +758,125 @@ ${darkVars}
   )
 }
 
-/** Compact color picker component */
-function ColorPicker({
+interface ColorInputProps {
+  label: string
+  value: string
+  onChange: (hex: string) => void
+  onReset?: () => void
+  isCustomized?: boolean
+}
+
+function ColorInput({
   label,
   value,
   onChange,
   onReset,
   isCustomized,
-}: {
-  label: string
-  value: string
-  onChange: (hex: string) => void
-  onReset: () => void
-  isCustomized: boolean
-}) {
+}: ColorInputProps): React.ReactElement {
+  const [inputValue, setInputValue] = useState(value)
+
+  useEffect(() => {
+    setInputValue(value)
+  }, [value])
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>): void {
+    const hex = e.target.value
+    setInputValue(hex)
+    if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+      onChange(hex)
+    }
+  }
+
+  function handleInputBlur(): void {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(inputValue)) {
+      setInputValue(value)
+    }
+  }
+
   return (
-    <div className="flex items-center gap-2 rounded-md border border-border/50 bg-background p-1.5">
+    <div className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background hover:border-border/80 transition-colors group">
+      <label className="relative cursor-pointer">
+        <div
+          className="h-9 w-9 rounded-md border border-border shadow-sm transition-transform hover:scale-105"
+          style={{ backgroundColor: value }}
+        />
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+        />
+      </label>
+
+      <span className="flex-1 text-sm font-medium">{label}</span>
+
       <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+        type="text"
+        value={inputValue}
+        onChange={handleInputChange}
+        onBlur={handleInputBlur}
+        className="w-20 px-2 py-1 text-xs font-mono bg-muted rounded border-0 focus:outline-none focus:ring-1 focus:ring-ring"
+        placeholder="#000000"
       />
-      <span className="flex-1 text-xs truncate">{label}</span>
-      {isCustomized && (
+
+      {isCustomized && onReset && (
         <button
           onClick={onReset}
-          className="h-4 w-4 flex items-center justify-center text-muted-foreground hover:text-foreground"
+          className="p-1.5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Reset to template"
         >
-          <RotateCcw className="h-3 w-3" />
+          <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
   )
 }
 
-/** Compact template card/pill for template selection */
-function TemplateCard({
-  preset,
-  isSelected,
-  onClick,
+function SaveButtonContent({
+  isSaving,
+  saveSuccess,
 }: {
+  isSaving: boolean
+  saveSuccess: boolean
+}): React.ReactElement {
+  if (isSaving) {
+    return (
+      <>
+        <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+        Saving...
+      </>
+    )
+  }
+  if (saveSuccess) {
+    return (
+      <>
+        <CheckIcon className="mr-2 h-4 w-4" />
+        Saved!
+      </>
+    )
+  }
+  return <>Save Theme</>
+}
+
+type FontCategory = (typeof FONT_OPTIONS)[number]['category']
+
+function FontSelectGroup({ category }: { category: FontCategory }): React.ReactElement {
+  const fonts = FONT_OPTIONS.filter((f) => f.category === category)
+  return (
+    <SelectGroup>
+      <SelectLabel>{category}</SelectLabel>
+      {fonts.map((f) => (
+        <SelectItem key={f.id} value={f.id}>
+          <span className="text-base" style={{ fontFamily: f.value }}>
+            {f.name}
+          </span>
+        </SelectItem>
+      ))}
+    </SelectGroup>
+  )
+}
+
+interface TemplateCardProps {
   preset: {
     name: string
     description: string
@@ -1065,11 +886,10 @@ function TemplateCard({
   }
   isSelected?: boolean
   onClick: () => void
-}) {
-  if (!preset) return null
+}
 
-  // Get colors for preview swatches
-  const getHex = (oklch: string | undefined, fallback: string) => {
+function TemplateCard({ preset, isSelected, onClick }: TemplateCardProps): React.ReactElement {
+  function getHex(oklch: string | undefined, fallback: string): string {
     if (!oklch) return fallback
     try {
       return oklchToHex(oklch)
@@ -1078,11 +898,10 @@ function TemplateCard({
     }
   }
 
-  // 4 key colors: background, foreground, primary, secondary/muted
   const colors = [
     getHex(preset.light.background, '#ffffff'),
     getHex(preset.light.primary, preset.color),
-    getHex(preset.light.secondary || preset.light.muted, '#f5f5f5'),
+    getHex(preset.light.muted, '#f5f5f5'),
     getHex(preset.light.foreground, '#171717'),
   ]
 
@@ -1091,25 +910,31 @@ function TemplateCard({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-colors',
+        'flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all',
         isSelected
           ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-          : 'border-border bg-background hover:bg-muted/50'
+          : 'border-border bg-background hover:bg-muted/50 hover:border-border/80'
       )}
     >
-      {/* Color swatches */}
-      <div className="flex rounded overflow-hidden border border-border/40">
+      <div className="flex rounded-md overflow-hidden border border-border/50 shadow-sm">
         {colors.map((color, i) => (
-          <div key={i} className="w-3 h-5" style={{ backgroundColor: color }} />
+          <div key={i} className="w-3.5 h-6" style={{ backgroundColor: color }} />
         ))}
       </div>
-      {/* Name */}
       <span className="text-sm font-medium">{preset.name}</span>
     </button>
   )
 }
 
-/** Import dialog button for importing CSS themes */
+interface ImportDialogProps {
+  importText: string
+  setImportText: (text: string) => void
+  importError: string | null
+  setImportError: (error: string | null) => void
+  onImport: () => boolean
+  cssExport: string
+}
+
 function ImportDialog({
   importText,
   setImportText,
@@ -1117,24 +942,15 @@ function ImportDialog({
   setImportError,
   onImport,
   cssExport,
-}: {
-  importText: string
-  setImportText: (text: string) => void
-  importError: string | null
-  setImportError: (error: string | null) => void
-  onImport: () => boolean
-  cssExport: string
-}) {
+}: ImportDialogProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
 
-  const handleImport = () => {
+  function handleImport(): void {
     const success = onImport()
-    if (success) {
-      setIsOpen(false)
-    }
+    if (success) setIsOpen(false)
   }
 
-  const handleDownloadTemplate = () => {
+  function handleDownloadTemplate(): void {
     const blob = new Blob([cssExport], { type: 'text/css' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -1149,9 +965,9 @@ function ImportDialog({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
         >
-          <Download className="h-3.5 w-3.5" />
+          <ArrowDownTrayIcon className="h-3.5 w-3.5" />
           <span className="text-sm">Import</span>
         </button>
       </DialogTrigger>
@@ -1159,42 +975,36 @@ function ImportDialog({
         <DialogHeader>
           <DialogTitle>Import Theme</DialogTitle>
           <DialogDescription>
-            <span className="block">Paste CSS variables to import a theme.</span>
-            <span>
-              Not sure what to include?{' '}
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="text-primary hover:underline"
-              >
-                Download a template
-              </button>{' '}
-              to get started.
-            </span>
+            Paste CSS variables to import a theme.{' '}
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="text-primary hover:underline"
+            >
+              Download a template
+            </button>{' '}
+            to get started.
           </DialogDescription>
         </DialogHeader>
         <Textarea
           placeholder={`:root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  /* ... other variables */
+  --primary: oklch(0.623 0.188 260);
+  /* ... */
 }
 
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  /* ... other variables */
+  /* ... */
 }`}
           value={importText}
           onChange={(e) => {
             setImportText(e.target.value)
             setImportError(null)
           }}
-          className="h-[200px] sm:h-[400px] resize-none font-mono text-xs"
+          className="h-[300px] resize-none font-mono text-xs"
         />
         {importError && <p className="text-sm text-destructive">{importError}</p>}
         <DialogFooter>

@@ -1,21 +1,21 @@
-/**
- * Theme customization module
- *
- * Provides types, presets, color conversion, and CSS generation
- * for organization portal theming.
- */
-
-// Types
 export type { ThemeVariables, ThemeConfig, ThemePreset, CoreThemeVariable } from './types'
 export { CORE_THEME_VARIABLES } from './types'
 
-// Presets
+export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
+export {
+  expandTheme,
+  extractMinimal,
+  parseOklch,
+  formatOklch,
+  adjustHue,
+  computeContrastForeground,
+  generateChartColors,
+} from './expand'
+
 export { themePresets, presetNames, primaryPresetIds, getPreset } from './presets'
 
-// Color conversion
 export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
 
-// CSS generation
 export {
   generateThemeCSS,
   parseThemeConfig,
