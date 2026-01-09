@@ -1,14 +1,13 @@
 import {
   CheckCircleIcon,
-  InformationCircleIcon,
   ExclamationTriangleIcon,
+  InformationCircleIcon,
   XCircleIcon,
 } from '@heroicons/react/24/solid'
-// Note: Heroicons doesn't have an animated loader, using a simple spinner via CSS
 import { useTheme } from 'next-themes'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
-const Toaster = ({ ...props }: ToasterProps) => {
+function Toaster(props: ToasterProps): React.ReactElement {
   const { theme = 'system' } = useTheme()
 
   return (

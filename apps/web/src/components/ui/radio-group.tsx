@@ -33,7 +33,6 @@ function RadioGroupItem({
         data-slot="radio-group-indicator"
         className="relative flex items-center justify-center"
       >
-        {/* Note: Heroicons doesn't have a Circle icon, using a styled div */}
         <div className="size-2 rounded-full bg-primary" />
       </RadioGroupPrimitive.Indicator>
     </RadioGroupPrimitive.Item>

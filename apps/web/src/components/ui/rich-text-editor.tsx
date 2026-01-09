@@ -4,14 +4,12 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import { useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-// Note: Heroicons doesn't have text formatting icons (Bold, Italic, ListOrdered)
-// Keeping lucide-react for those, using heroicons for the rest
 import { Bold, Italic, ListOrdered } from 'lucide-react'
 import {
-  ListBulletIcon,
-  LinkIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
+  LinkIcon,
+  ListBulletIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from './button'
 
@@ -138,18 +136,40 @@ export function RichTextEditor({
   )
 }
 
-function MenuBar({
-  editor,
-  disabled,
-  position = 'top',
-}: {
+interface ToolbarButtonProps {
+  icon: React.ReactNode
+  onClick: () => void
+  disabled: boolean
+  isActive?: boolean
+}
+
+function ToolbarButton({ icon, onClick, disabled, isActive }: ToolbarButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {icon}
+    </Button>
+  )
+}
+
+function ToolbarDivider() {
+  return <div className="w-px h-4 bg-border mx-1" />
+}
+
+interface MenuBarProps {
   editor: Editor
   disabled: boolean
   position?: 'top' | 'bottom'
-}) {
-  const setLink = useCallback(() => {
-    if (!editor) return
+}
 
+function MenuBar({ editor, disabled, position = 'top' }: MenuBarProps) {
+  const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
 
@@ -160,13 +180,15 @@ function MenuBar({
       return
     }
 
-    // Auto-prefix https:// if no protocol specified
     if (!/^https?:\/\//i.test(url)) {
       url = `https://${url}`
     }
 
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }, [editor])
+
+  const canUndo = editor.can().chain().focus().undo().run()
+  const canRedo = editor.can().chain().focus().redo().run()
 
   return (
     <div
@@ -175,79 +197,49 @@ function MenuBar({
         position === 'top' ? 'px-2 py-1.5 border-b border-input bg-muted/30' : 'pt-2'
       )}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={cn('h-7 w-7 p-0', editor.isActive('bold') && 'bg-muted')}
+      <ToolbarButton
+        icon={<Bold className="size-4" />}
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
-      >
-        <Bold className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={cn('h-7 w-7 p-0', editor.isActive('italic') && 'bg-muted')}
+        isActive={editor.isActive('bold')}
+      />
+      <ToolbarButton
+        icon={<Italic className="size-4" />}
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
-      >
-        <Italic className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={cn('h-7 w-7 p-0', editor.isActive('bulletList') && 'bg-muted')}
+        isActive={editor.isActive('italic')}
+      />
+      <ToolbarDivider />
+      <ToolbarButton
+        icon={<ListBulletIcon className="size-4" />}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         disabled={disabled}
-      >
-        <ListBulletIcon className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={cn('h-7 w-7 p-0', editor.isActive('orderedList') && 'bg-muted')}
+        isActive={editor.isActive('bulletList')}
+      />
+      <ToolbarButton
+        icon={<ListOrdered className="size-4" />}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         disabled={disabled}
-      >
-        <ListOrdered className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={cn('h-7 w-7 p-0', editor.isActive('link') && 'bg-muted')}
+        isActive={editor.isActive('orderedList')}
+      />
+      <ToolbarDivider />
+      <ToolbarButton
+        icon={<LinkIcon className="size-4" />}
         onClick={setLink}
         disabled={disabled}
-      >
-        <LinkIcon className="h-4 w-4" />
-      </Button>
+        isActive={editor.isActive('link')}
+      />
       <div className="flex-1" />
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0"
+      <ToolbarButton
+        icon={<ArrowUturnLeftIcon className="size-4" />}
         onClick={() => editor.chain().focus().undo().run()}
-        disabled={disabled || !editor.can().chain().focus().undo().run()}
-      >
-        <ArrowUturnLeftIcon className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0"
+        disabled={disabled || !canUndo}
+      />
+      <ToolbarButton
+        icon={<ArrowUturnRightIcon className="size-4" />}
         onClick={() => editor.chain().focus().redo().run()}
-        disabled={disabled || !editor.can().chain().focus().redo().run()}
-      >
-        <ArrowUturnRightIcon className="h-4 w-4" />
-      </Button>
+        disabled={disabled || !canRedo}
+      />
     </div>
   )
 }

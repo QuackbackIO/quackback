@@ -6,7 +6,6 @@ interface TimeAgoProps {
   className?: string
 }
 
-// Compute time ago string - works on both server and client
 function getTimeAgo(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   return formatDistanceToNow(d, { addSuffix: true })
