@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { ZoomIn, ZoomOut } from 'lucide-react'
+import { MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon } from '@heroicons/react/24/solid'
 
 interface ImageCropperProps {
   imageSrc: string
@@ -213,7 +213,7 @@ export function ImageCropper({
         </div>
 
         <div className="flex items-center gap-3 px-1">
-          <ZoomOut className="h-4 w-4 text-muted-foreground shrink-0" />
+          <MagnifyingGlassMinusIcon className="h-4 w-4 text-muted-foreground shrink-0" />
           <Slider
             value={[zoom]}
             min={minZoom}
@@ -222,7 +222,7 @@ export function ImageCropper({
             onValueChange={(value) => setZoom(value[0])}
             className="flex-1"
           />
-          <ZoomIn className="h-4 w-4 text-muted-foreground shrink-0" />
+          <MagnifyingGlassPlusIcon className="h-4 w-4 text-muted-foreground shrink-0" />
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

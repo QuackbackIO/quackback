@@ -6,29 +6,27 @@ interface TimeAgoProps {
   className?: string
 }
 
+// Compute time ago string - works on both server and client
+function getTimeAgo(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return formatDistanceToNow(d, { addSuffix: true })
+}
+
 export function TimeAgo({ date, className }: TimeAgoProps) {
-  const [timeAgo, setTimeAgo] = useState<string>('')
+  // Initialize with computed value for SSR
+  const [timeAgo, setTimeAgo] = useState<string>(() => getTimeAgo(date))
 
   useEffect(() => {
-    const d = new Date(date)
-
-    const updateTime = () => {
-      setTimeAgo(formatDistanceToNow(d, { addSuffix: true }))
-    }
-
-    // Set initial value
-    updateTime()
+    // Update immediately in case server/client time differs slightly
+    setTimeAgo(getTimeAgo(date))
 
     // Update every minute
-    const interval = setInterval(updateTime, 60000)
+    const interval = setInterval(() => {
+      setTimeAgo(getTimeAgo(date))
+    }, 60000)
 
     return () => clearInterval(interval)
   }, [date])
-
-  // Return empty span with same structure to avoid layout shift
-  if (!timeAgo) {
-    return <span className={className} />
-  }
 
   return <span className={className}>{timeAgo}</span>
 }

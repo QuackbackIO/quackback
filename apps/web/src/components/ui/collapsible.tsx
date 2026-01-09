@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 
 const Collapsible = CollapsiblePrimitive.Root
@@ -47,7 +47,7 @@ function CollapsibleSection({
             type="button"
             className="flex flex-1 items-center gap-2 hover:text-foreground/80 transition-colors"
           >
-            <ChevronDown
+            <ChevronDownIcon
               className={cn(
                 'h-4 w-4 text-muted-foreground transition-transform duration-200',
                 isOpen && 'rotate-180'

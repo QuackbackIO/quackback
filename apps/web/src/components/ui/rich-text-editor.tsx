@@ -4,7 +4,15 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import { useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { Bold, Italic, List, ListOrdered, Undo, Redo, Link as LinkIcon } from 'lucide-react'
+// Note: Heroicons doesn't have text formatting icons (Bold, Italic, ListOrdered)
+// Keeping lucide-react for those, using heroicons for the rest
+import { Bold, Italic, ListOrdered } from 'lucide-react'
+import {
+  ListBulletIcon,
+  LinkIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from './button'
 
 interface RichTextEditorProps {
@@ -196,7 +204,7 @@ function MenuBar({
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         disabled={disabled}
       >
-        <List className="h-4 w-4" />
+        <ListBulletIcon className="h-4 w-4" />
       </Button>
       <Button
         type="button"
@@ -228,7 +236,7 @@ function MenuBar({
         onClick={() => editor.chain().focus().undo().run()}
         disabled={disabled || !editor.can().chain().focus().undo().run()}
       >
-        <Undo className="h-4 w-4" />
+        <ArrowUturnLeftIcon className="h-4 w-4" />
       </Button>
       <Button
         type="button"
@@ -238,59 +246,101 @@ function MenuBar({
         onClick={() => editor.chain().focus().redo().run()}
         disabled={disabled || !editor.can().chain().focus().redo().run()}
       >
-        <Redo className="h-4 w-4" />
+        <ArrowUturnRightIcon className="h-4 w-4" />
       </Button>
     </div>
   )
 }
 
-// Read-only content renderer
+// Read-only content renderer - SSR compatible
 interface RichTextContentProps {
   content: JSONContent | string
   className?: string
 }
 
-export function RichTextContent({ content, className }: RichTextContentProps) {
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        heading: false,
-        codeBlock: false,
-        blockquote: false,
-        horizontalRule: false,
-        link: false, // Disable built-in Link, we use our own configured version
-      }),
-      Link.configure({
-        openOnClick: true,
-        HTMLAttributes: {
-          class: 'text-primary underline',
-        },
-      }),
-    ],
-    content,
-    editable: false,
-    editorProps: {
-      attributes: {
-        class: cn('prose prose-neutral dark:prose-invert max-w-none', className),
-      },
-    },
-  })
+// Generate HTML from TipTap JSON content for SSR
+function generateContentHTML(content: JSONContent): string {
+  // Simple recursive HTML generator for common node types
+  function renderNode(node: JSONContent): string {
+    if (!node) return ''
 
-  // Update editor content when content prop changes
-  useEffect(() => {
-    if (editor && content) {
-      // Only update if content has actually changed
-      const currentContent = editor.getJSON()
-      const newContentStr = JSON.stringify(content)
-      const currentContentStr = JSON.stringify(currentContent)
-      if (newContentStr !== currentContentStr) {
-        editor.commands.setContent(content)
+    switch (node.type) {
+      case 'doc':
+        return node.content?.map(renderNode).join('') ?? ''
+
+      case 'paragraph': {
+        const pContent = node.content?.map(renderNode).join('') ?? ''
+        return pContent ? `<p>${pContent}</p>` : '<p></p>'
       }
-    }
-  }, [editor, content])
 
-  return <EditorContent editor={editor} />
+      case 'text': {
+        let text = node.text ?? ''
+        // Escape HTML entities
+        text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        // Apply marks
+        if (node.marks) {
+          for (const mark of node.marks) {
+            switch (mark.type) {
+              case 'bold':
+                text = `<strong>${text}</strong>`
+                break
+              case 'italic':
+                text = `<em>${text}</em>`
+                break
+              case 'link': {
+                const href = mark.attrs?.href ?? ''
+                text = `<a href="${href}" class="text-primary underline" target="_blank" rel="noopener noreferrer">${text}</a>`
+                break
+              }
+            }
+          }
+        }
+        return text
+      }
+
+      case 'bulletList':
+        return `<ul>${node.content?.map(renderNode).join('') ?? ''}</ul>`
+
+      case 'orderedList':
+        return `<ol>${node.content?.map(renderNode).join('') ?? ''}</ol>`
+
+      case 'listItem':
+        return `<li>${node.content?.map(renderNode).join('') ?? ''}</li>`
+
+      case 'hardBreak':
+        return '<br>'
+
+      default:
+        // For unknown nodes, try to render their content
+        return node.content?.map(renderNode).join('') ?? ''
+    }
+  }
+
+  return renderNode(content)
+}
+
+export function RichTextContent({ content, className }: RichTextContentProps) {
+  // For SSR: generate HTML directly from JSON content
+  if (typeof content === 'object' && content.type === 'doc') {
+    const html = generateContentHTML(content)
+    return (
+      <div
+        className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
+
+  // For string content (HTML or plain text)
+  if (typeof content === 'string') {
+    return (
+      <div className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}>
+        <p className="whitespace-pre-wrap">{content}</p>
+      </div>
+    )
+  }
+
+  return null
 }
 
 // Helper to convert TipTap JSON to plain text

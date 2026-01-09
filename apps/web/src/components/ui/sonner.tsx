@@ -1,10 +1,10 @@
 import {
-  CircleCheckIcon,
-  InfoIcon,
-  Loader2Icon,
-  OctagonXIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+  CheckCircleIcon,
+  InformationCircleIcon,
+  ExclamationTriangleIcon,
+  XCircleIcon,
+} from '@heroicons/react/24/solid'
+// Note: Heroicons doesn't have an animated loader, using a simple spinner via CSS
 import { useTheme } from 'next-themes'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
@@ -16,11 +16,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps['theme']}
       className="toaster group"
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        success: <CheckCircleIcon className="size-4" />,
+        info: <InformationCircleIcon className="size-4" />,
+        warning: <ExclamationTriangleIcon className="size-4" />,
+        error: <XCircleIcon className="size-4" />,
+        loading: (
+          <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ),
       }}
       style={
         {
