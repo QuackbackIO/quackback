@@ -146,8 +146,8 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
     <aside className="w-64 xl:w-72 shrink-0 flex flex-col border-r border-border/50 bg-card/30 overflow-hidden">
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
-        <div className="flex items-center justify-between py-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="flex items-center justify-between py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Roadmaps
           </span>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -224,22 +224,22 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                 <div
                   key={roadmap.id}
                   className={cn(
-                    'group flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors',
+                    'group flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer font-medium transition-colors',
                     selectedRoadmapId === roadmap.id
-                      ? 'bg-muted text-foreground font-medium'
+                      ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   )}
                   onClick={() => onSelectRoadmap(roadmap.id)}
                 >
                   <MapIcon
                     className={cn(
-                      'h-4 w-4 shrink-0',
+                      'h-3.5 w-3.5 shrink-0',
                       selectedRoadmapId === roadmap.id ? 'text-primary' : ''
                     )}
                   />
-                  <span className="flex-1 text-sm truncate">{roadmap.name}</span>
+                  <span className="flex-1 text-xs truncate">{roadmap.name}</span>
                   {!roadmap.isPublic && (
-                    <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                    <LockClosedIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                   )}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

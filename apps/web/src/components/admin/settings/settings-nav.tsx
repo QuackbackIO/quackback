@@ -71,14 +71,14 @@ function NavSection({
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   return (
-    <div className="pb-5 last:pb-0">
+    <div className="pb-4 last:pb-0">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center justify-between py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
       >
         {label}
-        {isOpen ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+        {isOpen ? <ChevronUpIcon className="h-3 w-3" /> : <ChevronDownIcon className="h-3 w-3" />}
       </button>
       {isOpen && <div className="mt-2 space-y-1">{children}</div>}
     </div>
@@ -120,13 +120,13 @@ export function SettingsNav({ isCloud, hasEnterprise }: SettingsNavProps) {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
                   isActive
-                    ? 'bg-muted text-foreground font-medium'
+                    ? 'bg-muted text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >
-                <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+                <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive && 'text-primary')} />
                 <span className="truncate">{item.label}</span>
               </Link>
             )

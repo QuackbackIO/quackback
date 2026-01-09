@@ -22,6 +22,12 @@ interface PendingInvitationsProps {
 
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
 
+function getResendTooltipText(isExpired: boolean, minutesUntilResend: number | null): string {
+  if (isExpired) return 'Invitation expired'
+  if (minutesUntilResend) return `Wait ${minutesUntilResend} min to resend`
+  return 'Resend invitation'
+}
+
 export function PendingInvitations({ invitations: initialInvitations }: PendingInvitationsProps) {
   const [invitations, setInvitations] = useState(initialInvitations)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -161,11 +167,7 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {isExpired
-                        ? 'Invitation expired'
-                        : minutesUntilResend
-                          ? `Wait ${minutesUntilResend} min to resend`
-                          : 'Resend invitation'}
+                      {getResendTooltipText(isExpired, minutesUntilResend)}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

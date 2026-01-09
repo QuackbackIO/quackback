@@ -10,23 +10,18 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server-functions/roadmaps'
-import type { PostStatusEntity } from '@/lib/db-types'
 import type { PostId, RoadmapId } from '@quackback/ids'
 
 interface AddToRoadmapDropdownProps {
   postId: PostId
-  currentStatusId: string
   /** List of roadmap IDs this post is already on */
   currentRoadmapIds?: string[]
-  statuses: PostStatusEntity[]
   onSuccess?: () => void
 }
 
 export function AddToRoadmapDropdown({
   postId,
-  currentStatusId,
   currentRoadmapIds = [],
-  statuses,
   onSuccess,
 }: AddToRoadmapDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -35,9 +30,6 @@ export function AddToRoadmapDropdown({
   const { data: roadmaps, isLoading: isLoadingRoadmaps } = useRoadmaps({
     enabled: isOpen,
   })
-
-  // Get the first status with showOnRoadmap for default placement
-  const _defaultStatusId = statuses.find((s) => s.showOnRoadmap)?.id ?? currentStatusId
 
   const isOnRoadmap = (roadmapId: string) => currentRoadmapIds.includes(roadmapId)
 

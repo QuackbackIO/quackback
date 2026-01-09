@@ -1,6 +1,7 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { RoadmapPostEntry } from '@/lib/roadmaps'
 
 interface AdminRoadmapCardProps {
@@ -52,13 +53,12 @@ export function AdminRoadmapCard({ post, statusId }: AdminRoadmapCardProps) {
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex bg-card rounded-lg border cursor-grab active:cursor-grabbing transition-all ${
-        isDragging
-          ? 'opacity-50 border-primary shadow-lg scale-[1.02]'
-          : isOver
-            ? 'border-primary bg-primary/5'
-            : 'border-border hover:border-border/80 hover:shadow-sm'
-      }`}
+      className={cn(
+        'flex bg-card rounded-lg border cursor-grab active:cursor-grabbing transition-all',
+        isDragging && 'opacity-50 border-primary shadow-lg scale-[1.02]',
+        !isDragging && isOver && 'border-primary bg-primary/5',
+        !isDragging && !isOver && 'border-border hover:border-border/80 hover:shadow-sm'
+      )}
     >
       <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">
         <ChevronUpIcon className="h-5 w-5" />
