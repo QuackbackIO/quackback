@@ -393,7 +393,7 @@ export function DetailContent({
       {/* Main content */}
       <div className="flex border-b border-border/30">
         {/* Vote column */}
-        <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 bg-muted/10">
+        <div className="flex flex-col items-center justify-start py-6 px-6 border-r border-border/30 bg-muted/10">
           <button
             type="button"
             onClick={onVote}
@@ -455,7 +455,7 @@ export function DetailContent({
               <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 to-primary/4 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <Badge className="text-[10px] px-2 py-0.5 bg-primary/15 text-primary border-0 font-semibold uppercase tracking-wide">
+                    <Badge className="text-xs px-2.5 py-1 bg-primary/15 text-primary border-0 font-semibold uppercase tracking-wide">
                       Official Response
                     </Badge>
                     {post.officialResponse.authorName && (

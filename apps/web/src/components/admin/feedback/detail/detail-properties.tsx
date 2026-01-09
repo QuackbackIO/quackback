@@ -31,7 +31,7 @@ interface DetailPropertiesProps {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-3">
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2.5">
       {children}
     </h3>
   )
@@ -39,8 +39,8 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function PropertyItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
-      <span className="text-[11px] font-medium text-muted-foreground/80">{label}</span>
+    <div className="space-y-1">
+      <span className="text-xs font-medium text-muted-foreground/80">{label}</span>
       <div>{children}</div>
     </div>
   )
@@ -60,7 +60,7 @@ export function DetailProperties({
   const [tagOpen, setTagOpen] = useState(false)
 
   const currentStatus = statuses.find((s) => s.id === post.statusId)
-  const currentBoard = boards.find((b) => b.id === post.boardId)
+  const currentBoard = boards.find((b) => b.id === post.board.id)
 
   const handleStatusChange = async (statusId: StatusId) => {
     setStatusOpen(false)
@@ -84,7 +84,7 @@ export function DetailProperties({
   }
 
   return (
-    <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/40 bg-gradient-to-b from-card/50 to-card/30 overflow-hidden">
+    <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-gradient-to-b from-card/50 to-card/30 overflow-hidden">
       <ScrollArea className="h-full">
         <div className="p-5 space-y-6">
           {/* Properties Section */}
@@ -99,7 +99,7 @@ export function DetailProperties({
                       type="button"
                       disabled={isUpdating}
                       className={cn(
-                        'group flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full',
+                        'group flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs w-full',
                         'bg-muted/40 hover:bg-muted/60 border border-transparent hover:border-border/50',
                         'transition-all duration-150 ease-out',
                         'disabled:opacity-50 disabled:cursor-not-allowed',
@@ -107,20 +107,20 @@ export function DetailProperties({
                       )}
                     >
                       <span
-                        className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white/10 shadow-sm"
+                        className="h-2 w-2 rounded-full shrink-0 ring-2 ring-white/10 shadow-sm"
                         style={{ backgroundColor: currentStatus?.color || '#94a3b8' }}
                       />
                       <span className="font-medium flex-1 text-left text-foreground/90">
                         {currentStatus?.name || 'No Status'}
                       </span>
                       {isUpdating ? (
-                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        <ArrowPathIcon className="h-3 w-3 animate-spin text-muted-foreground" />
                       ) : (
-                        <ChevronUpDownIcon className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
+                        <ChevronUpDownIcon className="h-3 w-3 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
                       )}
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-52 p-1.5" sideOffset={4}>
+                  <PopoverContent align="start" className="w-44 p-1" sideOffset={4}>
                     <div className="space-y-0.5">
                       {statuses.map((status) => (
                         <button
@@ -128,7 +128,7 @@ export function DetailProperties({
                           type="button"
                           onClick={() => handleStatusChange(status.id)}
                           className={cn(
-                            'w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm',
+                            'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs',
                             'transition-all duration-100 ease-out',
                             status.id === currentStatus?.id
                               ? 'bg-primary/10 text-foreground'
@@ -136,12 +136,12 @@ export function DetailProperties({
                           )}
                         >
                           <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0 shadow-sm"
+                            className="h-2 w-2 rounded-full shrink-0 shadow-sm"
                             style={{ backgroundColor: status.color }}
                           />
                           <span className="flex-1 text-left font-medium">{status.name}</span>
                           {status.id === currentStatus?.id && (
-                            <CheckIcon className="h-3.5 w-3.5 text-primary" />
+                            <CheckIcon className="h-3 w-3 text-primary" />
                           )}
                         </button>
                       ))}
@@ -152,7 +152,7 @@ export function DetailProperties({
 
               {/* Board */}
               <PropertyItem label="Board">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 text-sm">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/30 text-xs">
                   <span className="font-medium text-foreground/90">
                     {currentBoard?.name || 'Unknown'}
                   </span>
@@ -169,8 +169,8 @@ export function DetailProperties({
                       onClick={() => handleTagToggle(tag.id)}
                       disabled={isUpdating}
                       className={cn(
-                        'group inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1',
-                        'rounded-full text-xs font-medium',
+                        'group inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5',
+                        'rounded-full text-[11px] font-medium',
                         'bg-primary/8 text-primary/90 border border-primary/15',
                         'hover:bg-primary/12 hover:border-primary/25',
                         'transition-all duration-150 ease-out',
@@ -178,7 +178,7 @@ export function DetailProperties({
                       )}
                     >
                       {tag.name}
-                      <XMarkIcon className="h-3 w-3 opacity-40 group-hover:opacity-80 transition-opacity" />
+                      <XMarkIcon className="h-2.5 w-2.5 opacity-40 group-hover:opacity-80 transition-opacity" />
                     </button>
                   ))}
                   {tags.filter((t) => !post.tags.some((pt) => pt.id === t.id)).length > 0 && (
@@ -188,8 +188,8 @@ export function DetailProperties({
                           type="button"
                           disabled={isUpdating}
                           className={cn(
-                            'inline-flex items-center gap-1 px-2.5 py-1',
-                            'rounded-full text-xs font-medium',
+                            'inline-flex items-center gap-1 px-2 py-0.5',
+                            'rounded-full text-[11px] font-medium',
                             'text-muted-foreground/70 hover:text-muted-foreground',
                             'border border-dashed border-border/60 hover:border-border',
                             'hover:bg-muted/40',
@@ -197,11 +197,11 @@ export function DetailProperties({
                             'disabled:opacity-50'
                           )}
                         >
-                          <PlusIcon className="h-3 w-3" />
+                          <PlusIcon className="h-2.5 w-2.5" />
                           Add
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-48 p-1.5" align="start" sideOffset={4}>
+                      <PopoverContent className="w-40 p-1" align="start" sideOffset={4}>
                         <div className="max-h-48 overflow-y-auto space-y-0.5">
                           {tags
                             .filter((tag) => !post.tags.some((t) => t.id === tag.id))
@@ -211,7 +211,7 @@ export function DetailProperties({
                                 type="button"
                                 onClick={() => handleAddTag(tag.id)}
                                 className={cn(
-                                  'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md',
+                                  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
                                   'text-foreground/80 hover:text-foreground hover:bg-muted/60',
                                   'transition-all duration-100 ease-out text-left font-medium'
                                 )}
@@ -232,22 +232,22 @@ export function DetailProperties({
           </div>
 
           {/* Author Section */}
-          <div className="border-t border-border/30 pt-6">
+          <div className="border-t border-border/30 pt-5">
             <SectionHeader>Author</SectionHeader>
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/25 hover:bg-muted/40 transition-colors duration-150">
-              <Avatar className="h-10 w-10 ring-2 ring-background shadow-sm">
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-muted/25 hover:bg-muted/40 transition-colors duration-150">
+              <Avatar className="h-8 w-8 ring-2 ring-background shadow-sm">
                 {post.memberId && avatarUrls?.[post.memberId] && (
                   <AvatarImage src={avatarUrls[post.memberId]!} alt={post.authorName || 'Author'} />
                 )}
-                <AvatarFallback className="text-sm bg-primary/10 text-primary font-medium">
+                <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
                   {getInitials(post.authorName)}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate text-foreground/90">
+                <p className="text-xs font-medium truncate text-foreground/90">
                   {post.authorName || 'Anonymous'}
                 </p>
-                <p className="text-[11px] text-muted-foreground/70">
+                <p className="text-[10px] text-muted-foreground/70">
                   Submitted <TimeAgo date={post.createdAt} />
                 </p>
               </div>
@@ -255,28 +255,28 @@ export function DetailProperties({
           </div>
 
           {/* Stats Section */}
-          <div className="border-t border-border/30 pt-6">
+          <div className="border-t border-border/30 pt-5">
             <SectionHeader>Engagement</SectionHeader>
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="group relative p-3.5 rounded-xl bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30 hover:border-border/50 transition-all duration-150">
-                <div className="flex items-center gap-2 mb-1">
-                  <HandThumbUpIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="group relative p-2.5 rounded-lg bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30 hover:border-border/50 transition-all duration-150">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <HandThumbUpIcon className="h-3 w-3 text-muted-foreground/50" />
                   <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/60">
                     Votes
                   </span>
                 </div>
-                <p className="text-2xl font-bold tabular-nums text-foreground/90">
+                <p className="text-xl font-bold tabular-nums text-foreground/90">
                   {post.voteCount}
                 </p>
               </div>
-              <div className="group relative p-3.5 rounded-xl bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30 hover:border-border/50 transition-all duration-150">
-                <div className="flex items-center gap-2 mb-1">
-                  <ChatBubbleLeftIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
+              <div className="group relative p-2.5 rounded-lg bg-gradient-to-br from-muted/40 to-muted/20 border border-border/30 hover:border-border/50 transition-all duration-150">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <ChatBubbleLeftIcon className="h-3 w-3 text-muted-foreground/50" />
                   <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/60">
                     Comments
                   </span>
                 </div>
-                <p className="text-2xl font-bold tabular-nums text-foreground/90">
+                <p className="text-xl font-bold tabular-nums text-foreground/90">
                   {post.comments?.length || 0}
                 </p>
               </div>

@@ -1,5 +1,4 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useCallback } from 'react'
 import {
   ArrowLeftIcon,
   ChevronLeftIcon,
@@ -22,11 +21,9 @@ import {
 import { AddToRoadmapDropdown } from '@/components/admin/add-to-roadmap-dropdown'
 import type { NavigationContext } from './use-navigation-context'
 import type { PostDetails } from '@/components/admin/feedback/inbox-types'
-import type { PostStatusEntity } from '@/lib/db-types'
 
 interface DetailHeaderProps {
   post: PostDetails
-  statuses: PostStatusEntity[]
   navigationContext: NavigationContext
   onEdit: () => void
   onRoadmapChange?: () => void
@@ -34,59 +31,37 @@ interface DetailHeaderProps {
 
 export function DetailHeader({
   post,
-  statuses,
   navigationContext,
   onEdit,
   onRoadmapChange,
-}: DetailHeaderProps) {
+}: DetailHeaderProps): React.ReactElement {
   const navigate = useNavigate()
 
-  const handleBack = () => {
-    navigate({ to: navigationContext.backUrl as any })
+  function navigateToPost(postId: string): void {
+    navigate({
+      to: '/admin/feedback/posts/$postId',
+      params: { postId },
+    })
   }
 
-  const handlePrev = () => {
-    if (navigationContext.prevId) {
-      // Just navigate to the post - sessionStorage has the full list for context
-      navigate({
-        to: '/admin/feedback/posts/$postId',
-        params: { postId: navigationContext.prevId },
-      })
-    }
-  }
-
-  const handleNext = () => {
-    if (navigationContext.nextId) {
-      // Just navigate to the post - sessionStorage has the full list for context
-      navigate({
-        to: '/admin/feedback/posts/$postId',
-        params: { postId: navigationContext.nextId },
-      })
-    }
-  }
-
-  const handleCopyLink = useCallback(async () => {
+  async function handleCopyLink(): Promise<void> {
     try {
       await navigator.clipboard.writeText(window.location.href)
       toast.success('Link copied to clipboard')
     } catch {
       toast.error('Failed to copy link')
     }
-  }, [])
-
-  const handleViewInPortal = useCallback(() => {
-    window.open(`/b/${post.board.slug}/posts/${post.id}`, '_blank')
-  }, [post.board.slug, post.id])
+  }
 
   return (
     <header className="sticky top-0 z-20 bg-gradient-to-b from-card/98 to-card/95 backdrop-blur-md border-b border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-      <div className="flex items-center justify-between px-4 py-2.5">
+      <div className="flex items-center justify-between px-6 py-2.5">
         {/* Left side: Back button and breadcrumb */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleBack}
+            onClick={() => navigate({ to: navigationContext.backUrl as any })}
             className="gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-150"
           >
             <ArrowLeftIcon className="h-3.5 w-3.5" />
@@ -115,7 +90,9 @@ export function DetailHeader({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={handlePrev}
+                  onClick={() =>
+                    navigationContext.prevId && navigateToPost(navigationContext.prevId)
+                  }
                   disabled={!navigationContext.prevId}
                   className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
                 >
@@ -124,7 +101,9 @@ export function DetailHeader({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={handleNext}
+                  onClick={() =>
+                    navigationContext.nextId && navigateToPost(navigationContext.nextId)
+                  }
                   disabled={!navigationContext.nextId}
                   className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
                 >
@@ -147,9 +126,7 @@ export function DetailHeader({
 
           <AddToRoadmapDropdown
             postId={post.id}
-            currentStatusId={post.statusId ?? ''}
             currentRoadmapIds={post.roadmapIds}
-            statuses={statuses}
             onSuccess={onRoadmapChange}
           />
 
@@ -165,7 +142,10 @@ export function DetailHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44" sideOffset={4}>
-              <DropdownMenuItem onClick={handleViewInPortal} className="gap-2">
+              <DropdownMenuItem
+                onClick={() => window.open(`/b/${post.board.slug}/posts/${post.id}`, '_blank')}
+                className="gap-2"
+              >
                 <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
                 View in Portal
               </DropdownMenuItem>
