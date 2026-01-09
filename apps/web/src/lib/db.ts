@@ -28,7 +28,7 @@ declare global {
  */
 function getDatabase(): Database {
   // Cloud multi-tenant mode: get tenant database from request context
-  if (process.env.CATALOG_DATABASE_URL) {
+  if (process.env.CLOUD_CATALOG_DATABASE_URL) {
     const ctx = tenantStorage.getStore()
     if (ctx?.db) {
       return ctx.db

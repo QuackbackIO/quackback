@@ -17,7 +17,7 @@ import { z } from 'zod'
 const serverEnvSchema = z.object({
   // Database
   DATABASE_URL: z.string().optional(),
-  CATALOG_DATABASE_URL: z.string().optional(),
+  CLOUD_CATALOG_DATABASE_URL: z.string().optional(),
 
   // Auth
   BETTER_AUTH_SECRET: z.string().min(1),
@@ -33,9 +33,9 @@ const serverEnvSchema = z.object({
   EMAIL_FROM: z.string().default('Quackback <noreply@quackback.io>'),
 
   // Cloud multi-tenant
-  NEON_API_KEY: z.string().optional(),
-  TENANT_BASE_DOMAIN: z.string().optional(),
-  NEON_DEFAULT_REGION: z.string().default('aws-us-east-1'),
+  CLOUD_NEON_API_KEY: z.string().optional(),
+  CLOUD_TENANT_BASE_DOMAIN: z.string().optional(),
+  CLOUD_NEON_DEFAULT_REGION: z.string().default('aws-us-east-1'),
 
   // OAuth providers
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -59,7 +59,7 @@ const serverEnvSchema = z.object({
   ENTERPRISE_LICENSE_KEY: z.string().optional(),
 
   // Session transfer (cloud)
-  TRANSFER_TOKEN_SECRET: z.string().optional(),
+  CLOUD_TRANSFER_TOKEN_SECRET: z.string().optional(),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>
@@ -129,7 +129,7 @@ export const config = {
 
   /** Check if multi-tenant mode is enabled (has catalog database) */
   get isMultiTenant() {
-    return Boolean(getConfig().CATALOG_DATABASE_URL)
+    return Boolean(getConfig().CLOUD_CATALOG_DATABASE_URL)
   },
 }
 

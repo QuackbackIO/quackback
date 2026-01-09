@@ -10,11 +10,9 @@ import { userIdSchema, type UserId } from '@quackback/ids'
 import { getWorkspaceFeatures } from '@/lib/features/server'
 import {
   getBrandingConfig,
-  getCustomCss,
   getPortalConfig,
   getPublicPortalConfig,
   getPublicAuthConfig,
-  updateCustomCss,
   updateBrandingConfig,
   updatePortalConfig,
   uploadLogo,
@@ -74,21 +72,6 @@ export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(asy
     return config
   } catch (error) {
     console.error(`[fn:settings] ❌ fetchBrandingConfig failed:`, error)
-    throw error
-  }
-})
-
-/**
- * Fetch custom CSS (public - used for portal styling)
- */
-export const fetchCustomCss = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchCustomCss`)
-  try {
-    const css = await getCustomCss()
-    console.log(`[fn:settings] fetchCustomCss: hasCustomCss=${!!css}`)
-    return css
-  } catch (error) {
-    console.error(`[fn:settings] ❌ fetchCustomCss failed:`, error)
     throw error
   }
 })
@@ -267,14 +250,6 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
     }
   })
 
-// ============================================
-// Schemas
-// ============================================
-
-const updateCustomCssSchema = z.object({
-  customCss: z.string().nullable(),
-})
-
 const updateThemeSchema = z.object({
   brandingConfig: z.record(z.string(), z.unknown()),
 })
@@ -297,28 +272,8 @@ const updatePortalConfigSchema = z.object({
     .optional(),
 })
 
-// ============================================
-// Type Exports
-// ============================================
-
-export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
 export type UpdateThemeInput = z.infer<typeof updateThemeSchema>
 export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSchema>
-
-// ============================================
-// Write Operations
-// ============================================
-
-/**
- * Update custom CSS
- */
-export const updateCustomCssFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateCustomCssSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
-
-    return await updateCustomCss(data.customCss)
-  })
 
 /**
  * Update branding theme configuration

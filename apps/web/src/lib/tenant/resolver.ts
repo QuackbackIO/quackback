@@ -53,9 +53,9 @@ const catalogSchema = { workspace, workspaceDomain }
 
 function getConfig() {
   return {
-    catalogDbUrl: process.env.CATALOG_DATABASE_URL,
-    baseDomain: process.env.TENANT_BASE_DOMAIN,
-    neonApiKey: process.env.NEON_API_KEY,
+    catalogDbUrl: process.env.CLOUD_CATALOG_DATABASE_URL,
+    baseDomain: process.env.CLOUD_TENANT_BASE_DOMAIN,
+    neonApiKey: process.env.CLOUD_NEON_API_KEY,
   }
 }
 
@@ -183,7 +183,7 @@ export async function resolveTenantFromDomain(request: Request): Promise<TenantC
 
   if (!config.catalogDbUrl || !config.baseDomain || !config.neonApiKey) {
     console.error(
-      '[resolver] Tenant resolution not configured: missing CATALOG_DATABASE_URL, TENANT_BASE_DOMAIN, or NEON_API_KEY'
+      '[resolver] Tenant resolution not configured: missing CLOUD_CATALOG_DATABASE_URL, CLOUD_TENANT_BASE_DOMAIN, or CLOUD_NEON_API_KEY'
     )
     return null
   }

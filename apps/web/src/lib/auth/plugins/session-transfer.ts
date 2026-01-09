@@ -51,12 +51,14 @@ export const sessionTransfer = () => {
         },
         async (ctx) => {
           const { token } = ctx.query
-          const transferSecret = process.env.TRANSFER_TOKEN_SECRET
+          const transferSecret = process.env.CLOUD_TRANSFER_TOKEN_SECRET
           const NODE_ENV = process.env.NODE_ENV
 
           // Check if session-transfer is enabled (requires shared secret)
           if (!transferSecret) {
-            console.warn('Session transfer attempted but TRANSFER_TOKEN_SECRET not configured')
+            console.warn(
+              'Session transfer attempted but CLOUD_TRANSFER_TOKEN_SECRET not configured'
+            )
             return ctx.redirect('/admin/login?error=session_transfer_not_configured')
           }
 

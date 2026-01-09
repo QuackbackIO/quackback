@@ -84,9 +84,9 @@ function generateUuid(prefix: string): string {
 
 /** Get catalog database connection */
 function getCatalogDb() {
-  const url = process.env.CATALOG_DATABASE_URL
+  const url = process.env.CLOUD_CATALOG_DATABASE_URL
   if (!url) {
-    throw new Error('CATALOG_DATABASE_URL is required for cloud mode')
+    throw new Error('CLOUD_CATALOG_DATABASE_URL is required for cloud mode')
   }
   const sql = postgres(url, { max: 5 })
   return drizzle(sql, { schema: catalogSchema })
@@ -112,13 +112,13 @@ async function createNeonProject(
   name: string,
   region?: string
 ): Promise<{ projectId: string; connectionUri: string }> {
-  const apiKey = process.env.NEON_API_KEY
+  const apiKey = process.env.CLOUD_NEON_API_KEY
   if (!apiKey) {
-    throw new Error('NEON_API_KEY is required')
+    throw new Error('CLOUD_NEON_API_KEY is required')
   }
 
   const client = createApiClient({ apiKey })
-  const defaultRegion = process.env.NEON_DEFAULT_REGION || 'aws-us-east-1'
+  const defaultRegion = process.env.CLOUD_NEON_DEFAULT_REGION || 'aws-us-east-1'
 
   // Retry logic for transient errors
   let lastError: Error | null = null
@@ -155,7 +155,7 @@ async function createNeonProject(
 
 /** Delete Neon project (for cleanup on failure) */
 async function deleteNeonProject(projectId: string): Promise<void> {
-  const apiKey = process.env.NEON_API_KEY
+  const apiKey = process.env.CLOUD_NEON_API_KEY
   if (!apiKey) return
 
   try {
@@ -473,7 +473,7 @@ export const createWorkspaceFn = createServerFn({ method: 'POST' })
         .where(eq(workspace.id, workspaceId))
 
       // 6. Create subdomain record
-      const baseDomain = process.env.TENANT_BASE_DOMAIN || 'quackback.io'
+      const baseDomain = process.env.CLOUD_TENANT_BASE_DOMAIN || 'quackback.io'
       await db.insert(workspaceDomain).values({
         id: generateUuid('domain'),
         workspaceId,

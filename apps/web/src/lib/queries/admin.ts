@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { BoardId, TagId, MemberId } from '@quackback/ids'
+import type { BoardId, TagId, MemberId, PostId } from '@quackback/ids'
 import {
   fetchInboxPosts,
   fetchBoardsList,
@@ -11,6 +11,7 @@ import {
   fetchIntegrationsList,
   listPortalUsersFn,
 } from '@/lib/server-functions/admin'
+import { fetchPostWithDetails } from '@/lib/server-functions/posts'
 import { fetchPublicStatuses } from '@/lib/server-functions/portal'
 import type { PortalUserListParams } from '@/lib/users/user.types'
 
@@ -149,6 +150,16 @@ export const adminQueries = {
       queryKey: ['admin', 'integrations'],
       queryFn: () => fetchIntegrationsList(),
       staleTime: 1 * 60 * 1000, // 1min - integration status can change
+    }),
+
+  /**
+   * Get post details by ID
+   */
+  postDetail: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['admin', 'post', postId],
+      queryFn: () => fetchPostWithDetails({ data: { id: postId } }),
+      staleTime: 30 * 1000, // 30s - frequently updated
     }),
 }
 
