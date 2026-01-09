@@ -1,4 +1,4 @@
-import { Search, FileQuestion } from 'lucide-react'
+import { MagnifyingGlassIcon, DocumentIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 
 interface InboxEmptyStateProps {
@@ -11,7 +11,7 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
         <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-          <Search className="h-6 w-6 text-muted-foreground" />
+          <MagnifyingGlassIcon className="h-6 w-6 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-medium text-foreground mb-1">No posts match your filters</h3>
         <p className="text-sm text-muted-foreground max-w-sm mb-4">
@@ -30,7 +30,7 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
   return (
     <div className="flex flex-col items-center justify-center h-full py-16 px-4 text-center">
       <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-        <FileQuestion className="h-6 w-6 text-muted-foreground" />
+        <DocumentIcon className="h-6 w-6 text-muted-foreground" />
       </div>
       <h3 className="text-lg font-medium text-foreground mb-1">Select a post</h3>
       <p className="text-sm text-muted-foreground max-w-sm">

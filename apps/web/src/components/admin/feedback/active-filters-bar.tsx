@@ -1,15 +1,14 @@
 import { useMemo, useState } from 'react'
 import {
-  X,
-  Circle,
-  LayoutGrid,
-  Tag,
-  User,
-  Calendar,
-  TrendingUp,
-  Plus,
-  ChevronRight,
-} from 'lucide-react'
+  XMarkIcon,
+  Squares2X2Icon,
+  TagIcon,
+  UserIcon,
+  CalendarIcon,
+  ArrowTrendingUpIcon,
+  PlusIcon,
+  ChevronRightIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { InboxFilters } from './use-inbox-filters'
@@ -48,13 +47,18 @@ interface ActiveFiltersBarProps {
 
 type FilterCategory = 'status' | 'board' | 'tags' | 'owner' | 'date' | 'votes'
 
-const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: typeof Circle }[] = [
-  { key: 'status', label: 'Status', icon: Circle },
-  { key: 'board', label: 'Board', icon: LayoutGrid },
-  { key: 'tags', label: 'Tag', icon: Tag },
-  { key: 'owner', label: 'Assigned to', icon: User },
-  { key: 'date', label: 'Created date', icon: Calendar },
-  { key: 'votes', label: 'Vote count', icon: TrendingUp },
+// Circle icon placeholder - using a simple colored div instead
+const CircleIcon = ({ className }: { className?: string }) => (
+  <span className={`inline-block rounded-full bg-current ${className}`} />
+)
+
+const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: typeof Squares2X2Icon }[] = [
+  { key: 'status', label: 'Status', icon: CircleIcon as any },
+  { key: 'board', label: 'Board', icon: Squares2X2Icon },
+  { key: 'tags', label: 'Tag', icon: TagIcon },
+  { key: 'owner', label: 'Assigned to', icon: UserIcon },
+  { key: 'date', label: 'Created date', icon: CalendarIcon },
+  { key: 'votes', label: 'Vote count', icon: ArrowTrendingUpIcon },
 ]
 
 const VOTE_THRESHOLDS = [
@@ -171,19 +175,19 @@ function AddFilterButton({
         <button
           type="button"
           className={cn(
-            'inline-flex items-center gap-1 px-2.5 py-1',
-            'rounded-full text-sm',
+            'inline-flex items-center gap-1 px-2 py-0.5',
+            'rounded-full text-xs',
             'border border-dashed border-border/50',
             'text-muted-foreground hover:text-foreground',
             'hover:border-border hover:bg-muted/30',
             'transition-colors'
           )}
         >
-          <Plus className="h-3.5 w-3.5" />
+          <PlusIcon className="h-3 w-3" />
           Add filter
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 p-0">
+      <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
           <div className="py-1">
             {FILTER_CATEGORIES.map((category) => {
@@ -194,16 +198,16 @@ function AddFilterButton({
                   type="button"
                   onClick={() => setActiveCategory(category.key)}
                   className={cn(
-                    'w-full flex items-center justify-between gap-2 px-3 py-2',
-                    'text-sm text-left',
+                    'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
+                    'text-xs text-left',
                     'hover:bg-muted/50 transition-colors'
                   )}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                     {category.label}
                   </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
                 </button>
               )
             })}
@@ -213,9 +217,9 @@ function AddFilterButton({
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground border-b border-border/50"
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
-              <ChevronRight className="h-3 w-3 rotate-180" />
+              <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               Back
             </button>
             <div className="max-h-[250px] overflow-y-auto py-1">
@@ -225,7 +229,7 @@ function AddFilterButton({
                     key={status.id}
                     type="button"
                     onClick={() => handleSelectStatus(status.slug)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     <span
                       className="h-2 w-2 rounded-full shrink-0"
@@ -241,7 +245,7 @@ function AddFilterButton({
                     key={board.id}
                     type="button"
                     onClick={() => handleSelectBoard(board.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     {board.name}
                   </button>
@@ -253,7 +257,7 @@ function AddFilterButton({
                     key={tag.id}
                     type="button"
                     onClick={() => handleSelectTag(tag.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     {tag.name}
                   </button>
@@ -264,7 +268,7 @@ function AddFilterButton({
                   <button
                     type="button"
                     onClick={() => handleSelectOwner('unassigned')}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors text-muted-foreground"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors text-muted-foreground"
                   >
                     Unassigned
                   </button>
@@ -273,7 +277,7 @@ function AddFilterButton({
                       key={member.id}
                       type="button"
                       onClick={() => handleSelectOwner(member.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                     >
                       {member.name || member.email}
                     </button>
@@ -287,7 +291,7 @@ function AddFilterButton({
                     key={preset.value}
                     type="button"
                     onClick={() => handleSelectDate(preset)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     {preset.label}
                   </button>
@@ -299,7 +303,7 @@ function AddFilterButton({
                     key={threshold.value}
                     type="button"
                     onClick={() => handleSelectVotes(threshold.value)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     {threshold.label}
                   </button>
@@ -314,12 +318,12 @@ function AddFilterButton({
 
 function getFilterIcon(type: ActiveFilter['type']) {
   const icons = {
-    status: Circle,
-    board: LayoutGrid,
-    tags: Tag,
-    owner: User,
-    date: Calendar,
-    minVotes: TrendingUp,
+    status: CircleIcon as any,
+    board: Squares2X2Icon,
+    tags: TagIcon,
+    owner: UserIcon,
+    date: CalendarIcon,
+    minVotes: ArrowTrendingUpIcon,
   }
   return icons[type]
 }
@@ -356,12 +360,12 @@ function FilterChip({
     <>
       {color ? (
         <span
-          className="h-2 w-2 rounded-full shrink-0"
+          className="h-1.5 w-1.5 rounded-full shrink-0"
           style={{ backgroundColor: color }}
           aria-hidden="true"
         />
       ) : (
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
       )}
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
@@ -371,8 +375,8 @@ function FilterChip({
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1',
-        'rounded-full bg-muted/60 text-sm',
+        'inline-flex items-center gap-1 px-2 py-0.5',
+        'rounded-full bg-muted/60 text-xs',
         'border border-border/30 hover:border-border/50',
         'transition-colors'
       )}
@@ -387,7 +391,7 @@ function FilterChip({
               {chipContent}
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-48 p-0">
+          <PopoverContent align="start" className="w-44 p-0">
             <div className="max-h-[250px] overflow-y-auto py-1">
               {options.map((option) => (
                 <button
@@ -395,7 +399,7 @@ function FilterChip({
                   type="button"
                   onClick={() => handleSelect(option.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors',
                     option.id === valueId ? 'bg-muted/50 font-medium' : 'hover:bg-muted/50'
                   )}
                 >
@@ -412,7 +416,7 @@ function FilterChip({
           </PopoverContent>
         </Popover>
       ) : (
-        <span className="inline-flex items-center gap-1.5">{chipContent}</span>
+        <span className="inline-flex items-center gap-1">{chipContent}</span>
       )}
       <button
         type="button"
@@ -425,7 +429,7 @@ function FilterChip({
         )}
         aria-label={`Remove ${label} ${value} filter`}
       >
-        <X className="h-3 w-3" />
+        <XMarkIcon className="h-2.5 w-2.5" />
       </button>
     </div>
   )
@@ -652,11 +656,11 @@ export function ActiveFiltersBar({
 
   return (
     <div
-      className="px-3 py-2 border-b border-border/30 bg-card/50"
+      className="px-3 py-1.5 border-b border-border/30 bg-card/50"
       role="region"
       aria-label="Active filters"
     >
-      <div className="flex flex-wrap gap-1.5 items-center">
+      <div className="flex flex-wrap gap-1 items-center">
         {activeFilters.map(({ key, ...filterProps }) => (
           <FilterChip key={key} {...filterProps} />
         ))}
@@ -676,8 +680,8 @@ export function ActiveFiltersBar({
             type="button"
             onClick={onClearAll}
             className={cn(
-              'text-xs text-muted-foreground hover:text-foreground',
-              'px-2 py-1 rounded',
+              'text-[11px] text-muted-foreground hover:text-foreground',
+              'px-1.5 py-0.5 rounded',
               'hover:bg-muted/50',
               'transition-colors'
             )}

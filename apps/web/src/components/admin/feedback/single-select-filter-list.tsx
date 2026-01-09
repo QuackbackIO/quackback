@@ -1,45 +1,48 @@
 import { cn } from '@/lib/utils'
 
-interface SingleSelectFilterListProps<T extends { id: string; name: string }> {
+interface FilterListProps<T extends { id: string; name: string }> {
   items: T[]
-  selectedId: string | undefined
-  onSelect: (id: string | undefined) => void
+  selectedIds: string[]
+  onSelect: (id: string, addToSelection: boolean) => void
   renderItem?: (item: T, isSelected: boolean) => React.ReactNode
   className?: string
 }
 
-export function SingleSelectFilterList<T extends { id: string; name: string }>({
+export function FilterList<T extends { id: string; name: string }>({
   items,
-  selectedId,
+  selectedIds,
   onSelect,
   renderItem,
   className,
-}: SingleSelectFilterListProps<T>) {
-  const handleClick = (id: string) => {
-    // Click same item = deselect (show all)
-    // Click different item = select that one
-    onSelect(selectedId === id ? undefined : id)
+}: FilterListProps<T>) {
+  const handleClick = (id: string, event: React.MouseEvent) => {
+    const addToSelection = event.metaKey || event.ctrlKey
+    onSelect(id, addToSelection)
   }
 
   return (
-    <div className={cn('space-y-0.5', className)} role="listbox" aria-label="Filter selection">
+    <div className={cn('space-y-1', className)} role="listbox" aria-label="Filter selection">
       {items.map((item) => {
-        const isSelected = selectedId === item.id
+        const isSelected = selectedIds.includes(item.id)
         return (
           <button
             key={item.id}
             type="button"
             role="option"
             aria-selected={isSelected}
-            onClick={() => handleClick(item.id)}
+            onClick={(e) => handleClick(item.id, e)}
             className={cn(
-              'w-full text-left px-2 py-1.5 rounded-md text-sm transition-colors',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-xs transition-colors',
               isSelected
-                ? 'bg-muted/50 text-foreground font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                ? 'bg-muted text-foreground font-medium'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
-            {renderItem ? renderItem(item, isSelected) : item.name}
+            {renderItem ? (
+              renderItem(item, isSelected)
+            ) : (
+              <span className="truncate">{item.name}</span>
+            )}
           </button>
         )
       })}
@@ -50,18 +53,17 @@ export function SingleSelectFilterList<T extends { id: string; name: string }>({
 // Specialized component for status filtering with color dots
 interface StatusFilterListProps {
   statuses: Array<{ id: string; slug: string; name: string; color: string }>
-  selectedSlug: string | undefined
-  onSelect: (slug: string | undefined) => void
+  selectedSlugs: string[]
+  onSelect: (slug: string, addToSelection: boolean) => void
 }
 
-export function StatusFilterList({ statuses, selectedSlug, onSelect }: StatusFilterListProps) {
-  // Map statuses to use slug as id for the generic component
+export function StatusFilterList({ statuses, selectedSlugs, onSelect }: StatusFilterListProps) {
   const items = statuses.map((s) => ({ id: s.slug, name: s.name, color: s.color }))
 
   return (
-    <SingleSelectFilterList
+    <FilterList
       items={items}
-      selectedId={selectedSlug}
+      selectedIds={selectedSlugs}
       onSelect={onSelect}
       renderItem={(status) => (
         <span className="flex items-center gap-2">
@@ -77,20 +79,15 @@ export function StatusFilterList({ statuses, selectedSlug, onSelect }: StatusFil
   )
 }
 
-// Specialized component for board filtering
-interface BoardFilterListProps {
+// Specialized component for board filtering - uses default rendering
+export function BoardFilterList({
+  boards,
+  selectedIds,
+  onSelect,
+}: {
   boards: Array<{ id: string; name: string }>
-  selectedId: string | undefined
-  onSelect: (id: string | undefined) => void
-}
-
-export function BoardFilterList({ boards, selectedId, onSelect }: BoardFilterListProps) {
-  return (
-    <SingleSelectFilterList
-      items={boards}
-      selectedId={selectedId}
-      onSelect={onSelect}
-      renderItem={(board) => <span className="truncate">{board.name}</span>}
-    />
-  )
+  selectedIds: string[]
+  onSelect: (id: string, addToSelection: boolean) => void
+}) {
+  return <FilterList items={boards} selectedIds={selectedIds} onSelect={onSelect} />
 }

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { PenSquare } from 'lucide-react'
+import { PencilSquareIcon } from '@heroicons/react/24/solid'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
@@ -92,7 +92,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" title="Create new post">
-          <PenSquare className="h-4 w-4" />
+          <PencilSquareIcon className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent

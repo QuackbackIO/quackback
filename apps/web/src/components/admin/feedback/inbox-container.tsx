@@ -1,29 +1,22 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
-import { InboxPostList } from '@/components/admin/feedback/inbox-post-list'
-import { InboxPostDetail } from '@/components/admin/feedback/inbox-post-detail'
+import { FeedbackTableView } from '@/components/admin/feedback/table'
 import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog'
-import { EditPostDialog } from '@/components/admin/feedback/edit-post-dialog'
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import {
   useInboxPosts,
-  usePostDetail,
   useUpdatePostStatus,
-  useUpdatePostTags,
-  useUpdateOfficialResponse,
-  useToggleCommentReaction,
-  useVotePost,
-  useAddComment,
   flattenInboxPosts,
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
-import { useInboxUIStore } from '@/lib/stores/inbox-ui'
-import type { CommentId, PostId, StatusId } from '@quackback/ids'
+import type { PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db-types'
 import type { TeamMember } from '@/lib/members'
+import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
 interface InboxContainerProps {
   initialPosts: InboxPostListResult
@@ -40,8 +33,8 @@ export function InboxContainer({
   tags,
   statuses,
   members,
-  currentUser,
 }: InboxContainerProps) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   // URL-based filter state
@@ -56,9 +49,6 @@ export function InboxContainer({
     toggleStatus,
   } = useInboxFilters()
 
-  // UI state from Zustand
-  const { isEditDialogOpen, setEditDialogOpen } = useInboxUIStore()
-
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
 
@@ -68,7 +58,6 @@ export function InboxContainer({
   }, [])
 
   // Only use initialData on first render before any filter changes
-  // This prevents stale data when user changes filters
   const shouldUseInitialData = isInitialRender.current && !filters.search && !filters.owner
 
   // Server state - Posts list (with infinite query for pagination)
@@ -85,147 +74,92 @@ export function InboxContainer({
 
   const posts = flattenInboxPosts(postsData)
 
-  // Server state - Selected post detail
-  const { data: selectedPost, isLoading: isLoadingPost } = usePostDetail({
-    postId: selectedPostId as PostId | null,
-  })
-
   // Mutations
   const updateStatus = useUpdatePostStatus()
-  const updateTags = useUpdatePostTags()
-  const updateOfficialResponse = useUpdateOfficialResponse()
-  const toggleReaction = useToggleCommentReaction()
-  const votePost = useVotePost()
-  const addComment = useAddComment()
 
   // Handlers
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore) {
       fetchNextPage()
     }
-  }
+  }, [hasMore, isLoadingMore, fetchNextPage])
 
-  const handleStatusChange = async (statusId: StatusId) => {
-    if (!selectedPostId) return
-    updateStatus.mutate({ postId: selectedPostId as PostId, statusId })
-  }
+  const handleNavigateToPost = useCallback(
+    (postId: string) => {
+      // Save navigation context for prev/next on detail page
+      const backUrl = window.location.pathname + window.location.search
+      saveNavigationContext(
+        posts.map((p) => p.id),
+        backUrl
+      )
 
-  const handleTagsChange = async (tagIds: string[]) => {
-    if (!selectedPostId) return
-    updateTags.mutate({ postId: selectedPostId as PostId, tagIds, allTags: tags })
-  }
+      navigate({
+        to: '/admin/feedback/posts/$postId',
+        params: { postId },
+      })
+    },
+    [navigate, posts]
+  )
 
-  const handleOfficialResponseChange = async (response: string | null) => {
-    if (!selectedPostId) return
-    updateOfficialResponse.mutate({ postId: selectedPostId as PostId, response })
-  }
+  const handleStatusChange = useCallback(
+    (postId: string, statusId: StatusId) => {
+      updateStatus.mutate({ postId: postId as PostId, statusId })
+    },
+    [updateStatus]
+  )
 
-  const handleReaction = (commentId: string, emoji: string) => {
-    if (!selectedPostId) return
-    toggleReaction.mutate({
-      postId: selectedPostId as PostId,
-      commentId: commentId as CommentId,
-      emoji,
-    })
-  }
-
-  const handleVote = () => {
-    if (!selectedPostId) return
-    votePost.mutate(selectedPostId as PostId)
-  }
-
-  const refetchPosts = () => {
+  const refetchPosts = useCallback(() => {
     queryClient.invalidateQueries({
       queryKey: inboxKeys.list(filters),
     })
-  }
+  }, [queryClient, filters])
 
   return (
-    <>
-      <InboxLayout
-        hasActiveFilters={hasActiveFilters}
-        filters={
-          <InboxFiltersPanel
-            filters={filters}
-            onFiltersChange={setFilters}
-            boards={boards}
-            tags={tags}
-            statuses={statuses}
-          />
-        }
-        postList={
-          <InboxPostList
-            posts={posts}
-            statuses={statuses}
-            boards={boards}
-            tags={tags}
-            members={members}
-            filters={filters}
-            onFiltersChange={setFilters}
-            hasMore={!!hasMore}
-            isLoading={isLoading}
-            isLoadingMore={isLoadingMore}
-            selectedPostId={selectedPostId}
-            onSelectPost={setSelectedPostId}
-            onLoadMore={handleLoadMore}
-            sort={filters.sort}
-            onSortChange={(sort) => setFilters({ sort })}
-            search={filters.search}
-            onSearchChange={(search) => setFilters({ search })}
-            hasActiveFilters={hasActiveFilters}
-            onClearFilters={clearFilters}
-            onToggleStatus={toggleStatus}
-            onToggleBoard={toggleBoard}
-            headerAction={
-              <CreatePostDialog
-                boards={boards}
-                tags={tags}
-                statuses={statuses}
-                onPostCreated={refetchPosts}
-              />
-            }
-          />
-        }
-        postDetail={
-          <InboxPostDetail
-            post={selectedPost ?? null}
-            isLoading={isLoadingPost}
-            allTags={tags}
-            statuses={statuses}
-            avatarUrls={selectedPost?.avatarUrls}
-            currentUser={currentUser}
-            onClose={() => setSelectedPostId(null)}
-            onEdit={() => setEditDialogOpen(true)}
-            onStatusChange={handleStatusChange}
-            onTagsChange={handleTagsChange}
-            onOfficialResponseChange={handleOfficialResponseChange}
-            onRoadmapChange={() => {
-              if (selectedPostId) {
-                queryClient.invalidateQueries({
-                  queryKey: inboxKeys.detail(selectedPostId as PostId),
-                })
-              }
-            }}
-            createComment={addComment}
-            onReaction={handleReaction}
-            isReactionPending={toggleReaction.isPending}
-            onVote={handleVote}
-            isVotePending={votePost.isPending}
-          />
-        }
-      />
-
-      {/* Edit Post Dialog */}
-      {selectedPost && (
-        <EditPostDialog
-          post={selectedPost}
+    <InboxLayout
+      hasActiveFilters={hasActiveFilters}
+      filters={
+        <InboxFiltersPanel
+          filters={filters}
+          onFiltersChange={setFilters}
           boards={boards}
           tags={tags}
           statuses={statuses}
-          open={isEditDialogOpen}
-          onOpenChange={setEditDialogOpen}
         />
-      )}
-    </>
+      }
+    >
+      <FeedbackTableView
+        posts={posts}
+        statuses={statuses}
+        boards={boards}
+        tags={tags}
+        members={members}
+        filters={filters}
+        onFiltersChange={setFilters}
+        hasMore={!!hasMore}
+        isLoading={isLoading}
+        isLoadingMore={isLoadingMore}
+        focusedPostId={selectedPostId}
+        onFocusPost={setSelectedPostId}
+        onNavigateToPost={handleNavigateToPost}
+        onLoadMore={handleLoadMore}
+        sort={filters.sort}
+        onSortChange={(sort) => setFilters({ sort })}
+        search={filters.search}
+        onSearchChange={(search) => setFilters({ search })}
+        hasActiveFilters={hasActiveFilters}
+        onClearFilters={clearFilters}
+        onToggleStatus={toggleStatus}
+        onToggleBoard={toggleBoard}
+        onStatusChange={handleStatusChange}
+        headerAction={
+          <CreatePostDialog
+            boards={boards}
+            tags={tags}
+            statuses={statuses}
+            onPostCreated={refetchPosts}
+          />
+        }
+      />
+    </InboxLayout>
   )
 }

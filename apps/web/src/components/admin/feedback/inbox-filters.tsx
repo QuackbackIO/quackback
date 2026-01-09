@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { StatusFilterList, BoardFilterList } from './single-select-filter-list'
+import { toggleItem } from './filter-utils'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
 
@@ -15,25 +16,32 @@ interface InboxFiltersProps {
 function FilterSection({
   title,
   children,
+  hint,
   defaultOpen = true,
 }: {
   title: string
   children: React.ReactNode
+  hint?: string
   defaultOpen?: boolean
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   return (
-    <div className="border-b border-border/30 pb-4 last:border-0">
+    <div className="pb-4 last:pb-0">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center justify-between py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
       >
         {title}
-        {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {isOpen ? <ChevronUpIcon className="h-3 w-3" /> : <ChevronDownIcon className="h-3 w-3" />}
       </button>
-      {isOpen && <div className="mt-3">{children}</div>}
+      {isOpen && (
+        <div className="mt-2">
+          {children}
+          {hint && <p className="mt-2 text-[10px] text-muted-foreground/60">{hint}</p>}
+        </div>
+      )}
     </div>
   )
 }
@@ -45,71 +53,64 @@ export function InboxFiltersPanel({
   tags,
   statuses,
 }: InboxFiltersProps) {
-  // Get current single-select values from filters
-  // If multiple statuses/boards are selected (from URL), take the first one for sidebar display
-  const selectedStatusSlug = filters.status?.length === 1 ? filters.status[0] : undefined
-  const selectedBoardId = filters.board?.length === 1 ? filters.board[0] : undefined
-
-  const handleStatusSelect = (slug: string | undefined) => {
-    onFiltersChange({ status: slug ? [slug] : undefined })
+  // Handle filter selection with multi-select support
+  // - Regular click: select only this item (replace), or clear if already the only one selected
+  // - Ctrl/Cmd+click: add/remove from selection (toggle)
+  function handleFilterSelect<K extends 'status' | 'board'>(
+    key: K,
+    current: string[] | undefined,
+    id: string,
+    addToSelection: boolean
+  ) {
+    if (addToSelection) {
+      onFiltersChange({ [key]: toggleItem(current, id) })
+    } else {
+      const isOnlySelected = current?.length === 1 && current[0] === id
+      onFiltersChange({ [key]: isOnlySelected ? undefined : [id] })
+    }
   }
 
-  const handleBoardSelect = (id: string | undefined) => {
-    onFiltersChange({ board: id ? [id] : undefined })
-  }
+  const handleStatusSelect = (slug: string, addToSelection: boolean) =>
+    handleFilterSelect('status', filters.status, slug, addToSelection)
 
-  // Tag toggle (multi-select, kept as-is)
+  const handleBoardSelect = (id: string, addToSelection: boolean) =>
+    handleFilterSelect('board', filters.board, id, addToSelection)
+
+  // Tags remain simple toggle (they're already visually distinct as chips)
   const handleTagToggle = (tagId: string) => {
-    const currentTags = filters.tags || []
-    const newTags = currentTags.includes(tagId)
-      ? currentTags.filter((t) => t !== tagId)
-      : [...currentTags, tagId]
-    onFiltersChange({ tags: newTags.length > 0 ? newTags : undefined })
+    const newTags = toggleItem(filters.tags, tagId)
+    onFiltersChange({ tags: newTags })
   }
+
+  const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
+  const modifierKey = isMac ? '⌘' : 'Ctrl'
 
   return (
-    <div className="space-y-4">
-      {/* Status Filter - Single Select */}
-      <FilterSection title="Status">
+    <div className="space-y-0">
+      {/* Status Filter */}
+      <FilterSection title="Status" hint={`${modifierKey}+click to multi-select`}>
         <StatusFilterList
-          statuses={statuses.map((s) => ({
-            id: s.id,
-            slug: s.slug,
-            name: s.name,
-            color: s.color,
-          }))}
-          selectedSlug={selectedStatusSlug}
+          statuses={statuses}
+          selectedSlugs={filters.status || []}
           onSelect={handleStatusSelect}
         />
-        {/* Show indicator if multiple statuses are selected via URL/advanced filter */}
-        {filters.status && filters.status.length > 1 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {filters.status.length} statuses selected via advanced filters
-          </p>
-        )}
       </FilterSection>
 
-      {/* Board Filter - Single Select */}
+      {/* Board Filter */}
       {boards.length > 0 && (
         <FilterSection title="Board">
           <BoardFilterList
             boards={boards}
-            selectedId={selectedBoardId}
+            selectedIds={filters.board || []}
             onSelect={handleBoardSelect}
           />
-          {/* Show indicator if multiple boards are selected via URL/advanced filter */}
-          {filters.board && filters.board.length > 1 && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {filters.board.length} boards selected via advanced filters
-            </p>
-          )}
         </FilterSection>
       )}
 
-      {/* Tags Filter - Multi-select chips */}
+      {/* Tags Filter */}
       {tags.length > 0 && (
         <FilterSection title="Tags" defaultOpen={true}>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {tags.map((tag) => {
               const isSelected = filters.tags?.includes(tag.id)
               return (
@@ -117,7 +118,7 @@ export function InboxFiltersPanel({
                   key={tag.id}
                   type="button"
                   onClick={() => handleTagToggle(tag.id)}
-                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
                     isSelected
                       ? 'bg-foreground text-background'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Loader2, Search, X } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -10,14 +10,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { InboxPostCard } from '@/components/admin/feedback/inbox-post-card'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
+import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/db-types'
 import type { TeamMember } from '@/lib/members'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import type { StatusId } from '@quackback/ids'
 
-interface InboxPostListProps {
+interface FeedbackTableViewProps {
   posts: PostListItem[]
   statuses: PostStatusEntity[]
   boards: Board[]
@@ -28,8 +29,9 @@ interface InboxPostListProps {
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean
-  selectedPostId: string | null
-  onSelectPost: (id: string | null) => void
+  focusedPostId: string | null
+  onFocusPost: (id: string | null) => void
+  onNavigateToPost: (id: string) => void
   onLoadMore: () => void
   sort: InboxFilters['sort']
   onSortChange: (sort: InboxFilters['sort']) => void
@@ -40,37 +42,25 @@ interface InboxPostListProps {
   headerAction?: React.ReactNode
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
+  onStatusChange: (postId: string, statusId: StatusId) => void
 }
 
-function PostListSkeleton() {
+function TableSkeleton() {
   return (
-    <div className="divide-y divide-border/50">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="flex">
-          {/* Vote section */}
-          <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/30 py-3">
+    <div className="divide-y divide-border/30">
+      {Array.from({ length: 6 }).map((_, rowIdx) => (
+        <div key={rowIdx} className="flex">
+          <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 py-2.5">
             <Skeleton className="h-4 w-4 mb-1" />
             <Skeleton className="h-4 w-6" />
           </div>
-
-          {/* Content */}
-          <div className="flex-1 min-w-0 px-3 py-3">
-            {/* Status badge */}
-            <Skeleton className="h-5 w-16 rounded-full mb-1.5" />
-
-            {/* Title */}
-            <Skeleton className="h-5 w-4/5 mb-1" />
-
-            {/* Excerpt */}
-            <Skeleton className="h-4 w-full mt-1" />
-            <Skeleton className="h-4 w-3/4 mt-1" />
-
-            {/* Meta row */}
-            <div className="flex items-center gap-2.5 mt-2">
-              <Skeleton className="h-3 w-20" />
+          <div className="flex-1 min-w-0 px-3 py-2.5">
+            <Skeleton className="h-4 w-3/4 mb-1" />
+            <Skeleton className="h-3 w-full mb-1.5" />
+            <div className="flex items-center gap-2">
               <Skeleton className="h-3 w-16" />
-              <div className="flex-1" />
-              <Skeleton className="h-5 w-14 rounded-full" />
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-12" />
             </div>
           </div>
         </div>
@@ -79,7 +69,7 @@ function PostListSkeleton() {
   )
 }
 
-export function InboxPostList({
+export function FeedbackTableView({
   posts,
   statuses,
   boards,
@@ -90,8 +80,9 @@ export function InboxPostList({
   hasMore,
   isLoading,
   isLoadingMore,
-  selectedPostId,
-  onSelectPost,
+  focusedPostId,
+  onFocusPost,
+  onNavigateToPost,
   onLoadMore,
   sort,
   onSortChange,
@@ -102,7 +93,8 @@ export function InboxPostList({
   headerAction,
   onToggleStatus,
   onToggleBoard,
-}: InboxPostListProps) {
+  onStatusChange,
+}: FeedbackTableViewProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [searchValue, setSearchValue] = useState(search || '')
 
@@ -111,14 +103,17 @@ export function InboxPostList({
     setSearchValue(search || '')
   }, [search])
 
-  // Update parent when search changes
+  // Update parent when search changes (debounced)
   const prevSearchRef = useRef(searchValue)
   useEffect(() => {
-    // Only notify parent if value actually changed (not on initial mount or parent sync)
-    if (searchValue !== prevSearchRef.current) {
+    if (searchValue === prevSearchRef.current) return
+
+    const timeoutId = setTimeout(() => {
       prevSearchRef.current = searchValue
       onSearchChange(searchValue || undefined)
-    }
+    }, 300) // 300ms debounce
+
+    return () => clearTimeout(timeoutId)
   }, [searchValue, onSearchChange])
 
   // Infinite scroll observer
@@ -150,7 +145,7 @@ export function InboxPostList({
         return
       }
 
-      const currentIndex = selectedPostId ? posts.findIndex((p) => p.id === selectedPostId) : -1
+      const currentIndex = focusedPostId ? posts.findIndex((p) => p.id === focusedPostId) : -1
 
       switch (e.key) {
         case 'j':
@@ -158,7 +153,7 @@ export function InboxPostList({
           e.preventDefault()
           if (posts.length > 0) {
             const nextIndex = Math.min(currentIndex + 1, posts.length - 1)
-            onSelectPost(posts[nextIndex]?.id ?? null)
+            onFocusPost(posts[nextIndex]?.id ?? null)
           }
           break
         case 'k':
@@ -166,11 +161,17 @@ export function InboxPostList({
           e.preventDefault()
           if (posts.length > 0 && currentIndex > 0) {
             const prevIndex = Math.max(currentIndex - 1, 0)
-            onSelectPost(posts[prevIndex]?.id ?? null)
+            onFocusPost(posts[prevIndex]?.id ?? null)
+          }
+          break
+        case 'Enter':
+          if (focusedPostId) {
+            e.preventDefault()
+            onNavigateToPost(focusedPostId)
           }
           break
         case 'Escape':
-          onSelectPost(null)
+          onFocusPost(null)
           break
         case '/':
           e.preventDefault()
@@ -181,28 +182,21 @@ export function InboxPostList({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [posts, selectedPostId, onSelectPost])
+  }, [posts, focusedPostId, onFocusPost, onNavigateToPost])
 
-  const activeFiltersBar = (
-    <ActiveFiltersBar
-      filters={filters}
-      onFiltersChange={onFiltersChange}
-      onClearAll={onClearFilters}
-      boards={boards}
-      tags={tags}
-      statuses={statuses}
-      members={members}
-      onToggleStatus={onToggleStatus}
-      onToggleBoard={onToggleBoard}
-    />
+  const handleStatusChange = useCallback(
+    (postId: string) => (statusId: StatusId) => {
+      onStatusChange(postId, statusId)
+    },
+    [onStatusChange]
   )
 
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
-      {activeFiltersBar}
-      <div className="border-b border-border/50 px-3 py-2.5 flex items-center gap-2">
+    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+      {/* Search and Sort Row */}
+      <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
             placeholder="Search..."
@@ -217,7 +211,7 @@ export function InboxPostList({
               onClick={() => setSearchValue('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <X className="h-3.5 w-3.5" />
+              <XMarkIcon className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -236,6 +230,23 @@ export function InboxPostList({
         </Select>
         {headerAction}
       </div>
+
+      {/* Active Filters Bar */}
+      {hasActiveFilters && (
+        <div className="mt-2">
+          <ActiveFiltersBar
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            onClearAll={onClearFilters}
+            boards={boards}
+            tags={tags}
+            statuses={statuses}
+            members={members}
+            onToggleStatus={onToggleStatus}
+            onToggleBoard={onToggleBoard}
+          />
+        </div>
+      )}
     </div>
   )
 
@@ -243,7 +254,7 @@ export function InboxPostList({
     return (
       <div>
         {headerContent}
-        <PostListSkeleton />
+        <TableSkeleton />
       </div>
     )
   }
@@ -264,36 +275,37 @@ export function InboxPostList({
     <div>
       {headerContent}
 
-      {/* Post List */}
-      <div className="divide-y divide-border/50">
+      {/* Flat Post List */}
+      <div className="divide-y divide-border/30">
         {posts.map((post) => (
-          <InboxPostCard
+          <FeedbackRow
             key={post.id}
             post={post}
             statuses={statuses}
-            isSelected={post.id === selectedPostId}
-            onClick={() => onSelectPost(post.id)}
+            isFocused={post.id === focusedPostId}
+            onClick={() => onNavigateToPost(post.id)}
+            onStatusChange={handleStatusChange(post.id)}
           />
         ))}
-
-        {/* Load more trigger */}
-        {hasMore && (
-          <div ref={loadMoreRef} className="py-4 flex justify-center">
-            {isLoadingMore ? (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onLoadMore}
-                className="text-muted-foreground"
-              >
-                Load more
-              </Button>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Load more trigger */}
+      {hasMore && (
+        <div ref={loadMoreRef} className="py-4 flex justify-center">
+          {isLoadingMore ? (
+            <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              className="text-muted-foreground"
+            >
+              Load more
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

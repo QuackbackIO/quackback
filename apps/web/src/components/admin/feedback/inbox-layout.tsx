@@ -1,25 +1,25 @@
 import { useState } from 'react'
-import { Filter } from 'lucide-react'
+import { FunnelIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface InboxLayoutProps {
   filters: React.ReactNode
-  postList: React.ReactNode
-  postDetail: React.ReactNode
+  /** The table view or post list content */
+  children: React.ReactNode
   hasActiveFilters?: boolean
 }
 
-export function InboxLayout({ filters, postList, postDetail, hasActiveFilters }: InboxLayoutProps) {
+export function InboxLayout({ filters, children, hasActiveFilters }: InboxLayoutProps) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   return (
-    <div className="flex h-[calc(100vh-69px)] bg-background">
+    <div className="flex h-full bg-background">
       {/* Filters - Desktop */}
-      <aside className="hidden lg:flex w-60 xl:w-64 shrink-0 flex-col border-r border-border/50 bg-card/50 overflow-hidden">
+      <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-4">{filters}</div>
+          <div className="p-5">{filters}</div>
         </ScrollArea>
       </aside>
 
@@ -28,7 +28,7 @@ export function InboxLayout({ filters, postList, postDetail, hasActiveFilters }:
         <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
           <SheetTrigger asChild>
             <Button size="lg" className="rounded-full shadow-md">
-              <Filter className="h-4 w-4 mr-2" />
+              <FunnelIcon className="h-4 w-4 mr-2" />
               Filters
               {hasActiveFilters && (
                 <span className="ml-2 h-2 w-2 rounded-full bg-primary-foreground" />
@@ -40,21 +40,16 @@ export function InboxLayout({ filters, postList, postDetail, hasActiveFilters }:
               <SheetTitle>Filters</SheetTitle>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-60px)]">
-              <div className="p-4">{filters}</div>
+              <div className="p-5">{filters}</div>
             </ScrollArea>
           </SheetContent>
         </Sheet>
       </div>
 
-      {/* Post List */}
-      <main className="w-[420px] lg:w-[540px] shrink-0 flex flex-col border-r border-border/50 bg-card overflow-hidden">
-        <ScrollArea className="h-full">{postList}</ScrollArea>
+      {/* Main Content - Table View */}
+      <main className="flex-1 min-w-0 flex flex-col bg-card overflow-hidden">
+        <ScrollArea className="h-full">{children}</ScrollArea>
       </main>
-
-      {/* Post Detail */}
-      <aside className="hidden md:flex flex-1 min-w-0 flex-col bg-background overflow-hidden">
-        <ScrollArea className="h-full">{postDetail}</ScrollArea>
-      </aside>
     </div>
   )
 }
