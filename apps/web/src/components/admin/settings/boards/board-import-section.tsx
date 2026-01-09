@@ -1,5 +1,13 @@
 import { useState, useRef, useCallback } from 'react'
-import { Upload, FileText, X, Loader2, CheckCircle2, AlertCircle, Download } from 'lucide-react'
+import {
+  ArrowUpTrayIcon,
+  DocumentTextIcon,
+  XMarkIcon,
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ArrowDownTrayIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { CSV_TEMPLATE } from '@/lib/schemas/import'
 import type { ImportResult } from '@/lib/import/types'
@@ -112,7 +120,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
             />
             {selectedFile ? (
               <div className="flex items-center justify-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
+                <DocumentTextIcon className="h-5 w-5 text-primary" />
                 <span className="text-sm font-medium">{selectedFile.name}</span>
                 <button
                   onClick={(e) => {
@@ -121,12 +129,12 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
                   }}
                   className="p-1 hover:bg-muted rounded"
                 >
-                  <X className="h-4 w-4 text-muted-foreground" />
+                  <XMarkIcon className="h-4 w-4 text-muted-foreground" />
                 </button>
               </div>
             ) : (
               <>
-                <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                <ArrowUpTrayIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm text-muted-foreground">
                   Drop a CSV file here or click to browse
                 </p>
@@ -139,18 +147,18 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
 
           {error && (
             <div className="mt-4 p-3 bg-destructive/10 text-destructive text-sm rounded-lg flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
+              <ExclamationCircleIcon className="h-4 w-4 shrink-0" />
               {error}
             </div>
           )}
 
           <div className="mt-4 flex items-center gap-2">
             <Button onClick={handleImport} disabled={!selectedFile}>
-              <Upload className="h-4 w-4 mr-2" />
+              <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
               Import Data
             </Button>
             <Button variant="outline" onClick={downloadTemplate}>
-              <Download className="h-4 w-4 mr-2" />
+              <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
               Download Template
             </Button>
           </div>
@@ -160,7 +168,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
       {state === 'uploading' && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <ArrowPathIcon className="h-5 w-5 animate-spin text-primary" />
             <span className="text-sm font-medium">Processing import...</span>
           </div>
         </div>
@@ -169,7 +177,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
       {state === 'completed' && result && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-green-600">
-            <CheckCircle2 className="h-5 w-5" />
+            <CheckCircleIcon className="h-5 w-5" />
             <span className="font-medium">Import Complete</span>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
@@ -209,7 +217,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
       {state === 'failed' && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-destructive">
-            <AlertCircle className="h-5 w-5" />
+            <ExclamationCircleIcon className="h-5 w-5" />
             <span className="font-medium">Import Failed</span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

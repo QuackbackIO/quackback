@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Plus } from 'lucide-react'
+import { PlusIcon } from '@heroicons/react/24/solid'
 import {
   Form,
   FormControl,
@@ -27,6 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+
 export function CreateBoardDialog() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
@@ -64,7 +65,7 @@ export function CreateBoardDialog() {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="h-4 w-4" />
+          <PlusIcon className="h-4 w-4" />
           New board
         </Button>
       </DialogTrigger>

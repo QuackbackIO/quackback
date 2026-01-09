@@ -5,7 +5,7 @@ import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/schemas/boards'
 import { useDeleteBoard } from '@/lib/hooks/use-board-actions'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-react'
+import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import {
   Form,
   FormControl,
@@ -57,7 +57,7 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-md bg-destructive/10 p-4">
-        <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+        <ExclamationTriangleIcon className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
         <div className="space-y-1">
           <p className="font-medium text-destructive">Delete this board</p>
           <p className="text-sm text-muted-foreground">

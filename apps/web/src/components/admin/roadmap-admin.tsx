@@ -15,7 +15,7 @@ import {
   getFirstCollision,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { ChevronUp, Map } from 'lucide-react'
+import { ChevronUpIcon, MapIcon } from '@heroicons/react/24/solid'
 import { RoadmapSidebar } from './roadmap-sidebar'
 import { AdminRoadmapColumn } from './roadmap-column'
 import { Badge } from '@/components/ui/badge'
@@ -151,7 +151,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-69px)] bg-background">
+    <div className="flex h-full bg-background">
       {/* Sidebar */}
       <RoadmapSidebar
         selectedRoadmapId={selectedRoadmapId}
@@ -182,7 +182,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
               onDragCancel={handleDragCancel}
             >
               <ScrollArea className="flex-1">
-                <div className="flex gap-4 p-6 h-full min-h-[calc(100vh-69px-73px)]">
+                <div className="flex gap-4 p-6 h-full">
                   {statuses.map((status) => (
                     <AdminRoadmapColumn
                       key={status.id}
@@ -201,7 +201,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
                 {activePost ? (
                   <div className="flex bg-card rounded-lg border border-border shadow-lg w-[280px] cursor-grabbing rotate-2">
                     <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">
-                      <ChevronUp className="h-4 w-4" />
+                      <ChevronUpIcon className="h-4 w-4" />
                       <span className="text-sm font-bold text-foreground">
                         {activePost.voteCount}
                       </span>
@@ -223,7 +223,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mx-auto mb-4">
-                <Map className="h-6 w-6 text-primary" />
+                <MapIcon className="h-6 w-6 text-primary" />
               </div>
               <h3 className="text-lg font-semibold text-foreground">No roadmap selected</h3>
               <p className="mt-1 text-sm text-muted-foreground">

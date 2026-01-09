@@ -1,5 +1,10 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Settings, Lock, Upload, Download } from 'lucide-react'
+import {
+  Cog6ToothIcon,
+  LockClosedIcon,
+  ArrowUpTrayIcon,
+  ArrowDownTrayIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 
 interface BoardSettingsNavProps {
@@ -11,10 +16,10 @@ export function BoardSettingsNav({ boardSlug }: BoardSettingsNavProps) {
   const basePath = `/admin/settings/boards/${boardSlug}`
 
   const navItems = [
-    { label: 'General', to: basePath, icon: Settings },
-    { label: 'Access', to: `${basePath}/access`, icon: Lock },
-    { label: 'Import Data', to: `${basePath}/import`, icon: Upload },
-    { label: 'Export Data', to: `${basePath}/export`, icon: Download },
+    { label: 'General', to: basePath, icon: Cog6ToothIcon },
+    { label: 'Access', to: `${basePath}/access`, icon: LockClosedIcon },
+    { label: 'Import Data', to: `${basePath}/import`, icon: ArrowUpTrayIcon },
+    { label: 'Export Data', to: `${basePath}/export`, icon: ArrowDownTrayIcon },
   ]
 
   return (

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, RefreshCw, Clock, X } from 'lucide-react'
+import { EnvelopeIcon, ArrowPathIcon, ClockIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -118,7 +118,7 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
             <li key={inv.id} className="flex items-center justify-between px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                  <Mail className="h-5 w-5 text-muted-foreground" />
+                  <EnvelopeIcon className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div>
                   <p className="font-medium text-foreground">{inv.name || inv.email}</p>
@@ -152,11 +152,11 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
                         className="h-8 w-8"
                       >
                         {isLoading ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
                         ) : minutesUntilResend ? (
-                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <ClockIcon className="h-4 w-4 text-muted-foreground" />
                         ) : (
-                          <RefreshCw className="h-4 w-4" />
+                          <ArrowPathIcon className="h-4 w-4" />
                         )}
                       </Button>
                     </TooltipTrigger>
@@ -180,7 +180,7 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
                         disabled={isLoading}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
-                        <X className="h-4 w-4" />
+                        <XMarkIcon className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Cancel invitation</TooltipContent>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Map, Plus, Check, Loader2 } from 'lucide-react'
+import { MapIcon, PlusIcon, CheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -73,7 +73,7 @@ export function AddToRoadmapDropdown({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
-          <Map className="h-3.5 w-3.5" />
+          <MapIcon className="h-3.5 w-3.5" />
           Add to roadmap
           {roadmapCount > 0 && (
             <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
@@ -85,7 +85,7 @@ export function AddToRoadmapDropdown({
       <DropdownMenuContent align="end" className="w-56">
         {isLoadingRoadmaps ? (
           <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : roadmaps && roadmaps.length > 0 ? (
           roadmaps.map((roadmap) => {
@@ -103,11 +103,11 @@ export function AddToRoadmapDropdown({
               >
                 <span className="truncate">{roadmap.name}</span>
                 {isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : isOn ? (
-                  <Check className="h-4 w-4 text-primary" />
+                  <CheckIcon className="h-4 w-4 text-primary" />
                 ) : (
-                  <Plus className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                  <PlusIcon className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
                 )}
               </DropdownMenuItem>
             )

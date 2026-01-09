@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Upload, Loader2, Trash2 } from 'lucide-react'
+import { ArrowUpTrayIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -328,7 +328,7 @@ export function HeaderBranding({
                   />
                   {isUploading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded">
-                      <Loader2 className="h-4 w-4 animate-spin text-white" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin text-white" />
                     </div>
                   )}
                 </div>
@@ -343,10 +343,10 @@ export function HeaderBranding({
                   disabled={isUploading}
                 >
                   {isUploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      <Upload className="h-4 w-4 mr-1.5" />
+                      <ArrowUpTrayIcon className="h-4 w-4 mr-1.5" />
                       {hasHeaderLogo ? 'Change' : 'Upload Logo'}
                     </>
                   )}
@@ -361,9 +361,9 @@ export function HeaderBranding({
                     className="text-destructive hover:text-destructive"
                   >
                     {isDeleting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Trash2 className="h-4 w-4" />
+                      <TrashIcon className="h-4 w-4" />
                     )}
                   </Button>
                 )}

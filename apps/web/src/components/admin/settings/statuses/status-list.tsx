@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, GripVertical, Trash2, Lock } from 'lucide-react'
+import { PlusIcon, Bars3Icon, TrashIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -364,7 +364,7 @@ export function StatusList({ initialStatuses }: StatusListProps) {
                   >
                     {/* Spacer for grip handle alignment */}
                     <div className="w-3.5" />
-                    <Plus className="h-3 w-3" />
+                    <PlusIcon className="h-3 w-3" />
                     <span className="text-sm">Add new status</span>
                   </button>
                 </div>
@@ -466,7 +466,7 @@ function SortableStatusItem({
         {...listeners}
         className="touch-none cursor-grab active:cursor-grabbing"
       >
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+        <Bars3Icon className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
       </button>
 
       <Popover>
@@ -500,7 +500,7 @@ function SortableStatusItem({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Lock className="h-3 w-3 text-muted-foreground" />
+                <LockClosedIcon className="h-3 w-3 text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent>
                 <p>Default status for new posts and cannot be removed</p>
@@ -529,7 +529,7 @@ function SortableStatusItem({
         disabled={deleteDisabled}
         title={deleteTitle}
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <TrashIcon className="h-3.5 w-3.5" />
       </Button>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { ChevronUp } from 'lucide-react'
+import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import type { RoadmapPostEntry } from '@/lib/roadmaps'
 
@@ -61,7 +61,7 @@ export function AdminRoadmapCard({ post, statusId }: AdminRoadmapCardProps) {
       }`}
     >
       <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">
-        <ChevronUp className="h-4 w-4" />
+        <ChevronUpIcon className="h-5 w-5" />
         <span className="text-sm font-bold text-foreground">{post.voteCount}</span>
       </div>
       <div className="flex-1 min-w-0 p-3">

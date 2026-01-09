@@ -1,6 +1,14 @@
 import { Link } from '@tanstack/react-router'
-import { Slack, ChevronRight } from 'lucide-react'
+import { ChevronRightIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
+
+function SlackIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" />
+    </svg>
+  )
+}
 
 // Integration definitions for the catalog
 const INTEGRATIONS = [
@@ -8,7 +16,7 @@ const INTEGRATIONS = [
     id: 'slack',
     name: 'Slack',
     description: 'Get notified in Slack when users submit feedback or when statuses change.',
-    icon: Slack,
+    icon: SlackIcon,
     iconBg: 'bg-[#4A154B]',
     to: '/admin/settings/integrations/slack',
     available: true,
@@ -88,7 +96,7 @@ export function IntegrationList({ integrations }: IntegrationListProps) {
                     {integration.description}
                   </p>
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors flex-shrink-0 mt-0.5" />
+                <ChevronRightIcon className="h-5 w-5 text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors flex-shrink-0 mt-0.5" />
               </div>
             </Link>
           )
@@ -133,7 +141,7 @@ export function IntegrationList({ integrations }: IntegrationListProps) {
                   </p>
                 )}
               </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors flex-shrink-0 mt-0.5" />
+              <ChevronRightIcon className="h-5 w-5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors flex-shrink-0 mt-0.5" />
             </div>
           </Link>
         )

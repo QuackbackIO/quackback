@@ -12,7 +12,8 @@ import {
   FormLabel,
 } from '@/components/ui/form'
 import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
-import { Globe, Lock } from 'lucide-react'
+import { GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
+
 interface BoardAccessFormProps {
   board: Board
 }
@@ -69,7 +70,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
                     <RadioGroupItem value="public" id="visibility-public" className="mt-0.5" />
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
+                        <GlobeAltIcon className="h-4 w-4" />
                         <span className="font-medium">Public</span>
                       </div>
                       <p className="text-sm text-muted-foreground">
@@ -85,7 +86,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
                     <RadioGroupItem value="private" id="visibility-private" className="mt-0.5" />
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
-                        <Lock className="h-4 w-4" />
+                        <LockClosedIcon className="h-4 w-4" />
                         <span className="font-medium">Private</span>
                       </div>
                       <p className="text-sm text-muted-foreground">

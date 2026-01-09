@@ -1,6 +1,6 @@
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter, useSearch } from '@tanstack/react-router'
-import { Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -78,7 +78,7 @@ export function SlackConnectionActions({
       {/* Success toast */}
       {showSuccess && (
         <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircleIcon className="h-4 w-4" />
           <span>Connected successfully!</span>
         </div>
       )}
@@ -89,7 +89,7 @@ export function SlackConnectionActions({
           <Button onClick={handleConnect} disabled={connecting}>
             {connecting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                 Connecting...
               </>
             ) : (
@@ -104,7 +104,7 @@ export function SlackConnectionActions({
               <Button variant="outline" size="sm" disabled={disconnecting}>
                 {disconnecting ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                     Disconnecting...
                   </>
                 ) : (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Loader2, Hash, Lock, RefreshCw } from 'lucide-react'
+import { ArrowPathIcon, HashtagIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -171,7 +171,7 @@ export function SlackConfig({
             disabled={loadingChannels}
             className="h-8 gap-1.5 text-xs"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loadingChannels ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon className={`h-3.5 w-3.5 ${loadingChannels ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
@@ -186,7 +186,7 @@ export function SlackConfig({
             <SelectTrigger id="channel-select" className="w-full">
               {loadingChannels ? (
                 <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
                   <span>Loading channels...</span>
                 </div>
               ) : (
@@ -198,9 +198,9 @@ export function SlackConfig({
                 <SelectItem key={channel.id} value={channel.id}>
                   <div className="flex items-center gap-2">
                     {channel.isPrivate ? (
-                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                      <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     ) : (
-                      <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                      <HashtagIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                     <span>{channel.name}</span>
                   </div>
@@ -241,7 +241,7 @@ export function SlackConfig({
       {/* Saving indicator */}
       {(saving || isPending) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <ArrowPathIcon className="h-4 w-4 animate-spin" />
           <span>Saving...</span>
         </div>
       )}

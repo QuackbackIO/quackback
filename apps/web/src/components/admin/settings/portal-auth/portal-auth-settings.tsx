@@ -1,6 +1,6 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Loader2, Mail, Lock } from 'lucide-react'
+import { ArrowPathIcon, EnvelopeIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -82,7 +82,7 @@ export function PortalAuthSettings({ initialConfig }: PortalAuthSettingsProps) {
       <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-            <Mail className="h-5 w-5" />
+            <EnvelopeIcon className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
@@ -90,7 +90,7 @@ export function PortalAuthSettings({ initialConfig }: PortalAuthSettingsProps) {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Email authentication is always enabled</p>
@@ -149,7 +149,7 @@ export function PortalAuthSettings({ initialConfig }: PortalAuthSettingsProps) {
       {/* Saving indicator */}
       {(saving || isPending) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <ArrowPathIcon className="h-4 w-4 animate-spin" />
           <span>Saving...</span>
         </div>
       )}

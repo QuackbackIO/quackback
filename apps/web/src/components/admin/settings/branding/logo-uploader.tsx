@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
-import { Camera, Loader2, Trash2 } from 'lucide-react'
+import { CameraIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import {
@@ -118,7 +118,7 @@ export function LogoUploader({ workspaceName, initialLogoUrl }: LogoUploaderProp
           )}
           {isUploading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
-              <Loader2 className="h-6 w-6 animate-spin text-white" />
+              <ArrowPathIcon className="h-6 w-6 animate-spin text-white" />
             </div>
           )}
         </div>
@@ -128,12 +128,12 @@ export function LogoUploader({ workspaceName, initialLogoUrl }: LogoUploaderProp
           <Button type="button" variant="outline" onClick={handleLogoClick} disabled={isUploading}>
             {isUploading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
                 Uploading...
               </>
             ) : (
               <>
-                <Camera className="h-4 w-4 mr-2" />
+                <CameraIcon className="h-4 w-4 mr-2" />
                 {hasCustomLogo ? 'Change logo' : 'Upload logo'}
               </>
             )}
@@ -147,9 +147,9 @@ export function LogoUploader({ workspaceName, initialLogoUrl }: LogoUploaderProp
               className="text-destructive hover:text-destructive"
             >
               {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
               ) : (
-                <Trash2 className="h-4 w-4" />
+                <TrashIcon className="h-4 w-4" />
               )}
             </Button>
           )}

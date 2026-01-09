@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Loader2, FileDown } from 'lucide-react'
+import { ArrowDownTrayIcon, ArrowPathIcon, DocumentArrowDownIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 
 interface BoardExportSectionProps {
@@ -48,7 +48,7 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
     <div className="rounded-xl border border-border/50 bg-card shadow-sm p-6">
       <div className="flex items-center gap-3 mb-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-          <Download className="h-5 w-5 text-green-500" />
+          <ArrowDownTrayIcon className="h-5 w-5 text-green-500" />
         </div>
         <div>
           <h2 className="font-semibold text-foreground">Export to CSV</h2>
@@ -58,7 +58,7 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
 
       <div className="bg-muted/50 rounded-lg p-4 mb-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <FileDown className="h-4 w-4" />
+          <DocumentArrowDownIcon className="h-4 w-4" />
           <span>
             Includes: title, content, status, tags, author info, vote count, and creation date
           </span>
@@ -74,12 +74,12 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
       <Button onClick={handleExport} disabled={isExporting}>
         {isExporting ? (
           <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
             Exporting...
           </>
         ) : (
           <>
-            <Download className="h-4 w-4 mr-2" />
+            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
             Export CSV
           </>
         )}

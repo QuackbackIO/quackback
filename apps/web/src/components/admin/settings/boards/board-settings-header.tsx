@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { ChevronDown, Check, MessageSquare } from 'lucide-react'
+import { ChevronDownIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -35,9 +35,9 @@ export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHe
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2" data-testid="board-switcher">
-                <MessageSquare className="h-4 w-4" />
+                <ChatBubbleLeftIcon className="h-4 w-4" />
                 {currentBoard.name}
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
@@ -47,9 +47,9 @@ export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHe
                   onClick={() => handleBoardSwitch(board.slug)}
                   className="gap-2"
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <ChatBubbleLeftIcon className="h-4 w-4" />
                   <span className="flex-1 truncate">{board.name}</span>
-                  {board.id === currentBoard.id && <Check className="h-4 w-4 text-primary" />}
+                  {board.id === currentBoard.id && <CheckIcon className="h-4 w-4 text-primary" />}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

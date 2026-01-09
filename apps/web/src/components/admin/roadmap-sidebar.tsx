@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { Plus, Map, MoreVertical, Pencil, Trash2, Loader2, Lock } from 'lucide-react'
+import {
+  PlusIcon,
+  MapIcon,
+  EllipsisVerticalIcon,
+  PencilIcon,
+  TrashIcon,
+  ArrowPathIcon,
+  LockClosedIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -135,17 +143,17 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
   }
 
   return (
-    <aside className="w-60 xl:w-64 shrink-0 flex flex-col border-r border-border/50 bg-card/50 overflow-hidden">
+    <aside className="w-64 xl:w-72 shrink-0 flex flex-col border-r border-border/50 bg-card/30 overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border/50">
-        <div className="flex items-center justify-between">
+      <div className="px-5 pt-5 pb-3">
+        <div className="flex items-center justify-between py-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Roadmaps
           </span>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 -mr-1.5">
-                <Plus className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-7 w-7 -mr-2">
+                <PlusIcon className="h-4 w-4" />
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -181,7 +189,9 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                     Cancel
                   </Button>
                   <Button type="submit" disabled={createRoadmap.isPending}>
-                    {createRoadmap.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {createRoadmap.isPending && (
+                      <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
+                    )}
                     Create
                   </Button>
                 </div>
@@ -193,15 +203,15 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
 
       {/* List */}
       <ScrollArea className="flex-1">
-        <div className="p-2">
+        <div className="px-5 pb-5">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : roadmaps?.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 mb-3">
-                <Map className="h-5 w-5 text-primary" />
+                <MapIcon className="h-5 w-5 text-primary" />
               </div>
               <p className="text-sm font-medium text-foreground">No roadmaps yet</p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -209,26 +219,28 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
               </p>
             </div>
           ) : (
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {roadmaps?.map((roadmap) => (
                 <div
                   key={roadmap.id}
                   className={cn(
-                    'group flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors',
+                    'group flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors',
                     selectedRoadmapId === roadmap.id
-                      ? 'bg-muted text-foreground'
+                      ? 'bg-muted text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   )}
                   onClick={() => onSelectRoadmap(roadmap.id)}
                 >
-                  <Map
+                  <MapIcon
                     className={cn(
                       'h-4 w-4 shrink-0',
                       selectedRoadmapId === roadmap.id ? 'text-primary' : ''
                     )}
                   />
                   <span className="flex-1 text-sm truncate">{roadmap.name}</span>
-                  {!roadmap.isPublic && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+                  {!roadmap.isPublic && (
+                    <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                  )}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -237,12 +249,12 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                         className="h-6 w-6 opacity-0 group-hover:opacity-100 -mr-1"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <MoreVertical className="h-4 w-4" />
+                        <EllipsisVerticalIcon className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => openEditDialog(roadmap)}>
-                        <Pencil className="h-4 w-4 mr-2" />
+                        <PencilIcon className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -250,7 +262,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                         className="text-destructive focus:text-destructive"
                         onClick={() => openDeleteDialog(roadmap)}
                       >
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <TrashIcon className="h-4 w-4 mr-2" />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -296,7 +308,9 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                   Cancel
                 </Button>
                 <Button type="submit" disabled={updateRoadmap.isPending}>
-                  {updateRoadmap.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {updateRoadmap.isPending && (
+                    <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
+                  )}
                   Save
                 </Button>
               </div>
@@ -321,7 +335,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteRoadmap.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleteRoadmap.isPending && <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
