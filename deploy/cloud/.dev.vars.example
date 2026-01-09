@@ -6,8 +6,8 @@
 BETTER_AUTH_SECRET=your-secret-key-at-least-32-characters-long
 
 # Multi-tenant resolution (required for cloud mode)
-CATALOG_DATABASE_URL=postgres://user:pass@host/catalog
-NEON_API_KEY=napi_xxxxxxxxxxxx
+CLOUD_CATALOG_DATABASE_URL=postgres://user:pass@host/catalog
+CLOUD_NEON_API_KEY=napi_xxxxxxxxxxxx
 
 # Email service (required for notifications)
 RESEND_API_KEY=re_xxxxxxxxxxxx

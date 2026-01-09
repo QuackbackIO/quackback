@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import { cloudflare } from '@cloudflare/vite-plugin'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
 
   const EDITION = env.EDITION || 'self-hosted'
   const INCLUDE_EE = env.INCLUDE_EE === 'true'
+  const USE_CLOUDFLARE = EDITION === 'cloud'
 
   // EE package aliases - point to stubs when EE not included
   const eeAliases: Record<string, string> = !INCLUDE_EE
@@ -44,7 +45,7 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths({
         projects: ['./tsconfig.json'],
       }),
-      cloudflare({ viteEnvironment: { name: 'ssr' } }),
+      USE_CLOUDFLARE && cloudflare({ viteEnvironment: { name: 'ssr' } }),
       tanstackStart({
         srcDirectory: 'src',
         router: {
@@ -52,6 +53,6 @@ export default defineConfig(({ mode }) => {
         },
       }),
       viteReact(),
-    ],
+    ].filter(Boolean) as PluginOption[],
   }
 })

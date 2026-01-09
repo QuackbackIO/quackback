@@ -74,8 +74,8 @@ Edit `.dev.vars` with your development secrets:
 ```bash
 # Required
 BETTER_AUTH_SECRET=your-dev-secret-at-least-32-characters
-CATALOG_DATABASE_URL=postgres://user:pass@host/catalog
-NEON_API_KEY=napi_xxxxxxxxxxxx
+CLOUD_CATALOG_DATABASE_URL=postgres://user:pass@host/catalog
+CLOUD_NEON_API_KEY=napi_xxxxxxxxxxxx
 RESEND_API_KEY=re_xxxxxxxxxxxx
 INTEGRATION_ENCRYPTION_KEY=base64-encoded-32-byte-key
 
@@ -92,15 +92,15 @@ Secrets must be set via wrangler for each environment:
 # Development environment
 cd apps/web
 wrangler secret put BETTER_AUTH_SECRET -c ../../deploy/cloud/wrangler.dev.jsonc
-wrangler secret put CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.dev.jsonc
-wrangler secret put NEON_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
+wrangler secret put CLOUD_CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.dev.jsonc
+wrangler secret put CLOUD_NEON_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 wrangler secret put RESEND_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 wrangler secret put INTEGRATION_ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 
 # Production environment
 wrangler secret put BETTER_AUTH_SECRET -c ../../deploy/cloud/wrangler.production.jsonc
-wrangler secret put CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.production.jsonc
-wrangler secret put NEON_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
+wrangler secret put CLOUD_CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.production.jsonc
+wrangler secret put CLOUD_NEON_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 wrangler secret put RESEND_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 wrangler secret put INTEGRATION_ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 ```
@@ -118,7 +118,7 @@ For local development that simulates the Cloudflare environment:
 cd apps/web
 
 # Build for Cloudflare
-bun run build:cf
+bun run build:cloud
 
 # Run locally with wrangler
 wrangler dev -c ../../deploy/cloud/wrangler.dev.jsonc
@@ -175,8 +175,8 @@ This deploys to:
 
 ### What Happens During Deployment
 
-1. **Build**: `DEPLOY_TARGET=cloudflare vite build`
-   - Loads `@cloudflare/vite-plugin` instead of Nitro
+1. **Build**: `EDITION=cloud vite build`
+   - Loads `@cloudflare/vite-plugin` when EDITION=cloud
    - Outputs to `dist/client/` and `dist/server/`
    - Generates `wrangler.json` with entry point
 
@@ -212,13 +212,13 @@ Automated deployments are configured in `.github/workflows/deploy-cloud.yml`.
 
 ### Required Secrets per Environment
 
-| Secret                 | Description                                         |
-| ---------------------- | --------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN` | API token with Workers permissions                  |
-| `BETTER_AUTH_SECRET`   | Auth encryption key (32+ chars)                     |
-| `CATALOG_DATABASE_URL` | Catalog database connection string                  |
-| `NEON_API_KEY`         | Neon API key for fetching tenant connection strings |
-| `RESEND_API_KEY`       | Email service API key                               |
+| Secret                       | Description                                         |
+| ---------------------------- | --------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`       | API token with Workers permissions                  |
+| `BETTER_AUTH_SECRET`         | Auth encryption key (32+ chars)                     |
+| `CLOUD_CATALOG_DATABASE_URL` | Catalog database connection string                  |
+| `CLOUD_NEON_API_KEY`         | Neon API key for fetching tenant connection strings |
+| `RESEND_API_KEY`             | Email service API key                               |
 
 ### Manual Production Deploy
 
@@ -314,7 +314,7 @@ Update this to match your local PostgreSQL setup.
 
 ```bash
 # Build for Cloudflare (from apps/web)
-bun run build:cf
+bun run build:cloud
 
 # Deploy to dev (from root)
 bun run deploy:cloud:dev

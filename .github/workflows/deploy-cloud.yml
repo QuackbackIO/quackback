@@ -18,7 +18,6 @@ env:
   # Build-time configuration for cloud edition
   EDITION: cloud
   INCLUDE_EE: true
-  DEPLOY_TARGET: cloudflare
 
 jobs:
   deploy:
@@ -49,12 +48,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build for Cloudflare
-        run: bun run build:cf
+        run: bun run build:cloud
         working-directory: apps/web
         env:
           EDITION: ${{ env.EDITION }}
           INCLUDE_EE: ${{ env.INCLUDE_EE }}
-          DEPLOY_TARGET: ${{ env.DEPLOY_TARGET }}
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3

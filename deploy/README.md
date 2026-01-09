@@ -79,14 +79,14 @@ Quackback supports different build configurations:
 | `bun run build`                   | Self-hosted | No          | Bun        |
 | `bun run build:community`         | Self-hosted | No          | Bun        |
 | `bun run build:enterprise`        | Self-hosted | Yes         | Bun        |
-| `bun run build:cloud`             | Cloud       | Yes         | Bun        |
+| `bun run build:cloud`             | Cloud       | Yes         | Cloudflare |
 | `bun run deploy:cloud:dev`        | Cloud       | Yes         | Cloudflare |
 | `bun run deploy:cloud:production` | Cloud       | Yes         | Cloudflare |
 
-The build target is controlled by `DEPLOY_TARGET` environment variable:
+The build target is controlled by `EDITION` environment variable:
 
-- `bun` (default): Uses Nitro with Bun preset for self-hosted deployments
-- `cloudflare`: Uses `@cloudflare/vite-plugin` for Cloudflare Workers
+- `self-hosted` (default): Standard Vite build for self-hosted deployments
+- `cloud`: Uses `@cloudflare/vite-plugin` for Cloudflare Workers
 
 ---
 
