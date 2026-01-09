@@ -44,9 +44,7 @@ async function fetchInboxPosts(filters: InboxFilters, page: number): Promise<Inb
   return (await fetchInboxPostsForAdmin({
     data: {
       boardIds: filters.board as BoardId[] | undefined,
-      excludeBoardIds: filters.excludeBoard as BoardId[] | undefined,
       statusSlugs: filters.status,
-      excludeStatusSlugs: filters.excludeStatus,
       tagIds: filters.tags as TagId[] | undefined,
       ownerId: (filters.owner || undefined) as MemberId | null | undefined,
       search: filters.search,
