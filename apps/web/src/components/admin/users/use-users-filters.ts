@@ -14,37 +14,46 @@ export function useUsersFilters() {
   const navigate = useNavigate()
   const search = Route.useSearch()
 
-  const filters: UsersFilters = useMemo(
-    () => ({
+  const filters: UsersFilters = useMemo(() => {
+    let verified: boolean | undefined
+    if (search.verified === 'true') {
+      verified = true
+    } else if (search.verified === 'false') {
+      verified = false
+    }
+
+    return {
       search: search.search,
-      verified: search.verified === 'true' ? true : search.verified === 'false' ? false : undefined,
+      verified,
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
       sort: search.sort,
-    }),
-    [search]
-  )
+    }
+  }, [search])
 
   const selectedUserId = search.selected ?? null
 
   const setFilters = useCallback(
     (updates: Partial<UsersFilters>) => {
+      // Convert boolean verified to URL param format
+      let verifiedParam: 'true' | 'false' | undefined
+      if ('verified' in updates) {
+        if (updates.verified === true) {
+          verifiedParam = 'true'
+        } else if (updates.verified === false) {
+          verifiedParam = 'false'
+        }
+      }
+
       void navigate({
         to: '/admin/users',
         search: {
           ...search,
-          ...(updates.search !== undefined && { search: updates.search }),
-          ...(updates.verified !== undefined && {
-            verified:
-              updates.verified === true
-                ? ('true' as const)
-                : updates.verified === false
-                  ? ('false' as const)
-                  : undefined,
-          }),
-          ...(updates.dateFrom !== undefined && { dateFrom: updates.dateFrom }),
-          ...(updates.dateTo !== undefined && { dateTo: updates.dateTo }),
-          ...(updates.sort !== undefined && { sort: updates.sort }),
+          ...('search' in updates && { search: updates.search }),
+          ...('verified' in updates && { verified: verifiedParam }),
+          ...('dateFrom' in updates && { dateFrom: updates.dateFrom }),
+          ...('dateTo' in updates && { dateTo: updates.dateTo }),
+          ...('sort' in updates && { sort: updates.sort }),
         },
         replace: true,
       })

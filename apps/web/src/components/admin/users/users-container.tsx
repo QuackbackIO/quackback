@@ -68,6 +68,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
           filters={filters}
           onFiltersChange={setFilters}
           onClearFilters={clearFilters}
+          hasActiveFilters={hasActiveFilters}
         />
       }
       userList={

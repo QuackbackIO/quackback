@@ -39,44 +39,19 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: typeof Enve
   { key: 'date', label: 'Date Joined', icon: CalendarIcon },
 ]
 
+function getDateFromDaysAgo(daysAgo: number): string {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  date.setDate(date.getDate() - daysAgo)
+  return date.toISOString().split('T')[0]
+}
+
 const DATE_PRESETS = [
-  {
-    value: 'today',
-    label: 'Today',
-    getDates: () => {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      return { dateFrom: today.toISOString().split('T')[0] }
-    },
-  },
-  {
-    value: '7days',
-    label: 'Last 7 days',
-    getDates: () => {
-      const date = new Date()
-      date.setDate(date.getDate() - 7)
-      return { dateFrom: date.toISOString().split('T')[0] }
-    },
-  },
-  {
-    value: '30days',
-    label: 'Last 30 days',
-    getDates: () => {
-      const date = new Date()
-      date.setDate(date.getDate() - 30)
-      return { dateFrom: date.toISOString().split('T')[0] }
-    },
-  },
-  {
-    value: '90days',
-    label: 'Last 90 days',
-    getDates: () => {
-      const date = new Date()
-      date.setDate(date.getDate() - 90)
-      return { dateFrom: date.toISOString().split('T')[0] }
-    },
-  },
-]
+  { value: 'today', label: 'Today', daysAgo: 0 },
+  { value: '7days', label: 'Last 7 days', daysAgo: 7 },
+  { value: '30days', label: 'Last 30 days', daysAgo: 30 },
+  { value: '90days', label: 'Last 90 days', daysAgo: 90 },
+] as const
 
 function AddFilterButton({
   onFiltersChange,
@@ -98,8 +73,8 @@ function AddFilterButton({
     closePopover()
   }
 
-  const handleSelectDate = (preset: (typeof DATE_PRESETS)[0]) => {
-    onFiltersChange(preset.getDates())
+  const handleSelectDate = (preset: (typeof DATE_PRESETS)[number]) => {
+    onFiltersChange({ dateFrom: getDateFromDaysAgo(preset.daysAgo) })
     closePopover()
   }
 
@@ -124,19 +99,19 @@ function AddFilterButton({
         <button
           type="button"
           className={cn(
-            'inline-flex items-center gap-1 px-2.5 py-1',
-            'rounded-full text-sm',
+            'inline-flex items-center gap-1 px-2 py-0.5',
+            'rounded-full text-xs',
             'border border-dashed border-border/50',
             'text-muted-foreground hover:text-foreground',
             'hover:border-border hover:bg-muted/30',
             'transition-colors'
           )}
         >
-          <PlusIcon className="h-3.5 w-3.5" />
+          <PlusIcon className="h-3 w-3" />
           Add filter
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 p-0">
+      <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
           <div className="py-1">
             {availableCategories.map((category) => {
@@ -147,16 +122,16 @@ function AddFilterButton({
                   type="button"
                   onClick={() => setActiveCategory(category.key)}
                   className={cn(
-                    'w-full flex items-center justify-between gap-2 px-3 py-2',
-                    'text-sm text-left',
+                    'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
+                    'text-xs text-left',
                     'hover:bg-muted/50 transition-colors'
                   )}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                     {category.label}
                   </span>
-                  <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
                 </button>
               )
             })}
@@ -166,9 +141,9 @@ function AddFilterButton({
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground border-b border-border/50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
-              <ChevronRightIcon className="h-3 w-3 rotate-180" />
+              <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               Back
             </button>
             <div className="max-h-[250px] overflow-y-auto py-1">
@@ -177,14 +152,14 @@ function AddFilterButton({
                   <button
                     type="button"
                     onClick={() => handleSelectVerified(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     Verified only
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSelectVerified(false)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     Unverified only
                   </button>
@@ -197,7 +172,7 @@ function AddFilterButton({
                     key={preset.value}
                     type="button"
                     onClick={() => handleSelectDate(preset)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     {preset.label}
                   </button>
@@ -241,7 +216,7 @@ function FilterChip({ type, label, value, valueId, onRemove, onChange, options }
 
   const chipContent = (
     <>
-      <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
     </>
@@ -250,8 +225,8 @@ function FilterChip({ type, label, value, valueId, onRemove, onChange, options }
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1',
-        'rounded-full bg-muted/60 text-sm',
+        'inline-flex items-center gap-1 px-2 py-0.5',
+        'rounded-full bg-muted/60 text-xs',
         'border border-border/30 hover:border-border/50',
         'transition-colors'
       )}
@@ -266,7 +241,7 @@ function FilterChip({ type, label, value, valueId, onRemove, onChange, options }
               {chipContent}
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-48 p-0">
+          <PopoverContent align="start" className="w-40 p-0">
             <div className="max-h-[250px] overflow-y-auto py-1">
               {options.map((option) => (
                 <button
@@ -274,7 +249,7 @@ function FilterChip({ type, label, value, valueId, onRemove, onChange, options }
                   type="button"
                   onClick={() => handleSelect(option.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors',
                     option.id === valueId ? 'bg-muted/50 font-medium' : 'hover:bg-muted/50'
                   )}
                 >
@@ -285,7 +260,7 @@ function FilterChip({ type, label, value, valueId, onRemove, onChange, options }
           </PopoverContent>
         </Popover>
       ) : (
-        <span className="inline-flex items-center gap-1.5">{chipContent}</span>
+        <span className="inline-flex items-center gap-1">{chipContent}</span>
       )}
       <button
         type="button"
@@ -346,10 +321,9 @@ function computeActiveFilters(
     })
   } else if (filters.dateFrom) {
     // Try to match current date to a preset for display
-    const matchedPreset = DATE_PRESETS.find((p) => {
-      const dates = p.getDates()
-      return dates.dateFrom === filters.dateFrom
-    })
+    const matchedPreset = DATE_PRESETS.find(
+      (p) => getDateFromDaysAgo(p.daysAgo) === filters.dateFrom
+    )
 
     result.push({
       key: 'dateFrom',
@@ -361,7 +335,7 @@ function computeActiveFilters(
       onChange: (presetId) => {
         const preset = DATE_PRESETS.find((p) => p.value === presetId)
         if (preset) {
-          onFiltersChange(preset.getDates())
+          onFiltersChange({ dateFrom: getDateFromDaysAgo(preset.daysAgo) })
         }
       },
       onRemove: () => onFiltersChange({ dateFrom: undefined }),

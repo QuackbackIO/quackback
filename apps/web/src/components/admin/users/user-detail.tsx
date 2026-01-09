@@ -40,6 +40,16 @@ interface UserDetailProps {
   currentMemberRole: string
 }
 
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+})
+
+function formatDate(date: Date | string): string {
+  return dateFormatter.format(new Date(date))
+}
+
 function DetailSkeleton() {
   return (
     <div className="p-4 space-y-6">
@@ -186,14 +196,6 @@ export function UserDetail({
         </p>
       </div>
     )
-  }
-
-  const formatDate = (date: Date | string) => {
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }).format(new Date(date))
   }
 
   return (

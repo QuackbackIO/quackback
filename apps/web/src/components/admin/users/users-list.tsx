@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon, UsersIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import {
@@ -94,27 +94,15 @@ export function UsersList({
   total,
 }: UsersListProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null)
-  const [searchValue, setSearchValue] = useState(filters.search || '')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Convenience accessors
-  const search = filters.search
-  const sort = filters.sort
-  const onSearchChange = (value: string | undefined) => onFiltersChange({ search: value })
-  const onSortChange = (value: UsersFilters['sort']) => onFiltersChange({ sort: value })
+  const handleSearchChange = (value: string) => {
+    onFiltersChange({ search: value || undefined })
+  }
 
-  // Sync input when parent search changes (e.g., clear filters)
-  useEffect(() => {
-    setSearchValue(search || '')
-  }, [search])
-
-  // Update parent when search changes
-  const prevSearchRef = useRef(searchValue)
-  useEffect(() => {
-    if (searchValue !== prevSearchRef.current) {
-      prevSearchRef.current = searchValue
-      onSearchChange(searchValue || undefined)
-    }
-  }, [searchValue, onSearchChange])
+  const handleSortChange = (value: UsersFilters['sort']) => {
+    onFiltersChange({ sort: value })
+  }
 
   // Infinite scroll observer
   useEffect(() => {
@@ -171,7 +159,7 @@ export function UsersList({
           break
         case '/':
           e.preventDefault()
-          document.querySelector<HTMLInputElement>('[data-search-input]')?.focus()
+          searchInputRef.current?.focus()
           break
       }
     }
@@ -187,17 +175,17 @@ export function UsersList({
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchInputRef}
             type="search"
             placeholder="Search users..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
+            value={filters.search || ''}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
-            data-search-input
           />
-          {searchValue && (
+          {filters.search && (
             <button
               type="button"
-              onClick={() => setSearchValue('')}
+              onClick={() => handleSearchChange('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <XMarkIcon className="h-3.5 w-3.5" />
@@ -205,9 +193,9 @@ export function UsersList({
           )}
         </div>
         <Select
-          value={sort || 'newest'}
+          value={filters.sort || 'newest'}
           onValueChange={(value) =>
-            onSortChange(value as 'newest' | 'oldest' | 'most_active' | 'name')
+            handleSortChange(value as 'newest' | 'oldest' | 'most_active' | 'name')
           }
         >
           <SelectTrigger className="h-8 w-[110px] text-xs border-border/50">
@@ -222,16 +210,14 @@ export function UsersList({
         </Select>
       </div>
 
-      {/* Active Filters Bar */}
-      {hasActiveFilters && (
-        <div className="mt-2">
-          <UsersActiveFiltersBar
-            filters={filters}
-            onFiltersChange={onFiltersChange}
-            onClearFilters={onClearFilters}
-          />
-        </div>
-      )}
+      {/* Active Filters Bar - Always visible */}
+      <div className="mt-2">
+        <UsersActiveFiltersBar
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          onClearFilters={onClearFilters}
+        />
+      </div>
 
       {/* Count */}
       <div className="mt-2 text-xs text-muted-foreground">

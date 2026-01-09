@@ -10,6 +10,7 @@ interface UsersFiltersProps {
   filters: UsersFilters
   onFiltersChange: (updates: Partial<UsersFilters>) => void
   onClearFilters: () => void
+  hasActiveFilters?: boolean
 }
 
 function FilterSection({
@@ -24,16 +25,16 @@ function FilterSection({
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   return (
-    <div className="pb-5 last:pb-0">
+    <div className="pb-4 last:pb-0">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center justify-between py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
       >
         {title}
-        {isOpen ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+        {isOpen ? <ChevronUpIcon className="h-3 w-3" /> : <ChevronDownIcon className="h-3 w-3" />}
       </button>
-      {isOpen && <div className="mt-3">{children}</div>}
+      {isOpen && <div className="mt-2">{children}</div>}
     </div>
   )
 }
@@ -50,9 +51,9 @@ function FilterOption({ label, isSelected, onClick }: FilterOptionProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors',
+        'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
         isSelected
-          ? 'bg-muted text-foreground font-medium'
+          ? 'bg-muted text-foreground'
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
       )}
     >
@@ -61,7 +62,12 @@ function FilterOption({ label, isSelected, onClick }: FilterOptionProps) {
   )
 }
 
-export function UsersFiltersPanel({ filters, onFiltersChange, onClearFilters }: UsersFiltersProps) {
+export function UsersFiltersPanel({
+  filters,
+  onFiltersChange,
+  onClearFilters,
+  hasActiveFilters = false,
+}: UsersFiltersProps) {
   const handleVerifiedChange = (value: 'all' | 'verified' | 'unverified') => {
     if (value === 'all') {
       onFiltersChange({ verified: undefined })
@@ -70,15 +76,13 @@ export function UsersFiltersPanel({ filters, onFiltersChange, onClearFilters }: 
     }
   }
 
-  const verifiedValue =
-    filters.verified === undefined ? 'all' : filters.verified ? 'verified' : 'unverified'
-
-  const hasActiveFilters = !!(
-    filters.search ||
-    filters.verified !== undefined ||
-    filters.dateFrom ||
-    filters.dateTo
-  )
+  // Determine which option is currently selected
+  let verifiedValue: 'all' | 'verified' | 'unverified' = 'all'
+  if (filters.verified === true) {
+    verifiedValue = 'verified'
+  } else if (filters.verified === false) {
+    verifiedValue = 'unverified'
+  }
 
   return (
     <div className="space-y-1">
