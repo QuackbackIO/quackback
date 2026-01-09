@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { Plug2 } from 'lucide-react'
+import { PuzzlePieceIcon } from '@heroicons/react/24/solid'
 import { adminQueries } from '@/lib/queries/admin'
 import { IntegrationList } from '@/components/admin/settings/integrations/integration-list'
 
@@ -34,7 +34,7 @@ function IntegrationsPage() {
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Plug2 className="h-5 w-5 text-primary" />
+          <PuzzlePieceIcon className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-xl font-semibold text-foreground">Integrations</h1>

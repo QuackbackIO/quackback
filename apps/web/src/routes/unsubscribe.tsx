@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { z } from 'zod'
-import { XCircle } from 'lucide-react'
+import { XCircleIcon } from '@heroicons/react/24/solid'
 // import { processUnsubscribeToken } from '@/lib/subscriptions'
 
 const searchSchema = z.object({
@@ -54,7 +54,7 @@ function UnsubscribePage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-            <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+            <XCircleIcon className="h-8 w-8 text-red-600 dark:text-red-400" />
           </div>
         </div>
 

@@ -5,7 +5,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Mail, ArrowLeft, Check, AlertCircle, Building2 } from 'lucide-react'
+import {
+  ArrowPathIcon,
+  EnvelopeIcon,
+  ArrowLeftIcon,
+  CheckIcon,
+  ExclamationCircleIcon,
+  BuildingOffice2Icon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import {
   sendVerificationCode,
@@ -248,7 +255,7 @@ function GetStartedPage() {
           {/* Logo/Brand */}
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <Building2 className="h-6 w-6 text-primary" />
+              <BuildingOffice2Icon className="h-6 w-6 text-primary" />
             </div>
             <h1 className="text-2xl font-bold">
               {step === 'email' && 'Get Started'}
@@ -267,7 +274,7 @@ function GetStartedPage() {
           {/* Error alert */}
           {error && (
             <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
+              <ExclamationCircleIcon className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -280,7 +287,7 @@ function GetStartedPage() {
                   Email address
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <EnvelopeIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
@@ -297,7 +304,7 @@ function GetStartedPage() {
               <Button type="submit" className="w-full" disabled={loading || !email}>
                 {loading ? (
                   <>
-                    <Loader2 className="animate-spin" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
                     Sending code...
                   </>
                 ) : (
@@ -334,7 +341,7 @@ function GetStartedPage() {
               <Button type="submit" className="w-full" disabled={loading || code.length !== 6}>
                 {loading ? (
                   <>
-                    <Loader2 className="animate-spin" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
                     Verifying...
                   </>
                 ) : (
@@ -348,7 +355,7 @@ function GetStartedPage() {
                   onClick={handleBack}
                   className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeftIcon className="h-4 w-4" />
                   Back
                 </button>
                 <button
@@ -415,19 +422,19 @@ function GetStartedPage() {
                 <div className="flex items-center gap-2 text-sm">
                   {checkingSlug && (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                       <span className="text-muted-foreground">Checking availability...</span>
                     </>
                   )}
                   {!checkingSlug && slugAvailable === true && slug.length >= 3 && (
                     <>
-                      <Check className="h-4 w-4 text-green-600" />
+                      <CheckIcon className="h-4 w-4 text-green-600" />
                       <span className="text-green-600">{slug}.quackback.io is available</span>
                     </>
                   )}
                   {!checkingSlug && slugAvailable === false && (
                     <>
-                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <ExclamationCircleIcon className="h-4 w-4 text-destructive" />
                       <span className="text-destructive">{slugError}</span>
                     </>
                   )}
@@ -450,7 +457,7 @@ function GetStartedPage() {
                 onClick={handleBack}
                 className="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeftIcon className="h-4 w-4" />
                 Back
               </button>
             </form>
@@ -475,11 +482,13 @@ function GetStartedPage() {
                         <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
                       )}
                       {pStep.status === 'active' && (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-primary" />
                       )}
-                      {pStep.status === 'complete' && <Check className="h-3.5 w-3.5 text-white" />}
+                      {pStep.status === 'complete' && (
+                        <CheckIcon className="h-3.5 w-3.5 text-white" />
+                      )}
                       {pStep.status === 'error' && (
-                        <AlertCircle className="h-3.5 w-3.5 text-white" />
+                        <ExclamationCircleIcon className="h-3.5 w-3.5 text-white" />
                       )}
                     </div>
                     <span

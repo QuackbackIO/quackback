@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
-import { Lock } from 'lucide-react'
+import { LockClosedIcon } from '@heroicons/react/24/solid'
 import { PortalAuthSettings } from '@/components/admin/settings/portal-auth/portal-auth-settings'
 
 export const Route = createFileRoute('/admin/settings/portal-auth')({
@@ -30,7 +30,7 @@ function PortalAuthPage() {
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Lock className="h-5 w-5 text-primary" />
+          <LockClosedIcon className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-xl font-semibold text-foreground">Portal Authentication</h1>

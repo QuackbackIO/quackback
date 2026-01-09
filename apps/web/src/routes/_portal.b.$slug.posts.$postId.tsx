@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
 import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
@@ -92,7 +92,7 @@ function PostDetailPage() {
         search={{ board: slug }}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeftIcon className="h-4 w-4" />
         <span>{board.name}</span>
       </Link>
 

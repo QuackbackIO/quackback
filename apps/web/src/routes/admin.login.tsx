@@ -5,7 +5,7 @@ import { settingsQueries } from '@/lib/queries/settings'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/settings'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle } from 'lucide-react'
+import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
 // Error messages for trust-login failures
 const errorMessages: Record<string, string> = {
@@ -83,7 +83,7 @@ function AdminLoginPage() {
         </div>
         {errorMessage && (
           <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
+            <ExclamationCircleIcon className="h-4 w-4" />
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}

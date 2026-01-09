@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
-import { User } from 'lucide-react'
+import { UserIcon } from '@heroicons/react/24/solid'
 import { ProfileForm } from '@/components/settings/profile-form'
 
 export const Route = createFileRoute('/_portal/settings/profile')({
@@ -35,7 +35,7 @@ function ProfilePage() {
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <User className="h-5 w-5 text-primary" />
+          <UserIcon className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-xl font-semibold text-foreground">Profile</h1>

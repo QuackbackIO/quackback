@@ -1,7 +1,14 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/queries/admin'
-import { MessageSquare, Users, Palette, Plug, Check, ArrowRight } from 'lucide-react'
+import {
+  ChatBubbleLeftIcon,
+  UsersIcon,
+  SwatchIcon,
+  PuzzlePieceIcon,
+  CheckIcon,
+  ArrowRightIcon,
+} from '@heroicons/react/24/solid'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -17,10 +24,10 @@ export interface OnboardingTask {
 
 // Icon mapping - kept in component since React components aren't serializable
 const taskIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  'create-board': MessageSquare,
-  'invite-team': Users,
-  'customize-branding': Palette,
-  'connect-integrations': Plug,
+  'create-board': ChatBubbleLeftIcon,
+  'invite-team': UsersIcon,
+  'customize-branding': SwatchIcon,
+  'connect-integrations': PuzzlePieceIcon,
 }
 
 export const Route = createFileRoute('/admin/getting-started')({
@@ -123,7 +130,7 @@ function GettingStartedPage() {
                     }`}
                   >
                     {isCompleted ? (
-                      <Check className="h-3.5 w-3.5" />
+                      <CheckIcon className="h-3.5 w-3.5" />
                     ) : (
                       <span className="text-xs font-medium">{index + 1}</span>
                     )}
@@ -147,7 +154,7 @@ function GettingStartedPage() {
                     <Button variant={isCompleted ? 'ghost' : 'default'} size="sm" asChild>
                       <Link to={task.href as any}>
                         {isCompleted ? task.completedLabel : task.actionLabel}
-                        <ArrowRight className="h-4 w-4" />
+                        <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                     </Button>
                   </div>

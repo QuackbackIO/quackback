@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { postAuthSuccess } from '@/lib/hooks/use-auth-broadcast'
-import { Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 
 /**
  * Auth Complete Page
@@ -35,12 +35,12 @@ function AuthCompletePage() {
       <div className="text-center space-y-4 p-8">
         {status === 'broadcasting' ? (
           <>
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+            <ArrowPathIcon className="h-12 w-12 animate-spin text-primary mx-auto" />
             <p className="text-muted-foreground">Completing sign in...</p>
           </>
         ) : (
           <>
-            <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto" />
+            <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto" />
             <p className="text-foreground font-medium">Signed in successfully!</p>
             <p className="text-sm text-muted-foreground">This window will close automatically.</p>
           </>
