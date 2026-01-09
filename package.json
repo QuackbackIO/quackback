@@ -34,6 +34,8 @@
     "db:reset": "bun packages/db/src/reset.ts",
     "db:generate-csv": "bun packages/db/src/generate-sample-csv.ts",
     "reset": "bun packages/db/src/reset.ts",
+    "import": "bun scripts/import/cli.ts",
+    "import:uservoice": "bun scripts/import/cli.ts uservoice",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -56,6 +58,7 @@
   },
   "dependencies": {
     "@better-auth/sso": "1.3.10",
+    "@heroicons/react": "^2.2.0",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-radio-group": "^1.3.8",
     "@tanstack/react-router-ssr-query": "^1.144.0",
