@@ -1,5 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronUp, MessageSquare, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import {
+  ChevronUpIcon,
+  ChatBubbleLeftIcon,
+  EllipsisHorizontalIcon,
+  PencilIcon,
+  TrashIcon,
+} from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -119,18 +125,20 @@ export function PostCard({
           handleVote(e)
         }}
         disabled={isPending}
-        className={`post-card__vote flex flex-col items-center justify-center w-16 shrink-0 border-r border-[var(--post-card-border)]/30 hover:bg-muted/40 transition-colors ${
+        className={`post-card__vote group flex flex-col items-center justify-center w-16 shrink-0 border-r border-[var(--post-card-border)]/30 transition-all duration-200 ${
           currentHasVoted
-            ? 'post-card__vote--voted text-[var(--post-card-voted-color)]'
-            : 'text-muted-foreground'
-        } ${isPending ? 'opacity-70' : ''}`}
+            ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/8'
+            : 'text-muted-foreground hover:bg-muted/40'
+        } ${isPending ? 'opacity-70 cursor-wait' : ''}`}
       >
-        <ChevronUp
-          className={`h-5 w-5 ${currentHasVoted ? 'fill-[var(--post-card-voted-color)]' : ''}`}
+        <ChevronUpIcon
+          className={`h-5 w-5 transition-transform duration-200 ${
+            currentHasVoted ? 'fill-[var(--post-card-voted-color)]' : ''
+          } ${!isPending ? 'group-hover:-translate-y-0.5' : ''}`}
         />
         <span
           data-testid="vote-count"
-          className={`text-sm font-bold ${currentHasVoted ? '' : 'text-foreground'}`}
+          className={`text-sm font-bold tabular-nums mt-0.5 ${currentHasVoted ? '' : 'text-foreground'}`}
         >
           {currentVoteCount}
         </span>
@@ -176,7 +184,7 @@ export function PostCard({
           <TimeAgo date={createdAt} />
           <div className="flex-1" />
           <div className="flex items-center gap-1 text-muted-foreground/70">
-            <MessageSquare className="h-3.5 w-3.5" />
+            <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
             <span>{commentCount}</span>
           </div>
           {boardName && (
@@ -195,7 +203,7 @@ export function PostCard({
                     className="p-1 -m-1 rounded hover:bg-muted/50 transition-colors"
                     aria-label="Post options"
                   >
-                    <MoreHorizontal className="h-4 w-4" />
+                    <EllipsisHorizontalIcon className="h-4 w-4" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
@@ -206,14 +214,14 @@ export function PostCard({
                         onEdit?.()
                       }}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <PencilIcon className="h-4 w-4" />
                       Edit
                     </DropdownMenuItem>
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <DropdownMenuItem disabled>
-                          <Pencil className="h-4 w-4" />
+                          <PencilIcon className="h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
                       </TooltipTrigger>
@@ -230,14 +238,14 @@ export function PostCard({
                         onDelete?.()
                       }}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <TrashIcon className="h-4 w-4" />
                       Delete
                     </DropdownMenuItem>
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <DropdownMenuItem disabled>
-                          <Trash2 className="h-4 w-4" />
+                          <TrashIcon className="h-4 w-4" />
                           Delete
                         </DropdownMenuItem>
                       </TooltipTrigger>

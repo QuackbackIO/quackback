@@ -1,5 +1,10 @@
 import { useState, useTransition, useEffect } from 'react'
-import { Reply, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react'
+import {
+  ArrowUturnLeftIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FaceSmileIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -176,9 +181,9 @@ function CommentItem({
                 onClick={() => setIsCollapsed(!isCollapsed)}
               >
                 {isCollapsed ? (
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRightIcon className="h-4 w-4" />
                 ) : (
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDownIcon className="h-4 w-4" />
                 )}
               </Button>
             )}
@@ -213,7 +218,7 @@ function CommentItem({
                   disabled={isPending}
                   data-testid="add-reaction-button"
                 >
-                  <SmilePlus className="h-3.5 w-3.5" />
+                  <FaceSmileIcon className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-2" align="start" data-testid="emoji-picker">
@@ -241,7 +246,7 @@ function CommentItem({
                 onClick={() => setShowReplyForm(!showReplyForm)}
                 data-testid="reply-button"
               >
-                <Reply className="h-3 w-3 mr-1" />
+                <ArrowUturnLeftIcon className="h-3 w-3 mr-1" />
                 Reply
               </Button>
             )}

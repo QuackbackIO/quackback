@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearch } from '@tanstack/react-router'
-import { CheckCircle, X } from 'lucide-react'
+import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 
 interface UnsubscribeBannerProps {
   postId: string
@@ -27,7 +27,7 @@ export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
   return (
     <div className="mb-4 flex items-center justify-between gap-4 [border-radius:var(--radius)] bg-success/10 border border-success/20 px-4 py-3">
       <div className="flex items-center gap-3">
-        <CheckCircle className="h-5 w-5 text-success flex-shrink-0" />
+        <CheckCircleIcon className="h-5 w-5 text-success flex-shrink-0" />
         <p className="text-sm text-foreground">
           You&apos;ve been unsubscribed from this post. Use the bell icon to resubscribe.
         </p>
@@ -37,7 +37,7 @@ export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
         className="flex-shrink-0 text-success hover:text-success/80 transition-colors"
         aria-label="Dismiss"
       >
-        <X className="h-4 w-4" />
+        <XMarkIcon className="h-4 w-4" />
       </button>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Filter } from 'lucide-react'
+import { FunnelIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -52,7 +52,7 @@ export function FilterDropdown({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 relative">
-          <Filter className="h-4 w-4" />
+          <FunnelIcon className="h-4 w-4" />
           <span className="hidden sm:inline">Filter</span>
           {activeCount > 0 && (
             <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">

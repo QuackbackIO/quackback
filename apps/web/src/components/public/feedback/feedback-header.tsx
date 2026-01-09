@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PenLine } from 'lucide-react'
+import { PencilIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -212,7 +212,7 @@ export function FeedbackHeader({
               transition={{ duration: 0.2 }}
               className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center"
             >
-              <PenLine className="w-4 h-4 text-primary" />
+              <PencilIcon className="w-4 h-4 text-primary" />
             </motion.div>
           )}
         </AnimatePresence>

@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useMemo } from 'react'
-import { Loader2 } from 'lucide-react'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
@@ -259,7 +259,7 @@ export function FeedbackContainer({
                 {hasNextPage && (
                   <div ref={sentinelRef} className="py-4 flex justify-center">
                     {isFetchingNextPage && (
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
                     )}
                   </div>
                 )}

@@ -1,4 +1,4 @@
-import { ChevronUp } from 'lucide-react'
+import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import type { PostId } from '@quackback/ids'
@@ -43,18 +43,30 @@ export function VoteButton({
       }
       aria-pressed={hasVoted}
       className={cn(
-        'flex flex-col items-center justify-center py-2 px-3 transition-colors cursor-pointer [border-radius:var(--radius)]',
-        hasVoted ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-        isPending && 'opacity-70',
+        'group flex flex-col items-center justify-center py-3 px-4 rounded-xl transition-all duration-200 cursor-pointer',
+        'border-2',
+        hasVoted
+          ? 'bg-primary/10 border-primary/30 text-primary shadow-sm shadow-primary/10'
+          : 'bg-muted/30 border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border/50',
+        isPending && 'opacity-70 cursor-wait',
         disabled && 'cursor-not-allowed opacity-50'
       )}
       onClick={onClick}
       disabled={isPending}
     >
-      <ChevronUp className={cn('h-6 w-6', hasVoted && 'fill-primary')} />
+      <ChevronUpIcon
+        className={cn(
+          'h-5 w-5 transition-transform duration-200',
+          hasVoted && 'fill-primary',
+          !isPending && !disabled && 'group-hover:-translate-y-0.5'
+        )}
+      />
       <span
         data-testid="vote-count"
-        className={cn('text-lg font-bold', hasVoted ? 'text-primary' : 'text-foreground')}
+        className={cn(
+          'text-xl font-bold tabular-nums mt-0.5',
+          hasVoted ? 'text-primary' : 'text-foreground'
+        )}
       >
         {voteCount}
       </span>

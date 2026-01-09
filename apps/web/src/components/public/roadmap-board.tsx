@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Map } from 'lucide-react'
+import { MapIcon } from '@heroicons/react/24/solid'
 import { RoadmapColumn } from './roadmap-column'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
@@ -39,7 +39,7 @@ export function RoadmapBoard({
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
-          <Map className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <MapIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium text-foreground">No roadmaps available</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Check back later to see what we're working on.

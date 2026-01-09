@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { LayoutList, MessageSquare } from 'lucide-react'
+import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { BoardWithStats } from '@/lib/boards'
@@ -30,7 +30,9 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >
-                <LayoutList className={cn('h-4 w-4 shrink-0', !currentBoard && 'text-primary')} />
+                <ListBulletIcon
+                  className={cn('h-4 w-4 shrink-0', !currentBoard && 'text-primary')}
+                />
                 <span className="truncate">View all posts</span>
               </Link>
 
@@ -49,7 +51,9 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                     )}
                   >
-                    <MessageSquare className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+                    <ChatBubbleLeftIcon
+                      className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')}
+                    />
                     <span className="truncate min-w-0">{board.name}</span>
                     {board.postCount > 0 && (
                       <span

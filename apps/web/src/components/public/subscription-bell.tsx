@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Bell, BellRing, Check, Loader2 } from 'lucide-react'
+import { BellIcon, BellAlertIcon, CheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -114,7 +114,7 @@ export function SubscriptionBell({
 
   // Icon: Bell when not subscribed, BellRing when subscribed (any level)
   const isSubscribed = status.subscribed
-  const BellIcon = isSubscribed ? BellRing : Bell
+  const BellIconComponent = isSubscribed ? BellAlertIcon : BellIcon
 
   // Button click handler for non-dropdown scenarios
   const handleButtonClick = () => {
@@ -146,9 +146,9 @@ export function SubscriptionBell({
           )}
         >
           {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <ArrowPathIcon className="h-5 w-5 animate-spin" />
           ) : (
-            <BellIcon className="h-5 w-5" />
+            <BellIconComponent className="h-5 w-5" />
           )}
         </button>
       </DropdownMenuTrigger>
@@ -165,13 +165,13 @@ export function SubscriptionBell({
           className="flex items-center justify-between cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <BellRing className="h-4 w-4" />
+            <BellAlertIcon className="h-4 w-4" />
             <div>
               <p className="text-sm">All activity</p>
               <p className="text-xs text-muted-foreground">Comments & status changes</p>
             </div>
           </div>
-          {level === 'all' && <Check className="h-4 w-4 text-primary" />}
+          {level === 'all' && <CheckIcon className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
 
         {/* Status changes only */}
@@ -180,13 +180,13 @@ export function SubscriptionBell({
           className="flex items-center justify-between cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4" />
+            <BellIcon className="h-4 w-4" />
             <div>
               <p className="text-sm">Status changes</p>
               <p className="text-xs text-muted-foreground">When status is updated</p>
             </div>
           </div>
-          {level === 'status_only' && <Check className="h-4 w-4 text-primary" />}
+          {level === 'status_only' && <CheckIcon className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -198,10 +198,10 @@ export function SubscriptionBell({
           className="flex items-center justify-between cursor-pointer"
         >
           <div className="flex items-center gap-2 text-muted-foreground">
-            <Bell className="h-4 w-4" />
+            <BellIcon className="h-4 w-4" />
             <p className="text-sm">Unsubscribe</p>
           </div>
-          {level === 'none' && <Check className="h-4 w-4 text-primary" />}
+          {level === 'none' && <CheckIcon className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

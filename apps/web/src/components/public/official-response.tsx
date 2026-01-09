@@ -1,4 +1,4 @@
-import { CircleCheck } from 'lucide-react'
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 
@@ -19,7 +19,7 @@ export function OfficialResponse({
     <div className="[border-radius:var(--radius)] border border-primary/20 bg-primary/5 p-4">
       <div className="flex items-start gap-3">
         <div className="shrink-0 rounded-full bg-primary/15 p-1.5">
-          <CircleCheck className="h-4 w-4 text-primary" />
+          <CheckCircleIcon className="h-4 w-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">

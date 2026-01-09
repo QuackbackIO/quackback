@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { TrendingUp, Clock, Flame, Search } from 'lucide-react'
+import {
+  ArrowTrendingUpIcon,
+  ClockIcon,
+  FireIcon,
+  MagnifyingGlassIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -23,9 +28,9 @@ interface FeedbackToolbarProps {
 }
 
 const sortOptions = [
-  { value: 'top', label: 'Top', icon: TrendingUp },
-  { value: 'new', label: 'New', icon: Clock },
-  { value: 'trending', label: 'Trending', icon: Flame },
+  { value: 'top', label: 'Top', icon: ArrowTrendingUpIcon },
+  { value: 'new', label: 'New', icon: ClockIcon },
+  { value: 'trending', label: 'Trending', icon: FireIcon },
 ] as const
 
 export function FeedbackToolbar({
@@ -82,7 +87,7 @@ export function FeedbackToolbar({
         <Popover open={searchOpen} onOpenChange={setSearchOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Search className="h-4 w-4" />
+              <MagnifyingGlassIcon className="h-4 w-4" />
               <span className="hidden sm:inline">Search</span>
             </Button>
           </PopoverTrigger>

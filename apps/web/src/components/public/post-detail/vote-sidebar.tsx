@@ -7,12 +7,9 @@ import type { PostId } from '@quackback/ids'
 
 export function VoteSidebarSkeleton() {
   return (
-    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 gap-4">
-      <div className="flex flex-col items-center gap-1">
-        <Skeleton className="h-8 w-8 rounded-md" />
-        <Skeleton className="h-4 w-6" />
-      </div>
-      <Skeleton className="h-8 w-8 rounded-full" />
+    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 bg-muted/10 gap-4">
+      <Skeleton className="h-16 w-12 rounded-xl" />
+      <Skeleton className="h-9 w-9 rounded-full" />
     </div>
   )
 }
@@ -33,7 +30,7 @@ export function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 gap-4">
+    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 bg-muted/10 gap-4">
       <AuthVoteButton
         postId={postId}
         initialVoteCount={initialVoteCount}

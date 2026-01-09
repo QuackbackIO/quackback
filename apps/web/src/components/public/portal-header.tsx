@@ -12,7 +12,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar } from '@/components/ui/avatar'
-import { LogOut, Settings, Shield } from 'lucide-react'
+import {
+  ArrowRightStartOnRectangleIcon,
+  Cog6ToothIcon,
+  ShieldCheckIcon,
+} from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 
@@ -126,7 +130,7 @@ export function PortalHeader({
       {canAccessAdmin && (
         <Button variant="outline" size="sm" asChild className="mr-2">
           <Link to="/admin">
-            <Shield className="mr-2 h-4 w-4" />
+            <ShieldCheckIcon className="mr-2 h-4 w-4" />
             Admin
           </Link>
         </Button>
@@ -151,12 +155,12 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to="/settings">
-                <Settings className="mr-2 h-4 w-4" />
+                <Cog6ToothIcon className="mr-2 h-4 w-4" />
                 Settings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
+              <ArrowRightStartOnRectangleIcon className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

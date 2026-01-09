@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronUp } from 'lucide-react'
+import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 
 interface RoadmapCardProps {
@@ -21,7 +21,7 @@ export function RoadmapCard({ id, title, voteCount, board }: RoadmapCardProps) {
     >
       {/* Vote section */}
       <div className="roadmap-card__vote flex flex-col items-center justify-center w-12 shrink-0 border-r border-[var(--post-card-border)]/30 text-muted-foreground">
-        <ChevronUp className="h-4 w-4" />
+        <ChevronUpIcon className="h-5 w-5" />
         <span className="text-sm font-bold text-foreground">{voteCount}</span>
       </div>
 
