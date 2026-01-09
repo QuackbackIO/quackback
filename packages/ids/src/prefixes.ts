@@ -21,6 +21,7 @@ export const ID_PREFIXES = {
   reaction: 'reaction',
   post_edit: 'post_edit',
   comment_edit: 'comment_edit',
+  note: 'note', // Internal staff notes on posts
 
   // Planning domain
   roadmap: 'roadmap',

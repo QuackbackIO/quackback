@@ -74,6 +74,12 @@ export const posts = pgTable(
       () => member.id,
       { onDelete: 'set null' }
     ),
+    // Moderation state for imported/pending content
+    moderationState: text('moderation_state', {
+      enum: ['published', 'pending', 'spam', 'archived'],
+    })
+      .default('published')
+      .notNull(),
     // Full-text search vector (generated column, auto-computed from title and content)
     // Title has weight 'A' (highest), content has weight 'B'
     searchVector: tsvector('search_vector').generatedAlwaysAs(
@@ -105,6 +111,8 @@ export const posts = pgTable(
     index('posts_deleted_at_idx').on(table.deletedAt),
     // Composite index for soft-delete queries (e.g., active posts by board)
     index('posts_board_deleted_at_idx').on(table.boardId, table.deletedAt),
+    // Index for moderation state filtering
+    index('posts_moderation_state_idx').on(table.moderationState),
     // CHECK constraints to ensure counts are never negative
     check('vote_count_non_negative', sql`vote_count >= 0`),
     check('comment_count_non_negative', sql`comment_count >= 0`),
@@ -262,6 +270,31 @@ export const commentEditHistory = pgTable(
   ]
 )
 
+// Internal staff notes on posts (not visible to public users)
+export const postNotes = pgTable(
+  'post_notes',
+  {
+    id: typeIdWithDefault('note')('id').primaryKey(),
+    postId: typeIdColumn('post')('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    // Member who created the note (staff only)
+    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
+      onDelete: 'set null',
+    }),
+    // For imported notes where member doesn't exist yet
+    authorName: text('author_name'),
+    authorEmail: text('author_email'),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('post_notes_post_id_idx').on(table.postId),
+    index('post_notes_member_id_idx').on(table.memberId),
+    index('post_notes_created_at_idx').on(table.createdAt),
+  ]
+)
+
 // Relations
 export const postsRelations = relations(posts, ({ one, many }) => ({
   board: one(boards, {
@@ -295,6 +328,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   comments: many(comments),
   tags: many(postTags),
   roadmaps: many(postRoadmaps),
+  notes: many(postNotes),
 }))
 
 export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
@@ -380,5 +414,18 @@ export const commentEditHistoryRelations = relations(commentEditHistory, ({ one 
     fields: [commentEditHistory.editorMemberId],
     references: [member.id],
     relationName: 'commentEditHistoryEditor',
+  }),
+}))
+
+// Post notes relations
+export const postNotesRelations = relations(postNotes, ({ one }) => ({
+  post: one(posts, {
+    fields: [postNotes.postId],
+    references: [posts.id],
+  }),
+  author: one(member, {
+    fields: [postNotes.memberId],
+    references: [member.id],
+    relationName: 'noteAuthor',
   }),
 }))

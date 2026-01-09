@@ -76,6 +76,9 @@ export type PostEditId = TypeId<'post_edit'>
 /** Comment edit history ID - e.g., comment_edit_01h455vb4pex5vsknk084sn02q */
 export type CommentEditId = TypeId<'comment_edit'>
 
+/** Internal staff note ID - e.g., note_01h455vb4pex5vsknk084sn02q */
+export type NoteId = TypeId<'note'>
+
 // ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
@@ -136,6 +139,7 @@ export interface EntityIdMap {
   reaction: ReactionId
   post_edit: PostEditId
   comment_edit: CommentEditId
+  note: NoteId
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId

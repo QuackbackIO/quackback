@@ -2,7 +2,14 @@ import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import type { BoardId, TagId, StatusId } from '@quackback/ids'
 import type { boards, roadmaps, tags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
-import type { posts, postRoadmaps, votes, comments, commentReactions } from './schema/posts'
+import type {
+  posts,
+  postRoadmaps,
+  votes,
+  comments,
+  commentReactions,
+  postNotes,
+} from './schema/posts'
 import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
 import type { member } from './schema/auth'
@@ -10,6 +17,10 @@ import type { member } from './schema/auth'
 // Status categories (defined here to avoid circular imports in tests)
 export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
+
+// Moderation states for posts (e.g., for imported content filtering)
+export const MODERATION_STATES = ['published', 'pending', 'spam', 'archived'] as const
+export type ModerationState = (typeof MODERATION_STATES)[number]
 
 // Board types
 export type Board = InferSelectModel<typeof boards>
@@ -55,6 +66,10 @@ export type NewVote = InferInsertModel<typeof votes>
 // Comment types
 export type Comment = InferSelectModel<typeof comments>
 export type NewComment = InferInsertModel<typeof comments>
+
+// Post note types (internal staff notes)
+export type PostNote = InferSelectModel<typeof postNotes>
+export type NewPostNote = InferInsertModel<typeof postNotes>
 
 // Comment reaction types
 export type CommentReaction = InferSelectModel<typeof commentReactions>
