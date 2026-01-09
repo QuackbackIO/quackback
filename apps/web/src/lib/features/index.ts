@@ -85,7 +85,7 @@ export function hasEEPackages(): boolean {
  * This requires cloud mode AND Neon API key to be configured.
  */
 export function isWorkspacePerDatabase(): boolean {
-  return isCloud() && Boolean(process.env.NEON_API_KEY)
+  return isCloud() && Boolean(process.env.CLOUD_NEON_API_KEY)
 }
 
 /**
@@ -94,7 +94,7 @@ export function isWorkspacePerDatabase(): boolean {
  * When false (self-hosted), uses DATABASE_URL singleton.
  */
 export function isMultiTenant(): boolean {
-  return isCloud() && Boolean(process.env.CATALOG_DATABASE_URL)
+  return isCloud() && Boolean(process.env.CLOUD_CATALOG_DATABASE_URL)
 }
 
 // ============================================================================

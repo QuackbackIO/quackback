@@ -2,7 +2,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useWorkspaceFeatures } from '@/lib/hooks/use-features'
 import { Badge } from '@/components/ui/badge'
 import { ENTERPRISE_ONLY_FEATURES, Feature } from '@/lib/features'
-import { Check, X, KeyRound, Shield, Users, ClipboardList } from 'lucide-react'
+import {
+  CheckIcon,
+  XMarkIcon,
+  KeyIcon,
+  ShieldCheckIcon,
+  UsersIcon,
+  ClipboardDocumentListIcon,
+} from '@heroicons/react/24/solid'
 
 export const Route = createFileRoute('/admin/settings/license')({
   beforeLoad: async () => {
@@ -54,7 +61,7 @@ function LicensePage() {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <KeyRound className="h-5 w-5 text-primary" />
+                  <KeyIcon className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <p className="font-medium">Enterprise License Active</p>
@@ -97,7 +104,7 @@ function LicensePage() {
         </div>
         <div className="divide-y divide-border/50">
           <FeatureRow
-            icon={<Shield className="h-4 w-4" />}
+            icon={<ShieldCheckIcon className="h-4 w-4" />}
             label="SSO / SAML"
             description="Single sign-on with your identity provider"
             community={false}
@@ -105,7 +112,7 @@ function LicensePage() {
             current={tier}
           />
           <FeatureRow
-            icon={<Users className="h-4 w-4" />}
+            icon={<UsersIcon className="h-4 w-4" />}
             label="SCIM Provisioning"
             description="Automated user provisioning and deprovisioning"
             community={false}
@@ -113,7 +120,7 @@ function LicensePage() {
             current={tier}
           />
           <FeatureRow
-            icon={<ClipboardList className="h-4 w-4" />}
+            icon={<ClipboardDocumentListIcon className="h-4 w-4" />}
             label="Audit Logs"
             description="Track all user actions for compliance"
             community={false}
@@ -138,7 +145,7 @@ function LicensePage() {
               .slice(0, 12)
               .map((feature) => (
                 <div key={feature} className="flex items-center gap-2 text-sm">
-                  <Check className="h-4 w-4 text-green-500" />
+                  <CheckIcon className="h-4 w-4 text-green-500" />
                   <span className="capitalize">{feature.replace(/_/g, ' ')}</span>
                 </div>
               ))}
@@ -174,17 +181,17 @@ function FeatureRow({ icon, label, description, community, enterprise }: Feature
         <div className="text-center w-20">
           <p className="text-xs text-muted-foreground mb-1">Community</p>
           {community ? (
-            <Check className="h-4 w-4 text-green-500 mx-auto" />
+            <CheckIcon className="h-4 w-4 text-green-500 mx-auto" />
           ) : (
-            <X className="h-4 w-4 text-muted-foreground/50 mx-auto" />
+            <XMarkIcon className="h-4 w-4 text-muted-foreground/50 mx-auto" />
           )}
         </div>
         <div className="text-center w-20">
           <p className="text-xs text-muted-foreground mb-1">Enterprise</p>
           {enterprise ? (
-            <Check className="h-4 w-4 text-green-500 mx-auto" />
+            <CheckIcon className="h-4 w-4 text-green-500 mx-auto" />
           ) : (
-            <X className="h-4 w-4 text-muted-foreground/50 mx-auto" />
+            <XMarkIcon className="h-4 w-4 text-muted-foreground/50 mx-auto" />
           )}
         </div>
       </div>
