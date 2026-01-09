@@ -30,6 +30,31 @@ import {
 import { dispatchPostStatusChanged } from '@/lib/events/dispatch'
 
 // ============================================
+// Helpers
+// ============================================
+
+/**
+ * Safely convert a date value to ISO string.
+ * Handles both Date objects and ISO strings (Neon HTTP driver returns strings).
+ */
+function toIsoString(value: Date | string): string {
+  if (typeof value === 'string') {
+    return value // Already an ISO string
+  }
+  return value.toISOString()
+}
+
+/**
+ * Safely convert an optional date value to ISO string or null.
+ */
+function toIsoStringOrNull(value: Date | string | null | undefined): string | null {
+  if (value == null) {
+    return null
+  }
+  return toIsoString(value)
+}
+
+// ============================================
 // Schemas
 // ============================================
 
@@ -147,10 +172,10 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         items: result.items.map((p) => ({
           ...p,
           contentJson: (p.contentJson ?? {}) as TiptapContent,
-          createdAt: p.createdAt.toISOString(),
-          updatedAt: p.updatedAt.toISOString(),
-          deletedAt: p.deletedAt?.toISOString() || null,
-          officialResponseAt: p.officialResponseAt?.toISOString() || null,
+          createdAt: toIsoString(p.createdAt),
+          updatedAt: toIsoString(p.updatedAt),
+          deletedAt: toIsoStringOrNull(p.deletedAt),
+          officialResponseAt: toIsoStringOrNull(p.officialResponseAt),
         })),
       }
     } catch (error) {
@@ -183,16 +208,16 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       }
       const serializeComment = (comment: (typeof comments)[0]): SerializedComment => ({
         ...comment,
-        createdAt: comment.createdAt.toISOString(),
+        createdAt: toIsoString(comment.createdAt),
         replies: comment.replies.map(serializeComment),
       })
 
       return {
         ...result,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt.toISOString(),
-        deletedAt: result.deletedAt?.toISOString() || null,
-        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+        createdAt: toIsoString(result.createdAt),
+        updatedAt: toIsoString(result.updatedAt),
+        deletedAt: toIsoStringOrNull(result.deletedAt),
+        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
         comments: comments.map(serializeComment),
       }
     } catch (error) {
@@ -234,10 +259,10 @@ export const createPostFn = createServerFn({ method: 'POST' })
       // Serialize Date fields
       return {
         ...result,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt.toISOString(),
-        deletedAt: result.deletedAt?.toISOString() || null,
-        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+        createdAt: toIsoString(result.createdAt),
+        updatedAt: toIsoString(result.updatedAt),
+        deletedAt: toIsoStringOrNull(result.deletedAt),
+        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ createPostFn failed:`, error)
@@ -271,10 +296,10 @@ export const updatePostFn = createServerFn({ method: 'POST' })
       // Serialize Date fields
       return {
         ...result,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt.toISOString(),
-        deletedAt: result.deletedAt?.toISOString() || null,
-        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+        createdAt: toIsoString(result.createdAt),
+        updatedAt: toIsoString(result.updatedAt),
+        deletedAt: toIsoStringOrNull(result.deletedAt),
+        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ updatePostFn failed:`, error)
@@ -332,10 +357,10 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
       // Serialize Date fields
       return {
         ...result,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt.toISOString(),
-        deletedAt: result.deletedAt?.toISOString() || null,
-        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+        createdAt: toIsoString(result.createdAt),
+        updatedAt: toIsoString(result.updatedAt),
+        deletedAt: toIsoStringOrNull(result.deletedAt),
+        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ changePostStatusFn failed:`, error)
@@ -358,10 +383,10 @@ export const restorePostFn = createServerFn({ method: 'POST' })
       // Serialize Date fields
       return {
         ...result,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt.toISOString(),
-        deletedAt: result.deletedAt?.toISOString() || null,
-        officialResponseAt: result.officialResponseAt?.toISOString() || null,
+        createdAt: toIsoString(result.createdAt),
+        updatedAt: toIsoString(result.updatedAt),
+        deletedAt: toIsoStringOrNull(result.deletedAt),
+        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ restorePostFn failed:`, error)
