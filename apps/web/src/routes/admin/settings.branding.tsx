@@ -3,14 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/queries/settings'
-import {
-  SunIcon,
-  MoonIcon,
-  CheckIcon,
-  ArrowPathIcon,
-  CameraIcon,
-  TrashIcon,
-} from '@heroicons/react/24/solid'
+import { SunIcon, MoonIcon, CheckIcon, ArrowPathIcon, CameraIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -109,82 +102,95 @@ function BrandingPage() {
         {/* Two-Column Layout */}
         <BrandingLayout>
           <BrandingControlsPanel>
-            <div className="p-5 space-y-6">
-              {/* Workspace Name */}
-              <div className="space-y-2">
-                <Label htmlFor="workspace-name">Workspace Name</Label>
-                <div className="relative">
-                  <Input
-                    id="workspace-name"
-                    value={workspaceName}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    placeholder="My Workspace"
-                  />
-                  {isSavingName && (
-                    <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
+            {/* Identity Section */}
+            <div className="p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Identity</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  How your brand appears in the portal header
+                </p>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
+                <div className="flex-1 space-y-1.5">
+                  <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
+                    Workspace Name
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="workspace-name"
+                      value={workspaceName}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      placeholder="My Workspace"
+                    />
+                    {isSavingName && (
+                      <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Appearance Section */}
+            <div className="p-5 space-y-4 border-t border-border">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Appearance</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Customize colors and typography
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Brand Color</Label>
+                  <ColorInputInline value={state.brandColor} onChange={state.setBrandColor} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Font</Label>
+                  <Select
+                    value={state.currentFontId}
+                    onValueChange={(id) => {
+                      const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
+                      if (selectedFont) state.setFont(selectedFont.value)
+                    }}
+                  >
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue>
+                        <span style={{ fontFamily: state.font }}>
+                          {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
+                            'Select font'}
+                        </span>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      <FontSelectGroup category="Sans Serif" />
+                      <FontSelectGroup category="Serif" />
+                      <FontSelectGroup category="Monospace" />
+                      <FontSelectGroup category="System" />
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {/* Logo */}
-              <div className="space-y-2">
-                <Label>Logo</Label>
-                <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
-              </div>
-
-              {/* Brand Color */}
-              <div className="space-y-2">
-                <Label>Brand Color</Label>
-                <ColorInputInline value={state.brandColor} onChange={state.setBrandColor} />
-              </div>
-
-              {/* Typography */}
-              <div className="space-y-4">
-                <Label>Typography & Style</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Font Family</Label>
-                    <Select
-                      value={state.currentFontId}
-                      onValueChange={(id) => {
-                        const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
-                        if (selectedFont) state.setFont(selectedFont.value)
-                      }}
-                    >
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue>
-                          <span style={{ fontFamily: state.font }}>
-                            {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
-                              'Select font'}
-                          </span>
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        <FontSelectGroup category="Sans Serif" />
-                        <FontSelectGroup category="Serif" />
-                        <FontSelectGroup category="Monospace" />
-                        <FontSelectGroup category="System" />
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Border Radius</Label>
-                    <div className="flex items-center gap-3 h-10">
-                      <Slider
-                        value={[state.radius * 100]}
-                        onValueChange={([v]) => state.setRadius(v / 100)}
-                        min={0}
-                        max={100}
-                        step={5}
-                        className="flex-1"
-                      />
-                      <div
-                        className="h-8 w-10 bg-primary shrink-0"
-                        style={{ borderRadius: `${state.radius}rem` }}
-                      />
-                    </div>
-                  </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Corner Roundness</Label>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-12">Sharp</span>
+                  <Slider
+                    value={[state.radius * 100]}
+                    onValueChange={([v]) => state.setRadius(v / 100)}
+                    min={0}
+                    max={100}
+                    step={5}
+                    className="flex-1"
+                  />
+                  <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
+                  <div
+                    className="h-6 w-6 bg-primary shrink-0"
+                    style={{ borderRadius: `${state.radius}rem` }}
+                  />
                 </div>
               </div>
             </div>
@@ -342,53 +348,46 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
   const isDeleting = deleteMutation.isPending
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-col items-center gap-2">
       {/* Logo Preview */}
-      <div className="relative">
+      <button
+        type="button"
+        onClick={handleLogoClick}
+        disabled={isUploading}
+        className="relative group cursor-pointer"
+      >
         {logoUrl ? (
           <img
             src={logoUrl}
             alt={workspaceName}
-            className="h-10 w-10 rounded-lg object-cover border border-border"
+            className="h-16 w-16 rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
           />
         ) : (
-          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-semibold border border-border">
+          <div className="h-16 w-16 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold border border-border transition-opacity group-hover:opacity-80">
             {workspaceName.charAt(0).toUpperCase() || 'W'}
           </div>
         )}
-        {isUploading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
-            <ArrowPathIcon className="h-4 w-4 animate-spin text-white" />
+        {isUploading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl">
+            <ArrowPathIcon className="h-5 w-5 animate-spin text-white" />
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+            <CameraIcon className="h-5 w-5 text-white" />
           </div>
         )}
-      </div>
+      </button>
 
-      {/* Actions */}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleLogoClick}
-        disabled={isUploading}
-      >
-        <CameraIcon className="h-4 w-4 mr-1.5" />
-        {hasCustomLogo ? 'Change' : 'Upload'}
-      </Button>
+      {/* Remove button */}
       {hasCustomLogo && (
-        <Button
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           onClick={handleDeleteLogo}
           disabled={isDeleting}
-          className="text-destructive hover:text-destructive px-2"
+          className="text-xs text-muted-foreground hover:text-destructive transition-colors"
         >
-          {isDeleting ? (
-            <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          ) : (
-            <TrashIcon className="h-4 w-4" />
-          )}
-        </Button>
+          {isDeleting ? 'Removing...' : 'Remove'}
+        </button>
       )}
 
       <input

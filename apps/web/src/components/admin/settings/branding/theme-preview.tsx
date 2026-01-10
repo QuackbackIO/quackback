@@ -249,7 +249,7 @@ function PortalPreview({ logoUrl, displayName }: { logoUrl?: string | null; disp
             status="In Progress"
             statusColor="var(--primary)"
             comments={12}
-            authorName="Sarah Chen"
+            authorName="James Wilson"
             timeAgo="2 days ago"
             tags={['Feature', 'UI']}
           />
@@ -264,7 +264,7 @@ function PortalPreview({ logoUrl, displayName }: { logoUrl?: string | null; disp
             description="The mobile experience could be smoother with better touch interactions and faster loading."
             status="Planned"
             comments={8}
-            authorName="Alex Kim"
+            authorName="Emily Davies"
             timeAgo="5 days ago"
             boardName="Mobile"
           />

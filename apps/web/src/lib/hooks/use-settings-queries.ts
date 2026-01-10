@@ -7,52 +7,46 @@ import {
   updateHeaderDisplayModeFn,
   updateHeaderDisplayNameFn,
 } from '@/lib/server-functions/settings'
+import { settingsQueries } from '@/lib/queries/settings'
 
-// Query keys
-export const settingsKeys = {
-  all: ['settings'] as const,
-  logo: () => [...settingsKeys.all, 'logo'] as const,
-  headerLogo: () => [...settingsKeys.all, 'headerLogo'] as const,
-}
-
-// Types
-interface LogoData {
-  logoUrl: string | null
-  hasCustomLogo: boolean
-}
-
-interface HeaderLogoData {
-  headerLogoUrl: string | null
-  headerDisplayMode: string | null
-  headerDisplayName: string | null
-  hasCustomHeaderLogo: boolean
-}
-
-// Logo hooks (simplified - returns initial data only for now)
+// Re-export query hooks that use the centralized settingsQueries
 export function useWorkspaceLogo() {
   return useQuery({
-    queryKey: settingsKeys.logo(),
-    queryFn: async (): Promise<LogoData> => {
-      // For now, return empty - the initial data from SSR will be used
-      return { logoUrl: null, hasCustomLogo: false }
-    },
-    enabled: false, // Don't auto-fetch - use SSR data
+    ...settingsQueries.logo(),
+    enabled: false, // Use SSR data, don't auto-fetch
   })
 }
 
+export function useWorkspaceHeaderLogo() {
+  return useQuery({
+    ...settingsQueries.headerLogo(),
+    enabled: false, // Use SSR data, don't auto-fetch
+  })
+}
+
+// Helper to convert ArrayBuffer to base64 (browser-compatible)
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+// Mutation hooks
 export function useUploadWorkspaceLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (file: Blob): Promise<void> => {
-      // Convert blob to base64
       const arrayBuffer = await file.arrayBuffer()
-      const base64 = Buffer.from(arrayBuffer).toString('base64')
+      const base64 = arrayBufferToBase64(arrayBuffer)
       const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-
       await uploadLogoFn({ data: { base64, mimeType } })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsKeys.logo() })
+      // Use refetchQueries to force refetch even with enabled: false
+      queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
     },
   })
 }
@@ -64,24 +58,9 @@ export function useDeleteWorkspaceLogo() {
       await deleteLogoFn()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsKeys.logo() })
+      // Use refetchQueries to force refetch even with enabled: false
+      queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
     },
-  })
-}
-
-// Header logo hooks (simplified)
-export function useWorkspaceHeaderLogo() {
-  return useQuery({
-    queryKey: settingsKeys.headerLogo(),
-    queryFn: async (): Promise<HeaderLogoData> => {
-      return {
-        headerLogoUrl: null,
-        headerDisplayMode: null,
-        headerDisplayName: null,
-        hasCustomHeaderLogo: false,
-      }
-    },
-    enabled: false,
   })
 }
 
@@ -89,15 +68,14 @@ export function useUploadWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (file: Blob): Promise<void> => {
-      // Convert blob to base64
       const arrayBuffer = await file.arrayBuffer()
-      const base64 = Buffer.from(arrayBuffer).toString('base64')
+      const base64 = arrayBufferToBase64(arrayBuffer)
       const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/webp'
-
       await uploadHeaderLogoFn({ data: { base64, mimeType } })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
+      // Use refetchQueries to force refetch even with enabled: false
+      queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
 }
@@ -109,7 +87,8 @@ export function useDeleteWorkspaceHeaderLogo() {
       await deleteHeaderLogoFn()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
+      // Use refetchQueries to force refetch even with enabled: false
+      queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
 }
@@ -125,7 +104,7 @@ export function useUpdateHeaderDisplayMode() {
       })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
+      queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
 }
@@ -137,7 +116,7 @@ export function useUpdateHeaderDisplayName() {
       await updateHeaderDisplayNameFn({ data: { name } })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsKeys.headerLogo() })
+      queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
 }
