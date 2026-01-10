@@ -67,6 +67,7 @@ export interface PostWithDetails extends Post {
     color: string
   }>
   commentCount: number
+  roadmapIds: string[]
 }
 
 /**

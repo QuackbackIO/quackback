@@ -13,6 +13,7 @@ import {
   eq,
   and,
   asc,
+  desc,
   sql,
   roadmaps,
   posts,
@@ -306,7 +307,7 @@ export async function getRoadmapPosts(
       .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(and(...conditions))
-      .orderBy(asc(postRoadmaps.position))
+      .orderBy(desc(posts.voteCount))
       .limit(limit + 1)
       .offset(offset),
     db
@@ -380,7 +381,7 @@ export async function getPublicRoadmapPosts(
       .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(and(...conditions))
-      .orderBy(asc(postRoadmaps.position))
+      .orderBy(desc(posts.voteCount))
       .limit(limit + 1)
       .offset(offset),
     db

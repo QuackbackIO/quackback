@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { roadmapIdSchema, postIdSchema, statusIdSchema } from '@quackback/ids'
+import { type RoadmapId, type PostId, type StatusId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   addPostToRoadmap,
@@ -30,37 +30,37 @@ const createRoadmapSchema = z.object({
 })
 
 const getRoadmapSchema = z.object({
-  id: roadmapIdSchema,
+  id: z.string(),
 })
 
 const updateRoadmapSchema = z.object({
-  id: roadmapIdSchema,
+  id: z.string(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   isPublic: z.boolean().optional(),
 })
 
 const deleteRoadmapSchema = z.object({
-  id: roadmapIdSchema,
+  id: z.string(),
 })
 
 const addPostToRoadmapSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  postId: postIdSchema,
+  roadmapId: z.string(),
+  postId: z.string(),
 })
 
 const removePostFromRoadmapSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  postId: postIdSchema,
+  roadmapId: z.string(),
+  postId: z.string(),
 })
 
 const reorderRoadmapsSchema = z.object({
-  roadmapIds: z.array(roadmapIdSchema),
+  roadmapIds: z.array(z.string()),
 })
 
 const getRoadmapPostsSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  statusId: statusIdSchema.optional(),
+  roadmapId: z.string(),
+  statusId: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
 })
@@ -89,8 +89,14 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
   await requireAuth({ roles: ['admin', 'member'] })
 
   const roadmaps = await listRoadmaps()
+  // Serialize branded types to plain strings for turbo-stream
   return roadmaps.map((roadmap) => ({
-    ...roadmap,
+    id: String(roadmap.id),
+    name: roadmap.name,
+    slug: roadmap.slug,
+    description: roadmap.description,
+    isPublic: roadmap.isPublic,
+    position: roadmap.position,
     createdAt: roadmap.createdAt.toISOString(),
     updatedAt: roadmap.updatedAt.toISOString(),
   }))
@@ -104,9 +110,15 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await getRoadmap(data.id)
+    const roadmap = await getRoadmap(data.id as RoadmapId)
+    // Serialize branded types to plain strings for turbo-stream
     return {
-      ...roadmap,
+      id: String(roadmap.id),
+      name: roadmap.name,
+      slug: roadmap.slug,
+      description: roadmap.description,
+      isPublic: roadmap.isPublic,
+      position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
     }
@@ -130,8 +142,14 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
       description: data.description,
       isPublic: data.isPublic,
     })
+    // Serialize branded types to plain strings for turbo-stream
     return {
-      ...roadmap,
+      id: String(roadmap.id),
+      name: roadmap.name,
+      slug: roadmap.slug,
+      description: roadmap.description,
+      isPublic: roadmap.isPublic,
+      position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
     }
@@ -145,13 +163,19 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await updateRoadmap(data.id, {
+    const roadmap = await updateRoadmap(data.id as RoadmapId, {
       name: data.name,
       description: data.description,
       isPublic: data.isPublic,
     })
+    // Serialize branded types to plain strings for turbo-stream
     return {
-      ...roadmap,
+      id: String(roadmap.id),
+      name: roadmap.name,
+      slug: roadmap.slug,
+      description: roadmap.description,
+      isPublic: roadmap.isPublic,
+      position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
     }
@@ -165,8 +189,8 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    await deleteRoadmap(data.id)
-    return { id: data.id }
+    await deleteRoadmap(data.id as RoadmapId)
+    return { id: String(data.id) }
   })
 
 /**
@@ -178,10 +202,10 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
     await requireAuth({ roles: ['admin', 'member'] })
 
     await addPostToRoadmap({
-      roadmapId: data.roadmapId,
-      postId: data.postId,
+      roadmapId: data.roadmapId as RoadmapId,
+      postId: data.postId as PostId,
     })
-    return { roadmapId: data.roadmapId, postId: data.postId }
+    return { success: true }
   })
 
 /**
@@ -192,8 +216,8 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    await removePostFromRoadmap(data.postId, data.roadmapId)
-    return { roadmapId: data.roadmapId, postId: data.postId }
+    await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
+    return { success: true }
   })
 
 /**
@@ -204,7 +228,7 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    await reorderRoadmaps(data.roadmapIds)
+    await reorderRoadmaps(data.roadmapIds as RoadmapId[])
     return { success: true }
   })
 
@@ -216,9 +240,30 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    return getRoadmapPosts(data.roadmapId, {
-      statusId: data.statusId,
+    const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
+      statusId: data.statusId as StatusId | undefined,
       limit: data.limit,
       offset: data.offset,
     })
+
+    // Serialize branded types to plain strings for turbo-stream
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        id: String(item.id),
+        title: item.title,
+        voteCount: item.voteCount,
+        statusId: item.statusId ? String(item.statusId) : null,
+        board: {
+          id: String(item.board.id),
+          name: item.board.name,
+          slug: item.board.slug,
+        },
+        roadmapEntry: {
+          postId: String(item.roadmapEntry.postId),
+          roadmapId: String(item.roadmapEntry.roadmapId),
+          position: item.roadmapEntry.position,
+        },
+      })),
+    }
   })

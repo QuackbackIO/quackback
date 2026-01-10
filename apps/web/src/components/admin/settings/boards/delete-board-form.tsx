@@ -1,4 +1,4 @@
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/schemas/boards'
@@ -28,6 +28,7 @@ interface DeleteBoardFormProps {
 
 export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const router = useRouter()
+  const navigate = useNavigate()
   const mutation = useDeleteBoard()
 
   const form = useForm<DeleteBoardInput>({
@@ -47,7 +48,11 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
       { id: board.id },
       {
         onSuccess: () => {
-          router.navigate({ to: '/admin/settings/boards' as any })
+          // Navigate to boards page without board param - will auto-select first remaining board
+          void navigate({
+            to: '/admin/settings/boards',
+            search: {},
+          })
           router.invalidate()
         },
       }

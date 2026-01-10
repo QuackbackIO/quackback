@@ -21,6 +21,7 @@ import {
   postStatuses,
   posts,
   postTags,
+  postRoadmaps,
   tags,
   comments,
   postEditHistory,
@@ -407,8 +408,8 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Get the board, tags, and comment count in parallel
-  const [board, postTagsResult, commentCountResult] = await Promise.all([
+  // Get the board, tags, comment count, and roadmaps in parallel
+  const [board, postTagsResult, commentCountResult, roadmapsResult] = await Promise.all([
     db.query.boards.findFirst({ where: eq(boards.id, post.boardId) }),
     db
       .select({
@@ -423,6 +424,10 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       .select({ count: sql<number>`count(*)::int` })
       .from(comments)
       .where(eq(comments.postId, postId)),
+    db
+      .select({ roadmapId: postRoadmaps.roadmapId })
+      .from(postRoadmaps)
+      .where(eq(postRoadmaps.postId, postId)),
   ])
 
   if (!board) {
@@ -430,6 +435,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
   }
 
   const commentCount = commentCountResult[0]?.count || 0
+  const roadmapIds = roadmapsResult.map((r) => String(r.roadmapId))
 
   const postWithDetails: PostWithDetails = {
     ...post,
@@ -440,6 +446,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     },
     tags: postTagsResult,
     commentCount,
+    roadmapIds,
   }
 
   return postWithDetails

@@ -1,4 +1,3 @@
-import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
   LockClosedIcon,
@@ -6,36 +5,33 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
+import { useBoardSelection, type BoardTab } from './use-board-selection'
 
-interface BoardSettingsNavProps {
-  boardSlug: string
-}
+const navItems: { label: string; tab: BoardTab; icon: typeof Cog6ToothIcon }[] = [
+  { label: 'General', tab: 'general', icon: Cog6ToothIcon },
+  { label: 'Access', tab: 'access', icon: LockClosedIcon },
+  { label: 'Import Data', tab: 'import', icon: ArrowUpTrayIcon },
+  { label: 'Export Data', tab: 'export', icon: ArrowDownTrayIcon },
+]
 
-export function BoardSettingsNav({ boardSlug }: BoardSettingsNavProps) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const basePath = `/admin/settings/boards/${boardSlug}`
-
-  const navItems = [
-    { label: 'General', to: basePath, icon: Cog6ToothIcon },
-    { label: 'Access', to: `${basePath}/access`, icon: LockClosedIcon },
-    { label: 'Import Data', to: `${basePath}/import`, icon: ArrowUpTrayIcon },
-    { label: 'Export Data', to: `${basePath}/export`, icon: ArrowDownTrayIcon },
-  ]
+export function BoardSettingsNav() {
+  const { selectedTab, setSelectedTab } = useBoardSelection()
 
   return (
     <nav className="w-48 shrink-0">
       <div className="sticky top-6">
         <ul className="space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.to
+            const isActive = selectedTab === item.tab
             const Icon = item.icon
 
             return (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
+              <li key={item.tab}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab(item.tab)}
                   className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+                    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
                     isActive
                       ? 'bg-secondary text-foreground font-medium'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -43,7 +39,7 @@ export function BoardSettingsNav({ boardSlug }: BoardSettingsNavProps) {
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
-                </Link>
+                </button>
               </li>
             )
           })}

@@ -2,7 +2,6 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import type { Board } from '@/lib/db-types'
 import {
   Form,
   FormControl,
@@ -13,6 +12,12 @@ import {
 } from '@/components/ui/form'
 import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
 import { GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
+import type { BoardId } from '@quackback/ids'
+
+interface Board {
+  id: BoardId
+  isPublic: boolean
+}
 
 interface BoardAccessFormProps {
   board: Board

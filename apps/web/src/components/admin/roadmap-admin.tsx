@@ -1,170 +1,81 @@
-import { useState, useCallback } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
-  KeyboardSensor,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
-  type DragOverEvent,
-  DragOverlay,
   type DragStartEvent,
-  pointerWithin,
-  rectIntersection,
-  type CollisionDetection,
-  getFirstCollision,
+  type DragEndEvent,
 } from '@dnd-kit/core'
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { ChevronUpIcon, MapIcon } from '@heroicons/react/24/solid'
+import { MapIcon } from '@heroicons/react/24/solid'
 import { RoadmapSidebar } from './roadmap-sidebar'
-import { AdminRoadmapColumn } from './roadmap-column'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { RoadmapColumn } from './roadmap-column'
+import { RoadmapCardOverlay } from './roadmap-card'
 import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
+import { useRoadmapSelection } from './use-roadmap-selection'
 import { useChangePostStatusId } from '@/lib/hooks/use-inbox-queries'
 import type { PostStatusEntity } from '@/lib/db-types'
 import type { RoadmapPostEntry } from '@/lib/roadmaps'
-import type { StatusId, PostId } from '@quackback/ids'
+import type { StatusId, PostId, RoadmapId } from '@quackback/ids'
 
 interface RoadmapAdminProps {
   statuses: PostStatusEntity[]
 }
 
 export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
-  const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null)
+  const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection()
   const { data: roadmaps } = useRoadmaps()
+  const changeStatus = useChangePostStatusId()
 
-  // Auto-select first roadmap when loaded
-  if (roadmaps && roadmaps.length > 0 && selectedRoadmapId === null) {
-    setSelectedRoadmapId(roadmaps[0].id)
-  }
+  // Auto-select first roadmap
+  useEffect(() => {
+    if (roadmaps?.length && !selectedRoadmapId) {
+      setSelectedRoadmap(roadmaps[0].id)
+    }
+  }, [roadmaps, selectedRoadmapId, setSelectedRoadmap])
 
   const selectedRoadmap = roadmaps?.find((r) => r.id === selectedRoadmapId)
 
-  // Change post status mutation (updates the post's actual status)
-  const changeStatus = useChangePostStatusId()
-
-  // DnD state
+  // Track dragged post for overlay
   const [activePost, setActivePost] = useState<RoadmapPostEntry | null>(null)
-  const [activeStatusId, setActiveStatusId] = useState<StatusId | null>(null)
-  const [overStatusId, setOverStatusId] = useState<StatusId | null>(null)
 
-  // Set of all column IDs for collision detection
-  const columnIds = new Set(statuses.map((s) => s.id))
+  const sensors = useSensors(useSensor(PointerSensor))
 
-  // Custom collision detection
-  const collisionDetection: CollisionDetection = useCallback((args) => {
-    const pointerCollisions = pointerWithin(args)
-    if (pointerCollisions.length > 0) {
-      const collision = getFirstCollision(pointerCollisions, 'id')
-      if (collision) {
-        return pointerCollisions
-      }
-    }
-    return rectIntersection(args)
-  }, [])
-
-  // Configure DnD sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
-
-  const handleDragStart = (event: DragStartEvent) => {
+  function handleDragStart(event: DragStartEvent) {
     const { active } = event
-    const activeData = active.data.current
-
-    if (activeData?.type === 'post') {
-      setActiveStatusId(activeData.statusId)
-      setActivePost(activeData.post)
+    if (active.data.current?.type === 'Task') {
+      setActivePost(active.data.current.post)
     }
   }
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event
+  async function handleDragEnd(event: DragEndEvent) {
+    setActivePost(null)
 
-    if (!over) {
-      setOverStatusId(null)
-      return
-    }
-
-    const overData = over.data.current
-    let targetStatusId: StatusId | null = null
-
-    if (overData?.type === 'column') {
-      targetStatusId = overData.statusId
-    } else if (overData?.type === 'post') {
-      targetStatusId = overData.statusId
-    } else if (columnIds.has(over.id as StatusId)) {
-      targetStatusId = over.id as StatusId
-    }
-
-    setOverStatusId(targetStatusId)
-  }
-
-  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
+    if (!over || over.data.current?.type !== 'Column') return
 
-    // Reset state
-    setActivePost(null)
-    setActiveStatusId(null)
-    setOverStatusId(null)
+    const sourceStatusId = active.data.current?.statusId as StatusId
+    const targetStatusId = over.data.current.statusId as StatusId
 
-    if (!over || !selectedRoadmapId) return
-
-    const activeData = active.data.current
-    const overData = over.data.current
-
-    const sourceStatusId = activeData?.statusId as StatusId | undefined
-    let targetStatusId: StatusId | undefined
-
-    if (overData?.type === 'column') {
-      targetStatusId = overData.statusId
-    } else if (overData?.type === 'post') {
-      targetStatusId = overData.statusId
-    } else if (columnIds.has(over.id as StatusId)) {
-      targetStatusId = over.id as StatusId
+    if (sourceStatusId !== targetStatusId) {
+      await changeStatus.mutateAsync({
+        postId: active.id as PostId,
+        statusId: targetStatusId,
+      })
     }
-
-    if (!sourceStatusId || !targetStatusId || sourceStatusId === targetStatusId) {
-      return
-    }
-
-    const postId = active.id as PostId
-
-    try {
-      // Update the post's actual status (not a roadmap-specific status)
-      await changeStatus.mutateAsync({ postId, statusId: targetStatusId })
-    } catch (error) {
-      console.error('Failed to change post status:', error)
-    }
-  }
-
-  const handleDragCancel = () => {
-    setActivePost(null)
-    setActiveStatusId(null)
-    setOverStatusId(null)
   }
 
   return (
     <div className="flex h-full bg-background">
-      {/* Sidebar */}
-      <RoadmapSidebar
-        selectedRoadmapId={selectedRoadmapId}
-        onSelectRoadmap={setSelectedRoadmapId}
-      />
+      <RoadmapSidebar selectedRoadmapId={selectedRoadmapId} onSelectRoadmap={setSelectedRoadmap} />
 
-      {/* Main content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {selectedRoadmap ? (
           <>
-            {/* Header */}
             <div className="px-6 py-4 border-b border-border/50 bg-card/50">
-              <h2 className="text-lg font-semibold text-foreground">{selectedRoadmap.name}</h2>
+              <h2 className="text-lg font-semibold">{selectedRoadmap.name}</h2>
               {selectedRoadmap.description && (
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   {selectedRoadmap.description}
@@ -172,51 +83,32 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
               )}
             </div>
 
-            {/* Board */}
             <DndContext
               sensors={sensors}
-              collisionDetection={collisionDetection}
               onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
-              onDragCancel={handleDragCancel}
+              autoScroll={false}
             >
-              <ScrollArea className="flex-1">
-                <div className="flex gap-4 p-6 h-full">
+              <div className="flex-1 overflow-auto p-6">
+                <div className="flex items-stretch gap-5">
                   {statuses.map((status) => (
-                    <AdminRoadmapColumn
+                    <RoadmapColumn
                       key={status.id}
-                      roadmapId={selectedRoadmapId! as `roadmap_${string}`}
+                      roadmapId={selectedRoadmapId as RoadmapId}
                       statusId={status.id}
                       title={status.name}
                       color={status.color}
-                      isOver={overStatusId === status.id && activeStatusId !== status.id}
                     />
                   ))}
                 </div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              </div>
 
-              <DragOverlay>
-                {activePost ? (
-                  <div className="flex bg-card rounded-lg border border-border shadow-lg w-[280px] cursor-grabbing rotate-2">
-                    <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 text-muted-foreground">
-                      <ChevronUpIcon className="h-4 w-4" />
-                      <span className="text-sm font-bold text-foreground">
-                        {activePost.voteCount}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0 p-3">
-                      <p className="text-sm font-medium text-foreground line-clamp-2">
-                        {activePost.title}
-                      </p>
-                      <Badge variant="secondary" className="mt-2 text-[11px]">
-                        {activePost.board.name}
-                      </Badge>
-                    </div>
-                  </div>
-                ) : null}
-              </DragOverlay>
+              {createPortal(
+                <DragOverlay dropAnimation={null}>
+                  {activePost && <RoadmapCardOverlay post={activePost} />}
+                </DragOverlay>,
+                document.body
+              )}
             </DndContext>
           </>
         ) : (
@@ -225,9 +117,9 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mx-auto mb-4">
                 <MapIcon className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground">No roadmap selected</h3>
+              <h3 className="text-lg font-semibold">No roadmap selected</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Create a roadmap using the sidebar or select an existing one
+                Create or select a roadmap from the sidebar
               </p>
             </div>
           </div>

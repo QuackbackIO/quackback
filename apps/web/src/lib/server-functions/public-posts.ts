@@ -427,9 +427,14 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
     const result = await listPublicRoadmaps()
 
     console.log(`[fn:public-posts] listPublicRoadmapsFn: count=${result.length}`)
-    // Serialize Date fields
+    // Serialize branded types to plain strings for turbo-stream
     return result.map((roadmap) => ({
-      ...roadmap,
+      id: String(roadmap.id),
+      name: roadmap.name,
+      slug: roadmap.slug,
+      description: roadmap.description,
+      isPublic: roadmap.isPublic,
+      position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
     }))
@@ -457,7 +462,27 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
         offset,
       })
       console.log(`[fn:public-posts] getPublicRoadmapPostsFn: count=${result.items.length}`)
-      return result
+
+      // Serialize branded types to plain strings for turbo-stream
+      return {
+        ...result,
+        items: result.items.map((item) => ({
+          id: String(item.id),
+          title: item.title,
+          voteCount: item.voteCount,
+          statusId: item.statusId ? String(item.statusId) : null,
+          board: {
+            id: String(item.board.id),
+            name: item.board.name,
+            slug: item.board.slug,
+          },
+          roadmapEntry: {
+            postId: String(item.roadmapEntry.postId),
+            roadmapId: String(item.roadmapEntry.roadmapId),
+            position: item.roadmapEntry.position,
+          },
+        })),
+      }
     } catch (error) {
       console.error(`[fn:public-posts] ❌ getPublicRoadmapPostsFn failed:`, error)
       throw error
@@ -482,7 +507,15 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
         limit,
       })
       console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: count=${result.items.length}`)
-      return result
+
+      // Serialize branded types to plain strings for turbo-stream
+      return {
+        ...result,
+        items: result.items.map((item) => ({
+          ...item,
+          statusId: item.statusId ? String(item.statusId) : null,
+        })),
+      }
     } catch (error) {
       console.error(`[fn:public-posts] ❌ getRoadmapPostsByStatusFn failed:`, error)
       throw error

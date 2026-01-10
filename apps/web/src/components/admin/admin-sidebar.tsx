@@ -95,7 +95,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden sm:flex w-16 shrink-0 flex-col border-r border-border/50 bg-card/60">
+      <aside className="hidden sm:flex w-16 shrink-0 flex-col">
         <div className="flex flex-col h-full py-6">
           {/* Logo */}
           <Link

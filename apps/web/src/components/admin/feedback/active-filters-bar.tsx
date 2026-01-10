@@ -655,11 +655,7 @@ export function ActiveFiltersBar({
   )
 
   return (
-    <div
-      className="px-3 py-1.5 border-b border-border/30 bg-card/50"
-      role="region"
-      aria-label="Active filters"
-    >
+    <div className="bg-card/50" role="region" aria-label="Active filters">
       <div className="flex flex-wrap gap-1 items-center">
         {activeFilters.map(({ key, ...filterProps }) => (
           <FilterChip key={key} {...filterProps} />

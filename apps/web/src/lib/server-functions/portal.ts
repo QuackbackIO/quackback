@@ -362,9 +362,14 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
   try {
     const roadmaps = await listPublicRoadmaps()
     console.log(`[fn:portal] fetchPublicRoadmaps: count=${roadmaps.length}`)
-    // Serialize Date fields
+    // Serialize branded types to plain strings for turbo-stream
     return roadmaps.map((roadmap) => ({
-      ...roadmap,
+      id: String(roadmap.id),
+      name: roadmap.name,
+      slug: roadmap.slug,
+      description: roadmap.description,
+      isPublic: roadmap.isPublic,
+      position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
     }))
@@ -380,11 +385,32 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicRoadmapPostsSchema)
   .handler(async ({ data }) => {
-    return await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
+    const result = await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
       statusId: data.statusId as StatusId | undefined,
       limit: data.limit ?? 20,
       offset: data.offset ?? 0,
     })
+
+    // Serialize branded types to plain strings for turbo-stream
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        id: String(item.id),
+        title: item.title,
+        voteCount: item.voteCount,
+        statusId: item.statusId ? String(item.statusId) : null,
+        board: {
+          id: String(item.board.id),
+          name: item.board.name,
+          slug: item.board.slug,
+        },
+        roadmapEntry: {
+          postId: String(item.roadmapEntry.postId),
+          roadmapId: String(item.roadmapEntry.roadmapId),
+          position: item.roadmapEntry.position,
+        },
+      })),
+    }
   })
 
 /**

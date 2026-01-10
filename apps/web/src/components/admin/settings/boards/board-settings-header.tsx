@@ -1,4 +1,3 @@
-import { useRouter } from '@tanstack/react-router'
 import { ChevronDownIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
@@ -8,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CreateBoardDialog } from './create-board-dialog'
+import { useBoardSelection } from './use-board-selection'
 
 interface Board {
   id: string
@@ -21,11 +21,7 @@ interface BoardSettingsHeaderProps {
 }
 
 export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHeaderProps) {
-  const router = useRouter()
-
-  function handleBoardSwitch(slug: string) {
-    router.navigate({ to: `/admin/settings/boards/${slug}` })
-  }
+  const { setSelectedBoard } = useBoardSelection()
 
   return (
     <div className="space-y-1">
@@ -44,7 +40,7 @@ export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHe
               {allBoards.map((board) => (
                 <DropdownMenuItem
                   key={board.id}
-                  onClick={() => handleBoardSwitch(board.slug)}
+                  onClick={() => setSelectedBoard(board.slug)}
                   className="gap-2"
                 >
                   <ChatBubbleLeftIcon className="h-4 w-4" />

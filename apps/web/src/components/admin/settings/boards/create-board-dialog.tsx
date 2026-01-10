@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createBoardSchema, type CreateBoardOutput } from '@/lib/schemas/boards'
@@ -31,6 +31,7 @@ import {
 export function CreateBoardDialog() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
+  const navigate = useNavigate()
   const mutation = useCreateBoard()
 
   const form = useForm({
@@ -47,7 +48,10 @@ export function CreateBoardDialog() {
       onSuccess: (board) => {
         setOpen(false)
         form.reset()
-        router.navigate({ to: `/admin/settings/boards/${board.slug}` as any })
+        void navigate({
+          to: '/admin/settings/boards',
+          search: { board: board.slug },
+        })
         router.invalidate()
       },
     })

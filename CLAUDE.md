@@ -11,187 +11,187 @@ Quackback is an open-source customer feedback platform. Collect, organize, and a
 ## Quick Start
 
 ```bash
-bun run setup    # One-time setup
-bun run dev      # Start dev server
+bun run setup    # One-time setup (deps, Docker, migrations, seed)
+bun run dev      # Start dev server at http://localhost:3000
 ```
 
-Open http://localhost:3000
-
-## Tech Stack
-
-| Layer             | Technology                       |
-| ----------------- | -------------------------------- |
-| **Framework**     | Next.js 16 (App Router)          |
-| **Database**      | PostgreSQL with Drizzle ORM      |
-| **Auth**          | Better-auth with emailOTP plugin |
-| **Runtime**       | Bun 1.3.3+                       |
-| **Styling**       | Tailwind CSS v4                  |
-| **UI Components** | shadcn/ui                        |
-| **Testing**       | Vitest                           |
-| **Validation**    | Zod                              |
+Login: `demo@example.com` (OTP code appears in console)
 
 ## Commands
 
 ```bash
 # Development
-bun run dev           # Start dev server (auto-migrates)
-bun run build         # Build for production
-bun run lint          # Run ESLint
-bun run test          # Run all Vitest tests
-bun run test <file>   # Run single test (e.g., bun run test packages/db/src/foo.test.ts)
+bun run dev              # Start dev server (self-hosted mode)
+bun run dev:cloud        # Start in cloud multi-tenant mode
+bun run build            # Build for production
 
 # Database
-bun run db:generate   # Generate migrations from schema changes
-bun run db:migrate    # Run migrations
-bun run db:studio     # Open Drizzle Studio
-bun run db:seed       # Seed demo data
-bun run db:reset      # Reset database (destructive)
+bun run db:generate      # Generate migrations from schema changes
+bun run db:migrate       # Run pending migrations
+bun run db:studio        # Open Drizzle Studio
+bun run db:seed          # Seed demo data
+bun run db:reset         # Reset database (destructive)
+
+# Testing
+bun run test             # Run Vitest tests
+bun run test <file>      # Run single test file
+bun run test:e2e         # Run Playwright E2E tests
+bun run test:e2e:ui      # E2E with interactive UI
+bun run test:e2e:headed  # E2E in headed browser
+
+# Code Quality
+bun run lint             # ESLint + Prettier checks
+bun run typecheck        # TypeScript type checking (in apps/web)
 ```
+
+## Tech Stack
+
+| Layer      | Technology                                    |
+| ---------- | --------------------------------------------- |
+| Framework  | TanStack Start + TanStack Router (file-based) |
+| Database   | PostgreSQL + Drizzle ORM                      |
+| Auth       | Better Auth with emailOTP plugin              |
+| Runtime    | Bun 1.3.4+                                    |
+| Styling    | Tailwind CSS v4 + shadcn/ui                   |
+| Validation | Zod                                           |
+| State      | TanStack Query (server) + Zustand (client)    |
 
 ## Architecture
 
-Quackback follows a **modular monolith** architecture:
-
 ```
-apps/web/               # TanStack Start app (routes, pages, components)
-├── routes/             # File-based routing
-└── lib/                # Utilities, auth config, services
+apps/web/                    # TanStack Start application
+├── src/routes/              # File-based routing (TanStack Router)
+├── src/components/          # UI and feature components
+├── src/lib/                 # Core utilities
+│   ├── auth/                # Better Auth configuration
+│   ├── db.ts                # Database proxy (tenant-aware)
+│   ├── server-functions/    # TanStack server functions (RPC)
+│   ├── posts/               # Post service & types
+│   └── settings/            # Workspace settings
 
-packages/               # Open source packages (AGPL-3.0)
-├── db/                 # Drizzle schema, migrations, repositories
-├── ids/                # TypeID system (branded UUIDs: post_xxx, board_xxx)
-├── email/              # Email service (Resend)
-└── integrations/       # Slack, Discord, Linear
+packages/                    # Shared packages (AGPL-3.0)
+├── db/                      # Drizzle schema, migrations, seed
+├── ids/                     # TypeID system (branded UUIDs)
+├── email/                   # Email service (Resend + React Email)
+└── integrations/            # Slack integration
 
-ee/                     # Enterprise Edition (proprietary license)
-└── packages/
-    ├── sso/            # @quackback/ee-sso - SSO/SAML authentication
-    ├── scim/           # @quackback/ee-scim - User provisioning
-    └── audit/          # @quackback/ee-audit - Audit logging
+ee/packages/                 # Enterprise Edition (proprietary)
+├── sso/                     # SSO/SAML authentication
+├── scim/                    # SCIM user provisioning
+└── audit/                   # Audit logging
 ```
 
-### Feature Tiers
+### Route Groups (TanStack Router)
 
-| Deployment      | Tiers                                                  |
-| --------------- | ------------------------------------------------------ |
-| **Self-hosted** | Community (free, unlimited) → Enterprise (license key) |
-| **Cloud**       | Free → Pro → Team → Enterprise (subscription)          |
+- `_portal/` - Public feedback portal (boards, posts)
+- `admin/` - Admin dashboard (inbox, roadmap, settings)
+- `auth.*` - Portal user authentication
+- `admin.login/signup` - Team member authentication
+- `api/` - API routes
 
-Enterprise-only features (require license or enterprise subscription):
+### Server Functions Pattern
 
-- SSO/SAML authentication
-- SCIM user provisioning
-- Audit logs
-
-### Service Layer (`packages/domain/`)
-
-Services return `Result<T, E>` for type-safe error handling:
+Server functions use `createServerFn` from TanStack Start:
 
 ```typescript
-import { ok, err, type Result } from '@quackback/domain'
+import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
+import { requireAuth } from './auth-helpers'
 
-async createPost(input: CreatePostInput, ctx: ServiceContext): Promise<Result<Post, PostError>> {
-  if (!input.title?.trim()) {
-    return err(PostError.validationError('Title is required'))
-  }
-  return withUnitOfWork(async (uow) => {
-    const post = await uow.posts.create({...})
-    return ok(post)
+const schema = z.object({ title: z.string().min(1) })
+
+export const createPostFn = createServerFn({ method: 'POST' })
+  .validator(schema)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    return createPost(data, auth.member)
   })
+```
+
+### Service Layer
+
+Services in `src/lib/{feature}/` throw typed errors:
+
+```typescript
+import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+
+export async function createPost(input: CreatePostInput, author: Author) {
+  if (!input.title?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title is required')
+  }
+  // ... business logic
 }
 ```
 
-### Unit of Work (`packages/db/`)
+### Database Access
 
-Database transactions use the Unit of Work pattern with lazy-loaded repositories:
+Always import from `@/lib/db`, not `@quackback/db`:
 
 ```typescript
-import { withUnitOfWork } from '@quackback/db'
+import { db, posts, eq, and, desc } from '@/lib/db'
 
-const result = await withUnitOfWork(async (uow) => {
-  const post = await uow.posts.findById(postId)
-  await uow.votes.create({ postId, userId })
-  return post
+const post = await db.query.posts.findFirst({
+  where: eq(posts.id, postId),
+  with: { board: true, status: true },
 })
 ```
 
-### API Routes (`apps/web/app/api/`)
+The `db` export is a proxy that handles:
 
-Use `withApiHandler` for auth, role checking, and error handling:
+- Self-hosted: Singleton postgres.js connection
+- Cloud: Tenant DB from AsyncLocalStorage context
 
-```typescript
-import {
-  withApiHandler,
-  validateBody,
-  successResponse,
-  buildServiceContext,
-} from '@/lib/api-handler'
+### TypeIDs
 
-export const POST = withApiHandler(
-  async (request, { validation }) => {
-    const body = await request.json()
-    const input = validateBody(schema, body)
-    const ctx = buildServiceContext(validation)
-    const result = await getPostService().createPost(input, ctx)
-    if (!result.success) throw new ApiError(result.error.message, 400)
-    return successResponse(result.value, 201)
-  },
-  { roles: ['owner', 'admin'] }
-)
-```
-
-### TypeIDs (`packages/ids/`)
-
-All entities use branded TypeIDs (UUIDv7 with prefix): `post_01h455vb4pex5vsknk084sn02q`
+All entities use branded TypeIDs: `post_01h455vb4pex5vsknk084sn02q`
 
 ```typescript
-import { createId, parseId } from '@quackback/ids'
+import { createId, toUuid, type PostId, type BoardId } from '@quackback/ids'
+
 const postId = createId('post') // => PostId (branded type)
-const parsed = parseId('post_xxx', 'post') // validates and returns PostId
+const uuid = toUuid(postId) // => raw UUID string
 ```
 
-## App Route Groups
+### Multi-Tenancy (Cloud vs Self-Hosted)
 
-Routes in `apps/web/app/`:
+- **Self-hosted**: Single workspace, `DATABASE_URL` singleton
+- **Cloud**: Multi-tenant via domain resolution
+  - `server.ts` resolves tenant from request domain
+  - Tenant context stored in `AsyncLocalStorage`
+  - Per-tenant Neon databases
 
-- `(portal)/` - Public portal (feedback boards, roadmap)
-- `(auth)/` - Portal user auth
-- `(admin-auth)/` - Team member auth
-- `admin/` - Admin dashboard (requires team role)
-- `api/` - API routes
+Build variants controlled by env vars:
 
-## Workspace Model
-
-Single-tenant: one workspace per installation.
-
-- Roles: `owner` > `admin` > `member` > `user` (portal users)
-- Fresh installs show onboarding wizard
-
-## Key Conventions
-
-- **Files**: kebab-case (`user-profile.tsx`)
-- **Components**: PascalCase (`UserProfile`)
-- **Functions**: camelCase (`getUserProfile`)
-- **Database tables**: snake_case (`feedback_items`)
-- **Server Components by default**, `'use client'` only when needed
+- `EDITION=self-hosted|cloud`
+- `INCLUDE_EE=true|false`
 
 ## Auth Context
 
 ```typescript
-// Require authenticated user
-const { session, user } = await requireAuth()
+// Require authenticated team member with role check
+const auth = await requireAuth({ roles: ['admin', 'member'] })
+// auth.user, auth.member, auth.settings
 
-// Require team member role
-const { settings, member } = await requireTenantRole(['owner', 'admin'])
+// Just require authentication
+const auth = await requireAuth()
 ```
 
 ## Environment Variables
 
-See `.env.example`. Key ones: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ROOT_URL`
+Key variables (see `.env.example`):
 
-## Demo Credentials
+- `DATABASE_URL` - PostgreSQL connection string
+- `BETTER_AUTH_SECRET` - Auth secret (32+ chars)
+- `BETTER_AUTH_URL` - Auth callback URL
+- `ROOT_URL` - Public instance URL
 
-After `bun run db:seed`: Email `demo@example.com` (OTP code logged to console)
+## Conventions
+
+- **Files**: kebab-case (`user-profile.tsx`)
+- **Components**: PascalCase (`UserProfile`)
+- **Functions**: camelCase (`getUserProfile`)
+- **Database**: snake_case (`post_tags`)
+- Use React Server Components by default, `'use client'` only when needed
 
 ## Git Commits
 
