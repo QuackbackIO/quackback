@@ -21,7 +21,7 @@ import { PlusIcon, Bars3Icon, TrashIcon, LockClosedIcon } from '@heroicons/react
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
 import {
   AlertDialog,
@@ -115,6 +115,33 @@ const PRESET_COLORS = [
   '#78716c', // Stone 500
   '#a8a29e', // Stone 400
 ]
+
+interface ColorPickerGridProps {
+  selectedColor: string
+  onColorChange: (color: string) => void
+}
+
+function ColorPickerGrid({
+  selectedColor,
+  onColorChange,
+}: ColorPickerGridProps): React.ReactElement {
+  return (
+    <div className="grid grid-cols-8 gap-1.5">
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={cn(
+            'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
+            selectedColor === c ? 'border-foreground' : 'border-transparent'
+          )}
+          style={{ backgroundColor: c }}
+          onClick={() => onColorChange(c)}
+        />
+      ))}
+    </div>
+  )
+}
 
 export function StatusList({ initialStatuses }: StatusListProps) {
   const router = useRouter()
@@ -327,49 +354,43 @@ export function StatusList({ initialStatuses }: StatusListProps) {
           const canDeleteInCategory = categoryStatuses.length > 1
 
           return (
-            <div key={category} className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-              {/* Left column - heading and description */}
+            <SettingsCard
+              key={category}
+              title={CATEGORY_INFO[category].label}
+              description={CATEGORY_INFO[category].description}
+              contentClassName="p-4"
+            >
               <div className="space-y-1">
-                <h2 className="font-semibold">{CATEGORY_INFO[category].label}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {CATEGORY_INFO[category].description}
-                </p>
+                <SortableContext
+                  items={categoryStatuses.map((s) => s.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {categoryStatuses.map((status) => (
+                    <SortableStatusItem
+                      key={status.id}
+                      status={status}
+                      canDelete={canDeleteInCategory && !status.isDefault}
+                      onToggleRoadmap={() => handleToggleRoadmap(status)}
+                      onColorChange={(color) => handleColorChange(status, color)}
+                      onDelete={() => setDeleteStatus(status)}
+                    />
+                  ))}
+                </SortableContext>
+
+                <button
+                  className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
+                  onClick={() => {
+                    setCreateCategory(category)
+                    setCreateDialogOpen(true)
+                  }}
+                >
+                  {/* Spacer for grip handle alignment */}
+                  <div className="w-3.5" />
+                  <PlusIcon className="h-3 w-3" />
+                  <span className="text-sm">Add new status</span>
+                </button>
               </div>
-
-              {/* Right column - status card */}
-              <Card className="p-4">
-                <div className="space-y-1">
-                  <SortableContext
-                    items={categoryStatuses.map((s) => s.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {categoryStatuses.map((status) => (
-                      <SortableStatusItem
-                        key={status.id}
-                        status={status}
-                        canDelete={canDeleteInCategory && !status.isDefault}
-                        onToggleRoadmap={() => handleToggleRoadmap(status)}
-                        onColorChange={(color) => handleColorChange(status, color)}
-                        onDelete={() => setDeleteStatus(status)}
-                      />
-                    ))}
-                  </SortableContext>
-
-                  <button
-                    className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
-                    onClick={() => {
-                      setCreateCategory(category)
-                      setCreateDialogOpen(true)
-                    }}
-                  >
-                    {/* Spacer for grip handle alignment */}
-                    <div className="w-3.5" />
-                    <PlusIcon className="h-3 w-3" />
-                    <span className="text-sm">Add new status</span>
-                  </button>
-                </div>
-              </Card>
-            </div>
+            </SettingsCard>
           )
         })}
       </DndContext>
@@ -447,12 +468,10 @@ function SortableStatusItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  const deleteDisabled = !canDelete
-  let deleteTitle = 'Delete status'
-  if (status.isDefault) {
-    deleteTitle = 'Cannot delete the default status'
-  } else if (!canDelete) {
-    deleteTitle = 'Must have at least one status in each category'
+  function getDeleteTitle(): string {
+    if (status.isDefault) return 'Cannot delete the default status'
+    if (!canDelete) return 'Must have at least one status in each category'
+    return 'Delete status'
   }
 
   return (
@@ -477,20 +496,7 @@ function SortableStatusItem({
           />
         </PopoverTrigger>
         <PopoverContent className="w-auto p-2" align="start">
-          <div className="grid grid-cols-8 gap-1.5">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className={cn(
-                  'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
-                  status.color === c ? 'border-foreground' : 'border-transparent'
-                )}
-                style={{ backgroundColor: c }}
-                onClick={() => onColorChange(c)}
-              />
-            ))}
-          </div>
+          <ColorPickerGrid selectedColor={status.color} onColorChange={onColorChange} />
         </PopoverContent>
       </Popover>
 
@@ -523,11 +529,11 @@ function SortableStatusItem({
         size="icon"
         className={cn(
           'h-7 w-7 text-muted-foreground hover:text-destructive',
-          deleteDisabled && 'opacity-50 cursor-not-allowed'
+          !canDelete && 'opacity-50 cursor-not-allowed'
         )}
         onClick={onDelete}
-        disabled={deleteDisabled}
-        title={deleteTitle}
+        disabled={!canDelete}
+        title={getDeleteTitle()}
       >
         <TrashIcon className="h-3.5 w-3.5" />
       </Button>
@@ -618,20 +624,7 @@ function CreateStatusDialog({ open, onOpenChange, category, onSubmit }: CreateSt
 
           <div className="space-y-2">
             <Label>Color</Label>
-            <div className="grid grid-cols-8 gap-1.5">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className={cn(
-                    'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
-                    color === c ? 'border-foreground' : 'border-transparent'
-                  )}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setColor(c)}
-                />
-              ))}
-            </div>
+            <ColorPickerGrid selectedColor={color} onColorChange={setColor} />
           </div>
 
           <DialogFooter>

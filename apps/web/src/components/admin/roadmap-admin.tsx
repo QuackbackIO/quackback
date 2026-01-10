@@ -74,7 +74,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {selectedRoadmap ? (
           <>
-            <div className="px-6 py-4 border-b border-border/50 bg-card/50">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border/50 bg-card/50">
               <h2 className="text-lg font-semibold">{selectedRoadmap.name}</h2>
               {selectedRoadmap.description && (
                 <p className="mt-0.5 text-sm text-muted-foreground">
@@ -89,8 +89,8 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
               onDragEnd={handleDragEnd}
               autoScroll={false}
             >
-              <div className="flex-1 overflow-auto p-6">
-                <div className="flex items-stretch gap-5">
+              <div className="flex-1 overflow-auto p-4 sm:p-6">
+                <div className="flex items-stretch gap-4 sm:gap-5">
                   {statuses.map((status) => (
                     <RoadmapColumn
                       key={status.id}

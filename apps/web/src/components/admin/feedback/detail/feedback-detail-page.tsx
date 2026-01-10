@@ -16,7 +16,7 @@ import {
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
-import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
+import type { Board, Tag, PostStatusEntity, Roadmap } from '@/lib/db-types'
 import type { CommentId, PostId, StatusId, TagId } from '@quackback/ids'
 import { useNavigationContext } from './use-navigation-context'
 
@@ -25,6 +25,7 @@ interface FeedbackDetailPageProps {
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
+  roadmaps: Roadmap[]
   currentUser: CurrentUser
 }
 
@@ -33,6 +34,7 @@ export function FeedbackDetailPage({
   boards,
   tags,
   statuses,
+  roadmaps,
   currentUser,
 }: FeedbackDetailPageProps): React.ReactElement {
   const navigate = useNavigate()
@@ -151,9 +153,11 @@ export function FeedbackDetailPage({
           boards={boards}
           tags={tags}
           statuses={statuses}
+          roadmaps={roadmaps}
           avatarUrls={post.avatarUrls}
           onStatusChange={handleStatusChange}
           onTagsChange={handleTagsChange}
+          onRoadmapChange={handleRoadmapChange}
           isUpdating={isUpdating}
         />
 
@@ -163,7 +167,6 @@ export function FeedbackDetailPage({
             post={post}
             navigationContext={navigationContext}
             onEdit={() => setEditDialogOpen(true)}
-            onRoadmapChange={handleRoadmapChange}
           />
           <DetailContent
             post={post}

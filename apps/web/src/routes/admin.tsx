@@ -45,9 +45,9 @@ function AdminLayout() {
   return (
     <div className="flex h-screen bg-background">
       <AdminSidebar initialUserData={initialUserData} />
-      <main className="flex-1 min-w-0 overflow-hidden sm:h-screen p-4">
+      <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:p-2 p-0">
         {/* Mobile: Add padding for fixed header */}
-        <div className="h-full sm:pt-0 pt-14 rounded-lg border border-border overflow-hidden">
+        <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden">
           <Outlet />
         </div>
       </main>

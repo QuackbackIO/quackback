@@ -82,13 +82,10 @@ export function InboxFiltersPanel({
     onFiltersChange({ tags: newTags })
   }
 
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
-  const modifierKey = isMac ? '⌘' : 'Ctrl'
-
   return (
     <div className="space-y-0">
       {/* Status Filter */}
-      <FilterSection title="Status" hint={`${modifierKey}+click to multi-select`}>
+      <FilterSection title="Status">
         <StatusFilterList
           statuses={statuses}
           selectedSlugs={filters.status || []}

@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
 import { LockClosedIcon } from '@heroicons/react/24/solid'
 import { PortalAuthSettings } from '@/components/admin/settings/portal-auth/portal-auth-settings'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 
 export const Route = createFileRoute('/admin/settings/portal-auth')({
   loader: async ({ context }) => {
@@ -40,19 +41,13 @@ function PortalAuthPage() {
         </div>
       </div>
 
-      {/* Authentication Methods - Two column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-        {/* Left column - heading and description */}
-        <div className="space-y-1">
-          <h2 className="font-semibold">Sign-in Methods</h2>
-          <p className="text-sm text-muted-foreground">
-            Choose which authentication methods are available to portal users
-          </p>
-        </div>
-
-        {/* Right column - settings card */}
+      {/* Authentication Methods */}
+      <SettingsCard
+        title="Sign-in Methods"
+        description="Choose which authentication methods are available to portal users"
+      >
         <PortalAuthSettings initialConfig={{ oauth: portalConfigQuery.data.oauth }} />
-      </div>
+      </SettingsCard>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getVoteSidebarDataFn } from '@/lib/server-functions/public-posts'
+import { getVoteSidebarDataFn, getVotedPostsFn } from '@/lib/server-functions/public-posts'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -27,6 +27,11 @@ export function VoteSidebar({ postId, initialVoteCount }: VoteSidebarProps) {
   // Get hasVoted from the shared votedPosts cache (single source of truth)
   const { data: votedPosts } = useQuery<Set<string>>({
     queryKey: votedPostsKeys.byWorkspace(),
+    queryFn: async () => {
+      const result = await getVotedPostsFn()
+      return new Set(result.votedPostIds)
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
   // Get membership and subscription data separately

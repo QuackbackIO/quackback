@@ -7,7 +7,7 @@ import {
   toggleReactionFn,
 } from '@/lib/server-functions/comments'
 import type { PostId, CommentId } from '@quackback/ids'
-import { postKeys } from './use-post-actions'
+import { portalDetailQueries } from '@/lib/queries/portal-detail'
 
 // ============================================================================
 // Query Key Factory
@@ -244,7 +244,7 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
     },
     onSuccess: (data) => {
       // Invalidate post details to refresh comments
-      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
+      queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       // Invalidate permissions as they may have changed
       queryClient.invalidateQueries({ queryKey: commentKeys.permission(commentId) })
       onSuccess?.(data)
@@ -279,7 +279,7 @@ export function useDeleteComment({
     },
     onSuccess: () => {
       // Invalidate post details to refresh comments
-      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
+      queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       onSuccess?.()
     },
     onError: (error: Error) => {
@@ -315,7 +315,7 @@ export function useToggleReaction({
     },
     onSuccess: (data) => {
       // Invalidate post details to refresh reaction counts
-      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) })
+      queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       onSuccess?.(data)
     },
     onError: (error: Error) => {

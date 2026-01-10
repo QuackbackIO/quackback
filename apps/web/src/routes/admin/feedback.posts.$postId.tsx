@@ -27,6 +27,7 @@ export const Route = createFileRoute('/admin/feedback/posts/$postId')({
       queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.tags()),
       queryClient.ensureQueryData(adminQueries.statuses()),
+      queryClient.ensureQueryData(adminQueries.roadmaps()),
     ])
 
     return {
@@ -65,6 +66,7 @@ function FeedbackDetailRoute(): React.ReactElement {
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
   const tagsQuery = useSuspenseQuery(adminQueries.tags())
   const statusesQuery = useSuspenseQuery(adminQueries.statuses())
+  const roadmapsQuery = useSuspenseQuery(adminQueries.roadmaps())
 
   return (
     <FeedbackDetailPage
@@ -72,6 +74,7 @@ function FeedbackDetailRoute(): React.ReactElement {
       boards={boardsQuery.data as any}
       tags={tagsQuery.data}
       statuses={statusesQuery.data}
+      roadmaps={roadmapsQuery.data as any}
       currentUser={currentUser}
     />
   )

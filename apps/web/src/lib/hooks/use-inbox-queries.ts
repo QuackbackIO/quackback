@@ -23,6 +23,7 @@ import type {
 } from '@/components/admin/feedback/inbox-types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db-types'
 import type { BoardId, CommentId, MemberId, PostId, StatusId, TagId } from '@quackback/ids'
+import { roadmapPostsKeys } from './use-roadmap-posts-query'
 
 // ============================================================================
 // Query Key Factory
@@ -143,7 +144,7 @@ export function useChangePostStatusId() {
     onSuccess: (_data, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: ['roadmapPosts'] })
+      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },
   })
 }

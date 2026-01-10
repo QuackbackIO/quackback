@@ -6,8 +6,11 @@ interface TimeAgoProps {
   className?: string
 }
 
-function getTimeAgo(date: Date | string): string {
+function getTimeAgo(date: Date | string | null | undefined): string {
+  if (!date) return ''
   const d = typeof date === 'string' ? new Date(date) : date
+  // Check for invalid date
+  if (isNaN(d.getTime())) return ''
   return formatDistanceToNow(d, { addSuffix: true })
 }
 

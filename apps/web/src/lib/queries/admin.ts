@@ -11,6 +11,7 @@ import {
   fetchIntegrationsList,
   listPortalUsersFn,
 } from '@/lib/server-functions/admin'
+import { fetchRoadmaps } from '@/lib/server-functions/roadmaps'
 import { fetchPostWithDetails } from '@/lib/server-functions/posts'
 import { fetchPublicStatuses } from '@/lib/server-functions/portal'
 import type { PortalUserListParams } from '@/lib/users/user.types'
@@ -89,6 +90,16 @@ export const adminQueries = {
     }),
 
   /**
+   * List all roadmaps
+   */
+  roadmaps: () =>
+    queryOptions({
+      queryKey: ['admin', 'roadmaps'],
+      queryFn: () => fetchRoadmaps(),
+      staleTime: 2 * 60 * 1000,
+    }),
+
+  /**
    * List all team members
    */
   teamMembers: () =>
@@ -154,10 +165,11 @@ export const adminQueries = {
 
   /**
    * Get post details by ID
+   * NOTE: Uses same query key as inboxKeys.detail() for cache consistency with mutations
    */
   postDetail: (postId: PostId) =>
     queryOptions({
-      queryKey: ['admin', 'post', postId],
+      queryKey: ['inbox', 'detail', postId],
       queryFn: () => fetchPostWithDetails({ data: { id: postId } }),
       staleTime: 30 * 1000, // 30s - frequently updated
     }),

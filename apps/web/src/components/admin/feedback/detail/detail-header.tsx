@@ -18,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { AddToRoadmapDropdown } from '@/components/admin/add-to-roadmap-dropdown'
 import type { NavigationContext } from './use-navigation-context'
 import type { PostDetails } from '@/components/admin/feedback/inbox-types'
 
@@ -26,14 +25,12 @@ interface DetailHeaderProps {
   post: PostDetails
   navigationContext: NavigationContext
   onEdit: () => void
-  onRoadmapChange?: () => void
 }
 
 export function DetailHeader({
   post,
   navigationContext,
   onEdit,
-  onRoadmapChange,
 }: DetailHeaderProps): React.ReactElement {
   const navigate = useNavigate()
 
@@ -123,12 +120,6 @@ export function DetailHeader({
             <PencilIcon className="h-3 w-3" />
             <span className="hidden sm:inline text-sm">Edit</span>
           </Button>
-
-          <AddToRoadmapDropdown
-            postId={post.id}
-            currentRoadmapIds={post.roadmapIds}
-            onSuccess={onRoadmapChange}
-          />
 
           {/* More menu */}
           <DropdownMenu>

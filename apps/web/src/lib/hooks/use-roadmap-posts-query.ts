@@ -20,6 +20,8 @@ export const roadmapPostsKeys = {
   list: (statusId: StatusId) => [...roadmapPostsKeys.lists(), statusId] as const,
   byRoadmap: (roadmapId: RoadmapId, statusId?: StatusId) =>
     [...roadmapPostsKeys.all, 'roadmap', roadmapId, statusId ?? 'all'] as const,
+  portal: (roadmapId: RoadmapId, statusId?: StatusId) =>
+    ['portal', 'roadmapPosts', roadmapId, statusId] as const,
 }
 
 interface UseRoadmapPostsOptions {
@@ -131,7 +133,7 @@ export function usePublicRoadmapPosts({
   enabled = true,
 }: UsePublicRoadmapPostsOptions) {
   return useInfiniteQuery({
-    queryKey: ['portal', 'roadmapPosts', roadmapId, statusId],
+    queryKey: roadmapPostsKeys.portal(roadmapId, statusId),
     queryFn: async ({ pageParam = 0 }): Promise<RoadmapPostsListResult> => {
       const { fetchPublicRoadmapPosts } = await import('@/lib/server-functions/portal')
       return fetchPublicRoadmapPosts({

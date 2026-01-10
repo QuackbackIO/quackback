@@ -57,7 +57,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        'min-w-[320px] max-w-[380px] flex flex-col rounded-xl p-3 bg-muted/30 transition-colors duration-200',
+        'min-w-[280px] max-w-[360px] flex-1 flex flex-col rounded-xl p-3 bg-muted/30 transition-colors duration-200',
         isOver && 'bg-primary/10'
       )}
     >

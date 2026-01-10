@@ -15,6 +15,7 @@ import {
   userEditPostFn,
   userDeletePostFn,
 } from '@/lib/server-functions/public-posts'
+import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
 import type { PublicFeedbackFilters } from '@/components/public/feedback/use-public-filters'
 import type { PublicPostListItem } from '@/lib/posts'
 import type { PostId, BoardId, StatusId, TagId } from '@quackback/ids'
@@ -177,6 +178,15 @@ export function useVoteMutation() {
               ),
             })),
           }
+        }
+      )
+
+      // Update voteCount in the detail query (if cached)
+      queryClient.setQueryData<PublicPostDetailView>(
+        portalDetailQueries.postDetail(postId).queryKey,
+        (old) => {
+          if (!old) return old
+          return { ...old, voteCount: data.voteCount }
         }
       )
 
@@ -416,6 +426,19 @@ export function useUserEditPost({ onSuccess, onError }: UseUserEditPostOptions =
           }
         }
       )
+      // Update the detail query (if cached)
+      queryClient.setQueryData<PublicPostDetailView>(
+        portalDetailQueries.postDetail(variables.postId).queryKey,
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            title: variables.title,
+            content: variables.content,
+            contentJson: variables.contentJson ?? old.contentJson,
+          }
+        }
+      )
       // Invalidate permissions as they may have changed
       queryClient.invalidateQueries({ queryKey: postPermissionsKeys.detail(variables.postId) })
       onSuccess?.(data)
@@ -459,6 +482,8 @@ export function useUserDeletePost({ onSuccess, onError }: UseUserDeletePostOptio
           }
         }
       )
+      // Remove the detail query from cache
+      queryClient.removeQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       // Invalidate to get fresh data
       queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
       onSuccess?.()
