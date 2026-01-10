@@ -10,8 +10,8 @@ export default defineConfig(({ mode }) => {
   // Load env from monorepo root where .env file lives
   const env = loadEnv(mode, path.resolve(__dirname, '../../'), '')
 
-  const EDITION = env.EDITION || 'self-hosted'
-  const INCLUDE_EE = env.INCLUDE_EE === 'true'
+  const EDITION = process.env.EDITION || env.EDITION || 'self-hosted'
+  const INCLUDE_EE = process.env.INCLUDE_EE === 'true' || env.INCLUDE_EE === 'true'
   const USE_CLOUDFLARE = EDITION === 'cloud'
 
   // EE package aliases - point to stubs when EE not included
