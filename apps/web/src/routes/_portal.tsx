@@ -92,12 +92,6 @@ function PortalLayout() {
       <PortalHeader
         orgName={org.name}
         orgLogo={brandingData?.logoUrl ?? null}
-        headerLogo={brandingData?.headerLogoUrl ?? null}
-        headerDisplayMode={
-          (brandingData?.headerDisplayMode as 'logo_and_name' | 'logo_only' | 'custom_logo') ??
-          undefined
-        }
-        headerDisplayName={brandingData?.headerDisplayName ?? null}
         userRole={userRole}
         initialUserData={initialUserData}
       />

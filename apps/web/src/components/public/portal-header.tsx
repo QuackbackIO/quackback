@@ -19,17 +19,9 @@ import {
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 
-type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
-
 interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
-  /** Custom horizontal header logo (used when headerDisplayMode is 'custom_logo') */
-  headerLogo?: string | null
-  /** How the brand appears in the header */
-  headerDisplayMode?: HeaderDisplayMode
-  /** Custom display name shown in header (falls back to orgName when not provided) */
-  headerDisplayName?: string | null
   /** User's role in the organization (passed from server) */
   userRole?: 'admin' | 'member' | 'user' | null
   /** Initial user data for SSR (store values override these after hydration) */
@@ -48,9 +40,6 @@ const navItems = [
 export function PortalHeader({
   orgName,
   orgLogo,
-  headerLogo,
-  headerDisplayMode = 'logo_and_name',
-  headerDisplayName,
   userRole,
   initialUserData: _initialUserData,
 }: PortalHeaderProps) {
@@ -59,9 +48,6 @@ export function PortalHeader({
   const { session } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
-
-  // Use custom display name if provided, otherwise fall back to org name
-  const displayName = headerDisplayName || orgName
 
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
@@ -87,10 +73,7 @@ export function PortalHeader({
     router.navigate({ to: '/' })
   }
 
-  // Check if we're using the two-row layout (custom header logo)
-  const useTwoRowLayout = headerDisplayMode === 'custom_logo' && headerLogo
-
-  // Navigation component (reused in both layouts)
+  // Navigation component
   const Navigation = () => (
     <nav className="portal-nav flex items-center gap-1">
       {navItems.map((item) => {
@@ -173,66 +156,42 @@ export function PortalHeader({
     </div>
   )
 
-  // Two-row layout for custom header logo
-  if (useTwoRowLayout) {
-    return (
-      <div className="portal-header portal-header--two-row sticky top-0 z-50 w-full bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
-        {/* Main header with logo */}
-        <header className="portal-header__main border-b border-[var(--header-border)]">
-          <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
-            <div className="flex h-14 items-center justify-between">
-              <Link to="/" className="portal-header__logo flex items-center">
-                <img src={headerLogo} alt={orgName} className="h-10 max-w-[240px] object-contain" />
-              </Link>
-              <AuthButtons />
-            </div>
-          </div>
-        </header>
-        {/* Navigation below header */}
-        <nav className="portal-header__nav-row">
-          <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center py-2">
-              <Navigation />
-            </div>
-          </div>
-        </nav>
-      </div>
-    )
-  }
-
-  // Single-row layout for logo_and_name or logo_only
+  // Two-row layout: Logo + Auth on top, Navigation below
   return (
-    <header className="portal-header sticky top-0 z-50 w-full border-b border-[var(--header-border)] bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
-      <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex h-14 items-center">
-        {/* Logo / Org Name */}
-        <Link to="/" className="portal-header__logo flex items-center gap-2 mr-6">
-          {orgLogo ? (
-            <img
-              src={orgLogo}
-              alt={orgName}
-              className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
-            />
-          ) : (
-            <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          {(headerDisplayMode === 'logo_and_name' || headerDisplayMode === 'custom_logo') && (
-            <span className="portal-header__name font-semibold hidden sm:block max-w-[18ch] line-clamp-2 text-[var(--header-foreground)]">
-              {displayName}
-            </span>
-          )}
-        </Link>
-
-        {/* Navigation Tabs */}
-        <Navigation />
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Auth/Admin Buttons */}
-        <AuthButtons />
+    <div className="portal-header w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)]">
+      {/* Row 1: Logo + Name + Auth */}
+      <div>
+        <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+          <div className="flex h-12 items-center justify-between">
+            <Link to="/" className="portal-header__logo flex items-center gap-2">
+              {orgLogo ? (
+                <img
+                  src={orgLogo}
+                  alt={orgName}
+                  className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+                />
+              ) : (
+                <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+                  {orgName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="portal-header__name font-semibold hidden sm:block max-w-[18ch] line-clamp-2 text-[var(--header-foreground)]">
+                {orgName}
+              </span>
+            </Link>
+            <AuthButtons />
+          </div>
+        </div>
       </div>
-    </header>
+
+      {/* Row 2: Navigation */}
+      <div>
+        <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center">
+            <Navigation />
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

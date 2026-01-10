@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import {
   ChevronUpIcon,
   ChatBubbleLeftIcon,
-  BellIcon,
   UserIcon,
   PlusIcon,
   ArrowTrendingUpIcon,
@@ -48,8 +47,6 @@ function getGoogleFontsUrl(fontFamily: string | undefined): string | null {
   return null
 }
 
-type HeaderDisplayMode = 'logo_and_name' | 'logo_only' | 'custom_logo'
-
 interface ThemePreviewProps {
   lightVars: ThemeVariables
   darkVars: ThemeVariables
@@ -58,10 +55,6 @@ interface ThemePreviewProps {
   fontFamily?: string
   logoUrl?: string | null
   workspaceName?: string
-  headerLogoUrl?: string | null
-  headerDisplayMode?: HeaderDisplayMode
-  /** Custom display name (falls back to workspaceName) */
-  headerDisplayName?: string | null
 }
 
 export function ThemePreview({
@@ -72,12 +65,7 @@ export function ThemePreview({
   fontFamily,
   logoUrl,
   workspaceName = 'Acme Feedback',
-  headerLogoUrl,
-  headerDisplayMode = 'logo_and_name',
-  headerDisplayName,
 }: ThemePreviewProps) {
-  // Use custom display name if provided, otherwise fall back to org name
-  const displayName = headerDisplayName || workspaceName
   const vars = previewMode === 'light' ? lightVars : darkVars
 
   // Convert OKLCH to hex for CSS custom properties
@@ -129,17 +117,17 @@ export function ThemePreview({
       '--success': safeHex(vars.success, '#22c55e'),
       '--radius': radius,
       // Component-level variables with fallbacks to global colors
-      '--header-background': safeHex(vars.headerBackground, background),
-      '--header-foreground': safeHex(vars.headerForeground, foreground),
-      '--header-border': safeHex(vars.headerBorder, border),
-      '--post-card-background': safeHex(vars.postCardBackground, card),
-      '--post-card-border': safeHex(vars.postCardBorder, border),
-      '--post-card-voted-color': safeHex(vars.postCardVotedColor, primary),
-      '--nav-active-background': safeHex(vars.navActiveBackground, muted),
-      '--nav-active-foreground': safeHex(vars.navActiveForeground, foreground),
-      '--nav-inactive-color': safeHex(vars.navInactiveColor, mutedForeground),
-      '--portal-button-background': safeHex(vars.portalButtonBackground, primary),
-      '--portal-button-foreground': safeHex(vars.portalButtonForeground, primaryForeground),
+      '--header-background': background,
+      '--header-foreground': foreground,
+      '--header-border': border,
+      '--post-card-background': card,
+      '--post-card-border': border,
+      '--post-card-voted-color': primary,
+      '--nav-active-background': muted,
+      '--nav-active-foreground': foreground,
+      '--nav-inactive-color': mutedForeground,
+      '--portal-button-background': primary,
+      '--portal-button-foreground': primaryForeground,
     }
   }, [vars, previewMode, radius])
 
@@ -162,120 +150,59 @@ export function ThemePreview({
           } as React.CSSProperties
         }
       >
-        <PortalPreview
-          logoUrl={logoUrl}
-          displayName={displayName}
-          headerLogoUrl={headerLogoUrl}
-          headerDisplayMode={headerDisplayMode}
-        />
+        <PortalPreview logoUrl={logoUrl} displayName={workspaceName} />
       </div>
     </>
   )
 }
 
-/** Portal preview showing a realistic feedback portal with BEM classes matching real portal */
-function PortalPreview({
-  logoUrl,
-  displayName,
-  headerLogoUrl,
-  headerDisplayMode = 'logo_and_name',
-}: {
-  logoUrl?: string | null
-  displayName: string
-  headerLogoUrl?: string | null
-  headerDisplayMode?: HeaderDisplayMode
-}) {
-  // Check if using two-row layout (custom header logo)
-  const useTwoRowLayout = headerDisplayMode === 'custom_logo' && headerLogoUrl
-
-  // User/auth controls for the header
-  const HeaderControls = () => (
-    <div className="flex items-center gap-2">
-      <div className="p-1.5 rounded text-[var(--muted-foreground)]">
-        <BellIcon className="h-4 w-4" />
-      </div>
-      <div className="h-6 w-6 rounded-full flex items-center justify-center bg-[var(--muted)] text-[var(--muted-foreground)]">
-        <UserIcon className="h-3.5 w-3.5" />
-      </div>
-    </div>
-  )
-
-  // Navigation tabs - using same BEM classes as real portal
-  const NavTabs = () => (
-    <nav className="portal-nav flex items-center gap-1">
-      <NavTab label="Feedback" active />
-      <NavTab label="Roadmap" />
-    </nav>
-  )
-
+/** Portal preview showing a realistic feedback portal */
+function PortalPreview({ logoUrl, displayName }: { logoUrl?: string | null; displayName: string }) {
   return (
     <>
-      {useTwoRowLayout ? (
-        // Two-row layout for custom logo: header + nav bar below (matching real portal)
-        <div className="portal-header portal-header--two-row bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
-          {/* Main header with logo */}
-          <header className="portal-header__main border-b border-[var(--header-border)]">
-            <div className="px-4">
-              <div className="flex h-14 items-center justify-between">
-                <a href="#" className="portal-header__logo flex items-center">
-                  <img
-                    src={headerLogoUrl}
-                    alt={displayName}
-                    className="h-10 max-w-[240px] object-contain"
-                  />
-                </a>
-                <HeaderControls />
-              </div>
-            </div>
-          </header>
-          {/* Navigation below header */}
-          <nav className="portal-header__nav-row">
-            <div className="px-4">
-              <div className="flex items-center py-2">
-                <NavTabs />
-              </div>
-            </div>
-          </nav>
-        </div>
-      ) : (
-        // Single-row header matching real portal exactly
-        <header className="portal-header border-b border-[var(--header-border)] bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
-          <div className="px-4 flex h-14 items-center">
-            {/* Logo / Org Name */}
-            <a href="#" className="portal-header__logo flex items-center gap-2 mr-6">
+      {/* Header - Two rows */}
+      <div className="portal-header py-1.5 border-b border-[var(--header-border)] bg-[var(--header-background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--header-background)]/60">
+        {/* Row 1: Logo + Name + Auth */}
+        <div>
+          <div className="px-4 flex h-10 items-center justify-between">
+            <a href="#" className="portal-header__logo flex items-center gap-2">
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt=""
-                  className="h-8 w-8 object-cover [border-radius:calc(var(--radius)*0.6)]"
+                  className="h-7 w-7 object-cover [border-radius:calc(var(--radius)*0.6)]"
                 />
               ) : (
-                <div className="h-8 w-8 flex items-center justify-center font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] [border-radius:calc(var(--radius)*0.6)]">
+                <div className="h-7 w-7 flex items-center justify-center font-semibold text-sm bg-[var(--primary)] text-[var(--primary-foreground)] [border-radius:calc(var(--radius)*0.6)]">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
               )}
-              {(headerDisplayMode === 'logo_and_name' || headerDisplayMode === 'custom_logo') && (
-                <span className="portal-header__name font-semibold max-w-[18ch] line-clamp-2 text-[var(--header-foreground)]">
-                  {displayName}
-                </span>
-              )}
+              <span className="portal-header__name font-semibold text-sm max-w-[14ch] line-clamp-1 text-[var(--header-foreground)]">
+                {displayName}
+              </span>
             </a>
-
-            {/* Navigation Tabs */}
-            <NavTabs />
-
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Auth Controls */}
-            <HeaderControls />
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full flex items-center justify-center bg-[var(--muted)] text-[var(--muted-foreground)]">
+                <UserIcon className="h-3.5 w-3.5" />
+              </div>
+            </div>
           </div>
-        </header>
-      )}
+        </div>
+
+        {/* Row 2: Navigation */}
+        <div>
+          <div className="px-4 flex items-center">
+            <nav className="portal-nav flex items-center gap-1">
+              <NavTab label="Feedback" active />
+              <NavTab label="Roadmap" />
+            </nav>
+          </div>
+        </div>
+      </div>
 
       {/* Content */}
       <div className="p-4 space-y-3">
-        {/* Feedback Header Banner - matching FeedbackHeader */}
+        {/* Feedback Header Banner */}
         <div
           className="rounded-lg px-5 py-4 shadow-sm"
           style={{
@@ -291,7 +218,7 @@ function PortalPreview({
           </p>
         </div>
 
-        {/* Toolbar - matching FeedbackToolbar */}
+        {/* Toolbar */}
         <div className="flex items-center justify-between gap-4">
           {/* Sort Pills */}
           <div className="flex items-center gap-1">
@@ -306,7 +233,7 @@ function PortalPreview({
           </button>
         </div>
 
-        {/* Post Cards Container - matching real portal structure with same visual treatment */}
+        {/* Post Cards Container */}
         <div
           className="rounded-lg overflow-hidden shadow-md"
           style={{
@@ -418,7 +345,7 @@ function PostCard({
       href="#"
       className="post-card flex transition-colors bg-[var(--post-card-background)] hover:bg-[var(--post-card-background)]/80"
     >
-      {/* Vote section - matching real portal exactly */}
+      {/* Vote section */}
       <button
         type="button"
         className={cn(
@@ -439,9 +366,9 @@ function PostCard({
         </span>
       </button>
 
-      {/* Content section - matching real portal exactly */}
+      {/* Content section */}
       <div className="post-card__content flex-1 min-w-0 px-4 py-3">
-        {/* Status badge - matching StatusBadge component */}
+        {/* Status badge */}
         <div className="inline-flex items-center gap-1.5 text-xs font-medium mb-2">
           <span
             className="h-2 w-2 rounded-full shrink-0"
@@ -479,7 +406,7 @@ function PostCard({
           </div>
         )}
 
-        {/* Footer - matching real portal exactly */}
+        {/* Footer */}
         <div className="flex items-center gap-2.5 text-xs text-[var(--muted-foreground)]">
           {/* Author avatar */}
           <div className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] bg-[var(--muted)] text-[var(--muted-foreground)]">

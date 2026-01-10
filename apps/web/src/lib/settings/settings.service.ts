@@ -278,6 +278,27 @@ export async function updateHeaderDisplayName(name: string | null): Promise<stri
   }
 }
 
+export async function updateWorkspaceName(name: string): Promise<string> {
+  try {
+    const org = await requireSettings()
+    const sanitizedName = name.trim()
+
+    if (!sanitizedName) {
+      throw new ValidationError('INVALID_NAME', 'Workspace name cannot be empty')
+    }
+
+    const [updated] = await db
+      .update(settings)
+      .set({ name: sanitizedName })
+      .where(eq(settings.id, org.id))
+      .returning()
+
+    return updated?.name ?? sanitizedName
+  } catch (error) {
+    wrapDbError('update workspace name', error)
+  }
+}
+
 // ============================================
 // PUBLIC CONFIG (NO AUTH REQUIRED)
 // ============================================

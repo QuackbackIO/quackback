@@ -21,6 +21,7 @@ import {
   deleteHeaderLogo,
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
+  updateWorkspaceName,
 } from '@/lib/settings/settings.service'
 import { requireAuth } from './auth-helpers'
 import { getSession } from './auth'
@@ -249,4 +250,17 @@ export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     return updateHeaderDisplayName(data.name)
+  })
+
+const updateWorkspaceNameSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+})
+
+export type UpdateWorkspaceNameInput = z.infer<typeof updateWorkspaceNameSchema>
+
+export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateWorkspaceNameSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+    return updateWorkspaceName(data.name)
   })
