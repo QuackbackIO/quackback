@@ -185,7 +185,7 @@ export function PortalHeader({
       </div>
 
       {/* Row 2: Navigation */}
-      <div>
+      <div className="mt-2">
         <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center">
             <Navigation />
