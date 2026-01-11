@@ -11,8 +11,10 @@
  * - pending: Awaiting moderation
  * - spam: Marked as spam
  * - archived: Hidden from public view
+ * - closed: Closed for voting/comments
+ * - deleted: Soft deleted (imported from source)
  */
-export type ModerationState = 'published' | 'pending' | 'spam' | 'archived'
+export type ModerationState = 'published' | 'pending' | 'spam' | 'archived' | 'closed' | 'deleted'
 
 /**
  * Intermediate post format
@@ -98,6 +100,18 @@ export interface IntermediateNote {
 }
 
 /**
+ * Intermediate user format (for pre-creating users before import)
+ */
+export interface IntermediateUser {
+  /** User email address */
+  email: string
+  /** User display name */
+  name?: string
+  /** Registration timestamp (ISO 8601) */
+  createdAt?: string
+}
+
+/**
  * Complete intermediate dataset for import
  */
 export interface IntermediateData {
@@ -105,14 +119,19 @@ export interface IntermediateData {
   comments: IntermediateComment[]
   votes: IntermediateVote[]
   notes: IntermediateNote[]
+  users: IntermediateUser[]
 }
 
 /**
  * Import options
  */
 export interface ImportOptions {
-  /** Target board slug (required) */
-  board: string
+  /** Target board slug (optional if posts have board field) */
+  board?: string
+  /** Auto-create missing boards from post data */
+  createBoards?: boolean
+  /** Auto-create missing statuses from post data */
+  createStatuses?: boolean
   /** Auto-create missing tags */
   createTags?: boolean
   /** Create members for unknown emails */
@@ -123,6 +142,8 @@ export interface ImportOptions {
   verbose?: boolean
   /** Batch size for database operations */
   batchSize?: number
+  /** Skip vote count reconciliation (use source counts instead of recounting) */
+  skipVoteReconciliation?: boolean
 }
 
 /**

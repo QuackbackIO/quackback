@@ -15,6 +15,13 @@
       "when": 1767978300000,
       "tag": "0001_add_moderation_state",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1768086342634,
+      "tag": "0002_lazy_mole_man",
+      "breakpoints": true
     }
   ]
 }

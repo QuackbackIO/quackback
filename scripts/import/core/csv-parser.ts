@@ -75,8 +75,17 @@ export function parseCSVRaw(filePath: string): {
 /**
  * Normalize a header name to camelCase.
  * Handles various formats: "Idea Title", "idea_title", "IDEA-TITLE" -> "ideaTitle"
+ *
+ * Note: Papaparse may call transformHeader multiple times on the same header,
+ * so we detect already-normalized headers by checking if they're already lowercase alphanumeric.
  */
 function normalizeHeader(header: string): string {
+  // If header is already lowercase alphanumeric, it's normalized (skip re-processing)
+  // This handles Papaparse calling transformHeader twice
+  if (/^[a-z][a-z0-9]*([A-Z][a-z0-9]*)*$/.test(header) || /^[a-z0-9]+$/.test(header)) {
+    return header
+  }
+
   return header
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')

@@ -9,6 +9,7 @@ import {
   fetchTeamMembers,
   fetchOnboardingStatus,
   fetchIntegrationsList,
+  fetchIntegrationByType,
   listPortalUsersFn,
 } from '@/lib/server-functions/admin'
 import { fetchRoadmaps } from '@/lib/server-functions/roadmaps'
@@ -161,6 +162,16 @@ export const adminQueries = {
       queryKey: ['admin', 'integrations'],
       queryFn: () => fetchIntegrationsList(),
       staleTime: 1 * 60 * 1000, // 1min - integration status can change
+    }),
+
+  /**
+   * Get a single integration by type with event mappings
+   */
+  integrationByType: (type: string) =>
+    queryOptions({
+      queryKey: ['admin', 'integrations', type],
+      queryFn: () => fetchIntegrationByType({ data: { type } }),
+      staleTime: 30 * 1000, // 30s - config may change frequently during setup
     }),
 
   /**

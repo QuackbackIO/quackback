@@ -51,7 +51,8 @@ type AnyTable =
   | typeof postRoadmaps
 
 interface ResolvedReferences {
-  board: { id: BoardId; slug: string }
+  board: { id: BoardId; slug: string } | null
+  boards: Map<string, BoardId>
   statuses: Map<string, StatusId>
   tags: Map<string, TagId>
   roadmaps: Map<string, RoadmapId>
@@ -96,8 +97,23 @@ export class Importer {
     try {
       // Step 1: Resolve references
       this.progress.start('Resolving references')
-      await this.resolveReferences()
+      await this.resolveReferences(data.posts)
       this.progress.success('References resolved')
+
+      // Step 1.5: Pre-create users from users list if provided
+      if (data.users && data.users.length > 0 && this.options.createUsers) {
+        this.progress.start(`Pre-creating ${data.users.length} users`)
+        for (const user of data.users) {
+          await this.userResolver.resolve(user.email, user.name)
+        }
+        // Flush users immediately so they exist for post imports
+        if (!this.options.dryRun && this.userResolver.pendingCount > 0) {
+          const created = await this.userResolver.flushPendingCreates()
+          this.progress.success(`${created} users pre-created`)
+        } else {
+          this.progress.success(`Users queued for creation`)
+        }
+      }
 
       // Step 2: Import posts
       if (data.posts.length > 0) {
@@ -134,8 +150,12 @@ export class Importer {
         this.progress.success(`${created} users created`)
       }
 
-      // Step 7: Reconcile vote counts
-      if (!this.options.dryRun && result.votes.imported > 0) {
+      // Step 7: Reconcile vote counts (skip if using source counts)
+      if (
+        !this.options.dryRun &&
+        result.votes.imported > 0 &&
+        !this.options.skipVoteReconciliation
+      ) {
         this.progress.start('Reconciling vote counts')
         await this.reconcileVoteCounts()
         this.progress.success('Vote counts reconciled')
@@ -164,28 +184,148 @@ export class Importer {
   /**
    * Resolve board, statuses, tags, and roadmaps from database
    */
-  private async resolveReferences(): Promise<void> {
-    // Resolve board
-    const boardResult = await this.db
-      .select({ id: boards.id, slug: boards.slug })
-      .from(boards)
-      .where(eq(boards.slug, this.options.board))
-      .limit(1)
+  private async resolveReferences(postData: IntermediatePost[]): Promise<void> {
+    // Resolve single board if specified
+    let board: { id: BoardId; slug: string } | null = null
+    if (this.options.board) {
+      const boardResult = await this.db
+        .select({ id: boards.id, slug: boards.slug })
+        .from(boards)
+        .where(eq(boards.slug, this.options.board))
+        .limit(1)
 
-    if (boardResult.length === 0) {
-      throw new Error(`Board not found: ${this.options.board}`)
+      if (boardResult.length === 0) {
+        throw new Error(`Board not found: ${this.options.board}`)
+      }
+      board = { id: boardResult[0].id as BoardId, slug: boardResult[0].slug }
     }
 
-    const board = { id: boardResult[0].id as BoardId, slug: boardResult[0].slug }
+    // Resolve all existing boards
+    const boardResults = await this.db
+      .select({ id: boards.id, slug: boards.slug, name: boards.name })
+      .from(boards)
+
+    const boardsMap = new Map<string, BoardId>()
+    const boardNameToSlug = new Map<string, string>()
+    for (const b of boardResults) {
+      boardsMap.set(b.slug, b.id as BoardId)
+      boardNameToSlug.set(b.name.toLowerCase(), b.slug)
+    }
+
+    // Create boards from post data if enabled
+    if (this.options.createBoards) {
+      const boardNames = new Set<string>()
+      for (const post of postData) {
+        if (post.board?.trim()) {
+          boardNames.add(post.board.trim())
+        }
+      }
+
+      const newBoards: Array<{ id: BoardId; slug: string; name: string }> = []
+      for (const name of boardNames) {
+        const slug = this.toSlug(name)
+        // Check if board exists by slug or name
+        if (!boardsMap.has(slug) && !boardNameToSlug.has(name.toLowerCase())) {
+          const boardId = generateId('board') as BoardId
+          newBoards.push({ id: boardId, slug, name })
+          boardsMap.set(slug, boardId)
+          boardNameToSlug.set(name.toLowerCase(), slug)
+        }
+      }
+
+      if (newBoards.length > 0) {
+        if (this.options.dryRun) {
+          this.progress.info(
+            `[DRY RUN] Would create ${newBoards.length} boards: ${newBoards.map((b) => b.name).join(', ')}`
+          )
+        } else {
+          await this.db.insert(boards).values(
+            newBoards.map((b) => ({
+              id: b.id,
+              slug: b.slug,
+              name: b.name,
+              isPublic: true,
+              settings: {},
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }))
+          )
+          this.progress.step(`Created ${newBoards.length} new boards`)
+        }
+      }
+    }
 
     // Resolve statuses
     const statusResults = await this.db
-      .select({ id: postStatuses.id, slug: postStatuses.slug })
+      .select({ id: postStatuses.id, slug: postStatuses.slug, name: postStatuses.name })
       .from(postStatuses)
 
     const statuses = new Map<string, StatusId>()
+    const statusNameToSlug = new Map<string, string>()
     for (const s of statusResults) {
       statuses.set(s.slug, s.id as StatusId)
+      statusNameToSlug.set(s.name.toLowerCase(), s.slug)
+    }
+
+    // Create statuses from post data if enabled
+    if (this.options.createStatuses) {
+      const statusNames = new Set<string>()
+      for (const post of postData) {
+        if (post.status?.trim()) {
+          statusNames.add(post.status.trim())
+        }
+      }
+
+      const newStatuses: Array<{
+        id: StatusId
+        slug: string
+        name: string
+        category: 'active' | 'complete' | 'closed'
+      }> = []
+      for (const name of statusNames) {
+        const slug = this.toSlug(name)
+        // Check if status exists by slug or name
+        if (!statuses.has(slug) && !statusNameToSlug.has(name.toLowerCase())) {
+          const statusId = generateId('status') as StatusId
+          // Determine category based on slug keywords
+          let category: 'active' | 'complete' | 'closed' = 'active'
+          if (slug.includes('complete') || slug.includes('done') || slug.includes('shipped')) {
+            category = 'complete'
+          } else if (
+            slug.includes('closed') ||
+            slug.includes('declined') ||
+            slug.includes('duplicate')
+          ) {
+            category = 'closed'
+          }
+          newStatuses.push({ id: statusId, slug, name, category })
+          statuses.set(slug, statusId as StatusId)
+          statusNameToSlug.set(name.toLowerCase(), slug)
+        }
+      }
+
+      if (newStatuses.length > 0) {
+        if (this.options.dryRun) {
+          this.progress.info(
+            `[DRY RUN] Would create ${newStatuses.length} statuses: ${newStatuses.map((s) => s.name).join(', ')}`
+          )
+        } else {
+          await this.db.insert(postStatuses).values(
+            newStatuses.map((s, index) => ({
+              id: s.id,
+              slug: s.slug,
+              name: s.name,
+              color: '#6b7280',
+              category: s.category,
+              position: index,
+              showOnRoadmap: false,
+              isDefault: false,
+              createdAt: new Date(),
+            }))
+          )
+          this.progress.step(`Created ${newStatuses.length} new statuses`)
+        }
+      }
     }
 
     // Resolve tags
@@ -207,17 +347,51 @@ export class Importer {
       roadmapMap.set(r.slug, r.id as RoadmapId)
     }
 
-    this.refs = { board, statuses, tags: tagMap, roadmaps: roadmapMap }
+    this.refs = { board, boards: boardsMap, statuses, tags: tagMap, roadmaps: roadmapMap }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database type variance between drizzle versions
     this.userResolver = new UserResolver(this.db as any, {
       createUsers: this.options.createUsers ?? false,
     })
 
-    this.progress.step(`Board: ${board.slug}`)
+    if (board) {
+      this.progress.step(`Board: ${board.slug}`)
+    } else {
+      this.progress.step(`Boards: ${boardsMap.size}`)
+    }
     this.progress.step(`Statuses: ${statuses.size}`)
     this.progress.step(`Tags: ${tagMap.size}`)
     this.progress.step(`Roadmaps: ${roadmapMap.size}`)
+  }
+
+  /**
+   * Convert a name to a URL-safe slug
+   */
+  private toSlug(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  /**
+   * Resolve board ID from post board name or global option
+   */
+  private resolveBoardId(postBoard: string | undefined): BoardId | null {
+    if (!this.refs) return null
+
+    // If global board specified, use that
+    if (this.refs.board) {
+      return this.refs.board.id
+    }
+
+    // Otherwise resolve from post data
+    if (postBoard?.trim()) {
+      const slug = this.toSlug(postBoard.trim())
+      return this.refs.boards.get(slug) ?? null
+    }
+
+    return null
   }
 
   /**
@@ -265,9 +439,19 @@ export class Importer {
         const createdAt = post.createdAt ? new Date(post.createdAt) : new Date()
         const responseAt = post.responseAt ? new Date(post.responseAt) : null
 
+        // Resolve board - from post data or global option
+        const boardId = this.resolveBoardId(post.board)
+        if (!boardId) {
+          stats.skipped++
+          if (this.options.verbose) {
+            this.progress.warn(`Skipping post: no board found for "${post.board || '(none)'}"`)
+          }
+          continue
+        }
+
         postInserts.push({
           id: postId,
-          boardId: this.refs.board.id,
+          boardId,
           title: post.title,
           content: post.body,
           memberId,

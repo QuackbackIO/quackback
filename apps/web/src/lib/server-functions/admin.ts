@@ -229,6 +229,48 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
 })
 
 /**
+ * Fetch a single integration by type (e.g., 'slack') with event mappings
+ */
+export const fetchIntegrationByType = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ type: z.string() }))
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] fetchIntegrationByType: type=${data.type}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+
+      const { integrations } = await import('@/lib/db')
+
+      const integration = await db.query.integrations.findFirst({
+        where: eq(integrations.integrationType, data.type),
+        with: {
+          eventMappings: true,
+        },
+      })
+
+      if (!integration) {
+        console.log(`[fn:admin] fetchIntegrationByType: not found`)
+        return null
+      }
+
+      console.log(`[fn:admin] fetchIntegrationByType: found id=${integration.id}`)
+      return {
+        id: integration.id,
+        status: integration.status,
+        externalWorkspaceName: integration.externalWorkspaceName,
+        config: integration.config as { channelId?: string },
+        eventMappings: integration.eventMappings.map((m) => ({
+          id: m.id,
+          eventType: m.eventType,
+          enabled: m.enabled,
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ fetchIntegrationByType failed:`, error)
+      throw error
+    }
+  })
+
+/**
  * Check onboarding state for a user
  * Returns member record, step, and whether boards exist
  * Note: This function is called during onboarding and may create member records

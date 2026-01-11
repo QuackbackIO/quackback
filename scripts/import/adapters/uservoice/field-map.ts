@@ -6,12 +6,12 @@
 
 const STATUS_MAP: Record<string, string> = {
   active: 'open',
-  'under review': 'under_review',
-  reviewing: 'under_review',
+  'under review': 'under-review',
+  reviewing: 'under-review',
   planned: 'planned',
-  started: 'in_progress',
-  'in progress': 'in_progress',
-  'working on it': 'in_progress',
+  started: 'in-progress',
+  'in progress': 'in-progress',
+  'working on it': 'in-progress',
   completed: 'complete',
   shipped: 'complete',
   done: 'complete',
@@ -31,6 +31,8 @@ const MODERATION_MAP: Record<string, string> = {
   spam: 'spam',
   archived: 'archived',
   hidden: 'archived',
+  closed: 'closed',
+  deleted: 'deleted',
 }
 
 export function normalizeStatus(status: string | undefined): string {

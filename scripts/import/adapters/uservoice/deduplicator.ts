@@ -23,6 +23,7 @@ export interface UserVoiceRow {
 
   // Classification
   forumName?: string
+  categoryName?: string
   labels?: string
   ideaListNames?: string
 
@@ -139,10 +140,10 @@ function extractPost(row: UserVoiceRow): IntermediatePost | null {
     body,
     authorEmail: row.ideaCreatorEmailAddress?.trim() || undefined,
     authorName: row.ideaCreatorName?.trim() || undefined,
-    board: row.forumName?.trim() || undefined,
+    board: row.categoryName?.trim() || row.forumName?.trim() || undefined,
     status: normalizeStatus(row.publicStatusName),
     moderation: normalizeModeration(row.moderationState) as ModerationState,
-    tags: row.labels?.trim() || undefined,
+    tags: parseLabelsField(row.labels),
     roadmap: parseFirstRoadmap(row.ideaListNames),
     voteCount: parseVoteCount(row.votersCount),
     createdAt: parseTimestamp(row.createdTimestamp),
@@ -150,6 +151,25 @@ function extractPost(row: UserVoiceRow): IntermediatePost | null {
     responseAt: parseTimestamp(row.publicStatusUpdatedTimestamp),
     responseBy: row.publicStatusCreatorEmailAddress?.trim() || undefined,
   }
+}
+
+/**
+ * Parse labels field - handles JSON arrays like ["Tag1","Tag2"] or plain comma-separated strings
+ */
+function parseLabelsField(labels: string | undefined): string | undefined {
+  if (!labels?.trim()) return undefined
+  const trimmed = labels.trim()
+  // Check if it's a JSON array
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed) as string[]
+      return parsed.join(',')
+    } catch {
+      // Not valid JSON, return as-is
+      return trimmed
+    }
+  }
+  return trimmed
 }
 
 /**

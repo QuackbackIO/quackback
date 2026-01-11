@@ -41,16 +41,20 @@ interface CliArgs {
   board?: string
   dryRun: boolean
   verbose: boolean
+  createBoards: boolean
+  createStatuses: boolean
   createTags: boolean
   createUsers: boolean
   batchSize: number
+  skipVoteReconciliation: boolean
   // Intermediate format files
   posts?: string
   comments?: string
   votes?: string
   notes?: string
   // UserVoice files
-  suggestions?: string
+  suggestions?: string // Full export (denormalized)
+  users?: string // Subdomain users export
 }
 
 function printUsage(): void {
@@ -66,7 +70,8 @@ Commands:
   help            Show this help message
 
 Common Options:
-  --board <slug>      Target board slug (required)
+  --board <slug>      Target board slug (required unless --create-boards)
+  --create-boards     Auto-create boards from post data (categories)
   --dry-run           Validate only, don't insert data
   --verbose           Show detailed progress
   --create-tags       Auto-create missing tags (default: true)
@@ -81,9 +86,10 @@ Intermediate Format Options:
   --notes <file>      Internal notes CSV file
 
 UserVoice Options:
-  --suggestions <file>    Full suggestions export CSV (required)
+  --suggestions <file>    Full suggestions export CSV (denormalized, required)
   --comments <file>       Comments CSV (optional)
   --notes <file>          Internal notes CSV (optional)
+  --users <file>          Subdomain users CSV (optional, requires --create-users)
 
 Examples:
   # Import from intermediate format
@@ -94,10 +100,10 @@ Examples:
 
   # Import from UserVoice with dry run
   bun scripts/import/cli.ts uservoice \\
-    --suggestions ~/Downloads/full-export.csv \\
+    --suggestions ~/Downloads/suggestions-full.csv \\
     --comments ~/Downloads/comments.csv \\
-    --board features \\
-    --dry-run --verbose
+    --notes ~/Downloads/notes.csv \\
+    --create-users --dry-run --verbose
 
   # Import with verbose output
   bun scripts/import/cli.ts intermediate \\
@@ -115,9 +121,12 @@ function parseArgs(args: string[]): CliArgs {
     command: 'help',
     dryRun: false,
     verbose: false,
+    createBoards: false,
+    createStatuses: false,
     createTags: true,
     createUsers: false,
     batchSize: 100,
+    skipVoteReconciliation: false,
   }
 
   if (args.length === 0) {
@@ -162,6 +171,9 @@ function parseArgs(args: string[]): CliArgs {
       case '-v':
         result.verbose = true
         break
+      case '--create-boards':
+        result.createBoards = true
+        break
       case '--create-tags':
         result.createTags = true
         break
@@ -188,6 +200,9 @@ function parseArgs(args: string[]): CliArgs {
         break
       case '--suggestions':
         result.suggestions = getNextArg(i++, '--suggestions')
+        break
+      case '--users':
+        result.users = getNextArg(i++, '--users')
         break
       case '--help':
       case '-h':
@@ -246,6 +261,7 @@ async function runIntermediateImport(args: CliArgs): Promise<void> {
     comments: [],
     votes: [],
     notes: [],
+    users: [],
   }
 
   // Helper to parse and log a file
@@ -291,14 +307,17 @@ async function runIntermediateImport(args: CliArgs): Promise<void> {
 }
 
 async function runUserVoiceImport(args: CliArgs): Promise<void> {
-  if (!args.board) {
-    console.error('Error: --board is required')
-    process.exit(1)
-  }
+  // UserVoice imports always use boards and statuses from source data
+  args.createBoards = true
+  args.createStatuses = true
+  // Trust source vote counts (votersCount from export) instead of recounting
+  args.skipVoteReconciliation = true
 
+  // Validate required files
   const suggestionsFile = validateFile(args.suggestions, 'suggestions', true)!
   const commentsFile = validateFile(args.comments, 'comments', false)
   const notesFile = validateFile(args.notes, 'notes', false)
+  const usersFile = validateFile(args.users, 'users', false)
 
   console.log('🔄 Converting UserVoice export...')
 
@@ -306,6 +325,7 @@ async function runUserVoiceImport(args: CliArgs): Promise<void> {
     suggestionsFile,
     commentsFile,
     notesFile,
+    usersFile,
     verbose: args.verbose,
   })
 
@@ -324,12 +344,15 @@ async function executeImport(data: IntermediateData, args: CliArgs): Promise<voi
   }
 
   const options: ImportOptions = {
-    board: args.board!,
+    board: args.board,
+    createBoards: args.createBoards,
+    createStatuses: args.createStatuses,
     createTags: args.createTags,
     createUsers: args.createUsers,
     dryRun: args.dryRun,
     verbose: args.verbose,
     batchSize: args.batchSize,
+    skipVoteReconciliation: args.skipVoteReconciliation,
   }
 
   if (args.dryRun) {

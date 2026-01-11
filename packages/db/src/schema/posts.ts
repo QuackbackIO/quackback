@@ -76,7 +76,7 @@ export const posts = pgTable(
     ),
     // Moderation state for imported/pending content
     moderationState: text('moderation_state', {
-      enum: ['published', 'pending', 'spam', 'archived'],
+      enum: ['published', 'pending', 'spam', 'archived', 'closed', 'deleted'],
     })
       .default('published')
       .notNull(),
