@@ -38,9 +38,6 @@ interface PostCardProps {
   boardSlug: string
   boardName?: string
   tags: { id: string; name: string; color: string }[]
-  hasVoted?: boolean
-  /** Callback when vote state changes (postId, newVotedState) */
-  onVoteChange?: (postId: string, voted: boolean) => void
   /** Whether the user is authenticated (shows login dialog on vote if false) */
   isAuthenticated?: boolean
   /** Whether the current user is the author of this post */
@@ -73,8 +70,6 @@ export function PostCard({
   boardSlug,
   boardName,
   tags,
-  hasVoted = false,
-  onVoteChange,
   isAuthenticated = true,
   isCurrentUserAuthor = false,
   canEdit = false,
@@ -93,9 +88,7 @@ export function PostCard({
     handleVote,
   } = usePostVote({
     postId: id,
-    initialVoteCount: voteCount,
-    initialHasVoted: hasVoted,
-    onVoteChange,
+    voteCount,
   })
 
   return (

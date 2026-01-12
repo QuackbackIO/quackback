@@ -116,8 +116,9 @@ export function FeedbackContainer({
   const posts = flattenPublicPosts(postsData)
   const isLoading = isFetching && !isFetchingNextPage
 
-  // Track voted posts in client state (syncs with server on vote)
-  const { hasVoted, toggleVote, refetchVotedPosts } = useVotedPosts({
+  // Track voted posts - TanStack Query is single source of truth
+  // Optimistic updates handled by useVoteMutation's onMutate
+  const { refetchVotedPosts } = useVotedPosts({
     initialVotedIds: votedPostIds,
   })
 
@@ -248,8 +249,6 @@ export function FeedbackContainer({
                       boardSlug={post.board?.slug || ''}
                       boardName={post.board?.name}
                       tags={post.tags}
-                      hasVoted={hasVoted(post.id)}
-                      onVoteChange={toggleVote}
                       isAuthenticated={!!effectiveUser}
                     />
                   ))}
