@@ -50,10 +50,8 @@ export interface WorkspaceFeaturesData {
 export function useWorkspaceFeatures() {
   return useQuery({
     queryKey: featuresKeys.workspace(),
-    queryFn: async (): Promise<WorkspaceFeaturesData> => {
-      return (await getWorkspaceFeaturesFn()) as WorkspaceFeaturesData
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes - features don't change often
+    queryFn: getWorkspaceFeaturesFn as () => Promise<WorkspaceFeaturesData>,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 }
 
@@ -108,11 +106,15 @@ export function useIsSelfHosted() {
   }
 }
 
+// ============================================================================
+// Hydration Hook
+// ============================================================================
+
 /**
  * Hook to hydrate features from SSR data.
  * Call this in a client component that receives SSR features data.
  */
-export function useHydrateFeatures(initialData: WorkspaceFeaturesData | null) {
+export function useHydrateFeatures(initialData: WorkspaceFeaturesData | null): void {
   const queryClient = useQueryClient()
 
   // Hydrate cache if initial data is provided and not already cached

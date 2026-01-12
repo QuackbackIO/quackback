@@ -9,7 +9,23 @@ import {
 } from '@/lib/server-functions/settings'
 import { settingsQueries } from '@/lib/queries/settings'
 
-// Re-export query hooks that use the centralized settingsQueries
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+// ============================================================================
+// Query Hooks
+// ============================================================================
+
 export function useWorkspaceLogo() {
   return useQuery({
     ...settingsQueries.logo(),
@@ -24,28 +40,21 @@ export function useWorkspaceHeaderLogo() {
   })
 }
 
-// Helper to convert ArrayBuffer to base64 (browser-compatible)
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
+// ============================================================================
+// Logo Mutation Hooks
+// ============================================================================
 
-// Mutation hooks
 export function useUploadWorkspaceLogo() {
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (file: Blob): Promise<void> => {
+    mutationFn: async (file: Blob) => {
       const arrayBuffer = await file.arrayBuffer()
       const base64 = arrayBufferToBase64(arrayBuffer)
       const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
       await uploadLogoFn({ data: { base64, mimeType } })
     },
     onSuccess: () => {
-      // Use refetchQueries to force refetch even with enabled: false
       queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
     },
   })
@@ -53,28 +62,30 @@ export function useUploadWorkspaceLogo() {
 
 export function useDeleteWorkspaceLogo() {
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (): Promise<void> => {
-      await deleteLogoFn()
-    },
+    mutationFn: () => deleteLogoFn(),
     onSuccess: () => {
-      // Use refetchQueries to force refetch even with enabled: false
       queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
     },
   })
 }
 
+// ============================================================================
+// Header Logo Mutation Hooks
+// ============================================================================
+
 export function useUploadWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (file: Blob): Promise<void> => {
+    mutationFn: async (file: Blob) => {
       const arrayBuffer = await file.arrayBuffer()
       const base64 = arrayBufferToBase64(arrayBuffer)
       const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/webp'
       await uploadHeaderLogoFn({ data: { base64, mimeType } })
     },
     onSuccess: () => {
-      // Use refetchQueries to force refetch even with enabled: false
       queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
@@ -82,12 +93,10 @@ export function useUploadWorkspaceHeaderLogo() {
 
 export function useDeleteWorkspaceHeaderLogo() {
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (): Promise<void> => {
-      await deleteHeaderLogoFn()
-    },
+    mutationFn: () => deleteHeaderLogoFn(),
     onSuccess: () => {
-      // Use refetchQueries to force refetch even with enabled: false
       queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
   })
@@ -95,14 +104,10 @@ export function useDeleteWorkspaceHeaderLogo() {
 
 export function useUpdateHeaderDisplayMode() {
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (mode: string): Promise<void> => {
-      await updateHeaderDisplayModeFn({
-        data: {
-          mode: mode as 'logo_and_name' | 'logo_only' | 'custom_logo',
-        },
-      })
-    },
+    mutationFn: (mode: 'logo_and_name' | 'logo_only' | 'custom_logo') =>
+      updateHeaderDisplayModeFn({ data: { mode } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },
@@ -111,10 +116,9 @@ export function useUpdateHeaderDisplayMode() {
 
 export function useUpdateHeaderDisplayName() {
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (name: string | null): Promise<void> => {
-      await updateHeaderDisplayNameFn({ data: { name } })
-    },
+    mutationFn: (name: string | null) => updateHeaderDisplayNameFn({ data: { name } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsQueries.headerLogo().queryKey })
     },

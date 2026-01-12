@@ -31,6 +31,31 @@ export const usersKeys = {
 }
 
 // ============================================================================
+// Fetch Functions
+// ============================================================================
+
+async function fetchPortalUsers(
+  filters: UsersFilters,
+  page: number
+): Promise<PortalUserListResultView> {
+  return (await listPortalUsersFn({
+    data: {
+      search: filters.search,
+      verified: filters.verified,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      sort: (filters.sort || 'newest') as 'newest' | 'oldest' | 'most_active',
+      page,
+      limit: 20,
+    },
+  })) as PortalUserListResultView
+}
+
+async function fetchUserDetail(memberId: MemberId): Promise<PortalUserDetail> {
+  return (await getPortalUserFn({ data: { memberId } })) as unknown as PortalUserDetail
+}
+
+// ============================================================================
 // Query Hooks
 // ============================================================================
 
@@ -52,37 +77,12 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
 
   return useInfiniteQuery({
     queryKey: usersKeys.list(filters),
-    queryFn: async ({ pageParam }): Promise<PortalUserListResultView> => {
-      return (await listPortalUsersFn({
-        data: {
-          search: filters.search,
-          verified: filters.verified,
-          dateFrom: filters.dateFrom,
-          dateTo: filters.dateTo,
-          sort: (filters.sort || 'newest') as 'newest' | 'oldest' | 'most_active',
-          page: pageParam,
-          limit: 20,
-        },
-      })) as PortalUserListResultView
-    },
+    queryFn: ({ pageParam }) => fetchPortalUsers(filters, pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    initialData: useInitialData
-      ? {
-          pages: [initialData],
-          pageParams: [1],
-        }
-      : undefined,
+    initialData: useInitialData ? { pages: [initialData], pageParams: [1] } : undefined,
     refetchOnMount: !useInitialData,
   })
-}
-
-// Helper to flatten paginated users into a single array
-export function flattenUsers(
-  data: InfiniteData<PortalUserListResultView> | undefined
-): PortalUserListItemView[] {
-  if (!data) return []
-  return data.pages.flatMap((page) => page.items)
 }
 
 interface UseUserDetailOptions {
@@ -93,13 +93,7 @@ interface UseUserDetailOptions {
 export function useUserDetail({ memberId, enabled = true }: UseUserDetailOptions) {
   return useQuery({
     queryKey: usersKeys.detail(memberId!),
-    queryFn: async (): Promise<PortalUserDetail> => {
-      return (await getPortalUserFn({
-        data: {
-          memberId: memberId!,
-        },
-      })) as unknown as PortalUserDetail
-    },
+    queryFn: () => fetchUserDetail(memberId!),
     enabled: enabled && !!memberId,
     staleTime: 30 * 1000,
   })
@@ -117,18 +111,10 @@ export function useRemovePortalUser() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (memberId: MemberId) => {
-      return await deletePortalUserFn({
-        data: {
-          memberId,
-        },
-      })
-    },
+    mutationFn: (memberId: MemberId) => deletePortalUserFn({ data: { memberId } }),
     onMutate: async (memberId) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: usersKeys.lists() })
 
-      // Snapshot previous state
       const previousLists = queryClient.getQueriesData<InfiniteData<PortalUserListResultView>>({
         queryKey: usersKeys.lists(),
       })
@@ -154,7 +140,6 @@ export function useRemovePortalUser() {
       return { previousLists }
     },
     onError: (_err, _memberId, context) => {
-      // Rollback on error
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
           if (data) {
@@ -164,8 +149,19 @@ export function useRemovePortalUser() {
       }
     },
     onSettled: () => {
-      // Refetch lists to ensure consistency
       queryClient.invalidateQueries({ queryKey: usersKeys.lists() })
     },
   })
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Flatten paginated users into a single array */
+export function flattenUsers(
+  data: InfiniteData<PortalUserListResultView> | undefined
+): PortalUserListItemView[] {
+  if (!data) return []
+  return data.pages.flatMap((page) => page.items)
 }

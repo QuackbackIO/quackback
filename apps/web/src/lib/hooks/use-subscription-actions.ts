@@ -7,10 +7,21 @@ import {
 } from '@/lib/server-functions/subscriptions'
 import type { PostId } from '@quackback/ids'
 
-type SubscriptionStatus = {
+// ============================================================================
+// Types
+// ============================================================================
+
+interface SubscriptionStatus {
   subscribed: boolean
   muted: boolean
   reason: string | null
+}
+
+type SubscriptionReason = 'manual' | 'author' | 'vote' | 'comment'
+
+interface UseSubscriptionStatusOptions {
+  postId: PostId
+  enabled?: boolean
 }
 
 // ============================================================================
@@ -23,13 +34,8 @@ export const subscriptionKeys = {
 }
 
 // ============================================================================
-// Query Hooks
+// Query Hook
 // ============================================================================
-
-interface UseSubscriptionStatusOptions {
-  postId: PostId
-  enabled?: boolean
-}
 
 /**
  * Hook to get the current user's subscription status for a post.
@@ -41,7 +47,6 @@ export function useSubscriptionStatus({ postId, enabled = true }: UseSubscriptio
       try {
         return await fetchSubscriptionStatus({ data: { postId } })
       } catch {
-        // Return default status on error (user not subscribed)
         return { subscribed: false, muted: false, reason: null }
       }
     },
@@ -51,136 +56,36 @@ export function useSubscriptionStatus({ postId, enabled = true }: UseSubscriptio
 }
 
 // ============================================================================
-// Mutation Hooks
+// Combined Hook
 // ============================================================================
-
-interface UseSubscribeOptions {
-  postId: PostId
-  onSuccess?: (status: SubscriptionStatus) => void
-  onError?: (error: Error) => void
-}
-
-/**
- * Hook to subscribe to a post.
- */
-export function useSubscribe({ postId, onSuccess, onError }: UseSubscribeOptions) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (reason: 'manual' | 'author' | 'vote' | 'comment' = 'manual') => {
-      return await subscribeToPostFn({ data: { postId, reason } })
-    },
-    onSuccess: async () => {
-      // Refetch the subscription status
-      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
-      const newStatus = queryClient.getQueryData<SubscriptionStatus>(
-        subscriptionKeys.status(postId)
-      )
-      if (newStatus) {
-        onSuccess?.(newStatus)
-      }
-    },
-    onError: (error: Error) => {
-      onError?.(error)
-    },
-  })
-}
-
-interface UseUnsubscribeOptions {
-  postId: PostId
-  onSuccess?: (status: SubscriptionStatus) => void
-  onError?: (error: Error) => void
-}
-
-/**
- * Hook to unsubscribe from a post.
- */
-export function useUnsubscribe({ postId, onSuccess, onError }: UseUnsubscribeOptions) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async () => {
-      return await unsubscribeFromPostFn({ data: { postId } })
-    },
-    onSuccess: async () => {
-      // Refetch the subscription status
-      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
-      const newStatus = queryClient.getQueryData<SubscriptionStatus>(
-        subscriptionKeys.status(postId)
-      )
-      if (newStatus) {
-        onSuccess?.(newStatus)
-      }
-    },
-    onError: (error: Error) => {
-      onError?.(error)
-    },
-  })
-}
-
-interface UseMuteSubscriptionOptions {
-  postId: PostId
-  onSuccess?: (status: SubscriptionStatus) => void
-  onError?: (error: Error) => void
-}
-
-/**
- * Hook to mute/unmute a subscription.
- */
-export function useMuteSubscription({ postId, onSuccess, onError }: UseMuteSubscriptionOptions) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (muted: boolean) => {
-      return await muteSubscriptionFn({ data: { postId, muted } })
-    },
-    onSuccess: async () => {
-      // Refetch the subscription status
-      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
-      const newStatus = queryClient.getQueryData<SubscriptionStatus>(
-        subscriptionKeys.status(postId)
-      )
-      if (newStatus) {
-        onSuccess?.(newStatus)
-      }
-    },
-    onError: (error: Error) => {
-      onError?.(error)
-    },
-  })
-}
 
 /**
  * Combined hook for all subscription actions.
+ * Provides status, mutations, and derived state in a single interface.
  */
 export function usePostSubscription({ postId, enabled = true }: UseSubscriptionStatusOptions) {
   const queryClient = useQueryClient()
   const statusQuery = useSubscriptionStatus({ postId, enabled })
 
   const subscribeMutation = useMutation({
-    mutationFn: async (reason: 'manual' | 'author' | 'vote' | 'comment' = 'manual') => {
-      return await subscribeToPostFn({ data: { postId, reason } })
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
+    mutationFn: (reason: SubscriptionReason = 'manual') =>
+      subscribeToPostFn({ data: { postId, reason } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
   })
 
   const unsubscribeMutation = useMutation({
-    mutationFn: async () => {
-      return await unsubscribeFromPostFn({ data: { postId } })
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
+    mutationFn: () => unsubscribeFromPostFn({ data: { postId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
   })
 
   const muteMutation = useMutation({
-    mutationFn: async (muted: boolean) => {
-      return await muteSubscriptionFn({ data: { postId, muted } })
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
+    mutationFn: (muted: boolean) => muteSubscriptionFn({ data: { postId, muted } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
   })
 

@@ -36,7 +36,7 @@ interface UseBoardsOptions {
 export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   return useQuery({
     queryKey: boardKeys.lists(),
-    queryFn: () => fetchBoards(),
+    queryFn: fetchBoards,
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -75,7 +75,6 @@ export function useCreateBoard() {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
 
-      // Optimistic update
       const optimisticBoard: Board = {
         id: `board_temp_${Date.now()}` as Board['id'],
         name: input.name,
@@ -174,12 +173,9 @@ export function useDeleteBoard() {
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
 
-      // Optimistic update
       queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
         old?.filter((board) => board.id !== input.id)
       )
-
-      // Remove detail from cache
       queryClient.removeQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
 
       return { previous }

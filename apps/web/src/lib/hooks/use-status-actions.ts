@@ -24,7 +24,7 @@ export const statusKeys = {
 }
 
 // ============================================================================
-// Query Hooks
+// Query Hook
 // ============================================================================
 
 interface UseStatusesOptions {
@@ -37,9 +37,7 @@ interface UseStatusesOptions {
 export function useStatuses({ enabled = true }: UseStatusesOptions = {}) {
   return useQuery({
     queryKey: statusKeys.lists(),
-    queryFn: async () => {
-      return await fetchStatuses()
-    },
+    queryFn: fetchStatuses,
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -61,7 +59,6 @@ export function useCreateStatus() {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
       const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
 
-      // Optimistic update
       const optimisticStatus: PostStatusEntity = {
         id: `status_temp_${Date.now()}` as PostStatusEntity['id'],
         name: input.name,
@@ -102,7 +99,6 @@ export function useUpdateStatus() {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
       const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
 
-      // Optimistic update
       queryClient.setQueryData<PostStatusEntity[]>(statusKeys.lists(), (old) =>
         old?.map((status) => {
           if (status.id !== input.id) return status
@@ -136,14 +132,11 @@ export function useDeleteStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: DeleteStatusInput): Promise<{ id: string }> => {
-      return await deleteStatusFn({ data: input })
-    },
+    mutationFn: (input: DeleteStatusInput) => deleteStatusFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
       const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
 
-      // Optimistic update
       queryClient.setQueryData<PostStatusEntity[]>(statusKeys.lists(), (old) =>
         old?.filter((status) => status.id !== input.id)
       )
@@ -168,23 +161,17 @@ export function useReorderStatuses() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: ReorderStatusesInput): Promise<void> => {
-      await reorderStatusesFn({ data: input })
-    },
+    mutationFn: (input: ReorderStatusesInput) => reorderStatusesFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: statusKeys.lists() })
       const previous = queryClient.getQueryData<PostStatusEntity[]>(statusKeys.lists())
 
       if (previous) {
-        // Reorder based on the new statusIds order
         const statusMap = new Map(previous.map((s) => [s.id, s]))
         const reordered = input.statusIds
           .map((id, index) => {
             const status = statusMap.get(id as PostStatusEntity['id'])
-            if (status) {
-              return { ...status, position: index }
-            }
-            return null
+            return status ? { ...status, position: index } : null
           })
           .filter((s): s is PostStatusEntity => s !== null)
 

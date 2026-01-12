@@ -22,7 +22,7 @@ export const tagKeys = {
 }
 
 // ============================================================================
-// Query Hooks
+// Query Hook
 // ============================================================================
 
 interface UseTagsOptions {
@@ -35,9 +35,7 @@ interface UseTagsOptions {
 export function useTags({ enabled = true }: UseTagsOptions = {}) {
   return useQuery({
     queryKey: tagKeys.lists(),
-    queryFn: async () => {
-      return await fetchTags()
-    },
+    queryFn: fetchTags,
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -59,7 +57,6 @@ export function useCreateTag() {
       await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
       const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
 
-      // Optimistic update
       const optimisticTag: Tag = {
         id: `tag_temp_${Date.now()}` as Tag['id'],
         name: input.name,
@@ -95,7 +92,6 @@ export function useUpdateTag() {
       await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
       const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
 
-      // Optimistic update
       queryClient.setQueryData<Tag[]>(tagKeys.lists(), (old) =>
         old?.map((tag) =>
           tag.id === input.id
@@ -124,14 +120,11 @@ export function useDeleteTag() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: DeleteTagInput): Promise<{ id: string }> => {
-      return await deleteTagFn({ data: input })
-    },
+    mutationFn: (input: DeleteTagInput) => deleteTagFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: tagKeys.lists() })
       const previous = queryClient.getQueryData<Tag[]>(tagKeys.lists())
 
-      // Optimistic update
       queryClient.setQueryData<Tag[]>(tagKeys.lists(), (old) =>
         old?.filter((tag) => tag.id !== input.id)
       )

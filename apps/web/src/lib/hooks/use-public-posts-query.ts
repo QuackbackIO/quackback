@@ -1,4 +1,3 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   useInfiniteQuery,
   useMutation,
@@ -111,7 +110,11 @@ export function usePublicPosts({ filters, initialData, enabled = true }: UsePubl
   })
 }
 
-// Helper to flatten paginated posts into a single array
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Flatten paginated posts into a single array */
 export function flattenPublicPosts(
   data: InfiniteData<PublicPostListResult> | undefined
 ): PublicPostListItem[] {
@@ -130,6 +133,9 @@ interface VoteResponse {
 
 interface VoteMutationContext {
   previousLists: [readonly unknown[], InfiniteData<PublicPostListResult> | undefined][]
+  previousVotedPosts: Set<string> | undefined
+  previousDetail: PublicPostDetailView | undefined
+  postId: PostId
 }
 
 export function useVoteMutation() {
@@ -137,24 +143,66 @@ export function useVoteMutation() {
 
   return useMutation({
     mutationFn: (postId: PostId): Promise<VoteResponse> => toggleVoteFn({ data: { postId } }),
-    onMutate: async (_postId): Promise<VoteMutationContext> => {
-      // Cancel any outgoing refetches for all public post lists
+    onMutate: async (postId): Promise<VoteMutationContext> => {
+      // Cancel outgoing queries
       await queryClient.cancelQueries({ queryKey: publicPostsKeys.lists() })
+      await queryClient.cancelQueries({ queryKey: votedPostsKeys.byWorkspace() })
 
-      // Snapshot ALL list queries
+      // Snapshot previous state for rollback
       const previousLists = queryClient.getQueriesData<InfiniteData<PublicPostListResult>>({
         queryKey: publicPostsKeys.lists(),
       })
+      const previousVotedPosts = queryClient.getQueryData<Set<string>>(votedPostsKeys.byWorkspace())
+      const previousDetail = queryClient.getQueryData<PublicPostDetailView>(
+        portalDetailQueries.postDetail(postId).queryKey
+      )
 
-      // Note: We don't optimistically update the cache here because:
-      // 1. hasVoted is user-specific and not part of PublicPostListItem
-      // 2. The local state in usePostVote handles immediate UI feedback
-      // 3. onSuccess will sync the voteCount from the server response
+      // Get current vote state to determine optimistic update
+      const currentlyVoted = previousVotedPosts?.has(postId) ?? false
+      const newVoted = !currentlyVoted
 
-      return { previousLists }
+      // OPTIMISTIC: Update votedPosts cache (hasVoted state)
+      queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(), (old) => {
+        const next = new Set(old || [])
+        if (newVoted) {
+          next.add(postId)
+        } else {
+          next.delete(postId)
+        }
+        return next
+      })
+
+      // OPTIMISTIC: Update voteCount in all list queries
+      queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
+        { queryKey: publicPostsKeys.lists() },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((post) =>
+                post.id === postId
+                  ? { ...post, voteCount: post.voteCount + (newVoted ? 1 : -1) }
+                  : post
+              ),
+            })),
+          }
+        }
+      )
+
+      // OPTIMISTIC: Update voteCount in detail query (if cached)
+      if (previousDetail) {
+        queryClient.setQueryData<PublicPostDetailView>(
+          portalDetailQueries.postDetail(postId).queryKey,
+          (old) => (old ? { ...old, voteCount: old.voteCount + (newVoted ? 1 : -1) } : old)
+        )
+      }
+
+      return { previousLists, previousVotedPosts, previousDetail, postId }
     },
     onError: (_err, _postId, context) => {
-      // Rollback all list queries on error
+      // Rollback all caches on error
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
           if (data) {
@@ -162,9 +210,18 @@ export function useVoteMutation() {
           }
         }
       }
+      if (context?.previousVotedPosts !== undefined) {
+        queryClient.setQueryData(votedPostsKeys.byWorkspace(), context.previousVotedPosts)
+      }
+      if (context?.previousDetail && context?.postId) {
+        queryClient.setQueryData(
+          portalDetailQueries.postDetail(context.postId).queryKey,
+          context.previousDetail
+        )
+      }
     },
     onSuccess: (data, postId) => {
-      // Update voteCount in all list queries
+      // Sync with server truth (corrects any optimistic drift)
       queryClient.setQueriesData<InfiniteData<PublicPostListResult>>(
         { queryKey: publicPostsKeys.lists() },
         (old) => {
@@ -181,16 +238,11 @@ export function useVoteMutation() {
         }
       )
 
-      // Update voteCount in the detail query (if cached)
       queryClient.setQueryData<PublicPostDetailView>(
         portalDetailQueries.postDetail(postId).queryKey,
-        (old) => {
-          if (!old) return old
-          return { ...old, voteCount: data.voteCount }
-        }
+        (old) => (old ? { ...old, voteCount: data.voteCount } : old)
       )
 
-      // Update the votedPosts cache (single source of truth for hasVoted)
       queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(), (old) => {
         const next = new Set(old || [])
         if (data.voted) {
@@ -278,7 +330,7 @@ export function useCreatePublicPost() {
 // Voted Posts Query Hook (using server action)
 // ============================================================================
 
-async function fetchVotedPosts(): Promise<Set<string>> {
+export async function fetchVotedPosts(): Promise<Set<string>> {
   const result = await getVotedPostsFn()
   return new Set(result.votedPostIds)
 }
@@ -290,69 +342,22 @@ interface UseVotedPostsOptions {
 
 /**
  * Hook to track which posts the user has voted on.
- * Uses React Query for server state with local optimistic updates.
- * Call refetch() after auth to sync with server state.
+ * Uses TanStack Query as single source of truth - no local state.
+ * Optimistic updates handled by useVoteMutation's onMutate.
  */
 export function useVotedPosts({ initialVotedIds, enabled = true }: UseVotedPostsOptions) {
-  const queryClient = useQueryClient()
-
-  // Local state for optimistic updates (immediate UI feedback)
-  const [localVotedIds, setLocalVotedIds] = useState(() => new Set(initialVotedIds))
-
-  // React Query for server state
-  const { data: serverVotedIds, refetch } = useQuery({
+  const { data: votedIds, refetch } = useQuery({
     queryKey: votedPostsKeys.byWorkspace(),
-    queryFn: () => fetchVotedPosts(),
+    queryFn: fetchVotedPosts,
     initialData: new Set(initialVotedIds),
-    // Refresh voted posts periodically to sync cross-device votes
     staleTime: 5 * 60 * 1000, // 5 minutes
     enabled,
   })
 
-  // Sync local state when server data changes (e.g., after refetch)
-  useEffect(() => {
-    if (serverVotedIds) {
-      setLocalVotedIds(serverVotedIds)
-    }
-  }, [serverVotedIds])
-
-  const hasVoted = useCallback((postId: string) => localVotedIds.has(postId), [localVotedIds])
-
-  // Optimistically update local state, server state syncs via vote mutation
-  const toggleVote = useCallback(
-    (postId: string, voted: boolean) => {
-      setLocalVotedIds((prev) => {
-        const next = new Set(prev)
-        if (voted) {
-          next.add(postId)
-        } else {
-          next.delete(postId)
-        }
-        return next
-      })
-      // Also update the query cache for consistency
-      queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(), (old) => {
-        if (!old) return new Set([postId])
-        const next = new Set(old)
-        if (voted) {
-          next.add(postId)
-        } else {
-          next.delete(postId)
-        }
-        return next
-      })
-    },
-    [queryClient]
-  )
-
-  const refetchVotedPosts = useCallback(() => {
-    refetch()
-  }, [refetch])
-
-  return useMemo(
-    () => ({ hasVoted, toggleVote, refetchVotedPosts }),
-    [hasVoted, toggleVote, refetchVotedPosts]
-  )
+  return {
+    hasVoted: (postId: string) => votedIds?.has(postId) ?? false,
+    refetchVotedPosts: refetch,
+  }
 }
 
 // ============================================================================

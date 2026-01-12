@@ -14,6 +14,31 @@ import {
 } from '@/lib/server-functions/roadmaps'
 import { getRoadmapPostsByStatusFn } from '@/lib/server-functions/public-posts'
 
+// ============================================================================
+// Types
+// ============================================================================
+
+interface UseRoadmapPostsOptions {
+  statusId: StatusId
+  initialData?: RoadmapPostListResult
+}
+
+interface UseRoadmapPostsByRoadmapOptions {
+  roadmapId: RoadmapId
+  statusId?: StatusId
+  enabled?: boolean
+}
+
+interface UsePublicRoadmapPostsOptions {
+  roadmapId: RoadmapId
+  statusId?: StatusId
+  enabled?: boolean
+}
+
+// ============================================================================
+// Query Key Factory
+// ============================================================================
+
 export const roadmapPostsKeys = {
   all: ['roadmapPosts'] as const,
   lists: () => [...roadmapPostsKeys.all, 'list'] as const,
@@ -24,38 +49,22 @@ export const roadmapPostsKeys = {
     ['portal', 'roadmapPosts', roadmapId, statusId] as const,
 }
 
-interface UseRoadmapPostsOptions {
-  statusId: StatusId
-  initialData?: RoadmapPostListResult
-}
+// ============================================================================
+// Query Hooks
+// ============================================================================
 
 export function useRoadmapPosts({ statusId, initialData }: UseRoadmapPostsOptions) {
   return useInfiniteQuery({
     queryKey: roadmapPostsKeys.list(statusId),
-    queryFn: ({ pageParam }): Promise<RoadmapPostListResult> =>
+    queryFn: ({ pageParam }) =>
       getRoadmapPostsByStatusFn({
-        data: {
-          statusId,
-          page: pageParam,
-          limit: 10,
-        },
+        data: { statusId, page: pageParam, limit: 10 },
       }) as Promise<RoadmapPostListResult>,
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    initialData: initialData
-      ? {
-          pages: [initialData],
-          pageParams: [1],
-        }
-      : undefined,
+    initialData: initialData ? { pages: [initialData], pageParams: [1] } : undefined,
     refetchOnMount: !initialData,
   })
-}
-
-interface UseRoadmapPostsByRoadmapOptions {
-  roadmapId: RoadmapId
-  statusId?: StatusId
-  enabled?: boolean
 }
 
 export function useRoadmapPostsByRoadmap({
@@ -65,66 +74,14 @@ export function useRoadmapPostsByRoadmap({
 }: UseRoadmapPostsByRoadmapOptions) {
   return useInfiniteQuery({
     queryKey: roadmapPostsKeys.byRoadmap(roadmapId, statusId),
-    queryFn: async ({ pageParam }): Promise<RoadmapPostsListResult> => {
-      return (await getRoadmapPostsFn({
-        data: {
-          roadmapId,
-          statusId,
-          limit: 20,
-          offset: pageParam,
-        },
-      })) as RoadmapPostsListResult
-    },
+    queryFn: ({ pageParam }) =>
+      getRoadmapPostsFn({
+        data: { roadmapId, statusId, limit: 20, offset: pageParam },
+      }) as Promise<RoadmapPostsListResult>,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
     enabled,
   })
-}
-
-export function useAddPostToRoadmap(roadmapId: RoadmapId) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (postId: PostId): Promise<void> => {
-      await addPostToRoadmapFn({
-        data: {
-          roadmapId,
-          postId,
-        },
-      })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId],
-      })
-    },
-  })
-}
-
-export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (postId: PostId): Promise<void> => {
-      await removePostFromRoadmapFn({
-        data: {
-          roadmapId,
-          postId,
-        },
-      })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId],
-      })
-    },
-  })
-}
-
-interface UsePublicRoadmapPostsOptions {
-  roadmapId: RoadmapId
-  statusId?: StatusId
-  enabled?: boolean
 }
 
 export function usePublicRoadmapPosts({
@@ -134,16 +91,11 @@ export function usePublicRoadmapPosts({
 }: UsePublicRoadmapPostsOptions) {
   return useInfiniteQuery({
     queryKey: roadmapPostsKeys.portal(roadmapId, statusId),
-    queryFn: async ({ pageParam = 0 }): Promise<RoadmapPostsListResult> => {
+    queryFn: async ({ pageParam = 0 }) => {
       const { fetchPublicRoadmapPosts } = await import('@/lib/server-functions/portal')
       return fetchPublicRoadmapPosts({
-        data: {
-          roadmapId,
-          statusId,
-          limit: 20,
-          offset: pageParam,
-        },
-      })
+        data: { roadmapId, statusId, limit: 20, offset: pageParam },
+      }) as Promise<RoadmapPostsListResult>
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
@@ -151,6 +103,37 @@ export function usePublicRoadmapPosts({
   })
 }
 
+// ============================================================================
+// Mutation Hooks
+// ============================================================================
+
+export function useAddPostToRoadmap(roadmapId: RoadmapId) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (postId: PostId) => addPostToRoadmapFn({ data: { roadmapId, postId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId] })
+    },
+  })
+}
+
+export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (postId: PostId) => removePostFromRoadmapFn({ data: { roadmapId, postId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId] })
+    },
+  })
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Flatten paginated roadmap posts into a single array */
 export function flattenRoadmapPosts(
   data: InfiniteData<RoadmapPostListResult> | undefined
 ): RoadmapPost[] {
@@ -158,6 +141,7 @@ export function flattenRoadmapPosts(
   return data.pages.flatMap((page) => page?.items ?? []).filter((item) => item?.id)
 }
 
+/** Flatten paginated roadmap post entries into a single array */
 export function flattenRoadmapPostEntries(
   data: InfiniteData<RoadmapPostsListResult> | undefined
 ): RoadmapPostEntry[] {

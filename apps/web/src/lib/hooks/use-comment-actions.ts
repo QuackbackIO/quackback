@@ -10,63 +10,14 @@ import type { PostId, CommentId } from '@quackback/ids'
 import { portalDetailQueries } from '@/lib/queries/portal-detail'
 
 // ============================================================================
-// Query Key Factory
+// Types
 // ============================================================================
-
-export const commentKeys = {
-  all: ['comments'] as const,
-  permissions: () => [...commentKeys.all, 'permissions'] as const,
-  permission: (commentId: CommentId) => [...commentKeys.permissions(), commentId] as const,
-}
-
-// ============================================================================
-// Query Hooks
-// ============================================================================
-
-interface UseCommentPermissionsOptions {
-  commentId: CommentId
-  enabled?: boolean
-}
 
 interface CommentPermissions {
   canEdit: boolean
   canDelete: boolean
   editReason?: string
   deleteReason?: string
-}
-
-/**
- * Hook to get edit/delete permissions for a comment.
- */
-export function useCommentPermissions({ commentId, enabled = true }: UseCommentPermissionsOptions) {
-  return useQuery({
-    queryKey: commentKeys.permission(commentId),
-    queryFn: async (): Promise<CommentPermissions> => {
-      try {
-        return await getCommentPermissionsFn({ data: { commentId } })
-      } catch {
-        return { canEdit: false, canDelete: false }
-      }
-    },
-    enabled,
-    staleTime: 30 * 1000, // 30 seconds
-  })
-}
-
-// ============================================================================
-// Mutation Hooks
-// ============================================================================
-
-interface UseCreateCommentOptions {
-  postId: PostId
-  /** Author info for optimistic update */
-  author?: {
-    name: string | null
-    email: string
-    memberId?: string
-  }
-  onSuccess?: (comment: unknown) => void
-  onError?: (error: Error) => void
 }
 
 interface OptimisticComment {
@@ -90,34 +41,102 @@ interface CreateCommentInput {
   memberId?: string | null
 }
 
+interface UseCreateCommentOptions {
+  postId: PostId
+  author?: { name: string | null; email: string; memberId?: string }
+  onSuccess?: (comment: unknown) => void
+  onError?: (error: Error) => void
+}
+
+interface UseEditCommentOptions {
+  commentId: CommentId
+  postId: PostId
+  onSuccess?: (comment: unknown) => void
+  onError?: (error: Error) => void
+}
+
+interface UseDeleteCommentOptions {
+  commentId: CommentId
+  postId: PostId
+  onSuccess?: () => void
+  onError?: (error: Error) => void
+}
+
+interface UseToggleReactionOptions {
+  commentId: CommentId
+  postId: PostId
+  onSuccess?: (result: {
+    added: boolean
+    reactions: Array<{ emoji: string; count: number; hasReacted: boolean }>
+  }) => void
+  onError?: (error: Error) => void
+}
+
+// ============================================================================
+// Query Key Factory
+// ============================================================================
+
+export const commentKeys = {
+  all: ['comments'] as const,
+  permissions: () => [...commentKeys.all, 'permissions'] as const,
+  permission: (commentId: CommentId) => [...commentKeys.permissions(), commentId] as const,
+}
+
+// ============================================================================
+// Query Hook
+// ============================================================================
+
+/**
+ * Hook to get edit/delete permissions for a comment.
+ */
+export function useCommentPermissions({
+  commentId,
+  enabled = true,
+}: {
+  commentId: CommentId
+  enabled?: boolean
+}) {
+  return useQuery({
+    queryKey: commentKeys.permission(commentId),
+    queryFn: async (): Promise<CommentPermissions> => {
+      try {
+        return await getCommentPermissionsFn({ data: { commentId } })
+      } catch {
+        return { canEdit: false, canDelete: false }
+      }
+    },
+    enabled,
+    staleTime: 30 * 1000,
+  })
+}
+
+// ============================================================================
+// Mutation Hooks
+// ============================================================================
+
 /**
  * Hook to create a comment on a post with optimistic updates.
  */
 export function useCreateComment({ postId, author, onSuccess, onError }: UseCreateCommentOptions) {
   const queryClient = useQueryClient()
+  const queryKey = ['portal', 'post', postId]
 
   return useMutation({
-    mutationFn: async (input: CreateCommentInput) => {
-      return await createCommentFn({
+    mutationFn: (input: CreateCommentInput) =>
+      createCommentFn({
         data: {
           postId,
           content: input.content,
           parentId: (input.parentId || undefined) as CommentId | undefined,
         },
-      })
-    },
+      }),
     onMutate: async (input) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['portal', 'post', postId] })
+      await queryClient.cancelQueries({ queryKey })
+      const previousPost = queryClient.getQueryData(queryKey)
 
-      // Snapshot previous value
-      const previousPost = queryClient.getQueryData(['portal', 'post', postId])
-
-      // Get author info from input (preferred) or hook options
       const authorName = input.authorName ?? author?.name ?? author?.email ?? null
       const memberId = input.memberId ?? author?.memberId ?? null
 
-      // Optimistically add the new comment
       if (previousPost && (authorName || author)) {
         const optimisticComment: OptimisticComment = {
           id: `comment_optimistic_${Date.now()}` as CommentId,
@@ -131,105 +150,42 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           reactions: [],
         }
 
-        queryClient.setQueryData(['portal', 'post', postId], (old: unknown) => {
+        queryClient.setQueryData(queryKey, (old: unknown) => {
           if (!old || typeof old !== 'object') return old
           const post = old as { comments: OptimisticComment[] }
-
-          if (input.parentId) {
-            // Adding a reply - find parent comment and add to its replies
-            const addReplyToComment = (comments: OptimisticComment[]): OptimisticComment[] => {
-              return comments.map((comment) => {
-                if (comment.id === input.parentId) {
-                  return {
-                    ...comment,
-                    replies: [...comment.replies, optimisticComment],
-                  }
-                }
-                if (comment.replies.length > 0) {
-                  return {
-                    ...comment,
-                    replies: addReplyToComment(comment.replies),
-                  }
-                }
-                return comment
-              })
-            }
-            return {
-              ...post,
-              comments: addReplyToComment(post.comments),
-            }
-          } else {
-            // Adding a top-level comment
-            return {
-              ...post,
-              comments: [optimisticComment, ...post.comments],
-            }
-          }
+          const comments = input.parentId
+            ? addReplyToComments(post.comments, input.parentId, optimisticComment)
+            : [optimisticComment, ...post.comments]
+          return { ...post, comments }
         })
       }
 
       return { previousPost }
     },
     onError: (error: Error, _variables, context) => {
-      // Rollback on error
       if (context?.previousPost) {
-        queryClient.setQueryData(['portal', 'post', postId], context.previousPost)
+        queryClient.setQueryData(queryKey, context.previousPost)
       }
       onError?.(error)
     },
     onSuccess: (data, input) => {
-      // Replace optimistic comment with real server data (no refetch needed)
-      const serverComment = data as { comment: { id: CommentId; content: string; createdAt: Date } }
-
-      queryClient.setQueryData(['portal', 'post', postId], (old: unknown) => {
+      const serverComment = data as { comment: { id: CommentId; createdAt: Date } }
+      queryClient.setQueryData(queryKey, (old: unknown) => {
         if (!old || typeof old !== 'object') return old
         const post = old as { comments: OptimisticComment[] }
-
-        const replaceOptimisticComment = (comments: OptimisticComment[]): OptimisticComment[] => {
-          return comments.map((comment) => {
-            // Replace optimistic comment with real one
-            if (comment.id.startsWith('comment_optimistic_')) {
-              // Check if this is the one we just created (same content and parent)
-              const sameParent = (comment.parentId || null) === (input.parentId || null)
-              const sameContent = comment.content === input.content
-              if (sameParent && sameContent) {
-                return {
-                  ...comment,
-                  id: serverComment.comment.id,
-                  createdAt:
-                    typeof serverComment.comment.createdAt === 'string'
-                      ? serverComment.comment.createdAt
-                      : serverComment.comment.createdAt.toISOString(),
-                }
-              }
-            }
-            // Recurse into replies
-            if (comment.replies.length > 0) {
-              return {
-                ...comment,
-                replies: replaceOptimisticComment(comment.replies),
-              }
-            }
-            return comment
-          })
-        }
-
         return {
           ...post,
-          comments: replaceOptimisticComment(post.comments),
+          comments: replaceOptimisticInComments(
+            post.comments,
+            input.parentId ?? null,
+            input.content,
+            serverComment.comment
+          ),
         }
       })
-
       onSuccess?.(data)
     },
   })
-}
-
-interface UseEditCommentOptions {
-  commentId: CommentId
-  postId: PostId
-  onSuccess?: (comment: unknown) => void
-  onError?: (error: Error) => void
 }
 
 /**
@@ -239,27 +195,14 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (content: string) => {
-      return await userEditCommentFn({ data: { commentId, content } })
-    },
+    mutationFn: (content: string) => userEditCommentFn({ data: { commentId, content } }),
     onSuccess: (data) => {
-      // Invalidate post details to refresh comments
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
-      // Invalidate permissions as they may have changed
       queryClient.invalidateQueries({ queryKey: commentKeys.permission(commentId) })
       onSuccess?.(data)
     },
-    onError: (error: Error) => {
-      onError?.(error)
-    },
+    onError,
   })
-}
-
-interface UseDeleteCommentOptions {
-  commentId: CommentId
-  postId: PostId
-  onSuccess?: () => void
-  onError?: (error: Error) => void
 }
 
 /**
@@ -274,28 +217,13 @@ export function useDeleteComment({
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async () => {
-      return await userDeleteCommentFn({ data: { commentId } })
-    },
+    mutationFn: () => userDeleteCommentFn({ data: { commentId } }),
     onSuccess: () => {
-      // Invalidate post details to refresh comments
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       onSuccess?.()
     },
-    onError: (error: Error) => {
-      onError?.(error)
-    },
+    onError,
   })
-}
-
-interface UseToggleReactionOptions {
-  commentId: CommentId
-  postId: PostId
-  onSuccess?: (result: {
-    added: boolean
-    reactions: Array<{ emoji: string; count: number; hasReacted: boolean }>
-  }) => void
-  onError?: (error: Error) => void
 }
 
 /**
@@ -310,16 +238,61 @@ export function useToggleReaction({
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (emoji: string) => {
-      return await toggleReactionFn({ data: { commentId, emoji } })
-    },
+    mutationFn: (emoji: string) => toggleReactionFn({ data: { commentId, emoji } }),
     onSuccess: (data) => {
-      // Invalidate post details to refresh reaction counts
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       onSuccess?.(data)
     },
-    onError: (error: Error) => {
-      onError?.(error)
-    },
+    onError,
+  })
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Add a reply to the correct parent in a nested comment structure */
+function addReplyToComments(
+  comments: OptimisticComment[],
+  parentId: string,
+  reply: OptimisticComment
+): OptimisticComment[] {
+  return comments.map((comment) => {
+    if (comment.id === parentId) {
+      return { ...comment, replies: [...comment.replies, reply] }
+    }
+    if (comment.replies.length > 0) {
+      return { ...comment, replies: addReplyToComments(comment.replies, parentId, reply) }
+    }
+    return comment
+  })
+}
+
+/** Replace optimistic comment with real server data */
+function replaceOptimisticInComments(
+  comments: OptimisticComment[],
+  parentId: string | null,
+  content: string,
+  serverComment: { id: CommentId; createdAt: Date }
+): OptimisticComment[] {
+  return comments.map((comment) => {
+    if (comment.id.startsWith('comment_optimistic_')) {
+      const sameParent = (comment.parentId || null) === (parentId || null)
+      const sameContent = comment.content === content
+      if (sameParent && sameContent) {
+        const createdAt =
+          typeof serverComment.createdAt === 'string'
+            ? serverComment.createdAt
+            : serverComment.createdAt.toISOString()
+        return { ...comment, id: serverComment.id, createdAt }
+      }
+    }
+    if (comment.replies.length > 0) {
+      return {
+        ...comment,
+        replies: replaceOptimisticInComments(comment.replies, parentId, content, serverComment),
+      }
+    }
+    return comment
   })
 }

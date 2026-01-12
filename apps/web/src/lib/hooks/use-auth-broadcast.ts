@@ -1,11 +1,28 @@
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 const CHANNEL_NAME = 'quackback-auth'
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface AuthBroadcastMessage {
   type: 'auth-success'
   timestamp: number
 }
+
+interface UseAuthBroadcastOptions {
+  onSuccess?: () => void
+  enabled?: boolean
+}
+
+interface UsePopupTrackerOptions {
+  onPopupClosed?: () => void
+}
+
+// ============================================================================
+// Broadcast Hooks
+// ============================================================================
 
 /**
  * Hook for listening to auth success broadcasts from popup windows.
@@ -17,8 +34,7 @@ interface AuthBroadcastMessage {
  * Note: The callback is responsible for handling session refresh.
  * Use refetchSession() from useSession for smooth updates without page reloads.
  */
-export function useAuthBroadcast(options: { onSuccess?: () => void; enabled?: boolean }) {
-  const { onSuccess, enabled = true } = options
+export function useAuthBroadcast({ onSuccess, enabled = true }: UseAuthBroadcastOptions): void {
   const onSuccessRef = useRef(onSuccess)
 
   // Keep callback ref updated without re-running effect
@@ -33,7 +49,6 @@ export function useAuthBroadcast(options: { onSuccess?: () => void; enabled?: bo
 
     channel.onmessage = (event: MessageEvent<AuthBroadcastMessage>) => {
       if (event.data.type === 'auth-success') {
-        // Call success callback - caller handles session refresh
         onSuccessRef.current?.()
       }
     }
@@ -43,6 +58,10 @@ export function useAuthBroadcast(options: { onSuccess?: () => void; enabled?: bo
     }
   }, [enabled])
 }
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
 /**
  * Post auth success message to other windows.
@@ -77,55 +96,22 @@ export function openAuthPopup(url: string): Window | null {
   return popup
 }
 
+// ============================================================================
+// Popup Tracker Hook
+// ============================================================================
+
 /**
  * Hook to track popup window state and detect if user closes it early.
  */
-export function usePopupTracker(options: { onPopupClosed?: () => void }) {
-  const { onPopupClosed } = options
+export function usePopupTracker({ onPopupClosed }: UsePopupTrackerOptions) {
   const popupRef = useRef<Window | null>(null)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const onPopupClosedRef = useRef(onPopupClosed)
 
-  const trackPopup = useCallback(
-    (popup: Window | null) => {
-      popupRef.current = popup
-
-      // Clear any existing interval
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-
-      if (!popup) return
-
-      // Poll to detect if popup was closed without completing auth
-      intervalRef.current = setInterval(() => {
-        if (popup.closed) {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current)
-            intervalRef.current = null
-          }
-          popupRef.current = null
-          onPopupClosed?.()
-        }
-      }, 500)
-    },
-    [onPopupClosed]
-  )
-
-  const clearPopup = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-    popupRef.current = null
-  }, [])
-
-  const focusPopup = useCallback(() => {
-    popupRef.current?.focus()
-  }, [])
-
-  const hasPopup = useCallback(() => {
-    return popupRef.current !== null && !popupRef.current.closed
-  }, [])
+  // Keep callback ref updated
+  useEffect(() => {
+    onPopupClosedRef.current = onPopupClosed
+  }, [onPopupClosed])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -136,10 +122,43 @@ export function usePopupTracker(options: { onPopupClosed?: () => void }) {
     }
   }, [])
 
-  return {
-    trackPopup,
-    clearPopup,
-    focusPopup,
-    hasPopup,
+  function trackPopup(popup: Window | null): void {
+    popupRef.current = popup
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
+
+    if (!popup) return
+
+    // Poll to detect if popup was closed without completing auth
+    intervalRef.current = setInterval(() => {
+      if (popup.closed) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
+        popupRef.current = null
+        onPopupClosedRef.current?.()
+      }
+    }, 500)
   }
+
+  function clearPopup(): void {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    popupRef.current = null
+  }
+
+  function focusPopup(): void {
+    popupRef.current?.focus()
+  }
+
+  function hasPopup(): boolean {
+    return popupRef.current !== null && !popupRef.current.closed
+  }
+
+  return { trackPopup, clearPopup, focusPopup, hasPopup }
 }

@@ -10,6 +10,10 @@ import {
 } from '@/lib/server-functions/roadmaps'
 import { listPublicRoadmapsFn } from '@/lib/server-functions/public-posts'
 
+// ============================================================================
+// Types
+// ============================================================================
+
 /** Roadmap type for client components (Date fields may be strings after serialization) */
 export interface RoadmapView {
   id: RoadmapId
@@ -22,6 +26,27 @@ export interface RoadmapView {
   updatedAt: Date | string
 }
 
+interface UseRoadmapsOptions {
+  enabled?: boolean
+}
+
+interface CreateRoadmapInput {
+  name: string
+  slug: string
+  description?: string
+  isPublic?: boolean
+}
+
+interface UpdateRoadmapInput {
+  name?: string
+  description?: string
+  isPublic?: boolean
+}
+
+// ============================================================================
+// Query Key Factory
+// ============================================================================
+
 export const roadmapsKeys = {
   all: ['roadmaps'] as const,
   list: () => [...roadmapsKeys.all, 'list'] as const,
@@ -29,9 +54,9 @@ export const roadmapsKeys = {
   detail: (roadmapId: RoadmapId) => [...roadmapsKeys.all, 'detail', roadmapId] as const,
 }
 
-interface UseRoadmapsOptions {
-  enabled?: boolean
-}
+// ============================================================================
+// Query Hooks
+// ============================================================================
 
 /**
  * Hook to fetch all roadmaps (admin)
@@ -39,9 +64,7 @@ interface UseRoadmapsOptions {
 export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.list(),
-    queryFn: async (): Promise<Roadmap[]> => {
-      return (await fetchRoadmaps()) as unknown as Roadmap[]
-    },
+    queryFn: fetchRoadmaps as unknown as () => Promise<Roadmap[]>,
     enabled,
   })
 }
@@ -52,20 +75,14 @@ export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
 export function usePublicRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
   return useQuery({
     queryKey: roadmapsKeys.publicList(),
-    queryFn: async (): Promise<RoadmapView[]> => {
-      const result = await listPublicRoadmapsFn()
-      return result as RoadmapView[]
-    },
+    queryFn: listPublicRoadmapsFn as () => Promise<RoadmapView[]>,
     enabled,
   })
 }
 
-interface CreateRoadmapInput {
-  name: string
-  slug: string
-  description?: string
-  isPublic?: boolean
-}
+// ============================================================================
+// Mutation Hooks
+// ============================================================================
 
 /**
  * Hook to create a new roadmap
@@ -74,26 +91,19 @@ export function useCreateRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreateRoadmapInput): Promise<Roadmap> => {
-      return (await createRoadmapFn({
+    mutationFn: (input: CreateRoadmapInput) =>
+      createRoadmapFn({
         data: {
           name: input.name,
           slug: input.slug,
           description: input.description,
           isPublic: input.isPublic,
         },
-      })) as unknown as Roadmap
-    },
+      }) as unknown as Promise<Roadmap>,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
   })
-}
-
-interface UpdateRoadmapInput {
-  name?: string
-  description?: string
-  isPublic?: boolean
 }
 
 /**
@@ -103,22 +113,15 @@ export function useUpdateRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({
-      roadmapId,
-      input,
-    }: {
-      roadmapId: RoadmapId
-      input: UpdateRoadmapInput
-    }): Promise<Roadmap> => {
-      return (await updateRoadmapFn({
+    mutationFn: ({ roadmapId, input }: { roadmapId: RoadmapId; input: UpdateRoadmapInput }) =>
+      updateRoadmapFn({
         data: {
           id: roadmapId,
           name: input.name,
           description: input.description,
           isPublic: input.isPublic,
         },
-      })) as unknown as Roadmap
-    },
+      }) as unknown as Promise<Roadmap>,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
@@ -132,13 +135,7 @@ export function useDeleteRoadmap() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (roadmapId: RoadmapId): Promise<void> => {
-      await deleteRoadmapFn({
-        data: {
-          id: roadmapId,
-        },
-      })
-    },
+    mutationFn: (roadmapId: RoadmapId) => deleteRoadmapFn({ data: { id: roadmapId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
@@ -152,13 +149,7 @@ export function useReorderRoadmaps() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (roadmapIds: string[]): Promise<void> => {
-      await reorderRoadmapsFn({
-        data: {
-          roadmapIds,
-        },
-      })
-    },
+    mutationFn: (roadmapIds: string[]) => reorderRoadmapsFn({ data: { roadmapIds } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },

@@ -26,6 +26,79 @@ import type { BoardId, CommentId, MemberId, PostId, StatusId, TagId } from '@qua
 import { roadmapPostsKeys } from './use-roadmap-posts-query'
 
 // ============================================================================
+// Types
+// ============================================================================
+
+interface UseInboxPostsOptions {
+  filters: InboxFilters
+  initialData?: InboxPostListResult
+}
+
+interface UsePostDetailOptions {
+  postId: PostId | null
+  enabled?: boolean
+}
+
+interface UpdateTagsInput {
+  postId: PostId
+  tagIds: string[]
+  allTags: Tag[]
+}
+
+interface ToggleReactionInput {
+  postId: PostId
+  commentId: CommentId
+  emoji: string
+}
+
+interface ToggleReactionResponse {
+  reactions: CommentReaction[]
+}
+
+interface UpdatePostInput {
+  postId: PostId
+  title: string
+  content: string
+  contentJson: unknown
+  statusId?: StatusId | null
+  boardId?: string
+  tagIds?: string[]
+  allTags?: Tag[]
+}
+
+interface UpdatePostResponse {
+  id: string
+  title: string
+  content: string
+  contentJson: unknown
+  statusId: StatusId | null
+  boardId: string
+}
+
+interface VotePostResponse {
+  voteCount: number
+  voted: boolean
+}
+
+interface AddCommentInput {
+  postId: string
+  content: string
+  parentId?: string | null
+  authorName?: string | null
+  authorEmail?: string | null
+  memberId?: string | null
+}
+
+interface CreatePostInput {
+  title: string
+  content: string
+  contentJson?: unknown
+  boardId: BoardId
+  statusId?: StatusId
+  tagIds: TagId[]
+}
+
+// ============================================================================
 // Query Key Factory
 // ============================================================================
 
@@ -71,11 +144,6 @@ async function fetchPostDetail(postId: PostId): Promise<PostDetails> {
 // Query Hooks
 // ============================================================================
 
-interface UseInboxPostsOptions {
-  filters: InboxFilters
-  initialData?: InboxPostListResult
-}
-
 export function useInboxPosts({ filters, initialData }: UseInboxPostsOptions) {
   return useInfiniteQuery({
     queryKey: inboxKeys.list(filters),
@@ -92,17 +160,16 @@ export function useInboxPosts({ filters, initialData }: UseInboxPostsOptions) {
   })
 }
 
-// Helper to flatten paginated posts into a single array
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Flatten paginated posts into a single array */
 export function flattenInboxPosts(
   data: InfiniteData<InboxPostListResult> | undefined
 ): PostListItem[] {
   if (!data) return []
   return data.pages.flatMap((page) => page.items)
-}
-
-interface UsePostDetailOptions {
-  postId: PostId | null
-  enabled?: boolean
 }
 
 export function usePostDetail({ postId, enabled = true }: UsePostDetailOptions) {
@@ -115,16 +182,57 @@ export function usePostDetail({ postId, enabled = true }: UsePostDetailOptions) 
 }
 
 // ============================================================================
+// Cache Update Helpers
+// ============================================================================
+
+/** Rollback helper for mutations that update both detail and list caches */
+function rollbackDetailAndLists<T>(
+  queryClient: ReturnType<typeof useQueryClient>,
+  postId: PostId,
+  context?: {
+    previousDetail?: T
+    previousLists?: [readonly unknown[], InfiniteData<InboxPostListResult> | undefined][]
+  }
+): void {
+  if (context?.previousDetail) {
+    queryClient.setQueryData(inboxKeys.detail(postId), context.previousDetail)
+  }
+  if (context?.previousLists) {
+    for (const [queryKey, data] of context.previousLists) {
+      if (data) {
+        queryClient.setQueryData(queryKey, data)
+      }
+    }
+  }
+}
+
+/** Update a post in all list caches */
+function updatePostInLists(
+  queryClient: ReturnType<typeof useQueryClient>,
+  postId: PostId,
+  updater: (post: PostListItem) => PostListItem
+): void {
+  queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
+    { queryKey: inboxKeys.lists() },
+    (old) => {
+      if (!old) return old
+      return {
+        ...old,
+        pages: old.pages.map((page) => ({
+          ...page,
+          items: page.items.map((post) => (post.id === postId ? updater(post) : post)),
+        })),
+      }
+    }
+  )
+}
+
+// ============================================================================
 // Mutation Hooks
 // ============================================================================
 
-/**
- * @deprecated Use useChangePostStatusId instead - the legacy status field has been removed
- */
-export function useUpdatePostStatus() {
-  const changeStatusId = useChangePostStatusId()
-  return changeStatusId
-}
+/** @deprecated Use useChangePostStatusId instead */
+export const useUpdatePostStatus = useChangePostStatusId
 
 /**
  * Hook to change a post's status using TypeID-based statusId
@@ -133,14 +241,8 @@ export function useChangePostStatusId() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, statusId }: { postId: PostId; statusId: StatusId }) => {
-      return await changePostStatusFn({
-        data: {
-          id: postId,
-          statusId,
-        },
-      })
-    },
+    mutationFn: ({ postId, statusId }: { postId: PostId; statusId: StatusId }) =>
+      changePostStatusFn({ data: { id: postId, statusId } }),
     onSuccess: (_data, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
@@ -153,20 +255,13 @@ export function useUpdatePostOwner() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, ownerId }: { postId: PostId; ownerId: MemberId | null }) => {
-      return await updatePostFn({
-        data: {
-          id: postId,
-          ownerId,
-        },
-      })
-    },
+    mutationFn: ({ postId, ownerId }: { postId: PostId; ownerId: MemberId | null }) =>
+      updatePostFn({ data: { id: postId, ownerId } }),
     onMutate: async ({ postId, ownerId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       const previousDetail = queryClient.getQueryData<PostDetails>(inboxKeys.detail(postId))
-
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
         queryKey: inboxKeys.lists(),
       })
@@ -177,34 +272,12 @@ export function useUpdatePostOwner() {
           ownerId,
         })
       }
-
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) => (post.id === postId ? { ...post, ownerId } : post)),
-            })),
-          }
-        }
-      )
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, ownerId }))
 
       return { previousDetail, previousLists }
     },
     onError: (_err, { postId }, context) => {
-      if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId), context.previousDetail)
-      }
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
+      rollbackDetailAndLists(queryClient, postId, context)
     },
     onSettled: (_data, _error, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
@@ -212,30 +285,17 @@ export function useUpdatePostOwner() {
   })
 }
 
-interface UpdateTagsInput {
-  postId: PostId
-  tagIds: string[]
-  allTags: Tag[]
-}
-
 export function useUpdatePostTags() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, tagIds }: UpdateTagsInput) => {
-      return await updatePostTagsFn({
-        data: {
-          id: postId,
-          tagIds: tagIds as TagId[],
-        },
-      })
-    },
+    mutationFn: ({ postId, tagIds }: UpdateTagsInput) =>
+      updatePostTagsFn({ data: { id: postId, tagIds: tagIds as TagId[] } }),
     onMutate: async ({ postId, tagIds, allTags }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
 
       const previousDetail = queryClient.getQueryData<PostDetails>(inboxKeys.detail(postId))
-
       const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
         queryKey: inboxKeys.lists(),
       })
@@ -251,36 +311,12 @@ export function useUpdatePostTags() {
           tags: mappedTags,
         })
       }
-
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) =>
-                post.id === postId ? { ...post, tags: mappedTags } : post
-              ),
-            })),
-          }
-        }
-      )
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, tags: mappedTags }))
 
       return { previousDetail, previousLists }
     },
     onError: (_err, { postId }, context) => {
-      if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId), context.previousDetail)
-      }
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
+      rollbackDetailAndLists(queryClient, postId, context)
     },
     onSettled: (_data, _error, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
@@ -292,35 +328,30 @@ export function useUpdateOfficialResponse() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, response }: { postId: PostId; response: string | null }) => {
-      return await updatePostFn({
-        data: {
-          id: postId,
-          officialResponse: response,
-        },
-      })
-    },
+    mutationFn: ({ postId, response }: { postId: PostId; response: string | null }) =>
+      updatePostFn({ data: { id: postId, officialResponse: response } }),
     onSuccess: (data, { postId }) => {
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) => {
-        if (!old) return old
-        const typedData = data as {
-          officialResponse?: string | null
-          officialResponseAuthorName?: string | null
-          officialResponseAt?: string | null
-        }
-        return {
-          ...old,
-          officialResponse: typedData.officialResponse
-            ? {
-                content: typedData.officialResponse,
-                authorName: typedData.officialResponseAuthorName ?? null,
-                respondedAt: typedData.officialResponseAt
-                  ? new Date(typedData.officialResponseAt)
-                  : new Date(),
-              }
-            : null,
-        }
-      })
+      const typedData = data as {
+        officialResponse?: string | null
+        officialResponseAuthorName?: string | null
+        officialResponseAt?: string | null
+      }
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
+        old
+          ? {
+              ...old,
+              officialResponse: typedData.officialResponse
+                ? {
+                    content: typedData.officialResponse,
+                    authorName: typedData.officialResponseAuthorName ?? null,
+                    respondedAt: typedData.officialResponseAt
+                      ? new Date(typedData.officialResponseAt)
+                      : new Date(),
+                  }
+                : null,
+            }
+          : old
+      )
     },
     onSettled: (_data, _error, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
@@ -331,16 +362,6 @@ export function useUpdateOfficialResponse() {
 // ============================================================================
 // Comment Reaction Mutation
 // ============================================================================
-
-interface ToggleReactionInput {
-  postId: PostId
-  commentId: CommentId
-  emoji: string
-}
-
-interface ToggleReactionResponse {
-  reactions: CommentReaction[]
-}
 
 export function useToggleCommentReaction() {
   const queryClient = useQueryClient()
@@ -449,45 +470,24 @@ function updateCommentReactionsFromServer(
 // Update Post Mutation (for edit dialog)
 // ============================================================================
 
-interface UpdatePostInput {
-  postId: PostId
-  title: string
-  content: string
-  contentJson: unknown
-  statusId?: StatusId | null
-  boardId?: string
-  tagIds?: string[]
-  allTags?: Tag[]
-}
-
-interface UpdatePostResponse {
-  id: string
-  title: string
-  content: string
-  contentJson: unknown
-  statusId: StatusId | null
-  boardId: string
-}
-
 export function useUpdatePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       postId,
       title,
       content,
       contentJson,
-    }: UpdatePostInput): Promise<UpdatePostResponse> => {
-      return (await updatePostFn({
+    }: UpdatePostInput): Promise<UpdatePostResponse> =>
+      updatePostFn({
         data: {
           id: postId,
           title,
           content,
           contentJson: contentJson as { type: 'doc'; content?: unknown[] },
         },
-      })) as UpdatePostResponse
-    },
+      }) as Promise<UpdatePostResponse>,
     onMutate: async ({ postId, title, content, contentJson, statusId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
@@ -506,50 +506,30 @@ export function useUpdatePost() {
           statusId: statusId ?? previousDetail.statusId,
         })
       }
-
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) =>
-                post.id === postId
-                  ? { ...post, title, content, statusId: statusId ?? post.statusId }
-                  : post
-              ),
-            })),
-          }
-        }
-      )
+      updatePostInLists(queryClient, postId, (post) => ({
+        ...post,
+        title,
+        content,
+        statusId: statusId ?? post.statusId,
+      }))
 
       return { previousDetail, previousLists }
     },
     onError: (_err, { postId }, context) => {
-      if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId), context.previousDetail)
-      }
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
+      rollbackDetailAndLists(queryClient, postId, context)
     },
     onSuccess: (data, { postId }) => {
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) => {
-        if (!old) return old
-        return {
-          ...old,
-          title: data.title,
-          content: data.content,
-          contentJson: data.contentJson,
-          statusId: data.statusId,
-        }
-      })
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
+        old
+          ? {
+              ...old,
+              title: data.title,
+              content: data.content,
+              contentJson: data.contentJson,
+              statusId: data.statusId,
+            }
+          : old
+      )
     },
     onSettled: (_data, _error, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
@@ -560,11 +540,6 @@ export function useUpdatePost() {
 // ============================================================================
 // Vote Post Mutation (for admin inbox)
 // ============================================================================
-
-interface VotePostResponse {
-  voteCount: number
-  voted: boolean
-}
 
 export function useVotePost() {
   const queryClient = useQueryClient()
@@ -580,74 +555,31 @@ export function useVotePost() {
         queryKey: inboxKeys.lists(),
       })
 
+      const wasVoted = previousDetail?.hasVoted ?? false
+      const voteDelta = wasVoted ? -1 : 1
+
       if (previousDetail) {
-        const newHasVoted = !previousDetail.hasVoted
         queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
           ...previousDetail,
-          hasVoted: newHasVoted,
-          voteCount: newHasVoted ? previousDetail.voteCount + 1 : previousDetail.voteCount - 1,
+          hasVoted: !wasVoted,
+          voteCount: previousDetail.voteCount + voteDelta,
         })
       }
-
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) => {
-                if (post.id !== postId) return post
-                return {
-                  ...post,
-                  voteCount: post.voteCount + (previousDetail?.hasVoted ? -1 : 1),
-                }
-              }),
-            })),
-          }
-        }
-      )
+      updatePostInLists(queryClient, postId, (post) => ({
+        ...post,
+        voteCount: post.voteCount + voteDelta,
+      }))
 
       return { previousDetail, previousLists }
     },
     onError: (_err, postId, context) => {
-      if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(postId), context.previousDetail)
-      }
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
+      rollbackDetailAndLists(queryClient, postId, context)
     },
     onSuccess: (data, postId) => {
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) => {
-        if (!old) return old
-        return {
-          ...old,
-          voteCount: data.voteCount,
-          hasVoted: data.voted,
-        }
-      })
-
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) =>
-                post.id === postId ? { ...post, voteCount: data.voteCount } : post
-              ),
-            })),
-          }
-        }
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
+        old ? { ...old, voteCount: data.voteCount, hasVoted: data.voted } : old
       )
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, voteCount: data.voteCount }))
     },
   })
 }
@@ -656,40 +588,18 @@ export function useVotePost() {
 // Add Comment Mutation
 // ============================================================================
 
-interface AddCommentInput {
-  postId: string
-  content: string
-  parentId?: string | null
-  authorName?: string | null
-  authorEmail?: string | null
-  memberId?: string | null
-}
-
-interface _AddCommentResponse {
-  id: string
-  postId: string
-  content: string
-  authorName: string | null
-  authorEmail: string | null
-  memberId: string | null
-  parentId: string | null
-  isTeamMember: boolean
-  createdAt: string
-}
-
 export function useAddComment() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ postId, content, parentId }: AddCommentInput) => {
-      return await createCommentFn({
+    mutationFn: ({ postId, content, parentId }: AddCommentInput) =>
+      createCommentFn({
         data: {
           postId: postId as PostId,
           content: content.trim(),
           parentId: (parentId || undefined) as CommentId | undefined,
         },
-      })
-    },
+      }),
     onMutate: async ({ postId, content, parentId, authorName, authorEmail, memberId }) => {
       const typedPostId = postId as PostId
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(typedPostId) })
@@ -709,7 +619,7 @@ export function useAddComment() {
         authorEmail: authorEmail || null,
         memberId: (memberId || null) as MemberId | null,
         parentId: (parentId || null) as CommentId | null,
-        isTeamMember: !!memberId, // Team member if they have a memberId
+        isTeamMember: !!memberId,
         createdAt: new Date(),
         deletedAt: null,
         replies: [],
@@ -720,83 +630,63 @@ export function useAddComment() {
         const updatedComments = parentId
           ? addReplyToComment(previousDetail.comments, parentId as CommentId, optimisticComment)
           : [...previousDetail.comments, optimisticComment]
-
         queryClient.setQueryData<PostDetails>(inboxKeys.detail(typedPostId), {
           ...previousDetail,
           comments: updatedComments,
         })
       }
-
-      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-        { queryKey: inboxKeys.lists() },
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((post) =>
-                post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post
-              ),
-            })),
-          }
-        }
-      )
+      updatePostInLists(queryClient, typedPostId, (post) => ({
+        ...post,
+        commentCount: post.commentCount + 1,
+      }))
 
       return { previousDetail, previousLists }
     },
     onError: (_err, { postId }, context) => {
-      const typedPostId = postId as PostId
-      if (context?.previousDetail) {
-        queryClient.setQueryData(inboxKeys.detail(typedPostId), context.previousDetail)
-      }
-      if (context?.previousLists) {
-        for (const [queryKey, data] of context.previousLists) {
-          if (data) {
-            queryClient.setQueryData(queryKey, data)
-          }
-        }
-      }
+      rollbackDetailAndLists(queryClient, postId as PostId, context)
     },
     onSuccess: (data, { postId, content, parentId }) => {
-      // Replace optimistic comment with real server data (no refetch needed)
       const typedPostId = postId as PostId
       const serverComment = data as { comment: { id: CommentId; createdAt: Date } }
 
       queryClient.setQueryData<PostDetails>(inboxKeys.detail(typedPostId), (old) => {
         if (!old) return old
-
-        const replaceOptimisticComment = (comments: CommentWithReplies[]): CommentWithReplies[] => {
-          return comments.map((comment) => {
-            // Replace optimistic comment with real one
-            if (comment.id.startsWith('comment_temp')) {
-              const sameParent = (comment.parentId || null) === (parentId || null)
-              const sameContent = comment.content === content
-              if (sameParent && sameContent) {
-                return {
-                  ...comment,
-                  id: serverComment.comment.id,
-                  createdAt: serverComment.comment.createdAt,
-                }
-              }
-            }
-            // Recurse into replies
-            if (comment.replies.length > 0) {
-              return {
-                ...comment,
-                replies: replaceOptimisticComment(comment.replies),
-              }
-            }
-            return comment
-          })
-        }
-
         return {
           ...old,
-          comments: replaceOptimisticComment(old.comments),
+          comments: replaceOptimisticComment(
+            old.comments,
+            parentId ?? null,
+            content,
+            serverComment.comment
+          ),
         }
       })
     },
+  })
+}
+
+/** Replace optimistic comment with real server data */
+function replaceOptimisticComment(
+  comments: CommentWithReplies[],
+  parentId: string | null,
+  content: string,
+  serverComment: { id: CommentId; createdAt: Date }
+): CommentWithReplies[] {
+  return comments.map((comment) => {
+    if (comment.id.startsWith('comment_temp')) {
+      const sameParent = (comment.parentId || null) === (parentId || null)
+      const sameContent = comment.content === content
+      if (sameParent && sameContent) {
+        return { ...comment, id: serverComment.id, createdAt: serverComment.createdAt }
+      }
+    }
+    if (comment.replies.length > 0) {
+      return {
+        ...comment,
+        replies: replaceOptimisticComment(comment.replies, parentId, content, serverComment),
+      }
+    }
+    return comment
   })
 }
 
@@ -804,40 +694,21 @@ export function useAddComment() {
 // Create Post Mutation (for admin create dialog)
 // ============================================================================
 
-interface CreatePostInput {
-  title: string
-  content: string
-  contentJson?: unknown
-  boardId: BoardId
-  statusId?: StatusId
-  tagIds: TagId[]
-}
-
-interface CreatePostResponse {
-  id: string
-  title: string
-  content: string
-  contentJson: unknown
-  statusId: StatusId | null
-  boardId: string
-}
-
 export function useCreatePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: CreatePostInput): Promise<CreatePostResponse> => {
-      return (await createPostFn({
+    mutationFn: (input: CreatePostInput) =>
+      createPostFn({
         data: {
           title: input.title,
           content: input.content,
           contentJson: input.contentJson as { type: 'doc'; content?: unknown[] },
-          boardId: input.boardId as BoardId,
+          boardId: input.boardId,
           statusId: input.statusId,
-          tagIds: input.tagIds as TagId[],
+          tagIds: input.tagIds,
         },
-      })) as CreatePostResponse
-    },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
     },
