@@ -16,7 +16,7 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
           <h2 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground px-4 pt-4 pb-3">
             Boards
           </h2>
-          <nav className="space-y-1 px-4 pb-4 max-h-[calc(100vh-14rem)] overflow-y-auto scrollbar-thin">
+          <nav className="space-y-1 px-4 pb-4 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
             {/* View all posts */}
             <Link
               to="/"
@@ -68,22 +68,24 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
         </div>
 
         {/* Powered by */}
-        <a
-          href="https://quackback.io"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-3"
-        >
-          <span>Powered by</span>
-          <img
-            src="/logo.png"
-            alt=""
-            width={12}
-            height={12}
-            className="opacity-50 group-hover:opacity-100 transition-opacity"
-          />
-          <span className="font-medium">Quackback</span>
-        </a>
+        <div className="flex justify-center mt-3">
+          <a
+            href="https://quackback.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-all px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50"
+          >
+            <span>Powered by</span>
+            <img
+              src="/logo.png"
+              alt=""
+              width={11}
+              height={11}
+              className="opacity-60 group-hover:opacity-100 transition-opacity"
+            />
+            <span className="font-medium">Quackback</span>
+          </a>
+        </div>
       </div>
     </aside>
   )
