@@ -355,8 +355,8 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         throw new Error('Organization settings not found')
       }
 
-      // Dispatch post.created event (fire-and-forget)
-      dispatchPostCreated(
+      // Dispatch post.created event (must await for Cloudflare Workers)
+      await dispatchPostCreated(
         { type: 'user', userId: ctx.user.id as UserId, email: ctx.user.email },
         {
           id: post.id,
@@ -529,10 +529,14 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
+    const startTime = Date.now()
     console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
     try {
       const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
+      console.log(
+        `[fn:public-posts] getVoteSidebarDataFn: auth resolved in ${Date.now() - startTime}ms`
+      )
 
       let isMember = false
       let hasVoted = false
@@ -550,13 +554,17 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         const userIdentifier = getMemberIdentifier(ctx.member.id)
         isMember = true
 
-        hasVoted = await hasUserVoted(postId, userIdentifier)
-
-        subscriptionStatus = await getSubscriptionStatus(ctx.member.id, postId)
+        // Run queries in parallel for better performance
+        const [voted, subStatus] = await Promise.all([
+          hasUserVoted(postId, userIdentifier),
+          getSubscriptionStatus(ctx.member.id, postId),
+        ])
+        hasVoted = voted
+        subscriptionStatus = subStatus
       }
 
       console.log(
-        `[fn:public-posts] getVoteSidebarDataFn: isMember=${isMember}, hasVoted=${hasVoted}`
+        `[fn:public-posts] getVoteSidebarDataFn: isMember=${isMember}, hasVoted=${hasVoted}, total=${Date.now() - startTime}ms`
       )
       return {
         isMember,
@@ -564,7 +572,12 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         subscriptionStatus,
       }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ getVoteSidebarDataFn failed:`, error)
+      const elapsed = Date.now() - startTime
+      const errorName = error instanceof Error ? error.name : 'Unknown'
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(
+        `[fn:public-posts] ❌ getVoteSidebarDataFn failed after ${elapsed}ms: ${errorName}: ${errorMsg}`
+      )
       throw error
     }
   })

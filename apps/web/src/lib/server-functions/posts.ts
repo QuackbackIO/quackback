@@ -26,7 +26,7 @@ import {
 } from '@/lib/posts/post.service'
 import { hasUserVoted } from '@/lib/posts/post.public'
 import { getMemberIdentifier } from '@/lib/user-identifier'
-import { dispatchPostStatusChanged } from '@/lib/events/dispatch'
+import { dispatchPostCreated, dispatchPostStatusChanged } from '@/lib/events/dispatch'
 
 // ============================================
 // Helpers
@@ -51,6 +51,33 @@ function toIsoStringOrNull(value: Date | string | null | undefined): string | nu
     return null
   }
   return toIsoString(value)
+}
+
+/**
+ * Serialize common post date fields for API responses.
+ */
+function serializePostDates<
+  T extends {
+    createdAt: Date | string
+    updatedAt: Date | string
+    deletedAt?: Date | string | null
+    officialResponseAt?: Date | string | null
+  },
+>(
+  post: T
+): Omit<T, 'createdAt' | 'updatedAt' | 'deletedAt' | 'officialResponseAt'> & {
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  officialResponseAt: string | null
+} {
+  return {
+    ...post,
+    createdAt: toIsoString(post.createdAt),
+    updatedAt: toIsoString(post.updatedAt),
+    deletedAt: toIsoStringOrNull(post.deletedAt),
+    officialResponseAt: toIsoStringOrNull(post.officialResponseAt),
+  }
 }
 
 // ============================================
@@ -212,12 +239,8 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       })
 
       return {
-        ...result,
+        ...serializePostDates(result),
         hasVoted,
-        createdAt: toIsoString(result.createdAt),
-        updatedAt: toIsoString(result.updatedAt),
-        deletedAt: toIsoStringOrNull(result.deletedAt),
-        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
         comments: comments.map(serializeComment),
       }
     } catch (error) {
@@ -256,14 +279,22 @@ export const createPostFn = createServerFn({ method: 'POST' })
         }
       )
       console.log(`[fn:posts] createPostFn: id=${result.id}`)
-      // Serialize Date fields
-      return {
-        ...result,
-        createdAt: toIsoString(result.createdAt),
-        updatedAt: toIsoString(result.updatedAt),
-        deletedAt: toIsoStringOrNull(result.deletedAt),
-        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
-      }
+
+      // Dispatch post.created event (must await for Cloudflare Workers)
+      await dispatchPostCreated(
+        { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
+        {
+          id: result.id,
+          title: result.title,
+          content: result.content,
+          boardId: result.boardId,
+          boardSlug: result.boardSlug,
+          authorEmail: auth.user.email,
+          voteCount: result.voteCount,
+        }
+      )
+
+      return serializePostDates(result)
     } catch (error) {
       console.error(`[fn:posts] ❌ createPostFn failed:`, error)
       throw error
@@ -295,14 +326,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
         }
       )
       console.log(`[fn:posts] updatePostFn: updated id=${result.id}`)
-      // Serialize Date fields
-      return {
-        ...result,
-        createdAt: toIsoString(result.createdAt),
-        updatedAt: toIsoString(result.updatedAt),
-        deletedAt: toIsoStringOrNull(result.deletedAt),
-        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
-      }
+      return serializePostDates(result)
     } catch (error) {
       console.error(`[fn:posts] ❌ updatePostFn failed:`, error)
       throw error
@@ -343,8 +367,8 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
 
       const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
 
-      // Dispatch post.status_changed event (fire-and-forget)
-      dispatchPostStatusChanged(
+      // Dispatch post.status_changed event (must await for Cloudflare Workers)
+      await dispatchPostStatusChanged(
         { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
         {
           id: result.id,
@@ -356,14 +380,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
       )
 
       console.log(`[fn:posts] changePostStatusFn: id=${data.id}, newStatus=${result.newStatus}`)
-      // Serialize Date fields
-      return {
-        ...result,
-        createdAt: toIsoString(result.createdAt),
-        updatedAt: toIsoString(result.updatedAt),
-        deletedAt: toIsoStringOrNull(result.deletedAt),
-        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
-      }
+      return serializePostDates(result)
     } catch (error) {
       console.error(`[fn:posts] ❌ changePostStatusFn failed:`, error)
       throw error
@@ -382,14 +399,7 @@ export const restorePostFn = createServerFn({ method: 'POST' })
 
       const result = await restorePost(data.id as PostId)
       console.log(`[fn:posts] restorePostFn: restored id=${result.id}`)
-      // Serialize Date fields
-      return {
-        ...result,
-        createdAt: toIsoString(result.createdAt),
-        updatedAt: toIsoString(result.updatedAt),
-        deletedAt: toIsoStringOrNull(result.deletedAt),
-        officialResponseAt: toIsoStringOrNull(result.officialResponseAt),
-      }
+      return serializePostDates(result)
     } catch (error) {
       console.error(`[fn:posts] ❌ restorePostFn failed:`, error)
       throw error

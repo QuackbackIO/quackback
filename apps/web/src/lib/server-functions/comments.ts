@@ -86,8 +86,8 @@ export const createCommentFn = createServerFn({ method: 'POST' })
         }
       )
 
-      // Dispatch comment.created event (fire-and-forget)
-      dispatchCommentCreated(
+      // Dispatch comment.created event (must await for Cloudflare Workers)
+      await dispatchCommentCreated(
         { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
         {
           id: result.comment.id,
@@ -97,6 +97,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
         {
           id: result.post.id,
           title: result.post.title,
+          boardSlug: result.post.boardSlug,
         }
       )
 

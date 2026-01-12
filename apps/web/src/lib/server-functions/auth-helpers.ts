@@ -7,9 +7,23 @@
 import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import type { Role } from '@/lib/auth'
-import { getSession } from './auth'
+import { auth } from '@/lib/auth'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
 import { db, member, eq } from '@/lib/db'
+
+/**
+ * Get session directly from better-auth (not through server function).
+ * This avoids nested server function call issues.
+ */
+async function getSessionDirect() {
+  try {
+    return await auth.api.getSession({ headers: getRequestHeaders() })
+  } catch (error) {
+    console.error('[auth] Failed to get session:', error)
+    return null
+  }
+}
 
 export type { Role }
 
@@ -47,7 +61,7 @@ export interface AuthContext {
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
   console.log(`[auth] Checking session...`)
-  const session = await getSession()
+  const session = await getSessionDirect()
   if (!session?.user) {
     console.warn(`[auth] ⚠️ No session`)
     throw new Error('Authentication required')
@@ -83,10 +97,10 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       name: appSettings.name,
     },
     user: {
-      id: session.user.id,
+      id: session.user.id as UserId,
       email: session.user.email,
       name: session.user.name,
-      image: session.user.image,
+      image: session.user.image ?? null,
     },
     member: {
       id: memberRecord.id as MemberId,
@@ -103,7 +117,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
  * who don't have one (e.g., users who signed up via OTP).
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
-  const session = await getSession()
+  const session = await getSessionDirect()
   if (!session?.user) {
     console.log(`[auth] Optional auth: no session`)
     return null
@@ -143,10 +157,10 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       name: appSettings.name,
     },
     user: {
-      id: session.user.id,
+      id: session.user.id as UserId,
       email: session.user.email,
       name: session.user.name,
-      image: session.user.image,
+      image: session.user.image ?? null,
     },
     member: {
       id: memberRecord.id as MemberId,

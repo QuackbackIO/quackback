@@ -143,13 +143,19 @@ const fetchPublicPostDetailSchema = z.object({
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .inputValidator(fetchPublicPostDetailSchema)
   .handler(async ({ data }) => {
+    const startTime = Date.now()
     console.log(`[fn:portal] fetchPublicPostDetail: postId=${data.postId}`)
     try {
       // Get user identifier for reaction highlighting (optional auth)
       const ctx = await getOptionalAuth()
       const userIdentifier = ctx?.member ? getMemberIdentifier(ctx.member.id) : undefined
+      console.log(`[fn:portal] fetchPublicPostDetail: auth resolved in ${Date.now() - startTime}ms`)
 
       const result = await getPublicPostDetail(data.postId as PostId, userIdentifier)
+      console.log(
+        `[fn:portal] fetchPublicPostDetail: query completed in ${Date.now() - startTime}ms`
+      )
+
       if (!result) {
         return null
       }
@@ -167,7 +173,9 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       })
 
       // Serialize Date fields
-      console.log(`[fn:portal] fetchPublicPostDetail: found, comments=${result.comments.length}`)
+      console.log(
+        `[fn:portal] fetchPublicPostDetail: found, comments=${result.comments.length}, total=${Date.now() - startTime}ms`
+      )
       return {
         ...result,
         contentJson: result.contentJson ?? {},
@@ -181,7 +189,12 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
           : null,
       }
     } catch (error) {
-      console.error(`[fn:portal] ❌ fetchPublicPostDetail failed:`, error)
+      const elapsed = Date.now() - startTime
+      const errorName = error instanceof Error ? error.name : 'Unknown'
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(
+        `[fn:portal] ❌ fetchPublicPostDetail failed after ${elapsed}ms: ${errorName}: ${errorMsg}`
+      )
       throw error
     }
   })
