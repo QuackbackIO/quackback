@@ -40,6 +40,7 @@ export interface CreateCommentResult {
   post: {
     id: PostId
     title: string
+    boardSlug: string
   }
 }
 

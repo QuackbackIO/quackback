@@ -12,6 +12,7 @@ import {
   db,
   eq,
   and,
+  inArray,
   postSubscriptions,
   notificationPreferences,
   unsubscribeTokens,
@@ -193,6 +194,52 @@ export async function getNotificationPreferences(
   }
 }
 
+const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
+  emailStatusChange: true,
+  emailNewComment: true,
+  emailMuted: false,
+}
+
+/**
+ * Batch get notification preferences for multiple members.
+ * Returns a Map with defaults filled in for members without preferences.
+ */
+export async function batchGetNotificationPreferences(
+  memberIds: MemberId[]
+): Promise<Map<MemberId, NotificationPreferencesData>> {
+  if (memberIds.length === 0) return new Map()
+
+  const rows = await db
+    .select({
+      memberId: notificationPreferences.memberId,
+      emailStatusChange: notificationPreferences.emailStatusChange,
+      emailNewComment: notificationPreferences.emailNewComment,
+      emailMuted: notificationPreferences.emailMuted,
+    })
+    .from(notificationPreferences)
+    .where(inArray(notificationPreferences.memberId, memberIds))
+
+  // Build map with found preferences, then fill defaults
+  const map = new Map<MemberId, NotificationPreferencesData>(
+    rows.map((row) => [
+      row.memberId,
+      {
+        emailStatusChange: row.emailStatusChange,
+        emailNewComment: row.emailNewComment,
+        emailMuted: row.emailMuted,
+      },
+    ])
+  )
+
+  for (const id of memberIds) {
+    if (!map.has(id)) {
+      map.set(id, DEFAULT_NOTIFICATION_PREFS)
+    }
+  }
+
+  return map
+}
+
 /**
  * Update notification preferences for a member (upsert)
  */
@@ -259,6 +306,32 @@ export async function generateUnsubscribeToken(
   })
 
   return token
+}
+
+export type UnsubscribeAction = 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
+
+/**
+ * Batch generate unsubscribe tokens for multiple members.
+ * Returns a Map of memberId -> token.
+ */
+export async function batchGenerateUnsubscribeTokens(
+  entries: Array<{ memberId: MemberId; postId: PostId; action: UnsubscribeAction }>
+): Promise<Map<MemberId, string>> {
+  if (entries.length === 0) return new Map()
+
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+  const tokens = entries.map((e) => ({
+    token: randomUUID(),
+    memberId: e.memberId,
+    postId: e.postId,
+    action: e.action,
+    expiresAt,
+  }))
+
+  await db.insert(unsubscribeTokens).values(tokens)
+
+  return new Map(tokens.map((t) => [t.memberId, t.token]))
 }
 
 /**

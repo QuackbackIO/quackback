@@ -153,7 +153,7 @@ export async function createComment(
   }
 
   // Return comment with post info for event building in API route
-  return { comment, post: { id: post.id, title: post.title } }
+  return { comment, post: { id: post.id, title: post.title, boardSlug: board.slug } }
 }
 
 /**
