@@ -21,20 +21,19 @@
 
 Quackback Cloud runs on Cloudflare Workers with:
 
-| Component              | Technology                                       |
-| ---------------------- | ------------------------------------------------ |
-| **Runtime**            | Cloudflare Workers via `@cloudflare/vite-plugin` |
-| **Framework**          | TanStack Start (React)                           |
-| **Database**           | Neon PostgreSQL (per-tenant)                     |
-| **Connection Pooling** | Cloudflare Hyperdrive                            |
-| **Multi-tenancy**      | Domain-based resolution via catalog database     |
+| Component         | Technology                                       |
+| ----------------- | ------------------------------------------------ |
+| **Runtime**       | Cloudflare Workers via `@cloudflare/vite-plugin` |
+| **Framework**     | TanStack Start (React)                           |
+| **Database**      | Neon PostgreSQL (per-tenant)                     |
+| **Multi-tenancy** | Domain-based resolution via catalog database     |
 
 ### Environments
 
-| Environment | Domain Pattern       | Worker Name         | Hyperdrive |
-| ----------- | -------------------- | ------------------- | ---------- |
-| Development | `*.dev.quackback.io` | `quackback-web-dev` | Dev pool   |
-| Production  | `*.quackback.io`     | `quackback-web`     | Prod pool  |
+| Environment | Domain Pattern       | Worker Name         |
+| ----------- | -------------------- | ------------------- |
+| Development | `*.dev.quackback.io` | `quackback-web-dev` |
+| Production  | `*.quackback.io`     | `quackback-web`     |
 
 ---
 
@@ -47,8 +46,7 @@ Before deploying, ensure you have:
 3. **Cloudflare API Token** with these permissions:
    - Account: Cloudflare Workers Scripts:Edit
    - Zone: quackback.io - Workers Routes:Edit
-4. **Hyperdrive** configured in Cloudflare dashboard (already set up)
-5. **Catalog Database** PostgreSQL database for workspace registry
+4. **Catalog Database** PostgreSQL database for workspace registry
 
 ---
 
@@ -123,8 +121,6 @@ bun run build:cloud
 # Run locally with wrangler
 wrangler dev -c ../../deploy/cloud/wrangler.dev.jsonc
 ```
-
-This uses Hyperdrive's `localConnectionString` to connect to your local PostgreSQL.
 
 ### Standard Local Development
 
@@ -244,15 +240,11 @@ Automated deployments are configured in `.github/workflows/deploy-cloud.yml`.
 
 ```jsonc
 {
-  "name": "quackback-web-dev",           // Worker name
-  "main": "@tanstack/react-start/server-entry",  // Entry point
-  "compatibility_flags": ["nodejs_compat"],      // Node.js APIs
-  "routes": [...],                        // Domain routing
-  "hyperdrive": [{                        // Database pooling
-    "binding": "HYPERDRIVE",
-    "id": "..."
-  }],
-  "vars": {                               // Non-secret env vars
+  "name": "quackback-web-dev",                   // Worker name
+  "main": "@tanstack/react-start/server-entry", // Entry point
+  "compatibility_flags": ["nodejs_compat"],     // Node.js APIs
+  "routes": [...],                              // Domain routing
+  "vars": {                                     // Non-secret env vars
     "EDITION": "cloud",
     "NODE_ENV": "development"
   }
@@ -272,11 +264,6 @@ cd apps/web
 bun add -D @cloudflare/vite-plugin wrangler
 ```
 
-### "Hyperdrive binding not found"
-
-The Hyperdrive ID in wrangler config must match one configured in Cloudflare dashboard.
-Check: **Cloudflare Dashboard > Workers > Hyperdrive**
-
 ### "Authentication required"
 
 Run `wrangler login` to authenticate with Cloudflare.
@@ -292,21 +279,7 @@ Secrets set via `wrangler secret put` are separate from `vars` in the config:
 
 1. Check worker logs: **Cloudflare Dashboard > Workers > quackback-web-dev > Logs**
 2. Verify secrets are set: `wrangler secret list -c ../../deploy/cloud/wrangler.dev.jsonc`
-3. Check Hyperdrive connection: Ensure database is accessible
-
-### Local Dev Can't Connect to Database
-
-The `localConnectionString` in wrangler config is used for local dev:
-
-```jsonc
-"hyperdrive": [{
-  "binding": "HYPERDRIVE",
-  "id": "...",
-  "localConnectionString": "postgresql://postgres:password@localhost:5432/quackback"
-}]
-```
-
-Update this to match your local PostgreSQL setup.
+3. Check database connection: Ensure Neon database is accessible
 
 ---
 

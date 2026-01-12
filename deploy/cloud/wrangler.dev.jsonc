@@ -21,13 +21,6 @@
       "zone_name": "quackback.io"
     }
   ],
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "56c4bf10a30e4256933db862515204a0",
-      "localConnectionString": "postgresql://postgres:password@localhost:5432/quackback"
-    }
-  ],
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
