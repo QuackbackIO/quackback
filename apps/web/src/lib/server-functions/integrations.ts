@@ -1,47 +1,57 @@
 import { createServerFn } from '@tanstack/react-start'
-import { createHmac, randomBytes } from 'crypto'
+import { randomBytes } from 'crypto'
 import { requireAuth } from './auth-helpers'
+import { signOAuthState } from '@/lib/auth/oauth-state'
+import { tenantStorage } from '@/lib/tenant'
+import { isMultiTenant } from '@/lib/features'
+import type { MemberId } from '@quackback/ids'
 
-function getHmacSecret(): string {
-  const secret = process.env.BETTER_AUTH_SECRET
-  if (!secret) {
-    throw new Error('BETTER_AUTH_SECRET not set')
-  }
-  return secret
-}
-
-function signState(data: {
-  orgId: string
-  memberId: string
+/**
+ * Slack OAuth state payload.
+ */
+export interface SlackOAuthState {
+  type: 'slack_oauth'
+  workspaceId: string
+  workspaceSlug: string
+  returnDomain: string
+  memberId: MemberId
   nonce: string
-  timestamp: number
-}): string {
-  const payload = JSON.stringify(data)
-  const hmac = createHmac('sha256', getHmacSecret())
-  hmac.update(payload)
-  const signature = hmac.digest('base64url')
-  return `${Buffer.from(payload).toString('base64url')}.${signature}`
+  ts: number
 }
 
 /**
  * Generate a signed OAuth connect URL for Slack.
- * Returns a relative URL path for use in the same origin.
+ * Cloud mode: absolute URL to central OAuth domain
+ * Self-hosted: relative URL to same origin
  */
 export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
   async (): Promise<string> => {
     const auth = await requireAuth({ roles: ['admin'] })
+    const tenant = tenantStorage.getStore()
+    const isCloud = isMultiTenant() && tenant
 
-    // Generate signed state
-    const nonce = randomBytes(16).toString('base64url')
-    const timestamp = Date.now()
-    const state = signState({
-      orgId: auth.settings.id,
+    const workspaceSlug = isCloud ? tenant.slug : 'default'
+    const returnDomain = isCloud
+      ? `${tenant.slug}.${process.env.CLOUD_TENANT_BASE_DOMAIN}`
+      : new URL(process.env.ROOT_URL || '').host
+
+    const state = signOAuthState({
+      type: 'slack_oauth',
+      workspaceId: auth.settings.id,
+      workspaceSlug,
+      returnDomain,
       memberId: auth.member.id,
-      nonce,
-      timestamp,
-    })
+      nonce: randomBytes(16).toString('base64url'),
+      ts: Date.now(),
+    } satisfies SlackOAuthState)
 
-    // Return relative URL to connect endpoint with signed state
-    return `/api/integrations/slack/connect?state=${encodeURIComponent(state)}`
+    const appDomain = process.env.CLOUD_APP_DOMAIN
+    const connectPath = `/oauth/slack/connect?state=${encodeURIComponent(state)}`
+
+    if (isCloud && appDomain) {
+      return `https://${appDomain}${connectPath}`
+    }
+
+    return connectPath
   }
 )

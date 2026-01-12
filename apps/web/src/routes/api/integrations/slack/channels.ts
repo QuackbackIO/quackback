@@ -44,9 +44,18 @@ export const Route = createFileRoute('/api/integrations/slack/channels')({
           return Response.json({ error: 'Slack token missing' }, { status: 500 })
         }
 
+        // Get workspace ID for decryption salt
+        const settingsRecord = await db.query.settings.findFirst({
+          columns: { id: true },
+        })
+
+        if (!settingsRecord) {
+          return Response.json({ error: 'Workspace not configured' }, { status: 500 })
+        }
+
         try {
-          // Decrypt token and fetch channels (pass empty string for single workspace)
-          const accessToken = decryptToken(integration.accessTokenEncrypted, '')
+          // Decrypt token using workspace ID as salt (consistent with integration-service.ts)
+          const accessToken = decryptToken(integration.accessTokenEncrypted, settingsRecord.id)
           const channels = await listSlackChannels(accessToken)
 
           console.log(`[slack] ✅ Channels fetched: ${channels.length} channels`)

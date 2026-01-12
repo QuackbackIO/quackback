@@ -5,27 +5,45 @@ import {
   ArrowPathIcon,
   ArrowRightIcon,
   BuildingOffice2Icon,
-  ChatBubbleLeftIcon,
   CheckIcon,
   EnvelopeIcon,
   GlobeAltIcon,
-  RocketLaunchIcon,
   SparklesIcon,
   Squares2X2Icon,
   UserIcon,
 } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { createBoardFn } from '@/lib/server-functions/boards'
+import { createBoardsBatchFn } from '@/lib/server-functions/boards'
 import { setupWorkspaceFn } from '@/lib/server-functions/onboarding'
 import { authClient } from '@/lib/auth/client'
+import { DEFAULT_BOARD_OPTIONS } from './default-boards'
 
-type Step = 'create-account' | 'setup-workspace' | 'create-board' | 'complete'
+type Step = 'create-account' | 'setup-workspace' | 'choose-boards' | 'complete'
+
+// Initial steps that can be passed from the route (subset of all steps)
+type InitialStep = 'create-account' | 'setup-workspace'
+
+function CompletionMessage({ boardNames }: { boardNames: string[] }): React.ReactNode {
+  if (boardNames.length === 0) {
+    return 'You can create feedback boards anytime from Settings'
+  }
+
+  if (boardNames.length === 1) {
+    return (
+      <>
+        Your feedback board <span className="font-semibold text-primary">"{boardNames[0]}"</span> is
+        ready
+      </>
+    )
+  }
+
+  return <>Your {boardNames.length} feedback boards are ready to collect ideas</>
+}
 
 interface OnboardingWizardProps {
-  initialStep: Step
+  initialStep: InitialStep
   userName?: string | null
 }
 
@@ -45,9 +63,11 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
   // Workspace setup state
   const [wsName, setWsName] = useState('')
 
-  // Board creation state
-  const [boardName, setBoardName] = useState('')
-  const [boardDescription, setBoardDescription] = useState('')
+  // Board selection state (all recommended enabled by default)
+  const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
+    new Set(DEFAULT_BOARD_OPTIONS.filter((b) => b.isRecommended).map((b) => b.id))
+  )
+  const [createdBoardNames, setCreatedBoardNames] = useState<string[]>([])
 
   // Shared state
   const [isLoading, setIsLoading] = useState(false)
@@ -240,7 +260,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
         },
       })
 
-      setStep('create-board')
+      setStep('choose-boards')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create workspace')
     } finally {
@@ -249,28 +269,48 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
   }
 
   // ============================================
-  // Board Creation Handlers
+  // Board Selection Handlers
   // ============================================
 
-  async function handleCreateBoard() {
+  function toggleBoard(boardId: string) {
+    setSelectedBoards((prev) => {
+      const next = new Set(prev)
+      if (next.has(boardId)) {
+        next.delete(boardId)
+      } else {
+        next.add(boardId)
+      }
+      return next
+    })
+  }
+
+  async function handleCreateBoards() {
     setIsLoading(true)
     setError('')
 
     try {
-      await createBoardFn({
-        data: {
-          name: boardName,
-          description: boardDescription,
-        },
-      })
+      const boardsToCreate = DEFAULT_BOARD_OPTIONS.filter((b) => selectedBoards.has(b.id)).map(
+        (b) => ({
+          name: b.name,
+          description: b.description,
+        })
+      )
 
+      const created = await createBoardsBatchFn({ data: { boards: boardsToCreate } })
+      setCreatedBoardNames(created.map((b) => b.name))
       setStep('complete')
       setShowConfetti(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create board')
+      setError(err instanceof Error ? err.message : 'Failed to create boards')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  function handleSkipBoards() {
+    setCreatedBoardNames([])
+    setStep('complete')
+    // No confetti for skip - encourage users to create boards later
   }
 
   // ============================================
@@ -638,86 +678,135 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
           </div>
         )}
 
-        {/* Step 3: Create Board */}
-        {step === 'create-board' && (
+        {/* Step 3: Choose Boards */}
+        {step === 'choose-boards' && (
           <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col items-center space-y-4 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                <ChatBubbleLeftIcon className="h-6 w-6 text-primary" />
+                <Squares2X2Icon className="h-6 w-6 text-primary" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                  Create your first board
+                  Set up your boards
                 </h1>
-                <p className="text-muted-foreground">Where users submit and vote on feedback</p>
+                <p className="text-muted-foreground">
+                  Boards organize feedback by topic. Toggle the ones you need.
+                </p>
               </div>
             </div>
 
-            {/* Form */}
+            {/* Board Selection Cards */}
             <Card className="bg-card border border-border/50 shadow-sm">
               <CardContent className="pt-6">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    handleCreateBoard()
-                  }}
-                  className="space-y-4"
-                >
+                <div className="space-y-3">
                   {error && (
                     <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
                       {error}
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <label htmlFor="boardName" className="text-sm font-medium">
-                      Board name
-                    </label>
-                    <Input
-                      id="boardName"
-                      type="text"
-                      value={boardName}
-                      onChange={(e) => setBoardName(e.target.value)}
-                      required
-                      placeholder="Feature Requests"
-                      autoFocus
-                    />
-                  </div>
+                  {DEFAULT_BOARD_OPTIONS.map((board) => {
+                    const isSelected = selectedBoards.has(board.id)
+                    const Icon = board.icon
+                    return (
+                      <button
+                        key={board.id}
+                        type="button"
+                        onClick={() => toggleBoard(board.id)}
+                        disabled={isLoading}
+                        className={`
+                          w-full flex items-center justify-between gap-4 p-4 rounded-xl
+                          border-2 transition-all duration-200 text-left
+                          disabled:opacity-50 disabled:cursor-not-allowed
+                          ${
+                            isSelected
+                              ? 'border-primary bg-primary/5 shadow-sm'
+                              : 'border-border/50 hover:border-primary/40 hover:bg-muted/30'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Custom checkbox */}
+                          <div
+                            className={`
+                              h-5 w-5 rounded border-2 flex items-center justify-center shrink-0
+                              transition-all duration-200
+                              ${
+                                isSelected
+                                  ? 'bg-primary border-primary'
+                                  : 'border-muted-foreground/40'
+                              }
+                            `}
+                          >
+                            {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
+                          </div>
 
-                  <div className="space-y-2">
-                    <label htmlFor="boardDescription" className="text-sm font-medium">
-                      Description{' '}
-                      <span className="text-muted-foreground font-normal">(optional)</span>
-                    </label>
-                    <Textarea
-                      id="boardDescription"
-                      value={boardDescription}
-                      onChange={(e) => setBoardDescription(e.target.value)}
-                      rows={3}
-                      placeholder="Share your ideas and vote on features"
-                      className="resize-none"
-                    />
-                  </div>
+                          {/* Icon */}
+                          <div
+                            className={`
+                              flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
+                              transition-colors duration-200
+                              ${isSelected ? 'bg-primary/15' : 'bg-muted/50'}
+                            `}
+                          >
+                            <Icon
+                              className={`h-5 w-5 transition-colors ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}
+                            />
+                          </div>
 
+                          {/* Text */}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-foreground">{board.name}</span>
+                              {board.isRecommended && (
+                                <span className="text-[10px] uppercase tracking-wider font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {board.description}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 mt-6">
                   <Button
-                    type="submit"
-                    disabled={isLoading || !boardName.trim()}
-                    className="w-full bg-primary hover:bg-primary text-white"
+                    type="button"
+                    variant="ghost"
+                    onClick={handleSkipBoards}
+                    disabled={isLoading}
+                    className="flex-1"
+                  >
+                    Skip for now
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleCreateBoards}
+                    disabled={isLoading}
+                    className="flex-1 bg-primary hover:bg-primary/90 text-white"
                   >
                     {isLoading ? (
                       <>
                         <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                        Creating board...
+                        Creating...
                       </>
                     ) : (
                       <>
-                        Create board
-                        <RocketLaunchIcon className="ml-2 h-4 w-4" />
+                        {selectedBoards.size === 0
+                          ? 'Continue'
+                          : `Create ${selectedBoards.size} board${selectedBoards.size !== 1 ? 's' : ''}`}
+                        <ArrowRightIcon className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
-                </form>
+                </div>
               </CardContent>
             </Card>
 
@@ -743,8 +832,7 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                   You're all set!
                 </h1>
                 <p className="text-muted-foreground">
-                  Your feedback board{' '}
-                  <span className="font-semibold text-primary">"{boardName}"</span> is ready
+                  <CompletionMessage boardNames={createdBoardNames} />
                 </p>
               </div>
             </div>

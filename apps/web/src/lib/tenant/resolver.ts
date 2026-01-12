@@ -173,6 +173,57 @@ function extractSlugFromHost(host: string, baseDomain: string): string | null {
 // ============================================
 
 /**
+ * Get a tenant database connection by workspace slug.
+ * Used for cross-tenant operations like OAuth callbacks on the central domain.
+ *
+ * @param slug - Workspace URL slug (e.g., "acme")
+ * @returns Database instance for the tenant
+ * @throws Error if workspace not found or not ready
+ */
+export async function getTenantDbBySlug(
+  slug: string
+): Promise<{ db: ReturnType<typeof getTenantDb>; workspaceId: string }> {
+  const config = getConfig()
+
+  if (!config.catalogDbUrl || !config.neonApiKey) {
+    throw new Error('getTenantDbBySlug requires CLOUD_CATALOG_DATABASE_URL and CLOUD_NEON_API_KEY')
+  }
+
+  const db = getCatalogDb(config.catalogDbUrl)
+
+  // Query workspace by slug
+  const workspaceRecord = await db.query.workspace.findFirst({
+    where: eq(workspace.slug, slug),
+  })
+
+  if (!workspaceRecord) {
+    throw new Error(`Workspace not found: ${slug}`)
+  }
+
+  if (workspaceRecord.migrationStatus !== 'completed') {
+    throw new Error(`Workspace ${slug} is not ready (status: ${workspaceRecord.migrationStatus})`)
+  }
+
+  if (!workspaceRecord.neonProjectId) {
+    throw new Error(`Workspace ${slug} has no Neon project ID`)
+  }
+
+  // Fetch connection string from Neon API
+  const connectionString = await fetchConnectionString(
+    workspaceRecord.neonProjectId,
+    config.neonApiKey
+  )
+
+  // Get or create Drizzle instance for tenant
+  const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
+
+  return {
+    db: tenantDb,
+    workspaceId: workspaceRecord.id,
+  }
+}
+
+/**
  * Resolve a domain to tenant context.
  *
  * @param request - Incoming HTTP request

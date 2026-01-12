@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
@@ -9,8 +8,6 @@ import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 interface UsersFiltersProps {
   filters: UsersFilters
   onFiltersChange: (updates: Partial<UsersFilters>) => void
-  onClearFilters: () => void
-  hasActiveFilters?: boolean
 }
 
 function FilterSection({
@@ -62,62 +59,27 @@ function FilterOption({ label, isSelected, onClick }: FilterOptionProps) {
   )
 }
 
-export function UsersFiltersPanel({
-  filters,
-  onFiltersChange,
-  onClearFilters,
-  hasActiveFilters = false,
-}: UsersFiltersProps) {
-  const handleVerifiedChange = (value: 'all' | 'verified' | 'unverified') => {
-    if (value === 'all') {
-      onFiltersChange({ verified: undefined })
-    } else {
-      onFiltersChange({ verified: value === 'verified' })
-    }
-  }
-
-  // Determine which option is currently selected
-  let verifiedValue: 'all' | 'verified' | 'unverified' = 'all'
-  if (filters.verified === true) {
-    verifiedValue = 'verified'
-  } else if (filters.verified === false) {
-    verifiedValue = 'unverified'
+export function UsersFiltersPanel({ filters, onFiltersChange }: UsersFiltersProps) {
+  // Toggle filter: clicking selected item clears it, clicking unselected sets it
+  const handleVerifiedClick = (value: boolean) => {
+    const isCurrentlySelected = filters.verified === value
+    onFiltersChange({ verified: isCurrentlySelected ? undefined : value })
   }
 
   return (
-    <div className="space-y-1">
-      {/* Clear Filters */}
-      {hasActiveFilters && (
-        <div className="flex justify-end pb-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearFilters}
-            className="text-xs text-muted-foreground hover:text-foreground -mr-2"
-          >
-            <XMarkIcon className="h-3.5 w-3.5 mr-1" />
-            Clear filters
-          </Button>
-        </div>
-      )}
-
+    <div className="space-y-0">
       {/* Email Verified Filter */}
       <FilterSection title="Email Status">
         <div className="space-y-1">
           <FilterOption
-            label="All users"
-            isSelected={verifiedValue === 'all'}
-            onClick={() => handleVerifiedChange('all')}
+            label="Verified"
+            isSelected={filters.verified === true}
+            onClick={() => handleVerifiedClick(true)}
           />
           <FilterOption
-            label="Verified only"
-            isSelected={verifiedValue === 'verified'}
-            onClick={() => handleVerifiedChange('verified')}
-          />
-          <FilterOption
-            label="Unverified only"
-            isSelected={verifiedValue === 'unverified'}
-            onClick={() => handleVerifiedChange('unverified')}
+            label="Unverified"
+            isSelected={filters.verified === false}
+            onClick={() => handleVerifiedClick(false)}
           />
         </div>
       </FilterSection>

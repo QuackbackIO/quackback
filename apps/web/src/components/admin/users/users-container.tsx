@@ -63,14 +63,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
   return (
     <UsersLayout
       hasActiveFilters={hasActiveFilters}
-      filters={
-        <UsersFiltersPanel
-          filters={filters}
-          onFiltersChange={setFilters}
-          onClearFilters={clearFilters}
-          hasActiveFilters={hasActiveFilters}
-        />
-      }
+      filters={<UsersFiltersPanel filters={filters} onFiltersChange={setFilters} />}
       userList={
         <UsersList
           users={users}

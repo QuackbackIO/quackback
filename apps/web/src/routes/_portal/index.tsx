@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
+import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
 import { portalQueries } from '@/lib/queries/portal'
@@ -56,15 +57,25 @@ export const Route = createFileRoute('/_portal/')({
       queryClient.ensureQueryData(portalQueries.tags()),
     ])
 
-    // If no boards exist, redirect to onboarding
+    // If no boards exist, return early with empty state flag
     if (boards.length === 0) {
-      throw redirect({ to: '/onboarding' })
+      return {
+        org,
+        isEmpty: true,
+        currentBoard: undefined,
+        currentSearch: undefined,
+        currentSort: sort,
+        session,
+        userIdentifier,
+        postIds: [],
+        postMemberIds: [],
+      }
     }
 
     // Pre-fetch voted posts and avatars
-    const postIds = posts.items.map((p) => p.id)
+    const postIds = posts.items.map((post) => post.id)
     const postMemberIds = posts.items
-      .map((p) => p.memberId)
+      .map((post) => post.memberId)
       .filter((id): id is `member_${string}` => id !== null)
 
     await Promise.all([
@@ -90,16 +101,29 @@ export const Route = createFileRoute('/_portal/')({
 })
 
 function PublicPortalPage() {
-  const {
-    org,
-    currentBoard,
-    currentSearch,
-    currentSort,
-    session,
-    userIdentifier,
-    postIds,
-    postMemberIds,
-  } = Route.useLoaderData()
+  const loaderData = Route.useLoaderData()
+  const { org, session } = loaderData
+
+  // Handle empty state when no boards exist
+  if ('isEmpty' in loaderData && loaderData.isEmpty) {
+    return (
+      <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
+          <div className="rounded-full bg-muted p-4 mb-6">
+            <ChatBubbleOvalLeftEllipsisIcon className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h2 className="text-2xl font-semibold text-foreground mb-2">Coming Soon</h2>
+          <p className="text-muted-foreground max-w-md">
+            {org.name} is setting up their feedback portal. Check back soon to share your ideas and
+            suggestions.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  const { currentBoard, currentSearch, currentSort, userIdentifier, postIds, postMemberIds } =
+    loaderData
 
   // Read pre-fetched data from React Query cache
   const boardsQuery = useSuspenseQuery(portalQueries.boards())

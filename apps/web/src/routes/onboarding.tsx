@@ -8,8 +8,8 @@ export const Route = createFileRoute('/onboarding')({
     const { session, settings } = context
 
     // Determine starting step based on state
-    // Flow: create-account → setup-workspace → create-board → complete
-    let initialStep: 'create-account' | 'setup-workspace' | 'create-board' = 'create-account'
+    // Flow: create-account → setup-workspace → choose-boards → complete
+    let initialStep: 'create-account' | 'setup-workspace' = 'create-account'
 
     if (session?.user) {
       // Check onboarding state via server function
@@ -22,13 +22,9 @@ export const Route = createFileRoute('/onboarding')({
 
       // User is authenticated with member record
       if (settings) {
-        if (state.hasBoards) {
-          // Everything is set up, redirect to admin
-          throw redirect({ to: '/admin' })
-        }
-
-        // Need to create first board
-        initialStep = 'create-board'
+        // Workspace is set up, onboarding complete - redirect to admin
+        // (Users can create boards later from the admin dashboard)
+        throw redirect({ to: '/admin' })
       } else {
         // Authenticated but no settings - need to set up workspace
         initialStep = 'setup-workspace'

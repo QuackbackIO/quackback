@@ -37,6 +37,7 @@
     "NODE_ENV": "production",
     "EDITION": "cloud",
     "CLOUD_TENANT_BASE_DOMAIN": "quackback.io",
+    "CLOUD_APP_DOMAIN": "app.quackback.io",
     "CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2"
   },
   "observability": {
