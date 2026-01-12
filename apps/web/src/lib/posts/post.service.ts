@@ -25,6 +25,7 @@ import {
   tags,
   comments,
   postEditHistory,
+  votes,
   type Post,
 } from '@/lib/db'
 import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
@@ -259,48 +260,56 @@ export async function voteOnPost(
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
-  // Single atomic operation: check existing vote, then insert or delete + update count
-  // Uses existing unique index on (post_id, user_identifier)
-  // Convert TypeIDs to UUIDs for raw SQL query
+  // Toggle vote using single atomic CTE query (Neon HTTP driver doesn't support transactions)
+  // The CTE handles the toggle atomically, then we query final state separately
+  // (safe because HTTP driver auto-commits, so state is consistent when we query)
   const postUuid = toUuid(postId)
-  // Convert memberId TypeID to UUID for raw SQL
   const memberUuid = options?.memberId ? toUuid(options.memberId) : null
-  const result = await db.execute<{ vote_count: number; voted: boolean }>(sql`
-    WITH existing_vote AS (
+
+  // Atomic toggle: delete if exists, insert if not, update count accordingly
+  await db.execute(sql`
+    WITH existing AS (
       SELECT id FROM votes
       WHERE post_id = ${postUuid} AND user_identifier = ${userIdentifier}
-      FOR UPDATE
     ),
-    vote_action AS (
-      -- Delete if vote exists, insert if it doesn't
+    deleted AS (
       DELETE FROM votes
-      WHERE id = (SELECT id FROM existing_vote)
-      RETURNING id, false AS is_new_vote
+      WHERE id IN (SELECT id FROM existing)
+      RETURNING id
     ),
-    insert_vote AS (
-      -- Only insert if no existing vote was found (and thus not deleted)
+    inserted AS (
       INSERT INTO votes (id, post_id, user_identifier, member_id, updated_at)
       SELECT gen_random_uuid(), ${postUuid}, ${userIdentifier}, ${memberUuid}, NOW()
-      WHERE NOT EXISTS (SELECT 1 FROM existing_vote)
-      RETURNING id, true AS is_new_vote
-    ),
-    combined AS (
-      SELECT is_new_vote FROM vote_action
-      UNION ALL
-      SELECT is_new_vote FROM insert_vote
+      WHERE NOT EXISTS (SELECT 1 FROM existing)
+      ON CONFLICT (post_id, user_identifier) DO NOTHING
+      RETURNING id
     )
     UPDATE posts
-    SET vote_count = GREATEST(0, vote_count + CASE
-      WHEN (SELECT is_new_vote FROM combined LIMIT 1) THEN 1
-      ELSE -1
-    END)
+    SET vote_count = GREATEST(0, vote_count +
+      CASE
+        WHEN EXISTS (SELECT 1 FROM inserted) THEN 1
+        WHEN EXISTS (SELECT 1 FROM deleted) THEN -1
+        ELSE 0
+      END
+    )
     WHERE id = ${postUuid}
-    RETURNING vote_count, (SELECT is_new_vote FROM combined LIMIT 1) AS voted
   `)
 
-  const rows = Array.from(result as Iterable<{ vote_count: number; voted: boolean }>)
-  const row = rows[0]
-  const voted = row?.voted ?? false
+  // Query final state (safe - previous query already committed)
+  const [voteState] = await db
+    .select({
+      voteCount: posts.voteCount,
+    })
+    .from(posts)
+    .where(eq(posts.id, postId))
+
+  const [existingVote] = await db
+    .select({ id: votes.id })
+    .from(votes)
+    .where(and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)))
+
+  const voted = existingVote !== undefined
+  const voteCount = voteState?.voteCount ?? post.voteCount
 
   // Auto-subscribe voter when they upvote
   if (voted && options?.memberId) {
@@ -309,7 +318,7 @@ export async function voteOnPost(
 
   return {
     voted,
-    voteCount: row?.vote_count ?? post.voteCount,
+    voteCount,
   }
 }
 
