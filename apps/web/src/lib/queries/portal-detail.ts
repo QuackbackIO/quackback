@@ -1,6 +1,11 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, StatusId, CommentId } from '@quackback/ids'
-import { fetchPublicBoardBySlug, fetchPublicPostDetail } from '@/lib/server-functions/portal'
+import type { PostId, StatusId, CommentId, MemberId } from '@quackback/ids'
+import {
+  fetchPublicBoardBySlug,
+  fetchPublicPostDetail,
+  getCommentsSectionDataFn,
+} from '@/lib/server-functions/portal'
+import { getVoteSidebarDataFn, getVotedPostsFn } from '@/lib/server-functions/public-posts'
 import type { CommentReactionCount } from '@/lib/shared'
 
 /**
@@ -72,5 +77,41 @@ export const portalDetailQueries = {
         return result as PublicPostDetailView
       },
       staleTime: 30 * 1000, // 30s
+    }),
+
+  /**
+   * Get vote sidebar data (membership, vote status, subscription status)
+   * Used for SSR prefetching and client-side Suspense queries
+   */
+  voteSidebarData: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['vote-sidebar', postId],
+      queryFn: () => getVoteSidebarDataFn({ data: { postId } }),
+      staleTime: 30 * 1000, // 30s
+    }),
+
+  /**
+   * Get comments section data (canComment, avatarMap, user)
+   * Used for SSR prefetching and client-side Suspense queries
+   */
+  commentsSectionData: (postId: PostId, commentMemberIds: MemberId[]) =>
+    queryOptions({
+      queryKey: ['comments-section', postId],
+      queryFn: () => getCommentsSectionDataFn({ data: { commentMemberIds } }),
+      staleTime: 60 * 1000, // 1min
+    }),
+
+  /**
+   * Get all post IDs the user has voted on
+   * Used for SSR prefetching - key must match votedPostsKeys.byWorkspace()
+   */
+  votedPosts: () =>
+    queryOptions({
+      queryKey: ['votedPosts'] as const,
+      queryFn: async () => {
+        const result = await getVotedPostsFn()
+        return new Set(result.votedPostIds)
+      },
+      staleTime: 5 * 60 * 1000, // 5min
     }),
 }

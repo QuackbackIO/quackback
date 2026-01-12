@@ -2,7 +2,11 @@ import { Suspense } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
-import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
+import {
+  portalDetailQueries,
+  type PublicPostDetailView,
+  type PublicCommentView,
+} from '@/lib/queries/portal-detail'
 import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
@@ -12,8 +16,25 @@ import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { isValidTypeId, type PostId } from '@quackback/ids'
+import { isValidTypeId, type PostId, type MemberId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/schemas/posts'
+
+/**
+ * Recursively collect all member IDs from comments and their nested replies
+ * Used for prefetching avatar data in the loader
+ */
+function collectCommentMemberIds(comments: PublicCommentView[]): string[] {
+  const memberIds: string[] = []
+  for (const comment of comments) {
+    if (comment.memberId) {
+      memberIds.push(comment.memberId)
+    }
+    if (comment.replies.length > 0) {
+      memberIds.push(...collectCommentMemberIds(comment.replies))
+    }
+  }
+  return memberIds
+}
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
@@ -47,6 +68,21 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     if (!post || post.board.slug !== slug) {
       throw notFound()
     }
+
+    // Prefetch user-specific data for SSR
+    // Uses prefetchQuery which won't throw on error - components fall back to client fetch
+    const commentMemberIds = collectCommentMemberIds(post.comments)
+
+    // Await prefetch so data is SSR'd (included in dehydrated state)
+    // prefetchQuery doesn't throw, so errors are handled gracefully
+    await Promise.all([
+      queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId)),
+      queryClient.prefetchQuery(
+        portalDetailQueries.commentsSectionData(postId, commentMemberIds as MemberId[])
+      ),
+      // Prefetch votedPosts so hasVoted state is SSR'd for vote button highlighting
+      queryClient.prefetchQuery(portalDetailQueries.votedPosts()),
+    ])
 
     return {
       settings,
@@ -102,7 +138,7 @@ function PostDetailPage() {
         <div className="flex">
           {/* Vote & Subscribe section - left column */}
           <Suspense fallback={<VoteSidebarSkeleton />}>
-            <VoteSidebar postId={postId} initialVoteCount={post.voteCount} />
+            <VoteSidebar postId={postId} voteCount={post.voteCount} />
           </Suspense>
 
           {/* Content section */}
