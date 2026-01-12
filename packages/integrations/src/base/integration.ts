@@ -12,7 +12,6 @@ export type DomainEventType =
   | 'comment.deleted'
   | 'vote.created'
   | 'vote.deleted'
-  | 'changelog.published'
 
 export interface DomainEvent<T = unknown> {
   id: string

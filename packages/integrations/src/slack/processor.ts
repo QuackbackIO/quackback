@@ -14,14 +14,6 @@ import {
   type CommentCreatedPayload,
 } from '../base'
 
-/**
- * Changelog data for changelog.published events.
- * Note: changelog events are integration-specific and not used for core notifications.
- */
-interface ChangelogPublishedPayload {
-  changelog: { id: string; title: string; slug: string; content: string }
-}
-
 export class SlackIntegration extends BaseIntegration {
   readonly type = 'slack'
   readonly displayName = 'Slack'
@@ -29,7 +21,6 @@ export class SlackIntegration extends BaseIntegration {
     'post.created',
     'post.status_changed',
     'comment.created',
-    'changelog.published',
   ]
 
   async processEvent(
@@ -235,35 +226,6 @@ export class SlackIntegration extends BaseIntegration {
               text: {
                 type: 'mrkdwn',
                 text: `> *<${postUrl}|${this.escapeSlackMrkdwn(post.title)}>*\n${this.quoteText(this.escapeSlackMrkdwn(content))}`,
-              },
-            },
-          ],
-        }
-      }
-
-      case 'changelog.published': {
-        const { changelog } = event.data as ChangelogPublishedPayload
-        const changelogUrl = `${rootUrl}/changelog/${changelog.slug}`
-        const content = this.stripHtml(changelog.content)
-        const actor = event.actor.email || 'System'
-
-        return {
-          text: `New update published by ${actor}: ${changelog.title}`,
-          blocks: [
-            {
-              type: 'context',
-              elements: [
-                {
-                  type: 'mrkdwn',
-                  text: `📢 New update published by ${actor}`,
-                },
-              ],
-            },
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `> *<${changelogUrl}|${this.escapeSlackMrkdwn(changelog.title)}>*\n${this.quoteText(this.escapeSlackMrkdwn(content))}`,
               },
             },
           ],
