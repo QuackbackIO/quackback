@@ -1,5 +1,5 @@
-import { useState, useTransition, useEffect } from 'react'
-import { useRouter, useSearch } from '@tanstack/react-router'
+import { useState, useEffect } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { getSlackConnectUrl } from '@/lib/server-functions/integrations'
+import { useDeleteIntegration } from '@/lib/hooks/use-integration-actions'
 
 interface SlackConnectionActionsProps {
   integrationId?: string
@@ -24,25 +25,23 @@ export function SlackConnectionActions({
   integrationId,
   isConnected,
 }: SlackConnectionActionsProps) {
-  const router = useRouter()
   const search = useSearch({ strict: false })
-  const [, startTransition] = useTransition()
+  const deleteMutation = useDeleteIntegration()
   const [showSuccess, setShowSuccess] = useState(false)
-  const [disconnecting, setDisconnecting] = useState(false)
   const [connecting, setConnecting] = useState(false)
 
   // Show success message if redirected from OAuth
   useEffect(() => {
-    const slackParam = (search as any)?.slack
-    if (slackParam === 'connected') {
-      setShowSuccess(true)
-      // Clear the URL param
-      const url = new URL(window.location.href)
-      url.searchParams.delete('slack')
-      window.history.replaceState({}, '', url.toString())
-      // Hide after 3 seconds
-      setTimeout(() => setShowSuccess(false), 3000)
-    }
+    const searchParams = search as { slack?: string }
+    if (searchParams.slack !== 'connected') return
+
+    setShowSuccess(true)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('slack')
+    window.history.replaceState({}, '', url.toString())
+
+    const timer = setTimeout(() => setShowSuccess(false), 3000)
+    return () => clearTimeout(timer)
   }, [search])
 
   const handleConnect = async () => {
@@ -56,22 +55,12 @@ export function SlackConnectionActions({
     }
   }
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = () => {
     if (!integrationId) return
-    setDisconnecting(true)
-    try {
-      const res = await fetch(`/api/integrations/${integrationId}`, {
-        method: 'DELETE',
-      })
-      if (res.ok) {
-        startTransition(() => {
-          router.invalidate()
-        })
-      }
-    } finally {
-      setDisconnecting(false)
-    }
+    deleteMutation.mutate({ id: integrationId })
   }
+
+  const disconnecting = deleteMutation.isPending
 
   return (
     <div className="flex flex-col items-end gap-2">

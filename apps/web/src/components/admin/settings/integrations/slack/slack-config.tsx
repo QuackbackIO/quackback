@@ -1,5 +1,4 @@
-import { useState, useEffect, useTransition } from 'react'
-import { useRouter } from '@tanstack/react-router'
+import { useState, useEffect, useCallback } from 'react'
 import { ArrowPathIcon, HashtagIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -11,12 +10,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-
-interface Channel {
-  id: string
-  name: string
-  isPrivate: boolean
-}
+import { useUpdateIntegration } from '@/lib/hooks/use-integration-actions'
+import { fetchSlackChannelsFn, type SlackChannel } from '@/lib/server-functions/integrations'
 
 interface EventMapping {
   id: string
@@ -29,6 +24,11 @@ interface SlackConfigProps {
   initialConfig: { channelId?: string }
   initialEventMappings: EventMapping[]
   enabled: boolean
+}
+
+function ChannelIcon({ isPrivate }: { isPrivate: boolean }) {
+  const Icon = isPrivate ? LockClosedIcon : HashtagIcon
+  return <Icon className="h-3.5 w-3.5 text-muted-foreground" />
 }
 
 const EVENT_TYPES = [
@@ -56,91 +56,61 @@ export function SlackConfig({
   initialEventMappings,
   enabled,
 }: SlackConfigProps) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [channels, setChannels] = useState<Channel[]>([])
+  const updateMutation = useUpdateIntegration()
+  const [channels, setChannels] = useState<SlackChannel[]>([])
   const [loadingChannels, setLoadingChannels] = useState(false)
   const [channelError, setChannelError] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState(initialConfig.channelId || '')
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
-  const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() => {
-    const settings: Record<string, boolean> = {}
-    for (const event of EVENT_TYPES) {
-      const mapping = initialEventMappings.find((m) => m.eventType === event.id)
-      settings[event.id] = mapping?.enabled ?? true // Default to enabled
-    }
-    return settings
-  })
-  const [saving, setSaving] = useState(false)
+  const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      EVENT_TYPES.map((event) => [
+        event.id,
+        initialEventMappings.find((m) => m.eventType === event.id)?.enabled ?? false,
+      ])
+    )
+  )
 
-  // Fetch channels on mount
-  useEffect(() => {
-    fetchChannels()
-  }, [])
-
-  const fetchChannels = async () => {
+  const fetchChannels = useCallback(async () => {
     setLoadingChannels(true)
     setChannelError(null)
     try {
-      const res = await fetch('/api/integrations/slack/channels')
-      if (!res.ok) {
-        throw new Error('Failed to load channels')
-      }
-      const data = await res.json()
-      setChannels(data.channels)
+      const result = await fetchSlackChannelsFn()
+      setChannels(result)
     } catch {
       setChannelError('Failed to load channels. Please try again.')
     } finally {
       setLoadingChannels(false)
     }
-  }
+  }, [])
 
-  const saveConfig = async (updates: {
-    enabled?: boolean
-    channelId?: string
-    eventMappings?: Array<{ eventType: string; enabled: boolean }>
-  }) => {
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/integrations/${integrationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enabled: updates.enabled,
-          config: updates.channelId !== undefined ? { channelId: updates.channelId } : undefined,
-          eventMappings: updates.eventMappings,
-        }),
-      })
-      if (res.ok) {
-        startTransition(() => {
-          router.invalidate()
-        })
-      }
-    } finally {
-      setSaving(false)
-    }
-  }
+  useEffect(() => {
+    fetchChannels()
+  }, [fetchChannels])
 
   const handleEnabledChange = (checked: boolean) => {
     setIntegrationEnabled(checked)
-    saveConfig({ enabled: checked })
+    updateMutation.mutate({ id: integrationId, enabled: checked })
   }
 
   const handleChannelChange = (channelId: string) => {
     setSelectedChannel(channelId)
-    saveConfig({ channelId })
+    updateMutation.mutate({ id: integrationId, config: { channelId } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
     const newSettings = { ...eventSettings, [eventId]: checked }
     setEventSettings(newSettings)
-    saveConfig({
+    updateMutation.mutate({
+      id: integrationId,
       eventMappings: Object.entries(newSettings).map(([eventType, enabled]) => ({
         eventType,
         enabled,
       })),
     })
   }
+
+  const saving = updateMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -197,11 +167,7 @@ export function SlackConfig({
               {channels.map((channel) => (
                 <SelectItem key={channel.id} value={channel.id}>
                   <div className="flex items-center gap-2">
-                    {channel.isPrivate ? (
-                      <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    ) : (
-                      <HashtagIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
+                    <ChannelIcon isPrivate={channel.isPrivate} />
                     <span>{channel.name}</span>
                   </div>
                 </SelectItem>
@@ -229,7 +195,7 @@ export function SlackConfig({
                 <div className="text-xs text-muted-foreground">{event.description}</div>
               </div>
               <Switch
-                checked={eventSettings[event.id] ?? true}
+                checked={eventSettings[event.id] ?? false}
                 onCheckedChange={(checked) => handleEventToggle(event.id, checked)}
                 disabled={saving || !integrationEnabled}
               />
@@ -239,10 +205,17 @@ export function SlackConfig({
       </div>
 
       {/* Saving indicator */}
-      {(saving || isPending) && (
+      {saving && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ArrowPathIcon className="h-4 w-4 animate-spin" />
           <span>Saving...</span>
+        </div>
+      )}
+
+      {/* Error message */}
+      {updateMutation.isError && (
+        <div className="text-sm text-destructive">
+          {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { exchangeSlackCode } from '@quackback/integrations'
+import { exchangeSlackCode } from '@/lib/hooks/slack'
 import { verifyOAuthState } from '@/lib/auth/oauth-state'
 import {
   STATE_EXPIRY_MS,
