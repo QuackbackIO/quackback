@@ -4,8 +4,7 @@ import type { PostId } from '@quackback/ids'
 
 interface AuthVoteButtonProps {
   postId: PostId
-  initialVoteCount: number
-  initialHasVoted: boolean
+  voteCount: number
   /** Whether voting is disabled (user not authenticated) */
   disabled?: boolean
 }
@@ -13,12 +12,7 @@ interface AuthVoteButtonProps {
 /**
  * VoteButton wrapper that shows auth dialog when unauthenticated user tries to vote.
  */
-export function AuthVoteButton({
-  postId,
-  initialVoteCount,
-  initialHasVoted,
-  disabled = false,
-}: AuthVoteButtonProps) {
+export function AuthVoteButton({ postId, voteCount, disabled = false }: AuthVoteButtonProps) {
   const { openAuthPopover } = useAuthPopover()
 
   const handleAuthRequired = () => {
@@ -28,8 +22,7 @@ export function AuthVoteButton({
   return (
     <VoteButton
       postId={postId}
-      initialVoteCount={initialVoteCount}
-      initialHasVoted={initialHasVoted}
+      voteCount={voteCount}
       disabled={disabled}
       onAuthRequired={disabled ? handleAuthRequired : undefined}
     />

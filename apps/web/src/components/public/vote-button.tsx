@@ -5,8 +5,7 @@ import type { PostId } from '@quackback/ids'
 
 interface VoteButtonProps {
   postId: PostId
-  initialVoteCount: number
-  initialHasVoted: boolean
+  voteCount: number
   disabled?: boolean
   /** Called when user tries to vote but isn't authenticated */
   onAuthRequired?: () => void
@@ -14,15 +13,13 @@ interface VoteButtonProps {
 
 export function VoteButton({
   postId,
-  initialVoteCount,
-  initialHasVoted,
+  voteCount: initialVoteCount,
   disabled = false,
   onAuthRequired,
 }: VoteButtonProps) {
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
-    initialVoteCount,
-    initialHasVoted,
+    voteCount: initialVoteCount,
   })
 
   function onClick(): void {

@@ -1,13 +1,23 @@
-import { useState, useCallback, useEffect } from 'react'
-import { useVoteMutation } from './use-public-posts-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useVoteMutation, votedPostsKeys, fetchVotedPosts } from './use-public-posts-query'
 import type { PostId } from '@quackback/ids'
+
+// ============================================================================
+// Query Keys
+// ============================================================================
+
+export const voteCountKeys = {
+  all: ['voteCount'] as const,
+  byPost: (postId: PostId) => [...voteCountKeys.all, postId] as const,
+}
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface UsePostVoteOptions {
   postId: PostId
-  initialVoteCount: number
-  initialHasVoted: boolean
-  /** Callback when vote state changes - used to sync parent state */
-  onVoteChange?: (postId: string, voted: boolean) => void
+  voteCount: number // Initial vote count (seeds cache)
 }
 
 interface UsePostVoteReturn {
@@ -17,82 +27,72 @@ interface UsePostVoteReturn {
   handleVote: (e?: React.MouseEvent) => void
 }
 
+// ============================================================================
+// Hook
+// ============================================================================
+
 /**
- * Hook for managing post voting with optimistic updates via React Query.
+ * Hook for managing post voting with TanStack Query as single source of truth.
+ * Optimistic updates handled via query cache manipulation.
  *
- * Always tracks vote count locally for immediate UI feedback.
- * When onVoteChange is provided, also notifies parent for hasVoted state sync.
+ * @param postId - The post ID to vote on
+ * @param voteCount - Initial vote count (seeds the cache)
  */
-export function usePostVote({
-  postId,
-  initialVoteCount,
-  initialHasVoted,
-  onVoteChange,
-}: UsePostVoteOptions): UsePostVoteReturn {
-  // Local state for optimistic updates - always used for vote count
-  const [localVoteCount, setLocalVoteCount] = useState(initialVoteCount)
-  const [localHasVoted, setLocalHasVoted] = useState(initialHasVoted)
+export function usePostVote({ postId, voteCount }: UsePostVoteOptions): UsePostVoteReturn {
+  const queryClient = useQueryClient()
 
-  // Sync local state when props change (e.g., from query cache updates)
-  useEffect(() => {
-    setLocalVoteCount(initialVoteCount)
-  }, [initialVoteCount])
+  // Subscribe to per-post vote count cache
+  // Seeded with initial value, updated optimistically by mutation
+  const { data: cachedVoteCount } = useQuery({
+    queryKey: voteCountKeys.byPost(postId),
+    queryFn: () => voteCount,
+    initialData: voteCount,
+    staleTime: Infinity, // Never refetch, rely on cache updates
+  })
 
-  useEffect(() => {
-    setLocalHasVoted(initialHasVoted)
-  }, [initialHasVoted])
+  // Subscribe to votedPosts cache for hasVoted state
+  // Has queryFn so it works even if useVotedPosts wasn't called (e.g., direct post detail navigation)
+  const { data: votedPosts } = useQuery<Set<string>>({
+    queryKey: votedPostsKeys.byWorkspace(),
+    queryFn: fetchVotedPosts,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
 
-  // Use the React Query mutation for cache integration
+  const hasVoted = votedPosts?.has(postId) ?? false
   const voteMutation = useVoteMutation()
 
-  const handleVote = useCallback(
-    (e?: React.MouseEvent) => {
-      if (e) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+  function handleVote(e?: React.MouseEvent): void {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
 
-      // Calculate new state based on current local state
-      const newHasVoted = !localHasVoted
-      const newVoteCount = newHasVoted ? localVoteCount + 1 : localVoteCount - 1
+    const newVoted = !hasVoted
 
-      // Apply optimistic update locally
-      setLocalHasVoted(newHasVoted)
-      setLocalVoteCount(newVoteCount)
+    // Optimistic update for vote count
+    queryClient.setQueryData<number>(
+      voteCountKeys.byPost(postId),
+      (old) => (old ?? voteCount) + (newVoted ? 1 : -1)
+    )
 
-      // Also notify parent if callback provided (for hasVoted sync)
-      if (onVoteChange) {
-        onVoteChange(postId, newHasVoted)
-      }
-
-      // Trigger mutation
-      voteMutation.mutate(postId, {
-        onError: () => {
-          // Revert local state on error
-          setLocalHasVoted(localHasVoted)
-          setLocalVoteCount(localVoteCount)
-          // Also notify parent of revert
-          if (onVoteChange) {
-            onVoteChange(postId, localHasVoted)
-          }
-        },
-        onSuccess: (data) => {
-          // Sync with server response for accuracy
-          setLocalHasVoted(data.voted)
-          setLocalVoteCount(data.voteCount)
-          // Also notify parent
-          if (onVoteChange) {
-            onVoteChange(postId, data.voted)
-          }
-        },
-      })
-    },
-    [postId, localVoteCount, localHasVoted, voteMutation, onVoteChange]
-  )
+    voteMutation.mutate(postId, {
+      onError: () => {
+        // Revert on error
+        queryClient.setQueryData<number>(
+          voteCountKeys.byPost(postId),
+          (old) => (old ?? voteCount) + (newVoted ? -1 : 1)
+        )
+      },
+      onSuccess: (data) => {
+        // Sync with server truth
+        queryClient.setQueryData<number>(voteCountKeys.byPost(postId), data.voteCount)
+      },
+    })
+  }
 
   return {
-    voteCount: localVoteCount,
-    hasVoted: localHasVoted,
+    voteCount: cachedVoteCount ?? voteCount,
+    hasVoted,
     isPending: voteMutation.isPending,
     handleVote,
   }
