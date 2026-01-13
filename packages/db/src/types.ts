@@ -13,6 +13,7 @@ import type {
 import type { integrations } from './schema/integrations'
 import type { changelogEntries } from './schema/changelog'
 import type { member } from './schema/auth'
+import type { billingSubscriptions, invoices } from './schema/billing'
 
 // Status categories (defined here to avoid circular imports in tests)
 export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
@@ -92,6 +93,14 @@ export type NewChangelogEntry = InferInsertModel<typeof changelogEntries>
 // Member types
 export type Member = InferSelectModel<typeof member>
 export type NewMember = InferInsertModel<typeof member>
+
+// Subscription types (cloud billing)
+export type Subscription = InferSelectModel<typeof billingSubscriptions>
+export type NewSubscription = InferInsertModel<typeof billingSubscriptions>
+
+// Invoice types (cloud billing)
+export type Invoice = InferSelectModel<typeof invoices>
+export type NewInvoice = InferInsertModel<typeof invoices>
 
 // Extended types for queries with relations
 export type CommentWithReplies = Comment & {

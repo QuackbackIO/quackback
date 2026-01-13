@@ -9,3 +9,6 @@ export * from './posts'
 export * from './integrations'
 export * from './changelog'
 export * from './notifications'
+
+// Billing (cloud edition)
+export * from './billing'
