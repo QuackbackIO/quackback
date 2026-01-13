@@ -118,7 +118,7 @@ async function createAuth() {
       defaultCookieAttributes: {
         sameSite: 'lax',
         // Secure cookies in production
-        secure: process.env.NODE_ENV === 'production',
+        secure: (process.env.NODE_ENV as string) === 'production',
       },
     },
 

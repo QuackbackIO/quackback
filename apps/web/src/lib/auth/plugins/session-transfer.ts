@@ -52,7 +52,7 @@ export const sessionTransfer = () => {
         async (ctx) => {
           const { token } = ctx.query
           const transferSecret = process.env.CLOUD_TRANSFER_TOKEN_SECRET
-          const NODE_ENV = process.env.NODE_ENV
+          const NODE_ENV = process.env.NODE_ENV as string
 
           // Check if session-transfer is enabled (requires shared secret)
           if (!transferSecret) {

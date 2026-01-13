@@ -48,7 +48,7 @@ export function isSelfHosted(): boolean {
   if (typeof __EDITION__ !== 'undefined') {
     return __EDITION__ !== 'cloud'
   }
-  return process.env.EDITION !== 'cloud'
+  return (process.env.EDITION as string) !== 'cloud'
 }
 
 /**
@@ -59,7 +59,7 @@ export function isCloud(): boolean {
   if (typeof __EDITION__ !== 'undefined') {
     return __EDITION__ === 'cloud'
   }
-  return process.env.EDITION === 'cloud'
+  return (process.env.EDITION as string) === 'cloud'
 }
 
 /**
