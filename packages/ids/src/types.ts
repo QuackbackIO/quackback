@@ -70,6 +70,9 @@ export type NotifPrefId = TypeId<'notif_pref'>
 /** Unsubscribe token ID - e.g., unsub_token_01h455vb4pex5vsknk084sn02q */
 export type UnsubTokenId = TypeId<'unsub_token'>
 
+/** In-app notification ID - e.g., notification_01h455vb4pex5vsknk084sn02q */
+export type NotificationId = TypeId<'notification'>
+
 /** Post edit history ID - e.g., post_edit_01h455vb4pex5vsknk084sn02q */
 export type PostEditId = TypeId<'post_edit'>
 
@@ -149,6 +152,7 @@ export interface EntityIdMap {
   post_subscription: PostSubscriptionId
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId
+  notification: NotificationId
   workspace: WorkspaceId
   user: UserId
   member: MemberId

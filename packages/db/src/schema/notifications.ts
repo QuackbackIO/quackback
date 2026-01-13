@@ -1,7 +1,16 @@
-import { pgTable, text, timestamp, boolean, index, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  index,
+  uniqueIndex,
+  varchar,
+  jsonb,
+} from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { posts } from './posts'
+import { posts, comments } from './posts'
 import { member } from './auth'
 
 /**
@@ -109,5 +118,57 @@ export const unsubscribeTokensRelations = relations(unsubscribeTokens, ({ one })
   post: one(posts, {
     fields: [unsubscribeTokens.postId],
     references: [posts.id],
+  }),
+}))
+
+/**
+ * In-app notifications - tracks notifications displayed in the UI.
+ * Created when events occur (status changes, comments, etc.) for subscribed users.
+ */
+export const inAppNotifications = pgTable(
+  'in_app_notifications',
+  {
+    id: typeIdWithDefault('notification')('id').primaryKey(),
+    memberId: typeIdColumn('member')('member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 50 }).notNull(), // 'post_status_changed', 'comment_created'
+    title: varchar('title', { length: 255 }).notNull(),
+    body: text('body'),
+    postId: typeIdColumnNullable('post')('post_id').references(() => posts.id, {
+      onDelete: 'cascade',
+    }),
+    commentId: typeIdColumnNullable('comment')('comment_id').references(() => comments.id, {
+      onDelete: 'cascade',
+    }),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Primary lookup: member's notifications ordered by date
+    index('in_app_notifications_member_created_idx').on(table.memberId, table.createdAt),
+    // Unread notifications for badge count (partial index)
+    index('in_app_notifications_member_unread_idx')
+      .on(table.memberId)
+      .where(sql`read_at IS NULL AND archived_at IS NULL`),
+    // Find notifications by related post
+    index('in_app_notifications_post_idx').on(table.postId),
+  ]
+)
+
+export const inAppNotificationsRelations = relations(inAppNotifications, ({ one }) => ({
+  member: one(member, {
+    fields: [inAppNotifications.memberId],
+    references: [member.id],
+  }),
+  post: one(posts, {
+    fields: [inAppNotifications.postId],
+    references: [posts.id],
+  }),
+  comment: one(comments, {
+    fields: [inAppNotifications.commentId],
+    references: [comments.id],
   }),
 }))

@@ -84,6 +84,7 @@ export type {
   PostSubscriptionId,
   NotifPrefId,
   UnsubTokenId,
+  NotificationId,
   // Auth entities
   WorkspaceId,
   UserId,

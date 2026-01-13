@@ -10,11 +10,13 @@ import type { HookHandler } from './types'
 // Import handlers (they export their hook objects, don't self-register)
 import { slackHook } from './slack/handler'
 import { emailHook } from './email/handler'
+import { notificationHook } from './notification/handler'
 
 // Initialize hooks Map AFTER imports are resolved
 const hooks = new Map<string, HookHandler>([
   ['slack', slackHook],
   ['email', emailHook],
+  ['notification', notificationHook],
 ])
 
 /**
@@ -43,3 +45,5 @@ export type {
   EmailTarget,
   EmailConfig,
 } from './types'
+
+export type { NotificationTarget, NotificationConfig } from './notification'

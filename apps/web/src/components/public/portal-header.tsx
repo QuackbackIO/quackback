@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { NotificationBell } from '@/components/notifications'
 
 interface PortalHeaderProps {
   orgName: string
@@ -109,6 +110,9 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
           </Link>
         </Button>
       )}
+
+      {/* Notification Bell (logged in users only) */}
+      {isLoggedIn && <NotificationBell popoverSide="bottom" className="mr-1" />}
 
       {/* Auth Buttons */}
       {isLoggedIn ? (

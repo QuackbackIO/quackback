@@ -16,6 +16,7 @@ import { stripHtml, truncate, getRootUrl } from '@/lib/hooks/utils'
 import type { EventData, EventActor } from './types'
 
 const EMAIL_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
+const NOTIFICATION_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
 
 /**
  * Get all hook targets for an event.
@@ -33,6 +34,14 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
     if (EMAIL_EVENT_TYPES.includes(event.type as (typeof EMAIL_EVENT_TYPES)[number])) {
       const emailTargets = await getEmailTargets(event)
       targets.push(...emailTargets)
+    }
+
+    // In-app notification targets (subscribers)
+    if (
+      NOTIFICATION_EVENT_TYPES.includes(event.type as (typeof NOTIFICATION_EVENT_TYPES)[number])
+    ) {
+      const notificationTargets = await getNotificationTargets(event)
+      targets.push(...notificationTargets)
     }
 
     return targets
@@ -207,6 +216,18 @@ function shouldNotifySubscriber(
 }
 
 /**
+ * Check if actor is a team member (cached per event).
+ */
+async function isActorTeamMember(actor: EventActor): Promise<boolean> {
+  if (!actor.userId) return false
+  const commenterMember = await db.query.member.findFirst({
+    where: eq(member.userId, actor.userId as UserId),
+    columns: { role: true },
+  })
+  return commenterMember?.role !== 'user'
+}
+
+/**
  * Build event-specific email config.
  */
 async function buildEmailEventConfig(
@@ -225,22 +246,84 @@ async function buildEmailEventConfig(
 
   if (event.type === 'comment.created') {
     const { comment, post } = event.data
-
-    // Check if commenter is a team member
-    const commenterMember = event.actor.userId
-      ? await db.query.member.findFirst({
-          where: eq(member.userId, event.actor.userId as UserId),
-          columns: { role: true },
-        })
-      : null
-    const isTeamMember = commenterMember?.role !== 'user'
-
     return {
       postTitle: post.title,
       postUrl: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
       commenterName: comment.authorEmail?.split('@')[0] ?? 'Someone',
       commentPreview: truncate(stripHtml(comment.content), 200),
-      isTeamMember,
+      isTeamMember: await isActorTeamMember(event.actor),
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get in-app notification targets (subscribers).
+ * Returns a single target with all member IDs for batch insertion.
+ */
+async function getNotificationTargets(event: EventData): Promise<HookTarget[]> {
+  const postId = extractPostId(event)
+  if (!postId) return []
+
+  const rootUrl = getRootUrl()
+  const subscribers = await getActiveSubscribers(postId)
+
+  if (subscribers.length === 0) return []
+
+  // Filter out the actor (don't notify yourself)
+  const eligibleSubscribers = subscribers.filter(
+    (subscriber) => !isActorSubscriber(subscriber, event.actor)
+  )
+
+  if (eligibleSubscribers.length === 0) return []
+
+  // Build notification config based on event type
+  const config = await buildNotificationConfig(event, rootUrl)
+  if (!config) return []
+
+  // Return single target with all member IDs (for batch insert)
+  return [
+    {
+      type: 'notification',
+      target: {
+        memberIds: eligibleSubscribers.map((s) => s.memberId),
+      },
+      config,
+    },
+  ]
+}
+
+/**
+ * Build notification-specific config from event.
+ */
+async function buildNotificationConfig(
+  event: EventData,
+  rootUrl: string
+): Promise<Record<string, unknown> | null> {
+  if (event.type === 'post.status_changed') {
+    const { post, previousStatus, newStatus } = event.data
+    return {
+      postId: post.id,
+      postTitle: post.title,
+      boardSlug: post.boardSlug,
+      postUrl: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+      previousStatus,
+      newStatus,
+    }
+  }
+
+  if (event.type === 'comment.created') {
+    const { comment, post } = event.data
+    return {
+      postId: post.id,
+      postTitle: post.title,
+      boardSlug: post.boardSlug,
+      postUrl: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+      commentId: comment.id,
+      commenterName: comment.authorEmail?.split('@')[0] ?? 'Someone',
+      commentPreview: truncate(stripHtml(comment.content), 200),
+      isTeamMember: await isActorTeamMember(event.actor),
     }
   }
 

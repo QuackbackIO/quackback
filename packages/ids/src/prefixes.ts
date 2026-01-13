@@ -37,6 +37,7 @@ export const ID_PREFIXES = {
   post_subscription: 'post_sub',
   notif_pref: 'notif_pref',
   unsub_token: 'unsub_token',
+  notification: 'notification',
 
   // ============================================
   // Auth Entities (Better-auth, text primary keys)
