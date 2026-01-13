@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { tagIdSchema } from '@quackback/ids'
+import type { TagId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { listTags, getTagById, createTag, updateTag, deleteTag } from '@/lib/tags/tag.service'
 
@@ -22,11 +22,11 @@ const createTagSchema = z.object({
 })
 
 const getTagSchema = z.object({
-  id: tagIdSchema,
+  id: z.string(),
 })
 
 const updateTagSchema = z.object({
-  id: tagIdSchema,
+  id: z.string(),
   name: z.string().min(1).max(50).optional(),
   color: z
     .string()
@@ -35,7 +35,7 @@ const updateTagSchema = z.object({
 })
 
 const deleteTagSchema = z.object({
-  id: tagIdSchema,
+  id: z.string(),
 })
 
 // ============================================
@@ -78,7 +78,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const tag = await getTagById(data.id)
+      const tag = await getTagById(data.id as TagId)
       console.log(`[fn:tags] fetchTag: found=${!!tag}`)
       return tag
     } catch (error) {
@@ -123,7 +123,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const tag = await updateTag(data.id, {
+      const tag = await updateTag(data.id as TagId, {
         name: data.name,
         color: data.color,
       })
@@ -145,9 +145,9 @@ export const deleteTagFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      await deleteTag(data.id)
+      await deleteTag(data.id as TagId)
       console.log(`[fn:tags] deleteTagFn: deleted`)
-      return { id: data.id }
+      return { id: data.id as TagId }
     } catch (error) {
       console.error(`[fn:tags] ❌ deleteTagFn failed:`, error)
       throw error

@@ -6,11 +6,11 @@ declare namespace Cloudflare {
     mainModule: typeof import('./src/server')
   }
   interface Env {
-    CLOUD_TENANT_BASE_DOMAIN: ''
-    CLOUD_NEON_DEFAULT_REGION: ''
-    CLOUD_CATALOG_DATABASE_URL: ''
-    CLOUD_NEON_API_KEY: ''
-    CLOUD_TRANSFER_TOKEN_SECRET: ''
+    CLOUD_TENANT_BASE_DOMAIN: string
+    CLOUD_NEON_DEFAULT_REGION: string
+    CLOUD_CATALOG_DATABASE_URL: string
+    CLOUD_NEON_API_KEY: string
+    CLOUD_TRANSFER_TOKEN_SECRET: string
     BETTER_AUTH_SECRET: string
     BETTER_AUTH_URL: string
     ROOT_URL: string
