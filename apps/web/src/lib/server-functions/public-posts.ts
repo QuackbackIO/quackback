@@ -581,3 +581,120 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       throw error
     }
   })
+
+// ============================================
+// Similar Posts (Duplicate Detection)
+// ============================================
+
+const findSimilarPostsSchema = z.object({
+  title: z.string().min(3).max(200),
+  boardId: z.string().optional(),
+  limit: z.number().int().min(1).max(10).optional().default(5),
+})
+
+export interface SimilarPost {
+  id: string
+  title: string
+  voteCount: number
+  status: {
+    name: string
+    color: string
+  } | null
+  boardSlug: string
+}
+
+/**
+ * Find posts similar to the given title using full-text search.
+ * Uses existing tsvector index for fast keyword-based matching.
+ * No auth required - this is a read-only helper for the post creation form.
+ */
+export const findSimilarPostsFn = createServerFn({ method: 'POST' })
+  .inputValidator(findSimilarPostsSchema)
+  .handler(async ({ data }): Promise<SimilarPost[]> => {
+    console.log(`[fn:public-posts] findSimilarPostsFn: title="${data.title.slice(0, 30)}..."`)
+    try {
+      // Import db utilities
+      const { db, posts, boards, postStatuses, eq, and, isNull, desc, sql } =
+        await import('@/lib/db')
+
+      // Build search query from title
+      // plainto_tsquery handles natural language input (no special syntax needed)
+      const searchQuery = data.title.trim()
+
+      // Build conditions
+      const conditions = [
+        isNull(posts.deletedAt),
+        sql`${posts.searchVector} @@ plainto_tsquery('english', ${searchQuery})`,
+      ]
+
+      if (data.boardId) {
+        conditions.push(eq(posts.boardId, data.boardId as BoardId))
+      }
+
+      // Query similar posts with ranking
+      const results = await db
+        .select({
+          id: posts.id,
+          title: posts.title,
+          voteCount: posts.voteCount,
+          statusId: posts.statusId,
+          boardId: posts.boardId,
+          // ts_rank scores relevance (higher = more relevant)
+          rank: sql<number>`ts_rank(${posts.searchVector}, plainto_tsquery('english', ${searchQuery}))`,
+        })
+        .from(posts)
+        .where(and(...conditions))
+        .orderBy(
+          // Order by relevance first, then by vote count for tiebreaker
+          desc(sql`ts_rank(${posts.searchVector}, plainto_tsquery('english', ${searchQuery}))`),
+          desc(posts.voteCount)
+        )
+        .limit(data.limit ?? 5)
+
+      if (results.length === 0) {
+        console.log(`[fn:public-posts] findSimilarPostsFn: no matches found`)
+        return []
+      }
+
+      // Fetch status and board info for matched posts
+      const statusIds = [...new Set(results.filter((r) => r.statusId).map((r) => r.statusId!))]
+      const boardIds = [...new Set(results.map((r) => r.boardId))]
+
+      const [statusesResult, boardsResult] = await Promise.all([
+        statusIds.length > 0
+          ? db
+              .select({ id: postStatuses.id, name: postStatuses.name, color: postStatuses.color })
+              .from(postStatuses)
+              .where(sql`${postStatuses.id} IN ${statusIds}`)
+          : Promise.resolve([]),
+        db
+          .select({ id: boards.id, slug: boards.slug })
+          .from(boards)
+          .where(sql`${boards.id} IN ${boardIds}`),
+      ])
+
+      const statusMap = new Map(statusesResult.map((s) => [String(s.id), s]))
+      const boardMap = new Map(boardsResult.map((b) => [String(b.id), b]))
+
+      // Build response
+      const similarPosts: SimilarPost[] = results.map((post) => {
+        const status = post.statusId ? statusMap.get(String(post.statusId)) : null
+        const board = boardMap.get(String(post.boardId))
+
+        return {
+          id: String(post.id),
+          title: post.title,
+          voteCount: post.voteCount,
+          status: status ? { name: status.name, color: status.color } : null,
+          boardSlug: board?.slug ?? '',
+        }
+      })
+
+      console.log(`[fn:public-posts] findSimilarPostsFn: found ${similarPosts.length} matches`)
+      return similarPosts
+    } catch (error) {
+      // Non-critical feature - log and return empty array
+      console.error(`[fn:public-posts] ❌ findSimilarPostsFn failed:`, error)
+      return []
+    }
+  })

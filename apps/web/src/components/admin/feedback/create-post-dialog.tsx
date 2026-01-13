@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createPostSchema, type CreatePostInput } from '@/lib/schemas/posts'
 import { useCreatePost } from '@/lib/hooks/use-inbox-queries'
+import { useSimilarPosts } from '@/lib/hooks/use-similar-posts'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,6 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import { SimilarPostsSuggestions } from '@/components/public/similar-posts-suggestions'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
@@ -87,6 +89,17 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
 
   const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
   const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
+
+  // Watch title for similar posts detection
+  const watchedTitle = form.watch('title')
+  const watchedBoardId = form.watch('boardId')
+
+  // Find similar posts as admin types (for duplicate detection)
+  const { posts: similarPosts, isLoading: isSimilarLoading } = useSimilarPosts({
+    title: watchedTitle,
+    boardId: watchedBoardId,
+    enabled: open,
+  })
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -205,6 +218,14 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+
+              {/* Similar posts suggestions (duplicate detection) */}
+              <SimilarPostsSuggestions
+                posts={similarPosts}
+                isLoading={isSimilarLoading}
+                show={watchedTitle.length >= 10}
+                className="my-2"
               />
 
               {/* Content - seamless rich text editor */}

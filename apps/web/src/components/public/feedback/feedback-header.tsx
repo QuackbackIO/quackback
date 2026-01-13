@@ -16,6 +16,8 @@ import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-e
 import { useCreatePublicPost } from '@/lib/hooks/use-public-posts-query'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { useSimilarPosts } from '@/lib/hooks/use-similar-posts'
+import { SimilarPostsSuggestions } from '@/components/public/similar-posts-suggestions'
 import { signOut } from '@/lib/auth/client'
 import type { JSONContent } from '@tiptap/react'
 
@@ -84,6 +86,13 @@ export function FeedbackHeader({
   }, [expanded])
 
   const selectedBoard = boards.find((b) => b.id === selectedBoardId)
+
+  // Find similar posts as user types (for duplicate detection)
+  const { posts: similarPosts, isLoading: isSimilarLoading } = useSimilarPosts({
+    title,
+    boardId: selectedBoardId,
+    enabled: expanded,
+  })
 
   const handleContentChange = useCallback(function (json: JSONContent): void {
     setContentJson(json)
@@ -263,6 +272,14 @@ export function FeedbackHeader({
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Similar posts suggestions (duplicate detection) */}
+            <SimilarPostsSuggestions
+              posts={similarPosts}
+              isLoading={isSimilarLoading}
+              show={expanded && title.length >= 10}
+              className="px-4 sm:px-5 mb-2"
+            />
 
             {/* Rich text editor */}
             <motion.div
