@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { z } from 'zod'
 import {
   ArrowUpTrayIcon,
   DocumentTextIcon,
@@ -11,6 +12,17 @@ import {
 import { Button } from '@/components/ui/button'
 import { CSV_TEMPLATE } from '@/lib/schemas/import'
 import type { ImportResult } from '@/lib/import/types'
+
+const errorResponseSchema = z.object({
+  error: z.string().optional(),
+})
+
+const importResponseSchema = z.object({
+  imported: z.number(),
+  skipped: z.number(),
+  errors: z.array(z.object({ row: z.number(), message: z.string() })),
+  createdTags: z.array(z.string()),
+})
 
 interface BoardImportSectionProps {
   boardId: string
@@ -64,11 +76,11 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
       })
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = errorResponseSchema.parse(await response.json())
         throw new Error(data.error || 'Import failed')
       }
 
-      const data = await response.json()
+      const data = importResponseSchema.parse(await response.json())
 
       // Import is now synchronous - results are returned immediately
       setResult({

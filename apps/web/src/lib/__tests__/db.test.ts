@@ -41,7 +41,7 @@ describe('db module', () => {
 
   describe('Self-hosted mode (no CLOUD_CATALOG_DATABASE_URL)', () => {
     it('should create singleton database from DATABASE_URL', async () => {
-      delete process.env.CLOUD_CATALOG_DATABASE_URL
+      delete (process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL
       process.env.DATABASE_URL = 'postgres://localhost/quackback'
 
       const { db } = await import('../db')
@@ -55,7 +55,7 @@ describe('db module', () => {
     })
 
     it('should reuse singleton on subsequent accesses', async () => {
-      delete process.env.CLOUD_CATALOG_DATABASE_URL
+      delete (process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL
       process.env.DATABASE_URL = 'postgres://localhost/quackback'
 
       const { db } = await import('../db')
@@ -69,8 +69,8 @@ describe('db module', () => {
     })
 
     it('should throw error when DATABASE_URL not set', async () => {
-      delete process.env.CLOUD_CATALOG_DATABASE_URL
-      delete process.env.DATABASE_URL
+      delete (process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL
+      delete (process.env as Record<string, string | undefined>).DATABASE_URL
 
       const { db } = await import('../db')
 
@@ -80,7 +80,7 @@ describe('db module', () => {
 
   describe('db proxy behavior', () => {
     it('should lazily access database on property access', async () => {
-      delete process.env.CLOUD_CATALOG_DATABASE_URL
+      delete (process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL
       process.env.DATABASE_URL = 'postgres://localhost/quackback'
 
       const { db } = await import('../db')

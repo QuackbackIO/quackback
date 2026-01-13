@@ -5,14 +5,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { resolveTenantFromDomain, resetCatalogDb } from '../resolver'
 
 // Hoist mocks so they're available before module imports
-const { mockGetTenantDb, mockDrizzle, mockPostgres } = vi.hoisted(() => ({
+const { mockGetTenantDb, mockDrizzle, mockNeon } = vi.hoisted(() => ({
   mockGetTenantDb: vi.fn((workspaceId: string, connectionString: string) => ({
     _workspaceId: workspaceId,
     _connectionString: connectionString,
     query: {},
   })),
   mockDrizzle: vi.fn(),
-  mockPostgres: vi.fn(),
+  mockNeon: vi.fn(() => ({})),
 }))
 
 // Mock db-cache
@@ -20,14 +20,14 @@ vi.mock('../db-cache', () => ({
   getTenantDb: mockGetTenantDb,
 }))
 
-// Mock drizzle-orm/postgres-js
-vi.mock('drizzle-orm/postgres-js', () => ({
-  drizzle: mockDrizzle,
+// Mock @neondatabase/serverless
+vi.mock('@neondatabase/serverless', () => ({
+  neon: mockNeon,
 }))
 
-// Mock postgres
-vi.mock('postgres', () => ({
-  default: mockPostgres,
+// Mock drizzle-orm/neon-http
+vi.mock('drizzle-orm/neon-http', () => ({
+  drizzle: mockDrizzle,
 }))
 
 // Store original env
@@ -60,7 +60,7 @@ describe('resolver', () => {
   beforeEach(() => {
     mockGetTenantDb.mockClear()
     mockDrizzle.mockReset()
-    mockPostgres.mockReset()
+    mockNeon.mockReset()
     resetCatalogDb()
 
     // Setup mock database
@@ -72,7 +72,7 @@ describe('resolver', () => {
       },
     }
     mockDrizzle.mockReturnValue(mockDb)
-    mockPostgres.mockReturnValue({})
+    mockNeon.mockReturnValue({})
 
     // Reset environment
     process.env = { ...originalEnv }
@@ -84,9 +84,9 @@ describe('resolver', () => {
 
   describe('resolveTenantFromDomain', () => {
     it('should return null when CLOUD_CATALOG_DATABASE_URL not configured', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = undefined as unknown as string
-      process.env.CLOUD_TENANT_BASE_DOMAIN = undefined as unknown as string
-      process.env.CLOUD_NEON_API_KEY = undefined as unknown as string
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL = undefined
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = undefined
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = undefined
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -95,9 +95,10 @@ describe('resolver', () => {
     })
 
     it('should return null when CLOUD_TENANT_BASE_DOMAIN not configured', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = undefined as unknown as string
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = undefined
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -106,9 +107,10 @@ describe('resolver', () => {
     })
 
     it('should return null when CLOUD_NEON_API_KEY not configured', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      delete process.env.CLOUD_NEON_API_KEY
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      delete (process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -117,9 +119,10 @@ describe('resolver', () => {
     })
 
     it('should return null when host header is missing', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       const request = new Request('https://example.com/dashboard')
 
@@ -129,9 +132,10 @@ describe('resolver', () => {
     })
 
     it('should return null when host is not a subdomain of base domain', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       const request = createRequest('https://example.com/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -141,9 +145,10 @@ describe('resolver', () => {
     })
 
     it('should return null when host is the base domain itself', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       const request = createRequest('https://quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -152,9 +157,10 @@ describe('resolver', () => {
     })
 
     it('should return null when workspace not found', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
@@ -166,9 +172,10 @@ describe('resolver', () => {
     })
 
     it('should return null when workspace migration not completed', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce({
         ...mockWorkspace,
@@ -182,9 +189,10 @@ describe('resolver', () => {
     })
 
     it('should return null when workspace has no Neon project ID', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce({
         ...mockWorkspace,
@@ -198,9 +206,10 @@ describe('resolver', () => {
     })
 
     it('should extract slug correctly from subdomain', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
@@ -215,9 +224,10 @@ describe('resolver', () => {
     })
 
     it('should strip port from host header', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
@@ -233,9 +243,10 @@ describe('resolver', () => {
     })
 
     it('should return null for nested subdomains', async () => {
-      process.env.CLOUD_CATALOG_DATABASE_URL = 'postgres://catalog/db'
-      process.env.CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      process.env.CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
+        'postgres://catalog/db'
+      ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
+      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
 
       const request = createRequest('https://app.acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)

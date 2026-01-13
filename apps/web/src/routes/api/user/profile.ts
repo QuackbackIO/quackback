@@ -101,7 +101,7 @@ export const Route = createFileRoute('/api/user/profile')({
               avatarType = avatarField.type
             }
           } else if (contentType.includes('application/json')) {
-            const body = await request.json()
+            const body = (await request.json()) as { name?: string }
             if (body.name && typeof body.name === 'string') {
               name = body.name.trim()
             }
@@ -135,13 +135,7 @@ export const Route = createFileRoute('/api/user/profile')({
             .update(user)
             .set(updates)
             .where(eq(user.id, session.user.id))
-            .returning({
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              image: user.image,
-              imageType: user.imageType,
-            })
+            .returning()
 
           console.log(`[api] ✅ Profile updated: user=${session.user.id}`)
           return Response.json({
@@ -181,13 +175,7 @@ export const Route = createFileRoute('/api/user/profile')({
               imageType: null,
             })
             .where(eq(user.id, session.user.id))
-            .returning({
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              image: user.image,
-              imageType: user.imageType,
-            })
+            .returning()
 
           console.log(`[api] ✅ Avatar removed: user=${session.user.id}`)
           return Response.json({

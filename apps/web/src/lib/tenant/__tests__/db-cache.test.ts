@@ -4,16 +4,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Hoist the mock factory so it's available before module imports
-const { mockCreateDb } = vi.hoisted(() => ({
-  mockCreateDb: vi.fn((connectionString: string) => ({
-    _connectionString: connectionString,
-    query: {},
-  })),
+const { mockNeon, mockDrizzle } = vi.hoisted(() => {
+  return {
+    mockNeon: vi.fn(() => ({})),
+    // Return a new object for each call to simulate unique db instances
+    mockDrizzle: vi.fn(() => ({
+      query: {},
+      _mock: true,
+    })),
+  }
+})
+
+// Mock @neondatabase/serverless
+vi.mock('@neondatabase/serverless', () => ({
+  neon: mockNeon,
 }))
 
-// Mock the db client module
-vi.mock('@quackback/db/client', () => ({
-  createDb: mockCreateDb,
+// Mock drizzle-orm/neon-http
+vi.mock('drizzle-orm/neon-http', () => ({
+  drizzle: mockDrizzle,
 }))
 
 // Import after mocking
@@ -30,8 +39,9 @@ describe('db-cache', () => {
     it('should create a new database connection on first call', () => {
       const db = getTenantDb('workspace_123', 'postgres://host/db1')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(1)
-      expect(mockCreateDb).toHaveBeenCalledWith('postgres://host/db1', { max: 5, prepare: false })
+      expect(mockNeon).toHaveBeenCalledTimes(1)
+      expect(mockNeon).toHaveBeenCalledWith('postgres://host/db1')
+      expect(mockDrizzle).toHaveBeenCalledTimes(1)
       expect(db).toBeDefined()
     })
 
@@ -39,7 +49,7 @@ describe('db-cache', () => {
       const db1 = getTenantDb('workspace_123', 'postgres://host/db1')
       const db2 = getTenantDb('workspace_123', 'postgres://host/db1')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(1)
+      expect(mockNeon).toHaveBeenCalledTimes(1)
       expect(db1).toBe(db2)
     })
 
@@ -47,7 +57,7 @@ describe('db-cache', () => {
       const db1 = getTenantDb('workspace_123', 'postgres://host/db1')
       const db2 = getTenantDb('workspace_456', 'postgres://host/db2')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(2)
+      expect(mockNeon).toHaveBeenCalledTimes(2)
       expect(db1).not.toBe(db2)
     })
 
@@ -55,13 +65,10 @@ describe('db-cache', () => {
       const db1 = getTenantDb('workspace_123', 'postgres://host/db1')
       const db2 = getTenantDb('workspace_123', 'postgres://host/db2-rotated')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(2)
+      expect(mockNeon).toHaveBeenCalledTimes(2)
       expect(db1).not.toBe(db2)
       // Verify the new connection uses the new connection string
-      expect(mockCreateDb).toHaveBeenLastCalledWith('postgres://host/db2-rotated', {
-        max: 5,
-        prepare: false,
-      })
+      expect(mockNeon).toHaveBeenLastCalledWith('postgres://host/db2-rotated')
     })
 
     it('should keep returning same connection if connection string unchanged', () => {
@@ -70,7 +77,7 @@ describe('db-cache', () => {
       const db2 = getTenantDb('workspace_123', connString)
       const db3 = getTenantDb('workspace_123', connString)
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(1)
+      expect(mockNeon).toHaveBeenCalledTimes(1)
       expect(db1).toBe(db2)
       expect(db2).toBe(db3)
     })
@@ -81,17 +88,17 @@ describe('db-cache', () => {
       getTenantDb('workspace_123', 'postgres://host/db1')
       getTenantDb('workspace_456', 'postgres://host/db2')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(2)
+      expect(mockNeon).toHaveBeenCalledTimes(2)
 
       clearTenantDb('workspace_123')
 
       // Getting workspace_123 again should create new connection
       getTenantDb('workspace_123', 'postgres://host/db1')
-      expect(mockCreateDb).toHaveBeenCalledTimes(3)
+      expect(mockNeon).toHaveBeenCalledTimes(3)
 
       // Getting workspace_456 should still use cached
       getTenantDb('workspace_456', 'postgres://host/db2')
-      expect(mockCreateDb).toHaveBeenCalledTimes(3)
+      expect(mockNeon).toHaveBeenCalledTimes(3)
     })
   })
 
@@ -100,7 +107,7 @@ describe('db-cache', () => {
       getTenantDb('workspace_123', 'postgres://host/db1')
       getTenantDb('workspace_456', 'postgres://host/db2')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(2)
+      expect(mockNeon).toHaveBeenCalledTimes(2)
 
       clearAllTenantDbs()
 
@@ -108,7 +115,7 @@ describe('db-cache', () => {
       getTenantDb('workspace_123', 'postgres://host/db1')
       getTenantDb('workspace_456', 'postgres://host/db2')
 
-      expect(mockCreateDb).toHaveBeenCalledTimes(4)
+      expect(mockNeon).toHaveBeenCalledTimes(4)
     })
   })
 
@@ -118,13 +125,13 @@ describe('db-cache', () => {
       for (let i = 0; i < 100; i++) {
         getTenantDb(`workspace_${i}`, `postgres://host/db${i}`)
       }
-      expect(mockCreateDb).toHaveBeenCalledTimes(100)
+      expect(mockNeon).toHaveBeenCalledTimes(100)
 
       // All 100 should be cached when accessed again
       for (let i = 0; i < 100; i++) {
         getTenantDb(`workspace_${i}`, `postgres://host/db${i}`)
       }
-      expect(mockCreateDb).toHaveBeenCalledTimes(100) // All still cached
+      expect(mockNeon).toHaveBeenCalledTimes(100) // All still cached
     })
   })
 })

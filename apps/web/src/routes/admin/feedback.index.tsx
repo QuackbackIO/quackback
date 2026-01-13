@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/queries/admin'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
@@ -8,20 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 
-const searchSchema = z.object({
-  board: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  status: z.array(z.string()).optional(),
-  owner: z.string().optional(),
-  search: z.string().optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
-  minVotes: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
-})
-
 export const Route = createFileRoute('/admin/feedback/')({
-  validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({
     board: search.board,
     tags: search.tags,

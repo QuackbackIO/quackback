@@ -85,8 +85,8 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      // 22 business columns + 1 searchVector (generated column for full-text search) + 1 deletedByMemberId (soft delete)
-      expect(columns.length).toBe(24)
+      // 23 business columns + 1 searchVector (generated column for full-text search) + 1 commentCount (denormalized)
+      expect(columns.length).toBe(25)
     })
   })
 

@@ -1,6 +1,11 @@
 import { useState } from 'react'
+import { z } from 'zod'
 import { ArrowDownTrayIcon, ArrowPathIcon, DocumentArrowDownIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+
+const errorResponseSchema = z.object({
+  error: z.string().optional(),
+})
 
 interface BoardExportSectionProps {
   boardId: string
@@ -22,7 +27,7 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
       const response = await fetch(`/api/export?${params}`)
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = errorResponseSchema.parse(await response.json())
         throw new Error(data.error || 'Export failed')
       }
 

@@ -375,9 +375,9 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
   try {
     const roadmaps = await listPublicRoadmaps()
     console.log(`[fn:portal] fetchPublicRoadmaps: count=${roadmaps.length}`)
-    // Serialize branded types to plain strings for turbo-stream
+    // Preserve branded types, serialize dates for turbo-stream
     return roadmaps.map((roadmap) => ({
-      id: String(roadmap.id),
+      id: roadmap.id,
       name: roadmap.name,
       slug: roadmap.slug,
       description: roadmap.description,

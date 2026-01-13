@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { z } from 'zod'
 import { toast } from 'sonner'
 import { CameraIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
@@ -8,6 +9,10 @@ import { ImageCropper } from '@/components/ui/image-cropper'
 import { authClient } from '@/lib/auth/client'
 import { useRouter } from '@tanstack/react-router'
 import { updateProfileNameFn, removeAvatarFn } from '@/lib/server-functions/user'
+
+const errorResponseSchema = z.object({
+  error: z.string().optional(),
+})
 
 interface ProfileFormProps {
   user: {
@@ -104,7 +109,7 @@ export function ProfileForm({
       })
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = errorResponseSchema.parse(await response.json())
         throw new Error(data.error || 'Failed to upload avatar')
       }
 
