@@ -134,7 +134,10 @@ function CommentItem({
   }
 
   return (
-    <div className="group/thread">
+    <div
+      id={`comment-${comment.id}`}
+      className="group/thread scroll-mt-20 transition-colors duration-500"
+    >
       {/* Thread container with Reddit-style indentation */}
       <div className={cn('relative', depth > 0 && 'ml-4 pl-4')}>
         {/* Comment content */}

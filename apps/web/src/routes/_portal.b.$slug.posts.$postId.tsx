@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
@@ -130,6 +130,24 @@ function PostDetailPage() {
     : null
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
+
+  // Scroll to comment anchor after content loads (handles async-loaded comments)
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash && hash.startsWith('#comment-')) {
+      // Small delay to ensure DOM is fully rendered after Suspense
+      const timeoutId = setTimeout(() => {
+        const element = document.querySelector(hash)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          // Add highlight effect
+          element.classList.add('bg-primary/5')
+          setTimeout(() => element.classList.remove('bg-primary/5'), 2000)
+        }
+      }, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [post.comments])
 
   // Create properly typed post with TipTap content
   const typedPost: PublicPostDetailView = {
