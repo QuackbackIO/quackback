@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
@@ -31,11 +32,20 @@ export function AuthCommentsSection({
   user: serverUser,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { session } = useRouteContext({ from: '__root__' })
   const { openAuthPopover } = useAuthPopover()
 
   // Refresh page on auth change to get updated server state (member status, user data)
-  useAuthBroadcast({ onSuccess: () => router.invalidate() })
+  useAuthBroadcast({
+    onSuccess: () => {
+      // Invalidate auth-dependent queries so they refetch with new session
+      queryClient.invalidateQueries({ queryKey: ['comments-section', postId] })
+      queryClient.invalidateQueries({ queryKey: ['vote-sidebar', postId] })
+      queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
+      router.invalidate()
+    },
+  })
 
   // Get user from session
   const user = session?.user
