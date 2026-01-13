@@ -34,6 +34,7 @@ export interface PublicPostDetailView {
   statusId: StatusId | null
   voteCount: number
   authorName: string | null
+  memberId: MemberId | null
   createdAt: Date | string
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>

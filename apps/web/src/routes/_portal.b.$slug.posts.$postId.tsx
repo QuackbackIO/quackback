@@ -73,12 +73,15 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     // Uses prefetchQuery which won't throw on error - components fall back to client fetch
     const commentMemberIds = collectCommentMemberIds(post.comments)
 
+    // Include post author's memberId for avatar fetching (if they have one)
+    const allMemberIds = post.memberId ? [...commentMemberIds, post.memberId] : commentMemberIds
+
     // Await prefetch so data is SSR'd (included in dehydrated state)
     // prefetchQuery doesn't throw, so errors are handled gracefully
     await Promise.all([
       queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId)),
       queryClient.prefetchQuery(
-        portalDetailQueries.commentsSectionData(postId, commentMemberIds as MemberId[])
+        portalDetailQueries.commentsSectionData(postId, allMemberIds as MemberId[])
       ),
       // Prefetch votedPosts so hasVoted state is SSR'd for vote button highlighting
       queryClient.prefetchQuery(portalDetailQueries.votedPosts()),
@@ -92,6 +95,14 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   },
   component: PostDetailPage,
 })
+
+/**
+ * Recursively collect member IDs for avatar fetching - mirrors loader logic
+ */
+function getAllMemberIds(post: PublicPostDetailView): MemberId[] {
+  const commentMemberIds = collectCommentMemberIds(post.comments) as MemberId[]
+  return post.memberId ? [...commentMemberIds, post.memberId] : commentMemberIds
+}
 
 function PostDetailPage() {
   const { settings, postId, slug } = Route.useLoaderData()
@@ -108,6 +119,15 @@ function PostDetailPage() {
   if (!post || !board) {
     return <div>Post not found</div>
   }
+
+  // Get avatar map that includes post author (prefetched in loader)
+  const allMemberIds = getAllMemberIds(post)
+  const commentsSectionQuery = useSuspenseQuery(
+    portalDetailQueries.commentsSectionData(postId, allMemberIds)
+  )
+  const authorAvatarUrl = post.memberId
+    ? (commentsSectionQuery.data.commentAvatarMap[post.memberId] ?? null)
+    : null
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
 
@@ -142,7 +162,11 @@ function PostDetailPage() {
           </Suspense>
 
           {/* Content section */}
-          <PostContentSection post={typedPost} currentStatus={currentStatus} />
+          <PostContentSection
+            post={typedPost}
+            currentStatus={currentStatus}
+            authorAvatarUrl={authorAvatarUrl}
+          />
         </div>
 
         {/* Official Response (if exists) */}

@@ -281,6 +281,7 @@ export async function getPublicPostDetail(
     statusId: postResult.statusId,
     voteCount: postResult.voteCount,
     authorName: postResult.authorName,
+    memberId: postResult.memberId,
     createdAt: postResult.createdAt,
     board: {
       id: postResult.board.id,

@@ -210,6 +210,7 @@ export interface PublicPostDetail {
   statusId: StatusId | null
   voteCount: number
   authorName: string | null
+  memberId: MemberId | null
   createdAt: Date
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>

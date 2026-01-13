@@ -37,12 +37,7 @@ const navItems = [
   { to: '/roadmap', label: 'Roadmap' },
 ]
 
-export function PortalHeader({
-  orgName,
-  orgLogo,
-  userRole,
-  initialUserData: _initialUserData,
-}: PortalHeaderProps) {
+export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {
   const router = useRouter()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { session } = useRouteContext({ from: '__root__' })
@@ -60,9 +55,11 @@ export function PortalHeader({
   const user = session?.user
   const isLoggedIn = !!user
 
-  const name = user?.name ?? null
-  const email = user?.email ?? null
-  const avatarUrl = user?.image ?? null
+  // Use initialUserData (which includes properly fetched avatar from blob storage)
+  // falling back to session data
+  const name = initialUserData?.name ?? user?.name ?? null
+  const email = initialUserData?.email ?? user?.email ?? null
+  const avatarUrl = initialUserData?.avatarUrl ?? user?.image ?? null
 
   // Team members (admin, member) can access admin dashboard
   const canAccessAdmin = isLoggedIn && ['admin', 'member'].includes(userRole || '')

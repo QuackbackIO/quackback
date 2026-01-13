@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getInitials } from '@/lib/utils'
 
 export function PostContentSectionSkeleton() {
   return (
@@ -16,6 +18,7 @@ export function PostContentSectionSkeleton() {
 
       {/* Author & time skeleton */}
       <div className="flex items-center gap-2 mb-4">
+        <Skeleton className="h-6 w-6 rounded-full" />
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />
       </div>
@@ -40,9 +43,14 @@ export function PostContentSectionSkeleton() {
 interface PostContentSectionProps {
   post: PublicPostDetailView
   currentStatus?: { name: string; color: string | null }
+  authorAvatarUrl?: string | null
 }
 
-export function PostContentSection({ post, currentStatus }: PostContentSectionProps) {
+export function PostContentSection({
+  post,
+  currentStatus,
+  authorAvatarUrl,
+}: PostContentSectionProps) {
   return (
     <div className="flex-1 p-6">
       {/* Status - only render if status exists */}
@@ -55,6 +63,12 @@ export function PostContentSection({ post, currentStatus }: PostContentSectionPr
 
       {/* Author & time */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+        <Avatar className="h-6 w-6">
+          {authorAvatarUrl && (
+            <AvatarImage src={authorAvatarUrl} alt={post.authorName || 'Author'} />
+          )}
+          <AvatarFallback className="text-[10px]">{getInitials(post.authorName)}</AvatarFallback>
+        </Avatar>
         <span className="font-medium text-foreground/90">{post.authorName || 'Anonymous'}</span>
         <span className="text-muted-foreground/60">·</span>
         <TimeAgo date={post.createdAt} />
