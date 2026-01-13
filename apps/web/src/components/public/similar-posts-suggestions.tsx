@@ -66,10 +66,10 @@ function SimilarPostItem({ post }: SimilarPostItemProps) {
 }
 
 // ============================================================================
-// Loading State
+// Loading State (kept for potential future use)
 // ============================================================================
 
-function LoadingIndicator() {
+function _LoadingIndicator() {
   return (
     <div className="flex items-center gap-2 py-2 px-3 text-xs text-muted-foreground">
       <div className="flex gap-1">
@@ -119,30 +119,14 @@ export function SimilarPostsSuggestions({
   show,
   className,
 }: SimilarPostsSuggestionsProps) {
-  // Don't render anything if not shown and no loading
-  if (!show && !isLoading) return null
+  // Only show if we have posts to display
+  // Don't show loading state to avoid flicker - it's fast enough
+  const showResults = show && posts.length > 0 && !isLoading
 
-  // Only show loading if we're actively loading and shown
-  const showLoading = isLoading && show
-
-  // Only show results if we have posts
-  const showResults = posts.length > 0 && !isLoading
+  if (!showResults) return null
 
   return (
     <AnimatePresence mode="wait">
-      {showLoading && (
-        <motion.div
-          key="loading"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-          className={cn('overflow-hidden', className)}
-        >
-          <LoadingIndicator />
-        </motion.div>
-      )}
-
       {showResults && (
         <motion.div
           key="results"

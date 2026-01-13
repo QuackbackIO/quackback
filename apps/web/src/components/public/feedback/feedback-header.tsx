@@ -88,9 +88,9 @@ export function FeedbackHeader({
   const selectedBoard = boards.find((b) => b.id === selectedBoardId)
 
   // Find similar posts as user types (for duplicate detection)
+  // Searches across ALL boards to find potential duplicates
   const { posts: similarPosts, isLoading: isSimilarLoading } = useSimilarPosts({
     title,
-    boardId: selectedBoardId,
     enabled: expanded,
   })
 
@@ -277,7 +277,7 @@ export function FeedbackHeader({
             <SimilarPostsSuggestions
               posts={similarPosts}
               isLoading={isSimilarLoading}
-              show={expanded && title.length >= 10}
+              show={expanded && title.length >= 5}
               className="px-4 sm:px-5 mb-2"
             />
 

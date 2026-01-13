@@ -588,7 +588,6 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
 
 const findSimilarPostsSchema = z.object({
   title: z.string().min(3).max(200),
-  boardId: z.string().optional(),
   limit: z.number().int().min(1).max(10).optional().default(5),
 })
 
@@ -608,28 +607,28 @@ export interface SimilarPost {
  * Uses existing tsvector index for fast keyword-based matching.
  * No auth required - this is a read-only helper for the post creation form.
  */
-export const findSimilarPostsFn = createServerFn({ method: 'POST' })
+export const findSimilarPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(findSimilarPostsSchema)
   .handler(async ({ data }): Promise<SimilarPost[]> => {
     console.log(`[fn:public-posts] findSimilarPostsFn: title="${data.title.slice(0, 30)}..."`)
     try {
       // Import db utilities
-      const { db, posts, boards, postStatuses, eq, and, isNull, desc, sql } =
+      const { db, posts, boards, postStatuses, and, isNull, desc, sql, inArray } =
         await import('@/lib/db')
 
       // Build search query from title
       // plainto_tsquery handles natural language input (no special syntax needed)
       const searchQuery = data.title.trim()
 
-      // Build conditions
+      // Build conditions - search across ALL boards for better duplicate detection
+      // We want to find similar posts anywhere in the workspace, not just the selected board
       const conditions = [
         isNull(posts.deletedAt),
         sql`${posts.searchVector} @@ plainto_tsquery('english', ${searchQuery})`,
       ]
 
-      if (data.boardId) {
-        conditions.push(eq(posts.boardId, data.boardId as BoardId))
-      }
+      // NOTE: Intentionally NOT filtering by boardId for duplicate detection
+      // Users should see similar posts across all boards
 
       // Query similar posts with ranking
       const results = await db
@@ -651,6 +650,10 @@ export const findSimilarPostsFn = createServerFn({ method: 'POST' })
         )
         .limit(data.limit ?? 5)
 
+      console.log(
+        `[fn:public-posts] findSimilarPostsFn: query="${searchQuery}", found ${results.length} raw results`
+      )
+
       if (results.length === 0) {
         console.log(`[fn:public-posts] findSimilarPostsFn: no matches found`)
         return []
@@ -665,12 +668,12 @@ export const findSimilarPostsFn = createServerFn({ method: 'POST' })
           ? db
               .select({ id: postStatuses.id, name: postStatuses.name, color: postStatuses.color })
               .from(postStatuses)
-              .where(sql`${postStatuses.id} IN ${statusIds}`)
+              .where(inArray(postStatuses.id, statusIds))
           : Promise.resolve([]),
         db
           .select({ id: boards.id, slug: boards.slug })
           .from(boards)
-          .where(sql`${boards.id} IN ${boardIds}`),
+          .where(inArray(boards.id, boardIds)),
       ])
 
       const statusMap = new Map(statusesResult.map((s) => [String(s.id), s]))

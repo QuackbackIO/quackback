@@ -26,8 +26,7 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 
 export const similarPostsKeys = {
   all: ['similarPosts'] as const,
-  search: (title: string, boardId?: string) =>
-    [...similarPostsKeys.all, title, boardId ?? 'all'] as const,
+  search: (title: string) => [...similarPostsKeys.all, title] as const,
 }
 
 // ============================================================================
@@ -37,13 +36,11 @@ export const similarPostsKeys = {
 interface UseSimilarPostsOptions {
   /** The title being typed by the user */
   title: string
-  /** Optional board ID to filter results to same board */
-  boardId?: string
   /** Whether the hook is enabled (default: true) */
   enabled?: boolean
   /** Debounce delay in ms (default: 400) */
   debounceMs?: number
-  /** Minimum title length to trigger search (default: 10) */
+  /** Minimum title length to trigger search (default: 5) */
   minLength?: number
 }
 
@@ -65,10 +62,9 @@ interface UseSimilarPostsResult {
  */
 export function useSimilarPosts({
   title,
-  boardId,
   enabled = true,
   debounceMs = 400,
-  minLength = 10,
+  minLength = 5,
 }: UseSimilarPostsOptions): UseSimilarPostsResult {
   // Debounce the title to avoid API spam
   const debouncedTitle = useDebouncedValue(title.trim(), debounceMs)
@@ -77,15 +73,15 @@ export function useSimilarPosts({
   const shouldSearch = enabled && debouncedTitle.length >= minLength
 
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: similarPostsKeys.search(debouncedTitle, boardId),
-    queryFn: () =>
-      findSimilarPostsFn({
+    queryKey: similarPostsKeys.search(debouncedTitle),
+    queryFn: async () => {
+      return findSimilarPostsFn({
         data: {
           title: debouncedTitle,
-          boardId,
           limit: 5,
         },
-      }),
+      })
+    },
     enabled: shouldSearch,
     staleTime: 60_000, // Cache for 1 minute
     gcTime: 5 * 60_000, // Keep in cache 5 minutes
