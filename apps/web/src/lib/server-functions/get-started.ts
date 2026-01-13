@@ -51,8 +51,16 @@ const workspaceDomain = pgTable(
     isPrimary: boolean('is_primary').default(false).notNull(),
     verified: boolean('verified').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Cloudflare custom domain fields
+    verificationToken: text('verification_token'), // HTTP verification token
+    cloudflareHostnameId: text('cloudflare_hostname_id'), // Cloudflare custom hostname ID
+    sslStatus: text('ssl_status'), // initializing|pending_validation|pending_issuance|pending_deployment|active|expired
+    ownershipStatus: text('ownership_status'), // pending|active|moved|blocked|deleted
   },
-  (table) => [index('workspace_domain_workspace_id_idx').on(table.workspaceId)]
+  (table) => [
+    index('workspace_domain_workspace_id_idx').on(table.workspaceId),
+    index('workspace_domain_cf_hostname_id_idx').on(table.cloudflareHostnameId),
+  ]
 )
 
 const verification = pgTable(
