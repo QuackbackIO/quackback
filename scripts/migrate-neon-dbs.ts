@@ -16,8 +16,9 @@ if (!NEON_API_KEY) {
   process.exit(1)
 }
 
-const NEON_API_BASE = 'https://console.neon.tech/api/v2'
 const EXCLUDED_PROJECTS = ['catalog']
+const CONCURRENCY = 5
+const TIMEOUT_MS = 60000
 
 interface NeonProject {
   id: string
@@ -26,84 +27,70 @@ interface NeonProject {
 
 interface NeonProjectsResponse {
   projects: NeonProject[]
-  pagination?: {
-    cursor?: string
-  }
 }
 
 interface NeonConnectionUriResponse {
   uri: string
 }
 
-async function fetchAllProjects(): Promise<NeonProject[]> {
-  const allProjects: NeonProject[] = []
-  let cursor: string | undefined
-
-  do {
-    const url = new URL(`${NEON_API_BASE}/projects`)
-    url.searchParams.set('limit', '100')
-    if (cursor) {
-      url.searchParams.set('cursor', cursor)
-    }
-
-    const response = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${NEON_API_KEY}` },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch projects: ${response.statusText}`)
-    }
-
-    const data = (await response.json()) as NeonProjectsResponse
-    allProjects.push(...data.projects)
-    cursor = data.pagination?.cursor
-  } while (cursor)
-
-  return allProjects.filter((p) => !EXCLUDED_PROJECTS.includes(p.name))
+async function fetchProjects(): Promise<NeonProject[]> {
+  const result =
+    await $`curl -s -H "Authorization: Bearer ${NEON_API_KEY}" "https://console.neon.tech/api/v2/projects?limit=100"`.text()
+  const data = JSON.parse(result) as NeonProjectsResponse
+  return data.projects.filter((p) => !EXCLUDED_PROJECTS.includes(p.name))
 }
 
 async function getConnectionUri(projectId: string): Promise<string> {
-  const response = await fetch(
-    `${NEON_API_BASE}/projects/${projectId}/connection_uri?database_name=neondb&role_name=neondb_owner`,
-    {
-      headers: { Authorization: `Bearer ${NEON_API_KEY}` },
-    }
-  )
-  if (!response.ok) {
-    throw new Error(`Failed to get connection URI: ${response.statusText}`)
-  }
-  const data = (await response.json()) as NeonConnectionUriResponse
+  const result =
+    await $`curl -s -H "Authorization: Bearer ${NEON_API_KEY}" "https://console.neon.tech/api/v2/projects/${projectId}/connection_uri?database_name=neondb&role_name=neondb_owner"`.text()
+  const data = JSON.parse(result) as NeonConnectionUriResponse
   return data.uri
 }
 
 async function runMigration(uri: string): Promise<boolean> {
   try {
-    await $`DATABASE_URL=${uri} bun run --cwd packages/db db:migrate`.quiet()
-    return true
+    const proc = Bun.spawn(['bun', 'run', '--cwd', 'packages/db', 'db:migrate'], {
+      env: { ...process.env, DATABASE_URL: uri },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const timeout = setTimeout(() => proc.kill(), TIMEOUT_MS)
+    const exitCode = await proc.exited
+    clearTimeout(timeout)
+    return exitCode === 0
   } catch {
     return false
   }
 }
 
+async function migrateProject(project: NeonProject): Promise<{ name: string; success: boolean }> {
+  try {
+    const uri = await getConnectionUri(project.id)
+    const success = await runMigration(uri)
+    return { name: project.name, success }
+  } catch {
+    return { name: project.name, success: false }
+  }
+}
+
 async function main() {
   console.log('🔍 Fetching Neon projects...')
-  const projects = await fetchAllProjects()
-  console.log(`Found ${projects.length} projects (excluding: ${EXCLUDED_PROJECTS.join(', ')})\n`)
+  const projects = await fetchProjects()
+  console.log(`Found ${projects.length} projects (excluding: ${EXCLUDED_PROJECTS.join(', ')})`)
+  console.log(`Running ${CONCURRENCY} migrations in parallel...\n`)
 
   const results: { name: string; success: boolean }[] = []
 
-  for (const project of projects) {
-    process.stdout.write(`Migrating ${project.name} (${project.id})... `)
-
-    try {
-      const uri = await getConnectionUri(project.id)
-      const success = await runMigration(uri)
-      results.push({ name: project.name, success })
-      console.log(success ? '✅' : '❌')
-    } catch {
-      results.push({ name: project.name, success: false })
-      console.log('❌')
-    }
+  for (let i = 0; i < projects.length; i += CONCURRENCY) {
+    const batch = projects.slice(i, i + CONCURRENCY)
+    const batchResults = await Promise.all(
+      batch.map(async (project) => {
+        const result = await migrateProject(project)
+        console.log(`${result.success ? '✅' : '❌'} ${result.name}`)
+        return result
+      })
+    )
+    results.push(...batchResults)
   }
 
   console.log('\n--- Summary ---')
