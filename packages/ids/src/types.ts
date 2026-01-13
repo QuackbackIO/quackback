@@ -120,6 +120,9 @@ export type TransferTokenId = TypeId<'transfer_token'>
 /** Subscription ID - e.g., subscription_01h455vb4pex5vsknk084sn02q */
 export type SubscriptionId = TypeId<'subscription'>
 
+/** Invoice ID - e.g., invoice_01h455vb4pex5vsknk084sn02q */
+export type InvoiceId = TypeId<'invoice'>
+
 // ============================================
 // Type Utilities
 // ============================================
@@ -163,6 +166,7 @@ export interface EntityIdMap {
   domain: DomainId
   transfer_token: TransferTokenId
   subscription: SubscriptionId
+  invoice: InvoiceId
 }
 
 /**

@@ -97,6 +97,7 @@ export type {
   TransferTokenId,
   // Billing
   SubscriptionId,
+  InvoiceId,
   // Utilities
   ExtractPrefix,
   EntityIdMap,
@@ -137,6 +138,7 @@ export {
   sessionIdSchema,
   inviteIdSchema,
   subscriptionIdSchema,
+  invoiceIdSchema,
   domainIdSchema,
   // Pre-built flexible schemas
   flexiblePostIdSchema,
@@ -155,6 +157,7 @@ export {
   flexibleSessionIdSchema,
   flexibleInviteIdSchema,
   flexibleSubscriptionIdSchema,
+  flexibleInvoiceIdSchema,
   flexibleDomainIdSchema,
   // Array schemas
   tagIdsSchema,

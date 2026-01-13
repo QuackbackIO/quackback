@@ -58,6 +58,7 @@ export const ID_PREFIXES = {
   // ============================================
 
   subscription: 'subscription',
+  invoice: 'invoice',
 } as const
 
 /**

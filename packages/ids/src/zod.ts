@@ -184,6 +184,7 @@ export const memberIdSchema = typeIdSchema(ID_PREFIXES.member)
 export const sessionIdSchema = typeIdSchema(ID_PREFIXES.session)
 export const inviteIdSchema = typeIdSchema(ID_PREFIXES.invite)
 export const subscriptionIdSchema = typeIdSchema(ID_PREFIXES.subscription)
+export const invoiceIdSchema = typeIdSchema(ID_PREFIXES.invoice)
 export const domainIdSchema = typeIdSchema(ID_PREFIXES.domain)
 
 // Flexible schemas (accept TypeID or UUID, normalize to UUID)
@@ -203,6 +204,7 @@ export const flexibleMemberIdSchema = flexibleIdSchema(ID_PREFIXES.member)
 export const flexibleSessionIdSchema = flexibleIdSchema(ID_PREFIXES.session)
 export const flexibleInviteIdSchema = flexibleIdSchema(ID_PREFIXES.invite)
 export const flexibleSubscriptionIdSchema = flexibleIdSchema(ID_PREFIXES.subscription)
+export const flexibleInvoiceIdSchema = flexibleIdSchema(ID_PREFIXES.invoice)
 export const flexibleDomainIdSchema = flexibleIdSchema(ID_PREFIXES.domain)
 
 // ============================================
