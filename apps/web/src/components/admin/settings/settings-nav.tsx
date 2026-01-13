@@ -10,6 +10,7 @@ import {
   PuzzlePieceIcon,
   GlobeAltIcon,
   KeyIcon,
+  CreditCardIcon,
   ChevronUpIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/solid'
@@ -46,6 +47,7 @@ const navSections: NavSection[] = [
         enterpriseOnly: true,
       },
       { label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon, cloudOnly: true },
+      { label: 'Billing', to: '/admin/settings/billing', icon: CreditCardIcon, cloudOnly: true },
     ],
   },
   {

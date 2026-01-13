@@ -26,9 +26,26 @@ export const getSubscription = cache(async (): Promise<WorkspaceSubscription | n
     return null
   }
 
-  // Cloud subscriptions would be handled by EE package
-  // For now, return null as we don't have subscription table in OSS
-  return null
+  // Import stripe subscription service dynamically to avoid loading in self-hosted
+  const { getSubscription: getStripeSubscription } =
+    await import('@/lib/stripe/subscription.service')
+
+  const subscription = await getStripeSubscription()
+
+  if (!subscription) {
+    return null
+  }
+
+  return {
+    id: subscription.id,
+    tier: subscription.tier as CloudTier,
+    status: subscription.status as SubscriptionStatus,
+    stripeCustomerId: subscription.stripeCustomerId,
+    stripeSubscriptionId: subscription.stripeSubscriptionId,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd ?? false,
+    trialEnd: subscription.trialEnd,
+  }
 })
 
 /**
