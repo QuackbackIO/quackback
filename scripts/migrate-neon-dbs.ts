@@ -5,6 +5,7 @@
  * Usage: NEON_API_KEY=xxx bun scripts/migrate-neon-dbs.ts
  *
  * Fetches all projects from Neon API and runs migrations on each.
+ * Excludes the catalog database by default.
  */
 
 import { $ } from 'bun'
@@ -16,6 +17,7 @@ if (!NEON_API_KEY) {
 }
 
 const NEON_API_BASE = 'https://console.neon.tech/api/v2'
+const EXCLUDED_PROJECTS = ['catalog']
 
 interface NeonProject {
   id: string
@@ -24,21 +26,40 @@ interface NeonProject {
 
 interface NeonProjectsResponse {
   projects: NeonProject[]
+  pagination?: {
+    cursor?: string
+  }
 }
 
 interface NeonConnectionUriResponse {
   uri: string
 }
 
-async function fetchProjects(): Promise<NeonProject[]> {
-  const response = await fetch(`${NEON_API_BASE}/projects`, {
-    headers: { Authorization: `Bearer ${NEON_API_KEY}` },
-  })
-  if (!response.ok) {
-    throw new Error(`Failed to fetch projects: ${response.statusText}`)
-  }
-  const data = (await response.json()) as NeonProjectsResponse
-  return data.projects
+async function fetchAllProjects(): Promise<NeonProject[]> {
+  const allProjects: NeonProject[] = []
+  let cursor: string | undefined
+
+  do {
+    const url = new URL(`${NEON_API_BASE}/projects`)
+    url.searchParams.set('limit', '100')
+    if (cursor) {
+      url.searchParams.set('cursor', cursor)
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${NEON_API_KEY}` },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch projects: ${response.statusText}`)
+    }
+
+    const data = (await response.json()) as NeonProjectsResponse
+    allProjects.push(...data.projects)
+    cursor = data.pagination?.cursor
+  } while (cursor)
+
+  return allProjects.filter((p) => !EXCLUDED_PROJECTS.includes(p.name))
 }
 
 async function getConnectionUri(projectId: string): Promise<string> {
@@ -66,8 +87,8 @@ async function runMigration(uri: string): Promise<boolean> {
 
 async function main() {
   console.log('🔍 Fetching Neon projects...')
-  const projects = await fetchProjects()
-  console.log(`Found ${projects.length} projects\n`)
+  const projects = await fetchAllProjects()
+  console.log(`Found ${projects.length} projects (excluding: ${EXCLUDED_PROJECTS.join(', ')})\n`)
 
   const results: { name: string; success: boolean }[] = []
 
