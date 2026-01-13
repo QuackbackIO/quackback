@@ -1,39 +1,42 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "quackback-web",
-  "account_id": "67cf7d5c8b797bfd5cbd417b233cc0d0",
-  "main": "../../apps/web/dist/server/index.js",
-  "compatibility_date": "2025-12-01",
-  "compatibility_flags": ["nodejs_compat"],
-  // Disable esbuild's keepNames to prevent __name helper from leaking into
-  // seroval's serialized stream code. See: https://opennext.js.org/cloudflare/howtos/keep_names
-  "keep_names": false,
-  "assets": {
-    "directory": "../../apps/web/dist/client"
-  },
-  "routes": [
-    {
-      "pattern": "*.quackback.io/*",
-      "zone_name": "quackback.io"
-    }
-  ],
-  "services": [
-    {
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "quackback-web"
-    }
-  ],
-  "vars": {
-    "ROOT_URL": "https://app.quackback.io",
-    "BETTER_AUTH_URL": "https://app.quackback.io",
-    "EMAIL_FROM": "Quackback <hello@quackback.io>",
-    "NODE_ENV": "production",
-    "EDITION": "cloud",
-    "CLOUD_TENANT_BASE_DOMAIN": "quackback.io",
-    "CLOUD_APP_DOMAIN": "app.quackback.io",
-    "CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2"
-  },
-  "observability": {
-    "enabled": true
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "quackback-web",
+	"account_id": "67cf7d5c8b797bfd5cbd417b233cc0d0",
+	"main": "../../apps/web/dist/server/index.js",
+	"compatibility_date": "2025-12-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// Disable esbuild's keepNames to prevent __name helper from leaking into
+	// seroval's serialized stream code. See: https://opennext.js.org/cloudflare/howtos/keep_names
+	"keep_names": false,
+	"assets": {
+		"directory": "../../apps/web/dist/client"
+	},
+	"routes": [
+		{
+			"pattern": "*.quackback.io/*",
+			"zone_name": "quackback.io"
+		}
+	],
+	"services": [
+		{
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "quackback-web"
+		}
+	],
+	"vars": {
+		"ROOT_URL": "https://app.quackback.io",
+		"BETTER_AUTH_URL": "https://app.quackback.io",
+		"EMAIL_FROM": "Quackback <hello@quackback.io>",
+		"NODE_ENV": "production",
+		"EDITION": "cloud",
+		"CLOUD_TENANT_BASE_DOMAIN": "quackback.io",
+		"CLOUD_APP_DOMAIN": "app.quackback.io",
+		"CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2",
+		"CLOUD_CLOUDFLARE_ZONE_ID": "54f34273ee8b1e8f2c2604f0c72a42be"
+	},
+	"observability": {
+		"enabled": true
+	}
 }
