@@ -62,8 +62,8 @@ export function FeedbackHeader({
     enabled: expanded,
   })
 
-  // Board selection
-  const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || boards[0]?.id || '')
+  // Board selection - only default if on a specific board page
+  const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || '')
 
   // Sync selectedBoardId when defaultBoardId prop changes
   useEffect(() => {
@@ -85,8 +85,6 @@ export function FeedbackHeader({
       })
     }
   }, [expanded])
-
-  const selectedBoard = boards.find((b) => b.id === selectedBoardId)
 
   // Find similar posts as user types (for duplicate detection)
   // Searches across ALL boards to find potential duplicates
@@ -142,7 +140,7 @@ export function FeedbackHeader({
   }
 
   function resetForm() {
-    setSelectedBoardId(defaultBoardId || boards[0]?.id || '')
+    setSelectedBoardId(defaultBoardId || '')
     setTitle('')
     setContentJson(null)
     setError('')
@@ -194,9 +192,7 @@ export function FeedbackHeader({
                   size="xs"
                   className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
                 >
-                  <SelectValue placeholder="Select board">
-                    {selectedBoard?.name || 'Select board'}
-                  </SelectValue>
+                  <SelectValue placeholder="Select a board" />
                 </SelectTrigger>
                 <SelectContent align="start">
                   {boards.map((board) => (

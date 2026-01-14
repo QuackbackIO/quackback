@@ -33,6 +33,11 @@ export interface BillingOverview {
     currency: string
     periodEnd: Date | null
   } | null
+  usage: {
+    seats: number
+    boards: number
+    roadmaps: number
+  } | null
   isStripeConfigured: boolean
 }
 
@@ -67,6 +72,7 @@ export const getBillingOverviewFn = createServerFn({ method: 'GET' }).handler(
         subscription: null,
         tierConfig: null,
         upcomingInvoice: null,
+        usage: null,
         isStripeConfigured: false,
       }
     }
@@ -87,10 +93,24 @@ export const getBillingOverviewFn = createServerFn({ method: 'GET' }).handler(
       }
     }
 
+    // Get usage counts
+    const [membersResult, boardsResult, roadmapsResult] = await Promise.all([
+      db.query.member.findMany({ columns: { id: true } }),
+      db.query.boards.findMany({ columns: { id: true } }),
+      db.query.roadmaps.findMany({ columns: { id: true } }),
+    ])
+
+    const usage = {
+      seats: membersResult.length,
+      boards: boardsResult.length,
+      roadmaps: roadmapsResult.length,
+    }
+
     return {
       subscription,
       tierConfig,
       upcomingInvoice,
+      usage,
       isStripeConfigured: isStripeConfigured(),
     }
   }
