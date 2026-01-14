@@ -74,6 +74,7 @@ export function FeedbackHeader({
 
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+  const [similarDismissed, setSimilarDismissed] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   // Focus title input when form expands
@@ -145,6 +146,7 @@ export function FeedbackHeader({
     setTitle('')
     setContentJson(null)
     setError('')
+    setSimilarDismissed(false)
   }
 
   function handleCancel() {
@@ -277,7 +279,8 @@ export function FeedbackHeader({
             <SimilarPostsSuggestions
               posts={similarPosts}
               isLoading={isSimilarLoading}
-              show={expanded && title.length >= 5}
+              show={expanded && title.length >= 5 && !similarDismissed}
+              onDismiss={() => setSimilarDismissed(true)}
               className="px-4 sm:px-5 mb-2"
             />
 

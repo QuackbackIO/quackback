@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link } from '@tanstack/react-router'
-import { ChevronUpIcon, LightBulbIcon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, LightBulbIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { cn } from '@/lib/utils'
@@ -26,7 +26,7 @@ function SimilarPostItem({ post }: SimilarPostItemProps) {
   const postUrl = `/b/${post.boardSlug}/posts/${post.id}`
 
   return (
-    <div className="flex items-stretch rounded-lg border border-border/50 bg-card overflow-hidden transition-colors hover:border-border">
+    <div className="flex items-stretch rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-border/80">
       {/* Vote button */}
       <button
         type="button"
@@ -39,14 +39,14 @@ function SimilarPostItem({ post }: SimilarPostItemProps) {
         aria-label={hasVoted ? 'Remove vote' : 'Vote for this post'}
         aria-pressed={hasVoted}
         className={cn(
-          'flex flex-col items-center justify-center w-12 shrink-0 border-r border-border/30 transition-colors',
+          'flex flex-col items-center justify-center w-12 shrink-0 border-r border-border transition-colors',
           hasVoted
             ? 'bg-primary/10 text-primary'
             : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
           isPending && 'opacity-50 cursor-wait'
         )}
       >
-        <ChevronUpIcon className={cn('h-4 w-4 transition-transform', hasVoted && 'text-primary')} />
+        <ChevronUpIcon className={cn('h-4 w-4', hasVoted && 'text-primary')} />
         <span className="text-xs font-bold tabular-nums">{voteCount}</span>
       </button>
 
@@ -99,6 +99,8 @@ interface SimilarPostsSuggestionsProps {
   isLoading: boolean
   /** Whether to show the component (controls visibility) */
   show: boolean
+  /** Callback when user dismisses the suggestions */
+  onDismiss?: () => void
   /** Optional className */
   className?: string
 }
@@ -117,6 +119,7 @@ export function SimilarPostsSuggestions({
   posts,
   isLoading,
   show,
+  onDismiss,
   className,
 }: SimilarPostsSuggestionsProps) {
   // Only show if we have posts to display
@@ -136,13 +139,23 @@ export function SimilarPostsSuggestions({
           transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           className={cn('overflow-hidden', className)}
         >
-          <div className="rounded-lg border border-amber-200/50 bg-amber-50/50 dark:border-amber-800/30 dark:bg-amber-950/20 p-3">
+          <div className="py-2">
             {/* Header */}
-            <div className="flex items-center gap-2 mb-3">
-              <LightBulbIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            <div className="flex items-center justify-between mb-2">
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LightBulbIcon className="h-3.5 w-3.5 text-primary" />
                 Similar requests from the community
               </p>
+              {onDismiss && (
+                <button
+                  type="button"
+                  onClick={onDismiss}
+                  className="p-1 -m-1 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Dismiss suggestions"
+                >
+                  <XMarkIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Post list */}
@@ -153,7 +166,7 @@ export function SimilarPostsSuggestions({
             </div>
 
             {/* Footer hint */}
-            <p className="text-[11px] text-amber-700/70 dark:text-amber-300/60 mt-3">
+            <p className="text-[11px] text-muted-foreground mt-2">
               Vote to show support, or continue below if your request is different.
             </p>
           </div>
