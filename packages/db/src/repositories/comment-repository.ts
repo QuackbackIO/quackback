@@ -25,6 +25,39 @@ export class CommentRepository {
   }
 
   /**
+   * Find a comment by ID with its post and board eager loaded
+   * Returns null if comment, post, or board is not found
+   * This is optimized to use a single query with joins
+   */
+  async findByIdWithPostAndBoard(
+    id: CommentId
+  ): Promise<{ comment: Comment; post: any; board: any } | null> {
+    const result = await this.db.query.comments.findFirst({
+      where: eq(comments.id, id),
+      with: {
+        post: {
+          with: {
+            board: true,
+          },
+        },
+      },
+    })
+
+    if (!result || !result.post || !result.post.board) {
+      return null
+    }
+
+    const { post, ...comment } = result
+    const { board, ...postData } = post
+
+    return {
+      comment: comment as Comment,
+      post: postData,
+      board,
+    }
+  }
+
+  /**
    * Find all comments for a post (flat list, not threaded)
    */
   async findByPostId(postId: PostId): Promise<Comment[]> {

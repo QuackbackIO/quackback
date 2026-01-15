@@ -19,6 +19,7 @@ import {
   and,
   asc,
   isNull,
+  sql,
   comments,
   commentReactions,
   commentEditHistory,
@@ -147,25 +148,14 @@ export class CommentService {
   ): Promise<Result<Comment, CommentError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      // Get existing comment
-      const existingComment = await commentRepo.findById(id)
-      if (!existingComment) {
+      // Get comment with post and board in a single query (3 queries → 1 query)
+      const commentWithRelations = await commentRepo.findByIdWithPostAndBoard(id)
+      if (!commentWithRelations) {
         return err(CommentError.notFound(id))
       }
 
-      // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(existingComment.postId)
-      if (!post) {
-        return err(CommentError.postNotFound(existingComment.postId))
-      }
-
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(CommentError.postNotFound(existingComment.postId))
-      }
+      const { comment: existingComment, post, board } = commentWithRelations
 
       // Authorization check - user must be comment author or team member
       const isAuthor = existingComment.memberId === ctx.memberId
@@ -215,25 +205,14 @@ export class CommentService {
   async deleteComment(id: CommentId, ctx: ServiceContext): Promise<Result<void, CommentError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      // Get existing comment
-      const existingComment = await commentRepo.findById(id)
-      if (!existingComment) {
+      // Get comment with post and board in a single query (3 queries → 1 query)
+      const commentWithRelations = await commentRepo.findByIdWithPostAndBoard(id)
+      if (!commentWithRelations) {
         return err(CommentError.notFound(id))
       }
 
-      // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(existingComment.postId)
-      if (!post) {
-        return err(CommentError.postNotFound(existingComment.postId))
-      }
-
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(CommentError.postNotFound(existingComment.postId))
-      }
+      const { comment: existingComment, post, board } = commentWithRelations
 
       // Authorization check - user must be comment author or team member
       const isAuthor = existingComment.memberId === ctx.memberId
@@ -266,26 +245,14 @@ export class CommentService {
   ): Promise<Result<Comment, CommentError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      const comment = await commentRepo.findById(id)
-      if (!comment) {
+      // Get comment with post and board in a single query (3 queries → 1 query)
+      const commentWithRelations = await commentRepo.findByIdWithPostAndBoard(id)
+      if (!commentWithRelations) {
         return err(CommentError.notFound(id))
       }
 
-      // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
-      if (!post) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
-
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
-
-      return ok(comment)
+      return ok(commentWithRelations.comment)
     })
   }
 
@@ -372,25 +339,14 @@ export class CommentService {
   ): Promise<Result<ReactionResult, CommentError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      // Verify comment exists
-      const comment = await commentRepo.findById(commentId)
-      if (!comment) {
+      // Get comment with post and board in a single query (3 queries → 1 query)
+      const commentWithRelations = await commentRepo.findByIdWithPostAndBoard(commentId)
+      if (!commentWithRelations) {
         return err(CommentError.notFound(commentId))
       }
 
-      // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
-      if (!post) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
-
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
+      const { comment } = commentWithRelations
 
       // Get user identifier for tracking
       const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
@@ -449,25 +405,14 @@ export class CommentService {
   ): Promise<Result<ReactionResult, CommentError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      // Verify comment exists
-      const comment = await commentRepo.findById(commentId)
-      if (!comment) {
+      // Get comment with post and board in a single query (3 queries → 1 query)
+      const commentWithRelations = await commentRepo.findByIdWithPostAndBoard(commentId)
+      if (!commentWithRelations) {
         return err(CommentError.notFound(commentId))
       }
 
-      // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
-      if (!post) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
-
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
+      const { comment } = commentWithRelations
 
       // Get user identifier for tracking
       const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
@@ -586,25 +531,14 @@ export class CommentService {
   ): Promise<Result<ReactionResult, CommentError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const commentRepo = new CommentRepository(uow.db)
-      const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      // Verify comment exists
-      const comment = await commentRepo.findById(commentId)
-      if (!comment) {
+      // Get comment with post and board in a single query (3 queries → 1 query)
+      const commentWithRelations = await commentRepo.findByIdWithPostAndBoard(commentId)
+      if (!commentWithRelations) {
         return err(CommentError.notFound(commentId))
       }
 
-      // Verify comment belongs to this organization (via its post's board)
-      const post = await postRepo.findById(comment.postId)
-      if (!post) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
-
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(CommentError.postNotFound(comment.postId))
-      }
+      const { comment } = commentWithRelations
 
       // Get user identifier for tracking
       const userIdentifier = ctx.userIdentifier || `member:${ctx.memberId}`
@@ -855,26 +789,37 @@ export class CommentService {
 
   /**
    * Check if a comment has any reply from a team member
-   * Recursively checks all descendants
+   * Uses a recursive CTE to fetch all descendants in a single query
+   * Compatible with both postgres-js and Neon HTTP drivers
    */
   private async hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
-    // Find direct replies that are from team members and not deleted
-    const replies = await db.query.comments.findMany({
-      where: and(eq(comments.parentId, commentId), isNull(comments.deletedAt)),
+    // Use recursive CTE to get all descendant comments in one query
+    const result = await db.select({
+      hasTeamReply: sql<boolean>`
+        EXISTS(
+          WITH RECURSIVE comment_descendants AS (
+            -- Base case: direct replies
+            SELECT id, parent_id, is_team_member, deleted_at
+            FROM comments
+            WHERE parent_id = ${commentId}
+              AND deleted_at IS NULL
+
+            UNION ALL
+
+            -- Recursive case: replies to replies
+            SELECT c.id, c.parent_id, c.is_team_member, c.deleted_at
+            FROM comments c
+            INNER JOIN comment_descendants cd ON c.parent_id = cd.id
+            WHERE c.deleted_at IS NULL
+          )
+          SELECT 1
+          FROM comment_descendants
+          WHERE is_team_member = true
+        )
+      `.as('has_team_reply'),
     })
 
-    for (const reply of replies) {
-      if (reply.isTeamMember) {
-        return true
-      }
-      // Recursively check replies
-      const hasNestedTeamReply = await this.hasTeamMemberReply(reply.id)
-      if (hasNestedTeamReply) {
-        return true
-      }
-    }
-
-    return false
+    return result[0]?.hasTeamReply ?? false
   }
 }
 

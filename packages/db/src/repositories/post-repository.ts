@@ -25,6 +25,58 @@ export class PostRepository {
   }
 
   /**
+   * Find a post by ID with all related data eager loaded
+   * Returns the post with board, tags, and comment count in a single query
+   */
+  async findByIdWithDetails(id: PostId): Promise<{
+    post: Post
+    board: { id: string; name: string; slug: string }
+    tags: { id: string; name: string; color: string }[]
+    commentCount: number
+  } | null> {
+    const result = await this.db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: {
+        board: {
+          columns: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        tags: {
+          with: {
+            tag: {
+              columns: {
+                id: true,
+                name: true,
+                color: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!result) {
+      return null
+    }
+
+    const { board, tags, ...post } = result
+
+    if (!board) {
+      return null
+    }
+
+    return {
+      post: post as Post,
+      board,
+      tags: tags.map((pt) => pt.tag),
+      commentCount: post.commentCount ?? 0,
+    }
+  }
+
+  /**
    * Find a post by slug within a board
    * Note: Posts don't have slugs in the current schema.
    * This method is reserved for future use when slug support is added.

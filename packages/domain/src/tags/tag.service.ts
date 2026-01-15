@@ -57,11 +57,8 @@ export class TagService {
 
       const trimmedName = input.name.trim()
 
-      // Check for duplicate name in the organization
-      const existingTags = await tagRepo.findAll()
-      const duplicate = existingTags.find(
-        (tag) => tag.name.toLowerCase() === trimmedName.toLowerCase()
-      )
+      // Check for duplicate name in the organization (optimized: 1 query instead of fetching all)
+      const duplicate = await tagRepo.findByName(trimmedName)
       if (duplicate) {
         return err(TagError.duplicateName(trimmedName))
       }
@@ -123,13 +120,10 @@ export class TagService {
           return err(TagError.validationError('Tag name must be 50 characters or less'))
         }
 
-        // Check for duplicate name (excluding current tag)
+        // Check for duplicate name (excluding current tag) (optimized: 1 query instead of fetching all)
         const trimmedName = input.name.trim()
-        const existingTags = await tagRepo.findAll()
-        const duplicate = existingTags.find(
-          (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
-        )
-        if (duplicate) {
+        const duplicate = await tagRepo.findByName(trimmedName)
+        if (duplicate && duplicate.id !== id) {
           return err(TagError.duplicateName(trimmedName))
         }
       }

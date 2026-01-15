@@ -488,48 +488,18 @@ export class PostService {
   ): Promise<Result<PostWithDetails, PostError>> {
     return withUnitOfWork(async (uow: UnitOfWork) => {
       const postRepo = new PostRepository(uow.db)
-      const boardRepo = new BoardRepository(uow.db)
 
-      // Get the post
-      const post = await postRepo.findById(postId)
-      if (!post) {
+      // Get post with all details in a single query (4 queries → 1 query)
+      const result = await postRepo.findByIdWithDetails(postId)
+      if (!result) {
         return err(PostError.notFound(postId))
       }
 
-      // Get the board and verify it belongs to this organization
-      const board = await boardRepo.findById(post.boardId)
-      if (!board) {
-        return err(PostError.boardNotFound(post.boardId))
-      }
-
-      // Get tags via postTags junction table
-      const postTagsResult = await uow.db
-        .select({
-          id: tags.id,
-          name: tags.name,
-          color: tags.color,
-        })
-        .from(postTags)
-        .innerJoin(tags, eq(tags.id, postTags.tagId))
-        .where(eq(postTags.postId, postId))
-
-      // Get comment count
-      const [commentCountResult] = await uow.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(comments)
-        .where(eq(comments.postId, postId))
-
-      const commentCount = commentCountResult?.count || 0
-
       const postWithDetails: PostWithDetails = {
-        ...post,
-        board: {
-          id: board.id,
-          name: board.name,
-          slug: board.slug,
-        },
-        tags: postTagsResult,
-        commentCount,
+        ...result.post,
+        board: result.board,
+        tags: result.tags,
+        commentCount: result.commentCount,
       }
 
       return ok(postWithDetails)

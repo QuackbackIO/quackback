@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import type { TagId, BoardId } from '@quackback/ids'
 import type { Database } from '../client'
 import { tags, postTags, posts } from '../schema'
@@ -44,6 +44,20 @@ export class TagRepository {
     return this.db.query.tags.findMany({
       orderBy: (tags, { asc }) => [asc(tags.name)],
     })
+  }
+
+  /**
+   * Find a tag by name (case-insensitive)
+   * This is optimized for duplicate checking without fetching all tags
+   */
+  async findByName(name: string): Promise<Tag | null> {
+    const result = await this.db
+      .select()
+      .from(tags)
+      .where(sql`LOWER(${tags.name}) = LOWER(${name})`)
+      .limit(1)
+
+    return result[0] ?? null
   }
 
   /**
