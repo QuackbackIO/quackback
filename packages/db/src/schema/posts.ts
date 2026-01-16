@@ -62,7 +62,8 @@ export const posts = pgTable(
     }),
     ownerId: text('owner_id'), // Legacy, kept for migration
     voteCount: integer('vote_count').default(0).notNull(),
-    // Denormalized comment count for performance (updated via trigger)
+    // Denormalized comment count for performance
+    // Automatically maintained by database trigger (see 0006_add_comment_count_trigger.sql)
     commentCount: integer('comment_count').default(0).notNull(),
     // Official team response (member-scoped)
     officialResponse: text('official_response'),
