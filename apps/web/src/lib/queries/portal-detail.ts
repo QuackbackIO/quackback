@@ -19,6 +19,7 @@ export interface PublicCommentView {
   createdAt: Date | string
   parentId: CommentId | null
   isTeamMember: boolean
+  avatarUrl: string | null
   replies: PublicCommentView[]
   reactions: CommentReactionCount[]
 }
@@ -35,6 +36,7 @@ export interface PublicPostDetailView {
   voteCount: number
   authorName: string | null
   memberId: MemberId | null
+  authorAvatarUrl: string | null
   createdAt: Date | string
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>
@@ -92,13 +94,14 @@ export const portalDetailQueries = {
     }),
 
   /**
-   * Get comments section data (canComment, avatarMap, user)
+   * Get comments section data (canComment, user)
+   * Avatar data is now included directly in comments from getPublicPostDetail
    * Used for SSR prefetching and client-side Suspense queries
    */
-  commentsSectionData: (postId: PostId, commentMemberIds: MemberId[]) =>
+  commentsSectionData: (postId: PostId) =>
     queryOptions({
       queryKey: ['comments-section', postId],
-      queryFn: () => getCommentsSectionDataFn({ data: { commentMemberIds } }),
+      queryFn: () => getCommentsSectionDataFn(),
       staleTime: 60 * 1000, // 1min
     }),
 

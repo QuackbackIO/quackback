@@ -15,6 +15,7 @@ import {
   and,
   asc,
   isNull,
+  sql,
   comments,
   commentReactions,
   commentEditHistory,
@@ -22,7 +23,7 @@ import {
   boards,
   type Comment,
 } from '@/lib/db'
-import type { CommentId, PostId, MemberId } from '@quackback/ids'
+import { toUuid, type CommentId, type PostId, type MemberId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
 import type {
@@ -40,11 +41,31 @@ import { buildCommentTree, aggregateReactions } from '@/lib/shared'
 // ============================================================================
 
 /**
+ * Safely extract rows from db.execute() result.
+ * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
+ */
+function getExecuteRows<T>(result: unknown): T[] {
+  // Check if result has rows property (neon-http format)
+  if (
+    result &&
+    typeof result === 'object' &&
+    'rows' in result &&
+    Array.isArray((result as { rows: unknown }).rows)
+  ) {
+    return (result as { rows: T[] }).rows
+  }
+  // Otherwise assume it's already an array (postgres-js format)
+  if (Array.isArray(result)) {
+    return result as T[]
+  }
+  return []
+}
+
+/**
  * Check if a comment has any reply from a team member
  * Recursively checks all descendants
  */
 async function hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
-  // Find direct replies that are from team members and not deleted
   const replies = await db.query.comments.findMany({
     where: and(eq(comments.parentId, commentId), isNull(comments.deletedAt)),
   })
@@ -53,9 +74,7 @@ async function hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
     if (reply.isTeamMember) {
       return true
     }
-    // Recursively check replies
-    const hasNestedTeamReply = await hasTeamMemberReply(reply.id)
-    if (hasNestedTeamReply) {
+    if (await hasTeamMemberReply(reply.id)) {
       return true
     }
   }
@@ -88,21 +107,15 @@ export async function createComment(
     role: 'admin' | 'member' | 'user'
   }
 ): Promise<CreateCommentResult> {
-  // Validate post exists
+  // Validate post exists and eagerly load board in single query
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, input.postId),
+    with: { board: true },
   })
-  if (!post) {
+  if (!post || !post.board) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
   }
-
-  // Verify post belongs to this organization (via its board)
-  const board = await db.query.boards.findFirst({
-    where: eq(boards.id, post.boardId),
-  })
-  if (!board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
-  }
+  const board = post.board
 
   // Validate parent comment exists if specified
   if (input.parentId) {
@@ -174,26 +187,19 @@ export async function updateComment(
   input: UpdateCommentInput,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Comment> {
-  // Get existing comment
+  // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, id),
+    with: {
+      post: {
+        with: { board: true },
+      },
+    },
   })
   if (!existingComment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
   }
-
-  // Verify comment belongs to this organization (via its post's board)
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, existingComment.postId),
-  })
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
-  }
-
-  const board = await db.query.boards.findFirst({
-    where: eq(boards.id, post.boardId),
-  })
-  if (!board) {
+  if (!existingComment.post || !existingComment.post.board) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
   }
 
@@ -250,26 +256,19 @@ export async function deleteComment(
   id: CommentId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
-  // Get existing comment
+  // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, id),
+    with: {
+      post: {
+        with: { board: true },
+      },
+    },
   })
   if (!existingComment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
   }
-
-  // Verify comment belongs to this organization (via its post's board)
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, existingComment.postId),
-  })
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
-  }
-
-  const board = await db.query.boards.findFirst({
-    where: eq(boards.id, post.boardId),
-  })
-  if (!board) {
+  if (!existingComment.post || !existingComment.post.board) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${existingComment.postId} not found`)
   }
 
@@ -393,42 +392,34 @@ export async function addReaction(
   emoji: string,
   userIdentifier: string
 ): Promise<ReactionResult> {
-  // Verify comment exists
-  const comment = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+  // Verify comment exists with post and board in single query
+  const comment = await db.query.comments.findFirst({
+    where: eq(comments.id, commentId),
+    with: {
+      post: {
+        with: { board: true },
+      },
+    },
+  })
   if (!comment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
-
-  // Verify comment belongs to this organization (via its post's board)
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-  if (!post) {
+  if (!comment.post || !comment.post.board) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
   }
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-  }
-
-  // Check if reaction already exists
-  const existingReaction = await db.query.commentReactions.findFirst({
-    where: and(
-      eq(commentReactions.commentId, commentId),
-      eq(commentReactions.userIdentifier, userIdentifier),
-      eq(commentReactions.emoji, emoji)
-    ),
-  })
-
-  let added = false
-  if (!existingReaction) {
-    // Add reaction
-    await db.insert(commentReactions).values({
+  // Atomically insert reaction (uses unique constraint to prevent duplicates)
+  const inserted = await db
+    .insert(commentReactions)
+    .values({
       commentId,
       userIdentifier,
       emoji,
     })
-    added = true
-  }
+    .onConflictDoNothing()
+    .returning()
+
+  const added = inserted.length > 0
 
   // Fetch updated reactions
   const reactions = await db.query.commentReactions.findMany({
@@ -461,36 +452,32 @@ export async function removeReaction(
   emoji: string,
   userIdentifier: string
 ): Promise<ReactionResult> {
-  // Verify comment exists
-  const comment = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+  // Verify comment exists with post and board in single query
+  const comment = await db.query.comments.findFirst({
+    where: eq(comments.id, commentId),
+    with: {
+      post: {
+        with: { board: true },
+      },
+    },
+  })
   if (!comment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
-
-  // Verify comment belongs to this organization (via its post's board)
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-  if (!post) {
+  if (!comment.post || !comment.post.board) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
   }
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-  }
-
-  // Check if reaction exists
-  const existingReaction = await db.query.commentReactions.findFirst({
-    where: and(
-      eq(commentReactions.commentId, commentId),
-      eq(commentReactions.userIdentifier, userIdentifier),
-      eq(commentReactions.emoji, emoji)
-    ),
-  })
-
-  if (existingReaction) {
-    // Remove reaction
-    await db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
-  }
+  // Directly delete (no need to check first - idempotent operation)
+  await db
+    .delete(commentReactions)
+    .where(
+      and(
+        eq(commentReactions.commentId, commentId),
+        eq(commentReactions.userIdentifier, userIdentifier),
+        eq(commentReactions.emoji, emoji)
+      )
+    )
 
   // Fetch updated reactions
   const reactions = await db.query.commentReactions.findMany({
@@ -523,46 +510,52 @@ export async function toggleReaction(
   emoji: string,
   userIdentifier: string
 ): Promise<ReactionResult> {
-  // Verify comment exists
-  const comment = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+  // Verify comment exists with post and board in single query
+  const comment = await db.query.comments.findFirst({
+    where: eq(comments.id, commentId),
+    with: {
+      post: {
+        with: { board: true },
+      },
+    },
+  })
   if (!comment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
-
-  // Verify comment belongs to this organization (via its post's board)
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, comment.postId) })
-  if (!post) {
+  if (!comment.post || !comment.post.board) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
   }
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-  }
+  const commentUuid = toUuid(commentId)
 
-  // Check if reaction already exists
-  const existingReaction = await db.query.commentReactions.findFirst({
-    where: and(
-      eq(commentReactions.commentId, commentId),
-      eq(commentReactions.userIdentifier, userIdentifier),
-      eq(commentReactions.emoji, emoji)
+  // Atomic toggle: delete if exists, insert if not
+  // Uses CTE to avoid race conditions between check and action
+  const toggleResult = await db.execute(sql`
+    WITH existing AS (
+      SELECT id FROM comment_reactions
+      WHERE comment_id = ${commentUuid}
+        AND user_identifier = ${userIdentifier}
+        AND emoji = ${emoji}
     ),
-  })
+    deleted AS (
+      DELETE FROM comment_reactions
+      WHERE id IN (SELECT id FROM existing)
+      RETURNING id
+    ),
+    inserted AS (
+      INSERT INTO comment_reactions (id, comment_id, user_identifier, emoji, created_at)
+      SELECT gen_random_uuid(), ${commentUuid}, ${userIdentifier}, ${emoji}, NOW()
+      WHERE NOT EXISTS (SELECT 1 FROM existing)
+      ON CONFLICT (comment_id, user_identifier, emoji) DO NOTHING
+      RETURNING id
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM inserted) as added,
+      EXISTS (SELECT 1 FROM deleted) as removed
+  `)
 
-  let added: boolean
-  if (existingReaction) {
-    // Remove existing reaction
-    await db.delete(commentReactions).where(eq(commentReactions.id, existingReaction.id))
-    added = false
-  } else {
-    // Add new reaction
-    await db.insert(commentReactions).values({
-      commentId,
-      userIdentifier,
-      emoji,
-    })
-    added = true
-  }
+  const toggleRows = getExecuteRows<{ added: boolean; removed: boolean }>(toggleResult)
+  const added = toggleRows[0]?.added ?? false
 
   // Fetch updated reactions
   const reactions = await db.query.commentReactions.findMany({

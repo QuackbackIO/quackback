@@ -23,8 +23,11 @@ import {
   postTags,
   tags,
   comments,
+  commentReactions,
   votes,
   postStatuses,
+  member as memberTable,
+  user as userTable,
 } from '@/lib/db'
 import type { PostId, StatusId, TagId, CommentId } from '@quackback/ids'
 import { buildCommentTree } from '@/lib/shared'
@@ -73,33 +76,25 @@ export async function listPublicPosts(params: {
     conditions.push(eq(boards.slug, boardSlug))
   }
 
-  // Status filter - resolve slugs to IDs using indexed lookup, or use IDs directly
-  let resolvedStatusIds = statusIds
+  // Status filter - use subquery to resolve slugs inline if needed
   if (statusSlugs && statusSlugs.length > 0) {
-    const statusesBySlug = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.slug, statusSlugs),
-      columns: { id: true },
-    })
-    resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
+    // Use subquery to resolve status slugs to IDs in a single query
+    const statusIdSubquery = db
+      .select({ id: postStatuses.id })
+      .from(postStatuses)
+      .where(inArray(postStatuses.slug, statusSlugs))
+    conditions.push(inArray(posts.statusId, statusIdSubquery))
+  } else if (statusIds && statusIds.length > 0) {
+    conditions.push(inArray(posts.statusId, statusIds))
   }
 
-  if (resolvedStatusIds && resolvedStatusIds.length > 0) {
-    conditions.push(inArray(posts.statusId, resolvedStatusIds))
-  }
-
-  // Tag filter - posts must have at least one of the selected tags
+  // Tag filter - use subquery to find posts with at least one of the selected tags
   if (tagIds && tagIds.length > 0) {
-    const postsWithSelectedTags = await db
+    const postIdsWithTagsSubquery = db
       .selectDistinct({ postId: postTags.postId })
       .from(postTags)
       .where(inArray(postTags.tagId, tagIds))
-
-    const postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
-
-    if (postIdsWithTags.length === 0) {
-      return { items: [], total: 0, hasMore: false }
-    }
-    conditions.push(inArray(posts.id, postIdsWithTags))
+    conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 
   // Full-text search using tsvector (much faster than ILIKE)
@@ -124,7 +119,8 @@ export async function listPublicPosts(params: {
         ? sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
         : desc(posts.voteCount) // 'top' is default
 
-  // Get posts with board info (without comment count - fetched separately)
+  // Get posts with board info
+  // Use denormalized commentCount field (maintained by database trigger)
   const postsResult = await db
     .select({
       id: posts.id,
@@ -132,6 +128,7 @@ export async function listPublicPosts(params: {
       content: posts.content,
       statusId: posts.statusId,
       voteCount: posts.voteCount,
+      commentCount: posts.commentCount,
       authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
@@ -148,20 +145,10 @@ export async function listPublicPosts(params: {
 
   const postIds = postsResult.map((p) => p.id)
 
-  // Batch fetch comment counts and tags in parallel
-  const [commentCountsResult, tagsResult] = await Promise.all([
+  // Batch fetch tags
+  const tagsResult =
     postIds.length > 0
-      ? db
-          .select({
-            postId: comments.postId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(comments)
-          .where(inArray(comments.postId, postIds))
-          .groupBy(comments.postId)
-      : Promise.resolve([]),
-    postIds.length > 0
-      ? db
+      ? await db
           .select({
             postId: postTags.postId,
             id: tags.id,
@@ -171,15 +158,9 @@ export async function listPublicPosts(params: {
           .from(postTags)
           .innerJoin(tags, eq(tags.id, postTags.tagId))
           .where(inArray(postTags.postId, postIds))
-      : Promise.resolve([]),
-  ])
+      : []
 
-  // Build lookup maps
-  const commentCountByPost = new Map<PostId, number>()
-  for (const row of commentCountsResult) {
-    commentCountByPost.set(row.postId, row.count)
-  }
-
+  // Build lookup map for tags
   const tagsByPost = new Map<PostId, Array<{ id: TagId; name: string; color: string }>>()
   for (const row of tagsResult) {
     const existing = tagsByPost.get(row.postId) || []
@@ -196,7 +177,7 @@ export async function listPublicPosts(params: {
     authorName: post.authorName,
     memberId: post.memberId,
     createdAt: post.createdAt,
-    commentCount: commentCountByPost.get(post.id) || 0,
+    commentCount: post.commentCount,
     tags: tagsByPost.get(post.id) || [],
     board: {
       id: post.boardId,
@@ -235,6 +216,31 @@ export async function getPublicPostDetail(
     return null
   }
 
+  // Fetch post author's avatar if memberId exists
+  let authorAvatarUrl: string | null = null
+  if (postResult.memberId) {
+    const authorData = await db
+      .select({
+        imageBlob: userTable.imageBlob,
+        imageType: userTable.imageType,
+        image: userTable.image,
+      })
+      .from(memberTable)
+      .innerJoin(userTable, eq(memberTable.userId, userTable.id))
+      .where(eq(memberTable.id, postResult.memberId))
+      .limit(1)
+
+    if (authorData.length > 0) {
+      const author = authorData[0]
+      if (author.imageBlob && author.imageType) {
+        const base64 = Buffer.from(author.imageBlob).toString('base64')
+        authorAvatarUrl = `data:${author.imageType};base64,${base64}`
+      } else if (author.image) {
+        authorAvatarUrl = author.image
+      }
+    }
+  }
+
   // Get tags
   const tagsResult = await db
     .select({
@@ -246,13 +252,73 @@ export async function getPublicPostDetail(
     .innerJoin(tags, eq(tags.id, postTags.tagId))
     .where(eq(postTags.postId, postId))
 
-  // Get comments with reactions
-  const commentsResult = await db.query.comments.findMany({
-    where: eq(comments.postId, postId),
-    with: {
-      reactions: true,
-    },
-    orderBy: asc(comments.createdAt),
+  // Get comments with reactions and avatar data
+  // Use raw query to LEFT JOIN member and user tables for avatar URLs
+  const commentsWithAvatars = await db
+    .select({
+      id: comments.id,
+      postId: comments.postId,
+      parentId: comments.parentId,
+      memberId: comments.memberId,
+      authorId: comments.authorId,
+      authorName: comments.authorName,
+      authorEmail: comments.authorEmail,
+      content: comments.content,
+      isTeamMember: comments.isTeamMember,
+      createdAt: comments.createdAt,
+      // Avatar data from user table (via member)
+      imageBlob: userTable.imageBlob,
+      imageType: userTable.imageType,
+      image: userTable.image,
+    })
+    .from(comments)
+    .leftJoin(memberTable, eq(comments.memberId, memberTable.id))
+    .leftJoin(userTable, eq(memberTable.userId, userTable.id))
+    .where(eq(comments.postId, postId))
+    .orderBy(asc(comments.createdAt))
+
+  // Fetch reactions separately (simpler than trying to aggregate in single query)
+  const commentIds = commentsWithAvatars.map((c) => c.id)
+  const reactionsResult =
+    commentIds.length > 0
+      ? await db.query.commentReactions.findMany({
+          where: inArray(commentReactions.commentId, commentIds),
+        })
+      : []
+
+  // Group reactions by comment ID
+  const reactionsByComment = new Map<string, Array<{ emoji: string; userIdentifier: string }>>()
+  for (const reaction of reactionsResult) {
+    const existing = reactionsByComment.get(reaction.commentId) || []
+    existing.push({ emoji: reaction.emoji, userIdentifier: reaction.userIdentifier })
+    reactionsByComment.set(reaction.commentId, existing)
+  }
+
+  // Build comments with reactions and compute avatar URLs
+  const commentsResult = commentsWithAvatars.map((comment) => {
+    // Compute avatar URL: blob takes precedence, then OAuth image, then null
+    let avatarUrl: string | null = null
+    if (comment.imageBlob && comment.imageType) {
+      const base64 = Buffer.from(comment.imageBlob).toString('base64')
+      avatarUrl = `data:${comment.imageType};base64,${base64}`
+    } else if (comment.image) {
+      avatarUrl = comment.image
+    }
+
+    return {
+      id: comment.id,
+      postId: comment.postId,
+      parentId: comment.parentId,
+      memberId: comment.memberId,
+      authorId: comment.authorId,
+      authorName: comment.authorName,
+      authorEmail: comment.authorEmail,
+      content: comment.content,
+      isTeamMember: comment.isTeamMember,
+      createdAt: comment.createdAt,
+      avatarUrl,
+      reactions: reactionsByComment.get(comment.id) || [],
+    }
   })
 
   // Build nested comment tree
@@ -267,6 +333,7 @@ export async function getPublicPostDetail(
     createdAt: node.createdAt,
     parentId: node.parentId as CommentId | null,
     isTeamMember: node.isTeamMember,
+    avatarUrl: node.avatarUrl ?? null,
     replies: node.replies.map(mapToPublicComment),
     reactions: node.reactions,
   })
@@ -282,6 +349,7 @@ export async function getPublicPostDetail(
     voteCount: postResult.voteCount,
     authorName: postResult.authorName,
     memberId: postResult.memberId,
+    authorAvatarUrl,
     createdAt: postResult.createdAt,
     board: {
       id: postResult.board.id,

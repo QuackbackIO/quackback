@@ -27,7 +27,7 @@ export function VoteSidebar({ postId, voteCount }: VoteSidebarProps) {
   const isMember = sidebarData?.isMember ?? false
   const subscriptionStatus = sidebarData?.subscriptionStatus ?? {
     subscribed: false,
-    muted: false,
+    level: 'none' as const,
     reason: null,
   }
 

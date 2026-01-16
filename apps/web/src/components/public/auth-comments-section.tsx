@@ -12,8 +12,6 @@ interface AuthCommentsSectionProps {
   comments: PublicCommentView[]
   /** Server-determined: user is authenticated member who can comment */
   allowCommenting?: boolean
-  /** Map of memberId to avatar URL (base64 or external URL) */
-  avatarUrls?: Record<string, string | null>
   user?: { name: string | null; email: string; memberId?: MemberId }
 }
 
@@ -28,7 +26,6 @@ export function AuthCommentsSection({
   postId,
   comments,
   allowCommenting: serverAllowCommenting = false,
-  avatarUrls,
   user: serverUser,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
@@ -70,7 +67,6 @@ export function AuthCommentsSection({
       postId={postId}
       comments={comments}
       allowCommenting={allowCommenting}
-      avatarUrls={avatarUrls}
       user={userData}
       onAuthRequired={() => openAuthPopover({ mode: 'login' })}
       createComment={createComment}

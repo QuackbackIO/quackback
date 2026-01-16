@@ -195,6 +195,7 @@ export interface PublicComment {
   createdAt: Date
   parentId: CommentId | null
   isTeamMember: boolean
+  avatarUrl: string | null
   replies: PublicComment[]
   reactions: CommentReactionCount[]
 }
@@ -211,6 +212,7 @@ export interface PublicPostDetail {
   voteCount: number
   authorName: string | null
   memberId: MemberId | null
+  authorAvatarUrl: string | null
   createdAt: Date
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>

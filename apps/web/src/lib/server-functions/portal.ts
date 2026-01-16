@@ -67,10 +67,6 @@ const fetchPublicRoadmapPostsSchema = z.object({
   offset: z.number().int().min(0).optional(),
 })
 
-const getCommentsSectionDataSchema = z.object({
-  commentMemberIds: z.array(z.string()),
-})
-
 const getMemberIdForUserSchema = z.object({
   userId: z.string(),
 })
@@ -428,81 +424,35 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
 
 /**
  * Get comments section data (optional auth).
- * Returns membership status and avatar URLs for comment authors.
+ * Returns membership status for comment permissions.
+ * Avatar data is now included directly in comments from getPublicPostDetail.
  */
-export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
-  .inputValidator(getCommentsSectionDataSchema)
-  .handler(
-    async ({
-      data,
-    }): Promise<{
-      isMember: boolean
-      canComment: boolean
-      commentAvatarMap: Record<string, string | null>
-      user: { name: string | null; email: string; memberId?: MemberId } | undefined
-    }> => {
-      const ctx = await getOptionalAuth()
+export const getCommentsSectionDataFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<{
+    isMember: boolean
+    canComment: boolean
+    user: { name: string | null; email: string; memberId?: MemberId } | undefined
+  }> => {
+    const ctx = await getOptionalAuth()
 
-      let isMember = false
-      let user: { name: string | null; email: string; memberId?: MemberId } | undefined = undefined
+    let isMember = false
+    let user: { name: string | null; email: string; memberId?: MemberId } | undefined = undefined
 
-      if (ctx?.user && ctx?.member) {
-        isMember = true
-        user = {
-          name: ctx.user.name,
-          email: ctx.user.email,
-          memberId: ctx.member.id,
-        }
-      }
-
-      const canComment = isMember
-
-      // Fetch avatar URLs for all comment authors
-      const validMemberIds = (data.commentMemberIds as MemberId[]).filter(
-        (id): id is MemberId => id !== null
-      )
-      let commentAvatarMap: Record<string, string | null> = {}
-
-      if (validMemberIds.length > 0) {
-        // Get members with their user data
-        const members = await db
-          .select({
-            memberId: memberTable.id,
-            userId: memberTable.userId,
-            imageBlob: userTable.imageBlob,
-            imageType: userTable.imageType,
-            image: userTable.image,
-          })
-          .from(memberTable)
-          .innerJoin(userTable, eq(memberTable.userId, userTable.id))
-          .where(inArray(memberTable.id, validMemberIds))
-
-        const avatarMap = new Map<MemberId, string | null>()
-
-        for (const member of members) {
-          if (member.imageBlob && member.imageType) {
-            const base64 = Buffer.from(member.imageBlob).toString('base64')
-            avatarMap.set(member.memberId, `data:${member.imageType};base64,${base64}`)
-          } else {
-            avatarMap.set(member.memberId, member.image)
-          }
-        }
-
-        // Fill in null for any members not found
-        for (const memberId of validMemberIds) {
-          if (!avatarMap.has(memberId)) {
-            avatarMap.set(memberId, null)
-          }
-        }
-
-        commentAvatarMap = Object.fromEntries(avatarMap)
-      }
-
-      return {
-        isMember,
-        canComment,
-        commentAvatarMap,
-        user,
+    if (ctx?.user && ctx?.member) {
+      isMember = true
+      user = {
+        name: ctx.user.name,
+        email: ctx.user.email,
+        memberId: ctx.member.id,
       }
     }
-  )
+
+    const canComment = isMember
+
+    return {
+      isMember,
+      canComment,
+      user,
+    }
+  }
+)

@@ -3,23 +3,7 @@ import { useMemo } from 'react'
 import { portalDetailQueries, type PublicCommentView } from '@/lib/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PostId, MemberId } from '@quackback/ids'
-
-/**
- * Recursively collect all member IDs from comments and their nested replies
- */
-function collectCommentMemberIds(comments: PublicCommentView[]): string[] {
-  const memberIds: string[] = []
-  for (const comment of comments) {
-    if (comment.memberId) {
-      memberIds.push(comment.memberId)
-    }
-    if (comment.replies.length > 0) {
-      memberIds.push(...collectCommentMemberIds(comment.replies))
-    }
-  }
-  return memberIds
-}
+import type { PostId } from '@quackback/ids'
 
 /**
  * Recursively count all comments including nested replies
@@ -70,14 +54,12 @@ interface CommentsSectionProps {
 }
 
 export function CommentsSection({ postId, comments }: CommentsSectionProps) {
-  const commentMemberIds = useMemo(() => collectCommentMemberIds(comments), [comments])
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
   // useSuspenseQuery reads from cache if available (prefetched in loader), fetches if not
   // Suspense boundary handles loading state, so no skeleton needed here
-  const { data } = useSuspenseQuery(
-    portalDetailQueries.commentsSectionData(postId, commentMemberIds as MemberId[])
-  )
+  // Avatar data is now included directly in each comment from getPublicPostDetail
+  const { data } = useSuspenseQuery(portalDetailQueries.commentsSectionData(postId))
 
   return (
     <div className="border-t border-border/30 p-6">
@@ -89,7 +71,6 @@ export function CommentsSection({ postId, comments }: CommentsSectionProps) {
         postId={postId}
         comments={comments}
         allowCommenting={data.canComment}
-        avatarUrls={data.commentAvatarMap}
         user={data.user}
       />
     </div>

@@ -22,8 +22,6 @@ interface CommentThreadProps {
   postId: PostId
   comments: PublicCommentView[]
   allowCommenting?: boolean
-  /** Map of memberId to avatar URL (base64 or external URL) */
-  avatarUrls?: Record<string, string | null>
   user?: { name: string | null; email: string }
   /** Called when unauthenticated user tries to comment */
   onAuthRequired?: () => void
@@ -35,7 +33,6 @@ export function CommentThread({
   postId,
   comments,
   allowCommenting = true,
-  avatarUrls,
   user,
   onAuthRequired,
   createComment,
@@ -69,7 +66,6 @@ export function CommentThread({
                 postId={postId}
                 comment={comment}
                 allowCommenting={allowCommenting}
-                avatarUrls={avatarUrls}
                 user={user}
                 createComment={createComment}
               />
@@ -84,7 +80,6 @@ interface CommentItemProps {
   postId: PostId
   comment: PublicCommentView
   allowCommenting: boolean
-  avatarUrls?: Record<string, string | null>
   depth?: number
   user?: { name: string | null; email: string }
   createComment?: CreateCommentMutation
@@ -94,7 +89,6 @@ function CommentItem({
   postId,
   comment,
   allowCommenting,
-  avatarUrls,
   depth = 0,
   user,
   createComment,
@@ -145,11 +139,8 @@ function CommentItem({
           {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
             <Avatar className={cn('h-8 w-8 shrink-0')}>
-              {comment.memberId && avatarUrls?.[comment.memberId] && (
-                <AvatarImage
-                  src={avatarUrls[comment.memberId]!}
-                  alt={comment.authorName || 'Comment author'}
-                />
+              {comment.avatarUrl && (
+                <AvatarImage src={comment.avatarUrl} alt={comment.authorName || 'Comment author'} />
               )}
               <AvatarFallback className={cn('text-xs')}>
                 {getInitials(comment.authorName)}
@@ -279,7 +270,6 @@ function CommentItem({
                 postId={postId}
                 comment={reply}
                 allowCommenting={allowCommenting}
-                avatarUrls={avatarUrls}
                 depth={depth + 1}
                 user={user}
                 createComment={createComment}

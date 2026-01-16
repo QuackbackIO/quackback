@@ -406,19 +406,21 @@ export async function getPostById(postId: PostId): Promise<Post> {
 
 /**
  * Get a post with full details including board, tags, and comment count
+ * Uses Drizzle query builder with parallel queries for compatibility across drivers.
  *
  * @param postId - Post ID to fetch
  * @returns Result containing the post with details or an error
  */
 export async function getPostWithDetails(postId: PostId): Promise<PostWithDetails> {
-  // Get the post
+  // Get the post first
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
   if (!post) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Get the board, tags, comment count, and roadmaps in parallel
-  const [board, postTagsResult, commentCountResult, roadmapsResult] = await Promise.all([
+  // Get the board, tags, and roadmaps in parallel
+  // Uses denormalized comment_count instead of counting comments
+  const [board, postTagsResult, roadmapsResult] = await Promise.all([
     db.query.boards.findFirst({ where: eq(boards.id, post.boardId) }),
     db
       .select({
@@ -430,10 +432,6 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       .innerJoin(tags, eq(tags.id, postTags.tagId))
       .where(eq(postTags.postId, postId)),
     db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(comments)
-      .where(eq(comments.postId, postId)),
-    db
       .select({ roadmapId: postRoadmaps.roadmapId })
       .from(postRoadmaps)
       .where(eq(postRoadmaps.postId, postId)),
@@ -443,9 +441,6 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
-  const commentCount = commentCountResult[0]?.count || 0
-  const roadmapIds = roadmapsResult.map((r) => String(r.roadmapId))
-
   const postWithDetails: PostWithDetails = {
     ...post,
     board: {
@@ -453,9 +448,12 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       name: board.name,
       slug: board.slug,
     },
-    tags: postTagsResult,
-    commentCount,
-    roadmapIds,
+    tags: postTagsResult.map((t) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+    })),
+    roadmapIds: roadmapsResult.map((r) => r.roadmapId),
   }
 
   return postWithDetails
@@ -528,19 +526,16 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(inArray(posts.boardId, boardIds))
   }
 
-  // Status filter - resolve slugs to IDs if needed
-  let resolvedStatusIds = statusIds
-
+  // Status filter - use subquery to resolve slugs inline if needed
   if (statusSlugs && statusSlugs.length > 0) {
-    const statusesBySlug = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.slug, statusSlugs),
-      columns: { id: true },
-    })
-    resolvedStatusIds = (statusesBySlug ?? []).map((s) => s.id)
-  }
-
-  if (resolvedStatusIds && resolvedStatusIds.length > 0) {
-    conditions.push(inArray(posts.statusId, resolvedStatusIds))
+    // Use subquery to resolve status slugs to IDs in a single query
+    const statusIdSubquery = db
+      .select({ id: postStatuses.id })
+      .from(postStatuses)
+      .where(inArray(postStatuses.slug, statusSlugs))
+    conditions.push(inArray(posts.statusId, statusIdSubquery))
+  } else if (statusIds && statusIds.length > 0) {
+    conditions.push(inArray(posts.statusId, statusIds))
   }
 
   // Owner filter
@@ -569,20 +564,13 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(sql`${posts.voteCount} >= ${minVotes}`)
   }
 
-  // Tag filter - posts must have at least one of the selected tags
-  let postIdsWithTags: PostId[] | null = null
+  // Tag filter - use subquery to find posts with at least one of the selected tags
   if (tagIds && tagIds.length > 0) {
-    const postsWithSelectedTags = await db
+    const postIdsWithTagsSubquery = db
       .selectDistinct({ postId: postTags.postId })
       .from(postTags)
       .where(inArray(postTags.tagId, tagIds))
-
-    postIdsWithTags = postsWithSelectedTags.map((p) => p.postId)
-
-    if (postIdsWithTags.length === 0) {
-      return { items: [], total: 0, hasMore: false }
-    }
-    conditions.push(inArray(posts.id, postIdsWithTags))
+    conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
@@ -620,28 +608,13 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
       .where(whereClause),
   ])
 
-  // Get comment counts for all posts
-  const postIds = rawPosts.map((p) => p.id)
-  const commentCounts =
-    postIds.length > 0
-      ? await db
-          .select({
-            postId: comments.postId,
-            count: sql<number>`count(*)::int`.as('count'),
-          })
-          .from(comments)
-          .where(inArray(comments.postId, postIds))
-          .groupBy(comments.postId)
-      : []
-
-  const commentCountMap = new Map(commentCounts.map((c) => [c.postId, Number(c.count)]))
-
   // Transform to PostListItem format
+  // Use denormalized commentCount field (maintained by database trigger)
   const items = rawPosts.map((post) => ({
     ...post,
     board: post.board,
     tags: post.tags.map((pt) => pt.tag),
-    commentCount: commentCountMap.get(post.id) ?? 0,
+    commentCount: post.commentCount,
   }))
 
   const total = Number(countResult[0].count)
@@ -680,10 +653,12 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-  // Get all posts with board and tags
+  // Get posts with board and tags (limit to prevent memory exhaustion)
+  const MAX_EXPORT_POSTS = 10000
   const rawPosts = await db.query.posts.findMany({
     where: whereClause,
     orderBy: desc(posts.createdAt),
+    limit: MAX_EXPORT_POSTS,
     with: {
       board: {
         columns: { id: true, name: true, slug: true },
@@ -698,11 +673,8 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
     },
   })
 
-  // Get status details for posts that have a statusId
-  const postStatusIds = rawPosts
-    .filter((p) => p.statusId)
-    .map((p) => p.statusId!)
-    .filter((id, index, self) => self.indexOf(id) === index) // unique
+  // Get status details for posts that have a statusId (use Set for O(n) deduplication)
+  const postStatusIds = [...new Set(rawPosts.filter((p) => p.statusId).map((p) => p.statusId!))]
 
   const statusDetails =
     postStatusIds.length > 0

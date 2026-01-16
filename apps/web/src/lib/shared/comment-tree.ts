@@ -28,6 +28,7 @@ export interface CommentWithReactions {
   content: string
   isTeamMember: boolean
   createdAt: Date
+  avatarUrl?: string | null
   reactions: Array<{
     emoji: string
     userIdentifier: string
@@ -48,6 +49,7 @@ export interface CommentTreeNode {
   content: string
   isTeamMember: boolean
   createdAt: Date
+  avatarUrl?: string | null
   replies: CommentTreeNode[]
   reactions: CommentReactionCount[]
 }
@@ -109,6 +111,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       content: comment.content,
       isTeamMember: comment.isTeamMember,
       createdAt: comment.createdAt,
+      avatarUrl: comment.avatarUrl,
       replies: [],
       reactions: aggregateReactions(comment.reactions, userIdentifier),
     }

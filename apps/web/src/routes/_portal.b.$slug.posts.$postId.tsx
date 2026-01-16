@@ -2,11 +2,7 @@ import { Suspense, useEffect } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
-import {
-  portalDetailQueries,
-  type PublicPostDetailView,
-  type PublicCommentView,
-} from '@/lib/queries/portal-detail'
+import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
 import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
@@ -16,25 +12,8 @@ import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { isValidTypeId, type PostId, type MemberId } from '@quackback/ids'
+import { isValidTypeId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/schemas/posts'
-
-/**
- * Recursively collect all member IDs from comments and their nested replies
- * Used for prefetching avatar data in the loader
- */
-function collectCommentMemberIds(comments: PublicCommentView[]): string[] {
-  const memberIds: string[] = []
-  for (const comment of comments) {
-    if (comment.memberId) {
-      memberIds.push(comment.memberId)
-    }
-    if (comment.replies.length > 0) {
-      memberIds.push(...collectCommentMemberIds(comment.replies))
-    }
-  }
-  return memberIds
-}
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
@@ -71,18 +50,10 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
     // Prefetch user-specific data for SSR
     // Uses prefetchQuery which won't throw on error - components fall back to client fetch
-    const commentMemberIds = collectCommentMemberIds(post.comments)
-
-    // Include post author's memberId for avatar fetching (if they have one)
-    const allMemberIds = post.memberId ? [...commentMemberIds, post.memberId] : commentMemberIds
-
-    // Await prefetch so data is SSR'd (included in dehydrated state)
-    // prefetchQuery doesn't throw, so errors are handled gracefully
+    // Avatar data is now included directly in post (authorAvatarUrl) and comments (avatarUrl)
     await Promise.all([
       queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId)),
-      queryClient.prefetchQuery(
-        portalDetailQueries.commentsSectionData(postId, allMemberIds as MemberId[])
-      ),
+      queryClient.prefetchQuery(portalDetailQueries.commentsSectionData(postId)),
       // Prefetch votedPosts so hasVoted state is SSR'd for vote button highlighting
       queryClient.prefetchQuery(portalDetailQueries.votedPosts()),
     ])
@@ -95,14 +66,6 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   },
   component: PostDetailPage,
 })
-
-/**
- * Recursively collect member IDs for avatar fetching - mirrors loader logic
- */
-function getAllMemberIds(post: PublicPostDetailView): MemberId[] {
-  const commentMemberIds = collectCommentMemberIds(post.comments) as MemberId[]
-  return post.memberId ? [...commentMemberIds, post.memberId] : commentMemberIds
-}
 
 function PostDetailPage() {
   const { settings, postId, slug } = Route.useLoaderData()
@@ -119,15 +82,6 @@ function PostDetailPage() {
   if (!post || !board) {
     return <div>Post not found</div>
   }
-
-  // Get avatar map that includes post author (prefetched in loader)
-  const allMemberIds = getAllMemberIds(post)
-  const commentsSectionQuery = useSuspenseQuery(
-    portalDetailQueries.commentsSectionData(postId, allMemberIds)
-  )
-  const authorAvatarUrl = post.memberId
-    ? (commentsSectionQuery.data.commentAvatarMap[post.memberId] ?? null)
-    : null
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
 
@@ -183,7 +137,7 @@ function PostDetailPage() {
           <PostContentSection
             post={typedPost}
             currentStatus={currentStatus}
-            authorAvatarUrl={authorAvatarUrl}
+            authorAvatarUrl={post.authorAvatarUrl}
           />
         </div>
 
