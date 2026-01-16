@@ -5,7 +5,9 @@ import { Outlet, createRootRouteWithContext, HeadContent, Scripts } from '@tanst
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
 import { getSession } from '@/lib/server-functions/auth'
-import { checkTenantAvailable, getSettings } from '@/lib/server-functions/workspace'
+import { checkTenantAvailable } from '@/lib/server-functions/workspace'
+import { fetchSettingsWithAllConfigs } from '@/lib/server-functions/settings'
+import type { SettingsWithAllConfigs } from '@/lib/settings'
 import { WorkspaceNotFoundPage } from '@/components/workspace-not-found'
 import { ThemeProvider } from '@/components/theme-provider'
 
@@ -39,12 +41,15 @@ const systemThemeScript = `
 
 // RouterContext is what's available in the context at different points:
 // - queryClient: always available (provided in createRouter)
-// - session/settings: available after beforeLoad runs (optional in type, guaranteed in child routes)
+// - session/settingsData: available after beforeLoad runs (optional in type, guaranteed in child routes)
 // - workspaceNotFound: true when in multi-tenant mode with no resolved tenant
 export interface RouterContext {
   queryClient: QueryClient
   session?: Awaited<ReturnType<typeof getSession>>
-  settings?: Awaited<ReturnType<typeof getSettings>>
+  /** @deprecated Use settingsData.settings instead */
+  settings?: SettingsWithAllConfigs['settings']
+  /** Consolidated settings data (single query) - includes all configs and branding */
+  settingsData?: SettingsWithAllConfigs
   workspaceNotFound?: boolean
 }
 
@@ -58,8 +63,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     }
 
     // Safe to query database now
-    const [session, settings] = await Promise.all([getSession(), getSettings()])
-    return { session, settings }
+    // Fetch session and all settings data in parallel (single settings query)
+    const [session, settingsData] = await Promise.all([getSession(), fetchSettingsWithAllConfigs()])
+    // Provide backward-compatible 'settings' for existing routes
+    return { session, settingsData, settings: settingsData.settings }
   },
   head: () => ({
     meta: [

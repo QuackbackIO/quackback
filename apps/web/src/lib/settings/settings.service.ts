@@ -330,3 +330,108 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     wrapDbError('fetch public portal config', error)
   }
 }
+
+// ============================================
+// CONSOLIDATED SETTINGS DATA
+// ============================================
+
+/**
+ * Helper to convert a bytea blob and MIME type to a data URL.
+ */
+function blobToDataUrl(blob: Buffer | null, mimeType: string | null): string | null {
+  if (!blob || !mimeType) return null
+  const base64 = Buffer.from(blob).toString('base64')
+  return `data:${mimeType};base64,${base64}`
+}
+
+/**
+ * Branding data extracted from settings (logo URLs, header config)
+ */
+export interface SettingsBrandingData {
+  name: string
+  logoUrl: string | null
+  faviconUrl: string | null
+  headerLogoUrl: string | null
+  headerDisplayMode: string | null
+  headerDisplayName: string | null
+}
+
+/**
+ * Consolidated settings data returned by getSettingsWithAllConfigs()
+ * Contains all parsed configs and branding data from a single query.
+ */
+export interface SettingsWithAllConfigs {
+  /** Raw settings record */
+  settings: Awaited<ReturnType<typeof requireSettings>>
+  /** Parsed auth configuration */
+  authConfig: AuthConfig
+  /** Parsed portal configuration */
+  portalConfig: PortalConfig
+  /** Parsed branding/theme configuration */
+  brandingConfig: BrandingConfig
+  /** Public auth config subset */
+  publicAuthConfig: PublicAuthConfig
+  /** Public portal config subset */
+  publicPortalConfig: PublicPortalConfig
+  /** Branding data with data URLs for logos */
+  brandingData: SettingsBrandingData
+  /** Favicon data URL or null */
+  faviconData: { url: string } | null
+}
+
+/**
+ * Get all settings data in a single query.
+ *
+ * This consolidates multiple separate queries into one database call,
+ * returning all parsed configs and branding data needed by the portal.
+ *
+ * Use this in route loaders to avoid redundant database queries.
+ */
+export async function getSettingsWithAllConfigs(): Promise<SettingsWithAllConfigs> {
+  try {
+    const org = await requireSettings()
+
+    // Parse all JSON configs
+    const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
+    const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+    const brandingConfig = parseJsonConfigNullable<BrandingConfig>(org.brandingConfig) || {}
+
+    // Build public config subsets
+    const publicAuthConfig: PublicAuthConfig = {
+      oauth: authConfig.oauth,
+      openSignup: authConfig.openSignup,
+    }
+
+    const publicPortalConfig: PublicPortalConfig = {
+      oauth: portalConfig.oauth,
+      features: portalConfig.features,
+    }
+
+    // Build branding data with data URLs
+    const brandingData: SettingsBrandingData = {
+      name: org.name,
+      logoUrl: blobToDataUrl(org.logoBlob, org.logoType),
+      faviconUrl: blobToDataUrl(org.faviconBlob, org.faviconType),
+      headerLogoUrl: blobToDataUrl(org.headerLogoBlob, org.headerLogoType),
+      headerDisplayMode: org.headerDisplayMode,
+      headerDisplayName: org.headerDisplayName,
+    }
+
+    // Build favicon data
+    const faviconUrl = blobToDataUrl(org.faviconBlob, org.faviconType)
+    const faviconData = faviconUrl ? { url: faviconUrl } : null
+
+    return {
+      settings: org,
+      authConfig,
+      portalConfig,
+      brandingConfig,
+      publicAuthConfig,
+      publicPortalConfig,
+      brandingData,
+      faviconData,
+    }
+  } catch (error) {
+    wrapDbError('fetch settings with all configs', error)
+  }
+}

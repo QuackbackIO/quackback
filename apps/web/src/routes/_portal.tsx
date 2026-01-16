@@ -2,41 +2,39 @@ import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { getCurrentUserRole } from '@/lib/server-functions/workspace'
 import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
-import {
-  fetchSettingsBrandingData,
-  fetchSettingsFaviconData,
-} from '@/lib/server-functions/settings-utils'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
-import { fetchBrandingConfig, fetchPublicPortalConfig } from '@/lib/server-functions/settings'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 import { theme } from '@/lib/theme'
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
     console.log('[_portal] loader started', { context })
-    const { session, settings: org } = context
+    const { session, settingsData } = context
 
+    // Use settingsData from context (single query in __root.tsx)
+    // Fall back to settings for backward compatibility
+    const org = settingsData?.settings ?? context.settings
     if (!org) {
       console.log('[_portal] no org, redirecting to onboarding')
       throw redirect({ to: '/onboarding' })
     }
 
-    const userRole = await getCurrentUserRole()
+    // Get user role and avatar (these still require separate queries)
+    const [userRole, avatarData] = await Promise.all([
+      getCurrentUserRole(),
+      session?.user
+        ? fetchUserAvatar({
+            data: { userId: session.user.id, fallbackImageUrl: session.user.image },
+          })
+        : null,
+    ])
 
-    const [avatarData, brandingData, faviconData, brandingConfig, portalConfig] = await Promise.all(
-      [
-        session?.user
-          ? fetchUserAvatar({
-              data: { userId: session.user.id, fallbackImageUrl: session.user.image },
-            })
-          : null,
-        fetchSettingsBrandingData(),
-        fetchSettingsFaviconData(),
-        fetchBrandingConfig(),
-        fetchPublicPortalConfig(),
-      ]
-    )
+    // Use pre-loaded settings data from context (no additional queries needed)
+    const brandingData = settingsData?.brandingData ?? null
+    const faviconData = settingsData?.faviconData ?? null
+    const brandingConfig = settingsData?.brandingConfig ?? {}
+    const portalConfig = settingsData?.publicPortalConfig ?? null
 
     const themeStyles =
       brandingConfig.preset || brandingConfig.light || brandingConfig.dark

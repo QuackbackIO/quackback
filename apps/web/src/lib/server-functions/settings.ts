@@ -13,6 +13,7 @@ import {
   getPortalConfig,
   getPublicPortalConfig,
   getPublicAuthConfig,
+  getSettingsWithAllConfigs,
   updateBrandingConfig,
   updatePortalConfig,
   uploadLogo,
@@ -59,6 +60,15 @@ export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler
 
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   return getPublicAuthConfig()
+})
+
+/**
+ * Fetch all settings data in a single query.
+ * Returns parsed configs, branding data, and favicon data.
+ * Use this to avoid multiple database round-trips for settings data.
+ */
+export const fetchSettingsWithAllConfigs = createServerFn({ method: 'GET' }).handler(async () => {
+  return getSettingsWithAllConfigs()
 })
 
 function buildAvatarUrl(

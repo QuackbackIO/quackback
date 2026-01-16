@@ -27,3 +27,6 @@ export type {
 
 // Default config values (no DB dependency)
 export { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './settings.types'
+
+// Consolidated settings types (for use with getSettingsWithAllConfigs)
+export type { SettingsWithAllConfigs, SettingsBrandingData } from './settings.service'
