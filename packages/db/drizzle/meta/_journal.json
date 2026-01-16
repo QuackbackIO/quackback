@@ -57,6 +57,13 @@
       "when": 1737158400000,
       "tag": "0007_subscription_notification_levels",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1737244800000,
+      "tag": "0008_add_pinned_comment",
+      "breakpoints": true
     }
   ]
 }

@@ -75,6 +75,9 @@ export const posts = pgTable(
     officialResponseAuthorId: text('official_response_author_id'), // Legacy
     officialResponseAuthorName: text('official_response_author_name'),
     officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
+    // Pinned comment as official response (replaces direct official response text)
+    // References a team member's root-level comment that serves as the official response
+    pinnedCommentId: typeIdColumnNullable('comment')('pinned_comment_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
@@ -127,6 +130,8 @@ export const posts = pgTable(
     index('posts_board_deleted_at_idx').on(table.boardId, table.deletedAt),
     // Index for moderation state filtering
     index('posts_moderation_state_idx').on(table.moderationState),
+    // Index for pinned comment lookups
+    index('posts_pinned_comment_id_idx').on(table.pinnedCommentId),
     // CHECK constraints to ensure counts are never negative
     check('vote_count_non_negative', sql`vote_count >= 0`),
     check('comment_count_non_negative', sql`comment_count >= 0`),
@@ -337,6 +342,11 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.officialResponseMemberId],
     references: [member.id],
     relationName: 'postOfficialResponseAuthor',
+  }),
+  // Pinned comment as official response
+  pinnedComment: one(comments, {
+    fields: [posts.pinnedCommentId],
+    references: [comments.id],
   }),
   votes: many(votes),
   comments: many(comments),
