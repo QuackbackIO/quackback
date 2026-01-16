@@ -1,10 +1,20 @@
 import type { Board, Tag, Comment } from '@/lib/db-types'
-import type { PostId, StatusId } from '@quackback/ids'
+import type { PostId, StatusId, CommentId, MemberId } from '@quackback/ids'
 
 export interface OfficialResponse {
   content: string
   authorName: string | null
   respondedAt: Date
+}
+
+export interface PinnedComment {
+  id: CommentId
+  content: string
+  authorName: string | null
+  memberId: MemberId | null
+  avatarUrl: string | null
+  createdAt: Date
+  isTeamMember: boolean
 }
 
 export interface CommentReaction {
@@ -38,6 +48,10 @@ export interface PostDetails {
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
   officialResponse: OfficialResponse | null
+  /** Pinned comment as official response (new approach) */
+  pinnedComment: PinnedComment | null
+  /** ID of the pinned comment (for UI to identify which comment is pinned) */
+  pinnedCommentId: CommentId | null
   /** Map of memberId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
   /** IDs of roadmaps this post belongs to */

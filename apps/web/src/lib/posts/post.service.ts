@@ -45,6 +45,7 @@ import type {
   UserEditPostInput,
   CreatePostResult,
   ChangeStatusResult,
+  PinnedComment,
 } from './post.types'
 
 /**
@@ -441,6 +442,47 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
+  // Fetch pinned comment data if exists
+  let pinnedComment: PinnedComment | null = null
+  if (post.pinnedCommentId) {
+    const pinnedCommentData = await db.query.comments.findFirst({
+      where: eq(comments.id, post.pinnedCommentId),
+      with: {
+        author: {
+          with: {
+            user: {
+              columns: { image: true, imageBlob: true, imageType: true },
+            },
+          },
+        },
+      },
+    })
+
+    if (pinnedCommentData && !pinnedCommentData.deletedAt) {
+      // Compute avatar URL
+      let avatarUrl: string | null = null
+      if (pinnedCommentData.author?.user) {
+        const user = pinnedCommentData.author.user
+        if (user.imageBlob && user.imageType) {
+          const base64 = Buffer.from(user.imageBlob).toString('base64')
+          avatarUrl = `data:${user.imageType};base64,${base64}`
+        } else if (user.image) {
+          avatarUrl = user.image
+        }
+      }
+
+      pinnedComment = {
+        id: pinnedCommentData.id,
+        content: pinnedCommentData.content,
+        authorName: pinnedCommentData.authorName,
+        memberId: pinnedCommentData.memberId,
+        avatarUrl,
+        createdAt: pinnedCommentData.createdAt,
+        isTeamMember: pinnedCommentData.isTeamMember,
+      }
+    }
+  }
+
   const postWithDetails: PostWithDetails = {
     ...post,
     board: {
@@ -454,6 +496,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       color: t.color,
     })),
     roadmapIds: roadmapsResult.map((r) => r.roadmapId),
+    pinnedComment,
   }
 
   return postWithDetails

@@ -37,6 +37,7 @@ import type {
   RoadmapPostListResult,
   PublicPostDetail,
   PublicComment,
+  PinnedComment,
 } from './post.types'
 
 /**
@@ -266,6 +267,7 @@ export async function getPublicPostDetail(
       content: comments.content,
       isTeamMember: comments.isTeamMember,
       createdAt: comments.createdAt,
+      deletedAt: comments.deletedAt,
       // Avatar data from user table (via member)
       imageBlob: userTable.imageBlob,
       imageType: userTable.imageType,
@@ -340,6 +342,33 @@ export async function getPublicPostDetail(
 
   const rootComments = commentTree.map(mapToPublicComment)
 
+  // Build pinned comment data if exists
+  let pinnedComment: PinnedComment | null = null
+  if (postResult.pinnedCommentId) {
+    // Find the pinned comment in the comments list
+    const pinnedCommentData = commentsWithAvatars.find((c) => c.id === postResult.pinnedCommentId)
+    if (pinnedCommentData && !pinnedCommentData.deletedAt) {
+      // Compute avatar URL for pinned comment author
+      let pinnedAvatarUrl: string | null = null
+      if (pinnedCommentData.imageBlob && pinnedCommentData.imageType) {
+        const base64 = Buffer.from(pinnedCommentData.imageBlob).toString('base64')
+        pinnedAvatarUrl = `data:${pinnedCommentData.imageType};base64,${base64}`
+      } else if (pinnedCommentData.image) {
+        pinnedAvatarUrl = pinnedCommentData.image
+      }
+
+      pinnedComment = {
+        id: pinnedCommentData.id as CommentId,
+        content: pinnedCommentData.content,
+        authorName: pinnedCommentData.authorName,
+        memberId: pinnedCommentData.memberId,
+        avatarUrl: pinnedAvatarUrl,
+        createdAt: pinnedCommentData.createdAt,
+        isTeamMember: pinnedCommentData.isTeamMember,
+      }
+    }
+  }
+
   return {
     id: postResult.id,
     title: postResult.title,
@@ -365,6 +394,8 @@ export async function getPublicPostDetail(
           respondedAt: postResult.officialResponseAt!,
         }
       : null,
+    pinnedComment,
+    pinnedCommentId: (postResult.pinnedCommentId as CommentId) ?? null,
   }
 }
 

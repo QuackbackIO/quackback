@@ -25,6 +25,19 @@ export interface PublicCommentView {
 }
 
 /**
+ * Pinned comment for client components (Date fields may be strings after serialization)
+ */
+export interface PinnedCommentView {
+  id: CommentId
+  content: string
+  authorName: string | null
+  memberId: MemberId | null
+  avatarUrl: string | null
+  createdAt: Date | string
+  isTeamMember: boolean
+}
+
+/**
  * Post detail type for client components (Date fields may be strings after serialization)
  */
 export interface PublicPostDetailView {
@@ -46,6 +59,8 @@ export interface PublicPostDetailView {
     authorName: string | null
     respondedAt: Date | string
   } | null
+  pinnedComment: PinnedCommentView | null
+  pinnedCommentId: CommentId | null
 }
 
 /**

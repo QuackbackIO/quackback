@@ -238,10 +238,19 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         replies: comment.replies.map(serializeComment),
       })
 
+      // Serialize pinned comment dates
+      const serializedPinnedComment = result.pinnedComment
+        ? {
+            ...result.pinnedComment,
+            createdAt: toIsoString(result.pinnedComment.createdAt),
+          }
+        : null
+
       return {
         ...serializePostDates(result),
         hasVoted,
         comments: comments.map(serializeComment),
+        pinnedComment: serializedPinnedComment,
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ fetchPostWithDetails failed:`, error)

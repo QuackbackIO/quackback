@@ -68,6 +68,8 @@ export interface PostWithDetails extends Post {
   }>
   commentCount: number
   roadmapIds: string[]
+  /** Pinned comment as official response (new approach) */
+  pinnedComment: PinnedComment | null
 }
 
 /**
@@ -176,12 +178,25 @@ export interface RoadmapPostListResult {
 }
 
 /**
- * Official response on a post
+ * Official response on a post (legacy - being replaced by pinned comments)
  */
 export interface OfficialResponse {
   content: string
   authorName: string | null
   respondedAt: Date
+}
+
+/**
+ * Pinned comment serving as the official response
+ */
+export interface PinnedComment {
+  id: CommentId
+  content: string
+  authorName: string | null
+  memberId: MemberId | null
+  avatarUrl: string | null
+  createdAt: Date
+  isTeamMember: boolean
 }
 
 /**
@@ -217,7 +232,12 @@ export interface PublicPostDetail {
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>
   comments: PublicComment[]
+  /** Legacy official response (text stored directly on post) */
   officialResponse: OfficialResponse | null
+  /** Pinned comment as official response (new approach) */
+  pinnedComment: PinnedComment | null
+  /** ID of the pinned comment (for UI to identify which comment is pinned) */
+  pinnedCommentId: CommentId | null
 }
 
 /**
