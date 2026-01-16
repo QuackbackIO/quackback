@@ -57,7 +57,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'boards'],
       queryFn: () => fetchBoardsList(),
-      staleTime: 2 * 60 * 1000, // 2min - rarely changes
+      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
   /**
@@ -67,7 +67,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'settings', 'boards'],
       queryFn: () => fetchBoardsForSettings(),
-      staleTime: 2 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5min - reference data
     }),
 
   /**
@@ -77,7 +77,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'tags'],
       queryFn: () => fetchTagsList(),
-      staleTime: 2 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
   /**
@@ -87,7 +87,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'statuses'],
       queryFn: () => fetchStatusesList(),
-      staleTime: 2 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
   /**
@@ -97,7 +97,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'roadmaps'],
       queryFn: () => fetchRoadmaps(),
-      staleTime: 2 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
   /**
@@ -107,7 +107,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'team', 'members'],
       queryFn: () => fetchTeamMembers(),
-      staleTime: 1 * 60 * 1000, // 1min - team changes should update quickly
+      staleTime: 5 * 60 * 1000, // 5min - reference data for filters/assignments
     }),
 
   /**
@@ -151,7 +151,7 @@ export const adminQueries = {
         const statuses = await fetchPublicStatuses()
         return statuses.filter((s) => s.showOnRoadmap)
       },
-      staleTime: 2 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5min - reference data
     }),
 
   /**

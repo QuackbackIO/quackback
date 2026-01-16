@@ -542,11 +542,11 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       let hasVoted = false
       let subscriptionStatus: {
         subscribed: boolean
-        muted: boolean
+        level: 'all' | 'status_only' | 'none'
         reason: string | null
       } = {
         subscribed: false,
-        muted: false,
+        level: 'none',
         reason: null,
       }
 
@@ -560,7 +560,11 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
           getSubscriptionStatus(ctx.member.id, postId),
         ])
         hasVoted = voted
-        subscriptionStatus = subStatus
+        subscriptionStatus = {
+          subscribed: subStatus.subscribed,
+          level: subStatus.level,
+          reason: subStatus.reason,
+        }
       }
 
       console.log(

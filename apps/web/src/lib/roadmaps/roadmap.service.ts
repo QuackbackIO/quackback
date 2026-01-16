@@ -21,7 +21,7 @@ import {
   boards,
   type Roadmap,
 } from '@/lib/db'
-import type { RoadmapId, PostId } from '@quackback/ids'
+import { toUuid, type RoadmapId, type PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type {
   CreateRoadmapInput,
@@ -171,12 +171,23 @@ export async function listPublicRoadmaps(): Promise<Roadmap[]> {
 
 /**
  * Reorder roadmaps in the sidebar
+ * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
-  // Run sequential updates (no transaction needed for position updates)
-  for (let i = 0; i < roadmapIds.length; i++) {
-    await db.update(roadmaps).set({ position: i }).where(eq(roadmaps.id, roadmapIds[i]))
-  }
+  if (roadmapIds.length === 0) return
+
+  // Build CASE WHEN clause for batch update
+  const cases = roadmapIds
+    .map((id, i) => sql`WHEN id = ${toUuid(id)} THEN ${i}`)
+    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
+  const ids = roadmapIds.map((id) => toUuid(id))
+
+  // Single UPDATE with CASE expression
+  await db.execute(sql`
+    UPDATE roadmaps
+    SET position = CASE ${cases} END
+    WHERE id = ANY(${ids}::uuid[])
+  `)
 }
 
 // ==========================================================================
@@ -242,6 +253,7 @@ export async function removePostFromRoadmap(postId: PostId, roadmapId: RoadmapId
 
 /**
  * Reorder posts within a roadmap
+ * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<void> {
   // Verify roadmap exists
@@ -250,15 +262,23 @@ export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<vo
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${input.roadmapId} not found`)
   }
 
-  // Reorder the posts (sequential updates, no transaction needed)
-  for (let i = 0; i < input.postIds.length; i++) {
-    await db
-      .update(postRoadmaps)
-      .set({ position: i })
-      .where(
-        and(eq(postRoadmaps.roadmapId, input.roadmapId), eq(postRoadmaps.postId, input.postIds[i]))
-      )
-  }
+  if (input.postIds.length === 0) return
+
+  const roadmapUuid = toUuid(input.roadmapId)
+
+  // Build CASE WHEN clause for batch update
+  const cases = input.postIds
+    .map((id, i) => sql`WHEN post_id = ${toUuid(id)} THEN ${i}`)
+    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
+  const postIds = input.postIds.map((id) => toUuid(id))
+
+  // Single UPDATE with CASE expression
+  await db.execute(sql`
+    UPDATE post_roadmaps
+    SET position = CASE ${cases} END
+    WHERE roadmap_id = ${roadmapUuid}
+      AND post_id = ANY(${postIds}::uuid[])
+  `)
 }
 
 // ==========================================================================

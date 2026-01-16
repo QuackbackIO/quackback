@@ -5,7 +5,7 @@ import { requireAuth } from './auth-helpers'
 import { signOAuthState } from '@/lib/auth/oauth-state'
 import { tenantStorage } from '@/lib/tenant'
 import { isMultiTenant } from '@/lib/features'
-import { db, integrations, integrationEventMappings, decryptToken, eq } from '@/lib/db'
+import { db, integrations, integrationEventMappings, decryptToken, eq, sql } from '@/lib/db'
 import { listSlackChannels } from '@/lib/hooks/slack'
 import type { MemberId, IntegrationId } from '@quackback/ids'
 
@@ -126,28 +126,29 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
 
     await db.update(integrations).set(updates).where(eq(integrations.id, integrationId))
 
+    // Batch upsert all event mappings in a single query
     if (data.eventMappings && data.eventMappings.length > 0) {
-      for (const mapping of data.eventMappings) {
-        await db
-          .insert(integrationEventMappings)
-          .values({
+      await db
+        .insert(integrationEventMappings)
+        .values(
+          data.eventMappings.map((mapping) => ({
             integrationId,
             eventType: mapping.eventType,
-            actionType: 'send_message',
+            actionType: 'send_message' as const,
             enabled: mapping.enabled,
-          })
-          .onConflictDoUpdate({
-            target: [
-              integrationEventMappings.integrationId,
-              integrationEventMappings.eventType,
-              integrationEventMappings.actionType,
-            ],
-            set: {
-              enabled: mapping.enabled,
-              updatedAt: new Date(),
-            },
-          })
-      }
+          }))
+        )
+        .onConflictDoUpdate({
+          target: [
+            integrationEventMappings.integrationId,
+            integrationEventMappings.eventType,
+            integrationEventMappings.actionType,
+          ],
+          set: {
+            enabled: sql`excluded.enabled`,
+            updatedAt: new Date(),
+          },
+        })
     }
 
     console.log(`[fn:integrations] updateIntegrationFn: updated id=${data.id}`)

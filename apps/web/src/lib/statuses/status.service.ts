@@ -10,7 +10,7 @@
  */
 
 import { db, eq, sql, posts, postStatuses, asc } from '@/lib/db'
-import type { StatusId } from '@quackback/ids'
+import { toUuid, type StatusId } from '@quackback/ids'
 import {
   NotFoundError,
   ValidationError,
@@ -19,6 +19,20 @@ import {
   InternalError,
 } from '@/lib/shared/errors'
 import type { Status, CreateStatusInput, UpdateStatusInput } from './status.types'
+
+/**
+ * Atomically set a status as default, unsetting all others in a single query.
+ * This prevents race conditions where concurrent requests could result in
+ * multiple defaults or no defaults.
+ */
+async function setStatusAsDefaultAtomic(statusId: StatusId): Promise<void> {
+  const statusUuid = toUuid(statusId)
+  await db.execute(sql`
+    UPDATE post_statuses
+    SET is_default = (id = ${statusUuid})
+    WHERE is_default = true OR id = ${statusUuid}
+  `)
+}
 
 /**
  * Create a new status
@@ -69,12 +83,9 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
     })
     .returning()
 
-  // If this is marked as default, ensure only one default exists
+  // If this is marked as default, ensure only one default exists (atomic operation)
   if (input.isDefault) {
-    // First, unset all defaults except the new one
-    await db.update(postStatuses).set({ isDefault: false }).where(eq(postStatuses.isDefault, true))
-    // Then set the new default
-    await db.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, status.id))
+    await setStatusAsDefaultAtomic(status.id)
   }
 
   return status
@@ -110,12 +121,9 @@ export async function updateStatus(id: StatusId, input: UpdateStatusInput): Prom
     }
   }
 
-  // If setting as default, use the setDefault pattern
+  // If setting as default, use atomic operation to prevent race conditions
   if (input.isDefault === true) {
-    // First, unset all defaults
-    await db.update(postStatuses).set({ isDefault: false }).where(eq(postStatuses.isDefault, true))
-    // Then set the new default
-    await db.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, id))
+    await setStatusAsDefaultAtomic(id)
   }
 
   // Build update data
@@ -215,6 +223,7 @@ export async function listStatuses(): Promise<Status[]> {
 
 /**
  * Reorder statuses within a category
+ * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderStatuses(ids: StatusId[]): Promise<void> {
   // Validate input
@@ -222,11 +231,18 @@ export async function reorderStatuses(ids: StatusId[]): Promise<void> {
     throw new ValidationError('VALIDATION_ERROR', 'Status IDs are required')
   }
 
-  // Reorder the statuses by updating their positions sequentially
-  // (neon-http does not support interactive transactions)
-  for (let index = 0; index < ids.length; index++) {
-    await db.update(postStatuses).set({ position: index }).where(eq(postStatuses.id, ids[index]))
-  }
+  // Build CASE WHEN clause for batch update
+  const cases = ids
+    .map((id, i) => sql`WHEN id = ${toUuid(id)} THEN ${i}`)
+    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
+  const uuids = ids.map((id) => toUuid(id))
+
+  // Single UPDATE with CASE expression
+  await db.execute(sql`
+    UPDATE post_statuses
+    SET position = CASE ${cases} END
+    WHERE id = ANY(${uuids}::uuid[])
+  `)
 }
 
 /**
@@ -241,9 +257,8 @@ export async function setDefaultStatus(id: StatusId): Promise<Status> {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
   }
 
-  // Set as default (unset all others first, then set this one)
-  await db.update(postStatuses).set({ isDefault: false }).where(eq(postStatuses.isDefault, true))
-  await db.update(postStatuses).set({ isDefault: true }).where(eq(postStatuses.id, id))
+  // Set as default atomically to prevent race conditions
+  await setStatusAsDefaultAtomic(id)
 
   // Fetch and return the updated status
   const updatedStatus = await db.query.postStatuses.findFirst({

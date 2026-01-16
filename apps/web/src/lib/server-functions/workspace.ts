@@ -29,10 +29,19 @@ export const checkTenantAvailable = createServerFn({ method: 'GET' }).handler(as
 
 /**
  * Get the app settings.
- * Returns the singleton settings record from the database.
+ * Returns settings from the request context (queried once at request start in server.ts).
+ * Falls back to database query if context not available (e.g., during build).
  */
 export const getSettings = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:workspace] getSettings`)
+  // Get settings from request context (populated in server.ts)
+  const ctx = tenantStorage.getStore()
+  if (ctx?.settings !== undefined) {
+    console.log(`[fn:workspace] getSettings: from context`)
+    return ctx.settings
+  }
+
+  // Fallback to database query if no context (e.g., during SSG build)
+  console.log(`[fn:workspace] getSettings: fallback to db query`)
   try {
     const org = await db.query.settings.findFirst()
     console.log(`[fn:workspace] getSettings: found=${!!org}`)
