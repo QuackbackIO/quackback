@@ -71,12 +71,16 @@ export const Route = createFileRoute('/_portal')({
       authConfig,
     }
   },
-  head: ({ loaderData }) => ({
-    meta: [{ title: loaderData?.org?.name }],
-    links: loaderData?.faviconData?.url
-      ? [{ rel: 'icon', href: loaderData.faviconData.url }]
-      : undefined,
-  }),
+  head: ({ loaderData }) => {
+    // Favicon priority: dedicated favicon > workspace logo > default logo.png
+    const faviconUrl =
+      loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
+
+    return {
+      meta: [{ title: loaderData?.org?.name }],
+      links: [{ rel: 'icon', href: faviconUrl }],
+    }
+  },
   component: PortalLayout,
 })
 
