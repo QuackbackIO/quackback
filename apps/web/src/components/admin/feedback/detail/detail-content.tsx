@@ -4,21 +4,26 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ChatBubbleLeftIcon,
-  BuildingOffice2Icon,
-  PencilIcon,
-  TrashIcon,
   FaceSmileIcon,
   ArrowUturnLeftIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
   ArrowPathRoundedSquareIcon,
+  EllipsisVerticalIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/solid'
+import { TrashIcon } from '@heroicons/react/24/outline'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { PostContent } from '@/components/public/post-content'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { CommentForm, type CreateCommentMutation } from '@/components/public/comment-form'
@@ -62,6 +67,10 @@ interface CommentItemProps {
   onReaction: (commentId: string, emoji: string) => void
   isReactionPending: boolean
   depth?: number
+  pinnedCommentId: string | null
+  onPinComment: (commentId: string) => void
+  onUnpinComment: () => void
+  isPinPending: boolean
 }
 
 function CommentItem({
@@ -73,6 +82,10 @@ function CommentItem({
   onReaction,
   isReactionPending,
   depth = 0,
+  pinnedCommentId,
+  onPinComment,
+  onUnpinComment,
+  isPinPending,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -82,6 +95,9 @@ function CommentItem({
   const canNest = depth < maxDepth
   const hasReplies = comment.replies && comment.replies.length > 0
   const reactions = comment.reactions || []
+  const isPinned = pinnedCommentId === comment.id
+  // Can pin: team member, root-level comment (no parent), not deleted
+  const canPin = comment.isTeamMember && !comment.parentId && depth === 0
 
   const handleReaction = (emoji: string) => {
     setShowEmojiPicker(false)
@@ -123,25 +139,63 @@ function CommentItem({
         {/* Content */}
         <div className="flex-1 min-w-0 pb-2">
           {/* Header */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm text-foreground">
-              {comment.authorName || 'Anonymous'}
-            </span>
-            {comment.isTeamMember && (
-              <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground">
-                <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm text-foreground">
+                {comment.authorName || 'Anonymous'}
               </span>
+              {comment.isTeamMember && (
+                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground">
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+              )}
+              {isPinned && (
+                <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+                  <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
+                  Pinned
+                </Badge>
+              )}
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-sm text-muted-foreground/60">
+                <TimeAgo date={comment.createdAt} />
+              </span>
+            </div>
+            {/* Actions dropdown for team comments */}
+            {canPin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 opacity-60 hover:opacity-100"
+                  >
+                    <EllipsisVerticalIcon className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {isPinned ? (
+                    <DropdownMenuItem onClick={onUnpinComment} disabled={isPinPending}>
+                      <MapPinIcon className="h-4 w-4 mr-2" />
+                      Unpin Response
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => onPinComment(comment.id)}
+                      disabled={isPinPending}
+                    >
+                      <MapPinIcon className="h-4 w-4 mr-2" />
+                      Pin as Official Response
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            <span className="text-muted-foreground/40">·</span>
-            <span className="text-sm text-muted-foreground/60">
-              <TimeAgo date={comment.createdAt} />
-            </span>
           </div>
 
           {/* Content */}
@@ -284,6 +338,10 @@ function CommentItem({
                   onReaction={onReaction}
                   isReactionPending={isReactionPending}
                   depth={depth + 1}
+                  pinnedCommentId={pinnedCommentId}
+                  onPinComment={onPinComment}
+                  onUnpinComment={onUnpinComment}
+                  isPinPending={isPinPending}
                 />
               </div>
             )
@@ -303,10 +361,11 @@ interface DetailContentProps {
   isReactionPending: boolean
   onVote: () => void
   isVotePending: boolean
-  onOfficialResponseChange: (response: string | null) => Promise<void>
-  isUpdating: boolean
   onRestore?: () => Promise<void>
   onPermanentDelete?: () => Promise<void>
+  onPinComment: (commentId: string) => void
+  onUnpinComment: () => void
+  isPinPending: boolean
 }
 
 export function DetailContent({
@@ -318,13 +377,12 @@ export function DetailContent({
   isReactionPending,
   onVote,
   isVotePending,
-  onOfficialResponseChange,
-  isUpdating,
   onRestore,
   onPermanentDelete,
+  onPinComment,
+  onUnpinComment,
+  isPinPending,
 }: DetailContentProps) {
-  const [isEditingResponse, setIsEditingResponse] = useState(false)
-  const [responseText, setResponseText] = useState('')
   const [isRestoring, setIsRestoring] = useState(false)
   const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false)
 
@@ -449,135 +507,29 @@ export function DetailContent({
             className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/85 leading-relaxed"
           />
 
-          {/* Official response */}
-          <div className="mt-8 pt-6 border-t border-border/30">
-            {post.officialResponse ? (
+          {/* Legacy Official Response (read-only - will be migrated to pinned comments) */}
+          {post.officialResponse && !post.pinnedComment && (
+            <div className="mt-8 pt-6 border-t border-border/30">
               <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 to-primary/4 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <Badge className="text-xs px-2.5 py-1 bg-primary/15 text-primary border-0 font-semibold uppercase tracking-wide">
-                      Official Response
-                    </Badge>
-                    {post.officialResponse.authorName && (
-                      <span className="text-xs text-muted-foreground/80 font-medium">
-                        by {post.officialResponse.authorName}
-                      </span>
-                    )}
-                    <span className="text-xs text-muted-foreground/60">
-                      · <TimeAgo date={post.officialResponse.respondedAt} />
+                <div className="flex items-center gap-2.5 flex-wrap mb-3">
+                  <Badge className="text-xs px-2.5 py-1 bg-primary/15 text-primary border-0 font-semibold uppercase tracking-wide">
+                    Official Response
+                  </Badge>
+                  {post.officialResponse.authorName && (
+                    <span className="text-xs text-muted-foreground/80 font-medium">
+                      by {post.officialResponse.authorName}
                     </span>
-                  </div>
-                  <div className="flex gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 hover:bg-primary/10 transition-colors duration-150"
-                      onClick={() => {
-                        setResponseText(post.officialResponse?.content || '')
-                        setIsEditingResponse(true)
-                      }}
-                    >
-                      <PencilIcon className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors duration-150"
-                      onClick={() => onOfficialResponseChange(null)}
-                      disabled={isUpdating}
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                  )}
+                  <span className="text-xs text-muted-foreground/60">
+                    · <TimeAgo date={post.officialResponse.respondedAt} />
+                  </span>
                 </div>
-                {isEditingResponse ? (
-                  <div className="space-y-3">
-                    <Textarea
-                      value={responseText}
-                      onChange={(e) => setResponseText(e.target.value)}
-                      placeholder="Update your official response..."
-                      rows={3}
-                      className="resize-none text-sm"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        disabled={isUpdating || !responseText.trim()}
-                        onClick={async () => {
-                          await onOfficialResponseChange(responseText.trim())
-                          setIsEditingResponse(false)
-                        }}
-                      >
-                        {isUpdating && <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />}
-                        Update
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setIsEditingResponse(false)
-                          setResponseText(post.officialResponse?.content || '')
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                    {post.officialResponse.content}
-                  </p>
-                )}
+                <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                  {post.officialResponse.content}
+                </p>
               </div>
-            ) : isEditingResponse ? (
-              <div className="space-y-3">
-                <Textarea
-                  value={responseText}
-                  onChange={(e) => setResponseText(e.target.value)}
-                  placeholder="Write your official response to this feedback..."
-                  rows={3}
-                  className="resize-none text-sm"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={isUpdating || !responseText.trim()}
-                    onClick={async () => {
-                      await onOfficialResponseChange(responseText.trim())
-                      setIsEditingResponse(false)
-                    }}
-                  >
-                    {isUpdating && <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />}
-                    Publish Response
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsEditingResponse(false)
-                      setResponseText('')
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-border/50"
-                onClick={() => {
-                  setResponseText('')
-                  setIsEditingResponse(true)
-                }}
-              >
-                <BuildingOffice2Icon className="h-4 w-4 mr-2" />
-                Add Official Response
-              </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -611,6 +563,10 @@ export function DetailContent({
                   createComment={createComment}
                   onReaction={onReaction}
                   isReactionPending={isReactionPending}
+                  pinnedCommentId={post.pinnedCommentId}
+                  onPinComment={onPinComment}
+                  onUnpinComment={onUnpinComment}
+                  isPinPending={isPinPending}
                 />
               ))}
           </div>

@@ -9,12 +9,12 @@ import { useInboxUIStore } from '@/lib/stores/inbox-ui'
 import {
   useUpdatePostStatus,
   useUpdatePostTags,
-  useUpdateOfficialResponse,
   useToggleCommentReaction,
   useVotePost,
   useAddComment,
   inboxKeys,
 } from '@/lib/hooks/use-inbox-queries'
+import { usePinComment, useUnpinComment } from '@/lib/hooks/use-comment-actions'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, PostStatusEntity, Roadmap } from '@/lib/db-types'
 import type { CommentId, PostId, StatusId, TagId } from '@quackback/ids'
@@ -50,10 +50,11 @@ export function FeedbackDetailPage({
   // Mutations
   const updateStatus = useUpdatePostStatus()
   const updateTags = useUpdatePostTags()
-  const updateOfficialResponse = useUpdateOfficialResponse()
   const toggleReaction = useToggleCommentReaction()
   const votePost = useVotePost()
   const addComment = useAddComment()
+  const pinComment = usePinComment({ postId: post.id as PostId })
+  const unpinComment = useUnpinComment({ postId: post.id as PostId })
 
   // Keyboard navigation
   useEffect(() => {
@@ -117,15 +118,6 @@ export function FeedbackDetailPage({
     }
   }
 
-  const handleOfficialResponseChange = async (response: string | null) => {
-    setIsUpdating(true)
-    try {
-      await updateOfficialResponse.mutateAsync({ postId: post.id as PostId, response })
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
   const handleReaction = (commentId: string, emoji: string) => {
     toggleReaction.mutate({
       postId: post.id as PostId,
@@ -142,6 +134,14 @@ export function FeedbackDetailPage({
     queryClient.invalidateQueries({
       queryKey: inboxKeys.detail(post.id as PostId),
     })
+  }
+
+  const handlePinComment = (commentId: string) => {
+    pinComment.mutate(commentId as CommentId)
+  }
+
+  const handleUnpinComment = () => {
+    unpinComment.mutate()
   }
 
   return (
@@ -177,8 +177,9 @@ export function FeedbackDetailPage({
             isReactionPending={toggleReaction.isPending}
             onVote={handleVote}
             isVotePending={votePost.isPending}
-            onOfficialResponseChange={handleOfficialResponseChange}
-            isUpdating={isUpdating}
+            onPinComment={handlePinComment}
+            onUnpinComment={handleUnpinComment}
+            isPinPending={pinComment.isPending || unpinComment.isPending}
           />
         </div>
       </div>

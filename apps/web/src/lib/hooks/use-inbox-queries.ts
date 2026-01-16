@@ -324,41 +324,6 @@ export function useUpdatePostTags() {
   })
 }
 
-export function useUpdateOfficialResponse() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({ postId, response }: { postId: PostId; response: string | null }) =>
-      updatePostFn({ data: { id: postId, officialResponse: response } }),
-    onSuccess: (data, { postId }) => {
-      const typedData = data as {
-        officialResponse?: string | null
-        officialResponseAuthorName?: string | null
-        officialResponseAt?: string | null
-      }
-      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
-        old
-          ? {
-              ...old,
-              officialResponse: typedData.officialResponse
-                ? {
-                    content: typedData.officialResponse,
-                    authorName: typedData.officialResponseAuthorName ?? null,
-                    respondedAt: typedData.officialResponseAt
-                      ? new Date(typedData.officialResponseAt)
-                      : new Date(),
-                  }
-                : null,
-            }
-          : old
-      )
-    },
-    onSettled: (_data, _error, { postId }) => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
-    },
-  })
-}
-
 // ============================================================================
 // Comment Reaction Mutation
 // ============================================================================
