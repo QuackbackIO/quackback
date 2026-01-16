@@ -24,10 +24,14 @@ export function WorkspaceNotFoundPage() {
 
         <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild size="lg">
-            <a href="https://quackback.io">Go to Quackback</a>
+            <a href="https://quackback.io?utm_source=not_found_page&utm_medium=button&utm_campaign=homepage">
+              Go to Quackback
+            </a>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <a href="https://quackback.io/signup">Create a workspace</a>
+            <a href="https://quackback.io/signup?utm_source=not_found_page&utm_medium=button&utm_campaign=signup">
+              Create a workspace
+            </a>
           </Button>
         </div>
 
