@@ -10,6 +10,7 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 import { isMultiTenant } from '@/lib/features'
 import { resolveTenantFromDomain, type TenantContext, tenantStorage } from '@/lib/tenant'
+import { db } from '@/lib/db'
 
 // Type-safe request context (TanStack Start module augmentation)
 declare module '@tanstack/react-start' {
@@ -46,9 +47,21 @@ export default createServerEntry({
     }
 
     // Self-hosted: no tenant resolution needed, uses DATABASE_URL singleton
+    // Still wrap in tenantStorage for request-scoped caching and settings
     if (!isMultiTenant()) {
-      console.log('[server] Self-hosted mode - no tenant resolution needed')
-      return handler.fetch(request, { context: { tenant: null } })
+      console.log('[server] Self-hosted mode - querying settings')
+      // Query settings once at request start (uses DATABASE_URL singleton)
+      const settings = await db.query.settings.findFirst()
+      const selfHostedContext: TenantContext = {
+        workspaceId: 'self-hosted',
+        slug: settings?.slug ?? '',
+        db: null, // Self-hosted uses DATABASE_URL singleton via db.ts
+        settings: settings ?? null,
+        cache: new Map(),
+      }
+      return tenantStorage.run(selfHostedContext, () => {
+        return handler.fetch(request, { context: { tenant: null } })
+      })
     }
 
     // Cloud: resolve tenant from domain
@@ -56,18 +69,39 @@ export default createServerEntry({
     const tenant = await resolveTenantFromDomain(request)
 
     if (!tenant) {
-      // Unknown or invalid domain - pass through, React will handle it
+      // Unknown or invalid domain - pass through with minimal context
       console.log(`[server] No tenant found for domain: ${url.hostname}`)
-      return handler.fetch(request, { context: { tenant: null } })
+      const noTenantContext: TenantContext = {
+        workspaceId: 'unknown',
+        slug: '',
+        db: null,
+        settings: null,
+        cache: new Map(),
+      }
+      return tenantStorage.run(noTenantContext, () => {
+        return handler.fetch(request, { context: { tenant: null } })
+      })
     }
 
     console.log(`[server] Tenant resolved: ${tenant.workspaceId} for domain: ${url.hostname}`)
 
+    // Query settings once using tenant's db directly (before setting up full context)
+    const settings = await tenant.db.query.settings.findFirst()
+
+    // Build full tenant context with settings and cache
+    const tenantContext: TenantContext = {
+      workspaceId: tenant.workspaceId,
+      slug: tenant.slug,
+      db: tenant.db,
+      settings: settings ?? null,
+      cache: new Map(),
+    }
+
     // Run entire request within AsyncLocalStorage context
     // This allows db.ts and other services to access tenant db via tenantStorage.getStore()
-    return tenantStorage.run(tenant, () => {
+    return tenantStorage.run(tenantContext, () => {
       console.log(`[server] Running request in tenant context: ${tenant.workspaceId}`)
-      return handler.fetch(request, { context: { tenant } })
+      return handler.fetch(request, { context: { tenant: tenantContext } })
     })
   },
 })

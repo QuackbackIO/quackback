@@ -10,7 +10,20 @@ import type { Role } from '@/lib/auth'
 import { auth } from '@/lib/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
-import { db, member, eq } from '@/lib/db'
+import { db, member, eq, type Member } from '@/lib/db'
+import { tenantStorage } from '@/lib/tenant'
+
+/** Get member from request-scoped cache (returns undefined if not cached) */
+function getCachedMember(userId: UserId): Member | undefined {
+  const ctx = tenantStorage.getStore()
+  return ctx?.cache.get(`member:${userId}`) as Member | undefined
+}
+
+/** Store member in request-scoped cache (only cache if member exists) */
+function setCachedMember(userId: UserId, data: Member): void {
+  const ctx = tenantStorage.getStore()
+  ctx?.cache.set(`member:${userId}`, data)
+}
 
 /**
  * Get session directly from better-auth (not through server function).
@@ -66,16 +79,28 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
     console.warn(`[auth] ⚠️ No session`)
     throw new Error('Authentication required')
   }
-  console.log(`[auth] Session: user=${session.user.id}`)
+  const userId = session.user.id as UserId
+  console.log(`[auth] Session: user=${userId}`)
 
   const appSettings = await getSettings()
   if (!appSettings) {
     throw new Error('Workspace not configured')
   }
 
-  const memberRecord = await db.query.member.findFirst({
-    where: eq(member.userId, session.user.id as UserId),
-  })
+  // Check member cache first
+  let memberRecord = getCachedMember(userId)
+  if (memberRecord) {
+    console.log(`[auth] Member cache hit for user=${userId}`)
+  } else {
+    console.log(`[auth] Member cache miss for user=${userId}`)
+    memberRecord = await db.query.member.findFirst({
+      where: eq(member.userId, userId),
+    })
+    if (memberRecord) {
+      setCachedMember(userId, memberRecord)
+    }
+  }
+
   if (!memberRecord) {
     throw new Error('Access denied: Not a team member')
   }
@@ -97,7 +122,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       name: appSettings.name,
     },
     user: {
-      id: session.user.id as UserId,
+      id: userId,
       email: session.user.email,
       name: session.user.name,
       image: session.user.image ?? null,
@@ -122,32 +147,43 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     console.log(`[auth] Optional auth: no session`)
     return null
   }
-  console.log(`[auth] Optional auth: user=${session.user.id}`)
+  const userId = session.user.id as UserId
+  console.log(`[auth] Optional auth: user=${userId}`)
 
   const appSettings = await getSettings()
   if (!appSettings) {
     return null
   }
 
-  let memberRecord = await db.query.member.findFirst({
-    where: eq(member.userId, session.user.id as UserId),
-  })
+  // Check member cache first
+  let memberRecord = getCachedMember(userId)
+  if (memberRecord) {
+    console.log(`[auth] Member cache hit for user=${userId}`)
+  } else {
+    console.log(`[auth] Member cache miss for user=${userId}`)
+    memberRecord = await db.query.member.findFirst({
+      where: eq(member.userId, userId),
+    })
 
-  // Auto-create member record for authenticated users without one
-  if (!memberRecord) {
-    console.log(`[auth] 📦 Creating member record for user=${session.user.id}`)
-    const newMemberId = generateId('member')
-    const [created] = await db
-      .insert(member)
-      .values({
-        id: newMemberId,
-        userId: session.user.id as UserId,
-        role: 'user',
-        createdAt: new Date(),
-      })
-      .returning()
-    memberRecord = created
-    console.log(`[auth] ✅ Member created: id=${newMemberId}`)
+    // Auto-create member record for authenticated users without one
+    if (!memberRecord) {
+      console.log(`[auth] 📦 Creating member record for user=${userId}`)
+      const newMemberId = generateId('member')
+      const [created] = await db
+        .insert(member)
+        .values({
+          id: newMemberId,
+          userId,
+          role: 'user',
+          createdAt: new Date(),
+        })
+        .returning()
+      memberRecord = created
+      console.log(`[auth] ✅ Member created: id=${newMemberId}`)
+    }
+
+    // Cache the member (either found or just created)
+    setCachedMember(userId, memberRecord)
   }
 
   return {
@@ -157,7 +193,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       name: appSettings.name,
     },
     user: {
-      id: session.user.id as UserId,
+      id: userId,
       email: session.user.email,
       name: session.user.name,
       image: session.user.image ?? null,

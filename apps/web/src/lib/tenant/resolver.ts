@@ -13,7 +13,7 @@ import { neon } from '@neondatabase/serverless'
 import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
 import { eq } from 'drizzle-orm'
 import { getTenantDb } from './db-cache'
-import type { TenantContext } from './types'
+import type { TenantInfo } from './types'
 
 // ============================================
 // Catalog Schema (inline - matches get-started.ts)
@@ -232,12 +232,12 @@ export async function getTenantDbBySlug(
 }
 
 /**
- * Resolve a domain to tenant context.
+ * Resolve a domain to tenant info.
  *
  * @param request - Incoming HTTP request
- * @returns TenantContext if domain maps to a valid workspace, null otherwise
+ * @returns TenantInfo if domain maps to a valid workspace, null otherwise
  */
-export async function resolveTenantFromDomain(request: Request): Promise<TenantContext | null> {
+export async function resolveTenantFromDomain(request: Request): Promise<TenantInfo | null> {
   const config = getConfig()
 
   if (!config.catalogDbUrl || !config.baseDomain || !config.neonApiKey) {
