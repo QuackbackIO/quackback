@@ -34,7 +34,9 @@
     "NODE_ENV": "development",
     "EDITION": "cloud",
     "CLOUD_TENANT_BASE_DOMAIN": "dev.quackback.io",
-    "CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2"
+    "CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2",
+    // OpenAI via Cloudflare AI Gateway
+    "OPENAI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/67cf7d5c8b797bfd5cbd417b233cc0d0/quackback-dev/openai"
   },
   "observability": {
     "enabled": true,

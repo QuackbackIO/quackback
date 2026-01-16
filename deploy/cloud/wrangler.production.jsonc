@@ -34,7 +34,9 @@
 		"CLOUD_TENANT_BASE_DOMAIN": "quackback.io",
 		"CLOUD_APP_DOMAIN": "app.quackback.io",
 		"CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2",
-		"CLOUD_CLOUDFLARE_ZONE_ID": "54f34273ee8b1e8f2c2604f0c72a42be"
+		"CLOUD_CLOUDFLARE_ZONE_ID": "54f34273ee8b1e8f2c2604f0c72a42be",
+		// OpenAI via Cloudflare AI Gateway
+		"OPENAI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/67cf7d5c8b797bfd5cbd417b233cc0d0/quackback-prod/openai"
 	},
 	"observability": {
 		"enabled": true

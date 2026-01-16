@@ -37,6 +37,7 @@
     "reset": "bun packages/db/src/reset.ts",
     "import": "bun scripts/import/cli.ts",
     "import:uservoice": "bun scripts/import/cli.ts uservoice",
+    "ai:backfill": "bun apps/web/scripts/backfill-ai.ts",
     "prepare": "husky"
   },
   "devDependencies": {
