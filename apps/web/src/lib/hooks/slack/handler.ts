@@ -84,12 +84,12 @@ async function postMessage(
 export const slackHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
     const { channelId } = target as SlackTarget
-    const { accessToken } = config as SlackConfig
+    const { accessToken, rootUrl } = config as SlackConfig
 
     console.log(`[Slack] Processing ${event.type} → channel ${channelId}`)
 
     const client = new WebClient(accessToken)
-    const message = buildSlackMessage(event)
+    const message = buildSlackMessage(event, rootUrl)
 
     try {
       const result = await postMessage(client, channelId, message)

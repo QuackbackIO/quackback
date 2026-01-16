@@ -104,6 +104,8 @@ export interface SlackTarget {
 
 export interface SlackConfig {
   accessToken: string
+  /** Portal base URL for constructing post links */
+  rootUrl: string
 }
 
 /**

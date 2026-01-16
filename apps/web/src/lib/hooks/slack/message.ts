@@ -4,7 +4,7 @@
  */
 
 import type { EventData } from '@/lib/events/types'
-import { stripHtml, getRootUrl, formatStatus, getStatusEmoji } from '../utils'
+import { stripHtml, formatStatus, getStatusEmoji } from '../utils'
 
 interface SlackMessage {
   text: string
@@ -36,10 +36,10 @@ function quoteText(text: string): string {
 
 /**
  * Build a Slack message for an event.
+ * @param event - The event data
+ * @param rootUrl - Portal base URL for constructing post links
  */
-export function buildSlackMessage(event: EventData): SlackMessage {
-  const rootUrl = getRootUrl()
-
+export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessage {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data

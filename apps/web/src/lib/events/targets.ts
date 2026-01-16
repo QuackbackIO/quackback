@@ -6,14 +6,30 @@
 import type { PostId, UserId } from '@quackback/ids'
 import { db, integrations, integrationEventMappings, decryptToken, eq, and, member } from '@/lib/db'
 import {
-  getActiveSubscribers,
+  getSubscribersForEvent,
   batchGetNotificationPreferences,
   batchGenerateUnsubscribeTokens,
   type Subscriber,
+  type NotificationEventType,
 } from '@/lib/subscriptions/subscription.service'
 import type { HookTarget } from '@/lib/hooks/types'
-import { stripHtml, truncate, getRootUrl } from '@/lib/hooks/utils'
+import { stripHtml, truncate } from '@/lib/hooks/utils'
+import { buildHookContext, type HookContext } from '@/lib/hooks/context'
 import type { EventData, EventActor } from './types'
+
+/**
+ * Map system event types to notification event types
+ */
+function getNotificationEventType(eventType: string): NotificationEventType | null {
+  switch (eventType) {
+    case 'post.status_changed':
+      return 'status_change'
+    case 'comment.created':
+      return 'comment'
+    default:
+      return null
+  }
+}
 
 const EMAIL_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
 const NOTIFICATION_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
@@ -25,15 +41,22 @@ const AI_EVENT_TYPES = ['post.created'] as const
  */
 export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
   try {
+    // Build context ONCE at the start - consolidates all settings/URL queries
+    const context = await buildHookContext()
+    if (!context) {
+      console.error('[Targets] Failed to build hook context')
+      return []
+    }
+
     const targets: HookTarget[] = []
 
     // Integration targets (Slack, Discord, etc.)
-    const integrationTargets = await getIntegrationTargets(event)
+    const integrationTargets = await getIntegrationTargets(event, context)
     targets.push(...integrationTargets)
 
     // Email targets (subscribers)
     if (EMAIL_EVENT_TYPES.includes(event.type as (typeof EMAIL_EVENT_TYPES)[number])) {
-      const emailTargets = await getEmailTargets(event)
+      const emailTargets = await getEmailTargets(event, context)
       targets.push(...emailTargets)
     }
 
@@ -41,7 +64,7 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
     if (
       NOTIFICATION_EVENT_TYPES.includes(event.type as (typeof NOTIFICATION_EVENT_TYPES)[number])
     ) {
-      const notificationTargets = await getNotificationTargets(event)
+      const notificationTargets = await getNotificationTargets(event, context)
       targets.push(...notificationTargets)
     }
 
@@ -64,7 +87,10 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
 /**
  * Get integration hook targets (Slack, Discord, etc.).
  */
-async function getIntegrationTargets(event: EventData): Promise<HookTarget[]> {
+async function getIntegrationTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
   // Single query: get active, enabled mappings with integration data
   const mappings = await db
     .select({
@@ -87,13 +113,6 @@ async function getIntegrationTargets(event: EventData): Promise<HookTarget[]> {
     return []
   }
 
-  // Get workspace ID for token decryption
-  const settings = await db.query.settings.findFirst({ columns: { id: true } })
-  if (!settings) {
-    console.error('[Targets] Settings not found')
-    return []
-  }
-
   const targets: HookTarget[] = []
 
   for (const m of mappings) {
@@ -109,7 +128,7 @@ async function getIntegrationTargets(event: EventData): Promise<HookTarget[]> {
     let accessToken: string | undefined
     if (m.accessTokenEncrypted) {
       try {
-        accessToken = decryptToken(m.accessTokenEncrypted, settings.id)
+        accessToken = decryptToken(m.accessTokenEncrypted, context.workspaceId)
       } catch (error) {
         console.error(`[Targets] Failed to decrypt token for ${m.integrationType}:`, error)
         continue // Skip this integration rather than crash all
@@ -119,7 +138,7 @@ async function getIntegrationTargets(event: EventData): Promise<HookTarget[]> {
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: { accessToken },
+      config: { accessToken, rootUrl: context.portalBaseUrl },
     })
   }
 
@@ -128,41 +147,44 @@ async function getIntegrationTargets(event: EventData): Promise<HookTarget[]> {
 
 /**
  * Get email hook targets (subscribers).
+ * Filters by:
+ * 1. Subscription level (notifyComments/notifyStatusChanges based on event type)
+ * 2. Global email preferences (emailNewComment/emailStatusChange)
+ * 3. Not the actor (don't notify yourself)
  */
-async function getEmailTargets(event: EventData): Promise<HookTarget[]> {
+async function getEmailTargets(event: EventData, context: HookContext): Promise<HookTarget[]> {
   const postId = extractPostId(event)
   if (!postId) return []
 
-  // Get workspace info
-  const settings = await db.query.settings.findFirst({ columns: { name: true } })
-  if (!settings) {
-    console.error('[Targets] Settings not found')
-    return []
-  }
+  // Map event type to notification event type
+  const notifEventType = getNotificationEventType(event.type)
+  if (!notifEventType) return []
 
-  const rootUrl = getRootUrl()
-  const subscribers = await getActiveSubscribers(postId)
-  console.log(`[Targets] Found ${subscribers.length} subscribers for post ${postId}`)
+  // Get subscribers who want this type of notification (subscription level filter)
+  const subscribers = await getSubscribersForEvent(postId, notifEventType)
+  console.log(
+    `[Targets] Found ${subscribers.length} subscribers for ${notifEventType} on post ${postId}`
+  )
 
   if (subscribers.length === 0) return []
 
   // Build event-specific config
-  const eventConfig = await buildEmailEventConfig(event, rootUrl)
+  const eventConfig = await buildEmailEventConfig(event, context.portalBaseUrl)
   if (!eventConfig) return []
 
   // Batch get notification preferences (single query instead of N queries)
   const memberIds = subscribers.map((s) => s.memberId)
   const prefsMap = await batchGetNotificationPreferences(memberIds)
 
-  // Filter to eligible subscribers (not actor, preferences allow)
+  // Filter to eligible subscribers (not actor, email preferences allow)
   const eligibleSubscribers = subscribers.filter((subscriber) => {
     // Skip the actor (don't notify yourself)
     if (isActorSubscriber(subscriber, event.actor)) {
       return false
     }
-    // Check preferences
+    // Check global email preferences
     const prefs = prefsMap.get(subscriber.memberId)
-    return prefs && shouldNotifySubscriber(event.type, prefs)
+    return prefs && shouldSendEmail(event.type, prefs)
   })
 
   if (eligibleSubscribers.length === 0) return []
@@ -181,10 +203,10 @@ async function getEmailTargets(event: EventData): Promise<HookTarget[]> {
     type: 'email',
     target: {
       email: subscriber.email,
-      unsubscribeUrl: `${rootUrl}/unsubscribe?token=${tokenMap.get(subscriber.memberId)}`,
+      unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.memberId)}`,
     },
     config: {
-      workspaceName: settings.name,
+      workspaceName: context.workspaceName,
       ...eventConfig,
     },
   }))
@@ -208,20 +230,22 @@ function isActorSubscriber(subscriber: Subscriber, actor: EventActor): boolean {
   return subscriber.userId === actor.userId || subscriber.email === actor.email
 }
 
-const EVENT_PREF_MAP: Record<string, 'emailStatusChange' | 'emailNewComment'> = {
+const EVENT_EMAIL_PREF_MAP: Record<string, 'emailStatusChange' | 'emailNewComment'> = {
   'post.status_changed': 'emailStatusChange',
   'comment.created': 'emailNewComment',
 }
 
 /**
- * Check if subscriber should be notified based on preferences.
+ * Check if email should be sent based on global email preferences.
+ * Note: Subscription level (notifyComments/notifyStatusChanges) is already filtered
+ * by getSubscribersForEvent. This checks the global email preferences.
  */
-function shouldNotifySubscriber(
+function shouldSendEmail(
   eventType: string,
   prefs: { emailStatusChange: boolean; emailNewComment: boolean; emailMuted: boolean }
 ): boolean {
   if (prefs.emailMuted) return false
-  const prefKey = EVENT_PREF_MAP[eventType]
+  const prefKey = EVENT_EMAIL_PREF_MAP[eventType]
   return prefKey ? prefs[prefKey] : false
 }
 
@@ -270,14 +294,22 @@ async function buildEmailEventConfig(
 
 /**
  * Get in-app notification targets (subscribers).
+ * Filters by subscription level (notifyComments/notifyStatusChanges based on event type).
  * Returns a single target with all member IDs for batch insertion.
  */
-async function getNotificationTargets(event: EventData): Promise<HookTarget[]> {
+async function getNotificationTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
   const postId = extractPostId(event)
   if (!postId) return []
 
-  const rootUrl = getRootUrl()
-  const subscribers = await getActiveSubscribers(postId)
+  // Map event type to notification event type
+  const notifEventType = getNotificationEventType(event.type)
+  if (!notifEventType) return []
+
+  // Get subscribers who want this type of notification (subscription level filter)
+  const subscribers = await getSubscribersForEvent(postId, notifEventType)
 
   if (subscribers.length === 0) return []
 
@@ -289,7 +321,7 @@ async function getNotificationTargets(event: EventData): Promise<HookTarget[]> {
   if (eligibleSubscribers.length === 0) return []
 
   // Build notification config based on event type
-  const config = await buildNotificationConfig(event, rootUrl)
+  const config = await buildNotificationConfig(event, context.portalBaseUrl)
   if (!config) return []
 
   // Return single target with all member IDs (for batch insert)

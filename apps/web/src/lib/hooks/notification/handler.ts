@@ -11,7 +11,7 @@ import type { EventData } from '@/lib/events/types'
 import { createNotificationsBatch } from '@/lib/notifications'
 import type { CreateNotificationInput, NotificationType } from '@/lib/notifications'
 import type { MemberId, PostId, CommentId } from '@quackback/ids'
-import { stripHtml, truncate, getRootUrl } from '../utils'
+import { truncate } from '../utils'
 
 /**
  * Target for notification hooks - contains all member IDs to notify
@@ -83,8 +83,7 @@ function buildNotifications(
   memberIds: MemberId[],
   config: NotificationConfig
 ): CreateNotificationInput[] {
-  const { postId, postTitle, boardSlug } = config
-  const postUrl = `${getRootUrl()}/b/${boardSlug}/posts/${postId}`
+  const { postId, postTitle, boardSlug, postUrl } = config
 
   if (event.type === 'post.status_changed') {
     const { previousStatus, newStatus } = config
@@ -101,13 +100,14 @@ function buildNotifications(
   if (event.type === 'comment.created') {
     const { commentId, commenterName, commentPreview, isTeamMember } = config
     const title = isTeamMember ? `${commenterName} (team) commented` : `${commenterName} commented`
-    const cleanPreview = truncate(stripHtml(commentPreview ?? ''), 150)
+    // commentPreview is already HTML-stripped and truncated (200 chars) in targets.ts
+    const body = truncate(commentPreview ?? '', 150)
 
     return memberIds.map((memberId) => ({
       memberId,
       type: 'comment_created' as NotificationType,
       title,
-      body: cleanPreview,
+      body,
       postId,
       commentId,
       metadata: {
@@ -115,7 +115,7 @@ function buildNotifications(
         boardSlug,
         postUrl,
         commenterName,
-        commentPreview: truncate(stripHtml(commentPreview ?? ''), 200),
+        commentPreview,
         isTeamMember,
       },
     }))
