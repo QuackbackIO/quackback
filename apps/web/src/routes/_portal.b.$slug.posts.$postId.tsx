@@ -7,7 +7,10 @@ import { portalQueries } from '@/lib/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
 import { PostContentSection } from '@/components/public/post-detail/post-content-section'
-import { OfficialResponseSection } from '@/components/public/post-detail/official-response-section'
+import {
+  OfficialResponseSection,
+  PinnedCommentSection,
+} from '@/components/public/post-detail/official-response-section'
 import {
   CommentsSection,
   CommentsSectionSkeleton,
@@ -141,20 +144,29 @@ function PostDetailPage() {
           />
         </div>
 
-        {/* Official Response (if exists) */}
-        {post.officialResponse && (
+        {/* Pinned Comment / Official Response (if exists) */}
+        {post.pinnedComment ? (
+          <PinnedCommentSection
+            comment={post.pinnedComment}
+            workspaceName={settings?.name ?? 'Team'}
+          />
+        ) : post.officialResponse ? (
           <OfficialResponseSection
             content={post.officialResponse.content}
             authorName={post.officialResponse.authorName}
             respondedAt={post.officialResponse.respondedAt}
             workspaceName={settings?.name ?? 'Team'}
           />
-        )}
+        ) : null}
 
         {/* Comments Section */}
         <div className="border-t border-border/30 bg-muted/20">
           <Suspense fallback={<CommentsSectionSkeleton />}>
-            <CommentsSection postId={postId} comments={post.comments} />
+            <CommentsSection
+              postId={postId}
+              comments={post.comments}
+              pinnedCommentId={post.pinnedCommentId}
+            />
           </Suspense>
         </div>
       </div>

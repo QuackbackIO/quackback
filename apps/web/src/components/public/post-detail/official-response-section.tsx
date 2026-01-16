@@ -1,5 +1,7 @@
 import { OfficialResponse } from '@/components/public/official-response'
+import { PinnedComment } from '@/components/public/pinned-comment'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { PinnedCommentView } from '@/lib/queries/portal-detail'
 
 export function OfficialResponseSectionSkeleton() {
   return (
@@ -42,6 +44,19 @@ export function OfficialResponseSection({
         respondedAt={respondedAt}
         workspaceName={workspaceName}
       />
+    </div>
+  )
+}
+
+interface PinnedCommentSectionProps {
+  comment: PinnedCommentView
+  workspaceName: string
+}
+
+export function PinnedCommentSection({ comment, workspaceName }: PinnedCommentSectionProps) {
+  return (
+    <div className="border-t border-border/30 p-6">
+      <PinnedComment comment={comment} workspaceName={workspaceName} />
     </div>
   )
 }

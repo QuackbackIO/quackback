@@ -4,6 +4,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FaceSmileIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +28,8 @@ interface CommentThreadProps {
   onAuthRequired?: () => void
   /** React Query mutation for creating comments with optimistic updates */
   createComment?: CreateCommentMutation
+  /** ID of the pinned comment (for showing pinned indicator) */
+  pinnedCommentId?: string | null
 }
 
 export function CommentThread({
@@ -36,6 +39,7 @@ export function CommentThread({
   user,
   onAuthRequired,
   createComment,
+  pinnedCommentId,
 }: CommentThreadProps) {
   return (
     <div className="space-y-6">
@@ -68,6 +72,7 @@ export function CommentThread({
                 allowCommenting={allowCommenting}
                 user={user}
                 createComment={createComment}
+                pinnedCommentId={pinnedCommentId}
               />
             ))}
         </div>
@@ -83,6 +88,7 @@ interface CommentItemProps {
   depth?: number
   user?: { name: string | null; email: string }
   createComment?: CreateCommentMutation
+  pinnedCommentId?: string | null
 }
 
 function CommentItem({
@@ -92,6 +98,7 @@ function CommentItem({
   depth = 0,
   user,
   createComment,
+  pinnedCommentId,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -108,6 +115,7 @@ function CommentItem({
   const maxDepth = 5
   const canNest = depth < maxDepth
   const hasReplies = comment.replies.length > 0
+  const isPinned = pinnedCommentId === comment.id
 
   async function handleReaction(emoji: string): Promise<void> {
     setShowEmojiPicker(false)
@@ -153,6 +161,12 @@ function CommentItem({
                 className="bg-primary text-primary-foreground text-xs px-1.5 py-0"
               >
                 Team
+              </Badge>
+            )}
+            {isPinned && (
+              <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+                <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
+                Pinned
               </Badge>
             )}
             <span className="text-muted-foreground text-xs">·</span>
@@ -273,6 +287,7 @@ function CommentItem({
                 depth={depth + 1}
                 user={user}
                 createComment={createComment}
+                pinnedCommentId={pinnedCommentId}
               />
             ))}
           </div>

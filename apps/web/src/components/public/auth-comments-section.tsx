@@ -13,6 +13,8 @@ interface AuthCommentsSectionProps {
   /** Server-determined: user is authenticated member who can comment */
   allowCommenting?: boolean
   user?: { name: string | null; email: string; memberId?: MemberId }
+  /** ID of the pinned comment (for showing pinned indicator) */
+  pinnedCommentId?: string | null
 }
 
 /**
@@ -27,6 +29,7 @@ export function AuthCommentsSection({
   comments,
   allowCommenting: serverAllowCommenting = false,
   user: serverUser,
+  pinnedCommentId,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -70,6 +73,7 @@ export function AuthCommentsSection({
       user={userData}
       onAuthRequired={() => openAuthPopover({ mode: 'login' })}
       createComment={createComment}
+      pinnedCommentId={pinnedCommentId}
     />
   )
 }

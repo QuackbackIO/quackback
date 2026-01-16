@@ -51,9 +51,10 @@ export function CommentsSectionSkeleton() {
 interface CommentsSectionProps {
   postId: PostId
   comments: PublicCommentView[]
+  pinnedCommentId?: string | null
 }
 
-export function CommentsSection({ postId, comments }: CommentsSectionProps) {
+export function CommentsSection({ postId, comments, pinnedCommentId }: CommentsSectionProps) {
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
   // useSuspenseQuery reads from cache if available (prefetched in loader), fetches if not
@@ -72,6 +73,7 @@ export function CommentsSection({ postId, comments }: CommentsSectionProps) {
         comments={comments}
         allowCommenting={data.canComment}
         user={data.user}
+        pinnedCommentId={pinnedCommentId}
       />
     </div>
   )
