@@ -13,15 +13,14 @@ import {
   fetchSubscriptionStatus,
   subscribeToPostFn,
   unsubscribeFromPostFn,
-  muteSubscriptionFn,
+  updateSubscriptionLevelFn,
 } from '@/lib/server-functions/subscriptions'
 import type { PostId } from '@quackback/ids'
-
-type SubscriptionLevel = 'all' | 'status_only' | 'none'
+import type { SubscriptionLevel } from '@/lib/subscriptions/subscription.types'
 
 interface SubscriptionStatus {
   subscribed: boolean
-  muted: boolean
+  level: SubscriptionLevel
   reason: string | null
 }
 
@@ -39,29 +38,33 @@ export function SubscriptionBell({
   onAuthRequired,
 }: SubscriptionBellProps) {
   const [status, setStatus] = useState<SubscriptionStatus>(
-    initialStatus || { subscribed: false, muted: false, reason: null }
+    initialStatus || { subscribed: false, level: 'none', reason: null }
   )
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
-  // Fetch status on mount if not provided
+  // Always fetch fresh status on mount to handle out-of-band changes (email unsubscribe, etc.)
   useEffect(() => {
-    if (!initialStatus && !disabled) {
+    if (!disabled) {
       fetchStatus()
     }
-  }, [postId, disabled, initialStatus])
+  }, [postId, disabled])
 
   const fetchStatus = async () => {
     try {
       const result = await fetchSubscriptionStatus({ data: { postId } })
-      setStatus(result)
+      setStatus({
+        subscribed: result.subscribed,
+        level: result.level,
+        reason: result.reason,
+      })
     } catch (error) {
       console.error('Failed to fetch subscription status:', error)
     }
   }
 
   const updateSubscription = useCallback(
-    async (level: SubscriptionLevel) => {
+    async (newLevel: SubscriptionLevel) => {
       if (disabled && onAuthRequired) {
         onAuthRequired()
         setOpen(false)
@@ -70,25 +73,15 @@ export function SubscriptionBell({
 
       setLoading(true)
       try {
-        if (level === 'none') {
-          // Unsubscribe
+        if (newLevel === 'none') {
+          // Unsubscribe - delete the subscription
           await unsubscribeFromPostFn({ data: { postId } })
-        } else if (level === 'all') {
-          // Subscribe to all (unmuted)
-          if (!status.subscribed) {
-            await subscribeToPostFn({ data: { postId, reason: 'manual' } })
-          } else {
-            // Already subscribed, just unmute
-            await muteSubscriptionFn({ data: { postId, muted: false } })
-          }
+        } else if (!status.subscribed) {
+          // Not subscribed yet - create subscription with level
+          await subscribeToPostFn({ data: { postId, reason: 'manual', level: newLevel } })
         } else {
-          // Subscribe to status only (muted)
-          if (!status.subscribed) {
-            // Subscribe first
-            await subscribeToPostFn({ data: { postId, reason: 'manual' } })
-          }
-          // Then mute
-          await muteSubscriptionFn({ data: { postId, muted: true } })
+          // Already subscribed - just update the level
+          await updateSubscriptionLevelFn({ data: { postId, level: newLevel } })
         }
 
         // Refetch status after update
@@ -103,16 +96,9 @@ export function SubscriptionBell({
     [postId, disabled, onAuthRequired, status.subscribed]
   )
 
-  // Determine current subscription level
-  function getSubscriptionLevel(): SubscriptionLevel {
-    if (!status.subscribed) return 'none'
-    if (status.muted) return 'status_only'
-    return 'all'
-  }
+  const level = status.level
 
-  const level = getSubscriptionLevel()
-
-  // Icon: Bell when not subscribed, BellRing when subscribed (any level)
+  // Icon: Bell when not subscribed, BellAlert when subscribed (any level)
   const isSubscribed = status.subscribed
   const BellIconComponent = isSubscribed ? BellAlertIcon : BellIcon
 

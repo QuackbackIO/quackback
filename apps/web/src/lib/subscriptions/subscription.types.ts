@@ -15,6 +15,8 @@ export interface Subscriber {
   email: string
   name: string | null
   reason: SubscriptionReason
+  notifyComments: boolean
+  notifyStatusChanges: boolean
 }
 
 export interface Subscription {
@@ -22,9 +24,18 @@ export interface Subscription {
   postId: PostId
   postTitle: string
   reason: SubscriptionReason
-  muted: boolean
+  notifyComments: boolean
+  notifyStatusChanges: boolean
   createdAt: Date
 }
+
+/**
+ * Subscription level for UI display
+ * - 'all': notifyComments=true, notifyStatusChanges=true
+ * - 'status_only': notifyComments=false, notifyStatusChanges=true
+ * - 'none': not subscribed (no row exists)
+ */
+export type SubscriptionLevel = 'all' | 'status_only' | 'none'
 
 export interface NotificationPreferencesData {
   emailStatusChange: boolean

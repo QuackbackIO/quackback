@@ -4,8 +4,16 @@
  * This service handles:
  * - Auto-subscribing users when they interact with posts
  * - Manual subscription management
- * - Querying active subscribers for notifications
+ * - Querying subscribers for notifications
  * - Notification preference management
+ *
+ * Subscription model:
+ * - notifyComments: receive notifications when someone comments
+ * - notifyStatusChanges: receive notifications when status changes
+ *
+ * "All activity" = both true
+ * "Status changes only" = notifyComments=false, notifyStatusChanges=true
+ * "Unsubscribed" = row deleted
  */
 
 import {
@@ -28,6 +36,7 @@ import type {
   Subscriber,
   Subscription,
   NotificationPreferencesData,
+  SubscriptionLevel,
 } from './subscription.types'
 
 // Re-export types for backwards compatibility
@@ -36,11 +45,14 @@ export type {
   Subscriber,
   Subscription,
   NotificationPreferencesData,
+  SubscriptionLevel,
 } from './subscription.types'
 
 interface SubscribeOptions {
   /** Pass an existing transaction to run within the same context */
   tx?: Transaction
+  /** Notification level - defaults to 'all' */
+  level?: SubscriptionLevel
 }
 
 /**
@@ -49,7 +61,7 @@ interface SubscribeOptions {
  * @param memberId - The member ID to subscribe
  * @param postId - The post ID to subscribe to
  * @param reason - Why the subscription was created
- * @param options - Optional existing database transaction
+ * @param options - Optional existing database transaction and notification level
  */
 export async function subscribeToPost(
   memberId: MemberId,
@@ -58,12 +70,19 @@ export async function subscribeToPost(
   options?: SubscribeOptions
 ): Promise<void> {
   const executor = options?.tx ?? db
+  const level = options?.level ?? 'all'
+
+  const notifyComments = level === 'all'
+  const notifyStatusChanges = level === 'all' || level === 'status_only'
+
   await executor
     .insert(postSubscriptions)
     .values({
       postId,
       memberId,
       reason,
+      notifyComments,
+      notifyStatusChanges,
     })
     .onConflictDoNothing()
 }
@@ -78,51 +97,100 @@ export async function unsubscribeFromPost(memberId: MemberId, postId: PostId): P
 }
 
 /**
- * Mute/unmute a subscription (keep it but toggle notifications)
+ * Update subscription notification level
  */
-export async function setSubscriptionMuted(
+export async function updateSubscriptionLevel(
   memberId: MemberId,
   postId: PostId,
-  muted: boolean
+  level: SubscriptionLevel
 ): Promise<void> {
+  if (level === 'none') {
+    await unsubscribeFromPost(memberId, postId)
+    return
+  }
+
+  const notifyComments = level === 'all'
+  const notifyStatusChanges = true // Both 'all' and 'status_only' get status changes
+
   await db
     .update(postSubscriptions)
-    .set({ muted, updatedAt: new Date() })
+    .set({
+      notifyComments,
+      notifyStatusChanges,
+      updatedAt: new Date(),
+    })
     .where(and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)))
 }
 
 /**
  * Get subscription status for a member on a post
- * Returns null if not subscribed, or the subscription details
  */
 export async function getSubscriptionStatus(
   memberId: MemberId,
   postId: PostId
-): Promise<{ subscribed: boolean; muted: boolean; reason: SubscriptionReason | null }> {
+): Promise<{
+  subscribed: boolean
+  notifyComments: boolean
+  notifyStatusChanges: boolean
+  reason: SubscriptionReason | null
+  level: SubscriptionLevel
+}> {
   const subscription = await db.query.postSubscriptions.findFirst({
     where: and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)),
   })
 
   if (!subscription) {
-    return { subscribed: false, muted: false, reason: null }
+    return {
+      subscribed: false,
+      notifyComments: false,
+      notifyStatusChanges: false,
+      reason: null,
+      level: 'none',
+    }
+  }
+
+  // Determine level from flags
+  let level: SubscriptionLevel = 'none'
+  if (subscription.notifyComments && subscription.notifyStatusChanges) {
+    level = 'all'
+  } else if (subscription.notifyStatusChanges) {
+    level = 'status_only'
   }
 
   return {
     subscribed: true,
-    muted: subscription.muted,
+    notifyComments: subscription.notifyComments,
+    notifyStatusChanges: subscription.notifyStatusChanges,
     reason: subscription.reason as SubscriptionReason,
+    level,
   }
 }
 
 /**
- * Get all active (non-muted) subscribers for a post
+ * Event type for filtering subscribers
  */
-export async function getActiveSubscribers(postId: PostId): Promise<Subscriber[]> {
-  // Single query with 3-way JOIN to avoid N+1 problem
+export type NotificationEventType = 'comment' | 'status_change'
+
+/**
+ * Get subscribers for a post filtered by event type.
+ * Returns subscribers who want to be notified about the given event type.
+ */
+export async function getSubscribersForEvent(
+  postId: PostId,
+  eventType: NotificationEventType
+): Promise<Subscriber[]> {
+  // Determine which column to filter by
+  const notifyColumn =
+    eventType === 'comment'
+      ? postSubscriptions.notifyComments
+      : postSubscriptions.notifyStatusChanges
+
   const rows = await db
     .select({
       memberId: postSubscriptions.memberId,
       reason: postSubscriptions.reason,
+      notifyComments: postSubscriptions.notifyComments,
+      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
       userId: member.userId,
       email: user.email,
       name: user.name,
@@ -130,7 +198,7 @@ export async function getActiveSubscribers(postId: PostId): Promise<Subscriber[]
     .from(postSubscriptions)
     .innerJoin(member, eq(postSubscriptions.memberId, member.id))
     .innerJoin(user, eq(member.userId, user.id))
-    .where(and(eq(postSubscriptions.postId, postId), eq(postSubscriptions.muted, false)))
+    .where(and(eq(postSubscriptions.postId, postId), eq(notifyColumn, true)))
 
   return rows.map((row) => ({
     memberId: row.memberId,
@@ -138,6 +206,8 @@ export async function getActiveSubscribers(postId: PostId): Promise<Subscriber[]
     email: row.email,
     name: row.name,
     reason: row.reason as SubscriptionReason,
+    notifyComments: row.notifyComments,
+    notifyStatusChanges: row.notifyStatusChanges,
   }))
 }
 
@@ -151,7 +221,8 @@ export async function getMemberSubscriptions(memberId: MemberId): Promise<Subscr
       postId: postSubscriptions.postId,
       postTitle: posts.title,
       reason: postSubscriptions.reason,
-      muted: postSubscriptions.muted,
+      notifyComments: postSubscriptions.notifyComments,
+      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
       createdAt: postSubscriptions.createdAt,
     })
     .from(postSubscriptions)
@@ -163,7 +234,8 @@ export async function getMemberSubscriptions(memberId: MemberId): Promise<Subscr
     postId: row.postId,
     postTitle: row.postTitle,
     reason: row.reason as SubscriptionReason,
-    muted: row.muted,
+    notifyComments: row.notifyComments,
+    notifyStatusChanges: row.notifyStatusChanges,
     createdAt: row.createdAt,
   }))
 }
@@ -291,12 +363,11 @@ export async function updateNotificationPreferences(
 export async function generateUnsubscribeToken(
   memberId: MemberId,
   postId: PostId | null,
-  action: 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
+  action: 'unsubscribe_post' | 'unsubscribe_all'
 ): Promise<string> {
   const token = randomUUID()
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-  // Use db directly (no workspace context needed for tokens)
   await db.insert(unsubscribeTokens).values({
     token,
     memberId,
@@ -308,7 +379,7 @@ export async function generateUnsubscribeToken(
   return token
 }
 
-export type UnsubscribeAction = 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
+export type UnsubscribeAction = 'unsubscribe_post' | 'unsubscribe_all'
 
 /**
  * Batch generate unsubscribe tokens for multiple members.
@@ -344,7 +415,6 @@ export async function processUnsubscribeToken(token: string): Promise<{
   postId: PostId | null
   post?: { title: string; boardSlug: string }
 } | null> {
-  // Use db directly (no workspace context needed)
   const tokenRecord = await db.query.unsubscribeTokens.findFirst({
     where: eq(unsubscribeTokens.token, token),
   })
@@ -394,11 +464,6 @@ export async function processUnsubscribeToken(token: string): Promise<{
     case 'unsubscribe_post':
       if (tokenRecord.postId) {
         await unsubscribeFromPost(tokenRecord.memberId, tokenRecord.postId)
-      }
-      break
-    case 'mute_post':
-      if (tokenRecord.postId) {
-        await setSubscriptionMuted(tokenRecord.memberId, tokenRecord.postId, true)
       }
       break
     case 'unsubscribe_all':

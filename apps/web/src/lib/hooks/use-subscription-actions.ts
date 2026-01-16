@@ -3,9 +3,10 @@ import {
   fetchSubscriptionStatus,
   subscribeToPostFn,
   unsubscribeFromPostFn,
-  muteSubscriptionFn,
+  updateSubscriptionLevelFn,
 } from '@/lib/server-functions/subscriptions'
 import type { PostId } from '@quackback/ids'
+import type { SubscriptionLevel } from '@/lib/subscriptions/subscription.types'
 
 // ============================================================================
 // Types
@@ -13,7 +14,7 @@ import type { PostId } from '@quackback/ids'
 
 interface SubscriptionStatus {
   subscribed: boolean
-  muted: boolean
+  level: SubscriptionLevel
   reason: string | null
 }
 
@@ -45,9 +46,14 @@ export function useSubscriptionStatus({ postId, enabled = true }: UseSubscriptio
     queryKey: subscriptionKeys.status(postId),
     queryFn: async (): Promise<SubscriptionStatus> => {
       try {
-        return await fetchSubscriptionStatus({ data: { postId } })
+        const result = await fetchSubscriptionStatus({ data: { postId } })
+        return {
+          subscribed: result.subscribed,
+          level: result.level,
+          reason: result.reason,
+        }
       } catch {
-        return { subscribed: false, muted: false, reason: null }
+        return { subscribed: false, level: 'none', reason: null }
       }
     },
     enabled,
@@ -68,8 +74,11 @@ export function usePostSubscription({ postId, enabled = true }: UseSubscriptionS
   const statusQuery = useSubscriptionStatus({ postId, enabled })
 
   const subscribeMutation = useMutation({
-    mutationFn: (reason: SubscriptionReason = 'manual') =>
-      subscribeToPostFn({ data: { postId, reason } }),
+    mutationFn: ({
+      reason = 'manual',
+      level = 'all',
+    }: { reason?: SubscriptionReason; level?: SubscriptionLevel } = {}) =>
+      subscribeToPostFn({ data: { postId, reason, level: level === 'none' ? 'all' : level } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
@@ -82,8 +91,9 @@ export function usePostSubscription({ postId, enabled = true }: UseSubscriptionS
     },
   })
 
-  const muteMutation = useMutation({
-    mutationFn: (muted: boolean) => muteSubscriptionFn({ data: { postId, muted } }),
+  const updateLevelMutation = useMutation({
+    mutationFn: (level: SubscriptionLevel) =>
+      updateSubscriptionLevelFn({ data: { postId, level } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.status(postId) })
     },
@@ -93,11 +103,11 @@ export function usePostSubscription({ postId, enabled = true }: UseSubscriptionS
     status: statusQuery.data,
     isLoading: statusQuery.isLoading,
     isSubscribed: statusQuery.data?.subscribed ?? false,
-    isMuted: statusQuery.data?.muted ?? false,
+    level: statusQuery.data?.level ?? 'none',
     subscribe: subscribeMutation.mutate,
     unsubscribe: unsubscribeMutation.mutate,
-    toggleMute: () => muteMutation.mutate(!statusQuery.data?.muted),
+    updateLevel: updateLevelMutation.mutate,
     isPending:
-      subscribeMutation.isPending || unsubscribeMutation.isPending || muteMutation.isPending,
+      subscribeMutation.isPending || unsubscribeMutation.isPending || updateLevelMutation.isPending,
   }
 }

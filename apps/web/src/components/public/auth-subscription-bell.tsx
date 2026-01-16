@@ -1,10 +1,11 @@
 import { SubscriptionBell } from './subscription-bell'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import type { PostId } from '@quackback/ids'
+import type { SubscriptionLevel } from '@/lib/subscriptions/subscription.types'
 
 interface SubscriptionStatus {
   subscribed: boolean
-  muted: boolean
+  level: SubscriptionLevel
   reason: string | null
 }
 

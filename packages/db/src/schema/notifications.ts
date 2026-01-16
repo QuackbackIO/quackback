@@ -16,6 +16,14 @@ import { member } from './auth'
 /**
  * Post subscriptions - tracks which users are subscribed to which posts.
  * Users are auto-subscribed when they create, vote on, or comment on a post.
+ *
+ * Notification levels controlled by:
+ * - notifyComments: receive notifications when someone comments
+ * - notifyStatusChanges: receive notifications when status changes
+ *
+ * "All activity" = both true
+ * "Status changes only" = notifyComments=false, notifyStatusChanges=true
+ * "Unsubscribed" = row deleted
  */
 export const postSubscriptions = pgTable(
   'post_subscriptions',
@@ -28,7 +36,8 @@ export const postSubscriptions = pgTable(
       .notNull()
       .references(() => member.id, { onDelete: 'cascade' }),
     reason: varchar('reason', { length: 20 }).notNull(), // 'author' | 'vote' | 'comment' | 'manual'
-    muted: boolean('muted').default(false).notNull(),
+    notifyComments: boolean('notify_comments').default(true).notNull(),
+    notifyStatusChanges: boolean('notify_status_changes').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -37,10 +46,14 @@ export const postSubscriptions = pgTable(
     uniqueIndex('post_subscriptions_unique').on(table.postId, table.memberId),
     index('post_subscriptions_member_idx').on(table.memberId),
     index('post_subscriptions_post_idx').on(table.postId),
-    // Partial index for active (non-muted) subscriber lookups
-    index('post_subscriptions_post_active_idx')
+    // Partial index for comment notification lookups
+    index('post_subscriptions_post_comments_idx')
       .on(table.postId)
-      .where(sql`muted = false`),
+      .where(sql`notify_comments = true`),
+    // Partial index for status change notification lookups
+    index('post_subscriptions_post_status_idx')
+      .on(table.postId)
+      .where(sql`notify_status_changes = true`),
   ]
 )
 
