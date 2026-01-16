@@ -32,9 +32,10 @@ import { sendInvitationFn } from '@/lib/server-functions/admin'
 interface InviteMemberDialogProps {
   open: boolean
   onClose: () => void
+  onSuccess?: () => void
 }
 
-export function InviteMemberDialog({ open, onClose }: InviteMemberDialogProps) {
+export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
@@ -61,6 +62,7 @@ export function InviteMemberDialog({ open, onClose }: InviteMemberDialogProps) {
 
       setSuccess(true)
       form.reset()
+      onSuccess?.()
       setTimeout(() => {
         setSuccess(false)
         onClose()

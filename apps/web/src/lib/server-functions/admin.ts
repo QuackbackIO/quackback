@@ -1,12 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import {
-  generateId,
-  inviteIdSchema,
-  type InviteId,
-  type UserId,
-  type MemberId,
-} from '@quackback/ids'
+import { generateId, type InviteId, type UserId, type MemberId } from '@quackback/ids'
 import type { InboxPostListParams } from '@/lib/posts/post.types'
 import type { BoardSettings } from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
@@ -21,7 +15,7 @@ import { listStatuses } from '@/lib/statuses/status.service'
 import { listTeamMembers } from '@/lib/members/member.service'
 import { listPortalUsers, getPortalUserDetail, removePortalUser } from '@/lib/users/user.service'
 import { sendInvitationEmail } from '@quackback/email'
-import { getRootUrl } from '@/lib/routing'
+import { resolvePortalUrl } from '@/lib/hooks/context'
 
 /**
  * Server functions for admin data fetching.
@@ -456,7 +450,9 @@ const sendInvitationSchema = z.object({
 })
 
 const invitationByIdSchema = z.object({
-  invitationId: inviteIdSchema,
+  // Use plain z.string() for TanStack Start compatibility
+  // TypeID validation with .refine() creates ZodEffects which isn't supported in inputValidator
+  invitationId: z.string(),
 })
 
 export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
@@ -492,12 +488,21 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('An invitation has already been sent to this email')
       }
 
+      // Check if user already exists and has a team membership
       const existingUser = await db.query.user.findFirst({
         where: eq(user.email, email),
       })
 
       if (existingUser) {
-        throw new Error('A user with this email already exists')
+        // Check if they already have a team member role (admin or member)
+        const existingMember = await db.query.member.findFirst({
+          where: eq(member.userId, existingUser.id),
+        })
+
+        if (existingMember && existingMember.role !== 'user') {
+          throw new Error('A team member with this email already exists')
+        }
+        // Portal users (role='user' or no member record) can be invited to become team members
       }
 
       const invitationId = generateId('invite')
@@ -516,8 +521,10 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         createdAt: now,
       })
 
-      const rootUrl = getRootUrl()
-      const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
+      // Use workspace domain for invitation link (not ROOT_URL)
+      // This ensures the link resolves to the correct tenant in cloud mode
+      const portalUrl = await resolvePortalUrl(settings.slug)
+      const inviteLink = `${portalUrl}/accept-invitation/${invitationId}`
 
       await sendInvitationEmail({
         to: email,
@@ -595,8 +602,9 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('Invitation not found')
       }
 
-      const rootUrl = getRootUrl()
-      const inviteLink = `${rootUrl}/accept-invitation/${invitationId}`
+      // Use workspace domain for invitation link (not ROOT_URL)
+      const portalUrl = await resolvePortalUrl(settings.slug)
+      const inviteLink = `${portalUrl}/accept-invitation/${invitationId}`
 
       await sendInvitationEmail({
         to: invitationRecord.email,

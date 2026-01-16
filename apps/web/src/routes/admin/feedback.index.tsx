@@ -21,7 +21,16 @@ export const Route = createFileRoute('/admin/feedback/')({
   }),
   errorComponent: FeedbackErrorComponent,
   loader: async ({ deps, context }) => {
-    const { user: currentUser, member, queryClient } = context
+    // Protected route - user and member are guaranteed by parent's beforeLoad auth check
+    const {
+      user: currentUser,
+      member,
+      queryClient,
+    } = context as {
+      user: NonNullable<typeof context.user>
+      member: NonNullable<typeof context.member>
+      queryClient: typeof context.queryClient
+    }
 
     // Parse filter params
     const boardFilterIds = (deps.board || []) as BoardId[]

@@ -11,7 +11,16 @@ export const Route = createFileRoute('/admin/feedback/posts/$postId')({
   errorComponent: DetailErrorComponent,
   loader: async ({ params, context }) => {
     const { postId } = params
-    const { user: currentUser, member, queryClient } = context
+    // Protected route - user and member are guaranteed by parent's beforeLoad auth check
+    const {
+      user: currentUser,
+      member,
+      queryClient,
+    } = context as {
+      user: NonNullable<typeof context.user>
+      member: NonNullable<typeof context.member>
+      queryClient: typeof context.queryClient
+    }
 
     // Validate TypeID format
     let validatedPostId: PostId

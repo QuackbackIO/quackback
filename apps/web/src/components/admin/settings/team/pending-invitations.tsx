@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { EnvelopeIcon, ArrowPathIcon, ClockIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,11 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
   const [invitations, setInvitations] = useState(initialInvitations)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Sync local state when prop changes (e.g., after query invalidation)
+  useEffect(() => {
+    setInvitations(initialInvitations)
+  }, [initialInvitations])
 
   const canResend = (lastSentAt: string | null, createdAt: string) => {
     const lastSent = lastSentAt ? new Date(lastSentAt) : new Date(createdAt)

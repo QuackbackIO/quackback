@@ -27,8 +27,11 @@ export const Route = createFileRoute('/admin/users')({
   }),
   errorComponent: UsersErrorComponent,
   loader: async ({ deps, context }) => {
-    // User, member, and settings are validated in parent /admin layout
-    const { member, queryClient } = context
+    // Protected route - member is guaranteed by parent's beforeLoad auth check
+    const { member, queryClient } = context as {
+      member: NonNullable<typeof context.member>
+      queryClient: typeof context.queryClient
+    }
 
     // Parse verified param
     const verified = deps.verified === 'true' ? true : deps.verified === 'false' ? false : undefined

@@ -3,7 +3,14 @@ import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 
 export const Route = createFileRoute('/admin')({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
+    // Skip auth for public admin routes (login, signup)
+    // These are child routes but should be publicly accessible
+    const publicPaths = ['/admin/login', '/admin/signup']
+    if (publicPaths.includes(location.pathname)) {
+      return {}
+    }
+
     // Only team members (owner, admin, member roles) can access admin dashboard
     // Portal users don't have member records, so they can't access this
     const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
@@ -16,9 +23,15 @@ export const Route = createFileRoute('/admin')({
       member,
     }
   },
-  loader: async ({ context }) => {
-    // Auth is already validated in beforeLoad
-    const { user } = context
+  loader: async ({ context, location }) => {
+    // Skip for public admin routes (login, signup) - they have their own layouts
+    const publicPaths = ['/admin/login', '/admin/signup']
+    if (publicPaths.includes(location.pathname)) {
+      return { user: null, initialUserData: null }
+    }
+
+    // Auth is already validated in beforeLoad - user is guaranteed to exist here
+    const { user } = context as { user: NonNullable<typeof context.user> }
 
     // Get avatar URL with base64 data for SSR (no flicker)
     const avatarData = await fetchUserAvatar({
@@ -41,6 +54,11 @@ export const Route = createFileRoute('/admin')({
 
 function AdminLayout() {
   const { initialUserData } = Route.useLoaderData()
+
+  // For public routes (login, signup), render just the outlet without the admin layout
+  if (!initialUserData) {
+    return <Outlet />
+  }
 
   return (
     <div className="flex h-screen bg-background">

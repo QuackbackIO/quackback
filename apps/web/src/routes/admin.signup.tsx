@@ -71,7 +71,7 @@ function AdminSignupPage() {
           mode="signup"
           authConfig={authConfig}
           invitationId={invitationId}
-          callbackUrl="/admin"
+          callbackUrl={`/accept-invitation/${invitationId}`}
           context="team"
           orgSlug={settings.slug}
           showOAuth

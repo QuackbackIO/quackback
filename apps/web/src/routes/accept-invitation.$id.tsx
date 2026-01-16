@@ -1,46 +1,50 @@
-import { createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { useState, useEffect } from 'react'
 import { acceptInvitationFn } from '@/lib/server-functions/invitations'
-import { getProfileFn } from '@/lib/server-functions/user'
 
 export const Route = createFileRoute('/accept-invitation/$id')({
+  loader: async ({ params, context }) => {
+    const { id } = params
+    const { session } = context
+
+    console.log('[accept-invitation] loader called', {
+      id,
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      userId: session?.user?.id,
+    })
+
+    // If not authenticated, redirect to signup with invitation ID
+    if (!session || !session.user) {
+      console.log('[accept-invitation] redirecting to signup', { invitation: id })
+      throw redirect({
+        to: '/admin/signup',
+        search: { invitation: id },
+      })
+    }
+
+    console.log('[accept-invitation] user authenticated, proceeding')
+    // User is authenticated - return the invitation ID for the component to process
+    return { invitationId: id }
+  },
   component: AcceptInvitationPage,
 })
 
 function AcceptInvitationPage() {
-  const { id } = Route.useParams()
-  const router = useRouter()
-  const { session } = useRouteContext({ from: '__root__' })
+  const { invitationId } = Route.useLoaderData()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [error, setError] = useState('')
 
   useEffect(() => {
     async function accept() {
-      // Check if user is authenticated
-      if (!session || !session.user) {
-        // Redirect to admin signup with invitation ID
-        // New users can create an account and accept the invitation in one step
-        router.navigate({
-          to: '/admin/signup',
-          search: { invitation: id },
-        })
-        return
-      }
-
       try {
-        // Check if user is a portal user (portal users can't accept team invitations)
-        const profileResult = await getProfileFn()
-        if (profileResult.userType === 'portal') {
-          throw new Error(
-            'Portal users cannot accept team invitations. Please sign up with a team account or contact your administrator.'
-          )
-        }
-
-        await acceptInvitationFn({ data: id })
-
+        // Accept the invitation - this will upgrade portal users to team members
+        await acceptInvitationFn({ data: invitationId })
         setStatus('success')
         // Redirect to admin dashboard after a short delay
-        setTimeout(() => router.navigate({ to: '/admin' }), 2000)
+        setTimeout(() => {
+          window.location.href = '/admin'
+        }, 2000)
       } catch (err) {
         setStatus('error')
         setError(err instanceof Error ? err.message : 'Failed to accept invitation')
@@ -48,7 +52,7 @@ function AcceptInvitationPage() {
     }
 
     accept()
-  }, [id, session, router])
+  }, [invitationId])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -71,12 +75,9 @@ function AcceptInvitationPage() {
           <div>
             <div className="text-destructive text-xl font-medium">Unable to accept invitation</div>
             <p className="mt-2 text-muted-foreground">{error}</p>
-            <button
-              onClick={() => router.navigate({ to: '/admin/login' })}
-              className="mt-4 text-primary underline"
-            >
+            <a href="/admin/login" className="mt-4 text-primary underline block">
               Go to login
-            </button>
+            </a>
           </div>
         )}
       </div>

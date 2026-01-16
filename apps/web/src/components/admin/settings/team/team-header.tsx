@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { UsersIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
@@ -9,6 +10,12 @@ interface TeamHeaderProps {
 
 export function TeamHeader({ workspaceName }: TeamHeaderProps) {
   const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const queryClient = useQueryClient()
+
+  const handleInviteSuccess = () => {
+    // Invalidate team data to refresh the pending invitations list
+    queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
+  }
 
   return (
     <>
@@ -30,7 +37,11 @@ export function TeamHeader({ workspaceName }: TeamHeaderProps) {
         </Button>
       </div>
 
-      <InviteMemberDialog open={showInviteDialog} onClose={() => setShowInviteDialog(false)} />
+      <InviteMemberDialog
+        open={showInviteDialog}
+        onClose={() => setShowInviteDialog(false)}
+        onSuccess={handleInviteSuccess}
+      />
     </>
   )
 }
