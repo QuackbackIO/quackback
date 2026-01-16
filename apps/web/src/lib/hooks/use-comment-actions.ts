@@ -5,6 +5,9 @@ import {
   userEditCommentFn,
   userDeleteCommentFn,
   toggleReactionFn,
+  pinCommentFn,
+  unpinCommentFn,
+  canPinCommentFn,
 } from '@/lib/server-functions/comments'
 import type { PostId, CommentId } from '@quackback/ids'
 import { portalDetailQueries } from '@/lib/queries/portal-detail'
@@ -294,5 +297,81 @@ function replaceOptimisticInComments(
       }
     }
     return comment
+  })
+}
+
+// ============================================================================
+// Pin/Unpin Hooks (Official Response)
+// ============================================================================
+
+interface UsePinCommentOptions {
+  postId: PostId
+  onSuccess?: () => void
+  onError?: (error: Error) => void
+}
+
+interface UseUnpinCommentOptions {
+  postId: PostId
+  onSuccess?: () => void
+  onError?: (error: Error) => void
+}
+
+/**
+ * Hook to check if a comment can be pinned as the official response.
+ */
+export function useCanPinComment({
+  commentId,
+  enabled = true,
+}: {
+  commentId: CommentId
+  enabled?: boolean
+}) {
+  return useQuery({
+    queryKey: [...commentKeys.all, 'canPin', commentId],
+    queryFn: async () => {
+      try {
+        return await canPinCommentFn({ data: { commentId } })
+      } catch {
+        return { canPin: false, reason: 'An error occurred' }
+      }
+    },
+    enabled,
+    staleTime: 30 * 1000,
+  })
+}
+
+/**
+ * Hook to pin a comment as the official response.
+ */
+export function usePinComment({ postId, onSuccess, onError }: UsePinCommentOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (commentId: CommentId) => pinCommentFn({ data: { commentId } }),
+    onSuccess: () => {
+      // Invalidate both portal and admin queries
+      queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      onSuccess?.()
+    },
+    onError,
+  })
+}
+
+/**
+ * Hook to unpin the currently pinned comment.
+ */
+export function useUnpinComment({ postId, onSuccess, onError }: UseUnpinCommentOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => unpinCommentFn({ data: { postId } }),
+    onSuccess: () => {
+      // Invalidate both portal and admin queries
+      queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      onSuccess?.()
+    },
+    onError,
   })
 }

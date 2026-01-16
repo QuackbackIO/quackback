@@ -9,10 +9,13 @@ import { type CommentId, type PostId, type UserId } from '@quackback/ids'
 import {
   canDeleteComment,
   canEditComment,
+  canPinComment,
   createComment,
   deleteComment,
+  pinComment,
   softDeleteComment,
   toggleReaction,
+  unpinComment,
   updateComment,
   userEditComment,
 } from '@/lib/comments/comment.service'
@@ -232,5 +235,82 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     } catch (error) {
       console.error(`[fn:comments] ❌ userDeleteCommentFn failed:`, error)
       throw error
+    }
+  })
+
+// Pin/Unpin Operations (Official Response)
+const pinCommentSchema = z.object({
+  commentId: z.string(),
+})
+
+const unpinCommentSchema = z.object({
+  postId: z.string(),
+})
+
+const canPinCommentSchema = z.object({
+  commentId: z.string(),
+})
+
+export type PinCommentInput = z.infer<typeof pinCommentSchema>
+export type UnpinCommentInput = z.infer<typeof unpinCommentSchema>
+export type CanPinCommentInput = z.infer<typeof canPinCommentSchema>
+
+export const pinCommentFn = createServerFn({ method: 'POST' })
+  .inputValidator(pinCommentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:comments] pinCommentFn: commentId=${data.commentId}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+
+      const result = await pinComment(data.commentId as CommentId, {
+        memberId: auth.member.id,
+        role: auth.member.role,
+      })
+      console.log(
+        `[fn:comments] pinCommentFn: pinned comment ${data.commentId} on post ${result.postId}`
+      )
+      return result
+    } catch (error) {
+      console.error(`[fn:comments] ❌ pinCommentFn failed:`, error)
+      throw error
+    }
+  })
+
+export const unpinCommentFn = createServerFn({ method: 'POST' })
+  .inputValidator(unpinCommentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:comments] unpinCommentFn: postId=${data.postId}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+
+      await unpinComment(data.postId as PostId, {
+        memberId: auth.member.id,
+        role: auth.member.role,
+      })
+      console.log(`[fn:comments] unpinCommentFn: unpinned comment from post ${data.postId}`)
+      return { postId: data.postId }
+    } catch (error) {
+      console.error(`[fn:comments] ❌ unpinCommentFn failed:`, error)
+      throw error
+    }
+  })
+
+export const canPinCommentFn = createServerFn({ method: 'GET' })
+  .inputValidator(canPinCommentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:comments] canPinCommentFn: commentId=${data.commentId}`)
+    try {
+      const ctx = await getOptionalAuth()
+      // Must be a team member to pin
+      if (!ctx?.member || !['admin', 'member'].includes(ctx.member.role)) {
+        return { canPin: false, reason: 'Only team members can pin comments' }
+      }
+
+      const result = await canPinComment(data.commentId as CommentId)
+      console.log(`[fn:comments] canPinCommentFn: canPin=${result.canPin}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:comments] canPinCommentFn failed:`, error)
+      return { canPin: false, reason: 'An error occurred' }
     }
   })
