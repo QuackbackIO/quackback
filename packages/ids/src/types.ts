@@ -83,6 +83,13 @@ export type CommentEditId = TypeId<'comment_edit'>
 export type NoteId = TypeId<'note'>
 
 // ============================================
+// AI Entity IDs
+// ============================================
+
+/** Post sentiment analysis ID - e.g., sentiment_01h455vb4pex5vsknk084sn02q */
+export type SentimentId = TypeId<'sentiment'>
+
+// ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
 
@@ -146,6 +153,7 @@ export interface EntityIdMap {
   post_edit: PostEditId
   comment_edit: CommentEditId
   note: NoteId
+  sentiment: SentimentId
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId

@@ -85,6 +85,8 @@ export type {
   NotifPrefId,
   UnsubTokenId,
   NotificationId,
+  // AI entities
+  SentimentId,
   // Auth entities
   WorkspaceId,
   UserId,

@@ -23,6 +23,14 @@ const tsvector = customType<{ data: string }>({
   },
 })
 
+// Custom vector type for embeddings (pgvector)
+// 1536 dimensions = OpenAI text-embedding-3-small
+const vector = customType<{ data: number[] }>({
+  dataType() {
+    return 'vector(1536)'
+  },
+})
+
 export const posts = pgTable(
   'posts',
   {
@@ -85,6 +93,11 @@ export const posts = pgTable(
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')`
     ),
+    // Semantic embedding for AI-powered similarity search (1536 dims = OpenAI text-embedding-3-small)
+    embedding: vector('embedding'),
+    // Track model version for future upgrades (allows re-embedding without data loss)
+    embeddingModel: text('embedding_model'),
+    embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
   },
   (table) => [
     index('posts_board_id_idx').on(table.boardId),

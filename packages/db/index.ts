@@ -29,4 +29,9 @@ export {
   sql,
   desc,
   asc,
+  count,
+  sum,
+  avg,
+  min,
+  max,
 } from 'drizzle-orm'
