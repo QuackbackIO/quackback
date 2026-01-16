@@ -139,6 +139,7 @@ function PublicPortalPage() {
     <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
       <FeedbackContainer
         workspaceName={org.name}
+        workspaceSlug={org.slug}
         boards={boardsQuery.data}
         posts={postsQuery.data.items as any}
         statuses={statusesQuery.data}

@@ -6,9 +6,10 @@ import type { BoardWithStats } from '@/lib/boards'
 interface FeedbackSidebarProps {
   boards: BoardWithStats[]
   currentBoard?: string
+  workspaceSlug?: string
 }
 
-export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) {
+export function FeedbackSidebar({ boards, currentBoard, workspaceSlug }: FeedbackSidebarProps) {
   return (
     <aside className="w-64 shrink-0 hidden lg:block">
       <div className="sticky top-24">
@@ -70,7 +71,7 @@ export function FeedbackSidebar({ boards, currentBoard }: FeedbackSidebarProps) 
         {/* Powered by */}
         <div className="flex justify-center mt-3">
           <a
-            href="https://quackback.io"
+            href={`https://quackback.io?utm_campaign=${encodeURIComponent(workspaceSlug || 'unknown')}&utm_content=feedback-board&utm_medium=referral&utm_source=powered-by`}
             target="_blank"
             rel="noopener noreferrer"
             className="group inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-all px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50"

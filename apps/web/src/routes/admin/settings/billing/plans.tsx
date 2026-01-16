@@ -64,9 +64,11 @@ const PLAN_FEATURES: Record<CloudTier, string[]> = {
 }
 
 function PlansPage() {
+  const { settings } = Route.useRouteContext()
   const { data } = useSuspenseQuery(billingQueries.overview())
 
   const currentTier = (data.subscription?.tier || 'free') as CloudTier
+  const workspaceSlug = settings?.slug || 'unknown'
 
   return (
     <div className="space-y-6">
@@ -99,7 +101,7 @@ function PlansPage() {
       {/* Feature Comparison Link */}
       <p className="text-center text-sm text-muted-foreground">
         <a
-          href="https://quackback.io/pricing"
+          href={`https://quackback.io/pricing?utm_campaign=${encodeURIComponent(workspaceSlug)}&utm_content=compare-features&utm_medium=referral&utm_source=admin-billing`}
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-foreground transition-colors inline-flex items-center gap-1"

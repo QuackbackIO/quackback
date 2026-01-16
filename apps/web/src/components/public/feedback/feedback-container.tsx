@@ -18,6 +18,7 @@ import type { PostStatusEntity, Tag } from '@/lib/db-types'
 
 interface FeedbackContainerProps {
   workspaceName: string
+  workspaceSlug: string
   boards: BoardWithStats[]
   posts: PublicPostListItem[]
   statuses: PostStatusEntity[]
@@ -35,6 +36,7 @@ interface FeedbackContainerProps {
 
 export function FeedbackContainer({
   workspaceName,
+  workspaceSlug,
   boards,
   posts: initialPosts,
   statuses,
@@ -267,7 +269,7 @@ export function FeedbackContainer({
           </div>
         </div>
 
-        <FeedbackSidebar boards={boards} currentBoard={activeBoard} />
+        <FeedbackSidebar boards={boards} currentBoard={activeBoard} workspaceSlug={workspaceSlug} />
       </div>
     </div>
   )
