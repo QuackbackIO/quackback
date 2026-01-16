@@ -70,7 +70,11 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
         user: session.user,
       }
     } catch (error) {
-      // Don't log redirect errors as failures
+      // Don't log redirect responses as failures
+      // TanStack Router's redirect() throws a Response object, not an Error
+      if (error instanceof Response) {
+        throw error
+      }
       if (error instanceof Error && error.message?.includes('redirect')) {
         throw error
       }

@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { acceptInvitationFn } from '@/lib/server-functions/invitations'
 
 export const Route = createFileRoute('/accept-invitation/$id')({
@@ -7,77 +7,67 @@ export const Route = createFileRoute('/accept-invitation/$id')({
     const { id } = params
     const { session } = context
 
-    console.log('[accept-invitation] loader called', {
-      id,
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      userId: session?.user?.id,
-    })
-
-    // If not authenticated, redirect to signup with invitation ID
-    if (!session || !session.user) {
-      console.log('[accept-invitation] redirecting to signup', { invitation: id })
-      throw redirect({
-        to: '/admin/signup',
-        search: { invitation: id },
-      })
+    // With magic links, users are authenticated before reaching this page.
+    // The magic link verification creates a session and redirects here.
+    if (!session?.user) {
+      return { error: 'Please use the invitation link from your email to join the team.' }
     }
 
-    console.log('[accept-invitation] user authenticated, proceeding')
-    // User is authenticated - return the invitation ID for the component to process
-    return { invitationId: id }
+    // User is authenticated - accept the invitation immediately
+    try {
+      await acceptInvitationFn({ data: id })
+      // Success - redirect directly to admin dashboard
+      throw redirect({ to: '/admin' })
+    } catch (error) {
+      // Don't treat redirect as an error
+      if (error instanceof Response || (error as { status?: number })?.status === 302) {
+        throw error
+      }
+      const message = error instanceof Error ? error.message : 'Failed to accept invitation'
+      return { error: message }
+    }
   },
   component: AcceptInvitationPage,
 })
 
 function AcceptInvitationPage() {
-  const { invitationId } = Route.useLoaderData()
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
-  const [error, setError] = useState('')
+  const data = Route.useLoaderData()
+  const [retrying, setRetrying] = useState(false)
 
-  useEffect(() => {
-    async function accept() {
-      try {
-        // Accept the invitation - this will upgrade portal users to team members
-        await acceptInvitationFn({ data: invitationId })
-        setStatus('success')
-        // Redirect to admin dashboard after a short delay
-        setTimeout(() => {
-          window.location.href = '/admin'
-        }, 2000)
-      } catch (err) {
-        setStatus('error')
-        setError(err instanceof Error ? err.message : 'Failed to accept invitation')
-      }
-    }
+  // If we reach this component, there was an error (success redirects in loader)
+  const error = data?.error || 'An unexpected error occurred'
 
-    accept()
-  }, [invitationId])
+  const handleRetry = () => {
+    setRetrying(true)
+    window.location.reload()
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-md text-center px-4">
-        {status === 'loading' && (
+        {retrying ? (
           <div>
             <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto" />
-            <p className="mt-4 text-muted-foreground">Accepting invitation...</p>
+            <p className="mt-4 text-muted-foreground">Retrying...</p>
           </div>
-        )}
-
-        {status === 'success' && (
-          <div>
-            <div className="text-primary text-xl font-medium">Welcome to the team!</div>
-            <p className="mt-2 text-muted-foreground">Redirecting to dashboard...</p>
-          </div>
-        )}
-
-        {status === 'error' && (
+        ) : (
           <div>
             <div className="text-destructive text-xl font-medium">Unable to accept invitation</div>
             <p className="mt-2 text-muted-foreground">{error}</p>
-            <a href="/admin/login" className="mt-4 text-primary underline block">
-              Go to login
-            </a>
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                onClick={handleRetry}
+                className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Try Again
+              </button>
+              <a
+                href="/"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Go to Home
+              </a>
+            </div>
           </div>
         )}
       </div>
