@@ -12,10 +12,11 @@ import { listInboxPosts } from '@/lib/posts/post.service'
 import { listBoards } from '@/lib/boards/board.service'
 import { listTags } from '@/lib/tags/tag.service'
 import { listStatuses } from '@/lib/statuses/status.service'
-import { listTeamMembers } from '@/lib/members/member.service'
+import { listTeamMembers, updateMemberRole, removeTeamMember } from '@/lib/members/member.service'
 import { listPortalUsers, getPortalUserDetail, removePortalUser } from '@/lib/users/user.service'
 import { sendInvitationEmail } from '@quackback/email'
 import { resolvePortalUrl } from '@/lib/hooks/context'
+import { getAuth, getMagicLinkToken } from '@/lib/auth'
 
 /**
  * Server functions for admin data fetching.
@@ -154,6 +155,56 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
     throw error
   }
 })
+
+// Schema for team member operations
+const memberIdSchema = z.object({
+  memberId: z.string(),
+})
+
+const updateMemberRoleSchema = z.object({
+  memberId: z.string(),
+  role: z.enum(['admin', 'member']),
+})
+
+/**
+ * Update a team member's role (admin only)
+ */
+export const updateMemberRoleFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateMemberRoleSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] updateMemberRoleFn: memberId=${data.memberId}, role=${data.role}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin'] })
+
+      await updateMemberRole(data.memberId as MemberId, data.role, auth.member.id)
+
+      console.log(`[fn:admin] updateMemberRoleFn: success`)
+      return { memberId: data.memberId, role: data.role }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ updateMemberRoleFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Remove a team member (converts to portal user, admin only)
+ */
+export const removeTeamMemberFn = createServerFn({ method: 'POST' })
+  .inputValidator(memberIdSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] removeTeamMemberFn: memberId=${data.memberId}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin'] })
+
+      await removeTeamMember(data.memberId as MemberId, auth.member.id)
+
+      console.log(`[fn:admin] removeTeamMemberFn: success`)
+      return { memberId: data.memberId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ removeTeamMemberFn failed:`, error)
+      throw error
+    }
+  })
 
 /**
  * Check onboarding completion status
@@ -459,6 +510,88 @@ export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
 export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
 
 /**
+ * Generate a magic link for invitation authentication.
+ * Uses Better Auth's API to generate the token and stores it for later URL construction.
+ *
+ * @param email - The invitee's email address
+ * @param callbackPath - Relative path to redirect to after authentication (e.g., /accept-invitation/{id})
+ * @param portalUrl - The base portal URL (workspace domain)
+ * @returns The magic link URL with the correct workspace domain
+ */
+async function generateInvitationMagicLink(
+  email: string,
+  callbackPath: string,
+  portalUrl: string
+): Promise<string> {
+  const authInstance = await getAuth()
+
+  console.log(
+    `[fn:admin] generateInvitationMagicLink: email=${email}, callbackPath=${callbackPath}, portalUrl=${portalUrl}`
+  )
+
+  // Use Better Auth's handler with the workspace domain context
+  // We pass a relative callbackURL - Better Auth will use the request's origin for redirects
+  const response = await authInstance.handler(
+    new Request(`${portalUrl}/api/auth/sign-in/magic-link`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: portalUrl,
+        Host: new URL(portalUrl).host,
+      },
+      body: JSON.stringify({
+        email,
+        callbackURL: callbackPath, // Relative path - Better Auth appends to origin
+      }),
+    })
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`[fn:admin] generateInvitationMagicLink: handler failed - ${errorText}`)
+    throw new Error(`Magic link generation failed: ${errorText}`)
+  }
+
+  console.log(`[fn:admin] generateInvitationMagicLink: handler succeeded`)
+
+  // Retrieve the token that was stored by our callback
+  const token = getMagicLinkToken(email)
+  if (!token) {
+    console.error(`[fn:admin] generateInvitationMagicLink: token not found in pending map`)
+    throw new Error(`Magic link token not found for ${email}`)
+  }
+
+  console.log(`[fn:admin] generateInvitationMagicLink: token retrieved, length=${token.length}`)
+
+  // Debug: Check if verification record was created in the database
+  const { verification } = await import('@/lib/db')
+  const verificationRecord = await db.query.verification.findFirst({
+    where: eq(verification.identifier, email.toLowerCase()),
+    orderBy: (v, { desc }) => [desc(v.createdAt)],
+  })
+  if (verificationRecord) {
+    console.log(`[fn:admin] generateInvitationMagicLink: verification record found in DB:`)
+    console.log(`[fn:admin]   id: ${verificationRecord.id}`)
+    console.log(`[fn:admin]   identifier: ${verificationRecord.identifier}`)
+    console.log(`[fn:admin]   value length: ${verificationRecord.value?.length}`)
+    console.log(`[fn:admin]   expiresAt: ${verificationRecord.expiresAt}`)
+    console.log(`[fn:admin]   token matches: ${verificationRecord.value === token}`)
+  } else {
+    console.error(
+      `[fn:admin] generateInvitationMagicLink: NO verification record found in DB for ${email}!`
+    )
+  }
+
+  // Construct the magic link URL with the workspace domain
+  // Use absolute callback URLs to ensure redirects stay on the workspace domain
+  const absoluteCallbackURL = `${portalUrl}${callbackPath}`
+  const magicLinkUrl = `${portalUrl}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}&callbackURL=${encodeURIComponent(absoluteCallbackURL)}&errorCallbackURL=${encodeURIComponent(absoluteCallbackURL)}`
+
+  console.log(`[fn:admin] generateInvitationMagicLink: URL constructed with absolute callbacks`)
+  return magicLinkUrl
+}
+
+/**
  * Send a team invitation
  */
 export const sendInvitationFn = createServerFn({ method: 'POST' })
@@ -521,10 +654,10 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         createdAt: now,
       })
 
-      // Use workspace domain for invitation link (not ROOT_URL)
-      // This ensures the link resolves to the correct tenant in cloud mode
+      // Generate magic link for one-click authentication
       const portalUrl = await resolvePortalUrl(settings.slug)
-      const inviteLink = `${portalUrl}/accept-invitation/${invitationId}`
+      const callbackURL = `/accept-invitation/${invitationId}`
+      const inviteLink = await generateInvitationMagicLink(email, callbackURL, portalUrl)
 
       await sendInvitationEmail({
         to: email,
@@ -602,9 +735,14 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('Invitation not found')
       }
 
-      // Use workspace domain for invitation link (not ROOT_URL)
+      // Generate new magic link for one-click authentication
       const portalUrl = await resolvePortalUrl(settings.slug)
-      const inviteLink = `${portalUrl}/accept-invitation/${invitationId}`
+      const callbackURL = `/accept-invitation/${invitationId}`
+      const inviteLink = await generateInvitationMagicLink(
+        invitationRecord.email,
+        callbackURL,
+        portalUrl
+      )
 
       await sendInvitationEmail({
         to: invitationRecord.email,
