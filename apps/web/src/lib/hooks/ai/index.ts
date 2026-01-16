@@ -1,0 +1,1 @@
+export { aiHook } from './handler'

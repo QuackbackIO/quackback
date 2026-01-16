@@ -17,6 +17,7 @@ import type { EventData, EventActor } from './types'
 
 const EMAIL_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
 const NOTIFICATION_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
+const AI_EVENT_TYPES = ['post.created'] as const
 
 /**
  * Get all hook targets for an event.
@@ -42,6 +43,15 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
     ) {
       const notificationTargets = await getNotificationTargets(event)
       targets.push(...notificationTargets)
+    }
+
+    // AI targets (sentiment, embeddings) - always run for post.created
+    if (AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
+      targets.push({
+        type: 'ai',
+        target: { type: 'ai' },
+        config: {},
+      })
     }
 
     return targets
