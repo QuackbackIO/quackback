@@ -17,7 +17,7 @@ import { useCreatePublicPost } from '@/lib/hooks/use-public-posts-query'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/hooks/use-similar-posts'
-import { SimilarPostsSuggestions } from '@/components/public/similar-posts-suggestions'
+import { SimilarPostsCard } from '@/components/public/similar-posts-card'
 import { signOut } from '@/lib/auth/client'
 import type { JSONContent } from '@tiptap/react'
 
@@ -74,7 +74,6 @@ export function FeedbackHeader({
 
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const [similarDismissed, setSimilarDismissed] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   // Focus title input when form expands
@@ -88,7 +87,7 @@ export function FeedbackHeader({
 
   // Find similar posts as user types (for duplicate detection)
   // Searches across ALL boards to find potential duplicates
-  const { posts: similarPosts, isLoading: isSimilarLoading } = useSimilarPosts({
+  const { posts: similarPosts } = useSimilarPosts({
     title,
     enabled: expanded,
   })
@@ -144,7 +143,6 @@ export function FeedbackHeader({
     setTitle('')
     setContentJson(null)
     setError('')
-    setSimilarDismissed(false)
   }
 
   function handleCancel() {
@@ -164,7 +162,6 @@ export function FeedbackHeader({
 
   return (
     <motion.div
-      layout
       className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
       initial={false}
       animate={{
@@ -271,15 +268,6 @@ export function FeedbackHeader({
               )}
             </AnimatePresence>
 
-            {/* Similar posts suggestions (duplicate detection) */}
-            <SimilarPostsSuggestions
-              posts={similarPosts}
-              isLoading={isSimilarLoading}
-              show={expanded && title.length >= 5 && !similarDismissed}
-              onDismiss={() => setSimilarDismissed(true)}
-              className="px-4 sm:px-5 mb-2"
-            />
-
             {/* Rich text editor */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -296,6 +284,13 @@ export function FeedbackHeader({
                 toolbarPosition="bottom"
               />
             </motion.div>
+
+            {/* Similar posts card - shown above footer as pre-submit prompt */}
+            <SimilarPostsCard
+              posts={similarPosts}
+              show={title.length >= 5}
+              className="px-4 sm:px-5 pb-3"
+            />
 
             {/* Footer with auth and actions */}
             <motion.div

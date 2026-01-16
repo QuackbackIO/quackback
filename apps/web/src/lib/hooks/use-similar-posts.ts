@@ -1,14 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
-import { findSimilarPostsFn, type SimilarPost } from '@/lib/server-functions/public-posts'
+import {
+  findSimilarPostsFn,
+  type SimilarPost,
+  type MatchStrength,
+} from '@/lib/server-functions/public-posts'
 
-// ============================================================================
-// Debounce Hook
-// ============================================================================
-
-/**
- * Hook that debounces a value, delaying updates until after a pause in changes.
- */
+/** Debounces a value, delaying updates until after a pause in changes. */
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value)
 
@@ -20,18 +18,10 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debouncedValue
 }
 
-// ============================================================================
-// Query Key Factory
-// ============================================================================
-
 export const similarPostsKeys = {
   all: ['similarPosts'] as const,
   search: (title: string) => [...similarPostsKeys.all, title] as const,
 }
-
-// ============================================================================
-// Hook
-// ============================================================================
 
 interface UseSimilarPostsOptions {
   /** The title being typed by the user */
@@ -56,9 +46,8 @@ interface UseSimilarPostsResult {
 }
 
 /**
- * Hook to find posts similar to the user's input title.
- * Debounces input to avoid excessive API calls.
- * Returns empty array when input is too short or disabled.
+ * Find posts similar to the user's input title.
+ * Debounces input and returns empty array when input is too short.
  */
 export function useSimilarPosts({
   title,
@@ -66,26 +55,16 @@ export function useSimilarPosts({
   debounceMs = 400,
   minLength = 5,
 }: UseSimilarPostsOptions): UseSimilarPostsResult {
-  // Debounce the title to avoid API spam
   const debouncedTitle = useDebouncedValue(title.trim(), debounceMs)
-
-  // Only search if we have meaningful input
   const shouldSearch = enabled && debouncedTitle.length >= minLength
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: similarPostsKeys.search(debouncedTitle),
-    queryFn: async () => {
-      return findSimilarPostsFn({
-        data: {
-          title: debouncedTitle,
-          limit: 5,
-        },
-      })
-    },
+    queryFn: () => findSimilarPostsFn({ data: { title: debouncedTitle, limit: 5 } }),
     enabled: shouldSearch,
-    staleTime: 60_000, // Cache for 1 minute
-    gcTime: 5 * 60_000, // Keep in cache 5 minutes
-    // Don't retry on failure - this is non-critical
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
     retry: false,
   })
 
@@ -97,5 +76,5 @@ export function useSimilarPosts({
   }
 }
 
-// Re-export type for consumers
-export type { SimilarPost }
+// Re-export types for consumers
+export type { SimilarPost, MatchStrength }

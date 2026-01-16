@@ -16,7 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
-import { SimilarPostsSuggestions } from '@/components/public/similar-posts-suggestions'
+import { SimilarPostsCard } from '@/components/public/similar-posts-card'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
@@ -95,10 +95,9 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
   const watchedBoardId = form.watch('boardId')
 
   // Find similar posts as admin types (for duplicate detection)
-  const { posts: similarPosts, isLoading: isSimilarLoading } = useSimilarPosts({
+  const { posts: similarPosts } = useSimilarPosts({
     title: watchedTitle,
-    boardId: watchedBoardId,
-    enabled: open,
+    enabled: open && !!watchedBoardId,
   })
 
   return (
@@ -220,14 +219,6 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
                 )}
               />
 
-              {/* Similar posts suggestions (duplicate detection) */}
-              <SimilarPostsSuggestions
-                posts={similarPosts}
-                isLoading={isSimilarLoading}
-                show={watchedTitle.length >= 10}
-                className="my-2"
-              />
-
               {/* Content - seamless rich text editor */}
               <FormField
                 control={form.control}
@@ -286,6 +277,13 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
                   }}
                 />
               )}
+
+              {/* Similar posts card - shown above footer as pre-submit prompt */}
+              <SimilarPostsCard
+                posts={similarPosts}
+                show={watchedTitle.length >= 10}
+                className="pt-2"
+              />
             </div>
 
             <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30">

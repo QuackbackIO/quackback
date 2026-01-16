@@ -591,6 +591,9 @@ const findSimilarPostsSchema = z.object({
   limit: z.number().int().min(1).max(10).optional().default(5),
 })
 
+/** Match strength categories for similar posts */
+export type MatchStrength = 'strong' | 'good' | 'weak'
+
 export interface SimilarPost {
   id: string
   title: string
@@ -600,11 +603,54 @@ export interface SimilarPost {
     color: string
   } | null
   boardSlug: string
+  /** How closely this matches the search (strong: 50%+, good: 40-50%, weak: 35-40%) */
+  matchStrength: MatchStrength
+}
+
+/** Categorize similarity score into match strength */
+function getMatchStrength(score: number): MatchStrength {
+  if (score >= 0.5) return 'strong'
+  if (score >= 0.4) return 'good'
+  return 'weak'
+}
+
+/** Raw search result before enrichment */
+interface RawSearchResult {
+  id: string
+  title: string
+  voteCount: number
+  statusId: string | null
+  boardId: string
+  score: number
+}
+
+/** Convert database row to raw result */
+function toRawResult(row: {
+  id: PostId | string
+  title: string
+  voteCount: number
+  statusId: StatusId | string | null
+  boardId: BoardId | string
+  score: number
+}): RawSearchResult {
+  return {
+    id: String(row.id),
+    title: row.title,
+    voteCount: row.voteCount,
+    statusId: row.statusId ? String(row.statusId) : null,
+    boardId: String(row.boardId),
+    score: Number(row.score),
+  }
 }
 
 /**
- * Find posts similar to the given title using full-text search.
- * Uses existing tsvector index for fast keyword-based matching.
+ * Find posts similar to the given title using hybrid search.
+ * Combines semantic (vector) and keyword (full-text) search for best results.
+ *
+ * The vector search handles synonyms naturally through embeddings - the model
+ * knows that "dark mode" ≈ "night theme" without needing explicit dictionaries.
+ * FTS provides a boost for exact keyword matches.
+ *
  * No auth required - this is a read-only helper for the post creation form.
  */
 export const findSimilarPostsFn = createServerFn({ method: 'GET' })
@@ -612,56 +658,128 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<SimilarPost[]> => {
     console.log(`[fn:public-posts] findSimilarPostsFn: title="${data.title.slice(0, 30)}..."`)
     try {
-      // Import db utilities
       const { db, posts, boards, postStatuses, and, isNull, desc, sql, inArray } =
         await import('@/lib/db')
+      const { generateEmbedding } = await import('@/lib/embeddings')
+      const { isAIEnabled } = await import('@/lib/ai/config')
 
-      // Build search query from title
-      // plainto_tsquery handles natural language input (no special syntax needed)
       const searchQuery = data.title.trim()
+      const limit = data.limit ?? 5
+      const fetchLimit = limit * 2 // Fetch more for merging
 
-      // Build conditions - search across ALL boards for better duplicate detection
-      // We want to find similar posts anywhere in the workspace, not just the selected board
-      const conditions = [
-        isNull(posts.deletedAt),
-        sql`${posts.searchVector} @@ plainto_tsquery('english', ${searchQuery})`,
-      ]
+      // Run hybrid search: vector + full-text
+      const vectorResults: RawSearchResult[] = []
+      const ftsResults: RawSearchResult[] = []
 
-      // NOTE: Intentionally NOT filtering by boardId for duplicate detection
-      // Users should see similar posts across all boards
+      // 1. Vector similarity search (if AI enabled)
+      if (isAIEnabled()) {
+        try {
+          const embedding = await generateEmbedding(searchQuery)
+          if (embedding) {
+            const vectorStr = `[${embedding.join(',')}]`
+            const matches = await db
+              .select({
+                id: posts.id,
+                title: posts.title,
+                voteCount: posts.voteCount,
+                statusId: posts.statusId,
+                boardId: posts.boardId,
+                score: sql<number>`1 - (${posts.embedding} <=> ${vectorStr}::vector)`.as('score'),
+              })
+              .from(posts)
+              .where(
+                and(
+                  isNull(posts.deletedAt),
+                  sql`${posts.embedding} IS NOT NULL`,
+                  sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= 0.35`
+                )
+              )
+              .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
+              .limit(fetchLimit)
 
-      // Query similar posts with ranking
-      const results = await db
+            vectorResults.push(...matches.map(toRawResult))
+            console.log(`[fn:public-posts] Vector search found ${vectorResults.length} results`)
+          }
+        } catch (error) {
+          console.warn(`[fn:public-posts] Vector search failed, using full-text only:`, error)
+        }
+      }
+
+      // 2. Full-text search (always run as fallback/complement)
+      const ftsMatches = await db
         .select({
           id: posts.id,
           title: posts.title,
           voteCount: posts.voteCount,
           statusId: posts.statusId,
           boardId: posts.boardId,
-          // ts_rank scores relevance (higher = more relevant)
-          rank: sql<number>`ts_rank(${posts.searchVector}, plainto_tsquery('english', ${searchQuery}))`,
+          score:
+            sql<number>`ts_rank(${posts.searchVector}, plainto_tsquery('english', ${searchQuery}))`.as(
+              'score'
+            ),
         })
         .from(posts)
-        .where(and(...conditions))
+        .where(
+          and(
+            isNull(posts.deletedAt),
+            sql`${posts.searchVector} @@ plainto_tsquery('english', ${searchQuery})`
+          )
+        )
         .orderBy(
-          // Order by relevance first, then by vote count for tiebreaker
           desc(sql`ts_rank(${posts.searchVector}, plainto_tsquery('english', ${searchQuery}))`),
           desc(posts.voteCount)
         )
-        .limit(data.limit ?? 5)
+        .limit(fetchLimit)
 
-      console.log(
-        `[fn:public-posts] findSimilarPostsFn: query="${searchQuery}", found ${results.length} raw results`
+      // Normalize FTS score to 0-1 range (ts_rank typically returns 0-0.5)
+      ftsResults.push(
+        ...ftsMatches.map((r) => ({
+          ...toRawResult(r),
+          score: Math.min(Number(r.score) * 2, 1),
+        }))
       )
+      console.log(`[fn:public-posts] Full-text search found ${ftsResults.length} results`)
 
-      if (results.length === 0) {
+      // 3. Merge results (dedupe by ID, combine scores)
+      const scoreMap = new Map<
+        string,
+        { result: RawSearchResult; vectorScore: number; ftsScore: number }
+      >()
+
+      for (const r of vectorResults) {
+        scoreMap.set(r.id, { result: r, vectorScore: r.score, ftsScore: 0 })
+      }
+
+      for (const r of ftsResults) {
+        const existing = scoreMap.get(r.id)
+        if (existing) {
+          existing.ftsScore = r.score
+        } else {
+          scoreMap.set(r.id, { result: r, vectorScore: 0, ftsScore: r.score })
+        }
+      }
+
+      // Calculate hybrid score: boost when both searches match
+      const merged = Array.from(scoreMap.values())
+        .map(({ result, vectorScore, ftsScore }) => {
+          const score = ftsScore > 0 ? Math.min(vectorScore + ftsScore * 0.3, 1) : vectorScore
+          return { ...result, score }
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+
+      console.log(`[fn:public-posts] Hybrid search merged ${merged.length} results`)
+
+      if (merged.length === 0) {
         console.log(`[fn:public-posts] findSimilarPostsFn: no matches found`)
         return []
       }
 
       // Fetch status and board info for matched posts
-      const statusIds = [...new Set(results.filter((r) => r.statusId).map((r) => r.statusId!))]
-      const boardIds = [...new Set(results.map((r) => r.boardId))]
+      const statusIds = [
+        ...new Set(merged.filter((r) => r.statusId).map((r) => r.statusId!)),
+      ] as StatusId[]
+      const boardIds = [...new Set(merged.map((r) => r.boardId))] as BoardId[]
 
       const [statusesResult, boardsResult] = await Promise.all([
         statusIds.length > 0
@@ -680,23 +798,23 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
       const boardMap = new Map(boardsResult.map((b) => [String(b.id), b]))
 
       // Build response
-      const similarPosts: SimilarPost[] = results.map((post) => {
-        const status = post.statusId ? statusMap.get(String(post.statusId)) : null
-        const board = boardMap.get(String(post.boardId))
+      const similarPosts: SimilarPost[] = merged.map((post) => {
+        const status = post.statusId ? statusMap.get(post.statusId) : null
+        const board = boardMap.get(post.boardId)
 
         return {
-          id: String(post.id),
+          id: post.id,
           title: post.title,
           voteCount: post.voteCount,
           status: status ? { name: status.name, color: status.color } : null,
           boardSlug: board?.slug ?? '',
+          matchStrength: getMatchStrength(post.score),
         }
       })
 
       console.log(`[fn:public-posts] findSimilarPostsFn: found ${similarPosts.length} matches`)
       return similarPosts
     } catch (error) {
-      // Non-critical feature - log and return empty array
       console.error(`[fn:public-posts] ❌ findSimilarPostsFn failed:`, error)
       return []
     }
