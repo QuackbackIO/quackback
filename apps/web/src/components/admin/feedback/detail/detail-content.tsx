@@ -368,6 +368,20 @@ interface DetailContentProps {
   isPinPending: boolean
 }
 
+function useAsyncAction(action?: () => Promise<void>): [boolean, () => Promise<void>] {
+  const [isPending, setIsPending] = useState(false)
+  const execute = async () => {
+    if (!action) return
+    setIsPending(true)
+    try {
+      await action()
+    } finally {
+      setIsPending(false)
+    }
+  }
+  return [isPending, execute]
+}
+
 export function DetailContent({
   post,
   avatarUrls,
@@ -383,8 +397,9 @@ export function DetailContent({
   onUnpinComment,
   isPinPending,
 }: DetailContentProps) {
-  const [isRestoring, setIsRestoring] = useState(false)
-  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false)
+  const [isRestoring, handleRestore] = useAsyncAction(onRestore)
+  const [isPermanentlyDeleting, handlePermanentDelete] = useAsyncAction(onPermanentDelete)
+  const isActionPending = isRestoring || isPermanentlyDeleting
 
   return (
     <div className="flex-1 min-w-0 overflow-y-auto">
@@ -403,16 +418,8 @@ export function DetailContent({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={async () => {
-                  if (!onRestore) return
-                  setIsRestoring(true)
-                  try {
-                    await onRestore()
-                  } finally {
-                    setIsRestoring(false)
-                  }
-                }}
-                disabled={isRestoring || isPermanentlyDeleting || !onRestore}
+                onClick={handleRestore}
+                disabled={isActionPending || !onRestore}
                 className="bg-background hover:bg-muted"
               >
                 {isRestoring ? (
@@ -425,16 +432,8 @@ export function DetailContent({
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={async () => {
-                  if (!onPermanentDelete) return
-                  setIsPermanentlyDeleting(true)
-                  try {
-                    await onPermanentDelete()
-                  } finally {
-                    setIsPermanentlyDeleting(false)
-                  }
-                }}
-                disabled={isRestoring || isPermanentlyDeleting || !onPermanentDelete}
+                onClick={handlePermanentDelete}
+                disabled={isActionPending || !onPermanentDelete}
               >
                 {isPermanentlyDeleting ? (
                   <ArrowPathIcon className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -474,7 +473,7 @@ export function DetailContent({
             />
             <span
               className={cn(
-                'text-xl font-bold tabular-nums mt-0.5',
+                'text-xl font-semibold tabular-nums mt-0.5',
                 post.hasVoted ? 'text-primary' : 'text-foreground'
               )}
             >
@@ -485,7 +484,7 @@ export function DetailContent({
 
         {/* Content */}
         <div className="flex-1 min-w-0 p-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight mb-3">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight mb-3">
             {post.title}
           </h1>
 

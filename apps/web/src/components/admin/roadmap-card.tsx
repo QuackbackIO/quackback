@@ -33,7 +33,7 @@ function CardContent({ post }: { post: RoadmapPostEntry }) {
     <>
       <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/50 text-muted-foreground">
         <ChevronUpIcon className="h-4 w-4" />
-        <span className="text-sm font-bold text-foreground">{post.voteCount}</span>
+        <span className="text-sm font-semibold text-foreground">{post.voteCount}</span>
       </div>
       <div className="flex-1 min-w-0 p-4">
         <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">

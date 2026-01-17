@@ -47,10 +47,9 @@ interface ActiveFiltersBarProps {
 
 type FilterCategory = 'status' | 'board' | 'tags' | 'owner' | 'date' | 'votes'
 
-// Circle icon placeholder - using a simple colored div instead
-const CircleIcon = ({ className }: { className?: string }) => (
-  <span className={`inline-block rounded-full bg-current ${className}`} />
-)
+function CircleIcon({ className }: { className?: string }) {
+  return <span className={`inline-block rounded-full bg-current ${className}`} />
+}
 
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: typeof Squares2X2Icon }[] = [
   { key: 'status', label: 'Status', icon: CircleIcon as any },
@@ -69,44 +68,39 @@ const VOTE_THRESHOLDS = [
   { value: 100, label: '100+ votes' },
 ]
 
+function getDateFromDaysAgo(days: number): string {
+  const date = new Date()
+  if (days > 0) {
+    date.setDate(date.getDate() - days)
+  } else {
+    date.setHours(0, 0, 0, 0)
+  }
+  return date.toISOString().split('T')[0]!
+}
+
 const DATE_PRESETS = [
-  {
-    value: 'today',
-    label: 'Today',
-    getDates: () => {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      return { dateFrom: today.toISOString().split('T')[0] }
-    },
-  },
-  {
-    value: '7days',
-    label: 'Last 7 days',
-    getDates: () => {
-      const date = new Date()
-      date.setDate(date.getDate() - 7)
-      return { dateFrom: date.toISOString().split('T')[0] }
-    },
-  },
-  {
-    value: '30days',
-    label: 'Last 30 days',
-    getDates: () => {
-      const date = new Date()
-      date.setDate(date.getDate() - 30)
-      return { dateFrom: date.toISOString().split('T')[0] }
-    },
-  },
-  {
-    value: '90days',
-    label: 'Last 90 days',
-    getDates: () => {
-      const date = new Date()
-      date.setDate(date.getDate() - 90)
-      return { dateFrom: date.toISOString().split('T')[0] }
-    },
-  },
-]
+  { value: 'today', label: 'Today', daysAgo: 0 },
+  { value: '7days', label: 'Last 7 days', daysAgo: 7 },
+  { value: '30days', label: 'Last 30 days', daysAgo: 30 },
+  { value: '90days', label: 'Last 90 days', daysAgo: 90 },
+] as const
+
+const MENU_BUTTON_STYLES =
+  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors'
+
+interface MenuButtonProps {
+  onClick: () => void
+  children: React.ReactNode
+  className?: string
+}
+
+function MenuButton({ onClick, children, className }: MenuButtonProps) {
+  return (
+    <button type="button" onClick={onClick} className={cn(MENU_BUTTON_STYLES, className)}>
+      {children}
+    </button>
+  )
+}
 
 function AddFilterButton({
   boards,
@@ -153,8 +147,8 @@ function AddFilterButton({
     closePopover()
   }
 
-  const handleSelectDate = (preset: (typeof DATE_PRESETS)[0]) => {
-    onFiltersChange(preset.getDates())
+  const handleSelectDate = (daysAgo: number) => {
+    onFiltersChange({ dateFrom: getDateFromDaysAgo(daysAgo) })
     closePopover()
   }
 
@@ -225,88 +219,60 @@ function AddFilterButton({
             <div className="max-h-[250px] overflow-y-auto py-1">
               {activeCategory === 'status' &&
                 statuses.map((status) => (
-                  <button
-                    key={status.id}
-                    type="button"
-                    onClick={() => handleSelectStatus(status.slug)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                  >
+                  <MenuButton key={status.id} onClick={() => handleSelectStatus(status.slug)}>
                     <span
                       className="h-2 w-2 rounded-full shrink-0"
                       style={{ backgroundColor: status.color }}
                     />
                     {status.name}
-                  </button>
+                  </MenuButton>
                 ))}
 
               {activeCategory === 'board' &&
                 boards.map((board) => (
-                  <button
-                    key={board.id}
-                    type="button"
-                    onClick={() => handleSelectBoard(board.id)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                  >
+                  <MenuButton key={board.id} onClick={() => handleSelectBoard(board.id)}>
                     {board.name}
-                  </button>
+                  </MenuButton>
                 ))}
 
               {activeCategory === 'tags' &&
                 tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => handleSelectTag(tag.id)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                  >
+                  <MenuButton key={tag.id} onClick={() => handleSelectTag(tag.id)}>
                     {tag.name}
-                  </button>
+                  </MenuButton>
                 ))}
 
               {activeCategory === 'owner' && (
                 <>
-                  <button
-                    type="button"
+                  <MenuButton
                     onClick={() => handleSelectOwner('unassigned')}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors text-muted-foreground"
+                    className="text-muted-foreground"
                   >
                     Unassigned
-                  </button>
+                  </MenuButton>
                   {members.map((member) => (
-                    <button
-                      key={member.id}
-                      type="button"
-                      onClick={() => handleSelectOwner(member.id)}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                    >
+                    <MenuButton key={member.id} onClick={() => handleSelectOwner(member.id)}>
                       {member.name || member.email}
-                    </button>
+                    </MenuButton>
                   ))}
                 </>
               )}
 
               {activeCategory === 'date' &&
                 DATE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.value}
-                    type="button"
-                    onClick={() => handleSelectDate(preset)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                  >
+                  <MenuButton key={preset.value} onClick={() => handleSelectDate(preset.daysAgo)}>
                     {preset.label}
-                  </button>
+                  </MenuButton>
                 ))}
 
               {activeCategory === 'votes' &&
                 VOTE_THRESHOLDS.map((threshold) => (
-                  <button
+                  <MenuButton
                     key={threshold.value}
-                    type="button"
                     onClick={() => handleSelectVotes(threshold.value)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
                   >
                     {threshold.label}
-                  </button>
+                  </MenuButton>
                 ))}
             </div>
           </div>
@@ -378,8 +344,11 @@ function FilterChip({
         'inline-flex items-center gap-1 px-2 py-0.5',
         'rounded-full bg-muted/60 text-xs',
         'border border-border/30 hover:border-border/50',
-        'transition-colors'
+        'transition-all duration-150 hover:scale-[1.02]',
+        // Add subtle left border accent based on filter type
+        color && 'border-l-2'
       )}
+      style={color ? { borderLeftColor: color } : undefined}
     >
       {hasOptions ? (
         <Popover open={open} onOpenChange={setOpen}>
@@ -592,10 +561,9 @@ function computeActiveFilters(
 
   if (filters.dateFrom) {
     // Try to match current date to a preset for display
-    const matchedPreset = DATE_PRESETS.find((p) => {
-      const dates = p.getDates()
-      return dates.dateFrom === filters.dateFrom
-    })
+    const matchedPreset = DATE_PRESETS.find(
+      (p) => getDateFromDaysAgo(p.daysAgo) === filters.dateFrom
+    )
 
     result.push({
       key: 'date',
@@ -607,7 +575,7 @@ function computeActiveFilters(
       onChange: (presetId) => {
         const preset = DATE_PRESETS.find((p) => p.value === presetId)
         if (preset) {
-          onFiltersChange(preset.getDates())
+          onFiltersChange({ dateFrom: getDateFromDaysAgo(preset.daysAgo) })
         }
       },
       onRemove: () => onFiltersChange({ dateFrom: undefined }),

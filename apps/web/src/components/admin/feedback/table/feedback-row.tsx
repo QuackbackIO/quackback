@@ -41,7 +41,7 @@ export function FeedbackRow({
       {/* Vote column - fixed width */}
       <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 py-2.5">
         <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-bold text-foreground tabular-nums">{post.voteCount}</span>
+        <span className="text-sm font-semibold text-foreground tabular-nums">{post.voteCount}</span>
       </div>
 
       {/* Main content */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BellIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -17,6 +17,18 @@ interface NotificationBellProps {
 export function NotificationBell({ className, popoverSide = 'right' }: NotificationBellProps) {
   const [open, setOpen] = useState(false)
   const { data: unreadCount = 0 } = useUnreadCount()
+  const [shouldPulse, setShouldPulse] = useState(false)
+  const prevCountRef = useRef(unreadCount)
+
+  // Pulse animation when unread count increases
+  useEffect(() => {
+    if (unreadCount > prevCountRef.current && unreadCount > 0) {
+      setShouldPulse(true)
+      const timer = setTimeout(() => setShouldPulse(false), 1000)
+      return () => clearTimeout(timer)
+    }
+    prevCountRef.current = unreadCount
+  }, [unreadCount])
 
   const isBottomAligned = popoverSide === 'bottom'
 
@@ -41,7 +53,8 @@ export function NotificationBell({ className, popoverSide = 'right' }: Notificat
                     'absolute -top-0.5 -right-0.5 flex items-center justify-center',
                     'min-w-[18px] h-[18px] px-1 rounded-full',
                     'bg-primary text-primary-foreground text-[10px] font-semibold',
-                    'border-2 border-card'
+                    'border-2 border-card',
+                    shouldPulse && 'animate-pulse'
                   )}
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
