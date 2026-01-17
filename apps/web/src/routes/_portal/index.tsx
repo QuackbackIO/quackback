@@ -15,10 +15,6 @@ const searchSchema = z.object({
   tagIds: z.array(z.string()).optional(),
 })
 
-/**
- * Public portal page - shows feedback boards and posts
- * This page is rendered for workspace domain root: acme.quackback.io/
- */
 export const Route = createFileRoute('/_portal/')({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({
@@ -27,28 +23,23 @@ export const Route = createFileRoute('/_portal/')({
     sort: search.sort,
   }),
   loader: async ({ deps, context }) => {
-    // Session/settings from context
     const { session, settings: org, queryClient } = context
 
-    // Redirect to onboarding if no settings (fresh install)
     if (!org) {
       throw redirect({ to: '/onboarding' })
     }
 
     const { board, searchQuery, sort } = deps
 
-    // Get user identifier - use member ID for authenticated users, anonymous cookie for others
     let userIdentifier = await getUserIdentifier()
     if (session?.user) {
-      // Use server function to get member ID (keeps db code out of client bundle)
       const memberId = await getMemberIdForUser({ data: { userId: session.user.id } })
       if (memberId) {
         userIdentifier = getMemberIdentifier(memberId)
       }
     }
 
-    // Pre-fetch all portal data using React Query
-    const [boards, posts, _statuses, _tags] = await Promise.all([
+    const [boards, posts] = await Promise.all([
       queryClient.ensureQueryData(portalQueries.boards()),
       queryClient.ensureQueryData(
         portalQueries.posts({ boardSlug: board, search: searchQuery, sort })
@@ -57,11 +48,10 @@ export const Route = createFileRoute('/_portal/')({
       queryClient.ensureQueryData(portalQueries.tags()),
     ])
 
-    // If no boards exist, return early with empty state flag
     if (boards.length === 0) {
       return {
         org,
-        isEmpty: true,
+        isEmpty: true as const,
         currentBoard: undefined,
         currentSearch: undefined,
         currentSort: sort,
@@ -72,7 +62,6 @@ export const Route = createFileRoute('/_portal/')({
       }
     }
 
-    // Pre-fetch voted posts and avatars
     const postIds = posts.items.map((post) => post.id)
     const postMemberIds = posts.items
       .map((post) => post.memberId)
@@ -85,9 +74,9 @@ export const Route = createFileRoute('/_portal/')({
         : Promise.resolve(),
     ])
 
-    // Return metadata needed by component
     return {
       org,
+      isEmpty: false as const,
       currentBoard: board,
       currentSearch: searchQuery,
       currentSort: sort,
@@ -104,10 +93,9 @@ function PublicPortalPage() {
   const loaderData = Route.useLoaderData()
   const { org, session } = loaderData
 
-  // Handle empty state when no boards exist
-  if ('isEmpty' in loaderData && loaderData.isEmpty) {
+  if (loaderData.isEmpty) {
     return (
-      <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
+      <main className="py-6">
         <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
           <div className="rounded-full bg-muted p-4 mb-6">
             <ChatBubbleOvalLeftEllipsisIcon className="h-10 w-10 text-muted-foreground" />
@@ -125,7 +113,6 @@ function PublicPortalPage() {
   const { currentBoard, currentSearch, currentSort, userIdentifier, postIds, postMemberIds } =
     loaderData
 
-  // Read pre-fetched data from React Query cache
   const boardsQuery = useSuspenseQuery(portalQueries.boards())
   const postsQuery = useSuspenseQuery(
     portalQueries.posts({ boardSlug: currentBoard, search: currentSearch, sort: currentSort })
@@ -134,6 +121,8 @@ function PublicPortalPage() {
   const tagsQuery = useSuspenseQuery(portalQueries.tags())
   const votedPostsQuery = useSuspenseQuery(portalQueries.votedPosts(postIds, userIdentifier))
   const avatarsQuery = useSuspenseQuery(portalQueries.avatars(postMemberIds))
+
+  const user = session?.user ? { name: session.user.name, email: session.user.email } : null
 
   return (
     <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
@@ -151,7 +140,7 @@ function PublicPortalPage() {
         currentSearch={currentSearch}
         currentSort={currentSort}
         defaultBoardId={boardsQuery.data[0]?.id}
-        user={session?.user ? { name: session.user.name, email: session.user.email } : null}
+        user={user}
       />
     </main>
   )

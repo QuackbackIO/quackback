@@ -9,18 +9,13 @@ import { theme } from '@/lib/theme'
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
-    console.log('[_portal] loader started', { context })
     const { session, settingsData } = context
 
-    // Use settingsData from context (single query in __root.tsx)
-    // Fall back to settings for backward compatibility
     const org = settingsData?.settings ?? context.settings
     if (!org) {
-      console.log('[_portal] no org, redirecting to onboarding')
       throw redirect({ to: '/onboarding' })
     }
 
-    // Get user role and avatar (these still require separate queries)
     const [userRole, avatarData] = await Promise.all([
       getCurrentUserRole(),
       session?.user
@@ -30,17 +25,13 @@ export const Route = createFileRoute('/_portal')({
         : null,
     ])
 
-    // Use pre-loaded settings data from context (no additional queries needed)
     const brandingData = settingsData?.brandingData ?? null
     const faviconData = settingsData?.faviconData ?? null
     const brandingConfig = settingsData?.brandingConfig ?? {}
     const portalConfig = settingsData?.publicPortalConfig ?? null
 
-    const themeStyles =
-      brandingConfig.preset || brandingConfig.light || brandingConfig.dark
-        ? theme.generateThemeCSS(brandingConfig)
-        : ''
-
+    const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
+    const themeStyles = hasThemeConfig ? theme.generateThemeCSS(brandingConfig) : ''
     const googleFontsUrl = theme.getGoogleFontsUrl(brandingConfig)
 
     const initialUserData = session?.user
@@ -56,7 +47,6 @@ export const Route = createFileRoute('/_portal')({
       oauth: portalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
     }
 
-    console.log('[_portal] loader completed', { org, userRole, session: !!session })
     return {
       org,
       userRole,
@@ -83,7 +73,6 @@ export const Route = createFileRoute('/_portal')({
 })
 
 function PortalLayout() {
-  console.log('[_portal] PortalLayout render')
   const { org, userRole, brandingData, themeStyles, googleFontsUrl, initialUserData, authConfig } =
     Route.useLoaderData()
 
@@ -97,7 +86,7 @@ function PortalLayout() {
         userRole={userRole}
         initialUserData={initialUserData}
       />
-      <main className="mx-auto max-w-5xl w-full flex-1">
+      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
         <Outlet />
       </main>
       <AuthDialog authConfig={authConfig} orgSlug={org.slug} />
