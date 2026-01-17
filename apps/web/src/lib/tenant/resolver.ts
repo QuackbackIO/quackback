@@ -8,79 +8,28 @@
  * Note: Uses process.env which works in both Cloudflare Workers (with nodejs_compat)
  * and Node.js/Bun environments.
  */
-import { drizzle } from 'drizzle-orm/neon-http'
-import { neon } from '@neondatabase/serverless'
-import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { getTenantDb } from './db-cache'
 import type { TenantInfo } from './types'
+import {
+  workspace,
+  workspaceDomain,
+  getCatalogDb,
+  resetCatalogDb,
+  type CatalogDb,
+} from '@/lib/catalog'
 
-// ============================================
-// Catalog Schema (inline - matches get-started.ts)
-// ============================================
+// Re-export for backwards compatibility
+export { resetCatalogDb }
 
-const workspace = pgTable('workspace', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  neonProjectId: text('neon_project_id'),
-  neonRegion: text('neon_region').default('aws-us-east-1'),
-  migrationStatus: text('migration_status').default('pending'), // 'pending' | 'in_progress' | 'completed'
-})
-
-const workspaceDomain = pgTable(
-  'workspace_domain',
-  {
-    id: text('id').primaryKey(),
-    workspaceId: text('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
-    domain: text('domain').notNull().unique(),
-    domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
-    isPrimary: boolean('is_primary').default(false).notNull(),
-    verified: boolean('verified').default(true).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    // Cloudflare custom domain fields
-    verificationToken: text('verification_token'), // HTTP verification token
-    cloudflareHostnameId: text('cloudflare_hostname_id'), // Cloudflare custom hostname ID
-    sslStatus: text('ssl_status'), // initializing|pending_validation|pending_issuance|pending_deployment|active|expired
-    ownershipStatus: text('ownership_status'), // pending|active|moved|blocked|deleted
-  },
-  (table) => [
-    index('workspace_domain_workspace_id_idx').on(table.workspaceId),
-    index('workspace_domain_cf_hostname_id_idx').on(table.cloudflareHostnameId),
-  ]
-)
-
-const catalogSchema = { workspace, workspaceDomain }
-
-// ============================================
-// Catalog Database Connection
-// ============================================
-
-function getConfig() {
+function getConfig(): {
+  baseDomain: string | undefined
+  neonApiKey: string | undefined
+} {
   return {
-    catalogDbUrl: process.env.CLOUD_CATALOG_DATABASE_URL,
     baseDomain: process.env.CLOUD_TENANT_BASE_DOMAIN,
     neonApiKey: process.env.CLOUD_NEON_API_KEY,
   }
-}
-
-// Singleton catalog database connection
-let catalogDb: ReturnType<typeof drizzle<typeof catalogSchema>> | null = null
-
-function getCatalogDb(connectionUrl: string) {
-  if (!catalogDb) {
-    const sql = neon(connectionUrl)
-    catalogDb = drizzle(sql, { schema: catalogSchema })
-  }
-  return catalogDb
-}
-
-/** Reset catalog db connection (for testing) */
-export function resetCatalogDb(): void {
-  catalogDb = null
 }
 
 // ============================================
@@ -176,6 +125,35 @@ function extractSlugFromHost(host: string, baseDomain: string): string | null {
   return slug
 }
 
+/**
+ * Look up a custom domain in the catalog database.
+ * Returns the workspace record if a verified custom domain matches.
+ */
+async function lookupCustomDomain(
+  db: CatalogDb,
+  host: string
+): Promise<typeof workspace.$inferSelect | null> {
+  // Query workspace_domain table for verified custom domains
+  const domainRecord = await db.query.workspaceDomain.findFirst({
+    where: and(
+      eq(workspaceDomain.domain, host),
+      eq(workspaceDomain.domainType, 'custom'),
+      eq(workspaceDomain.verified, true)
+    ),
+  })
+
+  if (!domainRecord) {
+    return null
+  }
+
+  // Fetch the associated workspace
+  const workspaceRecord = await db.query.workspace.findFirst({
+    where: eq(workspace.id, domainRecord.workspaceId),
+  })
+
+  return workspaceRecord ?? null
+}
+
 // ============================================
 // Public API
 // ============================================
@@ -191,15 +169,14 @@ function extractSlugFromHost(host: string, baseDomain: string): string | null {
 export async function getTenantDbBySlug(
   slug: string
 ): Promise<{ db: ReturnType<typeof getTenantDb>; workspaceId: string }> {
-  const config = getConfig()
+  const { neonApiKey } = getConfig()
 
-  if (!config.catalogDbUrl || !config.neonApiKey) {
-    throw new Error('getTenantDbBySlug requires CLOUD_CATALOG_DATABASE_URL and CLOUD_NEON_API_KEY')
+  if (!neonApiKey) {
+    throw new Error('getTenantDbBySlug requires CLOUD_NEON_API_KEY')
   }
 
-  const db = getCatalogDb(config.catalogDbUrl)
+  const db = getCatalogDb()
 
-  // Query workspace by slug
   const workspaceRecord = await db.query.workspace.findFirst({
     where: eq(workspace.slug, slug),
   })
@@ -216,13 +193,7 @@ export async function getTenantDbBySlug(
     throw new Error(`Workspace ${slug} has no Neon project ID`)
   }
 
-  // Fetch connection string from Neon API
-  const connectionString = await fetchConnectionString(
-    workspaceRecord.neonProjectId,
-    config.neonApiKey
-  )
-
-  // Get or create Drizzle instance for tenant
+  const connectionString = await fetchConnectionString(workspaceRecord.neonProjectId, neonApiKey)
   const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
 
   return {
@@ -238,66 +209,59 @@ export async function getTenantDbBySlug(
  * @returns TenantInfo if domain maps to a valid workspace, null otherwise
  */
 export async function resolveTenantFromDomain(request: Request): Promise<TenantInfo | null> {
-  const config = getConfig()
+  const { baseDomain, neonApiKey } = getConfig()
 
-  if (!config.catalogDbUrl || !config.baseDomain || !config.neonApiKey) {
+  if (!baseDomain || !neonApiKey) {
     console.error(
-      '[resolver] Tenant resolution not configured: missing CLOUD_CATALOG_DATABASE_URL, CLOUD_TENANT_BASE_DOMAIN, or CLOUD_NEON_API_KEY'
+      '[resolver] Tenant resolution not configured: missing CLOUD_TENANT_BASE_DOMAIN or CLOUD_NEON_API_KEY'
     )
     return null
   }
 
-  // Extract host from request
   const host = request.headers.get('host')?.split(':')[0]
   if (!host) {
     console.warn('[resolver] No host header in request')
     return null
   }
 
-  // Extract slug from subdomain
-  const slug = extractSlugFromHost(host, config.baseDomain)
-  if (!slug) {
-    // Not a subdomain of base domain - skip tenant resolution
-    return null
-  }
-
-  console.log(`[resolver] Resolving tenant for slug: ${slug}`)
+  const slug = extractSlugFromHost(host, baseDomain)
 
   try {
-    const db = getCatalogDb(config.catalogDbUrl)
+    const db = getCatalogDb()
 
-    // Query workspace by slug
-    const workspaceRecord = await db.query.workspace.findFirst({
-      where: eq(workspace.slug, slug),
-    })
+    let workspaceRecord: typeof workspace.$inferSelect | null = null
+
+    if (slug) {
+      console.log(`[resolver] Resolving tenant for slug: ${slug}`)
+      workspaceRecord =
+        (await db.query.workspace.findFirst({
+          where: eq(workspace.slug, slug),
+        })) ?? null
+    } else {
+      console.log(`[resolver] Checking for custom domain: ${host}`)
+      workspaceRecord = await lookupCustomDomain(db, host)
+    }
 
     if (!workspaceRecord) {
-      console.warn(`[resolver] No workspace found for slug: ${slug}`)
+      console.warn(`[resolver] No workspace found for host: ${host}`)
       return null
     }
 
     console.log(`[resolver] Found workspace: ${workspaceRecord.id} (${workspaceRecord.name})`)
 
-    // Check migration status
     if (workspaceRecord.migrationStatus !== 'completed') {
       console.warn(
-        `[resolver] Workspace ${slug} is not ready (status: ${workspaceRecord.migrationStatus})`
+        `[resolver] Workspace ${workspaceRecord.slug} is not ready (status: ${workspaceRecord.migrationStatus})`
       )
       return null
     }
 
     if (!workspaceRecord.neonProjectId) {
-      console.error(`[resolver] Workspace ${slug} has no Neon project ID`)
+      console.error(`[resolver] Workspace ${workspaceRecord.slug} has no Neon project ID`)
       return null
     }
 
-    // Fetch connection string from Neon API
-    const connectionString = await fetchConnectionString(
-      workspaceRecord.neonProjectId,
-      config.neonApiKey
-    )
-
-    // Get or create Drizzle instance for tenant
+    const connectionString = await fetchConnectionString(workspaceRecord.neonProjectId, neonApiKey)
     const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
 
     console.log(`[resolver] Successfully resolved tenant: ${workspaceRecord.id}`)

@@ -16,7 +16,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { eq, and, gt } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, integer, index, unique } from 'drizzle-orm/pg-core'
 import { neon } from '@neondatabase/serverless'
 import { createApiClient } from '@neondatabase/api-client'
 import postgres from 'postgres'
@@ -24,62 +23,7 @@ import crypto from 'node:crypto'
 import path from 'path'
 import { typeid } from 'typeid-js'
 import { sendSigninCodeEmail } from '@quackback/email'
-
-// ============================================
-// Catalog Schema (inline - matches website)
-// ============================================
-
-const workspace = pgTable('workspace', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  neonProjectId: text('neon_project_id'),
-  neonRegion: text('neon_region').default('aws-us-east-1'),
-  migrationStatus: text('migration_status').default('pending'), // 'pending' | 'in_progress' | 'completed'
-})
-
-const workspaceDomain = pgTable(
-  'workspace_domain',
-  {
-    id: text('id').primaryKey(),
-    workspaceId: text('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
-    domain: text('domain').notNull().unique(),
-    domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
-    isPrimary: boolean('is_primary').default(false).notNull(),
-    verified: boolean('verified').default(true).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    // Cloudflare custom domain fields
-    verificationToken: text('verification_token'), // HTTP verification token
-    cloudflareHostnameId: text('cloudflare_hostname_id'), // Cloudflare custom hostname ID
-    sslStatus: text('ssl_status'), // initializing|pending_validation|pending_issuance|pending_deployment|active|expired
-    ownershipStatus: text('ownership_status'), // pending|active|moved|blocked|deleted
-  },
-  (table) => [
-    index('workspace_domain_workspace_id_idx').on(table.workspaceId),
-    index('workspace_domain_cf_hostname_id_idx').on(table.cloudflareHostnameId),
-  ]
-)
-
-const verification = pgTable(
-  'verification',
-  {
-    id: text('id').primaryKey(),
-    identifier: text('identifier').notNull(),
-    value: text('value').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    attemptCount: integer('attempt_count').default(0).notNull(),
-  },
-  (table) => [
-    index('verification_identifier_idx').on(table.identifier),
-    unique('verification_identifier_unique').on(table.identifier),
-  ]
-)
-
-const catalogSchema = { workspace, workspaceDomain, verification }
+import { workspace, workspaceDomain, verification, catalogSchema } from '@/lib/catalog'
 
 // ============================================
 // Inline Helpers
@@ -90,8 +34,11 @@ function generateUuid(prefix: string): string {
   return typeid(prefix).toUUID()
 }
 
-/** Get catalog database connection */
-function getCatalogDb() {
+/**
+ * Get catalog database connection using postgres driver.
+ * Note: Uses postgres driver (not neon-http) for full transaction support needed during provisioning.
+ */
+function getCatalogDbPostgres() {
   const url = process.env.CLOUD_CATALOG_DATABASE_URL
   if (!url) {
     throw new Error('CLOUD_CATALOG_DATABASE_URL is required for cloud mode')
@@ -177,26 +124,21 @@ async function deleteNeonProject(projectId: string): Promise<void> {
 /** Run migrations on tenant database using raw SQL */
 async function runTenantMigrations(connectionString: string): Promise<void> {
   const sql = neon(connectionString)
-
-  // Read the initial migration SQL
-  // In production, this would be bundled or read from a known location
   const fs = await import('fs/promises')
+
   const migrationPath = path.join(
     process.cwd(),
     'node_modules/@quackback/db/drizzle/0000_initial.sql'
   )
   const migrationSql = await fs.readFile(migrationPath, 'utf-8')
 
-  // Split by statement breakpoint and execute each statement
   const statements = migrationSql
     .split('--> statement-breakpoint')
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && !s.startsWith('--'))
 
   for (const statement of statements) {
-    if (statement.trim()) {
-      await sql`${sql.unsafe(statement)}`
-    }
+    await sql`${sql.unsafe(statement)}`
   }
 }
 
@@ -312,7 +254,7 @@ const RESERVED_SLUGS = [
 export const sendVerificationCode = createServerFn({ method: 'POST' })
   .inputValidator(z.object({ email: z.string().email() }))
   .handler(async ({ data }) => {
-    const db = getCatalogDb()
+    const db = getCatalogDbPostgres()
     const code = String(Math.floor(100000 + Math.random() * 900000))
     const identifier = `workspace-creation:${data.email.toLowerCase()}`
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
@@ -343,7 +285,7 @@ export const sendVerificationCode = createServerFn({ method: 'POST' })
 export const verifyCode = createServerFn({ method: 'POST' })
   .inputValidator(z.object({ email: z.string().email(), code: z.string().length(6) }))
   .handler(async ({ data }) => {
-    const db = getCatalogDb()
+    const db = getCatalogDbPostgres()
     const identifier = `workspace-creation:${data.email.toLowerCase()}`
 
     // Find valid verification record
@@ -408,7 +350,7 @@ export const checkSlugAvailability = createServerFn({ method: 'GET' })
     }
 
     // Check database
-    const db = getCatalogDb()
+    const db = getCatalogDbPostgres()
     const existing = await db.query.workspace.findFirst({
       where: eq(workspace.slug, slug),
     })
@@ -429,7 +371,7 @@ export const createWorkspaceFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
-    const db = getCatalogDb()
+    const db = getCatalogDbPostgres()
     const email = data.email.toLowerCase()
     const slug = data.slug.toLowerCase()
 

@@ -6,9 +6,6 @@
  * Integrates with Cloudflare API for custom hostname management.
  */
 
-import { drizzle } from 'drizzle-orm/neon-http'
-import { neon } from '@neondatabase/serverless'
-import { pgTable, text, timestamp, boolean, index } from 'drizzle-orm/pg-core'
 import { eq, and } from 'drizzle-orm'
 import * as crypto from 'node:crypto'
 import type {
@@ -21,6 +18,7 @@ import type {
   VerificationRecords,
 } from './domains.types'
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from '@/lib/shared/errors'
+import { workspaceDomain, getCatalogDb } from '@/lib/catalog'
 
 // ============================================
 // Cloudflare Integration
@@ -69,64 +67,6 @@ function extractVerificationRecords(hostname: CFCustomHostname): VerificationRec
   }
 
   return records
-}
-
-// ============================================
-// Catalog Schema (inline - matches resolver.ts)
-// ============================================
-
-const workspace = pgTable('workspace', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  neonProjectId: text('neon_project_id'),
-  neonRegion: text('neon_region').default('aws-us-east-1'),
-  migrationStatus: text('migration_status').default('pending'),
-})
-
-const workspaceDomain = pgTable(
-  'workspace_domain',
-  {
-    id: text('id').primaryKey(),
-    workspaceId: text('workspace_id')
-      .notNull()
-      .references(() => workspace.id, { onDelete: 'cascade' }),
-    domain: text('domain').notNull().unique(),
-    domainType: text('domain_type').notNull(), // 'subdomain' | 'custom'
-    isPrimary: boolean('is_primary').default(false).notNull(),
-    verified: boolean('verified').default(true).notNull(),
-    verificationToken: text('verification_token'),
-    cloudflareHostnameId: text('cloudflare_hostname_id'),
-    sslStatus: text('ssl_status'),
-    ownershipStatus: text('ownership_status'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index('workspace_domain_workspace_id_idx').on(table.workspaceId),
-    index('workspace_domain_cf_hostname_id_idx').on(table.cloudflareHostnameId),
-  ]
-)
-
-const catalogSchema = { workspace, workspaceDomain }
-
-// ============================================
-// Catalog Database Connection
-// ============================================
-
-let catalogDb: ReturnType<typeof drizzle<typeof catalogSchema>> | null = null
-
-function getCatalogDb() {
-  const url = process.env.CLOUD_CATALOG_DATABASE_URL
-  if (!url) {
-    throw new Error('CLOUD_CATALOG_DATABASE_URL is required for domain operations')
-  }
-
-  if (!catalogDb) {
-    const sql = neon(url)
-    catalogDb = drizzle(sql, { schema: catalogSchema })
-  }
-  return catalogDb
 }
 
 // ============================================
