@@ -1,20 +1,21 @@
-import { useEffect, useCallback, useRef, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
-import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
-import { PostCard } from '@/components/public/post-card'
+import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
+import { MobileBoardSheet } from '@/components/public/feedback/mobile-board-sheet'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
+import { PostCard, type PostCardDensity } from '@/components/public/post-card'
+import type { BoardWithStats } from '@/lib/boards'
+import type { PostStatusEntity, Tag } from '@/lib/db-types'
+import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import {
-  usePublicPosts,
   flattenPublicPosts,
+  usePublicPosts,
   useVotedPosts,
 } from '@/lib/hooks/use-public-posts-query'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import type { BoardWithStats } from '@/lib/boards'
 import type { PublicPostListItem } from '@/lib/posts'
-import type { PostStatusEntity, Tag } from '@/lib/db-types'
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -49,17 +50,16 @@ export function FeedbackContainer({
   currentSort = 'top',
   defaultBoardId,
   user,
-}: FeedbackContainerProps) {
+}: FeedbackContainerProps): React.ReactElement {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
+  const [density, setDensity] = useState<PostCardDensity>('comfortable')
 
-  // Get user from session
   const effectiveUser = session?.user
     ? { name: session.user.name, email: session.user.email }
     : user
 
-  // Refs for intersection observer
   const sentinelRef = useRef<HTMLDivElement>(null)
   const fetchNextPageRef = useRef<() => void>(() => {})
 
@@ -168,14 +168,13 @@ export function FeedbackContainer({
     return () => observer.disconnect()
   }, [hasNextPage])
 
-  // Filter handlers
   const handleSearchChange = useCallback(
     (search: string) => setFilters({ search: search || undefined }),
     [setFilters]
   )
 
   const handleStatusChange = useCallback(
-    (statuses: string[]) => setFilters({ status: statuses.length > 0 ? statuses : undefined }),
+    (values: string[]) => setFilters({ status: values.length > 0 ? values : undefined }),
     [setFilters]
   )
 
@@ -189,9 +188,15 @@ export function FeedbackContainer({
     [setFilters]
   )
 
-  // Board for creating posts
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
+
+  function handlePostCreated(postId: string): void {
+    setTimeout(() => {
+      const postElement = document.querySelector(`[data-post-id="${postId}"]`)
+      postElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+  }
 
   return (
     <div className="py-6">
@@ -202,28 +207,30 @@ export function FeedbackContainer({
             boards={boards}
             defaultBoardId={boardIdForCreate}
             user={effectiveUser}
-            onPostCreated={(postId) => {
-              // Scroll to the new post after a short delay to allow the DOM to update
-              setTimeout(() => {
-                const postElement = document.querySelector(`[data-post-id="${postId}"]`)
-                postElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-              }, 100)
-            }}
+            onPostCreated={handlePostCreated}
           />
 
-          <FeedbackToolbar
-            currentSort={activeSort}
-            currentSearch={activeSearch}
-            onSearchChange={handleSearchChange}
-            statuses={statuses}
-            tags={tags}
-            selectedStatuses={activeStatuses}
-            selectedTagIds={activeTagIds}
-            onStatusChange={handleStatusChange}
-            onTagChange={handleTagChange}
-            onClearFilters={handleClearFilters}
-            activeFilterCount={activeFilterCount}
-          />
+          {/* Mobile board selector + Toolbar */}
+          <div className="flex items-center gap-2">
+            <MobileBoardSheet boards={boards} currentBoard={activeBoard} />
+            <div className="flex-1">
+              <FeedbackToolbar
+                currentSort={activeSort}
+                currentSearch={activeSearch}
+                onSearchChange={handleSearchChange}
+                statuses={statuses}
+                tags={tags}
+                selectedStatuses={activeStatuses}
+                selectedTagIds={activeTagIds}
+                onStatusChange={handleStatusChange}
+                onTagChange={handleTagChange}
+                onClearFilters={handleClearFilters}
+                activeFilterCount={activeFilterCount}
+                density={density}
+                onDensityChange={setDensity}
+              />
+            </div>
+          </div>
 
           <div className="mt-3">
             {posts.length === 0 && !isLoading ? (
@@ -234,25 +241,31 @@ export function FeedbackContainer({
               </p>
             ) : (
               <>
-                <div className="rounded-lg overflow-hidden divide-y divide-border/50 bg-card shadow-md border border-border/50">
-                  {posts.map((post) => (
-                    <PostCard
+                <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+                  {posts.map((post, index) => (
+                    <div
                       key={post.id}
-                      id={post.id}
-                      title={post.title}
-                      content={post.content}
-                      statusId={post.statusId}
-                      statuses={statuses}
-                      voteCount={post.voteCount}
-                      commentCount={post.commentCount}
-                      authorName={post.authorName}
-                      authorAvatarUrl={post.memberId ? initialAvatarUrls[post.memberId] : null}
-                      createdAt={post.createdAt}
-                      boardSlug={post.board?.slug || ''}
-                      boardName={post.board?.name}
-                      tags={post.tags}
-                      isAuthenticated={!!effectiveUser}
-                    />
+                      className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                      style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+                    >
+                      <PostCard
+                        id={post.id}
+                        title={post.title}
+                        content={post.content}
+                        statusId={post.statusId}
+                        statuses={statuses}
+                        voteCount={post.voteCount}
+                        commentCount={post.commentCount}
+                        authorName={post.authorName}
+                        authorAvatarUrl={post.memberId ? initialAvatarUrls[post.memberId] : null}
+                        createdAt={post.createdAt}
+                        boardSlug={post.board?.slug || ''}
+                        boardName={post.board?.name}
+                        tags={post.tags}
+                        isAuthenticated={!!effectiveUser}
+                        density={density}
+                      />
+                    </div>
                   ))}
                 </div>
 

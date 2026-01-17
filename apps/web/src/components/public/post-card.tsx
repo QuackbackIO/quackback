@@ -1,27 +1,29 @@
 import { Link } from '@tanstack/react-router'
 import {
-  ChevronUpIcon,
   ChatBubbleLeftIcon,
+  ChevronUpIcon,
   EllipsisHorizontalIcon,
   PencilIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid'
-import { Badge } from '@/components/ui/badge'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { TimeAgo } from '@/components/ui/time-ago'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { usePostVote } from '@/lib/hooks/use-post-vote'
-import { useAuthPopover } from '@/components/auth/auth-popover-context'
-import { getInitials } from '@/lib/utils'
 import type { PostStatusEntity } from '@/lib/db-types'
+import { usePostVote } from '@/lib/hooks/use-post-vote'
+import { cn, getInitials } from '@/lib/utils'
 import type { PostId, StatusId } from '@quackback/ids'
+
+export type PostCardDensity = 'comfortable' | 'compact'
 
 interface PostCardProps {
   id: PostId
@@ -54,6 +56,8 @@ interface PostCardProps {
   onEdit?: () => void
   /** Callback when user clicks delete */
   onDelete?: () => void
+  /** Display density: comfortable (default) or compact */
+  density?: PostCardDensity
 }
 
 export function PostCard({
@@ -78,7 +82,9 @@ export function PostCard({
   deleteReason,
   onEdit,
   onDelete,
-}: PostCardProps) {
+  density = 'comfortable',
+}: PostCardProps): React.ReactElement {
+  const isCompact = density === 'compact'
   const { openAuthPopover } = useAuthPopover()
   const currentStatus = statuses.find((s) => s.id === statusId)
   const {
@@ -86,19 +92,25 @@ export function PostCard({
     hasVoted: currentHasVoted,
     isPending,
     handleVote,
-  } = usePostVote({
-    postId: id,
-    voteCount,
-  })
+  } = usePostVote({ postId: id, voteCount })
+
+  function handleVoteClick(e: React.MouseEvent): void {
+    if (!isAuthenticated) {
+      e.preventDefault()
+      e.stopPropagation()
+      openAuthPopover({ mode: 'login' })
+      return
+    }
+    handleVote(e)
+  }
 
   return (
     <Link
       to="/b/$slug/posts/$postId"
       params={{ slug: boardSlug, postId: id }}
       data-post-id={id}
-      className="post-card flex transition-colors bg-[var(--post-card-background)] hover:bg-[var(--post-card-background)]/80"
+      className="post-card flex transition-all duration-200 ease-out bg-[var(--post-card-background)] hover:bg-muted/30"
     >
-      {/* Vote section - left column */}
       <button
         type="button"
         data-testid="vote-button"
@@ -108,50 +120,71 @@ export function PostCard({
             : `Vote for this post (${currentVoteCount} votes)`
         }
         aria-pressed={currentHasVoted}
-        onClick={(e) => {
-          if (!isAuthenticated) {
-            e.preventDefault()
-            e.stopPropagation()
-            openAuthPopover({ mode: 'login' })
-            return
-          }
-          handleVote(e)
-        }}
+        onClick={handleVoteClick}
         disabled={isPending}
-        className={`post-card__vote group flex flex-col items-center justify-center w-16 shrink-0 border-r border-[var(--post-card-border)]/30 transition-all duration-200 ${
+        className={cn(
+          'post-card__vote group flex flex-col items-center justify-center shrink-0 border-r !border-r-[rgba(0,0,0,0.05)] dark:!border-r-[rgba(255,255,255,0.06)] transition-all duration-200',
+          isCompact ? 'w-12' : 'w-16',
           currentHasVoted
             ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/8'
-            : 'text-muted-foreground hover:bg-muted/40'
-        } ${isPending ? 'opacity-70 cursor-wait' : ''}`}
+            : 'text-muted-foreground hover:bg-muted/40',
+          isPending && 'opacity-70 cursor-wait'
+        )}
       >
         <ChevronUpIcon
-          className={`h-5 w-5 transition-transform duration-200 ${
-            currentHasVoted ? 'fill-[var(--post-card-voted-color)]' : ''
-          } ${!isPending ? 'group-hover:-translate-y-0.5' : ''}`}
+          className={cn(
+            'transition-transform duration-200',
+            isCompact ? 'h-4 w-4' : 'h-5 w-5',
+            currentHasVoted && 'fill-[var(--post-card-voted-color)]',
+            !isPending && 'group-hover:-translate-y-0.5'
+          )}
         />
         <span
           data-testid="vote-count"
-          className={`text-sm font-bold tabular-nums mt-0.5 ${currentHasVoted ? '' : 'text-foreground'}`}
+          className={cn(
+            'font-semibold tabular-nums mt-0.5',
+            isCompact ? 'text-xs' : 'text-sm',
+            !currentHasVoted && 'text-foreground'
+          )}
         >
           {currentVoteCount}
         </span>
       </button>
 
       {/* Content section */}
-      <div className="post-card__content flex-1 min-w-0 px-4 py-3">
-        {/* Status badge - only render if status exists */}
-        {currentStatus && (
-          <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-2" />
+      <div
+        className={cn('post-card__content flex-1 min-w-0', isCompact ? 'px-3 py-2' : 'px-4 py-3')}
+      >
+        {/* Compact: Inline status and title */}
+        {isCompact ? (
+          <div className="flex items-center gap-2 mb-1">
+            {currentStatus && (
+              <StatusBadge
+                name={currentStatus.name}
+                color={currentStatus.color}
+                className="text-[10px]"
+              />
+            )}
+            <h3 className="font-medium text-sm text-foreground line-clamp-1 flex-1">{title}</h3>
+          </div>
+        ) : (
+          <>
+            {/* Status badge - only render if status exists */}
+            {currentStatus && (
+              <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-2" />
+            )}
+            {/* Title */}
+            <h3 className="font-medium text-[15px] text-foreground line-clamp-1 mb-1">{title}</h3>
+          </>
         )}
 
-        {/* Title */}
-        <h3 className="font-semibold text-[15px] text-foreground line-clamp-1 mb-1">{title}</h3>
+        {/* Description - hidden in compact mode */}
+        {!isCompact && (
+          <p className="text-sm text-muted-foreground/80 line-clamp-2 mb-2">{content}</p>
+        )}
 
-        {/* Description */}
-        <p className="text-sm text-muted-foreground/80 line-clamp-2 mb-2">{content}</p>
-
-        {/* Tags */}
-        {tags.length > 0 && (
+        {/* Tags - fewer in compact mode */}
+        {tags.length > 0 && !isCompact && (
           <div className="flex gap-1.5 mb-3 flex-wrap">
             {tags.slice(0, 3).map((tag) => (
               <Badge key={tag.id} variant="secondary" className="text-[11px] font-normal">
@@ -165,10 +198,15 @@ export function PostCard({
         )}
 
         {/* Footer */}
-        <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
-          <Avatar className="h-5 w-5">
+        <div
+          className={cn(
+            'flex items-center text-muted-foreground',
+            isCompact ? 'gap-2 text-[11px]' : 'gap-2.5 text-xs'
+          )}
+        >
+          <Avatar className={isCompact ? 'h-4 w-4' : 'h-5 w-5'}>
             {authorAvatarUrl && <AvatarImage src={authorAvatarUrl} alt={authorName || 'Author'} />}
-            <AvatarFallback className="text-[10px] bg-muted">
+            <AvatarFallback className={cn('bg-muted', isCompact ? 'text-[8px]' : 'text-[10px]')}>
               {getInitials(authorName)}
             </AvatarFallback>
           </Avatar>
@@ -177,11 +215,14 @@ export function PostCard({
           <TimeAgo date={createdAt} />
           <div className="flex-1" />
           <div className="flex items-center gap-1 text-muted-foreground/70">
-            <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
+            <ChatBubbleLeftIcon className={isCompact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
             <span>{commentCount}</span>
           </div>
           {boardName && (
-            <Badge variant="secondary" className="text-[11px] font-normal bg-muted/50">
+            <Badge
+              variant="secondary"
+              className={cn('font-normal bg-muted/50', isCompact ? 'text-[10px]' : 'text-[11px]')}
+            >
               {boardName}
             </Badge>
           )}

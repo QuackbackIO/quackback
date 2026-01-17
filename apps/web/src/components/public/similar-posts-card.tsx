@@ -1,13 +1,13 @@
 'use client'
 
-import { useRef, useState, useLayoutEffect } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronUpIcon, LightBulbIcon } from '@heroicons/react/24/solid'
 import { StatusBadge } from '@/components/ui/status-badge'
+import type { MatchStrength, SimilarPost } from '@/lib/hooks/use-similar-posts'
 import { usePostVote } from '@/lib/hooks/use-post-vote'
 import { cn } from '@/lib/utils'
-import type { SimilarPost, MatchStrength } from '@/lib/hooks/use-similar-posts'
 import type { PostId } from '@quackback/ids'
 
 const MATCH_STRENGTH_CONFIG: Record<MatchStrength, { label: string; textClass: string }> = {
@@ -46,7 +46,7 @@ function SimilarPostItem({ post }: SimilarPostItemProps): React.ReactElement {
         )}
       >
         <ChevronUpIcon className={cn('h-4 w-4', hasVoted && 'text-primary')} />
-        <span className="text-xs font-bold tabular-nums">{voteCount}</span>
+        <span className="text-xs font-semibold tabular-nums">{voteCount}</span>
       </button>
 
       <Link to={postUrl} target="_blank" className="flex-1 min-w-0 py-0.5 group">
@@ -80,10 +80,12 @@ interface SimilarPostsCardProps {
   className?: string
 }
 
-/**
- * Measures element height for smooth animations when content changes.
- */
-function useContentHeight(): { ref: React.RefObject<HTMLDivElement | null>; height: number } {
+interface ContentHeightResult {
+  ref: React.RefObject<HTMLDivElement | null>
+  height: number
+}
+
+function useContentHeight(): ContentHeightResult {
   const ref = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(0)
 
@@ -103,9 +105,10 @@ function useContentHeight(): { ref: React.RefObject<HTMLDivElement | null>; heig
   return { ref, height }
 }
 
+const MAX_SIMILAR_POSTS = 3
+
 /**
  * Displays similar posts in a compact card above the submit button.
- * Shows community requests that may address the same topic.
  */
 export function SimilarPostsCard({
   posts,
@@ -131,7 +134,7 @@ export function SimilarPostsCard({
               Similar requests from the community
             </p>
             <div className="space-y-1">
-              {posts.slice(0, 3).map((post) => (
+              {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
                 <SimilarPostItem key={post.id} post={post} />
               ))}
             </div>

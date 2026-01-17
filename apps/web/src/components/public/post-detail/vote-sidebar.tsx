@@ -1,15 +1,16 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { portalDetailQueries } from '@/lib/queries/portal-detail'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
-import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { Skeleton } from '@/components/ui/skeleton'
+import { portalDetailQueries } from '@/lib/queries/portal-detail'
 import type { PostId } from '@quackback/ids'
 
-export function VoteSidebarSkeleton() {
+const SIDEBAR_CLASS =
+  'flex flex-col items-center justify-start py-6 px-4 border-r !border-r-[rgba(0,0,0,0.05)] dark:!border-r-[rgba(255,255,255,0.06)] bg-muted/10'
+
+export function VoteSidebarSkeleton(): React.ReactElement {
   return (
-    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 bg-muted/10 gap-4">
+    <div className={SIDEBAR_CLASS}>
       <Skeleton className="h-16 w-12 rounded-xl" />
-      <Skeleton className="h-9 w-9 rounded-full" />
     </div>
   )
 }
@@ -19,26 +20,13 @@ interface VoteSidebarProps {
   voteCount: number
 }
 
-export function VoteSidebar({ postId, voteCount }: VoteSidebarProps) {
-  // useSuspenseQuery reads from cache if available (prefetched in loader), fetches if not
-  // Suspense boundary handles loading state, so no skeleton needed here
+export function VoteSidebar({ postId, voteCount }: VoteSidebarProps): React.ReactElement {
   const { data: sidebarData } = useSuspenseQuery(portalDetailQueries.voteSidebarData(postId))
-
   const isMember = sidebarData?.isMember ?? false
-  const subscriptionStatus = sidebarData?.subscriptionStatus ?? {
-    subscribed: false,
-    level: 'none' as const,
-    reason: null,
-  }
 
   return (
-    <div className="flex flex-col items-center justify-start py-6 px-4 border-r border-border/30 bg-muted/10 gap-4">
+    <div className={SIDEBAR_CLASS}>
       <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} />
-      <AuthSubscriptionBell
-        postId={postId}
-        initialStatus={subscriptionStatus}
-        disabled={!isMember}
-      />
     </div>
   )
 }

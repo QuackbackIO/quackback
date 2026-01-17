@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
@@ -6,17 +6,17 @@ import {
   FaceSmileIcon,
   MapPinIcon,
 } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { TimeAgo } from '@/components/ui/time-ago'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CommentForm, type CreateCommentMutation } from './comment-form'
-import { cn, getInitials } from '@/lib/utils'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/db-types'
 import { toggleReactionFn } from '@/lib/server-functions/comments'
-import type { PublicCommentView } from '@/lib/queries/portal-detail'
 import type { CommentReactionCount } from '@/lib/shared'
+import type { PublicCommentView } from '@/lib/queries/portal-detail'
+import { cn, getInitials } from '@/lib/utils'
+import { CommentForm, type CreateCommentMutation } from './comment-form'
 import type { PostId } from '@quackback/ids'
 
 interface CommentThreadProps {
@@ -40,41 +40,41 @@ export function CommentThread({
   onAuthRequired,
   createComment,
   pinnedCommentId,
-}: CommentThreadProps) {
+}: CommentThreadProps): React.ReactElement {
+  const sortedComments = [...comments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
+
   return (
     <div className="space-y-6">
-      {/* Add comment form or sign in prompt */}
       {allowCommenting ? (
         <CommentForm postId={postId} user={user} createComment={createComment} />
       ) : (
-        <div className="flex items-center justify-center py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-          <p className="text-sm text-muted-foreground mr-3">Sign in to comment</p>
+        <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+          <p className="text-sm text-muted-foreground">Sign in to comment</p>
           <Button variant="outline" size="sm" onClick={onAuthRequired}>
             Sign in
           </Button>
         </div>
       )}
 
-      {/* Comments list - sorted newest first */}
       {comments.length === 0 ? (
         <p className="text-muted-foreground text-center py-4">
           No comments yet. Be the first to share your thoughts!
         </p>
       ) : (
-        <div className="space-y-0">
-          {[...comments]
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .map((comment) => (
-              <CommentItem
-                key={comment.id}
-                postId={postId}
-                comment={comment}
-                allowCommenting={allowCommenting}
-                user={user}
-                createComment={createComment}
-                pinnedCommentId={pinnedCommentId}
-              />
-            ))}
+        <div className="space-y-4">
+          {sortedComments.map((comment) => (
+            <CommentItem
+              key={comment.id}
+              postId={postId}
+              comment={comment}
+              allowCommenting={allowCommenting}
+              user={user}
+              createComment={createComment}
+              pinnedCommentId={pinnedCommentId}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -91,6 +91,8 @@ interface CommentItemProps {
   pinnedCommentId?: string | null
 }
 
+const MAX_NESTING_DEPTH = 5
+
 function CommentItem({
   postId,
   comment,
@@ -99,21 +101,18 @@ function CommentItem({
   user,
   createComment,
   pinnedCommentId,
-}: CommentItemProps) {
+}: CommentItemProps): React.ReactElement {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
   const [isPending, setIsPending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
-  // Sync reactions from props when they change (e.g., on page refresh)
   useEffect(() => {
     setReactions(comment.reactions)
   }, [comment.reactions])
 
-  // Limit nesting depth for readability
-  const maxDepth = 5
-  const canNest = depth < maxDepth
+  const canNest = depth < MAX_NESTING_DEPTH
   const hasReplies = comment.replies.length > 0
   const isPinned = pinnedCommentId === comment.id
 
@@ -122,10 +121,7 @@ function CommentItem({
     setIsPending(true)
     try {
       const result = await toggleReactionFn({
-        data: {
-          commentId: comment.id,
-          emoji,
-        },
+        data: { commentId: comment.id, emoji },
       })
       setReactions(result.reactions)
     } catch (error) {
@@ -140,19 +136,22 @@ function CommentItem({
       id={`comment-${comment.id}`}
       className="group/thread scroll-mt-20 transition-colors duration-500"
     >
-      {/* Thread container with Reddit-style indentation */}
-      <div className={cn('relative', depth > 0 && 'ml-4 pl-4')}>
+      {/* Thread container with visual thread line */}
+      <div
+        className={cn(
+          'relative',
+          depth > 0 &&
+            'ml-4 pl-4 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border/50'
+        )}
+      >
         {/* Comment content */}
         <div className="py-2">
-          {/* Comment header with avatar */}
           <div className="flex items-center gap-2">
-            <Avatar className={cn('h-8 w-8 shrink-0')}>
+            <Avatar className="h-8 w-8 shrink-0">
               {comment.avatarUrl && (
                 <AvatarImage src={comment.avatarUrl} alt={comment.authorName || 'Comment author'} />
               )}
-              <AvatarFallback className={cn('text-xs')}>
-                {getInitials(comment.authorName)}
-              </AvatarFallback>
+              <AvatarFallback className="text-xs">{getInitials(comment.authorName)}</AvatarFallback>
             </Avatar>
             <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
             {comment.isTeamMember && (
@@ -204,8 +203,8 @@ function CommentItem({
                 onClick={() => handleReaction(reaction.emoji)}
                 disabled={isPending}
                 className={cn(
-                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors',
-                  'border hover:bg-muted',
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all duration-150',
+                  'border hover:bg-muted hover:scale-105',
                   reaction.hasReacted
                     ? 'bg-primary/10 border-primary/30 text-primary'
                     : 'bg-muted/50 border-transparent text-muted-foreground'
@@ -261,37 +260,53 @@ function CommentItem({
           </div>
 
           {/* Reply form */}
-          {showReplyForm && (
-            <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-              <CommentForm
-                postId={postId}
-                parentId={comment.id}
-                onSuccess={() => setShowReplyForm(false)}
-                onCancel={() => setShowReplyForm(false)}
-                user={user}
-                createComment={createComment}
-              />
+          <div
+            className="grid transition-all duration-200 ease-out"
+            style={{
+              gridTemplateRows: showReplyForm ? '1fr' : '0fr',
+              opacity: showReplyForm ? 1 : 0,
+            }}
+          >
+            <div className="overflow-hidden">
+              <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+                <CommentForm
+                  postId={postId}
+                  parentId={comment.id}
+                  onSuccess={() => setShowReplyForm(false)}
+                  onCancel={() => setShowReplyForm(false)}
+                  user={user}
+                  createComment={createComment}
+                />
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Nested replies */}
-        {!isCollapsed && hasReplies && (
-          <div className="space-y-0">
-            {comment.replies.map((reply) => (
-              <CommentItem
-                key={reply.id}
-                postId={postId}
-                comment={reply}
-                allowCommenting={allowCommenting}
-                depth={depth + 1}
-                user={user}
-                createComment={createComment}
-                pinnedCommentId={pinnedCommentId}
-              />
-            ))}
+        <div
+          className="grid transition-all duration-200 ease-out"
+          style={{
+            gridTemplateRows: !isCollapsed && hasReplies ? '1fr' : '0fr',
+            opacity: !isCollapsed && hasReplies ? 1 : 0,
+          }}
+        >
+          <div className="overflow-hidden">
+            <div className="space-y-3">
+              {comment.replies.map((reply) => (
+                <CommentItem
+                  key={reply.id}
+                  postId={postId}
+                  comment={reply}
+                  allowCommenting={allowCommenting}
+                  depth={depth + 1}
+                  user={user}
+                  createComment={createComment}
+                  pinnedCommentId={pinnedCommentId}
+                />
+              ))}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

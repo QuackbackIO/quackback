@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { MapIcon } from '@heroicons/react/24/solid'
-import { RoadmapColumn } from './roadmap-column'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { usePublicRoadmaps, type RoadmapView } from '@/lib/hooks/use-roadmaps-query'
 import type { PostStatusEntity } from '@/lib/db-types'
+import { usePublicRoadmaps, type RoadmapView } from '@/lib/hooks/use-roadmaps-query'
+import { RoadmapColumn } from './roadmap-column'
+import { usePublicRoadmapSelection } from './use-public-roadmap-selection'
 
 interface RoadmapBoardProps {
   statuses: PostStatusEntity[]
@@ -17,23 +18,19 @@ export function RoadmapBoard({
   statuses,
   initialRoadmaps,
   initialSelectedRoadmapId,
-}: RoadmapBoardProps) {
-  const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(
-    initialSelectedRoadmapId ?? null
-  )
-
-  const { data: roadmaps } = usePublicRoadmaps({
-    enabled: !initialRoadmaps,
-  })
+}: RoadmapBoardProps): React.ReactElement {
+  const { selectedRoadmapId, setSelectedRoadmap } = usePublicRoadmapSelection()
+  const { data: roadmaps } = usePublicRoadmaps({ enabled: !initialRoadmaps })
 
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []
-  const selectedRoadmap = availableRoadmaps.find((r) => r.id === selectedRoadmapId)
+  const effectiveSelectedId = selectedRoadmapId ?? initialSelectedRoadmapId
+  const selectedRoadmap = availableRoadmaps.find((r) => r.id === effectiveSelectedId)
 
   useEffect(() => {
-    if (availableRoadmaps.length > 0 && selectedRoadmapId === null) {
-      setSelectedRoadmapId(availableRoadmaps[0].id)
+    if (availableRoadmaps.length > 0 && !selectedRoadmapId) {
+      setSelectedRoadmap(availableRoadmaps[0].id)
     }
-  }, [availableRoadmaps, selectedRoadmapId])
+  }, [availableRoadmaps, selectedRoadmapId, setSelectedRoadmap])
 
   if (availableRoadmaps.length === 0) {
     return (
@@ -53,7 +50,7 @@ export function RoadmapBoard({
     <div className="space-y-4">
       {availableRoadmaps.length > 1 && (
         <div className="space-y-2">
-          <Tabs value={selectedRoadmapId ?? undefined} onValueChange={setSelectedRoadmapId}>
+          <Tabs value={effectiveSelectedId ?? undefined} onValueChange={setSelectedRoadmap}>
             <TabsList>
               {availableRoadmaps.map((roadmap) => (
                 <TabsTrigger key={roadmap.id} value={roadmap.id}>
@@ -72,7 +69,7 @@ export function RoadmapBoard({
         </div>
       )}
 
-      {selectedRoadmapId && (
+      {effectiveSelectedId && (
         <ScrollArea
           className="w-full"
           style={{ height: 'calc(100dvh - 3.5rem - 2rem - 4.5rem - 3rem)' }}
@@ -81,7 +78,7 @@ export function RoadmapBoard({
             {statuses.map((status) => (
               <RoadmapColumn
                 key={status.id}
-                roadmapId={selectedRoadmapId as `roadmap_${string}`}
+                roadmapId={effectiveSelectedId as `roadmap_${string}`}
                 statusId={status.id}
                 title={status.name}
                 color={status.color}

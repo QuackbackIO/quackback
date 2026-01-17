@@ -1,5 +1,5 @@
-import { VoteButton } from './vote-button'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import { VoteButton } from './vote-button'
 import type { PostId } from '@quackback/ids'
 
 interface AuthVoteButtonProps {
@@ -7,15 +7,22 @@ interface AuthVoteButtonProps {
   voteCount: number
   /** Whether voting is disabled (user not authenticated) */
   disabled?: boolean
+  /** Compact horizontal variant for inline use */
+  compact?: boolean
 }
 
 /**
  * VoteButton wrapper that shows auth dialog when unauthenticated user tries to vote.
  */
-export function AuthVoteButton({ postId, voteCount, disabled = false }: AuthVoteButtonProps) {
+export function AuthVoteButton({
+  postId,
+  voteCount,
+  disabled = false,
+  compact = false,
+}: AuthVoteButtonProps): React.ReactElement {
   const { openAuthPopover } = useAuthPopover()
 
-  const handleAuthRequired = () => {
+  function handleAuthRequired(): void {
     openAuthPopover({ mode: 'login' })
   }
 
@@ -25,6 +32,7 @@ export function AuthVoteButton({ postId, voteCount, disabled = false }: AuthVote
       voteCount={voteCount}
       disabled={disabled}
       onAuthRequired={disabled ? handleAuthRequired : undefined}
+      compact={compact}
     />
   )
 }
