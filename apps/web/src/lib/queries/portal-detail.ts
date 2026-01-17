@@ -53,6 +53,7 @@ export interface PublicPostDetailView {
   createdAt: Date | string
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>
+  roadmaps: Array<{ id: string; name: string; slug: string }>
   comments: PublicCommentView[]
   officialResponse: {
     content: string

@@ -7,23 +7,10 @@
 
 import { drizzle } from 'drizzle-orm/neon-http'
 import { neon } from '@neondatabase/serverless'
-import { pgTable, text, boolean } from 'drizzle-orm/pg-core'
 import { eq, and } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { getRootUrl } from './utils'
-
-// Catalog schema (simplified - only columns needed for URL lookup)
-const workspace = pgTable('workspace', {
-  id: text('id').primaryKey(),
-  slug: text('slug').notNull(),
-})
-
-const workspaceDomain = pgTable('workspace_domain', {
-  id: text('id').primaryKey(),
-  workspaceId: text('workspace_id').notNull(),
-  domain: text('domain').notNull(),
-  isPrimary: boolean('is_primary').notNull(),
-})
+import { workspace, workspaceDomain } from '@/lib/catalog'
 
 let catalogDb: ReturnType<typeof drizzle> | null = null
 
@@ -111,8 +98,9 @@ export async function resolvePortalUrl(slug: string): Promise<string> {
       .where(and(eq(workspace.slug, slug), eq(workspaceDomain.isPrimary, true)))
       .limit(1)
 
-    if (result.length > 0 && result[0].domain) {
-      return `https://${result[0].domain}`
+    const primaryDomain = result[0]?.domain
+    if (primaryDomain) {
+      return `https://${primaryDomain}`
     }
 
     // Fallback to subdomain based on slug

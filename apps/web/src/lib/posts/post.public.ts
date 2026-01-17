@@ -26,6 +26,8 @@ import {
   commentReactions,
   votes,
   postStatuses,
+  postRoadmaps,
+  roadmaps,
   member as memberTable,
   user as userTable,
 } from '@/lib/db'
@@ -39,6 +41,37 @@ import type {
   PublicComment,
   PinnedComment,
 } from './post.types'
+
+/**
+ * Compute avatar URL from user image data.
+ * Blob data takes precedence over OAuth image URL.
+ */
+function computeAvatarUrl(data: {
+  imageBlob: Buffer | null
+  imageType: string | null
+  image: string | null
+}): string | null {
+  if (data.imageBlob && data.imageType) {
+    const base64 = Buffer.from(data.imageBlob).toString('base64')
+    return `data:${data.imageType};base64,${base64}`
+  }
+  return data.image ?? null
+}
+
+/**
+ * Determine sort order for post queries.
+ */
+function getPostSortOrder(sort: 'top' | 'new' | 'trending') {
+  switch (sort) {
+    case 'new':
+      return desc(posts.createdAt)
+    case 'trending':
+      return sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
+    case 'top':
+    default:
+      return desc(posts.voteCount)
+  }
+}
 
 /**
  * List posts for public portal (no authentication required)
@@ -112,13 +145,7 @@ export async function listPublicPosts(params: {
 
   const total = countResult?.count || 0
 
-  // Determine sort order
-  const orderBy =
-    sort === 'new'
-      ? desc(posts.createdAt)
-      : sort === 'trending'
-        ? sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
-        : desc(posts.voteCount) // 'top' is default
+  const orderBy = getPostSortOrder(sort)
 
   // Get posts with board info
   // Use denormalized commentCount field (maintained by database trigger)
@@ -232,13 +259,7 @@ export async function getPublicPostDetail(
       .limit(1)
 
     if (authorData.length > 0) {
-      const author = authorData[0]
-      if (author.imageBlob && author.imageType) {
-        const base64 = Buffer.from(author.imageBlob).toString('base64')
-        authorAvatarUrl = `data:${author.imageType};base64,${base64}`
-      } else if (author.image) {
-        authorAvatarUrl = author.image
-      }
+      authorAvatarUrl = computeAvatarUrl(authorData[0])
     }
   }
 
@@ -252,6 +273,17 @@ export async function getPublicPostDetail(
     .from(postTags)
     .innerJoin(tags, eq(tags.id, postTags.tagId))
     .where(eq(postTags.postId, postId))
+
+  // Get roadmaps this post is in (only public roadmaps)
+  const roadmapsResult = await db
+    .select({
+      id: roadmaps.id,
+      name: roadmaps.name,
+      slug: roadmaps.slug,
+    })
+    .from(postRoadmaps)
+    .innerJoin(roadmaps, eq(roadmaps.id, postRoadmaps.roadmapId))
+    .where(and(eq(postRoadmaps.postId, postId), eq(roadmaps.isPublic, true)))
 
   // Get comments with reactions and avatar data
   // Use raw query to LEFT JOIN member and user tables for avatar URLs
@@ -296,32 +328,21 @@ export async function getPublicPostDetail(
     reactionsByComment.set(reaction.commentId, existing)
   }
 
-  // Build comments with reactions and compute avatar URLs
-  const commentsResult = commentsWithAvatars.map((comment) => {
-    // Compute avatar URL: blob takes precedence, then OAuth image, then null
-    let avatarUrl: string | null = null
-    if (comment.imageBlob && comment.imageType) {
-      const base64 = Buffer.from(comment.imageBlob).toString('base64')
-      avatarUrl = `data:${comment.imageType};base64,${base64}`
-    } else if (comment.image) {
-      avatarUrl = comment.image
-    }
-
-    return {
-      id: comment.id,
-      postId: comment.postId,
-      parentId: comment.parentId,
-      memberId: comment.memberId,
-      authorId: comment.authorId,
-      authorName: comment.authorName,
-      authorEmail: comment.authorEmail,
-      content: comment.content,
-      isTeamMember: comment.isTeamMember,
-      createdAt: comment.createdAt,
-      avatarUrl,
-      reactions: reactionsByComment.get(comment.id) || [],
-    }
-  })
+  // Build comments with reactions and computed avatar URLs
+  const commentsResult = commentsWithAvatars.map((comment) => ({
+    id: comment.id,
+    postId: comment.postId,
+    parentId: comment.parentId,
+    memberId: comment.memberId,
+    authorId: comment.authorId,
+    authorName: comment.authorName,
+    authorEmail: comment.authorEmail,
+    content: comment.content,
+    isTeamMember: comment.isTeamMember,
+    createdAt: comment.createdAt,
+    avatarUrl: computeAvatarUrl(comment),
+    reactions: reactionsByComment.get(comment.id) || [],
+  }))
 
   // Build nested comment tree
   const commentTree = buildCommentTree(commentsResult, userIdentifier)
@@ -345,24 +366,14 @@ export async function getPublicPostDetail(
   // Build pinned comment data if exists
   let pinnedComment: PinnedComment | null = null
   if (postResult.pinnedCommentId) {
-    // Find the pinned comment in the comments list
     const pinnedCommentData = commentsWithAvatars.find((c) => c.id === postResult.pinnedCommentId)
     if (pinnedCommentData && !pinnedCommentData.deletedAt) {
-      // Compute avatar URL for pinned comment author
-      let pinnedAvatarUrl: string | null = null
-      if (pinnedCommentData.imageBlob && pinnedCommentData.imageType) {
-        const base64 = Buffer.from(pinnedCommentData.imageBlob).toString('base64')
-        pinnedAvatarUrl = `data:${pinnedCommentData.imageType};base64,${base64}`
-      } else if (pinnedCommentData.image) {
-        pinnedAvatarUrl = pinnedCommentData.image
-      }
-
       pinnedComment = {
         id: pinnedCommentData.id as CommentId,
         content: pinnedCommentData.content,
         authorName: pinnedCommentData.authorName,
         memberId: pinnedCommentData.memberId,
-        avatarUrl: pinnedAvatarUrl,
+        avatarUrl: computeAvatarUrl(pinnedCommentData),
         createdAt: pinnedCommentData.createdAt,
         isTeamMember: pinnedCommentData.isTeamMember,
       }
@@ -386,6 +397,7 @@ export async function getPublicPostDetail(
       slug: postResult.board.slug,
     },
     tags: tagsResult,
+    roadmaps: roadmapsResult,
     comments: rootComments,
     officialResponse: postResult.officialResponse
       ? {

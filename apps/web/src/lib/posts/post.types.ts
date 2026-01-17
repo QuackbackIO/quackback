@@ -231,6 +231,7 @@ export interface PublicPostDetail {
   createdAt: Date
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>
+  roadmaps: Array<{ id: string; name: string; slug: string }>
   comments: PublicComment[]
   /** Legacy official response (text stored directly on post) */
   officialResponse: OfficialResponse | null
