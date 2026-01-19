@@ -13,8 +13,10 @@ import {
   CreditCardIcon,
   ChevronUpIcon,
   ChevronDownIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface NavItem {
   label: string
@@ -95,46 +97,53 @@ interface SettingsNavProps {
 export function SettingsNav({ isCloud, hasEnterprise }: SettingsNavProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
-  // Filter sections based on edition and tier
+  // Filter sections based on edition (enterprise items always shown with upgrade indicator)
   const filteredSections = navSections.map((section) => ({
     ...section,
-    items: section.items.filter((item) => {
-      // Cloud-only items hidden for self-hosted
-      if (item.cloudOnly && !isCloud) return false
-      // Self-hosted-only items hidden for cloud
-      if (item.selfHostedOnly && isCloud) return false
-      // Enterprise-only items hidden without enterprise access
-      if (item.enterpriseOnly && !hasEnterprise) return false
-      return true
-    }),
+    items: section.items.filter(
+      (item) => !(item.cloudOnly && !isCloud) && !(item.selfHostedOnly && isCloud)
+    ),
   }))
 
   return (
-    <div className="space-y-1">
-      {filteredSections.map((section) => (
-        <NavSection key={section.label} label={section.label}>
-          {section.items.map((item) => {
-            const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
-            const Icon = item.icon
+    <TooltipProvider>
+      <div className="space-y-1">
+        {filteredSections.map((section) => (
+          <NavSection key={section.label} label={section.label}>
+            {section.items.map((item) => {
+              const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
+              const Icon = item.icon
+              const isGated = item.enterpriseOnly && !hasEnterprise
 
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                  isActive
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                )}
-              >
-                <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive && 'text-primary')} />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            )
-          })}
-        </NavSection>
-      ))}
-    </div>
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                    isActive
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  )}
+                >
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive && 'text-primary')} />
+                  <span className="truncate flex-1">{item.label}</span>
+                  {isGated && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SparklesIcon className="h-3 w-3 text-amber-500 shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Enterprise feature</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </Link>
+              )
+            })}
+          </NavSection>
+        ))}
+      </div>
+    </TooltipProvider>
   )
 }

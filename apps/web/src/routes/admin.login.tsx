@@ -1,18 +1,21 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { settingsQueries } from '@/lib/queries/settings'
-import { DEFAULT_AUTH_CONFIG } from '@/lib/settings'
 import { OTPAuthForm } from '@/components/auth/otp-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
+import { settingsQueries } from '@/lib/queries/settings'
+import { useSuspenseQuery } from '@tanstack/react-query'
 
-// Error messages for trust-login failures
+// Error messages for login failures
 const errorMessages: Record<string, string> = {
   invalid_token: 'Your login link is invalid or has been tampered with. Please try again.',
   token_expired: 'Your login link has expired. Please request a new one.',
   trust_login_not_configured: 'Single sign-on is not configured for this workspace.',
   trust_login_not_supported: 'Single sign-on is not supported in this mode.',
+  not_team_member:
+    "This account doesn't have team access. Team membership is by invitation only. Please contact your administrator.",
+  sso_required: 'Your organization requires SSO. Please sign in with your identity provider.',
+  oauth_method_not_allowed: 'This sign-in method is not enabled for team members.',
 }
 
 const searchSchema = z.object({
@@ -38,6 +41,9 @@ export const Route = createFileRoute('/admin/login')({
 
     const { callbackUrl, error } = deps
 
+    // Pre-fetch public security config for team login options
+    await queryClient.ensureQueryData(settingsQueries.publicSecurityConfig())
+
     // Get error message if present
     const errorMessage = error && errorMessages[error]
 
@@ -46,9 +52,6 @@ export const Route = createFileRoute('/admin/login')({
       callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
         ? callbackUrl
         : '/admin'
-
-    // Pre-fetch auth config using React Query
-    await queryClient.ensureQueryData(settingsQueries.publicAuthConfig())
 
     return {
       settings,
@@ -61,13 +64,18 @@ export const Route = createFileRoute('/admin/login')({
 
 function AdminLoginPage() {
   const { settings, errorMessage, safeCallbackUrl } = Route.useLoaderData()
+  const securityConfig = useSuspenseQuery(settingsQueries.publicSecurityConfig()).data
 
-  // Read pre-fetched data from React Query cache
-  const { data } = useSuspenseQuery(settingsQueries.publicAuthConfig())
-  const authConfig = {
-    found: Boolean(data),
-    openSignup: data?.openSignup ?? DEFAULT_AUTH_CONFIG.openSignup,
-  }
+  // Determine what auth methods to show based on security config
+  const ssoRequired = securityConfig.sso.enabled && securityConfig.sso.enforcement === 'required'
+  const showGitHub = !ssoRequired && securityConfig.teamSocialLogin.github
+  const showGoogle = !ssoRequired && securityConfig.teamSocialLogin.google
+  const showSSO = securityConfig.sso.enabled
+
+  // Build OIDC config for OTPAuthForm if SSO is enabled
+  const oidcConfig = showSSO
+    ? { enabled: true, displayName: securityConfig.sso.displayName || 'SSO' }
+    : null
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -83,12 +91,11 @@ function AdminLoginPage() {
           </Alert>
         )}
         <OTPAuthForm
-          mode="login"
-          authConfig={authConfig}
           callbackUrl={safeCallbackUrl}
-          context="team"
           orgSlug={settings.slug}
-          showOAuth
+          oauthConfig={{ github: showGitHub, google: showGoogle }}
+          oidcConfig={oidcConfig}
+          oidcType="team"
         />
       </div>
     </div>

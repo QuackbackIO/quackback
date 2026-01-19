@@ -34,6 +34,7 @@ function SignupPage() {
   // Read pre-fetched data from React Query cache
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
   const oauthConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
+  const oidcConfig = portalConfigQuery.data.oidc
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -43,11 +44,10 @@ function SignupPage() {
           <p className="mt-2 text-muted-foreground">Sign up to vote and comment</p>
         </div>
         <OTPAuthForm
-          mode="signup"
           callbackUrl="/"
-          context="portal"
           orgSlug={settings.slug}
           oauthConfig={oauthConfig}
+          oidcConfig={oidcConfig}
         />
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}

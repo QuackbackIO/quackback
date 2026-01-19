@@ -14,8 +14,11 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
 
     const { queryClient } = context
 
-    // Pre-fetch portal config using React Query
-    await queryClient.ensureQueryData(settingsQueries.portalConfig())
+    // Pre-fetch portal config and OIDC config using React Query
+    await Promise.all([
+      queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      queryClient.ensureQueryData(settingsQueries.oidcConfig()),
+    ])
 
     return {}
   },
@@ -25,6 +28,7 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
 function PortalAuthPage() {
   // Read pre-fetched data from React Query cache
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const oidcConfigQuery = useSuspenseQuery(settingsQueries.oidcConfig())
 
   return (
     <div className="space-y-6">
@@ -46,7 +50,10 @@ function PortalAuthPage() {
         title="Sign-in Methods"
         description="Choose which authentication methods are available to portal users"
       >
-        <PortalAuthSettings initialConfig={{ oauth: portalConfigQuery.data.oauth }} />
+        <PortalAuthSettings
+          initialConfig={{ oauth: portalConfigQuery.data.oauth }}
+          oidcConfig={oidcConfigQuery.data}
+        />
       </SettingsCard>
     </div>
   )

@@ -45,6 +45,7 @@ export const Route = createFileRoute('/_portal')({
     const authConfig = {
       found: true,
       oauth: portalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
+      oidc: portalConfig?.oidc ?? null,
     }
 
     return {
@@ -76,22 +77,22 @@ function PortalLayout() {
   const { org, userRole, brandingData, themeStyles, googleFontsUrl, initialUserData, authConfig } =
     Route.useLoaderData()
 
-  const content = (
-    <div className="min-h-screen bg-background flex flex-col">
-      {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
-      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-      <PortalHeader
-        orgName={org.name}
-        orgLogo={brandingData?.logoUrl ?? null}
-        userRole={userRole}
-        initialUserData={initialUserData}
-      />
-      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
-        <Outlet />
-      </main>
-      <AuthDialog authConfig={authConfig} orgSlug={org.slug} />
-    </div>
+  return (
+    <AuthPopoverProvider>
+      <div className="min-h-screen bg-background flex flex-col">
+        {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
+        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+        <PortalHeader
+          orgName={org.name}
+          orgLogo={brandingData?.logoUrl ?? null}
+          userRole={userRole}
+          initialUserData={initialUserData}
+        />
+        <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
+          <Outlet />
+        </main>
+        <AuthDialog authConfig={authConfig} orgSlug={org.slug} />
+      </div>
+    </AuthPopoverProvider>
   )
-
-  return <AuthPopoverProvider>{content}</AuthPopoverProvider>
 }
