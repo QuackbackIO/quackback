@@ -10,11 +10,7 @@ import {
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/auth/client'
-
-interface OrgAuthConfig {
-  found: boolean
-  openSignup?: boolean
-}
+import type { PortalOAuthProviders, PublicOIDCConfig } from '@/lib/settings'
 
 interface InvitationInfo {
   id: string
@@ -25,24 +21,19 @@ interface InvitationInfo {
   inviterName: string | null
 }
 
-interface PortalOAuthConfig {
-  google: boolean
-  github: boolean
-}
-
 interface OTPAuthFormProps {
-  mode: 'login' | 'signup'
-  authConfig?: OrgAuthConfig | null
   invitationId?: string | null
   callbackUrl?: string
-  /** 'team' for team members with admin access, 'portal' for portal users */
-  context?: 'team' | 'portal'
   /** Organization slug for OAuth flows */
   orgSlug?: string
   /** Whether to show OAuth buttons (GitHub, Google) */
   showOAuth?: boolean
   /** OAuth provider configuration (which providers are enabled) */
-  oauthConfig?: PortalOAuthConfig
+  oauthConfig?: PortalOAuthProviders
+  /** OIDC provider configuration (optional custom SSO) */
+  oidcConfig?: PublicOIDCConfig | null
+  /** OIDC type: 'portal' for portal users, 'team' for team members (default: 'portal') */
+  oidcType?: 'portal' | 'team'
 }
 
 type Step = 'email' | 'code'
@@ -58,14 +49,13 @@ type Step = 'email' | 'code'
  * - Invitation acceptance happens after authentication
  */
 export function OTPAuthForm({
-  mode,
-  authConfig,
   invitationId,
   callbackUrl = '/',
-  context = 'portal',
   orgSlug,
   showOAuth = false,
   oauthConfig,
+  oidcConfig,
+  oidcType = 'portal',
 }: OTPAuthFormProps) {
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
@@ -217,25 +207,6 @@ export function OTPAuthForm({
     )
   }
 
-  // Signup not enabled (for team context without invitation)
-  if (
-    mode === 'signup' &&
-    context === 'team' &&
-    authConfig &&
-    !authConfig.openSignup &&
-    !invitation
-  ) {
-    return (
-      <Alert>
-        <InformationCircleIcon className="h-4 w-4" />
-        <AlertDescription>
-          Signup is not enabled for this organization. Please contact your administrator for an
-          invitation.
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Invitation Banner */}
@@ -255,18 +226,19 @@ export function OTPAuthForm({
         </div>
       )}
 
-      {/* OAuth Providers (GitHub, Google) - show on initial email step for non-invitation flow */}
+      {/* OAuth Providers (GitHub, Google, OIDC) - show on initial email step for non-invitation flow */}
       {orgSlug &&
         step === 'email' &&
         !invitation &&
-        (oauthConfig?.github || oauthConfig?.google || showOAuth) && (
+        (oauthConfig?.github || oauthConfig?.google || oidcConfig?.enabled || showOAuth) && (
           <>
             <OAuthButtons
               orgSlug={orgSlug}
               callbackUrl={callbackUrl}
-              context={context}
               showGitHub={oauthConfig?.github ?? showOAuth}
               showGoogle={oauthConfig?.google ?? showOAuth}
+              oidcConfig={oidcConfig}
+              oidcType={oidcType}
             />
             <div className="relative">
               <div className="absolute inset-0 flex items-center">

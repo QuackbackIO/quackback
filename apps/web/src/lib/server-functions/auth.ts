@@ -40,18 +40,15 @@ export interface Session {
  */
 export const getSession = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Session | null> => {
-    console.log(`[fn:auth] getSession`)
     try {
       const session = await auth.api.getSession({
         headers: getRequestHeaders(),
       })
 
       if (!session?.user) {
-        console.log(`[fn:auth] getSession: authenticated=false`)
         return null
       }
 
-      console.log(`[fn:auth] getSession: authenticated=true, userId=${session.user.id}`)
       // Serialize dates for client transport
       return {
         session: {

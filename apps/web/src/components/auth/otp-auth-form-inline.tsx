@@ -7,9 +7,12 @@ import {
   InformationCircleIcon,
   EnvelopeIcon,
   ArrowLeftIcon,
+  KeyIcon,
 } from '@heroicons/react/24/solid'
+import { GitHubIcon, GoogleIcon, MicrosoftIcon } from '@/components/icons/social-icons'
 import { openAuthPopup, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/auth/client'
+import type { PublicOIDCConfig } from '@/lib/settings'
 
 interface OrgAuthConfig {
   found: boolean
@@ -18,6 +21,7 @@ interface OrgAuthConfig {
     github: boolean
     microsoft?: boolean
   }
+  oidc?: PublicOIDCConfig | null
   openSignup?: boolean
 }
 
@@ -40,6 +44,38 @@ interface OTPAuthFormInlineProps {
 }
 
 type Step = 'email' | 'code'
+
+interface OAuthButtonProps {
+  provider: string
+  icon: React.ReactNode
+  label: string
+  mode: 'login' | 'signup'
+  loading: boolean
+  disabled: boolean
+  onClick: () => void
+}
+
+function OAuthButton({
+  icon,
+  label,
+  mode,
+  loading,
+  disabled,
+  onClick,
+}: OAuthButtonProps): React.ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={onClick}
+      className="w-full"
+      disabled={disabled}
+    >
+      {loading ? <ArrowPathIcon className="h-5 w-5 animate-spin" /> : icon}
+      {mode === 'login' ? 'Sign in' : 'Sign up'} with {label}
+    </Button>
+  )
+}
 
 /**
  * Inline OTP Auth Form for use in dialogs/popovers
@@ -64,7 +100,7 @@ export function OTPAuthFormInline({
   const [error, setError] = useState('')
   // Track which specific action is loading (null = not loading)
   const [loadingAction, setLoadingAction] = useState<
-    'email' | 'code' | 'google' | 'github' | 'microsoft' | null
+    'email' | 'code' | 'google' | 'github' | 'microsoft' | 'oidc' | null
   >(null)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
@@ -211,45 +247,83 @@ export function OTPAuthFormInline({
   }
 
   /**
-   * Open OAuth in popup window
+   * Initiate OAuth login
+   *
+   * All providers use popup windows for authentication:
+   * - GitHub/Google: Use Better Auth's signIn.social() with disableRedirect
+   * - OIDC: Use custom OAuth route for tenant-configured providers
    */
-  const initiateOAuthPopup = (provider: 'google' | 'github' | 'microsoft') => {
+  const initiateOAuth = async (provider: 'google' | 'github' | 'microsoft' | 'oidc') => {
+    setError('')
+
+    // If popup already open, just focus it
     if (hasPopup()) {
       focusPopup()
       return
     }
 
-    const returnDomain = window.location.host
-    const params = new URLSearchParams({
-      workspace: orgSlug,
-      returnDomain,
-      context: 'portal',
-      callbackUrl: '/',
-      popup: 'true',
-    })
-
-    // Use relative URL - OAuth route is on same origin
-    const oauthUrl = `/api/auth/oauth/${provider}?${params}`
-
-    setError('')
     setLoadingAction(provider)
     setPopupBlocked(false)
 
-    const popup = openAuthPopup(oauthUrl)
-    if (!popup) {
-      setPopupBlocked(true)
-      setLoadingAction(null)
+    // OIDC uses custom route for tenant-specific configuration
+    if (provider === 'oidc') {
+      const returnDomain = window.location.host
+      const params = new URLSearchParams({
+        workspace: orgSlug,
+        returnDomain,
+        callbackUrl: '/auth/auth-complete',
+        popup: 'true',
+        type: 'portal',
+      })
+
+      const oauthUrl = `/api/auth/oauth/oidc?${params}`
+      const popup = openAuthPopup(oauthUrl)
+      if (!popup) {
+        setPopupBlocked(true)
+        setLoadingAction(null)
+        return
+      }
+      trackPopup(popup)
       return
     }
 
-    trackPopup(popup)
+    // GitHub and Google use Better Auth's socialProviders with popup
+    // Get the OAuth URL without redirecting, then open in popup
+    try {
+      const result = await authClient.signIn.social({
+        provider,
+        callbackURL: '/auth/auth-complete',
+        disableRedirect: true,
+      })
+
+      if (result.error || !result.data?.url) {
+        console.error('[oauth] Failed to get OAuth URL:', result.error)
+        setError('Failed to initiate sign in')
+        setLoadingAction(null)
+        return
+      }
+
+      const popup = openAuthPopup(result.data.url)
+      if (!popup) {
+        setPopupBlocked(true)
+        setLoadingAction(null)
+        return
+      }
+      trackPopup(popup)
+    } catch (error) {
+      console.error('[oauth] Error initiating OAuth:', error)
+      setError('Failed to initiate sign in')
+      setLoadingAction(null)
+    }
   }
 
   // Determine which OAuth methods to show
-  const showGoogle = authConfig?.oauth?.google ?? true
-  const showGithub = authConfig?.oauth?.github ?? true
+  const showGoogle = authConfig?.oauth?.google ?? false
+  const showGithub = authConfig?.oauth?.github ?? false
   const showMicrosoft = authConfig?.oauth?.microsoft ?? false
-  const showOAuth = showGoogle || showGithub || showMicrosoft
+  const showOidc = authConfig?.oidc?.enabled === true
+  const oidcDisplayName = authConfig?.oidc?.displayName || 'SSO'
+  const showOAuth = showGoogle || showGithub || showMicrosoft || showOidc
 
   // Loading invitation
   if (loadingInvitation) {
@@ -310,77 +384,49 @@ export function OTPAuthFormInline({
       {showOAuth && step === 'email' && !invitation && (
         <>
           <div className="space-y-3">
-            {showGoogle && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => initiateOAuthPopup('google')}
-                className="w-full"
+            {showOidc && (
+              <OAuthButton
+                provider="oidc"
+                icon={<KeyIcon className="h-5 w-5" />}
+                label={oidcDisplayName}
+                mode={mode}
+                loading={loadingAction === 'oidc'}
                 disabled={loadingAction !== null}
-              >
-                {loadingAction === 'google' ? (
-                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                ) : (
-                  <svg className="h-5 w-5" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                )}
-                {mode === 'login' ? 'Sign in' : 'Sign up'} with Google
-              </Button>
+                onClick={() => initiateOAuth('oidc')}
+              />
+            )}
+            {showGoogle && (
+              <OAuthButton
+                provider="google"
+                icon={<GoogleIcon className="h-5 w-5" />}
+                label="Google"
+                mode={mode}
+                loading={loadingAction === 'google'}
+                disabled={loadingAction !== null}
+                onClick={() => initiateOAuth('google')}
+              />
             )}
             {showMicrosoft && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => initiateOAuthPopup('microsoft')}
-                className="w-full"
+              <OAuthButton
+                provider="microsoft"
+                icon={<MicrosoftIcon className="h-5 w-5" />}
+                label="Microsoft"
+                mode={mode}
+                loading={loadingAction === 'microsoft'}
                 disabled={loadingAction !== null}
-              >
-                {loadingAction === 'microsoft' ? (
-                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                ) : (
-                  <svg className="h-5 w-5" viewBox="0 0 24 24">
-                    <path fill="#f25022" d="M1 1h10v10H1z" />
-                    <path fill="#00a4ef" d="M1 13h10v10H1z" />
-                    <path fill="#7fba00" d="M13 1h10v10H13z" />
-                    <path fill="#ffb900" d="M13 13h10v10H13z" />
-                  </svg>
-                )}
-                {mode === 'login' ? 'Sign in' : 'Sign up'} with Microsoft
-              </Button>
+                onClick={() => initiateOAuth('microsoft')}
+              />
             )}
             {showGithub && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => initiateOAuthPopup('github')}
-                className="w-full"
+              <OAuthButton
+                provider="github"
+                icon={<GitHubIcon className="h-5 w-5" />}
+                label="GitHub"
+                mode={mode}
+                loading={loadingAction === 'github'}
                 disabled={loadingAction !== null}
-              >
-                {loadingAction === 'github' ? (
-                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                ) : (
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                  </svg>
-                )}
-                {mode === 'login' ? 'Sign in' : 'Sign up'} with GitHub
-              </Button>
+                onClick={() => initiateOAuth('github')}
+              />
             )}
           </div>
           <div className="relative">

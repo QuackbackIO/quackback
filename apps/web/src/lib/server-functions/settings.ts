@@ -23,7 +23,15 @@ import {
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
   updateWorkspaceName,
+  getOIDCConfig,
+  updateOIDCConfig,
+  deleteOIDCConfig,
+  getSecurityConfig,
+  getPublicSecurityConfig,
+  updateSecurityConfig,
+  deleteTeamSSOConfig,
 } from '@/lib/settings/settings.service'
+import { fetchOIDCDiscovery } from '@/lib/auth/oidc.service'
 import { requireAuth } from './auth-helpers'
 import { getSession } from './auth'
 import { db, member, user, invitation, eq, ne } from '@/lib/db'
@@ -274,3 +282,152 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
     await requireAuth({ roles: ['admin'] })
     return updateWorkspaceName(data.name)
   })
+
+// ============================================
+// OIDC Configuration
+// ============================================
+
+const updateOIDCConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  displayName: z.string().min(1).max(50).optional(),
+  issuer: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith('https://'), 'Issuer must use HTTPS')
+    .optional(),
+  clientId: z.string().min(1).optional(),
+  clientSecret: z.string().min(1).optional(),
+  scopes: z.array(z.string()).optional(),
+  emailDomain: z.string().optional(),
+})
+
+const testOIDCDiscoverySchema = z.object({
+  issuer: z.string().url(),
+})
+
+export type UpdateOIDCConfigInput = z.infer<typeof updateOIDCConfigSchema>
+export type TestOIDCDiscoveryInput = z.infer<typeof testOIDCDiscoverySchema>
+
+/**
+ * Fetch OIDC config for admin settings page
+ */
+export const fetchOIDCConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return getOIDCConfig()
+})
+
+/**
+ * Update OIDC config
+ */
+export const updateOIDCConfigFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateOIDCConfigSchema)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+    // Use settings ID as workspace ID for encryption salt
+    const workspaceId = auth.settings?.id || 'self-hosted'
+    return updateOIDCConfig(data, workspaceId)
+  })
+
+/**
+ * Delete OIDC config
+ */
+export const deleteOIDCConfigFn = createServerFn({ method: 'POST' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return deleteOIDCConfig()
+})
+
+/**
+ * Test OIDC discovery endpoint
+ * Returns discovery metadata if successful, or error
+ */
+export const testOIDCDiscoveryFn = createServerFn({ method: 'POST' })
+  .inputValidator(testOIDCDiscoverySchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+    try {
+      const discovery = await fetchOIDCDiscovery(data.issuer)
+      return {
+        success: true as const,
+        endpoints: {
+          authorization: discovery.authorization_endpoint,
+          token: discovery.token_endpoint,
+          userinfo: discovery.userinfo_endpoint,
+        },
+      }
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Discovery fetch failed',
+      }
+    }
+  })
+
+// ============================================
+// Security Configuration
+// ============================================
+
+const updateSecurityConfigSchema = z.object({
+  sso: z
+    .object({
+      enabled: z.boolean().optional(),
+      enforcement: z.enum(['optional', 'required']).optional(),
+      provider: z
+        .object({
+          enabled: z.boolean().optional(),
+          displayName: z.string().min(1).max(50).optional(),
+          issuer: z
+            .string()
+            .url()
+            .refine((url) => url.startsWith('https://'), 'Issuer must use HTTPS')
+            .optional(),
+          clientId: z.string().min(1).optional(),
+          clientSecret: z.string().min(1).optional(),
+          scopes: z.array(z.string()).optional(),
+          emailDomain: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  teamSocialLogin: z
+    .object({
+      github: z.boolean().optional(),
+      google: z.boolean().optional(),
+    })
+    .optional(),
+})
+
+export type UpdateSecurityConfigInput = z.infer<typeof updateSecurityConfigSchema>
+
+/**
+ * Fetch security config for admin settings page
+ */
+export const fetchSecurityConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return getSecurityConfig()
+})
+
+/**
+ * Fetch public security config for team login page (no secrets)
+ */
+export const fetchPublicSecurityConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
+  return getPublicSecurityConfig()
+})
+
+/**
+ * Update security config
+ */
+export const updateSecurityConfigFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateSecurityConfigSchema)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+    const workspaceId = auth.settings?.id || 'self-hosted'
+    return updateSecurityConfig(data, workspaceId)
+  })
+
+/**
+ * Delete team SSO config
+ */
+export const deleteTeamSSOConfigFn = createServerFn({ method: 'POST' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return deleteTeamSSOConfig()
+})

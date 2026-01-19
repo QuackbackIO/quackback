@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -9,6 +8,7 @@ import {
 import { OTPAuthFormInline } from './otp-auth-form-inline'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import type { PublicOIDCConfig } from '@/lib/settings'
 
 interface OrgAuthConfig {
   found: boolean
@@ -17,6 +17,7 @@ interface OrgAuthConfig {
     github: boolean
     microsoft?: boolean
   }
+  oidc?: PublicOIDCConfig | null
   openSignup?: boolean
 }
 
@@ -35,21 +36,12 @@ interface AuthDialogProps {
 export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
 
-  // DEBUG: Log when dialog state changes
-  useEffect(() => {
-    console.log('[AuthDialog] isOpen:', isOpen, 'mode:', mode)
-  }, [isOpen, mode])
-
   // Listen for auth success broadcasts from popup windows
   // The onAuthSuccess callback handles session updates via router.invalidate()
   useAuthBroadcast({
     onSuccess: onAuthSuccess,
     enabled: isOpen,
   })
-
-  const handleModeSwitch = (newMode: 'login' | 'signup') => {
-    setMode(newMode)
-  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeAuthPopover()}>
@@ -66,7 +58,7 @@ export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
           mode={mode}
           authConfig={authConfig}
           orgSlug={orgSlug}
-          onModeSwitch={handleModeSwitch}
+          onModeSwitch={setMode}
         />
       </DialogContent>
     </Dialog>
