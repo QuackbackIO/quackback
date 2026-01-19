@@ -7,66 +7,103 @@ import {
   fetchPublicAuthConfig,
   fetchTeamMembersAndInvitations,
   fetchUserProfile,
+  fetchOIDCConfigFn,
+  fetchSecurityConfigFn,
+  fetchPublicSecurityConfigFn,
+  getWorkspaceFeaturesFn,
 } from '@/lib/server-functions/settings'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
 } from '@/lib/server-functions/settings-utils'
 
+const STALE_TIME_LONG = 5 * 60 * 1000
+const STALE_TIME_SHORT = 30 * 1000
+const STALE_TIME_MEDIUM = 60 * 1000
+
 export const settingsQueries = {
   branding: () =>
     queryOptions({
       queryKey: ['settings', 'branding'],
-      queryFn: () => fetchBrandingConfig(),
-      staleTime: 5 * 60 * 1000,
+      queryFn: fetchBrandingConfig,
+      staleTime: STALE_TIME_LONG,
     }),
 
   logo: () =>
     queryOptions({
       queryKey: ['settings', 'logo'],
-      queryFn: () => fetchSettingsLogoData(),
-      staleTime: 5 * 60 * 1000,
+      queryFn: fetchSettingsLogoData,
+      staleTime: STALE_TIME_LONG,
     }),
 
   headerLogo: () =>
     queryOptions({
       queryKey: ['settings', 'headerLogo'],
-      queryFn: () => fetchSettingsHeaderLogoData(),
-      staleTime: 5 * 60 * 1000,
+      queryFn: fetchSettingsHeaderLogoData,
+      staleTime: STALE_TIME_LONG,
     }),
 
   portalConfig: () =>
     queryOptions({
       queryKey: ['settings', 'portalConfig'],
-      queryFn: () => fetchPortalConfig(),
-      staleTime: 5 * 60 * 1000,
+      queryFn: fetchPortalConfig,
+      staleTime: STALE_TIME_LONG,
     }),
 
   publicPortalConfig: () =>
     queryOptions({
       queryKey: ['settings', 'publicPortalConfig'],
-      queryFn: () => fetchPublicPortalConfig(),
-      staleTime: 5 * 60 * 1000,
+      queryFn: fetchPublicPortalConfig,
+      staleTime: STALE_TIME_LONG,
     }),
 
   publicAuthConfig: () =>
     queryOptions({
       queryKey: ['settings', 'publicAuthConfig'],
-      queryFn: () => fetchPublicAuthConfig(),
-      staleTime: 5 * 60 * 1000,
+      queryFn: fetchPublicAuthConfig,
+      staleTime: STALE_TIME_LONG,
     }),
 
   teamMembersAndInvitations: () =>
     queryOptions({
       queryKey: ['settings', 'team'],
-      queryFn: () => fetchTeamMembersAndInvitations(),
-      staleTime: 30 * 1000,
+      queryFn: fetchTeamMembersAndInvitations,
+      staleTime: STALE_TIME_SHORT,
     }),
 
   userProfile: (userId: UserId) =>
     queryOptions({
       queryKey: ['settings', 'userProfile', userId],
       queryFn: () => fetchUserProfile({ data: userId }),
-      staleTime: 1 * 60 * 1000,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  oidcConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'oidcConfig'],
+      queryFn: fetchOIDCConfigFn,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  securityConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'securityConfig'],
+      queryFn: fetchSecurityConfigFn,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  publicSecurityConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'publicSecurityConfig'],
+      queryFn: fetchPublicSecurityConfigFn,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  // Note: Uses same key as useWorkspaceFeatures to share cache
+  workspaceFeatures: () =>
+    queryOptions({
+      queryKey: ['features', 'workspace'],
+      queryFn: getWorkspaceFeaturesFn,
+      staleTime: STALE_TIME_LONG,
     }),
 }

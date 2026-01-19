@@ -23,10 +23,27 @@ export type {
   UpdatePortalConfigInput,
   PublicAuthConfig,
   PublicPortalConfig,
+  // OIDC types
+  OIDCProviderConfig,
+  PublicOIDCConfig,
+  AdminOIDCConfig,
+  UpdateOIDCConfigInput,
+  // Security types
+  SSOEnforcement,
+  TeamSocialLoginConfig,
+  SecurityConfig,
+  PublicSecurityConfig,
+  AdminSecurityConfig,
+  UpdateSecurityConfigInput,
 } from './settings.types'
 
 // Default config values (no DB dependency)
-export { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './settings.types'
+export {
+  DEFAULT_AUTH_CONFIG,
+  DEFAULT_PORTAL_CONFIG,
+  DEFAULT_OIDC_SCOPES,
+  DEFAULT_SECURITY_CONFIG,
+} from './settings.types'
 
 // Consolidated settings types (for use with getSettingsWithAllConfigs)
 export type { SettingsWithAllConfigs, SettingsBrandingData } from './settings.service'
