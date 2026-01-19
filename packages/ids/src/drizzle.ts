@@ -16,6 +16,9 @@ import { generateId, fromUuid, toUuid } from './core'
 import type { IdPrefix } from './prefixes'
 import type { TypeId } from './types'
 
+/** UUID regex pattern (with or without dashes) for Better Auth compatibility */
+const UUID_PATTERN = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+
 /**
  * Custom Drizzle column type for TypeID
  *
@@ -40,6 +43,11 @@ export function typeIdColumn<P extends IdPrefix>(prefix: P) {
       return 'uuid'
     },
     toDriver(value: TypeId<P>): string {
+      // Handle raw UUIDs (e.g., from Better Auth's internal adapter)
+      // Better Auth sometimes passes raw UUIDs when linking accounts
+      if (UUID_PATTERN.test(value)) {
+        return value
+      }
       // Convert TypeID to UUID for database storage
       return toUuid(value)
     },
@@ -76,6 +84,10 @@ export function typeIdColumnNullable<P extends IdPrefix>(prefix: P) {
     },
     toDriver(value: TypeId<P> | null): string | null {
       if (value === null) return null
+      // Handle raw UUIDs (e.g., from Better Auth's internal adapter)
+      if (UUID_PATTERN.test(value)) {
+        return value
+      }
       return toUuid(value)
     },
     fromDriver(value: unknown): TypeId<P> | null {
