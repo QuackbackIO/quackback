@@ -4,21 +4,9 @@ import { emailOTP, oneTimeToken, magicLink } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 
-// ============================================================================
-// Magic Link Token Capture
-// ============================================================================
-
-/**
- * Temporary storage for magic link tokens during invitation flow.
- * When sendInvitationFn calls signInMagicLink, the callback stores the token here.
- * The invitation flow then retrieves it to construct the URL with the correct workspace domain.
- */
+/** Temporary storage for magic link tokens during invitation flow */
 const pendingMagicLinkTokens = new Map<string, { token: string; timestamp: number }>()
 
-/**
- * Store a magic link token for retrieval by the invitation flow.
- * Tokens are automatically cleaned up after 30 seconds.
- */
 export function storeMagicLinkToken(email: string, token: string): void {
   const normalizedEmail = email.toLowerCase()
   pendingMagicLinkTokens.set(normalizedEmail, { token, timestamp: Date.now() })
@@ -32,18 +20,13 @@ export function storeMagicLinkToken(email: string, token: string): void {
   }, 30000)
 }
 
-/**
- * Retrieve and remove a stored magic link token.
- * Returns undefined if no token is stored for this email.
- */
 export function getMagicLinkToken(email: string): string | undefined {
   const normalizedEmail = email.toLowerCase()
   const stored = pendingMagicLinkTokens.get(normalizedEmail)
-  if (stored) {
-    pendingMagicLinkTokens.delete(normalizedEmail)
-    return stored.token
-  }
-  return undefined
+  if (!stored) return undefined
+
+  pendingMagicLinkTokens.delete(normalizedEmail)
+  return stored.token
 }
 
 // Build-time constants (defined in vite.config.ts)
@@ -57,30 +40,29 @@ const getSessionTransferPlugin = async (): Promise<BetterAuthPlugin | null> => {
   return sessionTransfer()
 }
 
-/**
- * Build trusted origins for CSRF protection.
- * Accepts same-origin requests and allows redirects to the request host.
- */
+// OIDC callback plugin - loaded dynamically to avoid client bundling of database code
+const getOidcCallbackPlugin = async (): Promise<BetterAuthPlugin> => {
+  const { oidcCallback } = await import('./plugins/oidc-callback')
+  return oidcCallback()
+}
+
 async function getTrustedOrigins(request?: Request): Promise<string[]> {
-  // During initialization, request may be undefined
   if (!request) return []
 
   const trusted: string[] = []
   const requestHost = request.headers.get('host')
 
-  // Always trust the request host (for GET requests like magic link clicks that don't have Origin header)
+  // Trust the request host (for GET requests like magic link clicks without Origin header)
   if (requestHost) {
-    // Determine protocol from request URL or default to https
     const protocol = new URL(request.url).protocol || 'https:'
     trusted.push(`${protocol}//${requestHost}`)
   }
 
-  // Also trust if Origin header matches request host
+  // Trust Origin header if it matches request host
   const origin = request.headers.get('origin')
   if (origin) {
     try {
-      const originHost = new URL(origin).host
-      if (requestHost && originHost === requestHost) {
+      if (requestHost && new URL(origin).host === requestHost) {
         trusted.push(origin)
       }
     } catch {
@@ -88,7 +70,7 @@ async function getTrustedOrigins(request?: Request): Promise<string[]> {
     }
   }
 
-  return [...new Set(trusted)] // Deduplicate
+  return [...new Set(trusted)]
 }
 
 // Lazy-initialized auth instance
@@ -107,11 +89,13 @@ async function createAuth() {
     settings: settingsTable,
     member: memberTable,
     invitation: invitationTable,
+    eq,
   } = await import('@/lib/db')
   const { sendSigninCodeEmail } = await import('@quackback/email')
 
-  // Get cloud-only plugins
+  // Get plugins
   const sessionTransferPlugin = await getSessionTransferPlugin()
+  const oidcCallbackPlugin = await getOidcCallbackPlugin()
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -136,6 +120,31 @@ async function createAuth() {
     // Password auth disabled - users sign in via OTP email codes
     emailAndPassword: {
       enabled: false,
+    },
+
+    // Account linking - allow users to link multiple OAuth providers to their account
+    // This is needed when a user signs up with email OTP, then later signs in with GitHub/Google
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ['github', 'google', 'oidc', 'team-sso'],
+      },
+    },
+
+    // Social OAuth providers (GitHub and Google)
+    // Callbacks at /api/auth/callback/github and /api/auth/callback/google
+    socialProviders: {
+      github: {
+        clientId: process.env.GITHUB_CLIENT_ID || '',
+        clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+      },
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID || '',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+        // Force account selection and offline access for refresh tokens
+        accessType: 'offline',
+        prompt: 'select_account',
+      },
     },
 
     session: {
@@ -169,6 +178,35 @@ async function createAuth() {
         sameSite: 'lax',
         // Secure cookies in production
         secure: (process.env.NODE_ENV as string) === 'production',
+      },
+    },
+
+    // Database hooks for OAuth user creation - creates member records
+    // All OAuth signups get 'user' role (portal user)
+    // Team members are added via invitations only
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            // Cast user.id to the branded TypeID type for database operations
+            const userId = user.id as ReturnType<typeof generateId<'user'>>
+
+            // Check if member already exists (in case of race conditions)
+            const existingMember = await db.query.member.findFirst({
+              where: eq(memberTable.userId, userId),
+            })
+
+            if (!existingMember) {
+              await db.insert(memberTable).values({
+                id: generateId('member'),
+                userId,
+                role: 'user', // Always 'user' - team access via invitations only
+                createdAt: new Date(),
+              })
+              console.log(`[auth] Created member record: userId=${user.id}, role=user`)
+            }
+          },
+        },
       },
     },
 
@@ -213,6 +251,9 @@ async function createAuth() {
 
       // Session transfer for cross-domain handoff from website (cloud only)
       ...(sessionTransferPlugin ? [sessionTransferPlugin] : []),
+
+      // OIDC callback for tenant-configured OIDC providers
+      oidcCallbackPlugin,
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),
