@@ -17,7 +17,7 @@ import {
   getOrCreateStripeCustomer,
   isStripeConfigured,
 } from '@/lib/stripe'
-import { db } from '@/lib/db'
+import { db, inArray, member } from '@/lib/db'
 import { CLOUD_TIER_CONFIG, type CloudTier } from '@/lib/features'
 import type { Subscription, Invoice } from '@quackback/db/types'
 
@@ -93,9 +93,12 @@ export const getBillingOverviewFn = createServerFn({ method: 'GET' }).handler(
       }
     }
 
-    // Get usage counts
+    // Get usage counts (seats only count admin and member roles, not portal users)
     const [membersResult, boardsResult, roadmapsResult] = await Promise.all([
-      db.query.member.findMany({ columns: { id: true } }),
+      db.query.member.findMany({
+        columns: { id: true },
+        where: inArray(member.role, ['admin', 'member']),
+      }),
       db.query.boards.findMany({ columns: { id: true } }),
       db.query.roadmaps.findMany({ columns: { id: true } }),
     ])

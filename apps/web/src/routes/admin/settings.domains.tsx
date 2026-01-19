@@ -11,7 +11,6 @@ import {
   ExclamationCircleIcon,
   ClockIcon,
   ClipboardDocumentIcon,
-  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline'
 import { StarIcon as StarIconSolid, CheckIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -49,6 +48,7 @@ import { isCloud } from '@/lib/features'
 import { useFeature, Feature } from '@/lib/hooks/use-features'
 import { getDisplayStatus, type Domain } from '@/lib/domains'
 import { cn } from '@/lib/utils'
+import { ProUpgradeModal } from '@/components/admin/pro-upgrade-modal'
 
 export const Route = createFileRoute('/admin/settings/domains')({
   loader: async ({ context }) => {
@@ -69,12 +69,8 @@ function DomainsPage() {
     return <NotAvailableInSelfHosted />
   }
 
-  // Check feature access
-  if (!isFeatureLoading && !hasCustomDomainFeature) {
-    return <UpgradeRequired />
-  }
-
-  return <DomainManagement />
+  // Show full UI but disable parts when lacking feature access
+  return <DomainManagement hasFeature={!isFeatureLoading && hasCustomDomainFeature} />
 }
 
 function NotAvailableInSelfHosted() {
@@ -107,40 +103,9 @@ function NotAvailableInSelfHosted() {
   )
 }
 
-function UpgradeRequired() {
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Custom Domains</h1>
-        <p className="text-sm text-muted-foreground">
-          Connect your own domain to your feedback portal
-        </p>
-      </div>
-
-      {/* Upgrade Card */}
-      <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
-        <div className="px-6 py-12 flex flex-col items-center justify-center text-center">
-          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <StarIcon className="h-6 w-6 text-primary" />
-          </div>
-          <h3 className="text-base font-medium text-foreground mb-1">Upgrade to Pro</h3>
-          <p className="text-sm text-muted-foreground max-w-md mb-4">
-            Custom domains are available on the Pro plan and above. Upgrade to connect your own
-            domain like feedback.yourcompany.com with automatic SSL certificates.
-          </p>
-          <Button>
-            <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
-            View Plans
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DomainManagement() {
+function DomainManagement({ hasFeature }: { hasFeature: boolean }) {
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null)
   const queryClient = useQueryClient()
 
@@ -171,7 +136,7 @@ function DomainManagement() {
             Connect your own domain to your feedback portal
           </p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)}>
+        <Button onClick={() => (hasFeature ? setShowAddDialog(true) : setShowUpgradeModal(true))}>
           <PlusIcon className="h-4 w-4 mr-2" />
           Add Domain
         </Button>
@@ -179,9 +144,11 @@ function DomainManagement() {
 
       {/* Domain List */}
       {domains.length === 0 ? (
-        <EmptyState onAddDomain={() => setShowAddDialog(true)} />
+        <EmptyState
+          onAddDomain={() => (hasFeature ? setShowAddDialog(true) : setShowUpgradeModal(true))}
+        />
       ) : (
-        <DomainList domains={domains} onDelete={setDomainToDelete} />
+        <DomainList domains={domains} onDelete={setDomainToDelete} hasFeature={hasFeature} />
       )}
 
       {/* Add Domain Dialog */}
@@ -192,6 +159,19 @@ function DomainManagement() {
         domain={domainToDelete}
         open={!!domainToDelete}
         onOpenChange={(open) => !open && setDomainToDelete(null)}
+      />
+
+      {/* Pro Upgrade Modal */}
+      <ProUpgradeModal
+        open={showUpgradeModal}
+        onOpenChange={setShowUpgradeModal}
+        feature="Custom Domains"
+        description="Connect your own domain to your feedback portal for a professional, branded experience."
+        benefits={[
+          'Use your own domain like feedback.yourcompany.com',
+          'Automatic SSL certificate provisioning',
+          'Seamless DNS verification',
+        ]}
       />
     </div>
   )
@@ -221,9 +201,11 @@ function EmptyState({ onAddDomain }: { onAddDomain: () => void }) {
 function DomainList({
   domains,
   onDelete,
+  hasFeature,
 }: {
   domains: Domain[]
   onDelete: (domain: Domain) => void
+  hasFeature: boolean
 }) {
   return (
     <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
@@ -234,14 +216,22 @@ function DomainList({
       </div>
       <ul className="divide-y divide-border/50">
         {domains.map((domain) => (
-          <DomainCard key={domain.id} domain={domain} onDelete={onDelete} />
+          <DomainCard key={domain.id} domain={domain} onDelete={onDelete} hasFeature={hasFeature} />
         ))}
       </ul>
     </div>
   )
 }
 
-function DomainCard({ domain, onDelete }: { domain: Domain; onDelete: (domain: Domain) => void }) {
+function DomainCard({
+  domain,
+  onDelete,
+  hasFeature,
+}: {
+  domain: Domain
+  onDelete: (domain: Domain) => void
+  hasFeature: boolean
+}) {
   const [copied, setCopied] = useState(false)
 
   const setAsPrimaryMutation = useSetDomainPrimary()
@@ -257,8 +247,10 @@ function DomainCard({ domain, onDelete }: { domain: Domain; onDelete: (domain: D
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const isCustomDomain = domain.domainType === 'custom'
+
   return (
-    <li className="px-6 py-4">
+    <li className={cn('px-6 py-4', isCustomDomain && !hasFeature && 'opacity-60')}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -270,7 +262,8 @@ function DomainCard({ domain, onDelete }: { domain: Domain; onDelete: (domain: D
               </Badge>
             )}
             <DomainTypeBadge type={domain.domainType} />
-            <StatusBadge status={displayStatus} />
+            {/* Only show status badge for custom domains - subdomains inherit SSL from parent */}
+            {isCustomDomain && <StatusBadge status={displayStatus} />}
           </div>
 
           {/* CNAME Instructions for pending domains */}
@@ -301,12 +294,12 @@ function DomainCard({ domain, onDelete }: { domain: Domain; onDelete: (domain: D
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {isPending && (
+          {isPending && isCustomDomain && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => refreshMutation.mutate(domain.id)}
-              disabled={refreshMutation.isPending}
+              disabled={!hasFeature || refreshMutation.isPending}
             >
               <ArrowPathIcon
                 className={cn('h-4 w-4', refreshMutation.isPending && 'animate-spin')}
@@ -320,7 +313,7 @@ function DomainCard({ domain, onDelete }: { domain: Domain; onDelete: (domain: D
               variant="ghost"
               size="sm"
               onClick={() => setAsPrimaryMutation.mutate(domain.id)}
-              disabled={setAsPrimaryMutation.isPending}
+              disabled={(isCustomDomain && !hasFeature) || setAsPrimaryMutation.isPending}
               title="Set as primary"
             >
               <StarIcon className="h-4 w-4" />
@@ -328,11 +321,12 @@ function DomainCard({ domain, onDelete }: { domain: Domain; onDelete: (domain: D
             </Button>
           )}
 
-          {domain.domainType === 'custom' && (
+          {isCustomDomain && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onDelete(domain)}
+              disabled={!hasFeature}
               className="text-destructive hover:text-destructive hover:bg-destructive/10"
             >
               <TrashIcon className="h-4 w-4" />
