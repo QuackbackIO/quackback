@@ -603,7 +603,7 @@ export async function canEditComment(
     return { allowed: false, reason: 'Cannot edit a deleted comment' }
   }
 
-  // Team members (owner, admin, member) can always edit
+  // Team members (admin, member) can always edit
   if (actor.role && ['admin', 'member'].includes(actor.role)) {
     return { allowed: true }
   }
@@ -651,7 +651,7 @@ export async function canDeleteComment(
     return { allowed: false, reason: 'Comment has already been deleted' }
   }
 
-  // Team members (owner, admin, member) can always delete
+  // Team members (admin, member) can always delete
   if (actor.role && ['admin', 'member'].includes(actor.role)) {
     return { allowed: true }
   }

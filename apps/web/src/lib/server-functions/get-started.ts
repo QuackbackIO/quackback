@@ -262,7 +262,7 @@ async function seedTenantData(
       )
     `,
 
-    // Create owner user
+    // Create admin user (workspace creator)
     sql`
       INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
       VALUES (
@@ -275,10 +275,10 @@ async function seedTenantData(
       )
     `,
 
-    // Create owner member
+    // Create admin member (workspace creator)
     sql`
       INSERT INTO "member" ("id", "user_id", "role", "created_at")
-      VALUES (${memberId}::uuid, ${userId}::uuid, 'owner', NOW())
+      VALUES (${memberId}::uuid, ${userId}::uuid, 'admin', NOW())
     `,
 
     // Create default board

@@ -1,13 +1,13 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
-import { OTPAuthForm } from '@/components/auth/otp-auth-form'
+import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 
 /**
  * Portal Login Page
  *
- * For portal users (visitors) to sign in using magic OTP codes or OAuth.
+ * For portal users (visitors) to sign in using email OTP, OAuth, or OIDC.
  */
 export const Route = createFileRoute('/auth/login')({
   loader: async ({ context }) => {
@@ -32,7 +32,7 @@ function LoginPage() {
 
   // Read pre-fetched data from React Query cache
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
-  const oauthConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
+  const authConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
   const oidcConfig = portalConfigQuery.data.oidc
 
   return (
@@ -42,10 +42,10 @@ function LoginPage() {
           <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="mt-2 text-muted-foreground">Sign in to your account</p>
         </div>
-        <OTPAuthForm
+        <PortalAuthForm
           callbackUrl="/"
           orgSlug={settings.slug}
-          oauthConfig={oauthConfig}
+          authConfig={authConfig}
           oidcConfig={oidcConfig}
         />
         <p className="text-center text-sm text-muted-foreground">

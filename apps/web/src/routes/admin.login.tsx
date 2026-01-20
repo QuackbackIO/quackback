@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { OTPAuthForm } from '@/components/auth/otp-auth-form'
+import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { settingsQueries } from '@/lib/queries/settings'
@@ -26,8 +26,8 @@ const searchSchema = z.object({
 /**
  * Admin Login Page
  *
- * For team members (owner, admin, member) to sign in to the admin dashboard using magic OTP codes.
- * Uses the organization's team auth settings.
+ * For team members (admin, member) to sign in to the admin dashboard.
+ * Supports email OTP, OAuth, and team SSO based on security settings.
  */
 export const Route = createFileRoute('/admin/login')({
   validateSearch: searchSchema,
@@ -72,7 +72,7 @@ function AdminLoginPage() {
   const showGoogle = !ssoRequired && securityConfig.teamSocialLogin.google
   const showSSO = securityConfig.sso.enabled
 
-  // Build OIDC config for OTPAuthForm if SSO is enabled
+  // Build OIDC config for PortalAuthForm if SSO is enabled
   const oidcConfig = showSSO
     ? { enabled: true, displayName: securityConfig.sso.displayName || 'SSO' }
     : null
@@ -90,10 +90,10 @@ function AdminLoginPage() {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
-        <OTPAuthForm
+        <PortalAuthForm
           callbackUrl={safeCallbackUrl}
           orgSlug={settings.slug}
-          oauthConfig={{ github: showGitHub, google: showGoogle }}
+          authConfig={{ github: showGitHub, google: showGoogle }}
           oidcConfig={oidcConfig}
           oidcType="team"
         />

@@ -42,15 +42,17 @@ export async function isAuthMethodAllowed(
 }
 
 async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethodResult> {
-  if (provider === 'email') {
-    return { allowed: true }
-  }
-
   if (provider === 'team-sso') {
     return { allowed: false, error: 'auth_method_not_allowed' }
   }
 
   const portalConfig = await getPublicPortalConfig()
+
+  if (provider === 'email') {
+    // Email can now be disabled in portal config (defaults to true for backwards compatibility)
+    const enabled = portalConfig.oauth.email ?? true
+    return enabled ? { allowed: true } : { allowed: false, error: 'email_method_not_allowed' }
+  }
 
   if (provider === 'github' || provider === 'google') {
     const enabled = provider === 'github' ? portalConfig.oauth.github : portalConfig.oauth.google

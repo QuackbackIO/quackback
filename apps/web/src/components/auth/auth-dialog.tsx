@@ -5,7 +5,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { OTPAuthFormInline } from './otp-auth-form-inline'
+import { PortalAuthFormInline } from './portal-auth-form-inline'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import type { PublicOIDCConfig } from '@/lib/settings'
@@ -54,7 +54,7 @@ export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
               : 'Sign up to vote and comment on feedback'}
           </DialogDescription>
         </DialogHeader>
-        <OTPAuthFormInline
+        <PortalAuthFormInline
           mode={mode}
           authConfig={authConfig}
           orgSlug={orgSlug}

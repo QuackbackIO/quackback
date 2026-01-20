@@ -20,7 +20,7 @@ export interface OAuthProviders {
 
 /**
  * Team authentication configuration
- * Controls how team members (owner/admin/member roles) can sign in
+ * Controls how team members (admin/member roles) can sign in
  */
 export interface AuthConfig {
   /** Which OAuth providers are enabled for team sign-in */
@@ -48,7 +48,9 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
 /**
  * Portal OAuth settings (subset of providers available to portal users)
  */
-export interface PortalOAuthProviders {
+export interface PortalAuthMethods {
+  /** Whether email OTP authentication is enabled (defaults to true for backwards compatibility) */
+  email?: boolean
   google: boolean
   github: boolean
 }
@@ -143,7 +145,7 @@ export interface UpdateOIDCConfigInput {
  */
 export interface PortalConfig {
   /** OAuth providers for portal user sign-in */
-  oauth: PortalOAuthProviders
+  oauth: PortalAuthMethods
   /** Feature toggles */
   features: PortalFeatures
   /** Custom OIDC provider configuration (optional) */
@@ -155,6 +157,7 @@ export interface PortalConfig {
  */
 export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   oauth: {
+    email: true,
     google: true,
     github: true,
   },
@@ -244,7 +247,7 @@ export interface UpdateAuthConfigInput {
  * Input for updating portal config (partial update)
  */
 export interface UpdatePortalConfigInput {
-  oauth?: Partial<PortalOAuthProviders>
+  oauth?: Partial<PortalAuthMethods>
   features?: Partial<PortalFeatures>
 }
 
@@ -264,7 +267,7 @@ export interface PublicAuthConfig {
  * Public portal config for portal login forms
  */
 export interface PublicPortalConfig {
-  oauth: PortalOAuthProviders
+  oauth: PortalAuthMethods
   features: PortalFeatures
   /** Public OIDC config (no secrets) for displaying custom SSO button */
   oidc?: PublicOIDCConfig

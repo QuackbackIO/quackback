@@ -33,7 +33,7 @@ interface InvitationInfo {
   inviterName: string | null
 }
 
-interface OTPAuthFormInlineProps {
+interface PortalAuthFormInlineProps {
   mode: 'login' | 'signup'
   authConfig?: OrgAuthConfig | null
   invitationId?: string | null
@@ -78,22 +78,22 @@ function OAuthButton({
 }
 
 /**
- * Inline OTP Auth Form for use in dialogs/popovers
+ * Inline Portal Auth Form for use in dialogs/popovers
  *
- * Uses Better-auth's emailOTP plugin for passwordless authentication.
+ * Supports email OTP, OAuth, and OIDC authentication.
  *
- * Unlike the full-page OTPAuthForm, this version:
+ * Unlike the full-page PortalAuthForm, this version:
  * - Opens OAuth in popup windows instead of redirecting
  * - Signals success via BroadcastChannel to parent
  * - Better-auth automatically creates users if they don't exist
  */
-export function OTPAuthFormInline({
+export function PortalAuthFormInline({
   mode,
   authConfig,
   invitationId,
   orgSlug,
   onModeSwitch,
-}: OTPAuthFormInlineProps) {
+}: PortalAuthFormInlineProps) {
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')

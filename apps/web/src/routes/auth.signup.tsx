@@ -1,13 +1,13 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/queries/settings'
-import { OTPAuthForm } from '@/components/auth/otp-auth-form'
+import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
 
 /**
  * Portal Signup Page
  *
- * For portal visitors to create accounts using magic OTP codes or OAuth.
+ * For portal visitors to create accounts using email OTP, OAuth, or OIDC.
  * Creates member record with role='user' (portal users can vote/comment but not access admin).
  */
 export const Route = createFileRoute('/auth/signup')({
@@ -33,7 +33,7 @@ function SignupPage() {
 
   // Read pre-fetched data from React Query cache
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
-  const oauthConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
+  const authConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
   const oidcConfig = portalConfigQuery.data.oidc
 
   return (
@@ -43,10 +43,10 @@ function SignupPage() {
           <h1 className="text-2xl font-bold">Create an account</h1>
           <p className="mt-2 text-muted-foreground">Sign up to vote and comment</p>
         </div>
-        <OTPAuthForm
+        <PortalAuthForm
           callbackUrl="/"
           orgSlug={settings.slug}
-          oauthConfig={oauthConfig}
+          authConfig={authConfig}
           oidcConfig={oidcConfig}
         />
         <p className="text-center text-sm text-muted-foreground">

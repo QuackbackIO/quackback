@@ -147,6 +147,17 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const updated = deepMerge(existing, input as Partial<PortalConfig>)
 
+    // Validate at least one auth method is enabled
+    const hasAtLeastOneMethod =
+      updated.oauth.email || updated.oauth.github || updated.oauth.google || updated.oidc?.enabled
+
+    if (!hasAtLeastOneMethod) {
+      throw new ValidationError(
+        'AUTH_METHOD_REQUIRED',
+        'At least one authentication method must be enabled'
+      )
+    }
+
     await db
       .update(settings)
       .set({ portalConfig: JSON.stringify(updated) })

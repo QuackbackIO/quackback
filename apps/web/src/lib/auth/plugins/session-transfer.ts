@@ -103,7 +103,7 @@ export const sessionTransfer = () => {
             await db.insert(member).values({
               id: generateId('member'),
               userId: existingUser.id,
-              role: payload.context === 'team' ? 'owner' : 'user',
+              role: payload.context === 'team' ? 'admin' : 'user',
               createdAt: new Date(),
             })
           }

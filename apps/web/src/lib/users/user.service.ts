@@ -3,10 +3,10 @@
  *
  * Provides operations for listing and managing portal users (role='user' in member table).
  * Portal users are authenticated users who can vote/comment on the public portal
- * but don't have admin access (unlike owner/admin/member roles).
+ * but don't have admin access (unlike admin/member roles).
  *
  * All users (team + portal) are unified in the member table with roles:
- * - owner/admin/member: Team members with admin dashboard access
+ * - admin/member: Team members with admin dashboard access
  * - user: Portal users with public portal access only
  */
 

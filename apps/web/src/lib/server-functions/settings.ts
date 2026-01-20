@@ -184,6 +184,7 @@ const updateThemeSchema = z.object({
 const updatePortalConfigSchema = z.object({
   oauth: z
     .object({
+      email: z.boolean().optional(),
       google: z.boolean().optional(),
       github: z.boolean().optional(),
       microsoft: z.boolean().optional(),

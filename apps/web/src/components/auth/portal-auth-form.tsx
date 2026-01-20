@@ -10,7 +10,7 @@ import {
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/auth/client'
-import type { PortalOAuthProviders, PublicOIDCConfig } from '@/lib/settings'
+import type { PortalAuthMethods, PublicOIDCConfig } from '@/lib/settings'
 
 interface InvitationInfo {
   id: string
@@ -21,15 +21,15 @@ interface InvitationInfo {
   inviterName: string | null
 }
 
-interface OTPAuthFormProps {
+interface PortalAuthFormProps {
   invitationId?: string | null
   callbackUrl?: string
   /** Organization slug for OAuth flows */
   orgSlug?: string
-  /** Whether to show OAuth buttons (GitHub, Google) */
+  /** Whether to show OAuth buttons (GitHub, Google) - legacy prop, prefer authConfig */
   showOAuth?: boolean
-  /** OAuth provider configuration (which providers are enabled) */
-  oauthConfig?: PortalOAuthProviders
+  /** Auth method configuration (which methods are enabled) */
+  authConfig?: PortalAuthMethods
   /** OIDC provider configuration (optional custom SSO) */
   oidcConfig?: PublicOIDCConfig | null
   /** OIDC type: 'portal' for portal users, 'team' for team members (default: 'portal') */
@@ -39,24 +39,29 @@ interface OTPAuthFormProps {
 type Step = 'email' | 'code'
 
 /**
- * OTP Auth Form
+ * Portal Auth Form
  *
- * Unified form for login and signup using Better-auth's emailOTP plugin.
+ * Unified authentication form for portal users supporting:
+ * - Email OTP (magic codes)
+ * - OAuth (GitHub, Google)
+ * - Custom OIDC providers
  *
- * Flow: email → code → redirect
+ * Flow: email → code → redirect (or OAuth redirect)
  * - Better-auth automatically creates users if they don't exist
  * - Name can be updated after login via profile settings
  * - Invitation acceptance happens after authentication
  */
-export function OTPAuthForm({
+export function PortalAuthForm({
   invitationId,
   callbackUrl = '/',
   orgSlug,
   showOAuth = false,
-  oauthConfig,
+  authConfig,
   oidcConfig,
   oidcType = 'portal',
-}: OTPAuthFormProps) {
+}: PortalAuthFormProps) {
+  // Derive email enabled state from authConfig (defaults to true for backwards compatibility)
+  const emailEnabled = authConfig?.email ?? true
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -230,31 +235,34 @@ export function OTPAuthForm({
       {orgSlug &&
         step === 'email' &&
         !invitation &&
-        (oauthConfig?.github || oauthConfig?.google || oidcConfig?.enabled || showOAuth) && (
+        (authConfig?.github || authConfig?.google || oidcConfig?.enabled || showOAuth) && (
           <>
             <OAuthButtons
               orgSlug={orgSlug}
               callbackUrl={callbackUrl}
-              showGitHub={oauthConfig?.github ?? showOAuth}
-              showGoogle={oauthConfig?.google ?? showOAuth}
+              showGitHub={authConfig?.github ?? showOAuth}
+              showGoogle={authConfig?.google ?? showOAuth}
               oidcConfig={oidcConfig}
               oidcType={oidcType}
             />
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+            {/* Divider - only show when email is also enabled */}
+            {emailEnabled && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with email
+                  </span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with email
-                </span>
-              </div>
-            </div>
+            )}
           </>
         )}
 
-      {/* Step 1: Email Input */}
-      {step === 'email' && (
+      {/* Step 1: Email Input - only show when email auth is enabled */}
+      {step === 'email' && emailEnabled && (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
