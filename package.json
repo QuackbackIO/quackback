@@ -33,6 +33,7 @@
     "db:seed": "bun packages/db/src/seed.ts",
     "db:reset": "bun packages/db/src/reset.ts",
     "db:migrate:cloud": "bun scripts/migrate-neon-dbs.ts",
+    "db:migrate:catalog": "bun apps/web/src/lib/catalog/migrate.ts",
     "db:generate-csv": "bun packages/db/src/generate-sample-csv.ts",
     "reset": "bun packages/db/src/reset.ts",
     "import": "bun scripts/import/cli.ts",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@hookform/resolvers": "^5.2.2",
+    "@neondatabase/serverless": "^1.0.2",
     "@types/node": "^24.10.1",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
