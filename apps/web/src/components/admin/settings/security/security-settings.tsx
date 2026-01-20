@@ -186,8 +186,9 @@ export function SecuritySettings({
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Single Sign-On</h3>
           {!hasEnterprise && (
+            // Route path typed as '/' since license/billing routes are edition-specific
             <Link
-              to={isSelfHosted ? '/admin/settings/license' : '/admin/settings/billing'}
+              to={(isSelfHosted ? '/admin/settings/license' : '/admin/settings/billing') as '/'}
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
             >
               <LockClosedIcon className="h-3 w-3" />

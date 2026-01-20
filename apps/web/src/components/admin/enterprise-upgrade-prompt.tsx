@@ -53,7 +53,8 @@ export function EnterpriseUpgradePrompt({
 
         {/* Action button */}
         <Button asChild>
-          <Link to={isSelfHosted ? '/admin/settings/license' : '/admin/settings/billing'}>
+          {/* Route path typed as string since license/billing routes are edition-specific */}
+          <Link to={(isSelfHosted ? '/admin/settings/license' : '/admin/settings/billing') as '/'}>
             {isSelfHosted ? 'View License Settings' : 'Upgrade Plan'}
             <ArrowRightIcon className="ml-2 h-4 w-4" />
           </Link>
