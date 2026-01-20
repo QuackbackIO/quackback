@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { isCloud, type CloudTier } from '@/lib/features'
+import { tenantStorage } from '@/lib/tenant/storage'
 import type { SubscriptionId } from '@quackback/ids'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
@@ -16,7 +17,7 @@ export interface WorkspaceSubscription {
 }
 
 /**
- * Get subscription for the application (single workspace).
+ * Get subscription for the current workspace.
  * Returns null for self-hosted (OSS) editions.
  * Cached per request.
  */
@@ -26,24 +27,30 @@ export const getSubscription = cache(async (): Promise<WorkspaceSubscription | n
     return null
   }
 
-  // Import stripe subscription service dynamically to avoid loading in self-hosted
-  const { getSubscription: getStripeSubscription } =
-    await import('@/lib/stripe/subscription.service')
+  // Get workspaceId from tenant context
+  const ctx = tenantStorage.getStore()
+  const workspaceId = ctx?.workspaceId
+  if (!workspaceId || workspaceId === 'self-hosted' || workspaceId === 'unknown') {
+    return null
+  }
 
-  const subscription = await getStripeSubscription()
+  // Import catalog billing service dynamically to avoid loading in self-hosted
+  const { getSubscriptionByWorkspace } = await import('@/lib/stripe/catalog-billing.service')
+
+  const subscription = await getSubscriptionByWorkspace(workspaceId)
 
   if (!subscription) {
     return null
   }
 
   return {
-    id: subscription.id,
-    tier: subscription.tier as CloudTier,
-    status: subscription.status as SubscriptionStatus,
+    id: subscription.id as SubscriptionId,
+    tier: subscription.tier,
+    status: subscription.status,
     stripeCustomerId: subscription.stripeCustomerId,
     stripeSubscriptionId: subscription.stripeSubscriptionId,
     currentPeriodEnd: subscription.currentPeriodEnd,
-    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd ?? false,
+    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     trialEnd: subscription.trialEnd,
   }
 })

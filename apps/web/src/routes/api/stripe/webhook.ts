@@ -4,7 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
  * Stripe Webhook Handler
  *
  * Receives webhook events from Stripe for subscription and invoice updates.
- * Updates the subscriptions and invoices tables accordingly.
+ * Updates the catalog database directly (no tenant context needed).
  *
  * Webhook events handled:
  * - checkout.session.completed: Initial subscription created
@@ -42,8 +42,13 @@ export const Route = createFileRoute('/api/stripe/webhook')({
       POST: async ({ request }) => {
         // Dynamic imports to avoid loading Stripe in non-cloud environments
         const { getStripe, isStripeConfigured } = await import('@/lib/stripe')
-        const { syncSubscriptionFromStripe, syncInvoiceFromStripe, markSubscriptionCanceled } =
-          await import('@/lib/stripe/subscription.service')
+        const {
+          getWorkspaceIdFromStripeCustomer,
+          upsertStripeCustomer,
+          syncSubscriptionFromStripe,
+          syncInvoiceFromStripe,
+          markSubscriptionCanceled,
+        } = await import('@/lib/stripe/catalog-billing.service')
 
         console.log(`[stripe-webhook] Received webhook event`)
 
@@ -91,6 +96,24 @@ export const Route = createFileRoute('/api/stripe/webhook')({
             return new Response('OK', { status: 200 })
           }
 
+          // Helper to resolve workspaceId from Stripe customer
+          async function resolveWorkspaceId(customerId: string): Promise<string | null> {
+            // First try catalog lookup
+            let workspaceId = await getWorkspaceIdFromStripeCustomer(customerId)
+
+            if (!workspaceId) {
+              // Fallback: get from Stripe customer metadata
+              const customer = await stripe.customers.retrieve(customerId)
+              if (!customer.deleted && customer.metadata?.workspaceId) {
+                workspaceId = customer.metadata.workspaceId
+                // Cache the mapping for future lookups
+                await upsertStripeCustomer(customerId, workspaceId, customer.email ?? undefined)
+              }
+            }
+
+            return workspaceId
+          }
+
           // Handle the event
           switch (event.type) {
             case 'checkout.session.completed': {
@@ -104,8 +127,19 @@ export const Route = createFileRoute('/api/stripe/webhook')({
                     ? session.subscription
                     : session.subscription.id
 
-                const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-                await syncSubscriptionFromStripe(subscription)
+                const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+                const customerId =
+                  typeof stripeSubscription.customer === 'string'
+                    ? stripeSubscription.customer
+                    : stripeSubscription.customer.id
+
+                const workspaceId = await resolveWorkspaceId(customerId)
+                if (!workspaceId) {
+                  console.error(`[stripe-webhook] No workspaceId for customer: ${customerId}`)
+                  return new Response('Workspace not found', { status: 400 })
+                }
+
+                await syncSubscriptionFromStripe(stripeSubscription, workspaceId)
                 console.log(`[stripe-webhook] Synced subscription from checkout: ${subscriptionId}`)
               }
               break
@@ -113,29 +147,57 @@ export const Route = createFileRoute('/api/stripe/webhook')({
 
             case 'customer.subscription.created':
             case 'customer.subscription.updated': {
-              const subscription = event.data.object
-              await syncSubscriptionFromStripe(subscription)
-              console.log(`[stripe-webhook] Synced subscription: ${subscription.id}`)
+              const stripeSubscription = event.data.object
+              const customerId =
+                typeof stripeSubscription.customer === 'string'
+                  ? stripeSubscription.customer
+                  : stripeSubscription.customer.id
+
+              const workspaceId = await resolveWorkspaceId(customerId)
+              if (!workspaceId) {
+                console.error(`[stripe-webhook] No workspaceId for customer: ${customerId}`)
+                return new Response('Workspace not found', { status: 400 })
+              }
+
+              await syncSubscriptionFromStripe(stripeSubscription, workspaceId)
+              console.log(`[stripe-webhook] Synced subscription: ${stripeSubscription.id}`)
               break
             }
 
             case 'customer.subscription.deleted': {
-              const subscription = event.data.object
+              const stripeSubscription = event.data.object
               const customerId =
-                typeof subscription.customer === 'string'
-                  ? subscription.customer
-                  : subscription.customer.id
+                typeof stripeSubscription.customer === 'string'
+                  ? stripeSubscription.customer
+                  : stripeSubscription.customer.id
+
               await markSubscriptionCanceled(customerId)
-              console.log(`[stripe-webhook] Marked subscription canceled: ${subscription.id}`)
+              console.log(`[stripe-webhook] Marked subscription canceled: ${stripeSubscription.id}`)
               break
             }
 
             case 'invoice.paid':
             case 'invoice.payment_failed': {
-              const invoice = event.data.object
-              await syncInvoiceFromStripe(invoice)
+              const stripeInvoice = event.data.object
+              const customerId =
+                typeof stripeInvoice.customer === 'string'
+                  ? stripeInvoice.customer
+                  : stripeInvoice.customer?.id
+
+              if (!customerId) {
+                console.error(`[stripe-webhook] No customer on invoice: ${stripeInvoice.id}`)
+                return new Response('Invoice has no customer', { status: 400 })
+              }
+
+              const workspaceId = await resolveWorkspaceId(customerId)
+              if (!workspaceId) {
+                console.error(`[stripe-webhook] No workspaceId for customer: ${customerId}`)
+                return new Response('Workspace not found', { status: 400 })
+              }
+
+              await syncInvoiceFromStripe(stripeInvoice, workspaceId)
               console.log(
-                `[stripe-webhook] Synced invoice: ${invoice.id}, status=${invoice.status}`
+                `[stripe-webhook] Synced invoice: ${stripeInvoice.id}, status=${stripeInvoice.status}`
               )
               break
             }

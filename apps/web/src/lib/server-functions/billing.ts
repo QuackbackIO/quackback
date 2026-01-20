@@ -9,24 +9,29 @@ import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { isCloud } from '@/lib/features'
 import {
-  getSubscription,
-  getInvoices,
   getUpcomingInvoice,
   createCheckoutSession,
   createPortalSession,
   getOrCreateStripeCustomer,
   isStripeConfigured,
 } from '@/lib/stripe'
+import {
+  getSubscriptionByWorkspace,
+  getInvoicesByWorkspace,
+  upsertStripeCustomer,
+  type CatalogSubscription,
+  type InvoiceStatus,
+} from '@/lib/stripe/catalog-billing.service'
+import { tenantStorage } from '@/lib/tenant/storage'
 import { db, inArray, member } from '@/lib/db'
 import { CLOUD_TIER_CONFIG, type CloudTier } from '@/lib/features'
-import type { Subscription, Invoice } from '@quackback/db/types'
 
 // ============================================
 // Types
 // ============================================
 
 export interface BillingOverview {
-  subscription: Subscription | null
+  subscription: CatalogSubscription | null
   tierConfig: (typeof CLOUD_TIER_CONFIG)[CloudTier] | null
   upcomingInvoice: {
     amountDue: number
@@ -47,12 +52,24 @@ export interface InvoiceListItem {
   amountDue: number
   amountPaid: number
   currency: string
-  status: Invoice['status']
+  status: InvoiceStatus
   invoiceUrl: string | null
   pdfUrl: string | null
   periodStart: Date | null
   periodEnd: Date | null
   createdAt: Date
+}
+
+/**
+ * Helper to get workspaceId from tenant context
+ */
+function getWorkspaceId(): string | null {
+  const ctx = tenantStorage.getStore()
+  const workspaceId = ctx?.workspaceId
+  if (!workspaceId || workspaceId === 'self-hosted' || workspaceId === 'unknown') {
+    return null
+  }
+  return workspaceId
 }
 
 // ============================================
@@ -77,7 +94,18 @@ export const getBillingOverviewFn = createServerFn({ method: 'GET' }).handler(
       }
     }
 
-    const subscription = await getSubscription()
+    const workspaceId = getWorkspaceId()
+    if (!workspaceId) {
+      return {
+        subscription: null,
+        tierConfig: CLOUD_TIER_CONFIG.free,
+        upcomingInvoice: null,
+        usage: null,
+        isStripeConfigured: isStripeConfigured(),
+      }
+    }
+
+    const subscription = await getSubscriptionByWorkspace(workspaceId)
     const tierConfig = subscription ? CLOUD_TIER_CONFIG[subscription.tier] : CLOUD_TIER_CONFIG.free
 
     // Get upcoming invoice if subscription has Stripe customer
@@ -135,7 +163,12 @@ export const getInvoicesFn = createServerFn({ method: 'GET' })
       return []
     }
 
-    const invoiceList = await getInvoices(data.limit ?? 20)
+    const workspaceId = getWorkspaceId()
+    if (!workspaceId) {
+      return []
+    }
+
+    const invoiceList = await getInvoicesByWorkspace(workspaceId, data.limit ?? 20)
 
     return invoiceList.map((inv) => ({
       id: inv.id,
@@ -180,16 +213,27 @@ export const createCheckoutSessionFn = createServerFn({ method: 'POST' })
       throw new Error('Stripe is not configured')
     }
 
+    // Get workspaceId from tenant context
+    const workspaceId = getWorkspaceId()
+    if (!workspaceId) {
+      throw new Error('No workspace context for checkout')
+    }
+
     // Get or create Stripe customer
-    const subscription = await getSubscription()
+    const subscription = await getSubscriptionByWorkspace(workspaceId)
     const settings = await db.query.settings.findFirst()
     const workspaceName = settings?.name || 'Workspace'
 
+    // Create/get Stripe customer WITH workspaceId in metadata
     const customer = await getOrCreateStripeCustomer(
       auth.user.email,
       workspaceName,
-      subscription?.stripeCustomerId
+      subscription?.stripeCustomerId,
+      { workspaceId } // Include workspaceId in metadata for webhook lookups
     )
+
+    // Ensure mapping exists in catalog for webhook lookups
+    await upsertStripeCustomer(customer.id, workspaceId, auth.user.email)
 
     // Build URLs
     const baseUrl = process.env.ROOT_URL || 'http://localhost:3000'
@@ -236,7 +280,12 @@ export const createPortalSessionFn = createServerFn({ method: 'POST' })
       throw new Error('Stripe is not configured')
     }
 
-    const subscription = await getSubscription()
+    const workspaceId = getWorkspaceId()
+    if (!workspaceId) {
+      throw new Error('No workspace context')
+    }
+
+    const subscription = await getSubscriptionByWorkspace(workspaceId)
 
     if (!subscription?.stripeCustomerId) {
       throw new Error('No billing account found')

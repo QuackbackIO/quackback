@@ -71,7 +71,8 @@ export async function createStripeCustomer(
 export async function getOrCreateStripeCustomer(
   email: string,
   workspaceName: string,
-  existingCustomerId?: string | null
+  existingCustomerId?: string | null,
+  metadata?: Record<string, string>
 ): Promise<Stripe.Customer> {
   const stripe = getStripe()
 
@@ -87,8 +88,8 @@ export async function getOrCreateStripeCustomer(
     }
   }
 
-  // Create new customer
-  return createStripeCustomer(email, workspaceName)
+  // Create new customer with metadata
+  return createStripeCustomer(email, workspaceName, metadata)
 }
 
 // ============================================
