@@ -40,28 +40,28 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1736985600000,
+      "when": 1768602000000,
       "tag": "0005_add_performance_indexes",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1737072000000,
+      "when": 1768688400000,
       "tag": "0006_add_comment_count_trigger",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "7",
-      "when": 1737158400000,
+      "when": 1768774800000,
       "tag": "0007_subscription_notification_levels",
       "breakpoints": true
     },
     {
       "idx": 8,
       "version": "7",
-      "when": 1737244800000,
+      "when": 1768861200000,
       "tag": "0008_add_pinned_comment",
       "breakpoints": true
     }

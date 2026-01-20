@@ -10,11 +10,13 @@
     ".": "./index.ts",
     "./client": "./src/client.ts",
     "./schema": "./src/schema/index.ts",
+    "./schema/statuses": "./src/schema/statuses.ts",
     "./catalog": "./src/catalog/index.ts",
     "./tenant": "./src/tenant/index.ts",
     "./migrate": "./src/migrate-runtime.ts",
     "./queries/public": "./src/queries/public.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./drizzle/*": "./drizzle/*"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

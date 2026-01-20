@@ -20,10 +20,44 @@ import { neon } from '@neondatabase/serverless'
 import { createApiClient } from '@neondatabase/api-client'
 import postgres from 'postgres'
 import crypto from 'node:crypto'
-import path from 'path'
 import { typeid } from 'typeid-js'
 import { sendSigninCodeEmail } from '@quackback/email'
 import { workspace, workspaceDomain, verification, catalogSchema } from '@/lib/catalog'
+import { DEFAULT_STATUSES } from '@quackback/db/schema/statuses'
+
+// Import migration journal at build time (single source of truth)
+import migrationJournal from '@quackback/db/drizzle/meta/_journal.json'
+
+// Import migration SQL at build time (Vite raw import - works in Cloudflare Workers)
+// When adding a new migration: add the import and entry to MIGRATION_SQL
+import migration0000 from '@quackback/db/drizzle/0000_initial.sql?raw'
+import migration0001 from '@quackback/db/drizzle/0001_add_moderation_state.sql?raw'
+import migration0002 from '@quackback/db/drizzle/0002_fair_amazoness.sql?raw'
+import migration0003 from '@quackback/db/drizzle/0003_dazzling_bushwacker.sql?raw'
+import migration0004 from '@quackback/db/drizzle/0004_add_ai_features.sql?raw'
+import migration0005 from '@quackback/db/drizzle/0005_add_performance_indexes.sql?raw'
+import migration0006 from '@quackback/db/drizzle/0006_add_comment_count_trigger.sql?raw'
+import migration0007 from '@quackback/db/drizzle/0007_subscription_notification_levels.sql?raw'
+import migration0008 from '@quackback/db/drizzle/0008_add_pinned_comment.sql?raw'
+
+// Map migration tags to their SQL content
+const MIGRATION_SQL: Record<string, string> = {
+  '0000_initial': migration0000,
+  '0001_add_moderation_state': migration0001,
+  '0002_fair_amazoness': migration0002,
+  '0003_dazzling_bushwacker': migration0003,
+  '0004_add_ai_features': migration0004,
+  '0005_add_performance_indexes': migration0005,
+  '0006_add_comment_count_trigger': migration0006,
+  '0007_subscription_notification_levels': migration0007,
+  '0008_add_pinned_comment': migration0008,
+}
+
+// Derive migrations from journal (tag + timestamp) with SQL content
+const MIGRATIONS = migrationJournal.entries.map((entry) => ({
+  tag: entry.tag,
+  when: entry.when,
+}))
 
 // ============================================
 // Inline Helpers
@@ -121,24 +155,59 @@ async function deleteNeonProject(projectId: string): Promise<void> {
   }
 }
 
-/** Run migrations on tenant database using raw SQL */
+/**
+ * Run migrations on tenant database using raw SQL.
+ * Creates the drizzle migrations tracking table and records each migration.
+ * Compatible with Cloudflare Workers (uses neon-http, build-time SQL imports).
+ */
 async function runTenantMigrations(connectionString: string): Promise<void> {
   const sql = neon(connectionString)
-  const fs = await import('fs/promises')
 
-  const migrationPath = path.join(
-    process.cwd(),
-    'node_modules/@quackback/db/drizzle/0000_initial.sql'
-  )
-  const migrationSql = await fs.readFile(migrationPath, 'utf-8')
+  // Create drizzle migrations tracking table (matches drizzle-kit's schema)
+  await sql`CREATE SCHEMA IF NOT EXISTS drizzle`
+  await sql`
+    CREATE TABLE IF NOT EXISTS drizzle."__drizzle_migrations" (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )
+  `
 
-  const statements = migrationSql
-    .split('--> statement-breakpoint')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith('--'))
+  // Run each migration in order
+  for (const migration of MIGRATIONS) {
+    const migrationSql = MIGRATION_SQL[migration.tag]
+    if (!migrationSql) {
+      throw new Error(
+        `Missing SQL for migration ${migration.tag}. Add it to MIGRATION_SQL in get-started.ts`
+      )
+    }
 
-  for (const statement of statements) {
-    await sql`${sql.unsafe(statement)}`
+    // Check if migration already applied
+    const existing = await sql`
+      SELECT 1 FROM drizzle."__drizzle_migrations" WHERE hash = ${migration.tag}
+    `
+    if (existing.length > 0) {
+      console.log(`[migrations] Skipping ${migration.tag} (already applied)`)
+      continue
+    }
+
+    console.log(`[migrations] Applying ${migration.tag}...`)
+
+    // Parse and run each statement
+    const statements = migrationSql
+      .split('--> statement-breakpoint')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0 && !s.startsWith('--'))
+
+    for (const statement of statements) {
+      await sql`${sql.unsafe(statement)}`
+    }
+
+    // Record migration
+    await sql`
+      INSERT INTO drizzle."__drizzle_migrations" (hash, created_at)
+      VALUES (${migration.tag}, ${migration.when})
+    `
   }
 }
 
@@ -158,6 +227,25 @@ async function seedTenantData(
   const userId = generateUuid('user')
   const memberId = generateUuid('member')
   const boardId = generateUuid('board')
+
+  // Build status insert statements
+  const statusInserts = DEFAULT_STATUSES.map((status) => {
+    const statusId = generateUuid('status')
+    return sql`
+      INSERT INTO "post_statuses" ("id", "name", "slug", "color", "category", "position", "show_on_roadmap", "is_default", "created_at")
+      VALUES (
+        ${statusId}::uuid,
+        ${status.name},
+        ${status.slug},
+        ${status.color},
+        ${status.category},
+        ${status.position},
+        ${status.showOnRoadmap},
+        ${status.isDefault},
+        NOW()
+      )
+    `
+  })
 
   await sql.transaction([
     // Create settings
@@ -206,6 +294,9 @@ async function seedTenantData(
         NOW()
       )
     `,
+
+    // Create default statuses
+    ...statusInserts,
   ])
 
   return { userId }
