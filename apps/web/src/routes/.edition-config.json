@@ -5,6 +5,38 @@
     "admin/settings.license.tsx": {
       "editions": ["self-hosted"],
       "description": "License management is only for self-hosted deployments"
+    },
+    "_app.tsx": {
+      "editions": ["cloud"],
+      "description": "App-domain layout for routes without tenant context"
+    },
+    "_app/get-started.tsx": {
+      "editions": ["cloud"],
+      "description": "Workspace creation - cloud only"
+    },
+    "admin/settings.billing.tsx": {
+      "editions": ["cloud"],
+      "description": "Billing layout"
+    },
+    "admin/settings/billing/index.tsx": {
+      "editions": ["cloud"],
+      "description": "Billing overview"
+    },
+    "admin/settings/billing/plans.tsx": {
+      "editions": ["cloud"],
+      "description": "Plan selection"
+    },
+    "admin/settings/billing/payment.tsx": {
+      "editions": ["cloud"],
+      "description": "Payment methods"
+    },
+    "admin/settings/billing/invoices.tsx": {
+      "editions": ["cloud"],
+      "description": "Invoice history"
+    },
+    "admin/settings.domains.tsx": {
+      "editions": ["cloud"],
+      "description": "Custom domains"
     }
   }
 }

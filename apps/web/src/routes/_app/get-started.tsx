@@ -21,7 +21,7 @@ import {
   createWorkspaceFn,
 } from '@/lib/server-functions/get-started'
 
-export const Route = createFileRoute('/get-started')({
+export const Route = createFileRoute('/_app/get-started')({
   component: GetStartedPage,
 })
 

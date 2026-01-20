@@ -2,6 +2,7 @@
  * Server functions for workspace data fetching.
  *
  * Server Functions (createServerFn):
+ * - getRequestContext: Get discriminated request context (app-domain, self-hosted, tenant, unknown)
  * - getSettings: Fetch app settings
  * - getCurrentUserRole: Get current user's role
  * - validateApiWorkspaceAccess: Validate API access
@@ -11,21 +12,43 @@
 
 import { createServerFn } from '@tanstack/react-start'
 import { db, member, eq } from '@/lib/db'
-import { tenantStorage } from '@/lib/tenant'
-import { isMultiTenant } from '@/lib/features'
+import { tenantStorage, type RequestContext } from '@/lib/tenant'
 import { getSession } from './auth'
 
 /**
- * Check if tenant is available for database access.
- * Returns false only in multi-tenant mode when no tenant was resolved.
- * Use this to guard database calls in routes.
+ * Get the request context as a discriminated union.
+ * Replaces checkIsAppDomain() and checkTenantAvailable() with a single call.
+ *
+ * Returns:
+ * - { type: 'app-domain' } - Request is on app domain (e.g., app.quackback.io)
+ * - { type: 'self-hosted', settings } - Self-hosted mode with DATABASE_URL singleton
+ * - { type: 'tenant', workspaceId, settings } - Multi-tenant mode with resolved tenant
+ * - { type: 'unknown' } - Multi-tenant mode with no resolved tenant for domain
  */
-export const checkTenantAvailable = createServerFn({ method: 'GET' }).handler(async () => {
-  if (isMultiTenant() && !tenantStorage.getStore()) {
-    return false
+export const getRequestContext = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<RequestContext> => {
+    const store = tenantStorage.getStore()
+
+    if (!store) {
+      return { type: 'unknown' }
+    }
+
+    switch (store.contextType) {
+      case 'app-domain':
+        return { type: 'app-domain' }
+      case 'self-hosted':
+        return { type: 'self-hosted', settings: store.settings }
+      case 'tenant':
+        return {
+          type: 'tenant',
+          workspaceId: store.workspaceId ?? '',
+          settings: store.settings,
+        }
+      case 'unknown':
+        return { type: 'unknown' }
+    }
   }
-  return true
-})
+)
 
 /**
  * Get the app settings.
