@@ -1,6 +1,10 @@
 /**
- * Billing schema for cloud subscription management
+ * @deprecated These tables have been moved to the catalog database.
+ * This file is kept for migration compatibility only.
+ * Use @/lib/catalog/schema for billing operations.
  *
+ * Original description:
+ * Billing schema for cloud subscription management.
  * Tracks workspace subscriptions and invoices, integrated with Stripe.
  * Only used in cloud edition (multi-tenant mode).
  */

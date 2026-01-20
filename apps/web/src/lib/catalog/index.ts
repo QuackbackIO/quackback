@@ -2,8 +2,14 @@ export {
   workspace,
   workspaceDomain,
   verification,
+  stripeCustomer,
+  subscription,
+  invoice,
   workspaceRelations,
   workspaceDomainRelations,
+  stripeCustomerRelations,
+  subscriptionRelations,
+  invoiceRelations,
   catalogSchema,
 } from './schema'
 
