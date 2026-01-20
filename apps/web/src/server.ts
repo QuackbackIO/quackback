@@ -35,6 +35,18 @@ function shouldSkipTenantResolution(url: string): boolean {
   )
 }
 
+/**
+ * Check if request is on the app domain (CLOUD_APP_DOMAIN).
+ * App domain hosts routes like /get-started that don't need tenant context.
+ */
+function checkIsAppDomain(request: Request): boolean {
+  const appDomain = process.env.CLOUD_APP_DOMAIN
+  if (!appDomain) return false
+
+  const host = request.headers.get('host')?.split(':')[0]?.toLowerCase()
+  return host === appDomain.toLowerCase()
+}
+
 export default createServerEntry({
   async fetch(request) {
     const url = new URL(request.url)
@@ -46,20 +58,35 @@ export default createServerEntry({
       return handler.fetch(request, { context: { tenant: null } })
     }
 
+    // App domain (e.g., app.quackback.io): skip tenant resolution
+    // These routes (like /get-started) don't need a tenant database
+    if (checkIsAppDomain(request)) {
+      console.log(`[server] App domain request - skipping tenant resolution`)
+      const context: TenantContext = {
+        contextType: 'app-domain',
+        slug: '',
+        db: null,
+        settings: null,
+        cache: new Map(),
+      }
+      return tenantStorage.run(context, () => {
+        return handler.fetch(request, { context: { tenant: null } })
+      })
+    }
+
     // Self-hosted: no tenant resolution needed, uses DATABASE_URL singleton
     // Still wrap in tenantStorage for request-scoped caching and settings
     if (!isMultiTenant()) {
       console.log('[server] Self-hosted mode - querying settings')
-      // Query settings once at request start (uses DATABASE_URL singleton)
       const settings = await db.query.settings.findFirst()
-      const selfHostedContext: TenantContext = {
-        workspaceId: 'self-hosted',
+      const context: TenantContext = {
+        contextType: 'self-hosted',
         slug: settings?.slug ?? '',
-        db: null, // Self-hosted uses DATABASE_URL singleton via db.ts
+        db: null,
         settings: settings ?? null,
         cache: new Map(),
       }
-      return tenantStorage.run(selfHostedContext, () => {
+      return tenantStorage.run(context, () => {
         return handler.fetch(request, { context: { tenant: null } })
       })
     }
@@ -69,27 +96,26 @@ export default createServerEntry({
     const tenant = await resolveTenantFromDomain(request)
 
     if (!tenant) {
-      // Unknown or invalid domain - pass through with minimal context
       console.log(`[server] No tenant found for domain: ${url.hostname}`)
-      const noTenantContext: TenantContext = {
-        workspaceId: 'unknown',
+      const context: TenantContext = {
+        contextType: 'unknown',
         slug: '',
         db: null,
         settings: null,
         cache: new Map(),
       }
-      return tenantStorage.run(noTenantContext, () => {
+      return tenantStorage.run(context, () => {
         return handler.fetch(request, { context: { tenant: null } })
       })
     }
 
     console.log(`[server] Tenant resolved: ${tenant.workspaceId} for domain: ${url.hostname}`)
 
-    // Query settings once using tenant's db directly (before setting up full context)
+    // Query settings once using tenant's db directly
     const settings = await tenant.db.query.settings.findFirst()
 
-    // Build full tenant context with settings and cache
-    const tenantContext: TenantContext = {
+    const context: TenantContext = {
+      contextType: 'tenant',
       workspaceId: tenant.workspaceId,
       slug: tenant.slug,
       db: tenant.db,
@@ -97,11 +123,9 @@ export default createServerEntry({
       cache: new Map(),
     }
 
-    // Run entire request within AsyncLocalStorage context
-    // This allows db.ts and other services to access tenant db via tenantStorage.getStore()
-    return tenantStorage.run(tenantContext, () => {
+    return tenantStorage.run(context, () => {
       console.log(`[server] Running request in tenant context: ${tenant.workspaceId}`)
-      return handler.fetch(request, { context: { tenant: tenantContext } })
+      return handler.fetch(request, { context: { tenant: context } })
     })
   },
 })
