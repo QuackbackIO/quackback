@@ -40,10 +40,17 @@ const getSessionTransferPlugin = async (): Promise<BetterAuthPlugin | null> => {
   return sessionTransfer()
 }
 
-// OIDC callback plugin - loaded dynamically to avoid client bundling of database code
-const getOidcCallbackPlugin = async (): Promise<BetterAuthPlugin> => {
-  const { oidcCallback } = await import('./plugins/oidc-callback')
-  return oidcCallback()
+// OAuth callback plugin for GitHub/Google/OIDC
+// Handles OAuth callbacks and transfers session to tenant domain
+const getOAuthCallbackPlugin = async (): Promise<BetterAuthPlugin> => {
+  const { oauthCallback } = await import('./plugins/oauth-callback')
+  return oauthCallback()
+}
+
+// OAuth complete plugin - completes OAuth on tenant domain after app domain callback
+const getOAuthCompletePlugin = async (): Promise<BetterAuthPlugin> => {
+  const { oauthComplete } = await import('./plugins/oauth-complete')
+  return oauthComplete()
 }
 
 async function getTrustedOrigins(request?: Request): Promise<string[]> {
@@ -95,7 +102,8 @@ async function createAuth() {
 
   // Get plugins
   const sessionTransferPlugin = await getSessionTransferPlugin()
-  const oidcCallbackPlugin = await getOidcCallbackPlugin()
+  const oauthCallbackPlugin = await getOAuthCallbackPlugin()
+  const oauthCompletePlugin = await getOAuthCompletePlugin()
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -131,21 +139,9 @@ async function createAuth() {
       },
     },
 
-    // Social OAuth providers (GitHub and Google)
-    // Callbacks at /api/auth/callback/github and /api/auth/callback/google
-    socialProviders: {
-      github: {
-        clientId: process.env.GITHUB_CLIENT_ID || '',
-        clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
-      },
-      google: {
-        clientId: process.env.GOOGLE_CLIENT_ID || '',
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-        // Force account selection and offline access for refresh tokens
-        accessType: 'offline',
-        prompt: 'select_account',
-      },
-    },
+    // Note: GitHub/Google OAuth is handled by our custom oauth-callback plugin
+    // instead of Better Auth's built-in socialProviders. This allows callbacks
+    // on the app domain with session transfer to tenant domains.
 
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 days
@@ -252,8 +248,11 @@ async function createAuth() {
       // Session transfer for cross-domain handoff from website (cloud only)
       ...(sessionTransferPlugin ? [sessionTransferPlugin] : []),
 
-      // OIDC callback for tenant-configured OIDC providers
-      oidcCallbackPlugin,
+      // OAuth callback for GitHub/Google/OIDC - handles callbacks and session transfer
+      oauthCallbackPlugin,
+
+      // OAuth complete - completes OAuth on tenant domain after app domain callback
+      oauthCompletePlugin,
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),

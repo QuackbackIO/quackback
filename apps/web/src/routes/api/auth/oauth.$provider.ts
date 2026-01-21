@@ -1,94 +1,154 @@
 import { createFileRoute } from '@tanstack/react-router'
+import {
+  buildCallbackUrl,
+  isValidReturnDomain,
+  isValidCallbackUrl,
+  normalizeCallbackUrl,
+  generateCodeVerifier,
+  generateCodeChallenge,
+  generateNonce,
+} from '@/lib/auth/oauth-utils'
 
-/**
- * OIDC OAuth Initiation Route
- *
- * Initiates OAuth flow with tenant-configured OIDC providers. GitHub and Google
- * now use Better Auth's built-in socialProviders, so this route only handles OIDC.
- *
- * Query params:
- * - workspace: Workspace slug (required)
- * - returnDomain: Domain to redirect to after auth (required)
- * - callbackUrl: Path to redirect to after login (default: '/')
- * - type: 'portal' | 'team' - which OIDC config to use (default: 'portal')
- *
- * Flow:
- * 1. Validate workspace exists
- * 2. Load OIDC config from tenant settings (portal or team based on type)
- * 3. Build OIDC authorization URL with signed state
- * 4. Redirect to OIDC provider
- */
+const OAUTH_PROVIDERS = {
+  github: {
+    authUrl: 'https://github.com/login/oauth/authorize',
+    clientIdEnv: 'GITHUB_CLIENT_ID',
+    scope: 'read:user user:email',
+    extraParams: {},
+  },
+  google: {
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    clientIdEnv: 'GOOGLE_CLIENT_ID',
+    scope: 'openid email profile',
+    extraParams: { response_type: 'code', access_type: 'offline', prompt: 'select_account' },
+  },
+} as const
 
-function buildOIDCCallbackUrl(request: Request): string {
-  const proto = request.headers.get('x-forwarded-proto') || 'http'
-  const host = request.headers.get('host')
-  return `${proto}://${host}/api/auth/callback/oidc`
+type OAuthProvider = keyof typeof OAUTH_PROVIDERS
+
+function buildOAuthUrl(
+  provider: OAuthProvider,
+  clientId: string,
+  redirectUri: string,
+  state: string,
+  codeChallenge: string
+): string {
+  const config = OAUTH_PROVIDERS[provider]
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: config.scope,
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    ...config.extraParams,
+  })
+  return `${config.authUrl}?${params}`
 }
 
 export const Route = createFileRoute('/api/auth/oauth/$provider')({
   server: {
     handlers: {
-      /**
-       * GET /api/auth/oauth/[provider]
-       * Initiate OAuth flow with OIDC provider
-       *
-       * Note: GitHub and Google now use Better Auth's built-in socialProviders.
-       * This route only handles OIDC for tenant-configured identity providers.
-       */
       GET: async ({ request, params }) => {
         const { db, settings, eq } = await import('@/lib/db')
-        const { signOAuthState } = await import('@/lib/auth/oauth-state')
+        const { signOAuthState, encryptOIDCConfig, encryptCodeVerifier } =
+          await import('@/lib/auth/oauth-state')
 
         const { provider } = params
         console.log(`[oauth] Initiating OAuth: provider=${provider}`)
 
-        // Only OIDC is handled by this route
-        // GitHub and Google use Better Auth's socialProviders (via authClient.signIn.social)
-        if (provider !== 'oidc') {
-          return Response.json(
-            {
-              error: `Provider '${provider}' should use Better Auth's signIn.social() instead`,
-              hint: 'GitHub and Google OAuth is now handled by Better Auth socialProviders',
-            },
-            { status: 400 }
-          )
-        }
-
-        const url = new URL(request.url)
-        const searchParams = url.searchParams
-
-        const orgSlug = searchParams.get('workspace')
+        const searchParams = new URL(request.url).searchParams
+        const workspace = searchParams.get('workspace')
         const returnDomain = searchParams.get('returnDomain')
-        const callbackUrl = searchParams.get('callbackUrl') || '/'
         const popup = searchParams.get('popup') === 'true'
         const oidcType = (searchParams.get('type') || 'portal') as 'portal' | 'team'
 
-        // Validate required params
-        if (!orgSlug || !returnDomain) {
+        if (!workspace || !returnDomain) {
           return Response.json(
             { error: 'Missing required params: workspace, returnDomain' },
             { status: 400 }
           )
         }
 
-        // Validate settings exists
+        if (!isValidReturnDomain(returnDomain, workspace)) {
+          console.error(`[oauth] Invalid returnDomain: ${returnDomain} for workspace: ${workspace}`)
+          return Response.json({ error: 'Invalid return domain' }, { status: 400 })
+        }
+
+        const rawCallbackUrl = searchParams.get('callbackUrl') || '/'
+        if (!isValidCallbackUrl(rawCallbackUrl)) {
+          console.error(`[oauth] Invalid callbackUrl: ${rawCallbackUrl}`)
+          return Response.json({ error: 'Invalid callback URL' }, { status: 400 })
+        }
+        const safeCallbackUrl = normalizeCallbackUrl(rawCallbackUrl)
+
         const org = await db.query.settings.findFirst({
-          where: eq(settings.slug, orgSlug),
+          where: eq(settings.slug, workspace),
           columns: { id: true },
         })
 
         if (!org) {
-          return Response.json({ error: 'Settings not found' }, { status: 404 })
+          return Response.json({ error: 'Workspace not found' }, { status: 404 })
         }
 
-        // Load OIDC config from tenant settings (portal or team based on type)
+        const baseState = {
+          provider,
+          workspace,
+          returnDomain,
+          callbackUrl: safeCallbackUrl,
+          popup,
+          type: oidcType,
+        }
+
+        // Handle GitHub and Google via shared config
+        if (provider in OAUTH_PROVIDERS) {
+          const oauthProvider = provider as OAuthProvider
+          const config = OAUTH_PROVIDERS[oauthProvider]
+          const clientId = process.env[config.clientIdEnv]
+
+          if (!clientId) {
+            return Response.json({ error: `${provider} OAuth not configured` }, { status: 400 })
+          }
+
+          const codeVerifier = generateCodeVerifier()
+          const codeChallenge = generateCodeChallenge(codeVerifier)
+          const encryptedVerifier = encryptCodeVerifier(codeVerifier)
+
+          const signedState = signOAuthState({
+            ...baseState,
+            codeVerifier: encryptedVerifier,
+            ts: Date.now(),
+          })
+
+          const redirectUri = buildCallbackUrl(request.headers, provider)
+          console.log(`[oauth] Redirecting to ${provider}`)
+          return Response.redirect(
+            buildOAuthUrl(
+              oauthProvider,
+              clientId,
+              redirectUri,
+              `${provider}:${signedState}`,
+              codeChallenge
+            ),
+            302
+          )
+        }
+
+        // OIDC provider
+        if (provider !== 'oidc') {
+          return Response.json({ error: `Unsupported provider: ${provider}` }, { status: 400 })
+        }
+
         const { getFullOIDCConfig, getFullSecurityConfig } =
           await import('@/lib/settings/settings.service')
-        const { buildOIDCAuthUrl } = await import('@/lib/auth/oidc.service')
+        const { buildOIDCAuthUrl, decryptOIDCSecret } = await import('@/lib/auth/oidc.service')
 
-        let oidcConfig
+        const oidcConfig =
+          oidcType === 'team'
+            ? (await getFullSecurityConfig())?.sso.provider
+            : await getFullOIDCConfig()
+
         if (oidcType === 'team') {
-          // Team SSO - load from security config
           const securityConfig = await getFullSecurityConfig()
           if (!securityConfig?.sso.enabled || !securityConfig.sso.provider) {
             return Response.json(
@@ -96,37 +156,47 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
               { status: 400 }
             )
           }
-          oidcConfig = securityConfig.sso.provider
-        } else {
-          // Portal OIDC - load from portal config
-          oidcConfig = await getFullOIDCConfig()
-          if (!oidcConfig?.enabled) {
-            return Response.json(
-              { error: 'OIDC not configured for this workspace' },
-              { status: 400 }
-            )
-          }
+        } else if (!oidcConfig?.enabled) {
+          return Response.json({ error: 'OIDC not configured for this workspace' }, { status: 400 })
         }
 
-        // Build state with workspace info (HMAC-signed to prevent tampering)
-        const stateData = {
-          workspace: orgSlug,
-          returnDomain,
-          callbackUrl,
-          popup,
+        if (!oidcConfig) {
+          return Response.json({ error: 'OIDC configuration unavailable' }, { status: 400 })
+        }
+
+        const codeVerifier = generateCodeVerifier()
+        const codeChallenge = generateCodeChallenge(codeVerifier)
+        const encryptedVerifier = encryptCodeVerifier(codeVerifier)
+        const nonce = generateNonce()
+
+        const clientSecret = decryptOIDCSecret(oidcConfig.clientSecretEncrypted, org.id)
+        const encryptedOidcConfig = encryptOIDCConfig({
+          issuer: oidcConfig.issuer,
+          clientId: oidcConfig.clientId,
+          clientSecret,
+          emailDomain: oidcConfig.emailDomain,
+          scopes: oidcConfig.scopes,
           type: oidcType,
-          ts: Date.now(),
-        }
-        const signedState = signOAuthState(stateData)
+        })
 
-        // Build OIDC authorization URL with callback to /api/auth/callback/oidc
+        const oidcSignedState = signOAuthState({
+          ...baseState,
+          provider: 'oidc',
+          oidcConfig: encryptedOidcConfig,
+          codeVerifier: encryptedVerifier,
+          nonce,
+          ts: Date.now(),
+        })
+
+        const redirectUri = buildCallbackUrl(request.headers, 'oidc')
         const oauthUrl = await buildOIDCAuthUrl(
           oidcConfig,
-          buildOIDCCallbackUrl(request),
-          `oidc:${signedState}`
+          redirectUri,
+          `oidc:${oidcSignedState}`,
+          codeChallenge,
+          nonce
         )
-
-        console.log(`[oauth] ✅ Redirecting to OIDC provider`)
+        console.log(`[oauth] Redirecting to OIDC provider`)
         return Response.redirect(oauthUrl, 302)
       },
     },

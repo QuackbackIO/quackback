@@ -9,17 +9,18 @@ import {
   ArrowLeftIcon,
   KeyIcon,
 } from '@heroicons/react/24/solid'
-import { GitHubIcon, GoogleIcon, MicrosoftIcon } from '@/components/icons/social-icons'
+import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
 import { openAuthPopup, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/auth/client'
 import type { PublicOIDCConfig } from '@/lib/settings'
+
+type OAuthProvider = 'google' | 'github' | 'oidc'
 
 interface OrgAuthConfig {
   found: boolean
   oauth: {
     google: boolean
     github: boolean
-    microsoft?: boolean
   }
   oidc?: PublicOIDCConfig | null
   openSignup?: boolean
@@ -100,7 +101,7 @@ export function PortalAuthFormInline({
   const [error, setError] = useState('')
   // Track which specific action is loading (null = not loading)
   const [loadingAction, setLoadingAction] = useState<
-    'email' | 'code' | 'google' | 'github' | 'microsoft' | 'oidc' | null
+    'email' | 'code' | 'google' | 'github' | 'oidc' | null
   >(null)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
@@ -249,11 +250,12 @@ export function PortalAuthFormInline({
   /**
    * Initiate OAuth login
    *
-   * All providers use popup windows for authentication:
-   * - GitHub/Google: Use Better Auth's signIn.social() with disableRedirect
-   * - OIDC: Use custom OAuth route for tenant-configured providers
+   * All providers use popup windows for authentication.
+   * All providers use the custom /api/auth/oauth/[provider] route which:
+   * - Handles OAuth initiation with signed state containing workspace info
+   * - Redirects callback to app domain, then transfers session to tenant domain
    */
-  const initiateOAuth = async (provider: 'google' | 'github' | 'microsoft' | 'oidc') => {
+  const initiateOAuth = (provider: OAuthProvider) => {
     setError('')
 
     // If popup already open, just focus it
@@ -265,65 +267,32 @@ export function PortalAuthFormInline({
     setLoadingAction(provider)
     setPopupBlocked(false)
 
-    // OIDC uses custom route for tenant-specific configuration
-    if (provider === 'oidc') {
-      const returnDomain = window.location.host
-      const params = new URLSearchParams({
-        workspace: orgSlug,
-        returnDomain,
-        callbackUrl: '/auth/auth-complete',
-        popup: 'true',
-        type: 'portal',
-      })
+    // Build OAuth initiation URL with workspace info
+    const returnDomain = window.location.host
+    const params = new URLSearchParams({
+      workspace: orgSlug,
+      returnDomain,
+      callbackUrl: '/auth/auth-complete',
+      popup: 'true',
+      ...(provider === 'oidc' ? { type: 'portal' } : {}),
+    })
 
-      const oauthUrl = `/api/auth/oauth/oidc?${params}`
-      const popup = openAuthPopup(oauthUrl)
-      if (!popup) {
-        setPopupBlocked(true)
-        setLoadingAction(null)
-        return
-      }
-      trackPopup(popup)
+    const oauthUrl = `/api/auth/oauth/${provider}?${params}`
+    const popup = openAuthPopup(oauthUrl)
+    if (!popup) {
+      setPopupBlocked(true)
+      setLoadingAction(null)
       return
     }
-
-    // GitHub and Google use Better Auth's socialProviders with popup
-    // Get the OAuth URL without redirecting, then open in popup
-    try {
-      const result = await authClient.signIn.social({
-        provider,
-        callbackURL: '/auth/auth-complete',
-        disableRedirect: true,
-      })
-
-      if (result.error || !result.data?.url) {
-        console.error('[oauth] Failed to get OAuth URL:', result.error)
-        setError('Failed to initiate sign in')
-        setLoadingAction(null)
-        return
-      }
-
-      const popup = openAuthPopup(result.data.url)
-      if (!popup) {
-        setPopupBlocked(true)
-        setLoadingAction(null)
-        return
-      }
-      trackPopup(popup)
-    } catch (error) {
-      console.error('[oauth] Error initiating OAuth:', error)
-      setError('Failed to initiate sign in')
-      setLoadingAction(null)
-    }
+    trackPopup(popup)
   }
 
   // Determine which OAuth methods to show
   const showGoogle = authConfig?.oauth?.google ?? false
   const showGithub = authConfig?.oauth?.github ?? false
-  const showMicrosoft = authConfig?.oauth?.microsoft ?? false
   const showOidc = authConfig?.oidc?.enabled === true
   const oidcDisplayName = authConfig?.oidc?.displayName || 'SSO'
-  const showOAuth = showGoogle || showGithub || showMicrosoft || showOidc
+  const showOAuth = showGoogle || showGithub || showOidc
 
   // Loading invitation
   if (loadingInvitation) {
@@ -404,17 +373,6 @@ export function PortalAuthFormInline({
                 loading={loadingAction === 'google'}
                 disabled={loadingAction !== null}
                 onClick={() => initiateOAuth('google')}
-              />
-            )}
-            {showMicrosoft && (
-              <OAuthButton
-                provider="microsoft"
-                icon={<MicrosoftIcon className="h-5 w-5" />}
-                label="Microsoft"
-                mode={mode}
-                loading={loadingAction === 'microsoft'}
-                disabled={loadingAction !== null}
-                onClick={() => initiateOAuth('microsoft')}
               />
             )}
             {showGithub && (

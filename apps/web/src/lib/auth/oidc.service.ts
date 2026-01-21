@@ -10,6 +10,7 @@
 
 import { encryptToken, decryptToken } from '@quackback/db'
 import type { OIDCProviderConfig } from '@/lib/settings/settings.types'
+import { buildDisplayName } from './oauth-utils'
 
 export interface OIDCDiscoveryMetadata {
   issuer: string
@@ -115,7 +116,9 @@ export function decryptOIDCSecret(encryptedSecret: string, workspaceId: string):
 export async function buildOIDCAuthUrl(
   config: OIDCProviderConfig,
   redirectUri: string,
-  state: string
+  state: string,
+  codeChallenge: string,
+  nonce: string
 ): Promise<string> {
   const discovery = await fetchOIDCDiscovery(config.issuer)
 
@@ -125,9 +128,11 @@ export async function buildOIDCAuthUrl(
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('state', state)
 
-  // Use configured scopes or defaults
   const scopes = config.scopes?.length ? config.scopes : ['openid', 'email', 'profile']
   url.searchParams.set('scope', scopes.join(' '))
+  url.searchParams.set('code_challenge', codeChallenge)
+  url.searchParams.set('code_challenge_method', 'S256')
+  url.searchParams.set('nonce', nonce)
 
   return url.toString()
 }
@@ -182,27 +187,6 @@ export async function exchangeOIDCCode(
   }
 }
 
-interface UserInfoClaims {
-  name?: string
-  given_name?: string
-  family_name?: string
-  preferred_username?: string
-}
-
-function buildDisplayName(data: UserInfoClaims): string | undefined {
-  // Avoid email-like values for privacy
-  if (data.name && !data.name.includes('@')) {
-    return data.name
-  }
-  if (data.given_name) {
-    return data.family_name ? `${data.given_name} ${data.family_name}` : data.given_name
-  }
-  if (data.preferred_username && !data.preferred_username.includes('@')) {
-    return data.preferred_username
-  }
-  return undefined
-}
-
 export async function getOIDCUserInfo(
   config: OIDCProviderConfig,
   accessToken: string
@@ -239,9 +223,8 @@ export async function getOIDCUserInfo(
       return { error: 'Missing email claim in userinfo response' }
     }
 
-    // Build name from available claims (avoid email-like values for privacy)
     const { generateUsername } = await import('./username-generator')
-    const name = buildDisplayName(data) ?? generateUsername()
+    const name = buildDisplayName(data, generateUsername())
 
     return {
       sub: data.sub,

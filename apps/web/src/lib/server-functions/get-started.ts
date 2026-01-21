@@ -257,7 +257,7 @@ async function seedTenantData(
         ${input.slug},
         NOW(),
         '{"features":{"publicView":true,"submissions":true,"comments":true,"voting":true}}'::text,
-        '{"oauth":{"google":true,"github":true,"microsoft":false},"openSignup":true}'::text,
+        '{"oauth":{"google":true,"github":true},"openSignup":true}'::text,
         '{}'::text
       )
     `,

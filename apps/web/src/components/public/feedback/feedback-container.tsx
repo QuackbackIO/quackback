@@ -56,6 +56,11 @@ export function FeedbackContainer({
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
   const [density, setDensity] = useState<PostCardDensity>('comfortable')
 
+  // List key for animations - only updates when data finishes loading
+  // This prevents double animations when filters change (stale data → new data)
+  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}`
+  const [listKey, setListKey] = useState(filterKey)
+
   const effectiveUser = session?.user
     ? { name: session.user.name, email: session.user.email }
     : user
@@ -117,6 +122,14 @@ export function FeedbackContainer({
 
   const posts = flattenPublicPosts(postsData)
   const isLoading = isFetching && !isFetchingNextPage
+
+  // Update list key only when loading completes to trigger animations
+  // This ensures we animate the new data, not stale data during loading
+  useEffect(() => {
+    if (!isLoading && filterKey !== listKey) {
+      setListKey(filterKey)
+    }
+  }, [filterKey, isLoading, listKey])
 
   // Track voted posts - TanStack Query is single source of truth
   // Optimistic updates handled by useVoteMutation's onMutate
@@ -241,7 +254,10 @@ export function FeedbackContainer({
               </p>
             ) : (
               <>
-                <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+                <div
+                  key={listKey}
+                  className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40"
+                >
                   {posts.map((post, index) => (
                     <div
                       key={post.id}

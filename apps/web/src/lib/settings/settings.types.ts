@@ -15,7 +15,6 @@
 export interface OAuthProviders {
   google: boolean
   github: boolean
-  microsoft: boolean
 }
 
 /**
@@ -36,7 +35,6 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
   oauth: {
     google: true,
     github: true,
-    microsoft: true,
   },
   openSignup: false,
 }

@@ -15,7 +15,6 @@ interface OrgAuthConfig {
   oauth: {
     google: boolean
     github: boolean
-    microsoft?: boolean
   }
   oidc?: PublicOIDCConfig | null
   openSignup?: boolean

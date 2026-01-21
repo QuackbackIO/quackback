@@ -116,7 +116,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
           }),
           // Default auth config
           authConfig: JSON.stringify({
-            oauth: { google: true, github: true, microsoft: false },
+            oauth: { google: true, github: true },
             openSignup: true,
           }),
         })

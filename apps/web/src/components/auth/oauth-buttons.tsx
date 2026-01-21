@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { KeyIcon } from '@heroicons/react/24/solid'
-import { authClient } from '@/lib/auth/client'
 import type { PublicOIDCConfig } from '@/lib/settings'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
 import { openAuthPopup, useAuthBroadcast, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
@@ -26,8 +25,9 @@ interface OAuthButtonsProps {
  *
  * Renders GitHub, Google, and custom OIDC sign-in buttons.
  * All providers use popup windows for authentication.
- * GitHub/Google use Better Auth's socialProviders with disableRedirect.
- * OIDC uses custom route for tenant-configured identity providers.
+ * All providers use the custom /api/auth/oauth/[provider] route which:
+ * - Handles OAuth initiation with signed state containing workspace info
+ * - Redirects callback to app domain, then transfers session to tenant domain
  */
 export function OAuthButtons({
   orgSlug,
@@ -58,7 +58,7 @@ export function OAuthButtons({
     },
   })
 
-  async function handleOAuthLogin(provider: 'github' | 'google' | 'oidc'): Promise<void> {
+  function handleOAuthLogin(provider: 'github' | 'google' | 'oidc'): void {
     if (hasPopup()) {
       focusPopup()
       return
@@ -67,31 +67,19 @@ export function OAuthButtons({
     setLoadingProvider(provider)
     setPopupBlocked(false)
 
-    let oauthUrl: string
-
-    if (provider === 'oidc') {
-      const params = new URLSearchParams({
-        workspace: orgSlug,
-        returnDomain: window.location.host,
-        callbackUrl: '/auth/auth-complete',
-        popup: 'true',
-        type: oidcType,
-      })
-      oauthUrl = `/api/auth/oauth/oidc?${params}`
-    } else {
-      const result = await authClient.signIn.social({
-        provider,
-        callbackURL: '/auth/auth-complete',
-        disableRedirect: true,
-      })
-
-      if (result.error || !result.data?.url) {
-        console.error('[oauth] Failed to get OAuth URL:', result.error)
-        setLoadingProvider(null)
-        return
-      }
-      oauthUrl = result.data.url
-    }
+    // Build OAuth initiation URL with workspace info
+    // All providers use the same custom route which handles:
+    // - OAuth initiation with signed state
+    // - Callback on app domain
+    // - Session transfer to tenant domain
+    const params = new URLSearchParams({
+      workspace: orgSlug,
+      returnDomain: window.location.host,
+      callbackUrl: '/auth/auth-complete',
+      popup: 'true',
+      ...(provider === 'oidc' ? { type: oidcType } : {}),
+    })
+    const oauthUrl = `/api/auth/oauth/${provider}?${params}`
 
     const popup = openAuthPopup(oauthUrl)
     if (!popup) {
