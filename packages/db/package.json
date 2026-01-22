@@ -14,12 +14,16 @@
     "./catalog": "./src/catalog/index.ts",
     "./tenant": "./src/tenant/index.ts",
     "./migrate": "./src/migrate-runtime.ts",
+    "./init-sql": "./src/init-sql.generated.ts",
     "./queries/public": "./src/queries/public.ts",
     "./types": "./src/types.ts",
-    "./drizzle/*": "./drizzle/*"
+    "./drizzle/*": "./drizzle/*",
+    "./tenant-schema.sql": "./dist/tenant-schema.sql"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
+    "db:generate-init-sql": "bun scripts/generate-init-sql.ts",
+    "db:generate-tenant-schema": "bun scripts/generate-tenant-schema.ts",
     "db:generate:catalog": "drizzle-kit generate --config=drizzle-catalog.config.ts",
     "db:generate:tenant": "drizzle-kit generate --config=drizzle-tenant.config.ts",
     "db:migrate": "bun run src/migrate.ts",
