@@ -32,6 +32,10 @@ export interface BoardSettings {
   roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
 }
 
+// Use case types for personalized onboarding
+export const USE_CASE_TYPES = ['saas', 'consumer', 'marketplace', 'internal'] as const
+export type UseCaseType = (typeof USE_CASE_TYPES)[number]
+
 // Setup state for tracking onboarding/provisioning (stored in settings.setup_state)
 export interface SetupState {
   version: number // Schema version for future migrations
@@ -42,6 +46,7 @@ export interface SetupState {
   }
   completedAt?: string // ISO timestamp when onboarding was fully completed
   source: 'cloud' | 'self-hosted' // How this instance was provisioned
+  useCase?: UseCaseType // Product type for personalized board recommendations
 }
 
 // Default setup state for new instances (self-hosted starts with workspace incomplete)
