@@ -310,10 +310,21 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
     }
   }
 
-  function handleSkipBoards() {
-    setCreatedBoardNames([])
-    setStep('complete')
-    // No confetti for skip - encourage users to create boards later
+  async function handleSkipBoards() {
+    setIsLoading(true)
+    setError('')
+
+    try {
+      // Call with empty array to mark boards step as complete in setupState
+      await createBoardsBatchFn({ data: { boards: [] } })
+      setCreatedBoardNames([])
+      setStep('complete')
+      // No confetti for skip - encourage users to create boards later
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to complete setup')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // ============================================
