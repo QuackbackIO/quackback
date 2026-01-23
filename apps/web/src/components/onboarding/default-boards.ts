@@ -2,7 +2,6 @@ import {
   LightBulbIcon,
   BugAntIcon,
   ChatBubbleOvalLeftEllipsisIcon,
-  PuzzlePieceIcon,
 } from '@heroicons/react/24/solid'
 import type { ComponentType } from 'react'
 
@@ -38,11 +37,5 @@ export const DEFAULT_BOARD_OPTIONS: DefaultBoardOption[] = [
     name: 'General Feedback',
     description: 'Open feedback for any topic or suggestion',
     icon: ChatBubbleOvalLeftEllipsisIcon,
-  },
-  {
-    id: 'integrations',
-    name: 'Integrations',
-    description: 'Requests for integrations with other tools',
-    icon: PuzzlePieceIcon,
   },
 ]

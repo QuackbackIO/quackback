@@ -7,10 +7,10 @@ import {
   BuildingOffice2Icon,
   CheckIcon,
   EnvelopeIcon,
-  GlobeAltIcon,
-  SparklesIcon,
+  PlusIcon,
   Squares2X2Icon,
   UserIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -70,15 +70,16 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(
     new Set(DEFAULT_BOARD_OPTIONS.filter((b) => b.isRecommended).map((b) => b.id))
   )
+  const [customBoards, setCustomBoards] = useState<Array<{ name: string; description: string }>>([])
+  const [newCustomBoard, setNewCustomBoard] = useState({ name: '', description: '' })
+  const [showCustomBoardForm, setShowCustomBoardForm] = useState(false)
   const [createdBoardNames, setCreatedBoardNames] = useState<string[]>([])
 
   // Shared state
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showConfetti, setShowConfetti] = useState(false)
 
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>(Array(6).fill(null))
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const autoSubmittedCodeRef = useRef<string>('')
 
   const firstName = userName?.split(' ')[0] || name.split(' ')[0] || 'there'
@@ -98,77 +99,6 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
       codeInputRefs.current[0].focus()
     }
   }, [accountStep])
-
-  // Confetti animation
-  useEffect(() => {
-    if (showConfetti && canvasRef.current) {
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
-
-      const particles: Array<{
-        x: number
-        y: number
-        vx: number
-        vy: number
-        color: string
-        size: number
-        rotation: number
-        rotationSpeed: number
-      }> = []
-
-      const colors = ['#fcd34d', '#fbbf24', '#f59e0b', '#d97706', '#facc15']
-
-      // Create particles
-      for (let i = 0; i < 150; i++) {
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: -10 - Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 4,
-          vy: Math.random() * 3 + 2,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          size: Math.random() * 8 + 4,
-          rotation: Math.random() * 360,
-          rotationSpeed: (Math.random() - 0.5) * 10,
-        })
-      }
-
-      let animationFrame: number
-
-      const animate = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-        particles.forEach((p) => {
-          p.y += p.vy
-          p.x += p.vx
-          p.rotation += p.rotationSpeed
-          p.vy += 0.1 // gravity
-
-          ctx.save()
-          ctx.translate(p.x, p.y)
-          ctx.rotate((p.rotation * Math.PI) / 180)
-          ctx.fillStyle = p.color
-          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size / 2)
-          ctx.restore()
-        })
-
-        if (particles.every((p) => p.y > canvas.height)) {
-          setShowConfetti(false)
-        } else {
-          animationFrame = requestAnimationFrame(animate)
-        }
-      }
-
-      animate()
-
-      return () => {
-        if (animationFrame) cancelAnimationFrame(animationFrame)
-      }
-    }
-  }, [showConfetti])
 
   // ============================================
   // Account Creation Handlers
@@ -287,22 +217,38 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
     })
   }
 
+  function addCustomBoard() {
+    const name = newCustomBoard.name.trim()
+    const description = newCustomBoard.description.trim()
+    if (name) {
+      setCustomBoards((prev) => [...prev, { name, description }])
+      setNewCustomBoard({ name: '', description: '' })
+      setShowCustomBoardForm(false)
+    }
+  }
+
+  function removeCustomBoard(index: number) {
+    setCustomBoards((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function handleCreateBoards() {
     setIsLoading(true)
     setError('')
 
     try {
-      const boardsToCreate = DEFAULT_BOARD_OPTIONS.filter((b) => selectedBoards.has(b.id)).map(
-        (b) => ({
-          name: b.name,
-          description: b.description,
-        })
-      )
+      // Combine default selected boards with custom boards
+      const defaultBoardsToCreate = DEFAULT_BOARD_OPTIONS.filter((b) =>
+        selectedBoards.has(b.id)
+      ).map((b) => ({
+        name: b.name,
+        description: b.description,
+      }))
+
+      const boardsToCreate = [...defaultBoardsToCreate, ...customBoards]
 
       const created = await createBoardsBatchFn({ data: { boards: boardsToCreate } })
       setCreatedBoardNames(created.map((b) => b.name))
       setStep('complete')
-      setShowConfetti(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create boards')
     } finally {
@@ -319,7 +265,6 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
       await createBoardsBatchFn({ data: { boards: [] } })
       setCreatedBoardNames([])
       setStep('complete')
-      // No confetti for skip - encourage users to create boards later
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to complete setup')
     } finally {
@@ -333,11 +278,6 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
 
   return (
     <div className="relative">
-      {/* Confetti Canvas */}
-      {showConfetti && (
-        <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-50" />
-      )}
-
       {/* Step Content */}
       <div className="relative">
         {/* Step 1: Create Account */}
@@ -787,6 +727,97 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                       </button>
                     )
                   })}
+
+                  {/* Custom boards list */}
+                  {customBoards.map((board, index) => (
+                    <div
+                      key={`custom-${index}`}
+                      className="w-full flex items-center justify-between gap-4 p-4 rounded-xl border-2 border-primary bg-primary/5 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 bg-primary border-primary">
+                          <CheckIcon className="h-3 w-3 text-white" />
+                        </div>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                          <Squares2X2Icon className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-medium text-foreground">{board.name}</span>
+                          {board.description && (
+                            <p className="text-sm text-muted-foreground truncate">
+                              {board.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeCustomBoard(index)}
+                        disabled={isLoading}
+                        className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                        aria-label="Remove board"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add custom board form */}
+                  {showCustomBoardForm ? (
+                    <div className="p-4 rounded-xl border-2 border-dashed border-border space-y-3">
+                      <Input
+                        type="text"
+                        value={newCustomBoard.name}
+                        onChange={(e) =>
+                          setNewCustomBoard((prev) => ({ ...prev, name: e.target.value }))
+                        }
+                        placeholder="Board name"
+                        autoFocus
+                        disabled={isLoading}
+                      />
+                      <Input
+                        type="text"
+                        value={newCustomBoard.description}
+                        onChange={(e) =>
+                          setNewCustomBoard((prev) => ({ ...prev, description: e.target.value }))
+                        }
+                        placeholder="Description (optional)"
+                        disabled={isLoading}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowCustomBoardForm(false)
+                            setNewCustomBoard({ name: '', description: '' })
+                          }}
+                          disabled={isLoading}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={addCustomBoard}
+                          disabled={isLoading || !newCustomBoard.name.trim()}
+                        >
+                          Add board
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomBoardForm(true)}
+                      disabled={isLoading}
+                      className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <PlusIcon className="h-5 w-5" />
+                      <span>Add custom board</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Action Buttons */}
@@ -813,9 +844,12 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
                       </>
                     ) : (
                       <>
-                        {selectedBoards.size === 0
-                          ? 'Continue'
-                          : `Create ${selectedBoards.size} board${selectedBoards.size !== 1 ? 's' : ''}`}
+                        {(() => {
+                          const totalBoards = selectedBoards.size + customBoards.length
+                          return totalBoards === 0
+                            ? 'Continue'
+                            : `Create ${totalBoards} board${totalBoards !== 1 ? 's' : ''}`
+                        })()}
                         <ArrowRightIcon className="ml-2 h-4 w-4" />
                       </>
                     )}
@@ -838,12 +872,12 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
           <div className="space-y-6">
             {/* Success state */}
             <div className="flex flex-col items-center space-y-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary shadow-sm">
-                <CheckIcon className="h-8 w-8 text-white" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <CheckIcon className="h-6 w-6 text-primary" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-4xl font-bold tracking-tight text-foreground">
-                  You're all set!
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                  Setup complete
                 </h1>
                 <p className="text-muted-foreground">
                   <CompletionMessage boardNames={createdBoardNames} />
@@ -851,55 +885,13 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
               </div>
             </div>
 
-            {/* Next steps card */}
-            <Card className="bg-card border border-border/50 shadow-sm">
-              <CardContent className="pt-6 space-y-4">
-                <p className="text-sm font-semibold text-primary uppercase tracking-wider">
-                  What's next
-                </p>
-
-                <div className="space-y-3">
-                  {[
-                    {
-                      icon: Squares2X2Icon,
-                      title: 'Manage feedback',
-                      desc: 'Review, organize, and respond to submissions',
-                    },
-                    {
-                      icon: GlobeAltIcon,
-                      title: 'Share your portal',
-                      desc: 'Invite users to submit and vote on ideas',
-                    },
-                    {
-                      icon: SparklesIcon,
-                      title: 'Customize your portal',
-                      desc: 'Add statuses, tags, and roadmap views',
-                    },
-                  ].map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/30 hover:bg-muted/50 hover:border-primary/20 transition-colors"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <item.icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground">{item.title}</p>
-                        <p className="text-sm text-muted-foreground mt-0.5">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Button
-                  onClick={() => router.navigate({ to: '/admin' as any })}
-                  className="w-full bg-primary hover:bg-primary text-white"
-                >
-                  Go to dashboard
-                  <ArrowRightIcon className="ml-2 h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
+            <Button
+              onClick={() => router.navigate({ to: '/admin' as any })}
+              className="w-full bg-primary hover:bg-primary text-white"
+            >
+              Go to dashboard
+              <ArrowRightIcon className="ml-2 h-4 w-4" />
+            </Button>
 
             {/* Mini Progress Indicator */}
             <div className="flex items-center justify-center gap-2">
