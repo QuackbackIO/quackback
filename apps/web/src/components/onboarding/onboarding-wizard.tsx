@@ -7,6 +7,7 @@ import {
   BuildingOffice2Icon,
   CheckIcon,
   EnvelopeIcon,
+  GlobeAltIcon,
   PlusIcon,
   Squares2X2Icon,
   UserIcon,
@@ -885,13 +886,23 @@ export function OnboardingWizard({ initialStep, userName }: OnboardingWizardProp
               </div>
             </div>
 
-            <Button
-              onClick={() => router.navigate({ to: '/admin' as any })}
-              className="w-full bg-primary hover:bg-primary text-white"
-            >
-              Go to dashboard
-              <ArrowRightIcon className="ml-2 h-4 w-4" />
-            </Button>
+            <div className="space-y-3">
+              <Button
+                onClick={() => router.navigate({ to: '/admin' as any })}
+                className="w-full bg-primary hover:bg-primary/90 text-white"
+              >
+                <Squares2X2Icon className="mr-2 h-4 w-4" />
+                Go to dashboard
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.navigate({ to: '/' as any })}
+                className="w-full"
+              >
+                <GlobeAltIcon className="mr-2 h-4 w-4" />
+                View feedback portal
+              </Button>
+            </div>
 
             {/* Mini Progress Indicator */}
             <div className="flex items-center justify-center gap-2">
