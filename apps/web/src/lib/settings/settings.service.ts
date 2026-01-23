@@ -9,6 +9,7 @@
 
 import { db, eq, settings } from '@/lib/db'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
+import { tenantStorage } from '@/lib/tenant'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -79,11 +80,39 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   return result
 }
 
-async function requireSettings() {
+// Type alias for settings record
+type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
+
+// Request-scoped cache helpers for settings
+function getCachedSettings(): SettingsRecord | undefined {
+  const ctx = tenantStorage.getStore()
+  // First check the cache Map
+  const cached = ctx?.cache.get('settings') as SettingsRecord | undefined
+  if (cached) return cached
+  // Fall back to context.settings (populated in server.ts during request init)
+  return (ctx?.settings as SettingsRecord) ?? undefined
+}
+
+function setCachedSettings(data: SettingsRecord): void {
+  const ctx = tenantStorage.getStore()
+  ctx?.cache.set('settings', data)
+}
+
+async function requireSettings(): Promise<SettingsRecord> {
+  // Check cache first (includes context.settings from server.ts)
+  const cached = getCachedSettings()
+  if (cached) {
+    return cached
+  }
+
+  // Cache miss - fetch from database
   const org = await db.query.settings.findFirst()
   if (!org) {
     throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   }
+
+  // Cache the result for subsequent calls in this request
+  setCachedSettings(org)
   return org
 }
 

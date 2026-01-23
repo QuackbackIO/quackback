@@ -13,6 +13,21 @@ import { getSettings } from './workspace'
 import { db, member, eq, type Member } from '@/lib/db'
 import { tenantStorage } from '@/lib/tenant'
 
+// Type alias for session result
+type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
+
+/** Get session from request-scoped cache */
+function getCachedSession(): SessionResult | undefined {
+  const ctx = tenantStorage.getStore()
+  return ctx?.cache.get('session') as SessionResult | undefined
+}
+
+/** Store session in request-scoped cache */
+function setCachedSession(data: SessionResult): void {
+  const ctx = tenantStorage.getStore()
+  ctx?.cache.set('session', data)
+}
+
 /** Get member from request-scoped cache (returns undefined if not cached) */
 function getCachedMember(userId: UserId): Member | undefined {
   const ctx = tenantStorage.getStore()
@@ -28,10 +43,22 @@ function setCachedMember(userId: UserId, data: Member): void {
 /**
  * Get session directly from better-auth (not through server function).
  * This avoids nested server function call issues.
+ * Results are cached per-request to avoid redundant auth lookups.
  */
-async function getSessionDirect() {
+async function getSessionDirect(): Promise<SessionResult | null> {
+  // Check cache first
+  const cached = getCachedSession()
+  if (cached !== undefined) {
+    return cached
+  }
+
   try {
-    return await auth.api.getSession({ headers: getRequestHeaders() })
+    const session = await auth.api.getSession({ headers: getRequestHeaders() })
+
+    // Cache the result (including null to avoid repeated lookups)
+    setCachedSession(session)
+
+    return session
   } catch (error) {
     console.error('[auth] Failed to get session:', error)
     return null
