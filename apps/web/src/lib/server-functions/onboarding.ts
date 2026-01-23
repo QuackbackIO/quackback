@@ -82,7 +82,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
         : null
 
       // Check if onboarding is already complete
-      if (setupState?.steps?.core && setupState?.steps?.boards) {
+      if (setupState?.steps?.core && setupState?.steps?.workspace && setupState?.steps?.boards) {
         throw new Error('Workspace already initialized')
       }
 
@@ -102,8 +102,23 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       // Cloud-provisioned: settings exists with setupState.source = 'cloud'
       if (existingSettings) {
         console.log(
-          `[fn:onboarding] setupWorkspaceFn: cloud-provisioned workspace, completing setup`
+          `[fn:onboarding] setupWorkspaceFn: cloud-provisioned workspace, marking workspace step complete`
         )
+        // Update setupState to mark workspace step as complete
+        if (setupState && !setupState.steps.workspace) {
+          const updatedState: SetupState = {
+            ...setupState,
+            steps: {
+              ...setupState.steps,
+              workspace: true,
+            },
+          }
+          await db
+            .update(settings)
+            .set({ setupState: JSON.stringify(updatedState) })
+            .where(eq(settings.id, existingSettings.id))
+          console.log(`[fn:onboarding] setupWorkspaceFn: updated setupState.steps.workspace=true`)
+        }
       } else {
         // Self-hosted: create settings from scratch
         // Generate slug from workspace name
@@ -116,11 +131,12 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
           throw new Error('Invalid workspace name - cannot generate valid slug')
         }
 
-        // Initial setupState for self-hosted
+        // Initial setupState for self-hosted (workspace step done after this fn completes)
         setupState = {
           version: 1,
           steps: {
             core: true,
+            workspace: true,
             boards: false,
           },
           source: 'self-hosted',

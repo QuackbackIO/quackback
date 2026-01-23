@@ -9,7 +9,7 @@ export const Route = createFileRoute('/onboarding')({
 
     // Determine starting step based on state
     // Flow: create-account → setup-workspace → choose-boards → complete
-    let initialStep: 'create-account' | 'setup-workspace' = 'create-account'
+    let initialStep: 'create-account' | 'setup-workspace' | 'choose-boards' = 'create-account'
 
     if (session?.user) {
       // Check onboarding state via server function
@@ -24,9 +24,11 @@ export const Route = createFileRoute('/onboarding')({
       if (state.isOnboardingComplete) {
         // Onboarding complete (all setup steps done) - redirect to admin
         throw redirect({ to: '/admin' })
+      } else if (state.setupState?.steps?.workspace) {
+        // Workspace already configured (cloud-provisioned) - skip to boards
+        initialStep = 'choose-boards'
       } else {
         // Onboarding not complete - need to finish setup
-        // This handles both fresh instances and cloud-provisioned ones
         initialStep = 'setup-workspace'
       }
     }

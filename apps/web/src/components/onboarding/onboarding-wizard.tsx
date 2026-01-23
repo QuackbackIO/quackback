@@ -22,8 +22,11 @@ import { DEFAULT_BOARD_OPTIONS } from './default-boards'
 
 type Step = 'create-account' | 'setup-workspace' | 'choose-boards' | 'complete'
 
-// Initial steps that can be passed from the route (subset of all steps)
-type InitialStep = 'create-account' | 'setup-workspace'
+// Initial steps that can be passed from the route
+// - create-account: user not authenticated
+// - setup-workspace: user authenticated but workspace not configured
+// - choose-boards: workspace configured (cloud-provisioned), need to create boards
+type InitialStep = 'create-account' | 'setup-workspace' | 'choose-boards'
 
 function CompletionMessage({ boardNames }: { boardNames: string[] }): React.ReactNode {
   if (boardNames.length === 0) {
