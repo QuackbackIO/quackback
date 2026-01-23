@@ -790,11 +790,18 @@ export interface SettingsWithAllConfigs {
  * This consolidates multiple separate queries into one database call,
  * returning all parsed configs and branding data needed by the portal.
  *
+ * Returns null if settings don't exist (fresh install needing onboarding).
  * Use this in route loaders to avoid redundant database queries.
  */
-export async function getSettingsWithAllConfigs(): Promise<SettingsWithAllConfigs> {
+export async function getSettingsWithAllConfigs(): Promise<SettingsWithAllConfigs | null> {
   try {
-    const org = await requireSettings()
+    // Try cache first, then fall back to database query
+    // Unlike requireSettings(), we return null instead of throwing if not found
+    const org = getCachedSettings() ?? (await db.query.settings.findFirst()) ?? null
+    if (!org) return null
+
+    // Cache for subsequent calls in this request
+    setCachedSettings(org)
 
     // Parse all JSON configs
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)

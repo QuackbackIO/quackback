@@ -58,8 +58,8 @@ export interface RouterContext {
   session?: Awaited<ReturnType<typeof getSession>>
   /** @deprecated Use settingsData.settings instead */
   settings?: SettingsWithAllConfigs['settings']
-  /** Consolidated settings data (single query) - includes all configs and branding */
-  settingsData?: SettingsWithAllConfigs
+  /** Consolidated settings data (single query) - includes all configs and branding. Null if settings don't exist (fresh install). */
+  settingsData?: SettingsWithAllConfigs | null
 }
 
 // Paths that are allowed before onboarding is complete
@@ -96,19 +96,22 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     const [session, settingsData] = await Promise.all([getSession(), fetchSettingsWithAllConfigs()])
 
     // Enforce onboarding completion for non-exempt paths
+    // Missing settings (null) is treated the same as incomplete onboarding
     if (!isOnboardingExempt(location.pathname)) {
-      const setupState = getSetupState(settingsData.settings?.setupState ?? null)
+      const setupState = getSetupState(settingsData?.settings?.setupState ?? null)
       console.log(
-        `[__root] path=${location.pathname}, setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
+        `[__root] path=${location.pathname}, settingsExist=${!!settingsData}, setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
       )
       if (!isOnboardingComplete(setupState)) {
-        console.log(`[__root] Redirecting to /onboarding - setup incomplete`)
+        console.log(
+          `[__root] Redirecting to /onboarding - ${settingsData ? 'setup incomplete' : 'no settings (fresh install)'}`
+        )
         throw redirect({ to: '/onboarding' })
       }
     }
 
     // Provide backward-compatible 'settings' for existing routes
-    return { requestContext, session, settingsData, settings: settingsData.settings }
+    return { requestContext, session, settingsData, settings: settingsData?.settings ?? null }
   },
   head: () => ({
     meta: [
