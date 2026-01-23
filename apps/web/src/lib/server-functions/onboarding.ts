@@ -127,12 +127,13 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
         }
 
         // Create settings
+        // Use slug as both name and slug for consistency
         // Note: Not using transaction because neon-http driver doesn't support interactive transactions.
         const [createdSettings] = await db
           .insert(settings)
           .values({
             id: generateId('workspace'),
-            name: workspaceName.trim(),
+            name: slug,
             slug,
             createdAt: new Date(),
             // Default portal config - all features enabled
