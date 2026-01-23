@@ -1,5 +1,4 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import { getCurrentUserRole } from '@/lib/server-functions/workspace'
 import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
@@ -17,15 +16,7 @@ export const Route = createFileRoute('/_portal')({
       throw redirect({ to: '/onboarding' })
     }
 
-    // Redirect to onboarding if setup is incomplete
-    const setupState = getSetupState(org.setupState)
-    console.log(
-      `[_portal] setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
-    )
-    if (!isOnboardingComplete(setupState)) {
-      console.log(`[_portal] Redirecting to /onboarding - setup incomplete`)
-      throw redirect({ to: '/onboarding' })
-    }
+    // Note: Onboarding check is handled in __root.tsx beforeLoad
 
     const [userRole, avatarData] = await Promise.all([
       getCurrentUserRole(),

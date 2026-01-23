@@ -8,7 +8,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import { isSelfHosted, isCloud } from '@/lib/features'
 import { getSession } from './auth'
 import { db, member, eq } from '@/lib/db'
@@ -43,15 +42,7 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
       throw redirect({ to: '/' })
     }
 
-    // Check if onboarding is complete - redirect to onboarding if not
-    const setupState = getSetupState(appSettings.setupState)
-    console.log(
-      `[requireWorkspaceRole] setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
-    )
-    if (!isOnboardingComplete(setupState)) {
-      console.log(`[requireWorkspaceRole] Redirecting to /onboarding - setup incomplete`)
-      throw redirect({ to: '/onboarding' })
-    }
+    // Note: Onboarding check is handled in __root.tsx beforeLoad
 
     const memberRecord = await db.query.member.findFirst({
       where: eq(member.userId, session.user.id),

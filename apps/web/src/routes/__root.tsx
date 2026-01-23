@@ -1,7 +1,14 @@
 /// <reference types="vite/client" />
 import { lazy, Suspense, type ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
-import { Outlet, createRootRouteWithContext, HeadContent, Scripts } from '@tanstack/react-router'
+import {
+  Outlet,
+  createRootRouteWithContext,
+  HeadContent,
+  Scripts,
+  redirect,
+} from '@tanstack/react-router'
+import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
 import { getSession } from '@/lib/server-functions/auth'
@@ -55,8 +62,22 @@ export interface RouterContext {
   settingsData?: SettingsWithAllConfigs
 }
 
+// Paths that are allowed before onboarding is complete
+const ONBOARDING_EXEMPT_PATHS = [
+  '/onboarding',
+  '/auth/',
+  '/admin/login',
+  '/admin/signup',
+  '/api/',
+  '/accept-invitation/',
+]
+
+function isOnboardingExempt(pathname: string): boolean {
+  return ONBOARDING_EXEMPT_PATHS.some((path) => pathname.startsWith(path) || pathname === path)
+}
+
 export const Route = createRootRouteWithContext<RouterContext>()({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     // Get discriminated request context in a single call
     const requestContext = await getRequestContext()
 
@@ -73,6 +94,18 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     // Self-hosted or tenant mode - safe to query database
     // Fetch session and all settings data in parallel
     const [session, settingsData] = await Promise.all([getSession(), fetchSettingsWithAllConfigs()])
+
+    // Enforce onboarding completion for non-exempt paths
+    if (!isOnboardingExempt(location.pathname)) {
+      const setupState = getSetupState(settingsData.settings?.setupState ?? null)
+      console.log(
+        `[__root] path=${location.pathname}, setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
+      )
+      if (!isOnboardingComplete(setupState)) {
+        console.log(`[__root] Redirecting to /onboarding - setup incomplete`)
+        throw redirect({ to: '/onboarding' })
+      }
+    }
 
     // Provide backward-compatible 'settings' for existing routes
     return { requestContext, session, settingsData, settings: settingsData.settings }
