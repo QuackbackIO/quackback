@@ -264,12 +264,16 @@ export async function resolveTenantFromDomain(request: Request): Promise<TenantI
     const connectionString = await fetchConnectionString(workspaceRecord.neonProjectId, neonApiKey)
     const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
 
+    // Fetch settings from tenant DB (saves extra query in server.ts)
+    const settings = await tenantDb.query.settings.findFirst()
+
     console.log(`[resolver] Successfully resolved tenant: ${workspaceRecord.id}`)
 
     return {
       workspaceId: workspaceRecord.id,
       slug: workspaceRecord.slug,
       db: tenantDb,
+      settings: settings ?? null,
     }
   } catch (error) {
     console.error('[resolver] Failed to resolve tenant:', error)

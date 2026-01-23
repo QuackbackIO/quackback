@@ -111,15 +111,13 @@ export default createServerEntry({
 
     console.log(`[server] Tenant resolved: ${tenant.workspaceId} for domain: ${url.hostname}`)
 
-    // Query settings once using tenant's db directly
-    const settings = await tenant.db.query.settings.findFirst()
-
+    // Settings already fetched during tenant resolution
     const context: TenantContext = {
       contextType: 'tenant',
       workspaceId: tenant.workspaceId,
       slug: tenant.slug,
       db: tenant.db,
-      settings: settings ?? null,
+      settings: tenant.settings,
       cache: new Map(),
     }
 

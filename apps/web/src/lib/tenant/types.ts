@@ -54,6 +54,8 @@ export interface TenantInfo {
   slug: string
   /** Drizzle database instance connected to tenant's database */
   db: Database
+  /** Workspace settings (fetched during resolution to avoid extra query) */
+  settings: Settings | null
 }
 
 /**
