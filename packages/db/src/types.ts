@@ -32,6 +32,43 @@ export interface BoardSettings {
   roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
 }
 
+// Setup state for tracking onboarding/provisioning (stored in settings.setup_state)
+export interface SetupState {
+  version: number // Schema version for future migrations
+  steps: {
+    core: boolean // Core schema setup complete (settings created)
+    boards: boolean // At least one board created or explicitly skipped
+  }
+  completedAt?: string // ISO timestamp when onboarding was fully completed
+  source: 'cloud' | 'self-hosted' // How this instance was provisioned
+}
+
+// Default setup state for new instances
+export const DEFAULT_SETUP_STATE: SetupState = {
+  version: 1,
+  steps: {
+    core: true,
+    boards: false,
+  },
+  source: 'self-hosted',
+}
+
+// Helper to parse setup state from settings
+export function getSetupState(setupStateJson: string | null): SetupState | null {
+  if (!setupStateJson) return null
+  try {
+    return JSON.parse(setupStateJson) as SetupState
+  } catch {
+    return null
+  }
+}
+
+// Helper to check if onboarding is complete
+export function isOnboardingComplete(setupState: SetupState | null): boolean {
+  if (!setupState) return false
+  return setupState.steps.core && setupState.steps.boards
+}
+
 // Helper to get typed board settings
 export function getBoardSettings(board: Board): BoardSettings {
   const settings = (board.settings || {}) as BoardSettings

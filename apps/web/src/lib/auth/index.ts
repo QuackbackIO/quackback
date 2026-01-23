@@ -245,7 +245,7 @@ async function createAuth() {
         expiresIn: 60, // 1 minute - tokens are used immediately after generation
       }),
 
-      // Session transfer for cross-domain handoff from website (cloud only)
+      // Session transfer for post-provisioning auth from website (cloud only)
       ...(sessionTransferPlugin ? [sessionTransferPlugin] : []),
 
       // OAuth callback for GitHub/Google/OIDC - handles callbacks and session transfer

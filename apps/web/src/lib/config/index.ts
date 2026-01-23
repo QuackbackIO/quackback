@@ -59,7 +59,7 @@ const serverEnvSchema = z.object({
   ENTERPRISE_LICENSE_KEY: z.string().optional(),
 
   // Session transfer (cloud)
-  CLOUD_TRANSFER_TOKEN_SECRET: z.string().optional(),
+  CLOUD_SESSION_TRANSFER_SECRET: z.string().optional(),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>

@@ -2,7 +2,7 @@
 -- This allows pinning a team member's comment as the official response
 
 -- Add pinned_comment_id column to posts table
-ALTER TABLE "posts" ADD COLUMN "pinned_comment_id" uuid;
+ALTER TABLE "posts" ADD COLUMN "pinned_comment_id" uuid;--> statement-breakpoint
 
 -- Add index for efficient lookups
 CREATE INDEX "posts_pinned_comment_id_idx" ON "posts" ("pinned_comment_id");

@@ -64,6 +64,13 @@
       "when": 1768861200000,
       "tag": "0008_add_pinned_comment",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1768947600000,
+      "tag": "0009_add_setup_state",
+      "breakpoints": true
     }
   ]
 }

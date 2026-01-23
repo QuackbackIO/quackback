@@ -2,7 +2,11 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { generateId, type InviteId, type UserId, type MemberId } from '@quackback/ids'
 import type { InboxPostListParams } from '@/lib/posts/post.types'
-import type { BoardSettings } from '@quackback/db/types'
+import {
+  isOnboardingComplete as checkComplete,
+  type BoardSettings,
+  type SetupState,
+} from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSession } from './auth'
@@ -333,7 +337,8 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
         return {
           memberRecord: null,
           hasSettings: false,
-          hasBoards: false,
+          setupState: null,
+          isOnboardingComplete: false,
         }
       }
 
@@ -355,7 +360,8 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
             memberRecord: null,
             needsInvitation: true,
             hasSettings: false,
-            hasBoards: false,
+            setupState: null,
+            isOnboardingComplete: false,
           }
         }
 
@@ -374,10 +380,18 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
         console.log(`[fn:admin] checkOnboardingState: created admin member`)
       }
 
-      // Check if boards exist
-      const existingBoards = await db.query.boards.findFirst()
+      // Get settings to check setup state
+      const currentSettings = await getSettings()
+      const setupState: SetupState | null = currentSettings?.setupState
+        ? JSON.parse(currentSettings.setupState)
+        : null
 
-      console.log(`[fn:admin] checkOnboardingState: hasBoards=${!!existingBoards}`)
+      // Check if onboarding is complete based on setup state
+      const isOnboardingComplete = checkComplete(setupState)
+
+      console.log(
+        `[fn:admin] checkOnboardingState: setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete}`
+      )
       return {
         memberRecord: memberRecord
           ? {
@@ -387,8 +401,9 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
             }
           : null,
         needsInvitation: false,
-        hasSettings: true,
-        hasBoards: !!existingBoards,
+        hasSettings: !!currentSettings,
+        setupState,
+        isOnboardingComplete,
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ checkOnboardingState failed:`, error)

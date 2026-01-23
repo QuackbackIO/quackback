@@ -43,7 +43,7 @@ export function oauthComplete(): BetterAuthPlugin {
             return redirectWithError(ctx, 'missing_token')
           }
 
-          const secret = process.env.CLOUD_TRANSFER_TOKEN_SECRET || process.env.BETTER_AUTH_SECRET
+          const secret = process.env.CLOUD_SESSION_TRANSFER_SECRET || process.env.BETTER_AUTH_SECRET
           if (!secret) {
             console.error('[oauth-complete] No transfer token secret configured')
             return redirectWithError(ctx, 'config_error')

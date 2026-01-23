@@ -252,7 +252,7 @@ async function createTransferToken(
   callbackUrl: string,
   popup: boolean
 ): Promise<string> {
-  const secret = process.env.CLOUD_TRANSFER_TOKEN_SECRET || process.env.BETTER_AUTH_SECRET
+  const secret = process.env.CLOUD_SESSION_TRANSFER_SECRET || process.env.BETTER_AUTH_SECRET
   if (!secret) throw new Error('No transfer token secret configured')
 
   return new SignJWT({

@@ -4,8 +4,8 @@ import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
 
 export const Route = createFileRoute('/onboarding')({
   loader: async ({ context }) => {
-    // Session and settings already available from root context
-    const { session, settings } = context
+    // Session already available from root context
+    const { session } = context
 
     // Determine starting step based on state
     // Flow: create-account → setup-workspace → choose-boards → complete
@@ -21,12 +21,12 @@ export const Route = createFileRoute('/onboarding')({
       }
 
       // User is authenticated with member record
-      if (settings) {
-        // Workspace is set up, onboarding complete - redirect to admin
-        // (Users can create boards later from the admin dashboard)
+      if (state.isOnboardingComplete) {
+        // Onboarding complete (all setup steps done) - redirect to admin
         throw redirect({ to: '/admin' })
       } else {
-        // Authenticated but no settings - need to set up workspace
+        // Onboarding not complete - need to finish setup
+        // This handles both fresh instances and cloud-provisioned ones
         initialStep = 'setup-workspace'
       }
     }

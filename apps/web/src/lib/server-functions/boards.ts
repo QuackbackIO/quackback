@@ -5,8 +5,10 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { BoardId } from '@quackback/ids'
-import type { BoardSettings } from '@quackback/db/types'
+import type { BoardSettings, SetupState } from '@quackback/db/types'
 import { requireAuth } from './auth-helpers'
+import { getSettings } from './workspace'
+import { db, settings, eq } from '@/lib/db'
 import {
   listBoards,
   getBoardById,
@@ -171,6 +173,7 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
 /**
  * Create multiple boards at once (for onboarding).
  * Allows empty array for skip functionality.
+ * Updates setupState to mark boards step as complete.
  */
 export const createBoardsBatchFn = createServerFn({ method: 'POST' })
   .inputValidator(createBoardsBatchSchema)
@@ -178,12 +181,7 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
     console.log(`[fn:boards] createBoardsBatchFn: count=${data.boards.length}`)
     await requireAuth({ roles: ['admin', 'member'] })
 
-    if (data.boards.length === 0) {
-      console.log(`[fn:boards] createBoardsBatchFn: skipped (no boards selected)`)
-      return []
-    }
-
-    // Create boards sequentially to handle slug uniqueness
+    // Create boards (or skip if none selected)
     const createdBoards = []
     for (const boardInput of data.boards) {
       const board = await createBoard({
@@ -194,6 +192,34 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
       createdBoards.push(serializeBoard(board))
     }
 
-    console.log(`[fn:boards] createBoardsBatchFn: created ${createdBoards.length} boards`)
+    if (data.boards.length === 0) {
+      console.log(`[fn:boards] createBoardsBatchFn: skipped (no boards selected)`)
+    } else {
+      console.log(`[fn:boards] createBoardsBatchFn: created ${createdBoards.length} boards`)
+    }
+
+    // Update setupState to mark boards step as complete (and onboarding as finished)
+    const currentSettings = await getSettings()
+    if (currentSettings?.setupState) {
+      const setupState: SetupState = JSON.parse(currentSettings.setupState)
+
+      // Only update if boards step is not yet complete
+      if (!setupState.steps.boards) {
+        const updatedState: SetupState = {
+          ...setupState,
+          steps: {
+            ...setupState.steps,
+            boards: true,
+          },
+          completedAt: new Date().toISOString(),
+        }
+        await db
+          .update(settings)
+          .set({ setupState: JSON.stringify(updatedState) })
+          .where(eq(settings.id, currentSettings.id))
+        console.log(`[fn:boards] createBoardsBatchFn: onboarding complete, setupState updated`)
+      }
+    }
+
     return createdBoards
   })
