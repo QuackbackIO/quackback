@@ -16,14 +16,20 @@ import { tenantStorage } from '@/lib/tenant'
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
 
-/** Get session from request-scoped cache */
-function getCachedSession(): SessionResult | undefined {
+/** Check if session is cached (distinguishes cache miss from cached null) */
+function hasSessionCache(): boolean {
   const ctx = tenantStorage.getStore()
-  return ctx?.cache.get('session') as SessionResult | undefined
+  return ctx?.cache.has('session') ?? false
+}
+
+/** Get session from request-scoped cache */
+function getCachedSession(): SessionResult | null {
+  const ctx = tenantStorage.getStore()
+  return (ctx?.cache.get('session') as SessionResult | null) ?? null
 }
 
 /** Store session in request-scoped cache */
-function setCachedSession(data: SessionResult): void {
+function setCachedSession(data: SessionResult | null): void {
   const ctx = tenantStorage.getStore()
   ctx?.cache.set('session', data)
 }
@@ -46,10 +52,9 @@ function setCachedMember(userId: UserId, data: Member): void {
  * Results are cached per-request to avoid redundant auth lookups.
  */
 async function getSessionDirect(): Promise<SessionResult | null> {
-  // Check cache first
-  const cached = getCachedSession()
-  if (cached !== undefined) {
-    return cached
+  // Check cache first (use has() to distinguish cache miss from cached null)
+  if (hasSessionCache()) {
+    return getCachedSession()
   }
 
   try {
