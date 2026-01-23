@@ -45,7 +45,11 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
 
     // Check if onboarding is complete - redirect to onboarding if not
     const setupState = getSetupState(appSettings.setupState)
+    console.log(
+      `[requireWorkspaceRole] setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
+    )
     if (!isOnboardingComplete(setupState)) {
+      console.log(`[requireWorkspaceRole] Redirecting to /onboarding - setup incomplete`)
       throw redirect({ to: '/onboarding' })
     }
 

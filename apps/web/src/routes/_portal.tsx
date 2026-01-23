@@ -19,7 +19,11 @@ export const Route = createFileRoute('/_portal')({
 
     // Redirect to onboarding if setup is incomplete
     const setupState = getSetupState(org.setupState)
+    console.log(
+      `[_portal] setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
+    )
     if (!isOnboardingComplete(setupState)) {
+      console.log(`[_portal] Redirecting to /onboarding - setup incomplete`)
       throw redirect({ to: '/onboarding' })
     }
 
