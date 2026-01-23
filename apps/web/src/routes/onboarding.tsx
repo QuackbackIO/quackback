@@ -21,19 +21,25 @@ export const Route = createFileRoute('/onboarding')({
       }
 
       // User is authenticated with member record
+      console.log(
+        `[onboarding] state.isOnboardingComplete=${state.isOnboardingComplete}, workspace=${state.setupState?.steps?.workspace}`
+      )
       if (state.isOnboardingComplete) {
         // Onboarding complete (all setup steps done) - redirect to admin
         throw redirect({ to: '/admin' })
       } else if (state.setupState?.steps?.workspace) {
         // Workspace already configured (cloud-provisioned) - skip to boards
+        console.log(`[onboarding] Skipping to choose-boards (workspace already configured)`)
         initialStep = 'choose-boards'
       } else {
         // Onboarding not complete - need to finish setup
+        console.log(`[onboarding] Starting at setup-workspace`)
         initialStep = 'setup-workspace'
       }
     }
     // else: Not authenticated - start with account creation
 
+    console.log(`[onboarding] Returning initialStep=${initialStep}`)
     return {
       initialStep,
       userName: session?.user?.name,
