@@ -8,6 +8,9 @@
   // Disable esbuild's keepNames to prevent __name helper from leaking into
   // seroval's serialized stream code. See: https://opennext.js.org/cloudflare/howtos/keep_names
   "keep_names": false,
+  "placement": {
+    "region": "aws:eu-central-1"
+  },
   "assets": {
     "directory": "../../apps/web/dist/client"
   },
@@ -34,7 +37,7 @@
     "NODE_ENV": "development",
     "EDITION": "cloud",
     "CLOUD_TENANT_BASE_DOMAIN": "dev.quackback.io",
-    "CLOUD_NEON_DEFAULT_REGION": "aws-eu-west-2",
+    "CLOUD_NEON_DEFAULT_REGION": "aws-eu-central-1",
     // OpenAI via Cloudflare AI Gateway
     "OPENAI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/67cf7d5c8b797bfd5cbd417b233cc0d0/quackback-dev/openai"
   },
