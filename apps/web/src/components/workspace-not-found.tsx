@@ -29,7 +29,7 @@ export function WorkspaceNotFoundPage() {
             </a>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <a href="https://quackback.io/signup?utm_source=not_found_page&utm_medium=button&utm_campaign=signup">
+            <a href="https://quackback.io/create-workspace?utm_source=not_found_page&utm_medium=button&utm_campaign=signup">
               Create a workspace
             </a>
           </Button>
