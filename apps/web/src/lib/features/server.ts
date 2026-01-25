@@ -15,6 +15,7 @@ import {
 import { getSubscription, isSubscriptionActive } from '../subscription'
 import { getLicenseInfo, isLicenseExpired } from '../license/license.server'
 import type { LicenseInfo } from '../license/license.types'
+import { tenantStorage } from '../tenant/storage'
 
 // ============================================================================
 // Types
@@ -46,11 +47,15 @@ export interface WorkspaceFeatures {
 /**
  * Get feature access info for the workspace.
  * Cached per request for efficiency.
+ *
+ * For cloud mode, reads subscription from tenant context (sync).
+ * For self-hosted mode, requires async license check.
  */
 export const getWorkspaceFeatures = cache(async (): Promise<WorkspaceFeatures> => {
   if (isSelfHosted()) {
     return getSelfHostedFeatures()
   }
+  // Cloud features are now sync since subscription is in tenant context
   return getCloudFeatures()
 })
 
@@ -91,10 +96,11 @@ async function getSelfHostedFeatures(): Promise<WorkspaceFeatures> {
 }
 
 /**
- * Get features for cloud deployment
+ * Get features for cloud deployment.
+ * Reads subscription from tenant context (populated during resolution).
  */
-async function getCloudFeatures(): Promise<WorkspaceFeatures> {
-  const subscription = await getSubscription()
+function getCloudFeatures(): WorkspaceFeatures {
+  const subscription = getSubscription()
 
   // No active subscription = Free tier
   if (!subscription || !isSubscriptionActive(subscription)) {
@@ -171,6 +177,23 @@ export interface FeatureCheckResult {
 }
 
 /**
+ * Build the billing URL for upgrade prompts.
+ * Self-hosted uses internal license settings; cloud uses external billing page.
+ */
+function getBillingUpgradeUrl(): string {
+  if (isSelfHosted()) {
+    return '/admin/settings/license'
+  }
+
+  // Cloud: use external billing URL with workspace ID
+  const tenant = tenantStorage.getStore()
+  const workspaceId = tenant?.workspaceId
+  return workspaceId
+    ? `https://quackback.io/billing?workspace=${workspaceId}`
+    : 'https://quackback.io/billing'
+}
+
+/**
  * Check feature access and get detailed result for API/UI responses.
  */
 export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheckResult> {
@@ -186,7 +209,7 @@ export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheck
       allowed: false,
       error: 'This feature requires an Enterprise license',
       requiresEnterprise: true,
-      upgradeUrl: isSelfHosted() ? '/admin/settings/license' : '/admin/settings/billing',
+      upgradeUrl: getBillingUpgradeUrl(),
     }
   }
 
@@ -198,7 +221,7 @@ export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheck
     allowed: false,
     error: `This feature requires a ${tierName} plan or higher`,
     requiredTier: requiredTier ?? undefined,
-    upgradeUrl: '/admin/settings/billing',
+    upgradeUrl: getBillingUpgradeUrl(),
   }
 }
 

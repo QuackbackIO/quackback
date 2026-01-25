@@ -4,9 +4,21 @@
 import type { Database } from './db-cache'
 import type { settings } from '@quackback/db'
 import type { InferSelectModel } from 'drizzle-orm'
+import type { CloudTier } from '@/lib/features'
 
 /** Settings table row type */
 export type Settings = InferSelectModel<typeof settings>
+
+/**
+ * Subscription context for feature gating in cloud mode.
+ * Populated during tenant resolution from catalog database.
+ */
+export interface SubscriptionContext {
+  tier: CloudTier
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid'
+  seatsTotal: number
+  currentPeriodEnd: Date | null
+}
 
 /**
  * Request context types - discriminated union for different request scenarios.
@@ -56,6 +68,8 @@ export interface TenantInfo {
   db: Database
   /** Workspace settings (fetched during resolution to avoid extra query) */
   settings: Settings | null
+  /** Subscription context (fetched from catalog DB during resolution) */
+  subscription: SubscriptionContext | null
 }
 
 /**
@@ -75,4 +89,6 @@ export interface TenantContext {
   cache: Map<string, unknown>
   /** Workspace ID (only present for tenant context type) */
   workspaceId?: string
+  /** Subscription context (only present for tenant context type) */
+  subscription?: SubscriptionContext | null
 }

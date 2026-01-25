@@ -4,8 +4,8 @@
  * DO NOT EDIT MANUALLY - regenerate with:
  *   bun packages/db/scripts/generate-init-sql.ts
  *
- * Generated: 2026-01-23T13:13:02.831Z
- * Migrations: 10
+ * Generated: 2026-01-25T18:50:11.417Z
+ * Migrations: 12
  */
 
 export interface Migration {
@@ -85,12 +85,24 @@ export const MIGRATIONS: Migration[] = [
     hash: '9ba98678592f2ee1c5332e7fe98a193e0b34e6cb9f2276ce97f1dd2b51d8a949',
     sql: '-- Add setup_state column for tracking onboarding/provisioning state\nALTER TABLE "settings" ADD COLUMN "setup_state" text;\n',
   },
+  {
+    tag: '0010_add_board_vote_desc_index',
+    when: 1769034000000,
+    hash: '203e45e671430bf2bbeba4a0718368ec890298f17acc2da949c13427cbc40692',
+    sql: '-- Optimized indexes for "top posts" and "new posts" queries that ORDER BY DESC\n-- The existing posts_board_vote_idx is ascending, requiring backward scans\n-- These DESC indexes allow PostgreSQL to scan from highest values, stopping early after LIMIT\n-- Note: Cannot use CONCURRENTLY because Drizzle migrations run in transactions\n\n-- Index for vote_count DESC (used by "top" sort)\nCREATE INDEX IF NOT EXISTS "posts_board_vote_desc_idx"\nON "posts" ("board_id", "vote_count" DESC);--> statement-breakpoint\n\n-- Index for created_at DESC (used by "new" sort)\nCREATE INDEX IF NOT EXISTS "posts_board_created_desc_idx"\nON "posts" ("board_id", "created_at" DESC);\n',
+  },
+  {
+    tag: '0011_drop_deprecated_billing',
+    when: 1769120400000,
+    hash: '92c6c26a318cec654982421150f3839c155fc075142a3be7e9f77ef4f0dbee8c',
+    sql: '-- Migration: Drop deprecated billing tables from tenant database\n--\n-- Billing has been moved to the catalog database (website codebase).\n-- These tables were created in migration 0003 but are no longer used.\n-- The subscription table in the catalog database now handles all billing.\n\n-- Drop tables\nDROP TABLE IF EXISTS "invoices";--> statement-breakpoint\nDROP TABLE IF EXISTS "billing_subscriptions";--> statement-breakpoint\n\n-- Drop indexes (if any remain after table drop)\nDROP INDEX IF EXISTS "subscriptions_stripe_customer_idx";--> statement-breakpoint\nDROP INDEX IF EXISTS "subscriptions_stripe_subscription_idx";--> statement-breakpoint\nDROP INDEX IF EXISTS "invoices_stripe_invoice_idx";--> statement-breakpoint\n\n-- Drop enums (order matters - must drop after tables that use them)\nDROP TYPE IF EXISTS "invoice_status";--> statement-breakpoint\nDROP TYPE IF EXISTS "subscription_status";--> statement-breakpoint\nDROP TYPE IF EXISTS "cloud_tier";\n',
+  },
 ]
 
 /**
  * Schema version identifier (tag of last migration)
  */
-export const SCHEMA_VERSION = '0009_add_setup_state'
+export const SCHEMA_VERSION = '0011_drop_deprecated_billing'
 
 /**
  * Parse a migration SQL into individual statements.

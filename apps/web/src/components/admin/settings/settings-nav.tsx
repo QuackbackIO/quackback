@@ -13,6 +13,7 @@ import {
   CreditCardIcon,
   ChevronUpIcon,
   ChevronDownIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +27,8 @@ interface NavItem {
   selfHostedOnly?: boolean
   /** Show only for enterprise tier (cloud subscription or self-hosted with license) */
   enterpriseOnly?: boolean
+  /** If true, opens in new tab as external link */
+  external?: boolean
 }
 
 interface NavSection {
@@ -47,7 +50,14 @@ const navSections: NavSection[] = [
         enterpriseOnly: true,
       },
       { label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon, cloudOnly: true },
-      { label: 'Billing', to: '/admin/settings/billing', icon: CreditCardIcon, cloudOnly: true },
+      // Billing is now managed on the website - link will be replaced with external URL
+      {
+        label: 'Billing',
+        to: '__BILLING_EXTERNAL__',
+        icon: CreditCardIcon,
+        cloudOnly: true,
+        external: true,
+      },
     ],
   },
   {
@@ -89,9 +99,10 @@ function NavSection({
 
 interface SettingsNavProps {
   isCloud: boolean
+  workspaceId?: string
 }
 
-export function SettingsNav({ isCloud }: SettingsNavProps) {
+export function SettingsNav({ isCloud, workspaceId }: SettingsNavProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
   // Filter sections based on edition (enterprise items always shown with upgrade indicator)
@@ -102,6 +113,11 @@ export function SettingsNav({ isCloud }: SettingsNavProps) {
     ),
   }))
 
+  // Build external billing URL with workspaceId
+  const billingUrl = workspaceId
+    ? `https://quackback.io/billing?workspace=${workspaceId}`
+    : 'https://quackback.io/billing'
+
   return (
     <div className="space-y-1">
       {filteredSections.map((section) => (
@@ -109,6 +125,27 @@ export function SettingsNav({ isCloud }: SettingsNavProps) {
           {section.items.map((item) => {
             const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
             const Icon = item.icon
+
+            // Handle external billing link
+            if (item.external) {
+              const href = item.to === '__BILLING_EXTERNAL__' ? billingUrl : item.to
+              return (
+                <a
+                  key={item.to}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                    'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate flex-1">{item.label}</span>
+                  <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0 opacity-50" />
+                </a>
+              )
+            }
 
             return (
               <Link

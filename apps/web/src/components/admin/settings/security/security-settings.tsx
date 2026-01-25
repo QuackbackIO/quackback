@@ -8,7 +8,9 @@ import {
   Cog6ToothIcon,
   KeyIcon,
   InformationCircleIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
+import { useWorkspaceId } from '@/lib/hooks/use-workspace-id'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -31,8 +33,14 @@ export function SecuritySettings({
   isSelfHosted,
 }: SecuritySettingsProps) {
   const router = useRouter()
+  const workspaceId = useWorkspaceId()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
+
+  // Build external billing URL for cloud users
+  const billingUrl = workspaceId
+    ? `https://quackback.io/billing?workspace=${workspaceId}`
+    : 'https://quackback.io/billing'
 
   // SSO state
   const [ssoEnabled, setSsoEnabled] = useState(securityConfig.sso.enabled)
@@ -185,16 +193,27 @@ export function SecuritySettings({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Single Sign-On</h3>
-          {!hasEnterprise && (
-            // Route path typed as '/' since license/billing routes are edition-specific
-            <Link
-              to={(isSelfHosted ? '/admin/settings/license' : '/admin/settings/billing') as '/'}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-            >
-              <LockClosedIcon className="h-3 w-3" />
-              Enterprise
-            </Link>
-          )}
+          {!hasEnterprise &&
+            (isSelfHosted ? (
+              <Link
+                to="/admin/settings/license"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+              >
+                <LockClosedIcon className="h-3 w-3" />
+                Enterprise
+              </Link>
+            ) : (
+              <a
+                href={billingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+              >
+                <LockClosedIcon className="h-3 w-3" />
+                Enterprise
+                <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+              </a>
+            ))}
         </div>
 
         {/* SSO Provider Row */}

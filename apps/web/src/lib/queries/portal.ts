@@ -9,6 +9,7 @@ import {
   fetchAvatars,
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
+  fetchPortalData,
 } from '@/lib/server-functions/portal'
 
 /**
@@ -17,6 +18,22 @@ import {
  * These are used with ensureQueryData() in loaders and useSuspenseQuery() in components.
  */
 export const portalQueries = {
+  /**
+   * Combined portal data fetch - all data in a single server call
+   * This is the optimized entry point for the portal page
+   */
+  portalData: (params: {
+    boardSlug?: string
+    search?: string
+    sort: 'top' | 'new' | 'trending'
+    userId?: string
+    userIdentifier: string
+  }) =>
+    queryOptions({
+      queryKey: ['portal', 'data', params.boardSlug, params.search, params.sort],
+      queryFn: () => fetchPortalData({ data: params }),
+    }),
+
   /**
    * List all public boards with post counts
    */

@@ -111,13 +111,14 @@ export default createServerEntry({
 
     console.log(`[server] Tenant resolved: ${tenant.workspaceId} for domain: ${url.hostname}`)
 
-    // Settings already fetched during tenant resolution
+    // Settings and subscription already fetched during tenant resolution
     const context: TenantContext = {
       contextType: 'tenant',
       workspaceId: tenant.workspaceId,
       slug: tenant.slug,
       db: tenant.db,
       settings: tenant.settings,
+      subscription: tenant.subscription,
       cache: new Map(),
     }
 

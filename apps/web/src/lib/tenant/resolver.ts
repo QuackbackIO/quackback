@@ -10,10 +10,12 @@
  */
 import { eq, and } from 'drizzle-orm'
 import { getTenantDb } from './db-cache'
-import type { TenantInfo } from './types'
+import type { TenantInfo, SubscriptionContext } from './types'
+import type { CloudTier } from '@/lib/features'
 import {
   workspace,
   workspaceDomain,
+  subscription,
   getCatalogDb,
   resetCatalogDb,
   type CatalogDb,
@@ -267,13 +269,30 @@ export async function resolveTenantFromDomain(request: Request): Promise<TenantI
     // Fetch settings from tenant DB (saves extra query in server.ts)
     const settings = await tenantDb.query.settings.findFirst()
 
-    console.log(`[resolver] Successfully resolved tenant: ${workspaceRecord.id}`)
+    // Fetch subscription from catalog DB for feature gating
+    const subscriptionRecord = await db.query.subscription.findFirst({
+      where: eq(subscription.workspaceId, workspaceRecord.id),
+    })
+
+    const subscriptionContext: SubscriptionContext | null = subscriptionRecord
+      ? {
+          tier: subscriptionRecord.tier as CloudTier,
+          status: subscriptionRecord.status as SubscriptionContext['status'],
+          seatsTotal: subscriptionRecord.seatsIncluded + subscriptionRecord.seatsAdditional,
+          currentPeriodEnd: subscriptionRecord.currentPeriodEnd,
+        }
+      : null
+
+    console.log(
+      `[resolver] Successfully resolved tenant: ${workspaceRecord.id} (tier: ${subscriptionContext?.tier ?? 'free'})`
+    )
 
     return {
       workspaceId: workspaceRecord.id,
       slug: workspaceRecord.slug,
       db: tenantDb,
       settings: settings ?? null,
+      subscription: subscriptionContext,
     }
   } catch (error) {
     console.error('[resolver] Failed to resolve tenant:', error)

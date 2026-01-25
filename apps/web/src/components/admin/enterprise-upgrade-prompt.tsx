@@ -1,6 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { LockClosedIcon, ArrowRightIcon } from '@heroicons/react/24/solid'
+import {
+  LockClosedIcon,
+  ArrowRightIcon,
+  ArrowTopRightOnSquareIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { useWorkspaceId } from '@/lib/hooks/use-workspace-id'
 
 interface EnterpriseUpgradePromptProps {
   feature: string
@@ -19,6 +24,13 @@ export function EnterpriseUpgradePrompt({
   benefits = [],
   isSelfHosted = false,
 }: EnterpriseUpgradePromptProps) {
+  const workspaceId = useWorkspaceId()
+
+  // Build external billing URL for cloud users
+  const billingUrl = workspaceId
+    ? `https://quackback.io/billing?workspace=${workspaceId}`
+    : 'https://quackback.io/billing'
+
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4">
       <div className="max-w-md text-center space-y-6">
@@ -53,11 +65,17 @@ export function EnterpriseUpgradePrompt({
 
         {/* Action button */}
         <Button asChild>
-          {/* Route path typed as string since license/billing routes are edition-specific */}
-          <Link to={(isSelfHosted ? '/admin/settings/license' : '/admin/settings/billing') as '/'}>
-            {isSelfHosted ? 'View License Settings' : 'Upgrade Plan'}
-            <ArrowRightIcon className="ml-2 h-4 w-4" />
-          </Link>
+          {isSelfHosted ? (
+            <Link to="/admin/settings/license">
+              View License Settings
+              <ArrowRightIcon className="ml-2 h-4 w-4" />
+            </Link>
+          ) : (
+            <a href={billingUrl} target="_blank" rel="noopener noreferrer">
+              Upgrade Plan
+              <ArrowTopRightOnSquareIcon className="ml-2 h-4 w-4" />
+            </a>
+          )}
         </Button>
 
         {/* Help text */}

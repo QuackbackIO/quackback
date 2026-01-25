@@ -4,18 +4,21 @@ import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { isCloud } from '@/lib/features'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useWorkspaceId } from '@/lib/hooks/use-workspace-id'
 
 export const Route = createFileRoute('/admin/settings')({
   component: SettingsLayout,
 })
 
 function SettingsLayout() {
+  const workspaceId = useWorkspaceId()
+
   return (
     <div className="flex h-full bg-background">
       <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-5">
-            <SettingsNav isCloud={isCloud()} />
+            <SettingsNav isCloud={isCloud()} workspaceId={workspaceId} />
           </div>
         </ScrollArea>
       </aside>

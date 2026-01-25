@@ -1,5 +1,4 @@
-import { Link } from '@tanstack/react-router'
-import { SparklesIcon, ArrowRightIcon } from '@heroicons/react/24/solid'
+import { SparklesIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,6 +8,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { useWorkspaceId } from '@/lib/hooks/use-workspace-id'
 
 interface ProUpgradeModalProps {
   open: boolean
@@ -29,6 +29,13 @@ export function ProUpgradeModal({
   description,
   benefits = [],
 }: ProUpgradeModalProps) {
+  const workspaceId = useWorkspaceId()
+
+  // Build external billing URL
+  const billingUrl = workspaceId
+    ? `https://quackback.io/billing?workspace=${workspaceId}`
+    : 'https://quackback.io/billing'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -64,10 +71,10 @@ export function ProUpgradeModal({
 
         <DialogFooter className="sm:justify-center">
           <Button asChild>
-            <Link to="/admin/settings/billing">
+            <a href={billingUrl} target="_blank" rel="noopener noreferrer">
               Upgrade to Pro
-              <ArrowRightIcon className="ml-2 h-4 w-4" />
-            </Link>
+              <ArrowTopRightOnSquareIcon className="ml-2 h-4 w-4" />
+            </a>
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -3,9 +3,8 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
-import { getUserIdentifier, getMemberIdentifier } from '@/lib/user-identifier'
+import { getUserIdentifier } from '@/lib/user-identifier'
 import { portalQueries } from '@/lib/queries/portal'
-import { getMemberIdForUser } from '@/lib/server-functions/portal'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -31,24 +30,21 @@ export const Route = createFileRoute('/_portal/')({
 
     const { board, searchQuery, sort } = deps
 
-    let userIdentifier = await getUserIdentifier()
-    if (session?.user) {
-      const memberId = await getMemberIdForUser({ data: { userId: session.user.id } })
-      if (memberId) {
-        userIdentifier = getMemberIdentifier(memberId)
-      }
-    }
+    // Get user identifier (cookie-based for anonymous users)
+    const userIdentifier = await getUserIdentifier()
 
-    const [boards, posts] = await Promise.all([
-      queryClient.ensureQueryData(portalQueries.boards()),
-      queryClient.ensureQueryData(
-        portalQueries.posts({ boardSlug: board, search: searchQuery, sort })
-      ),
-      queryClient.ensureQueryData(portalQueries.statuses()),
-      queryClient.ensureQueryData(portalQueries.tags()),
-    ])
+    // Single combined query for all portal data
+    const portalData = await queryClient.ensureQueryData(
+      portalQueries.portalData({
+        boardSlug: board,
+        search: searchQuery,
+        sort,
+        userId: session?.user?.id,
+        userIdentifier,
+      })
+    )
 
-    if (boards.length === 0) {
+    if (portalData.boards.length === 0) {
       return {
         org,
         isEmpty: true as const,
@@ -56,23 +52,9 @@ export const Route = createFileRoute('/_portal/')({
         currentSearch: undefined,
         currentSort: sort,
         session,
-        userIdentifier,
-        postIds: [],
-        postMemberIds: [],
+        userIdentifier: portalData.userIdentifier,
       }
     }
-
-    const postIds = posts.items.map((post) => post.id)
-    const postMemberIds = posts.items
-      .map((post) => post.memberId)
-      .filter((id): id is `member_${string}` => id !== null)
-
-    await Promise.all([
-      queryClient.ensureQueryData(portalQueries.votedPosts(postIds, userIdentifier)),
-      postMemberIds.length > 0
-        ? queryClient.ensureQueryData(portalQueries.avatars(postMemberIds))
-        : Promise.resolve(),
-    ])
 
     return {
       org,
@@ -81,9 +63,7 @@ export const Route = createFileRoute('/_portal/')({
       currentSearch: searchQuery,
       currentSort: sort,
       session,
-      userIdentifier,
-      postIds,
-      postMemberIds,
+      userIdentifier: portalData.userIdentifier,
     }
   },
   component: PublicPortalPage,
@@ -110,17 +90,18 @@ function PublicPortalPage() {
     )
   }
 
-  const { currentBoard, currentSearch, currentSort, userIdentifier, postIds, postMemberIds } =
-    loaderData
+  const { currentBoard, currentSearch, currentSort, userIdentifier } = loaderData
 
-  const boardsQuery = useSuspenseQuery(portalQueries.boards())
-  const postsQuery = useSuspenseQuery(
-    portalQueries.posts({ boardSlug: currentBoard, search: currentSearch, sort: currentSort })
+  // Single combined query for all portal data
+  const { data: portalData } = useSuspenseQuery(
+    portalQueries.portalData({
+      boardSlug: currentBoard,
+      search: currentSearch,
+      sort: currentSort,
+      userId: session?.user?.id,
+      userIdentifier,
+    })
   )
-  const statusesQuery = useSuspenseQuery(portalQueries.statuses())
-  const tagsQuery = useSuspenseQuery(portalQueries.tags())
-  const votedPostsQuery = useSuspenseQuery(portalQueries.votedPosts(postIds, userIdentifier))
-  const avatarsQuery = useSuspenseQuery(portalQueries.avatars(postMemberIds))
 
   const user = session?.user ? { name: session.user.name, email: session.user.email } : null
 
@@ -129,17 +110,17 @@ function PublicPortalPage() {
       <FeedbackContainer
         workspaceName={org.name}
         workspaceSlug={org.slug}
-        boards={boardsQuery.data}
-        posts={postsQuery.data.items as any}
-        statuses={statusesQuery.data}
-        tags={tagsQuery.data}
-        hasMore={postsQuery.data.hasMore}
-        votedPostIds={votedPostsQuery.data}
-        postAvatarUrls={avatarsQuery.data}
+        boards={portalData.boards}
+        posts={portalData.posts.items as any}
+        statuses={portalData.statuses}
+        tags={portalData.tags}
+        hasMore={portalData.posts.hasMore}
+        votedPostIds={portalData.votedPostIds}
+        postAvatarUrls={portalData.avatars}
         currentBoard={currentBoard}
         currentSearch={currentSearch}
         currentSort={currentSort}
-        defaultBoardId={boardsQuery.data[0]?.id}
+        defaultBoardId={portalData.boards[0]?.id}
         user={user}
       />
     </main>

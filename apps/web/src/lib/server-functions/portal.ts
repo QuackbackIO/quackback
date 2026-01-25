@@ -71,6 +71,14 @@ const getMemberIdForUserSchema = z.object({
   userId: z.string(),
 })
 
+const fetchPortalDataSchema = z.object({
+  boardSlug: z.string().optional(),
+  search: z.string().optional(),
+  sort: z.enum(['top', 'new', 'trending']),
+  userId: z.string().optional(),
+  userIdentifier: z.string(),
+})
+
 /**
  * Get the member ID for a user.
  * Used in loaders to get member identifier for authenticated users.
@@ -88,6 +96,130 @@ export const getMemberIdForUser = createServerFn({ method: 'GET' })
       return memberRecord?.id ?? null
     } catch (error) {
       console.error(`[fn:portal] ❌ getMemberIdForUser failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Combined portal data fetch - single server call for all portal page data.
+ * Runs all queries server-side in optimal parallel batches to minimize latency.
+ *
+ * Phase 1 (parallel): boards, posts, statuses, tags, member lookup
+ * Phase 2 (parallel, after Phase 1): votedPosts, avatars
+ */
+export const fetchPortalData = createServerFn({ method: 'GET' })
+  .inputValidator(fetchPortalDataSchema)
+  .handler(async ({ data }) => {
+    const startTime = Date.now()
+    console.log(
+      `[fn:portal] fetchPortalData: sort=${data.sort}, board=${data.boardSlug || 'all'}, userId=${data.userId || 'anon'}`
+    )
+
+    try {
+      // Phase 1: Run all independent queries in parallel
+      const [boardsRaw, postsRaw, statuses, tags, memberId] = await Promise.all([
+        listPublicBoardsWithStats(),
+        listPublicPosts({
+          boardSlug: data.boardSlug,
+          search: data.search,
+          sort: data.sort,
+          page: 1,
+          limit: 20,
+        }),
+        listPublicStatuses(),
+        listPublicTags(),
+        data.userId
+          ? db.query.member
+              .findFirst({
+                where: eq(memberTable.userId, data.userId as UserId),
+              })
+              .then((m) => m?.id ?? null)
+          : Promise.resolve(null),
+      ])
+
+      console.log(
+        `[fn:portal] fetchPortalData Phase 1 complete in ${Date.now() - startTime}ms: boards=${boardsRaw.length}, posts=${postsRaw.items.length}`
+      )
+
+      // Serialize boards
+      const boards = boardsRaw.map((b) => ({
+        ...b,
+        settings: (b.settings ?? {}) as BoardSettings,
+      }))
+
+      // Serialize posts
+      const posts = {
+        ...postsRaw,
+        items: postsRaw.items.map((post) => ({
+          ...post,
+          createdAt: post.createdAt.toISOString(),
+        })),
+      }
+
+      // Extract IDs for Phase 2
+      const postIds = posts.items.map((post) => post.id)
+      const postMemberIds = posts.items
+        .map((post) => post.memberId)
+        .filter((id): id is MemberId => id !== null)
+
+      // Determine user identifier (use member ID if authenticated, fallback to provided)
+      const userIdentifier = memberId ? getMemberIdentifier(memberId) : data.userIdentifier
+
+      // Phase 2: Run dependent queries in parallel
+      const [votedPostsSet, avatarMap] = await Promise.all([
+        getUserVotedPostIds(postIds as PostId[], userIdentifier),
+        postMemberIds.length > 0
+          ? (async () => {
+              const members = await db
+                .select({
+                  memberId: memberTable.id,
+                  userId: memberTable.userId,
+                  imageBlob: userTable.imageBlob,
+                  imageType: userTable.imageType,
+                  image: userTable.image,
+                })
+                .from(memberTable)
+                .innerJoin(userTable, eq(memberTable.userId, userTable.id))
+                .where(inArray(memberTable.id, postMemberIds))
+
+              const avatarResult: Record<string, string | null> = {}
+              for (const member of members) {
+                if (member.imageBlob && member.imageType) {
+                  const base64 = Buffer.from(member.imageBlob).toString('base64')
+                  avatarResult[member.memberId] = `data:${member.imageType};base64,${base64}`
+                } else {
+                  avatarResult[member.memberId] = member.image
+                }
+              }
+              // Fill in null for any members not found
+              for (const id of postMemberIds) {
+                if (!(id in avatarResult)) {
+                  avatarResult[id] = null
+                }
+              }
+              return avatarResult
+            })()
+          : Promise.resolve({} as Record<string, string | null>),
+      ])
+
+      const elapsed = Date.now() - startTime
+      console.log(
+        `[fn:portal] fetchPortalData complete in ${elapsed}ms: votedPosts=${votedPostsSet.size}`
+      )
+
+      return {
+        boards,
+        posts,
+        statuses,
+        tags,
+        votedPostIds: Array.from(votedPostsSet),
+        avatars: avatarMap,
+        memberId,
+        userIdentifier,
+      }
+    } catch (error) {
+      const elapsed = Date.now() - startTime
+      console.error(`[fn:portal] ❌ fetchPortalData failed after ${elapsed}ms:`, error)
       throw error
     }
   })
