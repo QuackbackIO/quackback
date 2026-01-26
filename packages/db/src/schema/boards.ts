@@ -23,7 +23,10 @@ export const boards = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [uniqueIndex('boards_slug_idx').on(table.slug)]
+  (table) => [
+    uniqueIndex('boards_slug_idx').on(table.slug),
+    index('boards_is_public_idx').on(table.isPublic),
+  ]
 )
 
 export const roadmaps = pgTable(
@@ -41,6 +44,7 @@ export const roadmaps = pgTable(
   (table) => [
     uniqueIndex('roadmaps_slug_idx').on(table.slug),
     index('roadmaps_position_idx').on(table.position),
+    index('roadmaps_is_public_idx').on(table.isPublic),
   ]
 )
 
