@@ -33,8 +33,8 @@ export function ProUpgradeModal({
 
   // Build external billing URL
   const billingUrl = workspaceId
-    ? `https://quackback.io/billing?workspace=${workspaceId}`
-    : 'https://quackback.io/billing'
+    ? `https://www.quackback.io/workspaces/${workspaceId}/billing`
+    : 'https://www.quackback.io'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -39,8 +39,8 @@ export function SecuritySettings({
 
   // Build external billing URL for cloud users
   const billingUrl = workspaceId
-    ? `https://quackback.io/billing?workspace=${workspaceId}`
-    : 'https://quackback.io/billing'
+    ? `https://www.quackback.io/workspaces/${workspaceId}/billing`
+    : 'https://www.quackback.io'
 
   // SSO state
   const [ssoEnabled, setSsoEnabled] = useState(securityConfig.sso.enabled)

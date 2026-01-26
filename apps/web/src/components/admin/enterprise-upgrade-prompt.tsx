@@ -28,8 +28,8 @@ export function EnterpriseUpgradePrompt({
 
   // Build external billing URL for cloud users
   const billingUrl = workspaceId
-    ? `https://quackback.io/billing?workspace=${workspaceId}`
-    : 'https://quackback.io/billing'
+    ? `https://www.quackback.io/workspaces/${workspaceId}/billing`
+    : 'https://www.quackback.io'
 
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4">
