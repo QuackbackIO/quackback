@@ -105,14 +105,11 @@ export interface AuthContext {
  * const auth = await requireAuth()
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
-  console.log(`[auth] Checking session...`)
   const session = await getSessionDirect()
   if (!session?.user) {
-    console.warn(`[auth] ⚠️ No session`)
     throw new Error('Authentication required')
   }
   const userId = session.user.id as UserId
-  console.log(`[auth] Session: user=${userId}`)
 
   const appSettings = await getSettings()
   if (!appSettings) {
@@ -121,10 +118,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
 
   // Check member cache first
   let memberRecord = getCachedMember(userId)
-  if (memberRecord) {
-    console.log(`[auth] Member cache hit for user=${userId}`)
-  } else {
-    console.log(`[auth] Member cache miss for user=${userId}`)
+  if (!memberRecord) {
     memberRecord = await db.query.member.findFirst({
       where: eq(member.userId, userId),
     })
@@ -138,15 +132,11 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
   }
 
   if (options?.roles && !options.roles.includes(memberRecord.role as Role)) {
-    console.warn(
-      `[auth] ⚠️ Role denied: required=[${options.roles.join(',')}], actual=${memberRecord.role}`
-    )
     throw new Error(
       `Access denied: Requires [${options.roles.join(', ')}], got ${memberRecord.role}`
     )
   }
 
-  console.log(`[auth] ✅ Authorized: role=${memberRecord.role}`)
   return {
     settings: {
       id: appSettings.id as WorkspaceId,
@@ -176,11 +166,9 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
 export async function getOptionalAuth(): Promise<AuthContext | null> {
   const session = await getSessionDirect()
   if (!session?.user) {
-    console.log(`[auth] Optional auth: no session`)
     return null
   }
   const userId = session.user.id as UserId
-  console.log(`[auth] Optional auth: user=${userId}`)
 
   const appSettings = await getSettings()
   if (!appSettings) {
@@ -189,17 +177,13 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 
   // Check member cache first
   let memberRecord = getCachedMember(userId)
-  if (memberRecord) {
-    console.log(`[auth] Member cache hit for user=${userId}`)
-  } else {
-    console.log(`[auth] Member cache miss for user=${userId}`)
+  if (!memberRecord) {
     memberRecord = await db.query.member.findFirst({
       where: eq(member.userId, userId),
     })
 
     // Auto-create member record for authenticated users without one
     if (!memberRecord) {
-      console.log(`[auth] 📦 Creating member record for user=${userId}`)
       const newMemberId = generateId('member')
       const [created] = await db
         .insert(member)
@@ -211,7 +195,6 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
         })
         .returning()
       memberRecord = created
-      console.log(`[auth] ✅ Member created: id=${newMemberId}`)
     }
 
     // Cache the member (either found or just created)

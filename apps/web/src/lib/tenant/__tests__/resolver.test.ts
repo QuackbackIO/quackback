@@ -51,6 +51,7 @@ const mockWorkspace = {
   createdAt: new Date(),
   neonProjectId: 'proj_123',
   neonRegion: 'aws-us-east-1',
+  neonConnectionString: 'encrypted:connection:string',
   migrationStatus: 'completed',
 }
 
@@ -86,7 +87,7 @@ describe('resolver', () => {
     it('should return null when CLOUD_CATALOG_DATABASE_URL not configured', async () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL = undefined
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = undefined
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = undefined
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = undefined
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -98,7 +99,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = undefined
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -106,11 +107,16 @@ describe('resolver', () => {
       expect(result).toBeNull()
     })
 
-    it('should return null when CLOUD_NEON_API_KEY not configured', async () => {
+    it('should return null when workspace has no connection string', async () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      delete (process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
+
+      mockDb.query.workspace.findFirst.mockResolvedValueOnce({
+        ...mockWorkspace,
+        neonConnectionString: null,
+      })
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -122,7 +128,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       const request = new Request('https://example.com/dashboard')
 
@@ -135,7 +141,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       const request = createRequest('https://example.com/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -148,7 +154,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       const request = createRequest('https://quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
@@ -160,7 +166,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
@@ -175,7 +181,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce({
         ...mockWorkspace,
@@ -188,20 +194,21 @@ describe('resolver', () => {
       expect(result).toBeNull()
     })
 
-    it('should return null when workspace has no Neon project ID', async () => {
+    it('should return null when decryption fails (invalid ENCRYPTION_KEY)', async () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      delete (process.env as Record<string, string | undefined>).ENCRYPTION_KEY
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce({
         ...mockWorkspace,
-        neonProjectId: null,
+        neonConnectionString: 'invalid:encrypted:string',
       })
 
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
 
+      // Should catch decryption error and return null
       expect(result).toBeNull()
     })
 
@@ -209,7 +216,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
@@ -227,7 +234,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce(null)
 
@@ -246,7 +253,7 @@ describe('resolver', () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      ;(process.env as Record<string, string | undefined>).CLOUD_NEON_API_KEY = 'test-key'
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       const request = createRequest('https://app.acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
