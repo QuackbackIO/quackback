@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
@@ -16,52 +16,38 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/_portal/')({
   validateSearch: searchSchema,
-  loaderDeps: ({ search }) => ({
-    board: search.board,
-    searchQuery: search.search,
-    sort: search.sort,
-  }),
-  loader: async ({ deps, context }) => {
+  // Note: No loaderDeps - loader only runs on initial route load for SSR.
+  // Client-side filter changes are handled by FeedbackContainer's usePublicPosts.
+  // We access search params via location.search for initial SSR without triggering
+  // loader re-execution on client-side filter changes.
+  loader: async ({ context, location }) => {
     const { session, settings: org, queryClient } = context
 
     if (!org) {
       throw redirect({ to: '/onboarding' })
     }
 
-    const { board, searchQuery, sort } = deps
+    // Parse search params for initial SSR (not using loaderDeps to avoid re-execution)
+    const searchParams = location.search as z.infer<typeof searchSchema>
 
     // Get user identifier (cookie-based for anonymous users)
     const userIdentifier = await getUserIdentifier()
 
-    // Single combined query for all portal data
+    // Prefetch portal data for SSR with URL filters.
+    // Client-side filter changes are handled by FeedbackContainer.
     const portalData = await queryClient.ensureQueryData(
       portalQueries.portalData({
-        boardSlug: board,
-        search: searchQuery,
-        sort,
+        boardSlug: searchParams.board,
+        search: searchParams.search,
+        sort: searchParams.sort ?? 'top',
         userId: session?.user?.id,
         userIdentifier,
       })
     )
 
-    if (portalData.boards.length === 0) {
-      return {
-        org,
-        isEmpty: true as const,
-        currentBoard: undefined,
-        currentSearch: undefined,
-        currentSort: sort,
-        session,
-        userIdentifier: portalData.userIdentifier,
-      }
-    }
-
     return {
       org,
-      isEmpty: false as const,
-      currentBoard: board,
-      currentSearch: searchQuery,
-      currentSort: sort,
+      isEmpty: portalData.boards.length === 0,
       session,
       userIdentifier: portalData.userIdentifier,
     }
@@ -71,9 +57,30 @@ export const Route = createFileRoute('/_portal/')({
 
 function PublicPortalPage() {
   const loaderData = Route.useLoaderData()
-  const { org, session } = loaderData
+  const search = Route.useSearch()
+  const { org, session, userIdentifier } = loaderData
 
-  if (loaderData.isEmpty) {
+  // Read filters directly from URL for instant updates
+  const currentBoard = search.board
+  const currentSearch = search.search
+  const currentSort = search.sort ?? 'top'
+
+  // Fetch portal data - uses cached data from loader on initial load,
+  // refetches with new filters on client-side navigation.
+  // keepPreviousData ensures we show stale data while fetching new data.
+  const { data: portalData, isFetching } = useQuery({
+    ...portalQueries.portalData({
+      boardSlug: currentBoard,
+      search: currentSearch,
+      sort: currentSort,
+      userId: session?.user?.id,
+      userIdentifier,
+    }),
+    placeholderData: keepPreviousData,
+  })
+
+  // Show empty state if no boards exist
+  if (loaderData.isEmpty && !isFetching && (!portalData || portalData.boards.length === 0)) {
     return (
       <main className="py-6">
         <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
@@ -90,18 +97,16 @@ function PublicPortalPage() {
     )
   }
 
-  const { currentBoard, currentSearch, currentSort, userIdentifier } = loaderData
-
-  // Single combined query for all portal data
-  const { data: portalData } = useSuspenseQuery(
-    portalQueries.portalData({
-      boardSlug: currentBoard,
-      search: currentSearch,
-      sort: currentSort,
-      userId: session?.user?.id,
-      userIdentifier,
-    })
-  )
+  // Handle initial loading state (should be rare due to SSR)
+  if (!portalData) {
+    return (
+      <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
+        <div className="flex justify-center py-16">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        </div>
+      </main>
+    )
+  }
 
   const user = session?.user ? { name: session.user.name, email: session.user.email } : null
 

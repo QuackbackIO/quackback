@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter, useRouteContext, useRouterState } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
@@ -55,6 +55,9 @@ export function FeedbackContainer({
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
   const [density, setDensity] = useState<PostCardDensity>('comfortable')
+
+  // Detect router pending state for immediate loading feedback
+  const isRouterPending = useRouterState({ select: (s) => s.status === 'pending' })
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
@@ -121,7 +124,8 @@ export function FeedbackContainer({
   })
 
   const posts = flattenPublicPosts(postsData)
-  const isLoading = isFetching && !isFetchingNextPage
+  // Show loading when router is pending (navigation in progress) or when fetching new filter results
+  const isLoading = isRouterPending || (isFetching && !isFetchingNextPage)
 
   // Update list key only when loading completes to trigger animations
   // This ensures we animate the new data, not stale data during loading
@@ -246,7 +250,11 @@ export function FeedbackContainer({
           </div>
 
           <div className="mt-3">
-            {posts.length === 0 && !isLoading ? (
+            {isLoading ? (
+              <div className="flex justify-center py-16">
+                <ArrowPathIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : posts.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 {activeSearch || activeFilterCount > 0
                   ? 'No posts match your filters.'
