@@ -49,8 +49,9 @@ function checkIsAppDomain(request: Request): boolean {
 
 export default createServerEntry({
   async fetch(request) {
+    const requestStart = Date.now()
     const url = new URL(request.url)
-    console.log(`[server] Incoming request: ${request.method} ${url.pathname}`)
+    console.log(`[server] ⏱️ START request: ${request.method} ${url.pathname}`)
 
     // Skip tenant resolution for static assets
     if (shouldSkipTenantResolution(request.url)) {
@@ -69,8 +70,13 @@ export default createServerEntry({
         settings: null,
         cache: new Map(),
       }
-      return tenantStorage.run(context, () => {
-        return handler.fetch(request, { context: { tenant: null } })
+      return tenantStorage.run(context, async () => {
+        const t1 = Date.now()
+        const response = await handler.fetch(request, { context: { tenant: null } })
+        console.log(
+          `[server] ⏱️ handler.fetch: ${Date.now() - t1}ms, TOTAL: ${Date.now() - requestStart}ms`
+        )
+        return response
       })
     }
 
@@ -78,7 +84,9 @@ export default createServerEntry({
     // Still wrap in tenantStorage for request-scoped caching and settings
     if (!isMultiTenant()) {
       console.log('[server] Self-hosted mode - querying settings')
+      const t1 = Date.now()
       const settings = await db.query.settings.findFirst()
+      console.log(`[server] ⏱️ settings query: ${Date.now() - t1}ms`)
       const context: TenantContext = {
         contextType: 'self-hosted',
         slug: settings?.slug ?? '',
@@ -86,14 +94,21 @@ export default createServerEntry({
         settings: settings ?? null,
         cache: new Map(),
       }
-      return tenantStorage.run(context, () => {
-        return handler.fetch(request, { context: { tenant: null } })
+      return tenantStorage.run(context, async () => {
+        const t2 = Date.now()
+        const response = await handler.fetch(request, { context: { tenant: null } })
+        console.log(
+          `[server] ⏱️ handler.fetch: ${Date.now() - t2}ms, TOTAL: ${Date.now() - requestStart}ms`
+        )
+        return response
       })
     }
 
     // Cloud: resolve tenant from domain
     console.log(`[server] Multi-tenant mode - resolving tenant for domain: ${url.hostname}`)
+    const t1 = Date.now()
     const tenant = await resolveTenantFromDomain(request)
+    console.log(`[server] ⏱️ resolveTenantFromDomain: ${Date.now() - t1}ms`)
 
     if (!tenant) {
       console.log(`[server] No tenant found for domain: ${url.hostname}`)
@@ -104,8 +119,13 @@ export default createServerEntry({
         settings: null,
         cache: new Map(),
       }
-      return tenantStorage.run(context, () => {
-        return handler.fetch(request, { context: { tenant: null } })
+      return tenantStorage.run(context, async () => {
+        const t2 = Date.now()
+        const response = await handler.fetch(request, { context: { tenant: null } })
+        console.log(
+          `[server] ⏱️ handler.fetch: ${Date.now() - t2}ms, TOTAL: ${Date.now() - requestStart}ms`
+        )
+        return response
       })
     }
 
@@ -122,9 +142,14 @@ export default createServerEntry({
       cache: new Map(),
     }
 
-    return tenantStorage.run(context, () => {
+    return tenantStorage.run(context, async () => {
       console.log(`[server] Running request in tenant context: ${tenant.workspaceId}`)
-      return handler.fetch(request, { context: { tenant: context } })
+      const t2 = Date.now()
+      const response = await handler.fetch(request, { context: { tenant: context } })
+      console.log(
+        `[server] ⏱️ handler.fetch: ${Date.now() - t2}ms, TOTAL: ${Date.now() - requestStart}ms`
+      )
+      return response
     })
   },
 })
