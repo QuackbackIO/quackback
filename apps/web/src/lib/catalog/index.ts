@@ -20,3 +20,4 @@ export {
 } from './schema'
 
 export { getCatalogDb, resetCatalogDb, type CatalogDb } from './catalog-db'
+export { decryptConnectionString } from './crypto'
