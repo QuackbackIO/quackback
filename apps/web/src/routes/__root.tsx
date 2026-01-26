@@ -78,22 +78,31 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
+    const startTime = Date.now()
+    console.log(`[__root] ⏱️ beforeLoad START: ${location.pathname}`)
+
     // Get discriminated request context in a single call
+    const t1 = Date.now()
     const requestContext = await getRequestContext()
+    console.log(`[__root] ⏱️ getRequestContext: ${Date.now() - t1}ms`)
 
     // App domain routes (e.g., app.quackback.io) skip tenant resolution
     if (requestContext.type === 'app-domain') {
+      console.log(`[__root] ⏱️ beforeLoad TOTAL (app-domain): ${Date.now() - startTime}ms`)
       return { requestContext }
     }
 
     // Unknown domain in multi-tenant mode - no database access available
     if (requestContext.type === 'unknown') {
+      console.log(`[__root] ⏱️ beforeLoad TOTAL (unknown): ${Date.now() - startTime}ms`)
       return { requestContext }
     }
 
     // Self-hosted or tenant mode - safe to query database
     // Fetch session and all settings data in parallel
+    const t2 = Date.now()
     const [session, settingsData] = await Promise.all([getSession(), fetchSettingsWithAllConfigs()])
+    console.log(`[__root] ⏱️ session+settingsData parallel: ${Date.now() - t2}ms`)
 
     // Enforce onboarding completion for non-exempt paths
     // Missing settings (null) is treated the same as incomplete onboarding
@@ -111,6 +120,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     }
 
     // Provide backward-compatible 'settings' for existing routes
+    console.log(`[__root] ⏱️ beforeLoad TOTAL: ${Date.now() - startTime}ms`)
     return { requestContext, session, settingsData, settings: settingsData?.settings ?? null }
   },
   head: () => ({

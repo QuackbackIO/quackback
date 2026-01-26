@@ -26,6 +26,8 @@ import type { TiptapContent } from '@/lib/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
+    const loaderStart = Date.now()
+    console.log(`[postDetail] ⏱️ loader START`)
     const { slug, postId: postIdParam } = params
     const { settings, queryClient } = context
 
@@ -38,22 +40,27 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     }
     const postId = postIdParam as PostId
 
+    const t1 = Date.now()
     const [board, post] = await Promise.all([
       queryClient.ensureQueryData(portalDetailQueries.board(slug)),
       queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
       queryClient.ensureQueryData(portalQueries.statuses()),
     ])
+    console.log(`[postDetail] ⏱️ board+post+statuses parallel: ${Date.now() - t1}ms`)
 
     if (!board || !post || post.board.slug !== slug) {
       throw notFound()
     }
 
     // Prefetch user-specific data (won't throw on error - components fall back to client fetch)
+    const t2 = Date.now()
     await Promise.all([
       queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId)),
       queryClient.prefetchQuery(portalDetailQueries.commentsSectionData(postId)),
       queryClient.prefetchQuery(portalDetailQueries.votedPosts()),
     ])
+    console.log(`[postDetail] ⏱️ prefetch parallel: ${Date.now() - t2}ms`)
+    console.log(`[postDetail] ⏱️ loader TOTAL: ${Date.now() - loaderStart}ms`)
 
     return { settings, postId, slug }
   },
