@@ -21,10 +21,6 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
       throw redirect({ to: '/auth/login' })
     }
 
-    if (state.isOnboardingComplete) {
-      throw redirect({ to: '/admin' })
-    }
-
     // If use case not selected yet, redirect to use case step
     if (!state.setupState?.useCase) {
       throw redirect({ to: '/onboarding/usecase' })

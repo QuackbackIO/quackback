@@ -1,22 +1,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { checkOnboardingState } from '@/lib/server-functions/admin'
-import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 
 /**
  * Onboarding index route - redirects to the appropriate step.
  * This acts as a router that determines where the user should be in the onboarding flow.
+ * Note: Parent layout (_layout.tsx) handles redirecting when setup is already complete.
  */
 export const Route = createFileRoute('/onboarding/')({
   loader: async ({ context }) => {
-    const { session, settingsData } = context
-
-    // Check setup state from settings
-    const setupState = getSetupState(settingsData?.settings?.setupState ?? null)
-
-    // If onboarding is complete, go to admin
-    if (isOnboardingComplete(setupState)) {
-      throw redirect({ to: '/admin' })
-    }
+    const { session } = context
 
     // Not authenticated - start with account creation
     if (!session?.user) {
@@ -29,10 +21,6 @@ export const Route = createFileRoute('/onboarding/')({
     if (state.needsInvitation) {
       // Not first user - they need an invitation
       throw redirect({ to: '/auth/login' })
-    }
-
-    if (state.isOnboardingComplete) {
-      throw redirect({ to: '/admin' })
     }
 
     // Determine which step to go to

@@ -1,10 +1,26 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 
 /**
  * Shared layout for all onboarding steps.
  * Dark theme with amber accents matching website design.
+ *
+ * Redirects to root if setup is already complete (except for the complete page,
+ * which is shown once after finishing onboarding).
  */
 export const Route = createFileRoute('/onboarding/_layout')({
+  beforeLoad: ({ context, location }) => {
+    // Allow the complete page through - it's shown after finishing onboarding
+    if (location.pathname === '/onboarding/complete') {
+      return
+    }
+
+    // If setup is complete, redirect to root - onboarding is not needed
+    const setupState = getSetupState(context.settingsData?.settings?.setupState ?? null)
+    if (isOnboardingComplete(setupState)) {
+      throw redirect({ to: '/' })
+    }
+  },
   component: OnboardingLayout,
 })
 

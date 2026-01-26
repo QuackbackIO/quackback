@@ -21,10 +21,6 @@ export const Route = createFileRoute('/onboarding/_layout/usecase')({
       throw redirect({ to: '/auth/login' })
     }
 
-    if (state.isOnboardingComplete) {
-      throw redirect({ to: '/admin' })
-    }
-
     // If workspace is already set up, go to boards
     if (state.setupState?.steps?.workspace) {
       throw redirect({ to: '/onboarding/boards' })

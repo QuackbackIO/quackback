@@ -18,10 +18,6 @@ export const Route = createFileRoute('/onboarding/_layout/account')({
         throw redirect({ to: '/auth/login' })
       }
 
-      if (state.isOnboardingComplete) {
-        throw redirect({ to: '/admin' })
-      }
-
       if (state.setupState?.steps?.workspace) {
         throw redirect({ to: '/onboarding/boards' })
       }
