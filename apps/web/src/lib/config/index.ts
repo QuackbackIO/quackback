@@ -33,7 +33,6 @@ const serverEnvSchema = z.object({
   EMAIL_FROM: z.string().default('Quackback <noreply@quackback.io>'),
 
   // Cloud multi-tenant
-  CLOUD_NEON_API_KEY: z.string().optional(),
   CLOUD_TENANT_BASE_DOMAIN: z.string().optional(),
   CLOUD_NEON_DEFAULT_REGION: z.string().default('aws-us-east-1'),
 
@@ -60,6 +59,9 @@ const serverEnvSchema = z.object({
 
   // Session transfer (cloud)
   CLOUD_SESSION_TRANSFER_SECRET: z.string().optional(),
+
+  // Billing base URL (cloud edition - external website)
+  CLOUD_BILLING_URL: z.string().default('https://www.quackback.io'),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>
@@ -131,6 +133,22 @@ export const config = {
   get isMultiTenant() {
     return Boolean(getConfig().CLOUD_CATALOG_DATABASE_URL)
   },
+}
+
+// ============================================================================
+// URL Helpers
+// ============================================================================
+
+/**
+ * Get the external billing URL for cloud users.
+ * Uses path-based workspace ID: /workspaces/{workspaceId}/billing
+ */
+export function getBillingUrl(workspaceId?: string): string {
+  const baseUrl = getConfig().CLOUD_BILLING_URL
+  if (workspaceId) {
+    return `${baseUrl}/workspaces/${workspaceId}/billing`
+  }
+  return baseUrl
 }
 
 // Re-export schema for testing

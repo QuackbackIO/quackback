@@ -82,10 +82,10 @@ export function hasEEPackages(): boolean {
 
 /**
  * Check if workspace-per-database mode is enabled.
- * This requires cloud mode AND Neon API key to be configured.
+ * This requires cloud mode AND a catalog database to be configured.
  */
 export function isWorkspacePerDatabase(): boolean {
-  return isCloud() && Boolean(process.env.CLOUD_NEON_API_KEY)
+  return isCloud() && Boolean(process.env.CLOUD_CATALOG_DATABASE_URL)
 }
 
 /**

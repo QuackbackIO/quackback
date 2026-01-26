@@ -16,6 +16,7 @@ import { getSubscription, isSubscriptionActive } from '../subscription'
 import { getLicenseInfo, isLicenseExpired } from '../license/license.server'
 import type { LicenseInfo } from '../license/license.types'
 import { tenantStorage } from '../tenant/storage'
+import { getBillingUrl } from '../config'
 
 // ============================================================================
 // Types
@@ -187,10 +188,7 @@ function getBillingUpgradeUrl(): string {
 
   // Cloud: use external billing URL with workspace ID
   const tenant = tenantStorage.getStore()
-  const workspaceId = tenant?.workspaceId
-  return workspaceId
-    ? `https://quackback.io/billing?workspace=${workspaceId}`
-    : 'https://quackback.io/billing'
+  return getBillingUrl(tenant?.workspaceId)
 }
 
 /**
