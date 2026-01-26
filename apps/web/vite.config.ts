@@ -11,17 +11,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, '../../'), '')
 
   const EDITION = process.env.EDITION || env.EDITION || 'self-hosted'
-  const INCLUDE_EE = process.env.INCLUDE_EE === 'true' || env.INCLUDE_EE === 'true'
   const USE_CLOUDFLARE = EDITION === 'cloud'
-
-  // EE package aliases - point to stubs when EE not included
-  const eeAliases: Record<string, string> = !INCLUDE_EE
-    ? {
-        '@quackback/ee-sso': path.resolve(__dirname, 'src/lib/ee/stubs/sso.ts'),
-        '@quackback/ee-scim': path.resolve(__dirname, 'src/lib/ee/stubs/scim.ts'),
-        '@quackback/ee-audit': path.resolve(__dirname, 'src/lib/ee/stubs/audit.ts'),
-      }
-    : {}
 
   return {
     server: {
@@ -35,10 +25,6 @@ export default defineConfig(({ mode }) => {
     // stream code. These calls aren't defined in the browser, causing runtime errors.
     define: {
       __EDITION__: JSON.stringify(EDITION),
-      __INCLUDE_EE__: JSON.stringify(INCLUDE_EE),
-    },
-    resolve: {
-      alias: eeAliases,
     },
     plugins: [
       tailwindcss(),

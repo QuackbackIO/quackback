@@ -8,7 +8,6 @@
  *
  * Environment variables:
  *   EDITION: 'self-hosted' (default) | 'cloud'
- *   INCLUDE_EE: 'true' | 'false' (default)
  *
  * Usage:
  *   bun scripts/prepare-edition.ts
@@ -37,11 +36,9 @@ interface EditionConfig {
 
 function main() {
   const edition = (process.env.EDITION || 'self-hosted') as Edition
-  const includeEE = process.env.INCLUDE_EE === 'true'
 
   console.log(`\n=== Prepare Edition ===`)
   console.log(`Edition: ${edition}`)
-  console.log(`Include EE: ${includeEE}`)
   console.log('')
 
   // Read config

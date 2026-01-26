@@ -4,7 +4,6 @@ import { settingsQueries } from '@/lib/queries/settings'
 import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { SecuritySettings } from '@/components/admin/settings/security/security-settings'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { useWorkspaceFeatures } from '@/lib/hooks/use-features'
 
 export const Route = createFileRoute('/admin/settings/security')({
   loader: async ({ context }) => {
@@ -12,11 +11,7 @@ export const Route = createFileRoute('/admin/settings/security')({
     await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
 
     const { queryClient } = context
-    // Prefetch both queries in parallel for SSR
-    await Promise.all([
-      queryClient.ensureQueryData(settingsQueries.securityConfig()),
-      queryClient.ensureQueryData(settingsQueries.workspaceFeatures()),
-    ])
+    await queryClient.ensureQueryData(settingsQueries.securityConfig())
 
     return {}
   },
@@ -24,10 +19,6 @@ export const Route = createFileRoute('/admin/settings/security')({
 })
 
 function SecurityPage() {
-  const { data: features } = useWorkspaceFeatures()
-  const hasEnterprise = features?.hasEnterprise ?? false
-  const isSelfHosted = features?.edition === 'self-hosted'
-
   const securityConfigQuery = useSuspenseQuery(settingsQueries.securityConfig())
 
   return (
@@ -38,9 +29,7 @@ function SecurityPage() {
         </div>
         <div>
           <h1 className="text-xl font-semibold text-foreground">Security</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure SSO and sign-in methods for your team
-          </p>
+          <p className="text-sm text-muted-foreground">Configure sign-in methods for your team</p>
         </div>
       </div>
 
@@ -48,11 +37,7 @@ function SecurityPage() {
         title="Authentication"
         description="Control how team members sign in to the admin dashboard"
       >
-        <SecuritySettings
-          securityConfig={securityConfigQuery.data}
-          hasEnterprise={hasEnterprise}
-          isSelfHosted={isSelfHosted}
-        />
+        <SecuritySettings securityConfig={securityConfigQuery.data} />
       </SettingsCard>
     </div>
   )

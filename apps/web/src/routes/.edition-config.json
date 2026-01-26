@@ -2,10 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Route edition configuration for build-time exclusion. Routes listed here are renamed with '-' prefix for excluded editions.",
   "routes": {
-    "admin/settings.license.tsx": {
-      "editions": ["self-hosted"],
-      "description": "License management is only for self-hosted deployments"
-    },
     "_app.tsx": {
       "editions": ["cloud"],
       "description": "App-domain layout for routes without tenant context"

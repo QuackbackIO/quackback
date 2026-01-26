@@ -7,8 +7,6 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "ee/packages/*",
-    "ee/scripts/internal/*",
     "scripts/*"
   ],
   "resolutions": {
@@ -19,11 +17,9 @@
     "dev": "bun run --filter @quackback/web dev",
     "dev:cloud": "EDITION=cloud bun run --filter @quackback/web dev",
     "build": "bun scripts/prepare-edition.ts && bun run --filter @quackback/web build",
-    "build:community": "EDITION=self-hosted INCLUDE_EE=false bun run build",
-    "build:enterprise": "EDITION=self-hosted INCLUDE_EE=true bun run build",
-    "build:cloud": "EDITION=cloud INCLUDE_EE=true bun run build",
-    "deploy:cloud:dev": "EDITION=cloud INCLUDE_EE=true bun run --filter @quackback/web deploy:dev",
-    "deploy:cloud:production": "EDITION=cloud INCLUDE_EE=true bun run --filter @quackback/web deploy:production",
+    "build:cloud": "EDITION=cloud bun run build",
+    "deploy:cloud:dev": "EDITION=cloud bun run --filter @quackback/web deploy:dev",
+    "deploy:cloud:production": "EDITION=cloud bun run --filter @quackback/web deploy:production",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest",
     "test:e2e": "bun run --filter @quackback/web test:e2e",

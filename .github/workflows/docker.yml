@@ -13,9 +13,9 @@ on:
         default: 'true'
         type: boolean
       editions:
-        description: 'Editions to build (comma-separated: community,enterprise,cloud)'
+        description: 'Editions to build (comma-separated: community,cloud)'
         required: false
-        default: 'community,enterprise,cloud'
+        default: 'community,cloud'
         type: string
 
 env:
@@ -36,19 +36,12 @@ jobs:
           - edition: community
             build_args: |
               EDITION=self-hosted
-              INCLUDE_EE=false
             # Community gets 'latest' tag on main/master
             extra_tags: |
               type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') || github.ref == format('refs/heads/{0}', 'master') }}
-          - edition: enterprise
-            build_args: |
-              EDITION=self-hosted
-              INCLUDE_EE=true
-            extra_tags: ''
           - edition: cloud
             build_args: |
               EDITION=cloud
-              INCLUDE_EE=true
             extra_tags: ''
 
     steps:
@@ -146,12 +139,10 @@ jobs:
           echo "| Edition | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Community | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Enterprise | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Cloud | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Image Tags" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- \`ghcr.io/${{ github.repository }}:latest\` - Community (default)" >> $GITHUB_STEP_SUMMARY
           echo "- \`ghcr.io/${{ github.repository }}:latest-community\` - Community" >> $GITHUB_STEP_SUMMARY
-          echo "- \`ghcr.io/${{ github.repository }}:latest-enterprise\` - Enterprise (self-hosted + EE)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`ghcr.io/${{ github.repository }}:latest-cloud\` - Cloud (hosted + EE)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/${{ github.repository }}:latest-cloud\` - Cloud (hosted)" >> $GITHUB_STEP_SUMMARY

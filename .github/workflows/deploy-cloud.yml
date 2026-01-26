@@ -17,7 +17,6 @@ on:
 env:
   # Build-time configuration for cloud edition
   EDITION: cloud
-  INCLUDE_EE: true
 
 jobs:
   deploy:
@@ -52,7 +51,6 @@ jobs:
         working-directory: apps/web
         env:
           EDITION: ${{ env.EDITION }}
-          INCLUDE_EE: ${{ env.INCLUDE_EE }}
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3

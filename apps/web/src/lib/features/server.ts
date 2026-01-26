@@ -10,11 +10,8 @@ import {
   CLOUD_TIER_ORDER,
   SELF_HOSTED_TIER_CONFIG,
   getMinimumCloudTierForFeature,
-  isEnterpriseOnlyFeature,
 } from '@/lib/features'
 import { getSubscription, isSubscriptionActive } from '../subscription'
-import { getLicenseInfo, isLicenseExpired } from '../license/license.server'
-import type { LicenseInfo } from '../license/license.types'
 import { tenantStorage } from '../tenant/storage'
 import { getBillingUrl } from '../config'
 
@@ -25,7 +22,7 @@ import { getBillingUrl } from '../config'
 export interface WorkspaceFeatures {
   /** Deployment edition */
   edition: Edition
-  /** Self-hosted tier (community or enterprise) - null for cloud */
+  /** Self-hosted tier (community) - null for cloud */
   selfHostedTier: SelfHostedTier | null
   /** Cloud subscription tier - null for self-hosted */
   cloudTier: CloudTier | null
@@ -35,10 +32,6 @@ export interface WorkspaceFeatures {
   hasFeature: (feature: Feature) => boolean
   /** Resource limits */
   limits: TierLimits
-  /** Whether workspace has enterprise features (license or subscription) */
-  hasEnterprise: boolean
-  /** License info for self-hosted enterprise - null otherwise */
-  license: LicenseInfo | null
 }
 
 // ============================================================================
@@ -50,39 +43,21 @@ export interface WorkspaceFeatures {
  * Cached per request for efficiency.
  *
  * For cloud mode, reads subscription from tenant context (sync).
- * For self-hosted mode, requires async license check.
+ * For self-hosted mode, returns community tier.
  */
 export const getWorkspaceFeatures = cache(async (): Promise<WorkspaceFeatures> => {
   if (isSelfHosted()) {
     return getSelfHostedFeatures()
   }
-  // Cloud features are now sync since subscription is in tenant context
+  // Cloud features are sync since subscription is in tenant context
   return getCloudFeatures()
 })
 
 /**
  * Get features for self-hosted deployment
+ * Self-hosted always gets the community tier with all features
  */
-async function getSelfHostedFeatures(): Promise<WorkspaceFeatures> {
-  const license = await getLicenseInfo()
-  const hasValidLicense = license.valid && !isLicenseExpired(license)
-
-  if (hasValidLicense) {
-    // Self-hosted Enterprise
-    const config = SELF_HOSTED_TIER_CONFIG.enterprise
-    return {
-      edition: 'self-hosted',
-      selfHostedTier: 'enterprise',
-      cloudTier: null,
-      enabledFeatures: config.features,
-      hasFeature: (feature: Feature) => config.features.includes(feature),
-      limits: config.limits,
-      hasEnterprise: true,
-      license,
-    }
-  }
-
-  // Self-hosted Community
+function getSelfHostedFeatures(): WorkspaceFeatures {
   const config = SELF_HOSTED_TIER_CONFIG.community
   return {
     edition: 'self-hosted',
@@ -91,8 +66,6 @@ async function getSelfHostedFeatures(): Promise<WorkspaceFeatures> {
     enabledFeatures: config.features,
     hasFeature: (feature: Feature) => config.features.includes(feature),
     limits: config.limits,
-    hasEnterprise: false,
-    license: null,
   }
 }
 
@@ -113,12 +86,10 @@ function getCloudFeatures(): WorkspaceFeatures {
       enabledFeatures: config.features,
       hasFeature: (feature: Feature) => config.features.includes(feature),
       limits: config.limits,
-      hasEnterprise: false,
-      license: null,
     }
   }
 
-  const tier = subscription.tier
+  const tier = subscription.tier as CloudTier
   const config = CLOUD_TIER_CONFIG[tier]
 
   return {
@@ -128,8 +99,6 @@ function getCloudFeatures(): WorkspaceFeatures {
     enabledFeatures: config.features,
     hasFeature: (feature: Feature) => config.features.includes(feature),
     limits: config.limits,
-    hasEnterprise: tier === 'enterprise',
-    license: null,
   }
 }
 
@@ -143,14 +112,6 @@ function getCloudFeatures(): WorkspaceFeatures {
 export async function hasFeature(feature: Feature): Promise<boolean> {
   const features = await getWorkspaceFeatures()
   return features.hasFeature(feature)
-}
-
-/**
- * Check if the workspace has enterprise access (via license or subscription)
- */
-export async function hasEnterprise(): Promise<boolean> {
-  const features = await getWorkspaceFeatures()
-  return features.hasEnterprise
 }
 
 /**
@@ -173,17 +134,17 @@ export interface FeatureCheckResult {
   allowed: boolean
   error?: string
   requiredTier?: CloudTier
-  requiresEnterprise?: boolean
   upgradeUrl?: string
 }
 
 /**
  * Build the billing URL for upgrade prompts.
- * Self-hosted uses internal license settings; cloud uses external billing page.
+ * Self-hosted has all features; cloud uses external billing page.
  */
 function getBillingUpgradeUrl(): string {
   if (isSelfHosted()) {
-    return '/admin/settings/license'
+    // Self-hosted community has all features, no upgrade needed
+    return '/admin/settings'
   }
 
   // Cloud: use external billing URL with workspace ID
@@ -199,16 +160,6 @@ export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheck
 
   if (features.hasFeature(feature)) {
     return { allowed: true }
-  }
-
-  // Check if it's an enterprise-only feature
-  if (isEnterpriseOnlyFeature(feature)) {
-    return {
-      allowed: false,
-      error: 'This feature requires an Enterprise license',
-      requiresEnterprise: true,
-      upgradeUrl: getBillingUpgradeUrl(),
-    }
   }
 
   // Cloud tier requirement

@@ -54,9 +54,6 @@ const serverEnvSchema = z.object({
   GITHUB_APP_PRIVATE_KEY: z.string().optional(),
   INTEGRATION_ENCRYPTION_KEY: z.string().optional(),
 
-  // License
-  ENTERPRISE_LICENSE_KEY: z.string().optional(),
-
   // Session transfer (cloud)
   CLOUD_SESSION_TRANSFER_SECRET: z.string().optional(),
 

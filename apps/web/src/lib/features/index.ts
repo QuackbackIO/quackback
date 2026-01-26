@@ -4,8 +4,8 @@
  * Two-dimensional model:
  * 1. Deployment: self-hosted vs cloud
  * 2. Tier:
- *    - Self-hosted: community (free) vs enterprise (license key)
- *    - Cloud: free → pro → team → enterprise (subscription-based)
+ *    - Self-hosted: community (free, all features, no limits)
+ *    - Cloud: free → pro → team (subscription-based)
  */
 
 // ============================================================================
@@ -13,7 +13,6 @@
 // ============================================================================
 
 declare const __EDITION__: 'self-hosted' | 'cloud' | undefined
-declare const __INCLUDE_EE__: boolean | undefined
 
 // ============================================================================
 // Edition & Tier Types
@@ -27,14 +26,13 @@ export type Edition = 'self-hosted' | 'cloud'
 /**
  * Self-hosted tiers
  * - community: Free, all standard features, no limits
- * - enterprise: Requires license key, adds SSO/SAML, SCIM, Audit Logs
  */
-export type SelfHostedTier = 'community' | 'enterprise'
+export type SelfHostedTier = 'community'
 
 /**
  * Cloud subscription tiers
  */
-export type CloudTier = 'free' | 'pro' | 'team' | 'enterprise'
+export type CloudTier = 'free' | 'pro' | 'team'
 
 // ============================================================================
 // Edition Detection
@@ -67,17 +65,6 @@ export function isCloud(): boolean {
  */
 export function getEdition(): Edition {
   return isCloud() ? 'cloud' : 'self-hosted'
-}
-
-/**
- * Check if EE packages are included in this build
- * Used for conditional loading of EE features
- */
-export function hasEEPackages(): boolean {
-  if (typeof __INCLUDE_EE__ !== 'undefined') {
-    return __INCLUDE_EE__
-  }
-  return false
 }
 
 /**
@@ -122,51 +109,12 @@ export enum Feature {
   // Team tier (cloud) - included in self-hosted community
   INTEGRATIONS = 'integrations',
   CSV_IMPORT_EXPORT = 'csv_import_export',
-
-  // Enterprise-only (requires license for self-hosted, enterprise tier for cloud)
-  SSO_SAML = 'sso_saml',
-  SCIM = 'scim',
-  AUDIT_LOGS = 'audit_logs',
-
-  // Enterprise tier extras (cloud only)
   API_ACCESS = 'api_access',
   WEBHOOKS = 'webhooks',
-  WHITE_LABEL = 'white_label',
-  SLA_GUARANTEE = 'sla_guarantee',
-  DEDICATED_SUPPORT = 'dedicated_support',
-}
-
-// ============================================================================
-// Feature Categories
-// ============================================================================
-
-/**
- * Enterprise-only features
- * These require a license key (self-hosted) or enterprise subscription (cloud)
- */
-export const ENTERPRISE_ONLY_FEATURES: Feature[] = [
-  Feature.SSO_SAML,
-  Feature.SCIM,
-  Feature.AUDIT_LOGS,
-]
-
-/**
- * Check if a feature requires enterprise tier
- */
-export function isEnterpriseOnlyFeature(feature: Feature): boolean {
-  return ENTERPRISE_ONLY_FEATURES.includes(feature)
 }
 
 /**
- * All features except enterprise-only
- * Available to self-hosted community and various cloud tiers
- */
-const COMMUNITY_FEATURES: Feature[] = Object.values(Feature).filter(
-  (f) => !ENTERPRISE_ONLY_FEATURES.includes(f)
-)
-
-/**
- * All features including enterprise
+ * All available features
  */
 const ALL_FEATURES: Feature[] = Object.values(Feature)
 
@@ -203,21 +151,13 @@ export interface SelfHostedTierConfig {
   name: string
   features: Feature[]
   limits: TierLimits
-  requiresLicense: boolean
 }
 
 export const SELF_HOSTED_TIER_CONFIG: Record<SelfHostedTier, SelfHostedTierConfig> = {
   community: {
     name: 'Community',
-    features: COMMUNITY_FEATURES,
-    limits: UNLIMITED_LIMITS,
-    requiresLicense: false,
-  },
-  enterprise: {
-    name: 'Enterprise',
     features: ALL_FEATURES,
     limits: UNLIMITED_LIMITS,
-    requiresLicense: true,
   },
 }
 
@@ -257,24 +197,14 @@ const CLOUD_TEAM_FEATURES: Feature[] = [
   ...CLOUD_PRO_FEATURES,
   Feature.INTEGRATIONS,
   Feature.CSV_IMPORT_EXPORT,
-]
-
-const CLOUD_ENTERPRISE_FEATURES: Feature[] = [
-  ...CLOUD_TEAM_FEATURES,
-  Feature.SSO_SAML,
-  Feature.SCIM,
-  Feature.AUDIT_LOGS,
   Feature.API_ACCESS,
   Feature.WEBHOOKS,
-  Feature.WHITE_LABEL,
-  Feature.SLA_GUARANTEE,
-  Feature.DEDICATED_SUPPORT,
 ]
 
 /**
  * Cloud tier order for comparison (lowest to highest)
  */
-export const CLOUD_TIER_ORDER: CloudTier[] = ['free', 'pro', 'team', 'enterprise']
+export const CLOUD_TIER_ORDER: CloudTier[] = ['free', 'pro', 'team']
 
 /**
  * Complete cloud tier configuration
@@ -313,17 +243,6 @@ export const CLOUD_TIER_CONFIG: Record<CloudTier, CloudTierConfig> = {
       posts: 10000,
     },
   },
-  enterprise: {
-    name: 'Enterprise',
-    price: 499,
-    features: CLOUD_ENTERPRISE_FEATURES,
-    limits: {
-      boards: 'unlimited',
-      roadmaps: 'unlimited',
-      seats: 10,
-      posts: 'unlimited',
-    },
-  },
 }
 
 /**
@@ -332,7 +251,6 @@ export const CLOUD_TIER_CONFIG: Record<CloudTier, CloudTierConfig> = {
 export const CLOUD_SEAT_PRICING: Record<Exclude<CloudTier, 'free'>, number> = {
   pro: 15,
   team: 20,
-  enterprise: 30,
 }
 
 // ============================================================================
@@ -412,9 +330,6 @@ export function getSelfHostedTierConfig(tier: SelfHostedTier): SelfHostedTierCon
  * Get human-readable requirement for a feature
  */
 export function getFeatureRequirement(feature: Feature): string {
-  if (isEnterpriseOnlyFeature(feature)) {
-    return 'Requires Enterprise'
-  }
   const minTier = getMinimumCloudTierForFeature(feature)
   if (minTier && minTier !== 'free') {
     return `Requires ${CLOUD_TIER_CONFIG[minTier].name}`

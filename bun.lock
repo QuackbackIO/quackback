@@ -125,42 +125,6 @@
         "wrangler": "^4.60.0",
       },
     },
-    "ee/packages/audit": {
-      "name": "@quackback/ee-audit",
-      "version": "0.1.0",
-      "dependencies": {
-        "@quackback/db": "workspace:*",
-        "@quackback/ids": "workspace:*",
-        "drizzle-orm": "^0.45.0",
-      },
-    },
-    "ee/packages/scim": {
-      "name": "@quackback/ee-scim",
-      "version": "0.1.0",
-      "dependencies": {
-        "@quackback/db": "workspace:*",
-        "@quackback/ids": "workspace:*",
-        "zod": "^4.1.12",
-      },
-    },
-    "ee/packages/sso": {
-      "name": "@quackback/ee-sso",
-      "version": "0.1.0",
-      "dependencies": {
-        "@better-auth/sso": "1.3.10",
-        "@quackback/db": "workspace:*",
-        "@quackback/ids": "workspace:*",
-      },
-      "peerDependencies": {
-        "better-auth": "^1.4.0",
-      },
-    },
-    "ee/scripts/internal/generate-license": {
-      "name": "@quackback/generate-license",
-      "dependencies": {
-        "jose": "^6.1.3",
-      },
-    },
     "packages/db": {
       "name": "@quackback/db",
       "version": "0.1.0",
@@ -651,15 +615,7 @@
 
     "@quackback/db": ["@quackback/db@workspace:packages/db"],
 
-    "@quackback/ee-audit": ["@quackback/ee-audit@workspace:ee/packages/audit"],
-
-    "@quackback/ee-scim": ["@quackback/ee-scim@workspace:ee/packages/scim"],
-
-    "@quackback/ee-sso": ["@quackback/ee-sso@workspace:ee/packages/sso"],
-
     "@quackback/email": ["@quackback/email@workspace:packages/email"],
-
-    "@quackback/generate-license": ["@quackback/generate-license@workspace:ee/scripts/internal/generate-license"],
 
     "@quackback/ids": ["@quackback/ids@workspace:packages/ids"],
 

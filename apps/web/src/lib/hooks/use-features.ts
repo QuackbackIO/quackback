@@ -6,7 +6,6 @@ import {
   type CloudTier,
   type TierLimits,
 } from '@/lib/features'
-import type { LicenseInfo } from '@/lib/license'
 import { getWorkspaceFeaturesFn } from '@/lib/server-functions/settings'
 
 // ============================================================================
@@ -25,7 +24,7 @@ export const featuresKeys = {
 export interface WorkspaceFeaturesData {
   /** Deployment edition */
   edition: Edition
-  /** Self-hosted tier (community or enterprise) - null for cloud */
+  /** Self-hosted tier (community) - null for cloud */
   selfHostedTier: SelfHostedTier | null
   /** Cloud subscription tier - null for self-hosted */
   cloudTier: CloudTier | null
@@ -33,10 +32,6 @@ export interface WorkspaceFeaturesData {
   enabledFeatures: Feature[]
   /** Resource limits */
   limits: TierLimits
-  /** Whether workspace has enterprise features (license or subscription) */
-  hasEnterprise: boolean
-  /** License info for self-hosted enterprise - null otherwise */
-  license: LicenseInfo | null
 }
 
 // ============================================================================
@@ -57,7 +52,7 @@ export function useWorkspaceFeatures() {
 
 /**
  * Hook to check if a specific feature is enabled.
- * Returns { enabled, isLoading, edition, hasEnterprise } for conditional rendering.
+ * Returns { enabled, isLoading, edition } for conditional rendering.
  */
 export function useFeature(feature: Feature) {
   const { data, isLoading, error } = useWorkspaceFeatures()
@@ -69,18 +64,6 @@ export function useFeature(feature: Feature) {
     edition: data?.edition ?? 'cloud',
     selfHostedTier: data?.selfHostedTier ?? null,
     cloudTier: data?.cloudTier ?? null,
-    hasEnterprise: data?.hasEnterprise ?? false,
-  }
-}
-
-/**
- * Hook to check if the workspace has enterprise access
- */
-export function useHasEnterprise() {
-  const { data, isLoading } = useWorkspaceFeatures()
-  return {
-    hasEnterprise: data?.hasEnterprise ?? false,
-    isLoading,
   }
 }
 

@@ -48,8 +48,6 @@ export const getWorkspaceFeaturesFn = createServerFn({ method: 'GET' }).handler(
     cloudTier: features.cloudTier,
     enabledFeatures: features.enabledFeatures,
     limits: features.limits,
-    hasEnterprise: features.hasEnterprise,
-    license: features.license,
   }
 })
 

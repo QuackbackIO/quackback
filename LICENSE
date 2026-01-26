@@ -2,9 +2,7 @@ Quackback Licensing
 ===================
 
 Quackback is open-source software licensed under the GNU Affero General Public
-License v3.0 (AGPL-3.0), with the exception of the contents of the ee/
-directory, which contains Enterprise Edition features licensed under a
-proprietary license. See ee/LICENSE for Enterprise Edition terms.
+License v3.0 (AGPL-3.0).
 
 ---
 
