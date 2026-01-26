@@ -49,8 +49,15 @@ const navSections: NavSection[] = [
         icon: ShieldCheckIcon,
         enterpriseOnly: true,
       },
-      { label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon, cloudOnly: true },
-      // Billing is now managed on the website - link will be replaced with external URL
+      // Domains is now managed on the website
+      {
+        label: 'Domains',
+        to: '__DOMAINS_EXTERNAL__',
+        icon: GlobeAltIcon,
+        cloudOnly: true,
+        external: true,
+      },
+      // Billing is now managed on the website
       {
         label: 'Billing',
         to: '__BILLING_EXTERNAL__',
@@ -113,10 +120,13 @@ export function SettingsNav({ isCloud, workspaceId }: SettingsNavProps) {
     ),
   }))
 
-  // Build external billing URL with workspaceId
+  // Build external URLs with workspaceId
+  const domainsUrl = workspaceId
+    ? `https://www.quackback.io/workspaces/${workspaceId}/domains`
+    : 'https://www.quackback.io/workspaces'
   const billingUrl = workspaceId
-    ? `https://quackback.io/billing?workspace=${workspaceId}`
-    : 'https://quackback.io/billing'
+    ? `https://www.quackback.io/workspaces/${workspaceId}/billing`
+    : 'https://www.quackback.io/workspaces'
 
   return (
     <div className="space-y-1">
@@ -126,9 +136,11 @@ export function SettingsNav({ isCloud, workspaceId }: SettingsNavProps) {
             const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
             const Icon = item.icon
 
-            // Handle external billing link
+            // Handle external links (domains, billing)
             if (item.external) {
-              const href = item.to === '__BILLING_EXTERNAL__' ? billingUrl : item.to
+              let href = item.to
+              if (item.to === '__DOMAINS_EXTERNAL__') href = domainsUrl
+              else if (item.to === '__BILLING_EXTERNAL__') href = billingUrl
               return (
                 <a
                   key={item.to}
