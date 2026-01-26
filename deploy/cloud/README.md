@@ -21,12 +21,13 @@
 
 Quackback Cloud runs on Cloudflare Workers with:
 
-| Component         | Technology                                       |
-| ----------------- | ------------------------------------------------ |
-| **Runtime**       | Cloudflare Workers via `@cloudflare/vite-plugin` |
-| **Framework**     | TanStack Start (React)                           |
-| **Database**      | Neon PostgreSQL (per-tenant)                     |
-| **Multi-tenancy** | Domain-based resolution via catalog database     |
+| Component           | Technology                                       |
+| ------------------- | ------------------------------------------------ |
+| **Runtime**         | Cloudflare Workers via `@cloudflare/vite-plugin` |
+| **Framework**       | TanStack Start (React)                           |
+| **Database**        | Neon PostgreSQL (per-tenant)                     |
+| **Multi-tenancy**   | Domain-based resolution via catalog database     |
+| **Connection Pool** | Cloudflare Hyperdrive for catalog database       |
 
 ### Environments
 
@@ -47,6 +48,7 @@ Before deploying, ensure you have:
    - Account: Cloudflare Workers Scripts:Edit
    - Zone: quackback.io - Workers Routes:Edit
 4. **Catalog Database** PostgreSQL database for workspace registry
+5. **Hyperdrive** configured for catalog database connection pooling
 
 ---
 
@@ -60,7 +62,26 @@ wrangler login
 
 This opens a browser to authenticate. Your credentials are stored locally.
 
-### 2. Create Local Secrets File
+### 2. Create Hyperdrive Configuration
+
+Hyperdrive provides connection pooling for the catalog database, reducing latency by eliminating connection overhead.
+
+```bash
+# Create Hyperdrive for production
+npx wrangler hyperdrive create quackback-catalog-prod \
+  --connection-string="postgres://user:pass@host/catalog"
+
+# Create Hyperdrive for development (optional)
+npx wrangler hyperdrive create quackback-catalog-dev \
+  --connection-string="postgres://user:pass@host/catalog-dev"
+```
+
+Copy the `id` from the output and update the wrangler configs:
+
+- `wrangler.production.jsonc`: Set `hyperdrive[0].id` to production ID
+- `wrangler.dev.jsonc`: Set `hyperdrive[0].id` to development ID
+
+### 3. Create Local Secrets File
 
 ```bash
 cd deploy/cloud
@@ -73,7 +94,7 @@ Edit `.dev.vars` with your development secrets:
 # Required
 BETTER_AUTH_SECRET=your-dev-secret-at-least-32-characters
 CLOUD_CATALOG_DATABASE_URL=postgres://user:pass@host/catalog
-CLOUD_NEON_API_KEY=napi_xxxxxxxxxxxx
+ENCRYPTION_KEY=your-32-byte-hex-key
 RESEND_API_KEY=re_xxxxxxxxxxxx
 INTEGRATION_ENCRYPTION_KEY=base64-encoded-32-byte-key
 
@@ -82,23 +103,22 @@ GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
 ```
 
-### 3. Configure Cloudflare Secrets (for deployed workers)
+### 4. Configure Cloudflare Secrets (for deployed workers)
 
-Secrets must be set via wrangler for each environment:
+Secrets must be set via wrangler for each environment.
+Note: Catalog database connection is handled by Hyperdrive, not a secret.
 
 ```bash
 # Development environment
 cd apps/web
 wrangler secret put BETTER_AUTH_SECRET -c ../../deploy/cloud/wrangler.dev.jsonc
-wrangler secret put CLOUD_CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.dev.jsonc
-wrangler secret put CLOUD_NEON_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
+wrangler secret put ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 wrangler secret put RESEND_API_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 wrangler secret put INTEGRATION_ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.dev.jsonc
 
 # Production environment
 wrangler secret put BETTER_AUTH_SECRET -c ../../deploy/cloud/wrangler.production.jsonc
-wrangler secret put CLOUD_CATALOG_DATABASE_URL -c ../../deploy/cloud/wrangler.production.jsonc
-wrangler secret put CLOUD_NEON_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
+wrangler secret put ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 wrangler secret put RESEND_API_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 wrangler secret put INTEGRATION_ENCRYPTION_KEY -c ../../deploy/cloud/wrangler.production.jsonc
 ```
@@ -208,13 +228,13 @@ Automated deployments are configured in `.github/workflows/deploy-cloud.yml`.
 
 ### Required Secrets per Environment
 
-| Secret                       | Description                                         |
-| ---------------------------- | --------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`       | API token with Workers permissions                  |
-| `BETTER_AUTH_SECRET`         | Auth encryption key (32+ chars)                     |
-| `CLOUD_CATALOG_DATABASE_URL` | Catalog database connection string                  |
-| `CLOUD_NEON_API_KEY`         | Neon API key for fetching tenant connection strings |
-| `RESEND_API_KEY`             | Email service API key                               |
+| Secret                 | Description                                       |
+| ---------------------- | ------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN` | API token with Workers permissions                |
+| `BETTER_AUTH_SECRET`   | Auth encryption key (32+ chars)                   |
+| (Hyperdrive binding)   | Catalog database (configured in wrangler configs) |
+| `ENCRYPTION_KEY`       | 32-byte hex key for decrypting connection strings |
+| `RESEND_API_KEY`       | Email service API key                             |
 
 ### Manual Production Deploy
 

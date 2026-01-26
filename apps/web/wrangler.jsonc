@@ -4,6 +4,13 @@
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  // Hyperdrive for catalog database connection pooling
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE_CATALOG",
+      "id": ""
+    }
+  ],
   // Vars for typegen - actual values set in deploy configs or as secrets
   "vars": {
     "ROOT_URL": "",
@@ -13,8 +20,7 @@
     "EDITION": "",
     "CLOUD_TENANT_BASE_DOMAIN": "",
     "CLOUD_NEON_DEFAULT_REGION": "",
-    "CLOUD_CATALOG_DATABASE_URL": "",
-    "CLOUD_NEON_API_KEY": "",
-    "CLOUD_SESSION_TRANSFER_SECRET": ""
+    "CLOUD_SESSION_TRANSFER_SECRET": "",
+    "ENCRYPTION_KEY": ""
   }
 }
