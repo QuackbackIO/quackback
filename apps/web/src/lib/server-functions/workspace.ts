@@ -1,54 +1,11 @@
 /**
  * Server functions for workspace data fetching.
- *
- * Server Functions (createServerFn):
- * - getRequestContext: Get discriminated request context (app-domain, self-hosted, tenant, unknown)
- * - getSettings: Fetch app settings
- * - getCurrentUserRole: Get current user's role
- * - validateApiWorkspaceAccess: Validate API access
- *
- * See also: workspace-utils.ts for requireWorkspace and requireWorkspaceRole.
  */
 
 import { createServerFn } from '@tanstack/react-start'
 import { db, member, eq } from '@/lib/db'
-import { tenantStorage, type RequestContext } from '@/lib/tenant'
+import { tenantStorage } from '@/lib/tenant'
 import { getSession } from './auth'
-
-/**
- * Get the request context as a discriminated union.
- * Replaces checkIsAppDomain() and checkTenantAvailable() with a single call.
- *
- * Returns:
- * - { type: 'app-domain' } - Request is on app domain (e.g., app.quackback.io)
- * - { type: 'self-hosted', settings } - Self-hosted mode with DATABASE_URL singleton
- * - { type: 'tenant', workspaceId, settings } - Multi-tenant mode with resolved tenant
- * - { type: 'unknown' } - Multi-tenant mode with no resolved tenant for domain
- */
-export const getRequestContext = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<RequestContext> => {
-    const store = tenantStorage.getStore()
-
-    if (!store) {
-      return { type: 'unknown' }
-    }
-
-    switch (store.contextType) {
-      case 'app-domain':
-        return { type: 'app-domain' }
-      case 'self-hosted':
-        return { type: 'self-hosted', settings: store.settings }
-      case 'tenant':
-        return {
-          type: 'tenant',
-          workspaceId: store.workspaceId ?? '',
-          settings: store.settings,
-        }
-      case 'unknown':
-        return { type: 'unknown' }
-    }
-  }
-)
 
 /**
  * Get the app settings.
@@ -117,16 +74,19 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
       return { success: false as const, error: 'Unauthorized', status: 401 as const }
     }
 
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id),
-    })
+    // Parallelize member and settings queries - they're independent
+    const [memberRecord, appSettings] = await Promise.all([
+      db.query.member.findFirst({
+        where: eq(member.userId, session.user.id),
+      }),
+      db.query.settings.findFirst(),
+    ])
 
     if (!memberRecord) {
       console.log(`[fn:workspace] validateApiWorkspaceAccess: no member`)
       return { success: false as const, error: 'Forbidden', status: 403 as const }
     }
 
-    const appSettings = await db.query.settings.findFirst()
     if (!appSettings) {
       console.log(`[fn:workspace] validateApiWorkspaceAccess: no settings`)
       return { success: false as const, error: 'Settings not found', status: 403 as const }

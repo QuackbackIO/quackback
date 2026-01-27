@@ -19,7 +19,14 @@ import {
   member as memberTable,
   user as userTable,
 } from '@/lib/db'
-import type { PostId, StatusId, TagId, CommentId } from '@quackback/ids'
+import {
+  toUuid,
+  type PostId,
+  type StatusId,
+  type TagId,
+  type CommentId,
+  type MemberId,
+} from '@quackback/ids'
 import { buildCommentTree } from '@/lib/shared'
 import type {
   PublicPostListResult,
@@ -30,52 +37,71 @@ import type {
   PinnedComment,
 } from './post.types'
 
-function computeAvatarUrl(data: {
+interface AvatarData {
   imageBlob: Buffer | null
   imageType: string | null
   image: string | null
-}): string | null {
+}
+
+function computeAvatarUrl(data: AvatarData): string | null {
   if (data.imageBlob && data.imageType) {
-    const base64 = Buffer.from(data.imageBlob).toString('base64')
-    return `data:${data.imageType};base64,${base64}`
+    return `data:${data.imageType};base64,${Buffer.from(data.imageBlob).toString('base64')}`
   }
   return data.image ?? null
 }
 
-function getPostSortOrder(sort: 'top' | 'new' | 'trending') {
-  switch (sort) {
-    case 'new':
-      return desc(posts.createdAt)
-    case 'trending':
-      return sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
-    case 'top':
-    default:
-      return desc(posts.voteCount)
-  }
+function parseJson<T>(value: string | T): T {
+  return typeof value === 'string' ? JSON.parse(value) : value
 }
 
-export async function listPublicPosts(params: {
+function parseAvatarData(json: string | null): string | null {
+  if (!json) return null
+  const data = parseJson<{ blob?: string; type?: string; url?: string }>(json)
+  if (data.blob && data.type) {
+    return `data:${data.type};base64,${data.blob}`
+  }
+  return data.url ?? null
+}
+
+type SortOrder = 'top' | 'new' | 'trending'
+
+function getPostSortOrder(sort: SortOrder) {
+  if (sort === 'new') return desc(posts.createdAt)
+  if (sort === 'trending') {
+    return sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
+  }
+  return desc(posts.voteCount)
+}
+
+export interface PostWithVotesAndAvatars {
+  id: PostId
+  title: string
+  content: string | null
+  statusId: StatusId | null
+  voteCount: number
+  commentCount: number
+  authorName: string | null
+  memberId: string | null
+  createdAt: Date
+  tags: Array<{ id: TagId; name: string; color: string }>
+  board: { id: string; name: string; slug: string }
+  hasVoted: boolean
+  avatarUrl: string | null
+}
+
+interface PostListParams {
   boardSlug?: string
   search?: string
   statusIds?: StatusId[]
   statusSlugs?: string[]
   tagIds?: TagId[]
-  sort?: 'top' | 'new' | 'trending'
+  sort?: SortOrder
   page?: number
   limit?: number
-}): Promise<PublicPostListResult> {
-  const {
-    boardSlug,
-    search,
-    statusIds,
-    statusSlugs,
-    tagIds,
-    sort = 'top',
-    page = 1,
-    limit = 20,
-  } = params
-  const offset = (page - 1) * limit
+}
 
+function buildPostFilterConditions(params: PostListParams) {
+  const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
   const conditions = [eq(boards.isPublic, true)]
 
   if (boardSlug) {
@@ -104,6 +130,96 @@ export async function listPublicPosts(params: {
     conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
   }
 
+  return conditions
+}
+
+export async function listPublicPostsWithVotesAndAvatars(
+  params: PostListParams & { memberId?: MemberId }
+): Promise<{ items: PostWithVotesAndAvatars[]; hasMore: boolean }> {
+  const { sort = 'top', page = 1, limit = 20, memberId } = params
+  const offset = (page - 1) * limit
+  const conditions = buildPostFilterConditions(params)
+  const orderBy = getPostSortOrder(sort)
+
+  // Only authenticated users can vote, so we only check member_id
+  // Anonymous users see vote counts but hasVoted is always false
+  const memberUuid = memberId ? toUuid(memberId) : null
+  const voteExistsSubquery = memberUuid
+    ? sql<boolean>`EXISTS(
+        SELECT 1 FROM ${votes}
+        WHERE ${votes.postId} = ${posts.id}
+        AND ${votes.memberId} = ${memberUuid}::uuid
+      )`.as('has_voted')
+    : sql<boolean>`false`.as('has_voted')
+
+  const postsResult = await db
+    .select({
+      id: posts.id,
+      title: posts.title,
+      content: posts.content,
+      statusId: posts.statusId,
+      voteCount: posts.voteCount,
+      commentCount: posts.commentCount,
+      authorName: posts.authorName,
+      memberId: posts.memberId,
+      createdAt: posts.createdAt,
+      boardId: boards.id,
+      boardName: boards.name,
+      boardSlug: boards.slug,
+      tagsJson: sql<string>`COALESCE(
+        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
+         FROM ${postTags} pt
+         INNER JOIN ${tags} t ON t.id = pt.tag_id
+         WHERE pt.post_id = ${posts.id}),
+        '[]'
+      )`.as('tags_json'),
+      hasVoted: voteExistsSubquery,
+      avatarData: sql<string | null>`(
+        SELECT CASE
+          WHEN u.image_blob IS NOT NULL AND u.image_type IS NOT NULL
+          THEN json_build_object('blob', encode(u.image_blob, 'base64'), 'type', u.image_type)
+          ELSE json_build_object('url', u.image)
+        END
+        FROM ${memberTable} m
+        INNER JOIN ${userTable} u ON m.user_id = u.id
+        WHERE m.id = ${posts.memberId}
+      )`.as('avatar_data'),
+    })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(and(...conditions))
+    .orderBy(orderBy)
+    .limit(limit + 1)
+    .offset(offset)
+
+  const hasMore = postsResult.length > limit
+  const trimmedResults = hasMore ? postsResult.slice(0, limit) : postsResult
+
+  const items = trimmedResults.map(
+    (post): PostWithVotesAndAvatars => ({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      statusId: post.statusId,
+      voteCount: post.voteCount,
+      commentCount: post.commentCount,
+      authorName: post.authorName,
+      memberId: post.memberId,
+      createdAt: post.createdAt,
+      tags: parseJson<Array<{ id: TagId; name: string; color: string }>>(post.tagsJson),
+      board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
+      hasVoted: post.hasVoted ?? false,
+      avatarUrl: parseAvatarData(post.avatarData),
+    })
+  )
+
+  return { items, hasMore }
+}
+
+export async function listPublicPosts(params: PostListParams): Promise<PublicPostListResult> {
+  const { sort = 'top', page = 1, limit = 20 } = params
+  const offset = (page - 1) * limit
+  const conditions = buildPostFilterConditions(params)
   const orderBy = getPostSortOrder(sort)
 
   const postsResult = await db
@@ -120,6 +236,13 @@ export async function listPublicPosts(params: {
       boardId: boards.id,
       boardName: boards.name,
       boardSlug: boards.slug,
+      tagsJson: sql<string>`COALESCE(
+        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
+         FROM ${postTags} pt
+         INNER JOIN ${tags} t ON t.id = pt.tag_id
+         WHERE pt.post_id = ${posts.id}),
+        '[]'
+      )`.as('tags_json'),
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -131,29 +254,6 @@ export async function listPublicPosts(params: {
   const hasMore = postsResult.length > limit
   const trimmedResults = hasMore ? postsResult.slice(0, limit) : postsResult
 
-  const postIds = trimmedResults.map((p) => p.id)
-
-  const tagsResult =
-    postIds.length > 0
-      ? await db
-          .select({
-            postId: postTags.postId,
-            id: tags.id,
-            name: tags.name,
-            color: tags.color,
-          })
-          .from(postTags)
-          .innerJoin(tags, eq(tags.id, postTags.tagId))
-          .where(inArray(postTags.postId, postIds))
-      : []
-
-  const tagsByPost = new Map<PostId, Array<{ id: TagId; name: string; color: string }>>()
-  for (const row of tagsResult) {
-    const existing = tagsByPost.get(row.postId) || []
-    existing.push({ id: row.id, name: row.name, color: row.color })
-    tagsByPost.set(row.postId, existing)
-  }
-
   const items = trimmedResults.map((post) => ({
     id: post.id,
     title: post.title,
@@ -164,70 +264,69 @@ export async function listPublicPosts(params: {
     memberId: post.memberId,
     createdAt: post.createdAt,
     commentCount: post.commentCount,
-    tags: tagsByPost.get(post.id) || [],
-    board: {
-      id: post.boardId,
-      name: post.boardName,
-      slug: post.boardSlug,
-    },
+    tags: parseJson<Array<{ id: TagId; name: string; color: string }>>(post.tagsJson),
+    board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
   }))
 
-  return {
-    items,
-    total: -1,
-    hasMore,
-  }
+  return { items, total: -1, hasMore }
 }
 
 export async function getPublicPostDetail(
   postId: PostId,
-  userIdentifier?: string
+  memberId?: MemberId
 ): Promise<PublicPostDetail | null> {
-  const postResult = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: {
-      board: true,
-    },
-  })
-
-  if (!postResult || !postResult.board.isPublic) {
-    return null
-  }
-
-  const [authorAvatarData, tagsResult, roadmapsResult, commentsWithAvatars] = await Promise.all([
-    postResult.memberId
-      ? db
-          .select({
-            imageBlob: userTable.imageBlob,
-            imageType: userTable.imageType,
-            image: userTable.image,
-          })
-          .from(memberTable)
-          .innerJoin(userTable, eq(memberTable.userId, userTable.id))
-          .where(eq(memberTable.id, postResult.memberId))
-          .limit(1)
-      : Promise.resolve([]),
-
+  // Run post and comments queries in parallel (faster than single complex query)
+  const [postResults, commentsWithReactions] = await Promise.all([
+    // Query 1: Post with embedded tags, roadmaps, and author avatar
     db
       .select({
-        id: tags.id,
-        name: tags.name,
-        color: tags.color,
+        id: posts.id,
+        title: posts.title,
+        content: posts.content,
+        contentJson: posts.contentJson,
+        statusId: posts.statusId,
+        voteCount: posts.voteCount,
+        authorName: posts.authorName,
+        memberId: posts.memberId,
+        createdAt: posts.createdAt,
+        pinnedCommentId: posts.pinnedCommentId,
+        officialResponse: posts.officialResponse,
+        officialResponseAuthorName: posts.officialResponseAuthorName,
+        officialResponseAt: posts.officialResponseAt,
+        boardId: boards.id,
+        boardName: boards.name,
+        boardSlug: boards.slug,
+        boardIsPublic: boards.isPublic,
+        tagsJson: sql<string>`COALESCE(
+          (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
+           FROM ${postTags} pt
+           INNER JOIN ${tags} t ON t.id = pt.tag_id
+           WHERE pt.post_id = ${posts.id}),
+          '[]'
+        )`.as('tags_json'),
+        roadmapsJson: sql<string>`COALESCE(
+          (SELECT json_agg(json_build_object('id', r.id, 'name', r.name, 'slug', r.slug))
+           FROM ${postRoadmaps} pr
+           INNER JOIN ${roadmaps} r ON r.id = pr.roadmap_id
+           WHERE pr.post_id = ${posts.id} AND r.is_public = true),
+          '[]'
+        )`.as('roadmaps_json'),
+        authorAvatarData: sql<string | null>`(
+          SELECT CASE
+            WHEN u.image_blob IS NOT NULL AND u.image_type IS NOT NULL
+            THEN json_build_object('blob', encode(u.image_blob, 'base64'), 'type', u.image_type)
+            ELSE json_build_object('url', u.image)
+          END
+          FROM ${memberTable} m
+          INNER JOIN ${userTable} u ON m.user_id = u.id
+          WHERE m.id = ${posts.memberId}
+        )`.as('author_avatar_data'),
       })
-      .from(postTags)
-      .innerJoin(tags, eq(tags.id, postTags.tagId))
-      .where(eq(postTags.postId, postId)),
-
-    db
-      .select({
-        id: roadmaps.id,
-        name: roadmaps.name,
-        slug: roadmaps.slug,
-      })
-      .from(postRoadmaps)
-      .innerJoin(roadmaps, eq(roadmaps.id, postRoadmaps.roadmapId))
-      .where(and(eq(postRoadmaps.postId, postId), eq(roadmaps.isPublic, true))),
-
+      .from(posts)
+      .innerJoin(boards, eq(posts.boardId, boards.id))
+      .where(eq(posts.id, postId))
+      .limit(1),
+    // Query 2: Comments with avatars and reactions
     db
       .select({
         id: comments.id,
@@ -244,6 +343,12 @@ export async function getPublicPostDetail(
         imageBlob: userTable.imageBlob,
         imageType: userTable.imageType,
         image: userTable.image,
+        reactionsJson: sql<string>`COALESCE(
+          (SELECT json_agg(json_build_object('emoji', cr.emoji, 'memberId', cr.member_id))
+           FROM ${commentReactions} cr
+           WHERE cr.comment_id = ${comments.id}),
+          '[]'
+        )`.as('reactions_json'),
       })
       .from(comments)
       .leftJoin(memberTable, eq(comments.memberId, memberTable.id))
@@ -252,24 +357,20 @@ export async function getPublicPostDetail(
       .orderBy(asc(comments.createdAt)),
   ])
 
-  const authorAvatarUrl = authorAvatarData.length > 0 ? computeAvatarUrl(authorAvatarData[0]) : null
-
-  const commentIds = commentsWithAvatars.map((c) => c.id)
-  const reactionsResult =
-    commentIds.length > 0
-      ? await db.query.commentReactions.findMany({
-          where: inArray(commentReactions.commentId, commentIds),
-        })
-      : []
-
-  const reactionsByComment = new Map<string, Array<{ emoji: string; userIdentifier: string }>>()
-  for (const reaction of reactionsResult) {
-    const existing = reactionsByComment.get(reaction.commentId) || []
-    existing.push({ emoji: reaction.emoji, userIdentifier: reaction.userIdentifier })
-    reactionsByComment.set(reaction.commentId, existing)
+  const postResult = postResults[0]
+  if (!postResult || !postResult.boardIsPublic) {
+    return null
   }
 
-  const commentsResult = commentsWithAvatars.map((comment) => ({
+  const tagsResult = parseJson<Array<{ id: TagId; name: string; color: string }>>(
+    postResult.tagsJson
+  )
+  const roadmapsResult = parseJson<Array<{ id: string; name: string; slug: string }>>(
+    postResult.roadmapsJson
+  )
+  const authorAvatarUrl = parseAvatarData(postResult.authorAvatarData)
+
+  const commentsResult = commentsWithReactions.map((comment) => ({
     id: comment.id,
     postId: comment.postId,
     parentId: comment.parentId,
@@ -281,10 +382,10 @@ export async function getPublicPostDetail(
     isTeamMember: comment.isTeamMember,
     createdAt: comment.createdAt,
     avatarUrl: computeAvatarUrl(comment),
-    reactions: reactionsByComment.get(comment.id) || [],
+    reactions: parseJson<Array<{ emoji: string; memberId: string }>>(comment.reactionsJson),
   }))
 
-  const commentTree = buildCommentTree(commentsResult, userIdentifier)
+  const commentTree = buildCommentTree(commentsResult, memberId)
 
   const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => ({
     id: node.id as CommentId,
@@ -303,7 +404,7 @@ export async function getPublicPostDetail(
 
   let pinnedComment: PinnedComment | null = null
   if (postResult.pinnedCommentId) {
-    const pinnedCommentData = commentsWithAvatars.find((c) => c.id === postResult.pinnedCommentId)
+    const pinnedCommentData = commentsWithReactions.find((c) => c.id === postResult.pinnedCommentId)
     if (pinnedCommentData && !pinnedCommentData.deletedAt) {
       pinnedComment = {
         id: pinnedCommentData.id as CommentId,
@@ -328,11 +429,7 @@ export async function getPublicPostDetail(
     memberId: postResult.memberId,
     authorAvatarUrl,
     createdAt: postResult.createdAt,
-    board: {
-      id: postResult.board.id,
-      name: postResult.board.name,
-      slug: postResult.board.slug,
-    },
+    board: { id: postResult.boardId, name: postResult.boardName, slug: postResult.boardSlug },
     tags: tagsResult,
     roadmaps: roadmapsResult,
     comments: rootComments,
@@ -428,36 +525,43 @@ export async function getPublicRoadmapPostsPaginated(params: {
   }
 }
 
-export async function hasUserVoted(postId: PostId, userIdentifier: string): Promise<boolean> {
+export async function hasUserVoted(postId: PostId, memberId: MemberId): Promise<boolean> {
   const vote = await db.query.votes.findFirst({
-    where: and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)),
+    where: and(eq(votes.postId, postId), eq(votes.memberId, memberId)),
   })
-
   return !!vote
 }
 
 export async function getUserVotedPostIds(
   postIds: PostId[],
-  userIdentifier: string
+  memberId: MemberId
 ): Promise<Set<PostId>> {
   if (postIds.length === 0) {
     return new Set()
   }
-
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
-    .where(and(inArray(votes.postId, postIds), eq(votes.userIdentifier, userIdentifier)))
-
+    .where(and(inArray(votes.postId, postIds), eq(votes.memberId, memberId)))
   return new Set(result.map((r) => r.postId))
 }
 
-export async function getAllUserVotedPostIds(userIdentifier: string): Promise<Set<PostId>> {
+export async function getAllUserVotedPostIds(memberId: MemberId): Promise<Set<PostId>> {
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
-    .where(eq(votes.userIdentifier, userIdentifier))
+    .where(eq(votes.memberId, memberId))
+  return new Set(result.map((r) => r.postId))
+}
 
+export async function getVotedPostIdsByUserId(
+  userId: import('@quackback/ids').UserId
+): Promise<Set<PostId>> {
+  const result = await db
+    .select({ postId: votes.postId })
+    .from(votes)
+    .innerJoin(memberTable, eq(votes.memberId, memberTable.id))
+    .where(eq(memberTable.userId, userId))
   return new Set(result.map((r) => r.postId))
 }
 

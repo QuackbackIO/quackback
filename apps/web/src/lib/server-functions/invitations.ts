@@ -32,10 +32,15 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('User email not found')
       }
 
-      // Find the invitation
-      const inv = await db.query.invitation.findFirst({
-        where: eq(invitation.id, invitationId as InviteId),
-      })
+      // Parallelize invitation and member queries - they're independent
+      const [inv, existingMember] = await Promise.all([
+        db.query.invitation.findFirst({
+          where: eq(invitation.id, invitationId as InviteId),
+        }),
+        db.query.member.findFirst({
+          where: eq(member.userId, userId),
+        }),
+      ])
 
       if (!inv) {
         throw new Error('Invitation not found')
@@ -61,11 +66,6 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       }
 
       const role = inv.role || 'member'
-
-      // Check if member record already exists
-      const existingMember = await db.query.member.findFirst({
-        where: eq(member.userId, userId),
-      })
 
       if (existingMember) {
         // Update existing member's role if the invitation grants a higher role

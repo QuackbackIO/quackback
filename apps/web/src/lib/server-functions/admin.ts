@@ -9,7 +9,6 @@ import {
 } from '@quackback/db/types'
 import type { TiptapContent } from '@/lib/schemas/posts'
 import { requireAuth } from './auth-helpers'
-import { getSession } from './auth'
 import { getSettings } from './workspace'
 import { db, invitation, member, user, eq, and } from '@/lib/db'
 import { listInboxPosts } from '@/lib/posts/post.service'
@@ -614,32 +613,23 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] sendInvitationFn: role=${data.role}`)
     try {
-      await requireAuth({ roles: ['admin'] })
-
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
-
-      const settings = await getSettings()
-      if (!settings) {
-        throw new Error('Settings not found')
-      }
+      const auth = await requireAuth({ roles: ['admin'] })
 
       const email = data.email.toLowerCase()
 
-      const existingInvitation = await db.query.invitation.findFirst({
-        where: and(eq(invitation.email, email), eq(invitation.status, 'pending')),
-      })
+      // Parallelize invitation and user validation queries
+      const [existingInvitation, existingUser] = await Promise.all([
+        db.query.invitation.findFirst({
+          where: and(eq(invitation.email, email), eq(invitation.status, 'pending')),
+        }),
+        db.query.user.findFirst({
+          where: eq(user.email, email),
+        }),
+      ])
 
       if (existingInvitation) {
         throw new Error('An invitation has already been sent to this email')
       }
-
-      // Check if user already exists and has a team membership
-      const existingUser = await db.query.user.findFirst({
-        where: eq(user.email, email),
-      })
 
       if (existingUser) {
         // Check if they already have a team member role (admin or member)
@@ -665,20 +655,20 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         status: 'pending',
         expiresAt,
         lastSentAt: now,
-        inviterId: session.user.id,
+        inviterId: auth.user.id,
         createdAt: now,
       })
 
       // Generate magic link for one-click authentication
-      const portalUrl = await resolvePortalUrl(settings.slug)
+      const portalUrl = await resolvePortalUrl(auth.settings.slug)
       const callbackURL = `/accept-invitation/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(email, callbackURL, portalUrl)
 
       await sendInvitationEmail({
         to: email,
-        invitedByName: session.user.name,
+        invitedByName: auth.user.name,
         inviteeName: data.name || undefined,
-        workspaceName: settings.name,
+        workspaceName: auth.settings.name,
         inviteLink,
       })
 
@@ -728,17 +718,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:admin] resendInvitationFn: id=${data.invitationId}`)
     try {
-      await requireAuth({ roles: ['admin'] })
-
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
-
-      const settings = await getSettings()
-      if (!settings) {
-        throw new Error('Settings not found')
-      }
+      const auth = await requireAuth({ roles: ['admin'] })
 
       const invitationId = data.invitationId as InviteId
 
@@ -751,7 +731,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       }
 
       // Generate new magic link for one-click authentication
-      const portalUrl = await resolvePortalUrl(settings.slug)
+      const portalUrl = await resolvePortalUrl(auth.settings.slug)
       const callbackURL = `/accept-invitation/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(
         invitationRecord.email,
@@ -761,9 +741,9 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
 
       await sendInvitationEmail({
         to: invitationRecord.email,
-        invitedByName: session.user.name,
+        invitedByName: auth.user.name,
         inviteeName: invitationRecord.name || undefined,
-        workspaceName: settings.name,
+        workspaceName: auth.settings.name,
         inviteLink,
       })
 

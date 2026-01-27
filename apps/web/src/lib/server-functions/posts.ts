@@ -25,7 +25,6 @@ import {
   restorePost,
 } from '@/lib/posts/post.service'
 import { hasUserVoted } from '@/lib/posts/post.public'
-import { getMemberIdentifier } from '@/lib/user-identifier'
 import { dispatchPostCreated, dispatchPostStatusChanged } from '@/lib/events/dispatch'
 
 // ============================================
@@ -216,15 +215,14 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const postId = data.id as PostId
-      const userIdentifier = getMemberIdentifier(auth.member.id)
 
-      const [result, comments, hasVoted] = await Promise.all([
+      const [result, comments, voted] = await Promise.all([
         getPostWithDetails(postId),
-        getCommentsWithReplies(postId, userIdentifier),
-        hasUserVoted(postId, userIdentifier),
+        getCommentsWithReplies(postId, auth.member.id),
+        hasUserVoted(postId, auth.member.id),
       ])
       console.log(
-        `[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}, hasVoted=${hasVoted}`
+        `[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}, hasVoted=${voted}`
       )
 
       // Serialize Date fields in comments
@@ -248,7 +246,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
       return {
         ...serializePostDates(result),
-        hasVoted,
+        hasVoted: voted,
         comments: comments.map(serializeComment),
         pinnedComment: serializedPinnedComment,
       }
