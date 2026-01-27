@@ -56,8 +56,16 @@ export function FeedbackContainer({
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
   const [density, setDensity] = useState<PostCardDensity>('comfortable')
 
+  // Track if component has mounted to avoid hydration mismatch
+  const [hasMounted, setHasMounted] = useState(false)
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
   // Detect router pending state for immediate loading feedback
-  const isRouterPending = useRouterState({ select: (s) => s.status === 'pending' })
+  // Only use after mount to avoid hydration mismatch
+  const routerStatus = useRouterState({ select: (s) => s.status })
+  const isRouterPending = hasMounted && routerStatus === 'pending'
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
