@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import {
   ArrowTrendingUpIcon,
   Bars3Icon,
@@ -19,6 +18,7 @@ import { cn } from '@/lib/utils'
 
 interface FeedbackToolbarProps {
   currentSort: 'top' | 'new' | 'trending'
+  onSortChange: (sort: 'top' | 'new' | 'trending') => void
   currentSearch?: string
   onSearchChange: (search: string) => void
   statuses: PostStatusEntity[]
@@ -43,6 +43,7 @@ const SORT_OPTIONS = [
 
 export function FeedbackToolbar({
   currentSort,
+  onSortChange,
   currentSearch,
   onSearchChange,
   statuses,
@@ -78,10 +79,10 @@ export function FeedbackToolbar({
           const Icon = option.icon
           const isActive = currentSort === option.value
           return (
-            <Link
+            <button
               key={option.value}
-              to="/"
-              search={(prev: Record<string, unknown>) => ({ ...prev, sort: option.value })}
+              type="button"
+              onClick={() => onSortChange(option.value)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
                 isActive
@@ -91,7 +92,7 @@ export function FeedbackToolbar({
             >
               <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
               {option.label}
-            </Link>
+            </button>
           )
         })}
       </div>

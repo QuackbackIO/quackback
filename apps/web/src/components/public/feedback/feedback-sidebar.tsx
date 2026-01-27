@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 import type { BoardWithStats } from '@/lib/boards'
@@ -6,10 +5,16 @@ import type { BoardWithStats } from '@/lib/boards'
 interface FeedbackSidebarProps {
   boards: BoardWithStats[]
   currentBoard?: string
+  onBoardChange: (board: string | undefined) => void
   workspaceSlug?: string
 }
 
-export function FeedbackSidebar({ boards, currentBoard, workspaceSlug }: FeedbackSidebarProps) {
+export function FeedbackSidebar({
+  boards,
+  currentBoard,
+  onBoardChange,
+  workspaceSlug,
+}: FeedbackSidebarProps) {
   return (
     <aside className="w-64 shrink-0 hidden lg:block">
       <div className="sticky top-24">
@@ -19,11 +24,11 @@ export function FeedbackSidebar({ boards, currentBoard, workspaceSlug }: Feedbac
           </h2>
           <nav className="space-y-1 px-4 pb-4 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
             {/* View all posts */}
-            <Link
-              to="/"
-              search={(prev: Record<string, unknown>) => ({ ...prev, board: undefined })}
+            <button
+              type="button"
+              onClick={() => onBoardChange(undefined)}
               className={cn(
-                'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
+                'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer w-full text-left',
                 !currentBoard
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -31,18 +36,18 @@ export function FeedbackSidebar({ boards, currentBoard, workspaceSlug }: Feedbac
             >
               <ListBulletIcon className={cn('h-4 w-4 shrink-0', !currentBoard && 'text-primary')} />
               <span className="truncate">View all posts</span>
-            </Link>
+            </button>
 
             {/* Board list */}
             {boards.map((board) => {
               const isActive = currentBoard === board.slug
               return (
-                <Link
+                <button
                   key={board.id}
-                  to="/"
-                  search={(prev: Record<string, unknown>) => ({ ...prev, board: board.slug })}
+                  type="button"
+                  onClick={() => onBoardChange(board.slug)}
                   className={cn(
-                    'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
+                    'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer w-full text-left',
                     isActive
                       ? 'bg-muted text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -62,7 +67,7 @@ export function FeedbackSidebar({ boards, currentBoard, workspaceSlug }: Feedbac
                       {board.postCount}
                     </span>
                   )}
-                </Link>
+                </button>
               )
             })}
           </nav>

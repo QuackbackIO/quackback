@@ -185,6 +185,16 @@ export function FeedbackContainer({
     return () => observer.disconnect()
   }, [hasNextPage])
 
+  const handleSortChange = useCallback(
+    (sort: 'top' | 'new' | 'trending') => setFilters({ sort }),
+    [setFilters]
+  )
+
+  const handleBoardChange = useCallback(
+    (board: string | undefined) => setFilters({ board }),
+    [setFilters]
+  )
+
   const handleSearchChange = useCallback(
     (search: string) => setFilters({ search: search || undefined }),
     [setFilters]
@@ -229,10 +239,15 @@ export function FeedbackContainer({
 
           {/* Mobile board selector + Toolbar */}
           <div className="flex items-center gap-2">
-            <MobileBoardSheet boards={boards} currentBoard={activeBoard} />
+            <MobileBoardSheet
+              boards={boards}
+              currentBoard={activeBoard}
+              onBoardChange={handleBoardChange}
+            />
             <div className="flex-1">
               <FeedbackToolbar
                 currentSort={activeSort}
+                onSortChange={handleSortChange}
                 currentSearch={activeSearch}
                 onSearchChange={handleSearchChange}
                 statuses={statuses}
@@ -306,7 +321,12 @@ export function FeedbackContainer({
           </div>
         </div>
 
-        <FeedbackSidebar boards={boards} currentBoard={activeBoard} workspaceSlug={workspaceSlug} />
+        <FeedbackSidebar
+          boards={boards}
+          currentBoard={activeBoard}
+          onBoardChange={handleBoardChange}
+          workspaceSlug={workspaceSlug}
+        />
       </div>
     </div>
   )
