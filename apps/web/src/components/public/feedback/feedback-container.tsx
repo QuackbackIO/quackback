@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useRouteContext, useRouterState } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
@@ -75,8 +75,8 @@ export function FeedbackContainer({
   const activeBoard = filters.board ?? currentBoard
   const activeSearch = filters.search ?? currentSearch
   const activeSort = filters.sort ?? currentSort
-  const activeStatuses = useMemo(() => filters.status ?? [], [filters.status])
-  const activeTagIds = useMemo(() => filters.tagIds ?? [], [filters.tagIds])
+  const activeStatuses = filters.status ?? []
+  const activeTagIds = filters.tagIds ?? []
 
   // Build merged filters for the query
   const mergedFilters = useMemo(
@@ -185,35 +185,29 @@ export function FeedbackContainer({
     return () => observer.disconnect()
   }, [hasNextPage])
 
-  const handleSortChange = useCallback(
-    (sort: 'top' | 'new' | 'trending') => setFilters({ sort }),
-    [setFilters]
-  )
+  function handleSortChange(sort: 'top' | 'new' | 'trending'): void {
+    setFilters({ sort })
+  }
 
-  const handleBoardChange = useCallback(
-    (board: string | undefined) => setFilters({ board }),
-    [setFilters]
-  )
+  function handleBoardChange(board: string | undefined): void {
+    setFilters({ board })
+  }
 
-  const handleSearchChange = useCallback(
-    (search: string) => setFilters({ search: search || undefined }),
-    [setFilters]
-  )
+  function handleSearchChange(search: string): void {
+    setFilters({ search: search || undefined })
+  }
 
-  const handleStatusChange = useCallback(
-    (values: string[]) => setFilters({ status: values.length > 0 ? values : undefined }),
-    [setFilters]
-  )
+  function handleStatusChange(values: string[]): void {
+    setFilters({ status: values.length > 0 ? values : undefined })
+  }
 
-  const handleTagChange = useCallback(
-    (tagIds: string[]) => setFilters({ tagIds: tagIds.length > 0 ? tagIds : undefined }),
-    [setFilters]
-  )
+  function handleTagChange(tagIds: string[]): void {
+    setFilters({ tagIds: tagIds.length > 0 ? tagIds : undefined })
+  }
 
-  const handleClearFilters = useCallback(
-    () => setFilters({ status: undefined, tagIds: undefined }),
-    [setFilters]
-  )
+  function handleClearFilters(): void {
+    setFilters({ status: undefined, tagIds: undefined })
+  }
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId

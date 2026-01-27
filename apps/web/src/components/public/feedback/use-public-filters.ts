@@ -94,30 +94,8 @@ export function usePublicFilters() {
   )
 
   const clearFilters = useCallback(() => {
-    setOptimisticFilters((current) => {
-      const newFilters = {
-        ...current,
-        search: undefined,
-        status: undefined,
-        tagIds: undefined,
-      }
-      isOptimisticRef.current = true
-
-      void navigate({
-        to: '/',
-        search: {
-          board: newFilters.board,
-          sort: newFilters.sort,
-          search: undefined,
-          status: undefined,
-          tagIds: undefined,
-        },
-        replace: true,
-      })
-
-      return newFilters
-    })
-  }, [navigate])
+    setFilters({ search: undefined, status: undefined, tagIds: undefined })
+  }, [setFilters])
 
   const activeFilterCount = useMemo(() => {
     let count = 0
@@ -126,9 +104,7 @@ export function usePublicFilters() {
     return count
   }, [optimisticFilters.status, optimisticFilters.tagIds])
 
-  const hasActiveFilters = useMemo(() => {
-    return !!(optimisticFilters.status?.length || optimisticFilters.tagIds?.length)
-  }, [optimisticFilters.status, optimisticFilters.tagIds])
+  const hasActiveFilters = activeFilterCount > 0
 
   return {
     filters: optimisticFilters,
