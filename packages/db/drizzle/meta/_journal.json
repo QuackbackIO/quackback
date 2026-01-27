@@ -92,6 +92,13 @@
       "when": 1769206800000,
       "tag": "0012_add_public_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1769293200000,
+      "tag": "0013_authenticated_voting",
+      "breakpoints": true
     }
   ]
 }

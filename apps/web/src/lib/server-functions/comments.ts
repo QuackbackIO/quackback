@@ -20,8 +20,6 @@ import {
   userEditComment,
 } from '@/lib/comments/comment.service'
 import { dispatchCommentCreated } from '@/lib/events/dispatch'
-import { getMemberIdentifier } from '@/lib/user-identifier'
-
 import { getOptionalAuth, requireAuth } from './auth-helpers'
 
 // Schemas
@@ -162,9 +160,7 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
     console.log(`[fn:comments] toggleReactionFn: commentId=${data.commentId}, emoji=${data.emoji}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      const userIdentifier = getMemberIdentifier(auth.member.id)
-
-      const result = await toggleReaction(data.commentId as CommentId, data.emoji, userIdentifier)
+      const result = await toggleReaction(data.commentId as CommentId, data.emoji, auth.member.id)
       console.log(`[fn:comments] toggleReactionFn: toggled`)
       return result
     } catch (error) {

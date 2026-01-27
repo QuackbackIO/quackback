@@ -181,17 +181,17 @@ export const votes = pgTable(
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    userIdentifier: text('user_identifier').notNull(),
-    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
-      onDelete: 'cascade',
-    }),
+    // member_id is required - only authenticated users can vote
+    memberId: typeIdColumn('member')('member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('votes_post_id_idx').on(table.postId),
-    // Unique constraint: one vote per user per post
-    uniqueIndex('votes_unique_idx').on(table.postId, table.userIdentifier),
+    // Unique constraint: one vote per member per post
+    uniqueIndex('votes_member_post_idx').on(table.postId, table.memberId),
     index('votes_member_id_idx').on(table.memberId),
     index('votes_member_created_at_idx').on(table.memberId, table.createdAt),
   ]
@@ -234,17 +234,17 @@ export const commentReactions = pgTable(
     commentId: typeIdColumn('comment')('comment_id')
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
-    userIdentifier: text('user_identifier').notNull(),
+    // member_id is required - only authenticated users can react
+    memberId: typeIdColumn('member')('member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'cascade' }),
     emoji: text('emoji').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('comment_reactions_comment_id_idx').on(table.commentId),
-    uniqueIndex('comment_reactions_unique_idx').on(
-      table.commentId,
-      table.userIdentifier,
-      table.emoji
-    ),
+    index('comment_reactions_member_id_idx').on(table.memberId),
+    uniqueIndex('comment_reactions_unique_idx').on(table.commentId, table.memberId, table.emoji),
   ]
 )
 

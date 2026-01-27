@@ -320,12 +320,12 @@ export async function getCommentById(id: CommentId): Promise<Comment> {
  * Includes reaction counts and whether the current user has reacted.
  *
  * @param postId - Post ID to fetch comments for
- * @param userIdentifier - User identifier for tracking reactions
+ * @param memberId - Member ID for tracking reactions (optional)
  * @returns Result containing threaded comments or an error
  */
 export async function getCommentsByPost(
   postId: PostId,
-  userIdentifier: string
+  memberId?: MemberId
 ): Promise<CommentThread[]> {
   // Verify post exists
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -362,12 +362,12 @@ export async function getCommentsByPost(
     createdAt: comment.createdAt,
     reactions: comment.reactions.map((r) => ({
       emoji: r.emoji,
-      userIdentifier: r.userIdentifier,
+      memberId: r.memberId,
     })),
   }))
 
   // Build comment tree with reaction aggregation
-  const commentTree = buildCommentTree(formattedComments, userIdentifier)
+  const commentTree = buildCommentTree(formattedComments, memberId)
 
   return commentTree as CommentThread[]
 }
@@ -384,13 +384,13 @@ export async function getCommentsByPost(
  *
  * @param commentId - Comment ID to react to
  * @param emoji - Emoji to add
- * @param userIdentifier - User identifier for tracking reactions
+ * @param memberId - Member ID (required - auth only)
  * @returns Result containing reaction status or an error
  */
 export async function addReaction(
   commentId: CommentId,
   emoji: string,
-  userIdentifier: string
+  memberId: MemberId
 ): Promise<ReactionResult> {
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
@@ -413,7 +413,7 @@ export async function addReaction(
     .insert(commentReactions)
     .values({
       commentId,
-      userIdentifier,
+      memberId,
       emoji,
     })
     .onConflictDoNothing()
@@ -429,9 +429,9 @@ export async function addReaction(
   const aggregatedReactions = aggregateReactions(
     reactions.map((r) => ({
       emoji: r.emoji,
-      userIdentifier: r.userIdentifier,
+      memberId: r.memberId,
     })),
-    userIdentifier
+    memberId
   )
 
   return { added, reactions: aggregatedReactions }
@@ -444,13 +444,13 @@ export async function addReaction(
  *
  * @param commentId - Comment ID to remove reaction from
  * @param emoji - Emoji to remove
- * @param userIdentifier - User identifier for tracking reactions
+ * @param memberId - Member ID (required - auth only)
  * @returns Result containing reaction status or an error
  */
 export async function removeReaction(
   commentId: CommentId,
   emoji: string,
-  userIdentifier: string
+  memberId: MemberId
 ): Promise<ReactionResult> {
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
@@ -474,7 +474,7 @@ export async function removeReaction(
     .where(
       and(
         eq(commentReactions.commentId, commentId),
-        eq(commentReactions.userIdentifier, userIdentifier),
+        eq(commentReactions.memberId, memberId),
         eq(commentReactions.emoji, emoji)
       )
     )
@@ -487,9 +487,9 @@ export async function removeReaction(
   const aggregatedReactions = aggregateReactions(
     reactions.map((r) => ({
       emoji: r.emoji,
-      userIdentifier: r.userIdentifier,
+      memberId: r.memberId,
     })),
-    userIdentifier
+    memberId
   )
 
   return { added: false, reactions: aggregatedReactions }
@@ -502,13 +502,13 @@ export async function removeReaction(
  *
  * @param commentId - Comment ID to react to
  * @param emoji - Emoji to toggle
- * @param userIdentifier - User identifier for tracking reactions
+ * @param memberId - Member ID for tracking reactions (required - auth only)
  * @returns Result containing reaction status or an error
  */
 export async function toggleReaction(
   commentId: CommentId,
   emoji: string,
-  userIdentifier: string
+  memberId: MemberId
 ): Promise<ReactionResult> {
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
@@ -527,6 +527,7 @@ export async function toggleReaction(
   }
 
   const commentUuid = toUuid(commentId)
+  const memberUuid = toUuid(memberId)
 
   // Atomic toggle: delete if exists, insert if not
   // Uses CTE to avoid race conditions between check and action
@@ -534,7 +535,7 @@ export async function toggleReaction(
     WITH existing AS (
       SELECT id FROM comment_reactions
       WHERE comment_id = ${commentUuid}
-        AND user_identifier = ${userIdentifier}
+        AND member_id = ${memberUuid}
         AND emoji = ${emoji}
     ),
     deleted AS (
@@ -543,10 +544,10 @@ export async function toggleReaction(
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO comment_reactions (id, comment_id, user_identifier, emoji, created_at)
-      SELECT gen_random_uuid(), ${commentUuid}, ${userIdentifier}, ${emoji}, NOW()
+      INSERT INTO comment_reactions (id, comment_id, member_id, emoji, created_at)
+      SELECT gen_random_uuid(), ${commentUuid}, ${memberUuid}, ${emoji}, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
-      ON CONFLICT (comment_id, user_identifier, emoji) DO NOTHING
+      ON CONFLICT (comment_id, member_id, emoji) DO NOTHING
       RETURNING id
     )
     SELECT
@@ -565,9 +566,9 @@ export async function toggleReaction(
   const aggregatedReactions = aggregateReactions(
     reactions.map((r) => ({
       emoji: r.emoji,
-      userIdentifier: r.userIdentifier,
+      memberId: r.memberId,
     })),
-    userIdentifier
+    memberId
   )
 
   return { added, reactions: aggregatedReactions }

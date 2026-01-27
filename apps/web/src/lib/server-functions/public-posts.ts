@@ -29,7 +29,6 @@ import {
   voteOnPost,
   createPost,
 } from '@/lib/posts/post.service'
-import { getMemberIdentifier } from '@/lib/user-identifier'
 import { getPublicBoardById } from '@/lib/boards/board.public'
 import { getDefaultStatus } from '@/lib/statuses/status.service'
 import { getMemberByUser } from '@/lib/members/member.service'
@@ -275,7 +274,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Toggle vote on a post.
+ * Toggle vote on a post. Requires authentication.
  */
 export const toggleVoteFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleVoteSchema)
@@ -284,14 +283,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
       console.log(`[fn:public-posts] toggleVoteFn: postId=${data.postId}`)
       try {
         const ctx = await requireAuth()
-        const postId = data.postId as PostId
-
-        const memberId = ctx.member.id as MemberId
-        const userIdentifier = getMemberIdentifier(memberId)
-
-        const result = await voteOnPost(postId, userIdentifier, {
-          memberId,
-        })
+        const result = await voteOnPost(data.postId as PostId, ctx.member.id)
         console.log(
           `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}`
         )
@@ -404,8 +396,7 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
         return { votedPostIds: [] }
       }
 
-      const userIdentifier = getMemberIdentifier(ctx.member.id)
-      const result = await getAllUserVotedPostIds(userIdentifier)
+      const result = await getAllUserVotedPostIds(ctx.member.id)
 
       console.log(`[fn:public-posts] getVotedPostsFn: count=${result.size}`)
       return { votedPostIds: Array.from(result) }
@@ -551,12 +542,11 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       }
 
       if (ctx?.user && ctx?.member) {
-        const userIdentifier = getMemberIdentifier(ctx.member.id)
         isMember = true
 
         // Run queries in parallel for better performance
         const [voted, subStatus] = await Promise.all([
-          hasUserVoted(postId, userIdentifier),
+          hasUserVoted(postId, ctx.member.id),
           getSubscriptionStatus(ctx.member.id, postId),
         ])
         hasVoted = voted
@@ -671,46 +661,9 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
       const limit = data.limit ?? 5
       const fetchLimit = limit * 2 // Fetch more for merging
 
-      // Run hybrid search: vector + full-text
-      const vectorResults: RawSearchResult[] = []
-      const ftsResults: RawSearchResult[] = []
-
-      // 1. Vector similarity search (if AI enabled)
-      if (isAIEnabled()) {
-        try {
-          const embedding = await generateEmbedding(searchQuery)
-          if (embedding) {
-            const vectorStr = `[${embedding.join(',')}]`
-            const matches = await db
-              .select({
-                id: posts.id,
-                title: posts.title,
-                voteCount: posts.voteCount,
-                statusId: posts.statusId,
-                boardId: posts.boardId,
-                score: sql<number>`1 - (${posts.embedding} <=> ${vectorStr}::vector)`.as('score'),
-              })
-              .from(posts)
-              .where(
-                and(
-                  isNull(posts.deletedAt),
-                  sql`${posts.embedding} IS NOT NULL`,
-                  sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= 0.35`
-                )
-              )
-              .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
-              .limit(fetchLimit)
-
-            vectorResults.push(...matches.map(toRawResult))
-            console.log(`[fn:public-posts] Vector search found ${vectorResults.length} results`)
-          }
-        } catch (error) {
-          console.warn(`[fn:public-posts] Vector search failed, using full-text only:`, error)
-        }
-      }
-
-      // 2. Full-text search (always run as fallback/complement)
-      const ftsMatches = await db
+      // Run hybrid search: vector + full-text IN PARALLEL
+      // FTS runs immediately while embedding is generated (network call)
+      const ftsPromise = db
         .select({
           id: posts.id,
           title: posts.title,
@@ -735,13 +688,50 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
         )
         .limit(fetchLimit)
 
+      // Vector search: embedding generation + vector query
+      const vectorPromise = (async (): Promise<RawSearchResult[]> => {
+        if (!isAIEnabled()) return []
+        try {
+          const embedding = await generateEmbedding(searchQuery)
+          if (!embedding) return []
+
+          const vectorStr = `[${embedding.join(',')}]`
+          const matches = await db
+            .select({
+              id: posts.id,
+              title: posts.title,
+              voteCount: posts.voteCount,
+              statusId: posts.statusId,
+              boardId: posts.boardId,
+              score: sql<number>`1 - (${posts.embedding} <=> ${vectorStr}::vector)`.as('score'),
+            })
+            .from(posts)
+            .where(
+              and(
+                isNull(posts.deletedAt),
+                sql`${posts.embedding} IS NOT NULL`,
+                sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= 0.35`
+              )
+            )
+            .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
+            .limit(fetchLimit)
+
+          console.log(`[fn:public-posts] Vector search found ${matches.length} results`)
+          return matches.map(toRawResult)
+        } catch (error) {
+          console.warn(`[fn:public-posts] Vector search failed, using full-text only:`, error)
+          return []
+        }
+      })()
+
+      // Wait for both searches in parallel
+      const [ftsMatches, vectorResults] = await Promise.all([ftsPromise, vectorPromise])
+
       // Normalize FTS score to 0-1 range (ts_rank typically returns 0-0.5)
-      ftsResults.push(
-        ...ftsMatches.map((r) => ({
-          ...toRawResult(r),
-          score: Math.min(Number(r.score) * 2, 1),
-        }))
-      )
+      const ftsResults = ftsMatches.map((r) => ({
+        ...toRawResult(r),
+        score: Math.min(Number(r.score) * 2, 1),
+      }))
       console.log(`[fn:public-posts] Full-text search found ${ftsResults.length} results`)
 
       // 3. Merge results (dedupe by ID, combine scores)

@@ -31,7 +31,7 @@ export interface CommentWithReactions {
   avatarUrl?: string | null
   reactions: Array<{
     emoji: string
-    userIdentifier: string
+    memberId: string
   }>
 }
 
@@ -58,19 +58,19 @@ export interface CommentTreeNode {
  * Aggregate reactions by emoji, tracking whether the current user has reacted.
  *
  * @param reactions - Array of reaction records
- * @param userIdentifier - Optional user identifier to check for current user's reactions
+ * @param memberId - Optional member ID to check for current user's reactions
  * @returns Array of aggregated reaction counts
  */
 export function aggregateReactions(
-  reactions: Array<{ emoji: string; userIdentifier: string }>,
-  userIdentifier?: string
+  reactions: Array<{ emoji: string; memberId: string }>,
+  memberId?: string
 ): CommentReactionCount[] {
   const reactionCounts = new Map<string, { count: number; hasReacted: boolean }>()
 
   for (const reaction of reactions) {
     const existing = reactionCounts.get(reaction.emoji) || { count: 0, hasReacted: false }
     existing.count++
-    if (userIdentifier && reaction.userIdentifier === userIdentifier) {
+    if (memberId && reaction.memberId === memberId) {
       existing.hasReacted = true
     }
     reactionCounts.set(reaction.emoji, existing)
@@ -88,12 +88,12 @@ export function aggregateReactions(
  * Uses two-pass algorithm for O(n) complexity.
  *
  * @param comments - Flat array of comments with reactions
- * @param userIdentifier - Optional user identifier for reaction status
+ * @param memberId - Optional member ID for reaction status
  * @returns Array of root comments with nested replies
  */
 export function buildCommentTree<T extends CommentWithReactions>(
   comments: T[],
-  userIdentifier?: string
+  memberId?: string
 ): CommentTreeNode[] {
   const commentMap = new Map<string, CommentTreeNode>()
   const rootComments: CommentTreeNode[] = []
@@ -113,7 +113,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       createdAt: comment.createdAt,
       avatarUrl: comment.avatarUrl,
       replies: [],
-      reactions: aggregateReactions(comment.reactions, userIdentifier),
+      reactions: aggregateReactions(comment.reactions, memberId),
     }
     commentMap.set(comment.id, node)
   }

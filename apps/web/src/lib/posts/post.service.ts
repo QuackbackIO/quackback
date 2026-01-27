@@ -238,17 +238,13 @@ export async function updatePost(
  * If the user hasn't voted, adds a vote.
  *
  * Uses atomic SQL to prevent race conditions and ensure vote count integrity.
+ * Only authenticated users can vote (member_id is required).
  *
  * @param postId - Post ID to vote on
- * @param userIdentifier - Unique identifier for the voter (member:id or anon:uuid)
- * @param options - Optional audit data (memberId)
+ * @param memberId - Member ID of the voter (required)
  * @returns Result containing vote status and new count, or an error
  */
-export async function voteOnPost(
-  postId: PostId,
-  userIdentifier: string,
-  options?: { memberId?: MemberId }
-): Promise<VoteResult> {
+export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<VoteResult> {
   // Verify post exists
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
   if (!post) {
@@ -262,16 +258,14 @@ export async function voteOnPost(
   }
 
   // Toggle vote using single atomic CTE query (Neon HTTP driver doesn't support transactions)
-  // The CTE handles the toggle atomically, then we query final state separately
-  // (safe because HTTP driver auto-commits, so state is consistent when we query)
   const postUuid = toUuid(postId)
-  const memberUuid = options?.memberId ? toUuid(options.memberId) : null
+  const memberUuid = toUuid(memberId)
 
   // Atomic toggle: delete if exists, insert if not, update count accordingly
   await db.execute(sql`
     WITH existing AS (
       SELECT id FROM votes
-      WHERE post_id = ${postUuid} AND user_identifier = ${userIdentifier}
+      WHERE post_id = ${postUuid} AND member_id = ${memberUuid}
     ),
     deleted AS (
       DELETE FROM votes
@@ -279,10 +273,10 @@ export async function voteOnPost(
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO votes (id, post_id, user_identifier, member_id, updated_at)
-      SELECT gen_random_uuid(), ${postUuid}, ${userIdentifier}, ${memberUuid}, NOW()
+      INSERT INTO votes (id, post_id, member_id, updated_at)
+      SELECT gen_random_uuid(), ${postUuid}, ${memberUuid}, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
-      ON CONFLICT (post_id, user_identifier) DO NOTHING
+      ON CONFLICT (post_id, member_id) DO NOTHING
       RETURNING id
     )
     UPDATE posts
@@ -298,29 +292,24 @@ export async function voteOnPost(
 
   // Query final state (safe - previous query already committed)
   const [voteState] = await db
-    .select({
-      voteCount: posts.voteCount,
-    })
+    .select({ voteCount: posts.voteCount })
     .from(posts)
     .where(eq(posts.id, postId))
 
   const [existingVote] = await db
     .select({ id: votes.id })
     .from(votes)
-    .where(and(eq(votes.postId, postId), eq(votes.userIdentifier, userIdentifier)))
+    .where(and(eq(votes.postId, postId), eq(votes.memberId, memberId)))
 
   const voted = existingVote !== undefined
   const voteCount = voteState?.voteCount ?? post.voteCount
 
   // Auto-subscribe voter when they upvote
-  if (voted && options?.memberId) {
-    await subscribeToPost(options.memberId, postId, 'vote')
+  if (voted) {
+    await subscribeToPost(memberId, postId, 'vote')
   }
 
-  return {
-    voted,
-    voteCount,
-  }
+  return { voted, voteCount }
 }
 
 /**
@@ -506,12 +495,12 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
  * Get comments with nested replies and reactions for a post
  *
  * @param postId - Post ID to fetch comments for
- * @param userIdentifier - User identifier to check for reactions (e.g., "member:uuid" or "anon:uuid")
+ * @param memberId - Member ID to check for reactions (optional)
  * @returns Result containing nested comment tree or an error
  */
 export async function getCommentsWithReplies(
   postId: PostId,
-  userIdentifier: string
+  memberId?: MemberId
 ): Promise<CommentTreeNode[]> {
   // Verify post exists and belongs to organization
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -533,8 +522,8 @@ export async function getCommentsWithReplies(
     orderBy: asc(comments.createdAt),
   })
 
-  // Build nested tree using the utility function from @quackback/db
-  const commentTree = buildCommentTree(allComments, userIdentifier)
+  // Build nested tree using the utility function
+  const commentTree = buildCommentTree(allComments, memberId)
 
   return commentTree
 }
