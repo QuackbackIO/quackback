@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useRouteContext, useRouterState } from '@tanstack/react-router'
-import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
@@ -16,6 +15,7 @@ import {
   useVotedPosts,
 } from '@/lib/hooks/use-public-posts-query'
 import type { PublicPostListItem } from '@/lib/posts'
+import { cn } from '@/lib/utils'
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -55,17 +55,6 @@ export function FeedbackContainer({
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
   const [density, setDensity] = useState<PostCardDensity>('comfortable')
-
-  // Track if component has mounted to avoid hydration mismatch
-  const [hasMounted, setHasMounted] = useState(false)
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
-
-  // Detect router pending state for immediate loading feedback
-  // Only use after mount to avoid hydration mismatch
-  const routerStatus = useRouterState({ select: (s) => s.status })
-  const isRouterPending = hasMounted && routerStatus === 'pending'
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
@@ -132,8 +121,8 @@ export function FeedbackContainer({
   })
 
   const posts = flattenPublicPosts(postsData)
-  // Show loading when router is pending (navigation in progress) or when fetching new filter results
-  const isLoading = isRouterPending || (isFetching && !isFetchingNextPage)
+  // Show subtle loading indicator when fetching new filter results (not for pagination)
+  const isLoading = isFetching && !isFetchingNextPage
 
   // Update list key only when loading completes to trigger animations
   // This ensures we animate the new data, not stale data during loading
@@ -262,16 +251,13 @@ export function FeedbackContainer({
                 activeFilterCount={activeFilterCount}
                 density={density}
                 onDensityChange={setDensity}
+                isLoading={isLoading}
               />
             </div>
           </div>
 
           <div className="mt-3">
-            {isLoading ? (
-              <div className="flex justify-center py-16">
-                <ArrowPathIcon className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : posts.length === 0 ? (
+            {posts.length === 0 && !isLoading ? (
               <p className="text-muted-foreground text-center py-8">
                 {activeSearch || activeFilterCount > 0
                   ? 'No posts match your filters.'
@@ -281,7 +267,10 @@ export function FeedbackContainer({
               <>
                 <div
                   key={listKey}
-                  className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40"
+                  className={cn(
+                    'rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40 transition-opacity duration-150',
+                    isLoading && 'opacity-60'
+                  )}
                 >
                   {posts.map((post, index) => (
                     <div
@@ -314,7 +303,7 @@ export function FeedbackContainer({
                 {hasNextPage && (
                   <div ref={sentinelRef} className="py-4 flex justify-center">
                     {isFetchingNextPage && (
-                      <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+                      <span className="h-5 w-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
                     )}
                   </div>
                 )}

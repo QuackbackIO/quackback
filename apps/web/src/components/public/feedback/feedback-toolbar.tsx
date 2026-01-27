@@ -33,6 +33,8 @@ interface FeedbackToolbarProps {
   density?: PostCardDensity
   /** Callback when density changes */
   onDensityChange?: (density: PostCardDensity) => void
+  /** Show loading indicator */
+  isLoading?: boolean
 }
 
 const SORT_OPTIONS = [
@@ -56,6 +58,7 @@ export function FeedbackToolbar({
   activeFilterCount,
   density = 'comfortable',
   onDensityChange,
+  isLoading = false,
 }: FeedbackToolbarProps): React.ReactElement {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
@@ -95,6 +98,9 @@ export function FeedbackToolbar({
             </button>
           )
         })}
+        {isLoading && (
+          <span className="ml-1 h-4 w-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+        )}
       </div>
 
       {/* Right Actions */}
