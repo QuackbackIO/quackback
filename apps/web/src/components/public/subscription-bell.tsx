@@ -71,12 +71,21 @@ export function SubscriptionBell({
         return
       }
 
+      // Optimistic update - update UI immediately
+      const previousStatus = { ...status }
+      setStatus({
+        subscribed: newLevel !== 'none',
+        level: newLevel,
+        reason: newLevel !== 'none' ? 'manual' : null,
+      })
+      setOpen(false)
+
       setLoading(true)
       try {
         if (newLevel === 'none') {
           // Unsubscribe - delete the subscription
           await unsubscribeFromPostFn({ data: { postId } })
-        } else if (!status.subscribed) {
+        } else if (!previousStatus.subscribed) {
           // Not subscribed yet - create subscription with level
           await subscribeToPostFn({ data: { postId, reason: 'manual', level: newLevel } })
         } else {
@@ -84,16 +93,17 @@ export function SubscriptionBell({
           await updateSubscriptionLevelFn({ data: { postId, level: newLevel } })
         }
 
-        // Refetch status after update
+        // Sync with server truth
         await fetchStatus()
       } catch (error) {
+        // Revert on error
         console.error('Failed to update subscription:', error)
+        setStatus(previousStatus)
       } finally {
         setLoading(false)
-        setOpen(false)
       }
     },
-    [postId, disabled, onAuthRequired, status.subscribed]
+    [postId, disabled, onAuthRequired, status]
   )
 
   const level = status.level
