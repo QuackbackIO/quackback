@@ -1,5 +1,4 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { getCurrentUserRole } from '@/lib/server-functions/workspace'
 import { fetchUserAvatar } from '@/lib/server-functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -9,28 +8,24 @@ import { theme } from '@/lib/theme'
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
-    const { session, settingsData } = context
+    const { session, settings, userRole } = context
 
-    const org = settingsData?.settings ?? context.settings
+    const org = settings?.settings
     if (!org) {
       throw redirect({ to: '/onboarding' })
     }
 
-    // Note: Onboarding check is handled in __root.tsx beforeLoad
+    // userRole comes from bootstrap data, avatar needs to be fetched
+    const avatarData = session?.user
+      ? await fetchUserAvatar({
+          data: { userId: session.user.id, fallbackImageUrl: session.user.image },
+        })
+      : null
 
-    const [userRole, avatarData] = await Promise.all([
-      getCurrentUserRole(),
-      session?.user
-        ? fetchUserAvatar({
-            data: { userId: session.user.id, fallbackImageUrl: session.user.image },
-          })
-        : null,
-    ])
-
-    const brandingData = settingsData?.brandingData ?? null
-    const faviconData = settingsData?.faviconData ?? null
-    const brandingConfig = settingsData?.brandingConfig ?? {}
-    const portalConfig = settingsData?.publicPortalConfig ?? null
+    const brandingData = settings?.brandingData ?? null
+    const faviconData = settings?.faviconData ?? null
+    const brandingConfig = settings?.brandingConfig ?? {}
+    const portalConfig = settings?.publicPortalConfig ?? null
 
     const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
     const themeStyles = hasThemeConfig ? theme.generateThemeCSS(brandingConfig) : ''

@@ -45,5 +45,5 @@ export {
   DEFAULT_SECURITY_CONFIG,
 } from './settings.types'
 
-// Consolidated settings types (for use with getSettingsWithAllConfigs)
-export type { SettingsWithAllConfigs, SettingsBrandingData } from './settings.service'
+// Consolidated tenant settings type
+export type { TenantSettings, SettingsBrandingData } from './settings.service'

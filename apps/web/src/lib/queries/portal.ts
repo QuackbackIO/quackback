@@ -1,11 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, MemberId, RoadmapId, StatusId } from '@quackback/ids'
+import type { MemberId, RoadmapId, StatusId } from '@quackback/ids'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
   fetchPublicStatuses,
   fetchPublicTags,
-  fetchVotedPosts,
   fetchAvatars,
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
@@ -19,15 +18,15 @@ import {
  */
 export const portalQueries = {
   /**
-   * Combined portal data fetch - all data in a single server call
-   * This is the optimized entry point for the portal page
+   * Combined portal data fetch - all data in a single server call.
+   * This is the optimized entry point for the portal page.
+   * Vote status is only shown for authenticated users (via userId -> memberId).
    */
   portalData: (params: {
     boardSlug?: string
     search?: string
     sort: 'top' | 'new' | 'trending'
     userId?: string
-    userIdentifier: string
   }) =>
     queryOptions({
       queryKey: ['portal', 'data', params.boardSlug, params.search, params.sort],
@@ -68,17 +67,6 @@ export const portalQueries = {
     queryOptions({
       queryKey: ['portal', 'tags'],
       queryFn: () => fetchPublicTags(),
-    }),
-
-  /**
-   * Get which posts the user has voted on
-   */
-  votedPosts: (postIds: PostId[], userIdentifier: string) =>
-    queryOptions({
-      queryKey: ['portal', 'votedPosts', userIdentifier],
-      queryFn: () => fetchVotedPosts({ data: { postIds, userIdentifier } }),
-      // Don't cache voted posts too long - user might vote from another device
-      staleTime: 30 * 1000, // 30 seconds
     }),
 
   /**

@@ -16,82 +16,69 @@ export { resetCatalogDb }
 
 function extractSlugFromHost(host: string, baseDomain: string): string | null {
   const normalizedHost = host.toLowerCase()
-  const normalizedBase = baseDomain.toLowerCase()
+  const suffix = `.${baseDomain.toLowerCase()}`
 
-  const suffix = `.${normalizedBase}`
-  if (!normalizedHost.endsWith(suffix)) {
-    return null
-  }
+  if (!normalizedHost.endsWith(suffix)) return null
 
   const slug = normalizedHost.slice(0, -suffix.length)
-
-  if (!slug || slug.includes('.')) {
-    return null
-  }
-
-  return slug
+  return slug && !slug.includes('.') ? slug : null
 }
 
 async function lookupCustomDomain(
-  db: CatalogDb,
+  catalogDb: CatalogDb,
   host: string
 ): Promise<typeof workspace.$inferSelect | null> {
-  const domainRecord = await db.query.workspaceDomain.findFirst({
-    where: and(
-      eq(workspaceDomain.domain, host),
-      eq(workspaceDomain.domainType, 'custom'),
-      eq(workspaceDomain.verified, true)
-    ),
-  })
+  const [result] = await catalogDb
+    .select({
+      id: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+      ownerId: workspace.ownerId,
+      ownerEmail: workspace.ownerEmail,
+      createdAt: workspace.createdAt,
+      neonProjectId: workspace.neonProjectId,
+      neonConnectionString: workspace.neonConnectionString,
+      neonRegion: workspace.neonRegion,
+      migrationStatus: workspace.migrationStatus,
+    })
+    .from(workspaceDomain)
+    .innerJoin(workspace, eq(workspace.id, workspaceDomain.workspaceId))
+    .where(
+      and(
+        eq(workspaceDomain.domain, host),
+        eq(workspaceDomain.domainType, 'custom'),
+        eq(workspaceDomain.verified, true)
+      )
+    )
+    .limit(1)
 
-  if (!domainRecord) {
-    return null
-  }
-
-  return (
-    (await db.query.workspace.findFirst({
-      where: eq(workspace.id, domainRecord.workspaceId),
-    })) ?? null
-  )
+  return result ?? null
 }
 
-async function getConnectionString(
-  workspaceRecord: typeof workspace.$inferSelect
-): Promise<string> {
-  if (!workspaceRecord.neonConnectionString) {
-    throw new Error(`Workspace ${workspaceRecord.slug} has no connection string configured`)
+async function getConnectionString(record: typeof workspace.$inferSelect): Promise<string> {
+  if (!record.neonConnectionString) {
+    throw new Error(`Workspace ${record.slug} has no connection string configured`)
   }
-
-  return decryptConnectionString(workspaceRecord.neonConnectionString, workspaceRecord.id)
+  return decryptConnectionString(record.neonConnectionString, record.id)
 }
 
 export async function getTenantDbBySlug(
   slug: string
 ): Promise<{ db: ReturnType<typeof getTenantDb>; workspaceId: string }> {
-  const db = getCatalogDb()
+  const catalogDb = getCatalogDb()
+  const record = await catalogDb.query.workspace.findFirst({ where: eq(workspace.slug, slug) })
 
-  const workspaceRecord = await db.query.workspace.findFirst({
-    where: eq(workspace.slug, slug),
-  })
-
-  if (!workspaceRecord) {
-    throw new Error(`Workspace not found: ${slug}`)
+  if (!record) throw new Error(`Workspace not found: ${slug}`)
+  if (record.migrationStatus !== 'completed') {
+    throw new Error(`Workspace ${slug} is not ready (status: ${record.migrationStatus})`)
   }
 
-  if (workspaceRecord.migrationStatus !== 'completed') {
-    throw new Error(`Workspace ${slug} is not ready (status: ${workspaceRecord.migrationStatus})`)
-  }
-
-  const connectionString = await getConnectionString(workspaceRecord)
-  const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
-
-  return { db: tenantDb, workspaceId: workspaceRecord.id }
+  const connectionString = await getConnectionString(record)
+  return { db: getTenantDb(record.id, connectionString), workspaceId: record.id }
 }
 
 export async function resolveTenantFromDomain(request: Request): Promise<TenantInfo | null> {
-  const startTime = Date.now()
   const baseDomain = process.env.CLOUD_TENANT_BASE_DOMAIN
-
   if (!baseDomain) {
     console.error('[resolver] Missing CLOUD_TENANT_BASE_DOMAIN')
     return null
@@ -104,59 +91,43 @@ export async function resolveTenantFromDomain(request: Request): Promise<TenantI
   }
 
   try {
-    const db = getCatalogDb()
+    const catalogDb = getCatalogDb()
     const slug = extractSlugFromHost(host, baseDomain)
 
-    let workspaceRecord: typeof workspace.$inferSelect | null = null
+    const record = slug
+      ? await catalogDb.query.workspace.findFirst({ where: eq(workspace.slug, slug) })
+      : await lookupCustomDomain(catalogDb, host)
 
-    if (slug) {
-      workspaceRecord =
-        (await db.query.workspace.findFirst({
-          where: eq(workspace.slug, slug),
-        })) ?? null
-    } else {
-      workspaceRecord = await lookupCustomDomain(db, host)
-    }
-
-    if (!workspaceRecord) {
+    if (!record) {
       console.warn(`[resolver] No workspace found for host: ${host}`)
       return null
     }
 
-    if (workspaceRecord.migrationStatus !== 'completed') {
-      console.warn(
-        `[resolver] Workspace ${workspaceRecord.slug} not ready: ${workspaceRecord.migrationStatus}`
-      )
+    if (record.migrationStatus !== 'completed') {
+      console.warn(`[resolver] Workspace ${record.slug} not ready: ${record.migrationStatus}`)
       return null
     }
 
-    const connectionString = await getConnectionString(workspaceRecord)
-    const tenantDb = getTenantDb(workspaceRecord.id, connectionString)
+    const tenantDb = getTenantDb(record.id, await getConnectionString(record))
 
-    const [settings, subscriptionRecord] = await Promise.all([
+    const [tenantSettings, sub] = await Promise.all([
       tenantDb.query.settings.findFirst(),
-      db.query.subscription.findFirst({
-        where: eq(subscription.workspaceId, workspaceRecord.id),
-      }),
+      catalogDb.query.subscription.findFirst({ where: eq(subscription.workspaceId, record.id) }),
     ])
 
-    const subscriptionContext: SubscriptionContext | null = subscriptionRecord
-      ? {
-          tier: subscriptionRecord.tier as CloudTier,
-          status: subscriptionRecord.status as SubscriptionContext['status'],
-          seatsTotal: subscriptionRecord.seatsIncluded + subscriptionRecord.seatsAdditional,
-          currentPeriodEnd: subscriptionRecord.currentPeriodEnd,
-        }
-      : null
-
-    console.log(`[resolver] Resolved ${workspaceRecord.slug} in ${Date.now() - startTime}ms`)
-
     return {
-      workspaceId: workspaceRecord.id,
-      slug: workspaceRecord.slug,
+      workspaceId: record.id,
+      slug: record.slug,
       db: tenantDb,
-      settings: settings ?? null,
-      subscription: subscriptionContext,
+      settings: tenantSettings ?? null,
+      subscription: sub
+        ? {
+            tier: sub.tier as CloudTier,
+            status: sub.status as SubscriptionContext['status'],
+            seatsTotal: sub.seatsIncluded + sub.seatsAdditional,
+            currentPeriodEnd: sub.currentPeriodEnd,
+          }
+        : null,
     }
   } catch (error) {
     console.error('[resolver] Failed to resolve tenant:', error)

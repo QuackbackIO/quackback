@@ -1,12 +1,3 @@
-/**
- * SettingsService - Business logic for app settings
- *
- * This service handles all settings-related business logic including:
- * - Auth configuration (team sign-in settings)
- * - Portal configuration (public portal settings)
- * - Branding configuration (theme/colors)
- */
-
 import { db, eq, settings } from '@/lib/db'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import { tenantStorage } from '@/lib/tenant'
@@ -33,9 +24,7 @@ import {
 } from './settings.types'
 import { encryptOIDCSecret, fetchOIDCDiscovery } from '@/lib/auth/oidc.service'
 
-// ============================================
-// HELPERS
-// ============================================
+type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
 
 function parseJsonConfig<T>(json: string | null, defaultValue: T): T {
   if (!json) return defaultValue
@@ -61,75 +50,50 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
     if (source[key] !== undefined) {
       const srcVal = source[key]
       const tgtVal = result[key]
-      if (
+      const isNestedObject =
         typeof srcVal === 'object' &&
         srcVal !== null &&
         !Array.isArray(srcVal) &&
         typeof tgtVal === 'object' &&
         tgtVal !== null
-      ) {
-        result[key] = deepMerge(
-          tgtVal as Record<string, unknown>,
-          srcVal as Record<string, unknown>
-        ) as T[typeof key]
-      } else {
-        result[key] = srcVal as T[typeof key]
-      }
+
+      result[key] = isNestedObject
+        ? (deepMerge(
+            tgtVal as Record<string, unknown>,
+            srcVal as Record<string, unknown>
+          ) as T[typeof key])
+        : (srcVal as T[typeof key])
     }
   }
   return result
 }
 
-// Type alias for settings record
-type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
-
-// Request-scoped cache helpers for settings
 function getCachedSettings(): SettingsRecord | undefined {
   const ctx = tenantStorage.getStore()
-  // First check the cache Map
   const cached = ctx?.cache.get('settings') as SettingsRecord | undefined
-  if (cached) return cached
-  // Fall back to context.settings (populated in server.ts during request init)
-  return (ctx?.settings as SettingsRecord) ?? undefined
+  return cached ?? (ctx?.settings as SettingsRecord) ?? undefined
 }
 
 function setCachedSettings(data: SettingsRecord): void {
-  const ctx = tenantStorage.getStore()
-  ctx?.cache.set('settings', data)
+  tenantStorage.getStore()?.cache.set('settings', data)
 }
 
 async function requireSettings(): Promise<SettingsRecord> {
-  // Check cache first (includes context.settings from server.ts)
   const cached = getCachedSettings()
-  if (cached) {
-    return cached
-  }
+  if (cached) return cached
 
-  // Cache miss - fetch from database
   const org = await db.query.settings.findFirst()
-  if (!org) {
-    throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-  }
+  if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
 
-  // Cache the result for subsequent calls in this request
   setCachedSettings(org)
   return org
 }
 
 function wrapDbError(operation: string, error: unknown): never {
-  if (error instanceof NotFoundError || error instanceof ValidationError) {
-    throw error
-  }
-  throw new InternalError(
-    'DATABASE_ERROR',
-    `Failed to ${operation}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    error
-  )
+  if (error instanceof NotFoundError || error instanceof ValidationError) throw error
+  const message = error instanceof Error ? error.message : 'Unknown error'
+  throw new InternalError('DATABASE_ERROR', `Failed to ${operation}: ${message}`, error)
 }
-
-// ============================================
-// AUTH CONFIGURATION (Team sign-in)
-// ============================================
 
 export async function getAuthConfig(): Promise<AuthConfig> {
   try {
@@ -145,21 +109,15 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     const org = await requireSettings()
     const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     const updated = deepMerge(existing, input as Partial<AuthConfig>)
-
     await db
       .update(settings)
       .set({ authConfig: JSON.stringify(updated) })
       .where(eq(settings.id, org.id))
-
     return updated
   } catch (error) {
     wrapDbError('update auth config', error)
   }
 }
-
-// ============================================
-// PORTAL CONFIGURATION
-// ============================================
 
 export async function getPortalConfig(): Promise<PortalConfig> {
   try {
@@ -176,11 +134,9 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const updated = deepMerge(existing, input as Partial<PortalConfig>)
 
-    // Validate at least one auth method is enabled
-    const hasAtLeastOneMethod =
+    const hasAuthMethod =
       updated.oauth.email || updated.oauth.github || updated.oauth.google || updated.oidc?.enabled
-
-    if (!hasAtLeastOneMethod) {
+    if (!hasAuthMethod) {
       throw new ValidationError(
         'AUTH_METHOD_REQUIRED',
         'At least one authentication method must be enabled'
@@ -191,16 +147,11 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
       .update(settings)
       .set({ portalConfig: JSON.stringify(updated) })
       .where(eq(settings.id, org.id))
-
     return updated
   } catch (error) {
     wrapDbError('update portal config', error)
   }
 }
-
-// ============================================
-// BRANDING CONFIGURATION
-// ============================================
 
 export async function getBrandingConfig(): Promise<BrandingConfig> {
   try {
@@ -218,16 +169,11 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
       .update(settings)
       .set({ brandingConfig: JSON.stringify(config) })
       .where(eq(settings.id, org.id))
-
     return config
   } catch (error) {
     wrapDbError('update branding config', error)
   }
 }
-
-// ============================================
-// LOGO MANAGEMENT
-// ============================================
 
 export async function uploadLogo(data: {
   blob: Buffer
@@ -239,7 +185,6 @@ export async function uploadLogo(data: {
       .update(settings)
       .set({ logoBlob: data.blob, logoType: data.mimeType })
       .where(eq(settings.id, org.id))
-
     return { success: true }
   } catch (error) {
     wrapDbError('upload logo', error)
@@ -250,7 +195,6 @@ export async function deleteLogo(): Promise<{ success: true }> {
   try {
     const org = await requireSettings()
     await db.update(settings).set({ logoBlob: null, logoType: null }).where(eq(settings.id, org.id))
-
     return { success: true }
   } catch (error) {
     wrapDbError('delete logo', error)
@@ -267,7 +211,6 @@ export async function uploadHeaderLogo(data: {
       .update(settings)
       .set({ headerLogoBlob: data.blob, headerLogoType: data.mimeType })
       .where(eq(settings.id, org.id))
-
     return { success: true }
   } catch (error) {
     wrapDbError('upload header logo', error)
@@ -281,16 +224,11 @@ export async function deleteHeaderLogo(): Promise<{ success: true }> {
       .update(settings)
       .set({ headerLogoBlob: null, headerLogoType: null })
       .where(eq(settings.id, org.id))
-
     return { success: true }
   } catch (error) {
     wrapDbError('delete header logo', error)
   }
 }
-
-// ============================================
-// HEADER DISPLAY SETTINGS
-// ============================================
 
 const VALID_HEADER_MODES = ['logo_and_name', 'logo_only', 'custom_logo'] as const
 
@@ -334,36 +272,23 @@ export async function updateWorkspaceName(name: string): Promise<string> {
   try {
     const org = await requireSettings()
     const sanitizedName = name.trim()
-
-    if (!sanitizedName) {
-      throw new ValidationError('INVALID_NAME', 'Workspace name cannot be empty')
-    }
+    if (!sanitizedName) throw new ValidationError('INVALID_NAME', 'Workspace name cannot be empty')
 
     const [updated] = await db
       .update(settings)
       .set({ name: sanitizedName })
       .where(eq(settings.id, org.id))
       .returning()
-
     return updated?.name ?? sanitizedName
   } catch (error) {
     wrapDbError('update workspace name', error)
   }
 }
 
-// ============================================
-// OIDC CONFIGURATION
-// ============================================
-
-/**
- * Get OIDC config for admin settings page.
- * Returns null if OIDC is not configured.
- */
 export async function getOIDCConfig(): Promise<AdminOIDCConfig | null> {
   try {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-
     if (!portalConfig.oidc) return null
 
     return {
@@ -380,34 +305,23 @@ export async function getOIDCConfig(): Promise<AdminOIDCConfig | null> {
   }
 }
 
-/**
- * Get full OIDC config (including encrypted secret) for OAuth flow.
- * This is internal and should not be exposed to clients.
- */
 export async function getFullOIDCConfig(): Promise<OIDCProviderConfig | null> {
   try {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-
-    if (!portalConfig.oidc || !portalConfig.oidc.enabled) return null
-
+    if (!portalConfig.oidc?.enabled) return null
     return portalConfig.oidc
   } catch (error) {
     wrapDbError('fetch full OIDC config', error)
   }
 }
 
-/**
- * Update OIDC config.
- * Validates discovery before saving and encrypts the client secret.
- */
 export async function updateOIDCConfig(
   input: UpdateOIDCConfigInput,
   workspaceId: string
 ): Promise<AdminOIDCConfig> {
   try {
     await validateOIDCIssuer(input.issuer)
-
     const org = await requireSettings()
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const oidcConfig = buildOIDCProviderConfig(input, existing.oidc, workspaceId)
@@ -420,50 +334,31 @@ export async function updateOIDCConfig(
       .update(settings)
       .set({ portalConfig: JSON.stringify({ ...existing, oidc: oidcConfig }) })
       .where(eq(settings.id, org.id))
-
     return toAdminOIDCConfig(oidcConfig)
   } catch (error) {
     wrapDbError('update OIDC config', error)
   }
 }
 
-/**
- * Delete OIDC config from portal settings.
- */
 export async function deleteOIDCConfig(): Promise<{ success: true }> {
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-
-    // Remove OIDC config
     const { oidc: _, ...rest } = existing
     await db
       .update(settings)
       .set({ portalConfig: JSON.stringify(rest) })
       .where(eq(settings.id, org.id))
-
     return { success: true }
   } catch (error) {
     wrapDbError('delete OIDC config', error)
   }
 }
 
-// ============================================
-// SECURITY CONFIGURATION (Team SSO)
-// ============================================
-
-/**
- * Internal type for security config as stored in authConfig JSON
- * The authConfig JSON column stores both AuthConfig and SecurityConfig
- */
 interface AuthConfigWithSecurity extends AuthConfig {
   security?: SecurityConfig
 }
 
-/**
- * Helper to parse auth config with security settings from database.
- * Reduces duplication across security config functions.
- */
 async function getAuthConfigWithSecurity(): Promise<{
   org: Awaited<ReturnType<typeof requireSettings>>
   authConfig: AuthConfigWithSecurity
@@ -474,13 +369,9 @@ async function getAuthConfigWithSecurity(): Promise<{
     ...DEFAULT_AUTH_CONFIG,
     security: DEFAULT_SECURITY_CONFIG,
   })
-  const securityConfig = authConfig.security || DEFAULT_SECURITY_CONFIG
-  return { org, authConfig, securityConfig }
+  return { org, authConfig, securityConfig: authConfig.security || DEFAULT_SECURITY_CONFIG }
 }
 
-/**
- * Transform OIDCProviderConfig to AdminOIDCConfig (removes secrets, adds hasSecret flag).
- */
 function toAdminOIDCConfig(provider: OIDCProviderConfig): AdminOIDCConfig {
   return {
     enabled: provider.enabled,
@@ -493,9 +384,6 @@ function toAdminOIDCConfig(provider: OIDCProviderConfig): AdminOIDCConfig {
   }
 }
 
-/**
- * Validate OIDC discovery endpoint if issuer is provided.
- */
 async function validateOIDCIssuer(issuer: string | undefined): Promise<void> {
   if (!issuer) return
   const discovery = await fetchOIDCDiscovery(issuer)
@@ -504,44 +392,31 @@ async function validateOIDCIssuer(issuer: string | undefined): Promise<void> {
   }
 }
 
-/**
- * Build OIDC provider config by merging input with existing config.
- */
 function buildOIDCProviderConfig(
   input: UpdateOIDCConfigInput,
   existing: OIDCProviderConfig | undefined,
   workspaceId: string
 ): OIDCProviderConfig {
-  const clientSecretEncrypted = input.clientSecret
-    ? encryptOIDCSecret(input.clientSecret, workspaceId)
-    : (existing?.clientSecretEncrypted ?? '')
-
   return {
     enabled: input.enabled ?? existing?.enabled ?? false,
     displayName: input.displayName ?? existing?.displayName ?? 'SSO',
     issuer: input.issuer ?? existing?.issuer ?? '',
     clientId: input.clientId ?? existing?.clientId ?? '',
-    clientSecretEncrypted,
+    clientSecretEncrypted: input.clientSecret
+      ? encryptOIDCSecret(input.clientSecret, workspaceId)
+      : (existing?.clientSecretEncrypted ?? ''),
     scopes: input.scopes ?? existing?.scopes,
     emailDomain: input.emailDomain ?? existing?.emailDomain,
   }
 }
 
-/**
- * Check if OIDC provider has all required fields configured.
- */
 function isOIDCProviderComplete(provider: OIDCProviderConfig | undefined): boolean {
   return !!(provider?.issuer && provider?.clientId && provider?.clientSecretEncrypted)
 }
 
-/**
- * Get security config for admin settings page.
- * Returns config with provider info (but not actual secrets).
- */
 export async function getSecurityConfig(): Promise<AdminSecurityConfig> {
   try {
     const { securityConfig } = await getAuthConfigWithSecurity()
-
     return {
       sso: {
         enabled: securityConfig.sso.enabled,
@@ -557,13 +432,9 @@ export async function getSecurityConfig(): Promise<AdminSecurityConfig> {
   }
 }
 
-/**
- * Get public security config for team login page (no secrets).
- */
 export async function getPublicSecurityConfig(): Promise<PublicSecurityConfig> {
   try {
     const { securityConfig } = await getAuthConfigWithSecurity()
-
     return {
       sso: {
         enabled: securityConfig.sso.enabled,
@@ -577,10 +448,6 @@ export async function getPublicSecurityConfig(): Promise<PublicSecurityConfig> {
   }
 }
 
-/**
- * Get full security config (including encrypted secrets) for internal use.
- * This is used by the OAuth flow to get provider credentials.
- */
 export async function getFullSecurityConfig(): Promise<SecurityConfig | null> {
   try {
     const { securityConfig } = await getAuthConfigWithSecurity()
@@ -590,10 +457,6 @@ export async function getFullSecurityConfig(): Promise<SecurityConfig | null> {
   }
 }
 
-/**
- * Update security config.
- * Validates requirements before saving (e.g., cannot set required without configured SSO).
- */
 export async function updateSecurityConfig(
   input: UpdateSecurityConfigInput,
   workspaceId: string
@@ -601,7 +464,6 @@ export async function updateSecurityConfig(
   try {
     const { org, authConfig, securityConfig: existing } = await getAuthConfigWithSecurity()
 
-    // Build updated SSO provider if input provided
     let updatedSSOProvider = existing.sso.provider
     if (input.sso?.provider) {
       await validateOIDCIssuer(input.sso.provider.issuer)
@@ -612,7 +474,7 @@ export async function updateSecurityConfig(
       )
     }
 
-    const updatedSecurityConfig: SecurityConfig = {
+    const updated: SecurityConfig = {
       sso: {
         enabled: input.sso?.enabled ?? existing.sso.enabled,
         enforcement: input.sso?.enforcement ?? existing.sso.enforcement,
@@ -625,92 +487,60 @@ export async function updateSecurityConfig(
       },
     }
 
-    // Validation: Cannot set enforcement to 'required' without configured SSO provider
-    if (
-      updatedSecurityConfig.sso.enforcement === 'required' &&
-      !isOIDCProviderComplete(updatedSecurityConfig.sso.provider)
-    ) {
+    if (updated.sso.enforcement === 'required' && !isOIDCProviderComplete(updated.sso.provider)) {
       throw new ValidationError(
         'SSO_NOT_CONFIGURED',
         'Cannot require SSO without a configured provider'
       )
     }
-
-    // Validation: Required fields when enabling SSO
     if (
-      updatedSecurityConfig.sso.enabled &&
-      updatedSecurityConfig.sso.provider &&
-      !isOIDCProviderComplete(updatedSecurityConfig.sso.provider)
+      updated.sso.enabled &&
+      updated.sso.provider &&
+      !isOIDCProviderComplete(updated.sso.provider)
     ) {
       throw new ValidationError('SSO_INCOMPLETE', 'Issuer, client ID, and secret are required')
     }
 
     await db
       .update(settings)
-      .set({ authConfig: JSON.stringify({ ...authConfig, security: updatedSecurityConfig }) })
+      .set({ authConfig: JSON.stringify({ ...authConfig, security: updated }) })
       .where(eq(settings.id, org.id))
 
     return {
       sso: {
-        enabled: updatedSecurityConfig.sso.enabled,
-        enforcement: updatedSecurityConfig.sso.enforcement,
-        provider: updatedSecurityConfig.sso.provider
-          ? toAdminOIDCConfig(updatedSecurityConfig.sso.provider)
-          : undefined,
+        enabled: updated.sso.enabled,
+        enforcement: updated.sso.enforcement,
+        provider: updated.sso.provider ? toAdminOIDCConfig(updated.sso.provider) : undefined,
       },
-      teamSocialLogin: updatedSecurityConfig.teamSocialLogin,
+      teamSocialLogin: updated.teamSocialLogin,
     }
   } catch (error) {
     wrapDbError('update security config', error)
   }
 }
 
-/**
- * Delete team SSO configuration.
- */
 export async function deleteTeamSSOConfig(): Promise<{ success: true }> {
   try {
     const { org, authConfig, securityConfig: existing } = await getAuthConfigWithSecurity()
-
-    // Reset SSO config but keep social login settings
-    const updatedSecurityConfig: SecurityConfig = {
-      sso: {
-        enabled: false,
-        enforcement: 'optional',
-        provider: undefined,
-      },
+    const updated: SecurityConfig = {
+      sso: { enabled: false, enforcement: 'optional', provider: undefined },
       teamSocialLogin: existing.teamSocialLogin,
     }
-
-    const updatedAuthConfig: AuthConfigWithSecurity = {
-      ...authConfig,
-      security: updatedSecurityConfig,
-    }
-
     await db
       .update(settings)
-      .set({ authConfig: JSON.stringify(updatedAuthConfig) })
+      .set({ authConfig: JSON.stringify({ ...authConfig, security: updated }) })
       .where(eq(settings.id, org.id))
-
     return { success: true }
   } catch (error) {
     wrapDbError('delete team SSO config', error)
   }
 }
 
-// ============================================
-// PUBLIC CONFIG (NO AUTH REQUIRED)
-// ============================================
-
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
     const org = await requireSettings()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
-
-    return {
-      oauth: authConfig.oauth,
-      openSignup: authConfig.openSignup,
-    }
+    return { oauth: authConfig.oauth, openSignup: authConfig.openSignup }
   } catch (error) {
     wrapDbError('fetch public auth config', error)
   }
@@ -720,15 +550,11 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-
     return {
       oauth: portalConfig.oauth,
       features: portalConfig.features,
       oidc: portalConfig.oidc?.enabled
-        ? {
-            enabled: true,
-            displayName: portalConfig.oidc.displayName,
-          }
+        ? { enabled: true, displayName: portalConfig.oidc.displayName }
         : undefined,
     }
   } catch (error) {
@@ -736,22 +562,25 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   }
 }
 
-// ============================================
-// CONSOLIDATED SETTINGS DATA
-// ============================================
-
-/**
- * Helper to convert a bytea blob and MIME type to a data URL.
- */
-function blobToDataUrl(blob: Buffer | null, mimeType: string | null): string | null {
+function blobToDataUrl(
+  blob: Buffer | null,
+  mimeType: string | null,
+  cacheKey?: string
+): string | null {
   if (!blob || !mimeType) return null
-  const base64 = Buffer.from(blob).toString('base64')
-  return `data:${mimeType};base64,${base64}`
+
+  const ctx = tenantStorage.getStore()
+  if (cacheKey) {
+    const cached = ctx?.cache.get(cacheKey) as string | undefined
+    if (cached) return cached
+  }
+
+  const dataUrl = `data:${mimeType};base64,${Buffer.from(blob).toString('base64')}`
+  if (cacheKey) ctx?.cache.set(cacheKey, dataUrl)
+
+  return dataUrl
 }
 
-/**
- * Branding data extracted from settings (logo URLs, header config)
- */
 export interface SettingsBrandingData {
   name: string
   logoUrl: string | null
@@ -761,93 +590,52 @@ export interface SettingsBrandingData {
   headerDisplayName: string | null
 }
 
-/**
- * Consolidated settings data returned by getSettingsWithAllConfigs()
- * Contains all parsed configs and branding data from a single query.
- */
-export interface SettingsWithAllConfigs {
-  /** Raw settings record */
+export interface TenantSettings {
   settings: Awaited<ReturnType<typeof requireSettings>>
-  /** Parsed auth configuration */
   authConfig: AuthConfig
-  /** Parsed portal configuration */
   portalConfig: PortalConfig
-  /** Parsed branding/theme configuration */
   brandingConfig: BrandingConfig
-  /** Public auth config subset */
   publicAuthConfig: PublicAuthConfig
-  /** Public portal config subset */
   publicPortalConfig: PublicPortalConfig
-  /** Branding data with data URLs for logos */
   brandingData: SettingsBrandingData
-  /** Favicon data URL or null */
   faviconData: { url: string } | null
 }
 
-/**
- * Get all settings data in a single query.
- *
- * This consolidates multiple separate queries into one database call,
- * returning all parsed configs and branding data needed by the portal.
- *
- * Returns null if settings don't exist (fresh install needing onboarding).
- * Use this in route loaders to avoid redundant database queries.
- */
-export async function getSettingsWithAllConfigs(): Promise<SettingsWithAllConfigs | null> {
+export async function getTenantSettings(): Promise<TenantSettings | null> {
   try {
-    // Try cache first, then fall back to database query
-    // Unlike requireSettings(), we return null instead of throwing if not found
     const org = getCachedSettings() ?? (await db.query.settings.findFirst()) ?? null
     if (!org) return null
 
-    // Cache for subsequent calls in this request
     setCachedSettings(org)
 
-    // Parse all JSON configs
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const brandingConfig = parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
 
-    // Build public config subsets
-    const publicAuthConfig: PublicAuthConfig = {
-      oauth: authConfig.oauth,
-      openSignup: authConfig.openSignup,
-    }
-
-    const publicPortalConfig: PublicPortalConfig = {
-      oauth: portalConfig.oauth,
-      features: portalConfig.features,
-      oidc: portalConfig.oidc?.enabled
-        ? {
-            enabled: true,
-            displayName: portalConfig.oidc.displayName,
-          }
-        : undefined,
-    }
-
-    // Build branding data with data URLs
     const brandingData: SettingsBrandingData = {
       name: org.name,
-      logoUrl: blobToDataUrl(org.logoBlob, org.logoType),
-      faviconUrl: blobToDataUrl(org.faviconBlob, org.faviconType),
-      headerLogoUrl: blobToDataUrl(org.headerLogoBlob, org.headerLogoType),
+      logoUrl: blobToDataUrl(org.logoBlob, org.logoType, 'branding:logo'),
+      faviconUrl: blobToDataUrl(org.faviconBlob, org.faviconType, 'branding:favicon'),
+      headerLogoUrl: blobToDataUrl(org.headerLogoBlob, org.headerLogoType, 'branding:headerLogo'),
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }
-
-    // Build favicon data
-    const faviconUrl = blobToDataUrl(org.faviconBlob, org.faviconType)
-    const faviconData = faviconUrl ? { url: faviconUrl } : null
 
     return {
       settings: org,
       authConfig,
       portalConfig,
       brandingConfig,
-      publicAuthConfig,
-      publicPortalConfig,
+      publicAuthConfig: { oauth: authConfig.oauth, openSignup: authConfig.openSignup },
+      publicPortalConfig: {
+        oauth: portalConfig.oauth,
+        features: portalConfig.features,
+        oidc: portalConfig.oidc?.enabled
+          ? { enabled: true, displayName: portalConfig.oidc.displayName }
+          : undefined,
+      },
       brandingData,
-      faviconData,
+      faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,
     }
   } catch (error) {
     wrapDbError('fetch settings with all configs', error)

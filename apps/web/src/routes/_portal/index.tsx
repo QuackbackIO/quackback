@@ -3,7 +3,6 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
-import { getUserIdentifier } from '@/lib/user-identifier'
 import { portalQueries } from '@/lib/queries/portal'
 
 const searchSchema = z.object({
@@ -30,10 +29,8 @@ export const Route = createFileRoute('/_portal/')({
     // Parse search params for initial SSR (not using loaderDeps to avoid re-execution)
     const searchParams = location.search as z.infer<typeof searchSchema>
 
-    // Get user identifier (cookie-based for anonymous users)
-    const userIdentifier = await getUserIdentifier()
-
     // Prefetch portal data for SSR with URL filters.
+    // User identifier is read from cookie directly in the server function.
     // Client-side filter changes are handled by FeedbackContainer.
     const portalData = await queryClient.ensureQueryData(
       portalQueries.portalData({
@@ -41,7 +38,6 @@ export const Route = createFileRoute('/_portal/')({
         search: searchParams.search,
         sort: searchParams.sort ?? 'top',
         userId: session?.user?.id,
-        userIdentifier,
       })
     )
 
@@ -49,7 +45,6 @@ export const Route = createFileRoute('/_portal/')({
       org,
       isEmpty: portalData.boards.length === 0,
       session,
-      userIdentifier: portalData.userIdentifier,
     }
   },
   component: PublicPortalPage,
@@ -58,7 +53,7 @@ export const Route = createFileRoute('/_portal/')({
 function PublicPortalPage() {
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
-  const { org, session, userIdentifier } = loaderData
+  const { org, session } = loaderData
 
   // Read filters directly from URL for instant updates
   const currentBoard = search.board
@@ -68,13 +63,13 @@ function PublicPortalPage() {
   // Fetch portal data - uses cached data from loader on initial load,
   // refetches with new filters on client-side navigation.
   // keepPreviousData ensures we show stale data while fetching new data.
+  // User identifier is read from cookie directly in the server function.
   const { data: portalData, isFetching } = useQuery({
     ...portalQueries.portalData({
       boardSlug: currentBoard,
       search: currentSearch,
       sort: currentSort,
       userId: session?.user?.id,
-      userIdentifier,
     }),
     placeholderData: keepPreviousData,
   })

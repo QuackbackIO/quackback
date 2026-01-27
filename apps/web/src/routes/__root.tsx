@@ -11,10 +11,8 @@ import {
 import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
-import { getSession } from '@/lib/server-functions/auth'
-import { getRequestContext } from '@/lib/server-functions/workspace'
-import { fetchSettingsWithAllConfigs } from '@/lib/server-functions/settings'
-import type { SettingsWithAllConfigs } from '@/lib/settings'
+import { getBootstrapData, type BootstrapData } from '@/lib/server-functions/bootstrap'
+import type { TenantSettings } from '@/lib/settings'
 import type { RequestContext } from '@/lib/tenant'
 import { WorkspaceNotFoundPage } from '@/components/workspace-not-found'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -47,19 +45,12 @@ const systemThemeScript = `
   })()
 `
 
-// RouterContext is what's available in the context at different points:
-// - queryClient: always available (provided in createRouter)
-// - requestContext: discriminated union of context types (available after beforeLoad)
-// - session/settingsData: available after beforeLoad runs for tenant/self-hosted contexts
 export interface RouterContext {
   queryClient: QueryClient
-  /** Discriminated request context - determines how to handle the request */
   requestContext?: RequestContext
-  session?: Awaited<ReturnType<typeof getSession>>
-  /** @deprecated Use settingsData.settings instead */
-  settings?: SettingsWithAllConfigs['settings']
-  /** Consolidated settings data (single query) - includes all configs and branding. Null if settings don't exist (fresh install). */
-  settingsData?: SettingsWithAllConfigs | null
+  session?: BootstrapData['session']
+  settings?: TenantSettings | null
+  userRole?: 'admin' | 'member' | 'user' | null
 }
 
 // Paths that are allowed before onboarding is complete
@@ -78,50 +69,20 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const startTime = Date.now()
-    console.log(`[__root] ⏱️ beforeLoad START: ${location.pathname}`)
+    const { requestContext, session, settings, userRole } = await getBootstrapData()
 
-    // Get discriminated request context in a single call
-    const t1 = Date.now()
-    const requestContext = await getRequestContext()
-    console.log(`[__root] ⏱️ getRequestContext: ${Date.now() - t1}ms`)
-
-    // App domain routes (e.g., app.quackback.io) skip tenant resolution
-    if (requestContext.type === 'app-domain') {
-      console.log(`[__root] ⏱️ beforeLoad TOTAL (app-domain): ${Date.now() - startTime}ms`)
+    if (requestContext.type === 'app-domain' || requestContext.type === 'unknown') {
       return { requestContext }
     }
 
-    // Unknown domain in multi-tenant mode - no database access available
-    if (requestContext.type === 'unknown') {
-      console.log(`[__root] ⏱️ beforeLoad TOTAL (unknown): ${Date.now() - startTime}ms`)
-      return { requestContext }
-    }
-
-    // Self-hosted or tenant mode - safe to query database
-    // Fetch session and all settings data in parallel
-    const t2 = Date.now()
-    const [session, settingsData] = await Promise.all([getSession(), fetchSettingsWithAllConfigs()])
-    console.log(`[__root] ⏱️ session+settingsData parallel: ${Date.now() - t2}ms`)
-
-    // Enforce onboarding completion for non-exempt paths
-    // Missing settings (null) is treated the same as incomplete onboarding
     if (!isOnboardingExempt(location.pathname)) {
-      const setupState = getSetupState(settingsData?.settings?.setupState ?? null)
-      console.log(
-        `[__root] path=${location.pathname}, settingsExist=${!!settingsData}, setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete(setupState)}`
-      )
+      const setupState = getSetupState(settings?.settings?.setupState ?? null)
       if (!isOnboardingComplete(setupState)) {
-        console.log(
-          `[__root] Redirecting to /onboarding - ${settingsData ? 'setup incomplete' : 'no settings (fresh install)'}`
-        )
         throw redirect({ to: '/onboarding' })
       }
     }
 
-    // Provide backward-compatible 'settings' for existing routes
-    console.log(`[__root] ⏱️ beforeLoad TOTAL: ${Date.now() - startTime}ms`)
-    return { requestContext, session, settingsData, settings: settingsData?.settings ?? null }
+    return { requestContext, session, settings, userRole }
   },
   head: () => ({
     meta: [
@@ -203,7 +164,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
       </head>
-      <body className={cn('min-h-screen bg-background font-sans antialiased font-sans')}>
+      <body className={cn('min-h-screen bg-background font-sans antialiased')}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
