@@ -24,8 +24,8 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE_CATALOG",
-      "id": "039a5cc79f6c44758759056d22b90e19"
-    }
+      "id": "039a5cc79f6c44758759056d22b90e19",
+    },
   ],
   "vars": {
     "ROOT_URL": "https://app.quackback.io",
@@ -42,5 +42,8 @@
   },
   "observability": {
     "enabled": true,
+    "traces": {
+      "enabled": true,
+    },
   },
 }
