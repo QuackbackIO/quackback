@@ -16,7 +16,7 @@ export const Route = createFileRoute('/onboarding/_layout')({
     }
 
     // If setup is complete, redirect to root - onboarding is not needed
-    const setupState = getSetupState(context.settingsData?.settings?.setupState ?? null)
+    const setupState = getSetupState(context.settings?.settings?.setupState ?? null)
     if (isOnboardingComplete(setupState)) {
       throw redirect({ to: '/' })
     }

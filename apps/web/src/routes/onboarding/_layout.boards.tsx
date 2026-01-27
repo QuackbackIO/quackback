@@ -47,7 +47,9 @@ function BoardsStep() {
 
   // Get board options filtered by use case
   const boardOptions = getBoardOptionsForUseCase(useCase)
-  const existingBoardNames = new Set(existingBoards.map((b) => b.name.toLowerCase()))
+  const existingBoardNames = new Set(
+    existingBoards.map((b: { name: string }) => b.name.toLowerCase())
+  )
 
   // Initialize selection: pre-select all boards for the use case that don't already exist
   const initialSelection =
