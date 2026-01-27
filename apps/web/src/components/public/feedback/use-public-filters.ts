@@ -1,4 +1,4 @@
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { Route } from '@/routes/_portal/index'
 import { useMemo, useCallback } from 'react'
 
@@ -12,7 +12,14 @@ export interface PublicFeedbackFilters {
 
 export function usePublicFilters() {
   const navigate = useNavigate()
-  const search = Route.useSearch()
+  const currentSearch = Route.useSearch()
+
+  // Use pending location's search params during navigation for instant UI updates
+  // Falls back to current location when not navigating
+  const pendingSearch = useRouterState({
+    select: (s) => s.pendingLocation?.search as typeof currentSearch | undefined,
+  })
+  const search = pendingSearch ?? currentSearch
 
   const filters: PublicFeedbackFilters = useMemo(
     () => ({
