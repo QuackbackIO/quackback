@@ -28,6 +28,10 @@
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
 </p>
 
+<p align="center">
+  <img src=".github/screenshot.png" alt="Quackback feedback portal" width="800" />
+</p>
+
 ---
 
 ## Get Started
