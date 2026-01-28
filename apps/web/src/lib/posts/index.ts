@@ -13,6 +13,8 @@
 export type {
   CreatePostInput,
   UpdatePostInput,
+  AdminEditPostInput,
+  UserEditPostInput,
   VoteResult,
   ChangeStatusInput,
   PostWithDetails,

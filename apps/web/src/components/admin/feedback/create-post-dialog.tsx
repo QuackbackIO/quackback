@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { createPostSchema, type CreatePostInput } from '@/lib/schemas/posts'
+import { createPostSchema } from '@/lib/schemas/posts'
 import { useCreatePost } from '@/lib/hooks/use-inbox-queries'
+import type { CreatePostInput } from '@/lib/posts'
 import { useSimilarPosts } from '@/lib/hooks/use-similar-posts'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -35,16 +36,15 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const createPostMutation = useCreatePost()
 
-  const form = useForm<CreatePostInput>({
-    // Cast resolver since Zod's z.custom<T> doesn't properly infer branded types
-    resolver: standardSchemaResolver(createPostSchema) as any,
+  const form = useForm({
+    resolver: standardSchemaResolver(createPostSchema),
     defaultValues: {
       title: '',
       content: '',
       boardId: boards[0]?.id || '',
       statusId: defaultStatusId,
-      tagIds: [],
-    } as CreatePostInput,
+      tagIds: [] as string[],
+    },
   })
 
   const handleContentChange = useCallback(
@@ -56,9 +56,17 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
     [form]
   )
 
-  function onSubmit(data: CreatePostInput) {
+  // Handle form submission
+  const handleSubmit = form.handleSubmit((data) => {
     createPostMutation.mutate(
-      { ...data, contentJson },
+      {
+        title: data.title,
+        content: data.content,
+        boardId: data.boardId,
+        statusId: data.statusId,
+        tagIds: data.tagIds,
+        contentJson,
+      } as CreatePostInput,
       {
         onSuccess: () => {
           setOpen(false)
@@ -68,7 +76,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
         },
       }
     )
-  }
+  })
 
   function handleOpenChange(isOpen: boolean) {
     setOpen(isOpen)
@@ -83,7 +91,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
     // Submit on Cmd/Ctrl + Enter
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
-      form.handleSubmit(onSubmit)()
+      handleSubmit()
     }
   }
 
@@ -114,7 +122,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
         <DialogTitle className="sr-only">Create new post</DialogTitle>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
+          <form onSubmit={handleSubmit}>
             {/* Header row with board and status selectors */}
             <div className="flex items-center gap-4 pt-3 px-4 sm:px-6">
               <FormField
@@ -123,7 +131,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
                 render={({ field }) => (
                   <FormItem className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Board:</span>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value as string}>
                       <FormControl>
                         <SelectTrigger
                           size="xs"
@@ -153,7 +161,10 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
                 render={({ field }) => (
                   <FormItem className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Status:</span>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value as string | undefined}
+                    >
                       <FormControl>
                         <SelectTrigger
                           size="xs"
@@ -246,7 +257,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
                   control={form.control}
                   name="tagIds"
                   render={({ field }) => {
-                    const selectedIds = field.value ?? []
+                    const selectedIds = (field.value ?? []) as string[]
                     return (
                       <div className="flex flex-wrap gap-2 pt-2">
                         {tags.map((tag) => {

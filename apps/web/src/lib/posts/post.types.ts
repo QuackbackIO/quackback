@@ -2,7 +2,7 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, Board, Tag } from '@quackback/db/types'
+import type { Post, Board, Tag, TiptapContent } from '@quackback/db/types'
 import type { PostId, BoardId, TagId, StatusId, MemberId, CommentId } from '@quackback/ids'
 import type { CommentReactionCount } from '@/lib/shared'
 
@@ -13,7 +13,7 @@ export interface CreatePostInput {
   boardId: BoardId
   title: string
   content: string
-  contentJson?: unknown // TipTap JSON
+  contentJson?: TiptapContent | null
   statusId?: StatusId
   tagIds?: TagId[]
 }
@@ -24,7 +24,7 @@ export interface CreatePostInput {
 export interface UpdatePostInput {
   title?: string
   content?: string
-  contentJson?: unknown // TipTap JSON
+  contentJson?: TiptapContent | null
   statusId?: StatusId
   tagIds?: TagId[]
   ownerId?: string | null
@@ -222,7 +222,7 @@ export interface PublicPostDetail {
   id: string
   title: string
   content: string
-  contentJson: unknown
+  contentJson: TiptapContent | null
   statusId: StatusId | null
   voteCount: number
   authorName: string | null
@@ -250,12 +250,24 @@ export interface PermissionCheckResult {
 }
 
 /**
- * Input for user editing their own post
+ * Input for user editing their own post (portal)
  */
 export interface UserEditPostInput {
   title: string
   content: string
-  contentJson?: unknown
+  contentJson?: TiptapContent | null
+}
+
+/**
+ * Input for admin editing a post (includes status and tags)
+ */
+export interface AdminEditPostInput {
+  postId: PostId
+  title: string
+  content: string
+  contentJson?: TiptapContent | null
+  statusId?: StatusId
+  tagIds: TagId[]
 }
 
 /**

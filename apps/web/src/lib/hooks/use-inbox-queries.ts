@@ -23,6 +23,7 @@ import type {
 } from '@/components/admin/feedback/inbox-types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db-types'
 import type { BoardId, CommentId, MemberId, PostId, StatusId, TagId } from '@quackback/ids'
+import type { CreatePostInput } from '@/lib/posts'
 import { roadmapPostsKeys } from './use-roadmap-posts-query'
 
 // ============================================================================
@@ -87,15 +88,6 @@ interface AddCommentInput {
   authorName?: string | null
   authorEmail?: string | null
   memberId?: string | null
-}
-
-interface CreatePostInput {
-  title: string
-  content: string
-  contentJson?: unknown
-  boardId: BoardId
-  statusId?: StatusId
-  tagIds: TagId[]
 }
 
 // ============================================================================
@@ -586,7 +578,6 @@ export function useAddComment() {
         parentId: (parentId || null) as CommentId | null,
         isTeamMember: !!memberId,
         createdAt: new Date(),
-        deletedAt: null,
         replies: [],
         reactions: [],
       }

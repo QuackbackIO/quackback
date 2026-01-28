@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useForm, Controller } from 'react-hook-form'
-import { z } from 'zod'
-import { boardIdSchema, statusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
+import { editPostSchema } from '@/lib/schemas/posts'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,23 +18,7 @@ import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
 import type { BoardId, PostId, StatusId, TagId } from '@quackback/ids'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
-
-const editPostSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().min(1, 'Description is required').max(10000),
-  boardId: boardIdSchema,
-  statusId: statusIdSchema.optional(),
-  tagIds: tagIdsSchema,
-})
-
-// Manually type since Zod's z.custom<T> doesn't properly infer branded types
-interface EditPostInput {
-  title: string
-  content: string
-  boardId: BoardId
-  statusId?: StatusId
-  tagIds: TagId[]
-}
+import type { AdminEditPostInput } from '@/lib/posts'
 
 interface PostToEdit {
   id: PostId
@@ -54,7 +37,6 @@ interface EditPostDialogProps {
   statuses: PostStatusEntity[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  onPostUpdated?: () => void
 }
 
 export function EditPostDialog({
@@ -92,16 +74,15 @@ export function EditPostDialog({
   const lastPostIdRef = useRef(post.id)
   const wasOpenRef = useRef(false)
 
-  const form = useForm<EditPostInput>({
-    // Cast resolver since Zod's z.custom<T> doesn't properly infer branded types
-    resolver: standardSchemaResolver(editPostSchema) as any,
+  const form = useForm({
+    resolver: standardSchemaResolver(editPostSchema),
     defaultValues: {
       title: post.title,
       content: post.content,
-      boardId: post.board.id,
-      statusId: post.statusId || undefined,
-      tagIds: post.tags.map((t) => t.id),
-    } as EditPostInput,
+      boardId: post.board.id as string,
+      statusId: (post.statusId || undefined) as string | undefined,
+      tagIds: post.tags.map((t) => t.id) as string[],
+    },
   })
 
   // Reset form when opening dialog (handles both new post and reopening same post)
@@ -114,10 +95,10 @@ export function EditPostDialog({
       form.reset({
         title: post.title,
         content: post.content,
-        boardId: post.board.id,
-        statusId: post.statusId || undefined,
-        tagIds: post.tags.map((t) => t.id),
-      } as EditPostInput)
+        boardId: post.board.id as string,
+        statusId: (post.statusId || undefined) as string | undefined,
+        tagIds: post.tags.map((t) => t.id) as string[],
+      })
       setContentJson(getInitialContentJson(post))
     }
 
@@ -133,23 +114,25 @@ export function EditPostDialog({
     [form]
   )
 
-  async function onSubmit(data: EditPostInput) {
+  // Handle form submission
+  const handleSubmit = form.handleSubmit(async (data) => {
     setError('')
+    const input = { postId: post.id, ...data } as AdminEditPostInput
 
     try {
       // Check if tags need updating
       const currentTagIds = post.tags.map((t) => t.id).sort()
-      const newTagIds = [...data.tagIds].sort()
+      const newTagIds = [...input.tagIds].sort()
       const tagsChanged = JSON.stringify(currentTagIds) !== JSON.stringify(newTagIds)
 
       // Run mutations in parallel for better performance
       const mutations: Promise<unknown>[] = [
         updatePost.mutateAsync({
           postId: post.id as PostId,
-          title: data.title,
-          content: data.content,
+          title: input.title,
+          content: input.content,
           contentJson,
-          statusId: data.statusId,
+          statusId: input.statusId,
         }),
       ]
 
@@ -157,7 +140,7 @@ export function EditPostDialog({
         mutations.push(
           updateTags.mutateAsync({
             postId: post.id as PostId,
-            tagIds: data.tagIds as string[],
+            tagIds: input.tagIds as string[],
             allTags: tags,
           })
         )
@@ -169,9 +152,9 @@ export function EditPostDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update post')
     }
-  }
+  })
 
-  function handleOpenChange(isOpen: boolean) {
+  function handleOpenChangeLocal(isOpen: boolean) {
     onOpenChange(isOpen)
     if (!isOpen) {
       setError('')
@@ -182,7 +165,7 @@ export function EditPostDialog({
     // Submit on Cmd/Ctrl + Enter
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
-      form.handleSubmit(onSubmit)()
+      handleSubmit()
     }
   }
 
@@ -190,7 +173,7 @@ export function EditPostDialog({
   const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChangeLocal}>
       <DialogContent
         className="w-[95vw] max-w-3xl p-0 gap-0 overflow-hidden"
         onKeyDown={handleKeyDown}
@@ -198,7 +181,7 @@ export function EditPostDialog({
         <DialogTitle className="sr-only">Edit post</DialogTitle>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
+          <form onSubmit={handleSubmit}>
             {/* Header row with board and status selectors */}
             <div className="flex items-center gap-4 pt-3 px-4 sm:px-6">
               <FormField
@@ -207,7 +190,7 @@ export function EditPostDialog({
                 render={({ field }) => (
                   <FormItem className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Board:</span>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value as string}>
                       <FormControl>
                         <SelectTrigger
                           size="xs"
@@ -237,7 +220,10 @@ export function EditPostDialog({
                 render={({ field }) => (
                   <FormItem className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">Status:</span>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value as string | undefined}
+                    >
                       <FormControl>
                         <SelectTrigger
                           size="xs"
@@ -330,7 +316,7 @@ export function EditPostDialog({
                   control={form.control}
                   name="tagIds"
                   render={({ field }) => {
-                    const selectedIds = field.value ?? []
+                    const selectedIds = (field.value ?? []) as string[]
                     return (
                       <div className="flex flex-wrap gap-2 pt-2">
                         {tags.map((tag) => {

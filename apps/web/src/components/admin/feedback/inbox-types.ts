@@ -1,5 +1,6 @@
-import type { Board, Tag, Comment } from '@/lib/db-types'
+import type { Board, Tag } from '@/lib/db-types'
 import type { PostId, StatusId, CommentId, MemberId } from '@quackback/ids'
+import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
 export interface OfficialResponse {
   content: string
@@ -17,16 +18,18 @@ export interface PinnedComment {
   isTeamMember: boolean
 }
 
-export interface CommentReaction {
-  emoji: string
-  count: number
-  hasReacted: boolean
-}
+/**
+ * Reaction count with user's reaction state.
+ * Re-exported from shared for convenience.
+ */
+export type CommentReaction = CommentReactionCount
 
-export interface CommentWithReplies extends Comment {
-  replies: CommentWithReplies[]
-  reactions: CommentReaction[]
-}
+/**
+ * Comment with nested replies and reactions.
+ * This is an alias for CommentTreeNode from the shared module,
+ * which is the canonical type for nested comment structures.
+ */
+export type CommentWithReplies = CommentTreeNode
 
 export interface PostDetails {
   id: PostId
