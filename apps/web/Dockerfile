@@ -18,22 +18,7 @@ FROM oven/bun:1.3.7 AS base
 WORKDIR /app
 
 # ============================================================================
-# Dependencies stage
-# ============================================================================
-FROM base AS deps
-
-# Copy workspace package files for dependency resolution
-COPY package.json bun.lock ./
-COPY apps/web/package.json ./apps/web/
-COPY packages/db/package.json ./packages/db/
-COPY packages/email/package.json ./packages/email/
-COPY packages/ids/package.json ./packages/ids/
-
-# Install dependencies
-RUN bun install --frozen-lockfile
-
-# ============================================================================
-# Builder stage
+# Builder stage - install deps and build
 # ============================================================================
 FROM base AS builder
 ARG EDITION
@@ -46,12 +31,8 @@ COPY apps/web ./apps/web
 COPY packages ./packages
 COPY scripts ./scripts
 
-# Overlay node_modules from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/email/node_modules ./packages/email/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/ids/node_modules ./packages/ids/node_modules 2>/dev/null || true
+# Install all dependencies (including devDependencies for build)
+RUN bun install --frozen-lockfile
 
 # Set build-time environment
 ENV NODE_ENV=production
@@ -62,7 +43,7 @@ RUN bun scripts/prepare-edition.ts
 
 # Build the TanStack Start application
 WORKDIR /app/apps/web
-RUN bun --bun vite build
+RUN bun run build
 
 # ============================================================================
 # Production runner
