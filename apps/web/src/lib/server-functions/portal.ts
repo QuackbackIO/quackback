@@ -81,16 +81,13 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     const memberId = memberResult?.id ?? null
 
     const avatarMap: Record<string, string | null> = {}
-    const votedPostIds: string[] = []
+    // Return ALL voted post IDs (not just page 1) so infinite scroll pages show correct vote state
+    const votedPostIds = Array.from(allVotedPosts)
 
     const posts = {
       items: postsResult.items.map((post) => {
         if (post.memberId && post.avatarUrl !== undefined) {
           avatarMap[post.memberId] = post.avatarUrl
-        }
-        // Check if this post is in the user's voted set
-        if (allVotedPosts.has(post.id)) {
-          votedPostIds.push(post.id)
         }
         return {
           id: post.id,
