@@ -14,7 +14,7 @@
 ARG EDITION=self-hosted
 
 # Base image with Bun
-FROM oven/bun:1.3.4 AS base
+FROM oven/bun:1.3.7 AS base
 WORKDIR /app
 
 # ============================================================================
@@ -26,10 +26,8 @@ FROM base AS deps
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
-COPY packages/domain/package.json ./packages/domain/
 COPY packages/email/package.json ./packages/email/
 COPY packages/ids/package.json ./packages/ids/
-COPY packages/integrations/package.json ./packages/integrations/
 
 # Install dependencies
 RUN bun install --frozen-lockfile
@@ -52,10 +50,8 @@ COPY scripts ./scripts
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules 2>/dev/null || true
 COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/domain/node_modules ./packages/domain/node_modules 2>/dev/null || true
 COPY --from=deps /app/packages/email/node_modules ./packages/email/node_modules 2>/dev/null || true
 COPY --from=deps /app/packages/ids/node_modules ./packages/ids/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/integrations/node_modules ./packages/integrations/node_modules 2>/dev/null || true
 
 # Set build-time environment
 ENV NODE_ENV=production
@@ -71,7 +67,7 @@ RUN bun --bun vite build
 # ============================================================================
 # Production runner
 # ============================================================================
-FROM oven/bun:1.3.4-slim AS runner
+FROM oven/bun:1.3.7-slim AS runner
 ARG EDITION
 
 WORKDIR /app
