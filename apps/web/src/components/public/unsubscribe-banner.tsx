@@ -7,7 +7,7 @@ interface UnsubscribeBannerProps {
 }
 
 export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
-  const search = useSearch({ strict: false }) as any
+  const search = useSearch({ strict: false }) as { unsubscribed?: string } | undefined
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {

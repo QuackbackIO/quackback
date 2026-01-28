@@ -90,10 +90,10 @@ export async function savePostEmbedding(postId: PostId, embedding: number[]): Pr
   await db
     .update(posts)
     .set({
-      embedding: sql`${vectorStr}::vector`,
+      embedding: sql<number[]>`${vectorStr}::vector`,
       embeddingModel: EMBEDDING_MODEL,
       embeddingUpdatedAt: new Date(),
-    } as any)
+    })
     .where(eq(posts.id, postId))
 }
 

@@ -17,7 +17,7 @@ export interface OnboardingTask {
   title: string
   description: string
   isCompleted: boolean
-  href: string
+  href: '/admin/settings/boards' | '/admin/settings/team' | '/admin/settings'
   actionLabel: string
   completedLabel: string
 }
@@ -151,7 +151,7 @@ function GettingStartedPage() {
                     </div>
 
                     <Button variant={task.isCompleted ? 'ghost' : 'default'} size="sm" asChild>
-                      <Link to={task.href as any}>
+                      <Link to={task.href}>
                         {task.isCompleted ? task.completedLabel : task.actionLabel}
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>

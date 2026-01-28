@@ -47,12 +47,14 @@ interface ActiveFiltersBarProps {
 
 type FilterCategory = 'status' | 'board' | 'tags' | 'owner' | 'date' | 'votes'
 
+type IconComponent = React.ComponentType<{ className?: string }>
+
 function CircleIcon({ className }: { className?: string }) {
   return <span className={`inline-block rounded-full bg-current ${className}`} />
 }
 
-const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: typeof Squares2X2Icon }[] = [
-  { key: 'status', label: 'Status', icon: CircleIcon as any },
+const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconComponent }[] = [
+  { key: 'status', label: 'Status', icon: CircleIcon },
   { key: 'board', label: 'Board', icon: Squares2X2Icon },
   { key: 'tags', label: 'Tag', icon: TagIcon },
   { key: 'owner', label: 'Assigned to', icon: UserIcon },
@@ -282,9 +284,9 @@ function AddFilterButton({
   )
 }
 
-function getFilterIcon(type: ActiveFilter['type']) {
-  const icons = {
-    status: CircleIcon as any,
+function getFilterIcon(type: ActiveFilter['type']): IconComponent {
+  const icons: Record<ActiveFilter['type'], IconComponent> = {
+    status: CircleIcon,
     board: Squares2X2Icon,
     tags: TagIcon,
     owner: UserIcon,

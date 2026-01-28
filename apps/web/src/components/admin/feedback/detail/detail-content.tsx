@@ -35,7 +35,7 @@ import type {
   CommentWithReplies,
   CurrentUser,
 } from '@/components/admin/feedback/inbox-types'
-import type { PostId } from '@quackback/ids'
+import type { PostId, CommentId } from '@quackback/ids'
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -283,7 +283,7 @@ function CommentItem({
             <div className="mt-4 max-w-lg p-4 bg-muted/20 rounded-xl border border-border/30">
               <CommentForm
                 postId={postId}
-                parentId={comment.id}
+                parentId={comment.id as CommentId}
                 user={currentUser}
                 createComment={createComment}
                 onSuccess={() => setShowReplyForm(false)}

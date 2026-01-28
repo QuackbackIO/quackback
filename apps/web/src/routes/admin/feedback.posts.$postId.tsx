@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/queries/admin'
 import { FeedbackDetailPage } from '@/components/admin/feedback/detail/feedback-detail-page'
 import { ensureTypeId, type PostId } from '@quackback/ids'
+import type { PostDetails } from '@/components/admin/feedback/inbox-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -79,11 +80,11 @@ function FeedbackDetailRoute(): React.ReactElement {
 
   return (
     <FeedbackDetailPage
-      post={postQuery.data as any}
-      boards={boardsQuery.data as any}
+      post={postQuery.data as PostDetails}
+      boards={boardsQuery.data}
       tags={tagsQuery.data}
       statuses={statusesQuery.data}
-      roadmaps={roadmapsQuery.data as any}
+      roadmaps={roadmapsQuery.data}
       currentUser={currentUser}
     />
   )

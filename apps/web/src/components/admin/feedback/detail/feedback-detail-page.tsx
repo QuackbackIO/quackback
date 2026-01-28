@@ -86,7 +86,7 @@ export function FeedbackDetailPage({
           }
           break
         case 'Escape':
-          navigate({ to: navigationContext.backUrl as any })
+          navigate({ to: navigationContext.backUrl })
           break
         case 'e':
           e.preventDefault()

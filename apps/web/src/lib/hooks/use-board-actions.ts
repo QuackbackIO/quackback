@@ -117,6 +117,8 @@ export function useUpdateBoard() {
       const previousDetail = queryClient.getQueryData<Board>(boardKeys.detail(input.id as BoardId))
 
       // Optimistic update for list
+      // Cast settings to BoardSettings since input uses string[] but Board expects StatusId[]
+      const optimisticSettings = input.settings as Board['settings'] | undefined
       queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
         old?.map((board) => {
           if (board.id !== input.id) return board
@@ -125,7 +127,7 @@ export function useUpdateBoard() {
             ...(input.name !== undefined && { name: input.name }),
             ...(input.description !== undefined && { description: input.description }),
             ...(input.isPublic !== undefined && { isPublic: input.isPublic }),
-            ...(input.settings !== undefined && { settings: input.settings }),
+            ...(optimisticSettings !== undefined && { settings: optimisticSettings }),
             updatedAt: new Date(),
           }
         })
@@ -138,7 +140,7 @@ export function useUpdateBoard() {
           ...(input.name !== undefined && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),
           ...(input.isPublic !== undefined && { isPublic: input.isPublic }),
-          ...(input.settings !== undefined && { settings: input.settings }),
+          ...(optimisticSettings !== undefined && { settings: optimisticSettings }),
           updatedAt: new Date(),
         })
       }

@@ -275,10 +275,10 @@ async function saveEmbedding(postId: PostId, embedding: number[]): Promise<void>
   await db
     .update(posts)
     .set({
-      embedding: sql`${vectorStr}::vector`,
+      embedding: sql<number[]>`${vectorStr}::vector`,
       embeddingModel: EMBEDDING_MODEL,
       embeddingUpdatedAt: new Date(),
-    } as any)
+    })
     .where(eq(posts.id, postId))
 }
 

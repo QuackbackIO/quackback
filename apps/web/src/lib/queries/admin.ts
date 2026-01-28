@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { BoardId, TagId, MemberId, PostId } from '@quackback/ids'
+import type { BoardId, TagId, MemberId, PostId, RoadmapId } from '@quackback/ids'
 import {
   fetchInboxPosts,
   fetchBoardsList,
@@ -46,7 +46,20 @@ export const adminQueries = {
   inboxPosts: (filters: InboxPostListParams) =>
     queryOptions({
       queryKey: ['admin', 'inbox', 'posts', filters],
-      queryFn: () => fetchInboxPosts({ data: filters }),
+      queryFn: async () => {
+        const data = await fetchInboxPosts({ data: filters })
+        // Deserialize date strings from server response
+        return {
+          ...data,
+          items: data.items.map((p) => ({
+            ...p,
+            createdAt: new Date(p.createdAt),
+            updatedAt: new Date(p.updatedAt),
+            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+            officialResponseAt: p.officialResponseAt ? new Date(p.officialResponseAt) : null,
+          })),
+        }
+      },
       staleTime: 30 * 1000, // 30s - frequently updated
     }),
 
@@ -56,7 +69,14 @@ export const adminQueries = {
   boards: () =>
     queryOptions({
       queryKey: ['admin', 'boards'],
-      queryFn: () => fetchBoardsList(),
+      queryFn: async () => {
+        const data = await fetchBoardsList()
+        return data.map((b) => ({
+          ...b,
+          createdAt: new Date(b.createdAt),
+          updatedAt: new Date(b.updatedAt),
+        }))
+      },
       staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
@@ -96,7 +116,15 @@ export const adminQueries = {
   roadmaps: () =>
     queryOptions({
       queryKey: ['admin', 'roadmaps'],
-      queryFn: () => fetchRoadmaps(),
+      queryFn: async () => {
+        const data = await fetchRoadmaps()
+        return data.map((r) => ({
+          ...r,
+          id: r.id as RoadmapId, // Server serializes to string, cast back to branded type
+          createdAt: new Date(r.createdAt),
+          updatedAt: new Date(r.updatedAt),
+        }))
+      },
       staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
@@ -181,7 +209,31 @@ export const adminQueries = {
   postDetail: (postId: PostId) =>
     queryOptions({
       queryKey: ['inbox', 'detail', postId],
-      queryFn: () => fetchPostWithDetails({ data: { id: postId } }),
+      queryFn: async () => {
+        const data = await fetchPostWithDetails({ data: { id: postId } })
+        // Deserialize nested date strings from server response
+        type ServerComment = (typeof data.comments)[0]
+        type DeserializedComment = Omit<ServerComment, 'createdAt' | 'replies'> & {
+          createdAt: Date
+          replies: DeserializedComment[]
+        }
+        const deserializeComment = (c: ServerComment): DeserializedComment => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          replies: c.replies.map(deserializeComment),
+        })
+        return {
+          ...data,
+          createdAt: new Date(data.createdAt),
+          updatedAt: new Date(data.updatedAt),
+          deletedAt: data.deletedAt ? new Date(data.deletedAt) : null,
+          officialResponseAt: data.officialResponseAt ? new Date(data.officialResponseAt) : null,
+          comments: data.comments.map(deserializeComment),
+          pinnedComment: data.pinnedComment
+            ? { ...data.pinnedComment, createdAt: new Date(data.pinnedComment.createdAt) }
+            : null,
+        }
+      },
       staleTime: 30 * 1000, // 30s - frequently updated
     }),
 }

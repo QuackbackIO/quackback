@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/queries/admin'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
+import type { InboxPostListResult } from '@/lib/db-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -121,8 +122,8 @@ function FeedbackIndexPage() {
 
   return (
     <InboxContainer
-      initialPosts={postsQuery.data as any}
-      boards={boardsQuery.data as any}
+      initialPosts={postsQuery.data as InboxPostListResult}
+      boards={boardsQuery.data}
       tags={tagsQuery.data}
       statuses={statusesQuery.data}
       members={membersQuery.data}

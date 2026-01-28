@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { MemberId, RoadmapId, StatusId } from '@quackback/ids'
+import type { MemberId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
@@ -30,7 +30,23 @@ export const portalQueries = {
   }) =>
     queryOptions({
       queryKey: ['portal', 'data', params.boardSlug, params.search, params.sort],
-      queryFn: () => fetchPortalData({ data: params }),
+      queryFn: async () => {
+        const data = await fetchPortalData({ data: params })
+        // Deserialize dates and cast branded types from server response
+        return {
+          ...data,
+          posts: {
+            ...data.posts,
+            items: data.posts.items.map((p) => ({
+              ...p,
+              content: p.content ?? '', // Ensure content is never null
+              createdAt: new Date(p.createdAt),
+              memberId: p.memberId as MemberId | null, // Server returns string, cast to branded type
+              board: p.board ? { ...p.board, id: p.board.id as BoardId } : undefined,
+            })),
+          },
+        }
+      },
     }),
 
   /**

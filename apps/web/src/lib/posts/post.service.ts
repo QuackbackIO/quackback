@@ -115,7 +115,7 @@ export async function createPost(
       boardId: input.boardId,
       title,
       content,
-      contentJson: input.contentJson as Record<string, any> | null,
+      contentJson: input.contentJson,
       statusId,
       memberId: author.memberId,
       authorName: author.name,
@@ -937,7 +937,7 @@ export async function userEditPost(
     .set({
       title: input.title.trim(),
       content: input.content.trim(),
-      contentJson: input.contentJson as Record<string, any> | null,
+      contentJson: input.contentJson,
       updatedAt: new Date(),
     })
     .where(eq(posts.id, postId))

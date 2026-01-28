@@ -111,7 +111,7 @@ function PublicPortalPage() {
         workspaceName={org.name}
         workspaceSlug={org.slug}
         boards={portalData.boards}
-        posts={portalData.posts.items as any}
+        posts={portalData.posts.items}
         statuses={portalData.statuses}
         tags={portalData.tags}
         hasMore={portalData.posts.hasMore}

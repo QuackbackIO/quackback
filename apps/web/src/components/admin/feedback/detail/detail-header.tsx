@@ -58,7 +58,7 @@ export function DetailHeader({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate({ to: navigationContext.backUrl as any })}
+            onClick={() => navigate({ to: navigationContext.backUrl })}
             className="gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-150"
           >
             <ArrowLeftIcon className="h-3.5 w-3.5" />

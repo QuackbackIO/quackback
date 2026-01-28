@@ -95,7 +95,6 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
 
     const result = await listBoards()
     console.log(`[fn:admin] fetchBoardsList: count=${result.length}`)
-    // Serialize settings field and Date fields
     return result.map((b) => ({
       ...b,
       settings: (b.settings ?? {}) as BoardSettings,
