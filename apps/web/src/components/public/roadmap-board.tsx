@@ -34,7 +34,7 @@ export function RoadmapBoard({
 
   if (availableRoadmaps.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16">
+      <div className="flex items-center justify-center py-16 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
         <div className="text-center">
           <MapIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium text-foreground">No roadmaps available</h3>
@@ -75,14 +75,19 @@ export function RoadmapBoard({
           style={{ height: 'calc(100dvh - 3.5rem - 2rem - 4.5rem - 3rem)' }}
         >
           <div className="flex gap-4 pb-4 h-full">
-            {statuses.map((status) => (
-              <RoadmapColumn
+            {statuses.map((status, index) => (
+              <div
                 key={status.id}
-                roadmapId={effectiveSelectedId as `roadmap_${string}`}
-                statusId={status.id}
-                title={status.name}
-                color={status.color}
-              />
+                className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+                style={{ animationDelay: `${index * 75}ms` }}
+              >
+                <RoadmapColumn
+                  roadmapId={effectiveSelectedId as `roadmap_${string}`}
+                  statusId={status.id}
+                  title={status.name}
+                  color={status.color}
+                />
+              </div>
             ))}
           </div>
           <ScrollBar orientation="horizontal" />

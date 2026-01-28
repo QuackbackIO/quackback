@@ -148,13 +148,16 @@ function PostDetailPage() {
       <Link
         to="/"
         search={{ board: slug }}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
       >
         <ArrowLeftIcon className="h-4 w-4" />
         <span>{board.name}</span>
       </Link>
 
-      <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
+      <div
+        className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+        style={{ animationDelay: '50ms' }}
+      >
         <div className="flex">
           <Suspense fallback={<VoteSidebarSkeleton />}>
             <VoteSidebar postId={postId} voteCount={post.voteCount} />

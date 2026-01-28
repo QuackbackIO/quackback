@@ -172,7 +172,7 @@ export function PostContentSection({
   }
 
   return (
-    <div className="flex-1 p-6">
+    <div className="flex-1 p-6 animate-in fade-in duration-300 fill-mode-backwards">
       <div className="flex items-start justify-between gap-2 mb-3">
         {currentStatus ? (
           <StatusBadge name={currentStatus.name} color={currentStatus.color} />

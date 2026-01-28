@@ -69,7 +69,10 @@ export function MetadataSidebar({
   }
 
   return (
-    <aside className="hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5">
+    <aside
+      className="hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+      style={{ animationDelay: '100ms' }}
+    >
       <div className="p-4 space-y-5">
         {/* Upvotes */}
         <div className="flex items-center justify-between">

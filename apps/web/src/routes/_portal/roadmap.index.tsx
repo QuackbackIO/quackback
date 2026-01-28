@@ -37,16 +37,21 @@ function RoadmapPage() {
 
   return (
     <div className="py-8">
-      <div className="mb-6">
+      <div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
         <h1 className="text-3xl font-bold mb-2">Roadmap</h1>
         <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
       </div>
 
-      <RoadmapBoard
-        statuses={roadmapStatuses}
-        initialRoadmaps={roadmaps}
-        initialSelectedRoadmapId={initialSelectedId}
-      />
+      <div
+        className="animate-in fade-in duration-300 fill-mode-backwards"
+        style={{ animationDelay: '100ms' }}
+      >
+        <RoadmapBoard
+          statuses={roadmapStatuses}
+          initialRoadmaps={roadmaps}
+          initialSelectedRoadmapId={initialSelectedId}
+        />
+      </div>
     </div>
   )
 }

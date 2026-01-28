@@ -25,7 +25,7 @@ export function VoteSidebar({ postId, voteCount }: VoteSidebarProps): React.Reac
   const isMember = sidebarData?.isMember ?? false
 
   return (
-    <div className={SIDEBAR_CLASS}>
+    <div className={`${SIDEBAR_CLASS} animate-in fade-in duration-200 fill-mode-backwards`}>
       <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} />
     </div>
   )

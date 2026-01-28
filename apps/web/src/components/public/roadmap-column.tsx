@@ -64,23 +64,28 @@ export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColu
       <CardContent className="flex-1 min-h-0 p-0">
         <ScrollArea className="h-full px-6 pb-6">
           {isLoading ? (
-            <div className="h-full flex items-center justify-center py-8">
+            <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
               <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : posts.length === 0 ? (
-            <div className="h-full flex items-center justify-center py-8">
+            <div className="h-full flex items-center justify-center py-8 animate-in fade-in slide-in-from-bottom-1 duration-200">
               <p className="text-sm text-muted-foreground">No items yet</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {posts.map((post) => (
-                <RoadmapCard
+              {posts.map((post, index) => (
+                <div
                   key={post.id}
-                  id={post.id}
-                  title={post.title}
-                  voteCount={post.voteCount}
-                  board={{ slug: post.board.slug, name: post.board.name }}
-                />
+                  className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                  style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+                >
+                  <RoadmapCard
+                    id={post.id}
+                    title={post.title}
+                    voteCount={post.voteCount}
+                    board={{ slug: post.board.slug, name: post.board.name }}
+                  />
+                </div>
               ))}
               {hasNextPage && (
                 <div ref={sentinelRef} className="py-2 flex justify-center">

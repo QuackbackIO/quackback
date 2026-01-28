@@ -18,7 +18,7 @@ export const Route = createFileRoute('/_portal/settings')({
 
 function SettingsLayout() {
   return (
-    <div className="flex gap-8 px-6 py-8 w-full flex-1">
+    <div className="flex gap-8 px-6 py-8 w-full flex-1 animate-in fade-in duration-200">
       <SettingsNav />
       <main className="min-w-0 flex-1">
         <Outlet />

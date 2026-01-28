@@ -52,7 +52,7 @@ function NotificationsPage() {
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 sm:px-6">
       {/* Page Header */}
-      <header className="mb-8">
+      <header className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -96,7 +96,11 @@ function NotificationsPage() {
       ) : notifications.length > 0 ? (
         <div className="space-y-6">
           {groups.map((group, groupIndex) => (
-            <section key={group.label}>
+            <section
+              key={group.label}
+              className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+              style={{ animationDelay: `${groupIndex * 75}ms` }}
+            >
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
                 {group.label}
               </h2>
@@ -118,7 +122,10 @@ function NotificationsPage() {
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-border/50 bg-card shadow-sm">
+        <div
+          className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+          style={{ animationDelay: '75ms' }}
+        >
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
             <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
               <InboxIcon className="h-8 w-8 text-muted-foreground/60" />
