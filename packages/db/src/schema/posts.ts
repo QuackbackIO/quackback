@@ -15,6 +15,7 @@ import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackbac
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
 import { member } from './auth'
+import type { TiptapContent } from '../types'
 
 // Custom tsvector type for full-text search
 const tsvector = customType<{ data: string }>({
@@ -41,7 +42,7 @@ export const posts = pgTable(
     title: text('title').notNull(),
     content: text('content').notNull(),
     // Rich content stored as TipTap JSON (optional, for rich text support)
-    contentJson: jsonb('content_json').$type<Record<string, any>>(),
+    contentJson: jsonb('content_json').$type<TiptapContent>(),
     // Member-scoped identity (Hub-and-Spoke model)
     // memberId links to the workspace-scoped member record
     // For anonymous posts, memberId is null and authorName/authorEmail are used
@@ -261,7 +262,7 @@ export const postEditHistory = pgTable(
       .references(() => member.id, { onDelete: 'set null' }),
     previousTitle: text('previous_title').notNull(),
     previousContent: text('previous_content').notNull(),
-    previousContentJson: jsonb('previous_content_json').$type<Record<string, any>>(),
+    previousContentJson: jsonb('previous_content_json').$type<TiptapContent>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

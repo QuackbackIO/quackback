@@ -34,6 +34,37 @@ export interface BoardSettings {
   roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
 }
 
+// Integration config (stored in integrations.config JSONB column)
+export interface IntegrationConfig {
+  channelId?: string
+  channelName?: string
+  teamId?: string
+  webhookUrl?: string
+  [key: string]: string | boolean | number | undefined
+}
+
+// Event mapping config (stored in event_mappings JSONB columns)
+export interface EventMappingActionConfig {
+  templateId?: string
+  message?: string
+  [key: string]: string | boolean | number | undefined
+}
+
+export interface EventMappingFilters {
+  boardIds?: string[]
+  statusIds?: string[]
+  [key: string]: string[] | string | boolean | number | undefined
+}
+
+// TipTap rich text content (stored in contentJson JSONB columns)
+export interface TiptapContent {
+  type: string
+  content?: TiptapContent[]
+  text?: string
+  marks?: { type: string; attrs?: Record<string, string | number | boolean> }[]
+  attrs?: Record<string, string | number | boolean | null>
+}
+
 // Use case types for personalized onboarding
 export const USE_CASE_TYPES = ['saas', 'consumer', 'marketplace', 'internal'] as const
 export type UseCaseType = (typeof USE_CASE_TYPES)[number]

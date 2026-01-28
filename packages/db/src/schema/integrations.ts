@@ -14,6 +14,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { member } from './auth'
+import type { IntegrationConfig, EventMappingActionConfig, EventMappingFilters } from '../types'
 
 /**
  * Integration configurations.
@@ -32,7 +33,7 @@ export const integrations = pgTable(
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
 
     // Configuration (channel IDs, team IDs, etc.)
-    config: jsonb('config').$type<Record<string, any>>().notNull().default({}),
+    config: jsonb('config').$type<IntegrationConfig>().notNull().default({}),
 
     // External workspace info (for Slack team, GitHub org, etc.)
     externalWorkspaceId: varchar('external_workspace_id', { length: 255 }),
@@ -70,8 +71,8 @@ export const integrationEventMappings = pgTable(
     integrationId: typeIdColumn('integration')('integration_id').notNull(),
     eventType: varchar('event_type', { length: 100 }).notNull(),
     actionType: varchar('action_type', { length: 50 }).notNull(),
-    actionConfig: jsonb('action_config').$type<Record<string, any>>().notNull().default({}),
-    filters: jsonb('filters').$type<Record<string, any>>(),
+    actionConfig: jsonb('action_config').$type<EventMappingActionConfig>().notNull().default({}),
+    filters: jsonb('filters').$type<EventMappingFilters>(),
     enabled: boolean('enabled').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

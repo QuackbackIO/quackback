@@ -86,7 +86,7 @@ describe('Schema definitions', () => {
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
       // 23 business columns + 1 searchVector (generated) + 1 commentCount (denormalized) + 3 embedding columns (embedding, embeddingModel, embeddingUpdatedAt)
-      expect(columns.length).toBe(28)
+      expect(columns.length).toBe(29)
     })
   })
 
@@ -126,13 +126,8 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(votes))
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
-      expect(columns).toContain('userIdentifier')
+      expect(columns).toContain('memberId')
       expect(columns).toContain('createdAt')
-    })
-
-    it('has userIdentifier for anonymous voting', () => {
-      const columns = Object.keys(getTableColumns(votes))
-      expect(columns).toContain('userIdentifier')
     })
   })
 
@@ -168,7 +163,7 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(commentReactions))
       expect(columns).toContain('id')
       expect(columns).toContain('commentId')
-      expect(columns).toContain('userIdentifier')
+      expect(columns).toContain('memberId')
       expect(columns).toContain('emoji')
       expect(columns).toContain('createdAt')
     })

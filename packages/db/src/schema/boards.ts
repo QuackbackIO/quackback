@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
+import type { BoardSettings } from '../types'
 
 export const boards = pgTable(
   'boards',
@@ -19,7 +20,7 @@ export const boards = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     isPublic: boolean('is_public').default(true).notNull(),
-    settings: jsonb('settings').$type<Record<string, any>>().default({}).notNull(),
+    settings: jsonb('settings').$type<BoardSettings>().default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

@@ -139,13 +139,13 @@ describe('Type definitions', () => {
     it('Vote has correct shape', () => {
       expectTypeOf<Vote>().toHaveProperty('id')
       expectTypeOf<Vote>().toHaveProperty('postId')
-      expectTypeOf<Vote>().toHaveProperty('userIdentifier')
+      expectTypeOf<Vote>().toHaveProperty('memberId')
       expectTypeOf<Vote>().toHaveProperty('createdAt')
     })
 
     it('NewVote has required fields', () => {
       expectTypeOf<NewVote>().toHaveProperty('postId')
-      expectTypeOf<NewVote>().toHaveProperty('userIdentifier')
+      expectTypeOf<NewVote>().toHaveProperty('memberId')
     })
   })
 
@@ -173,13 +173,13 @@ describe('Type definitions', () => {
     it('CommentReaction has correct shape', () => {
       expectTypeOf<CommentReaction>().toHaveProperty('id')
       expectTypeOf<CommentReaction>().toHaveProperty('commentId')
-      expectTypeOf<CommentReaction>().toHaveProperty('userIdentifier')
+      expectTypeOf<CommentReaction>().toHaveProperty('memberId')
       expectTypeOf<CommentReaction>().toHaveProperty('emoji')
     })
 
     it('NewCommentReaction has required fields', () => {
       expectTypeOf<NewCommentReaction>().toHaveProperty('commentId')
-      expectTypeOf<NewCommentReaction>().toHaveProperty('userIdentifier')
+      expectTypeOf<NewCommentReaction>().toHaveProperty('memberId')
       expectTypeOf<NewCommentReaction>().toHaveProperty('emoji')
     })
   })
