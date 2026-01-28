@@ -46,21 +46,23 @@ Feedback tools should be simple. Quackback focuses on the essentials: voting, ro
 
 - **Your choice:** Use our managed cloud or self-host on your own infrastructure.
 - **Own your data:** No vendor lock-in. Export anytime, or run it yourself.
-- **Modern Stack:** Built with Next.js 16, RSC, and Tailwind. Fast by default.
+- **Modern Stack:** Built with TanStack Start, TanStack Router, and Tailwind. Fast by default.
 
 ## Features
 
 - **🗳️ Feedback Portal** — Public boards, upvoting, status tracking, and nested comments.
 - **📥 Admin Inbox** — Unified view to triage feedback. Powerful filtering and bulk actions.
 - **🗺️ Roadmap & Changelog** — Visually show users what you're building and what you've shipped.
-- **🔌 Integrations** — _(Coming soon)_ Slack, Linear, and Jira.
+- **🔌 Integrations** — Slack integration, with Linear and Jira coming soon.
 
 ## Tech Stack
 
-- **Framework:** Next.js 16 (App Router)
+- **Framework:** TanStack Start + TanStack Router
 - **Database:** PostgreSQL + Drizzle ORM
 - **Auth:** Better Auth
-- **Styling:** Tailwind CSS + shadcn/ui
+- **Styling:** Tailwind CSS v4 + shadcn/ui
+- **Validation:** Zod
+- **State:** TanStack Query (server)
 - **Runtime:** Bun
 
 ## Self-Hosted
@@ -81,7 +83,7 @@ You'll need to provide your own PostgreSQL database. Set `DATABASE_URL` in your 
 
 ### Local Development
 
-Prerequisites: [Bun](https://bun.sh/) v1.3.3+ and [Docker](https://docker.com/)
+Prerequisites: [Bun](https://bun.sh/) v1.3.4+ and [Docker](https://docker.com/)
 
 ```bash
 git clone https://github.com/QuackbackIO/quackback.git
@@ -103,7 +105,7 @@ Visit [http://localhost:3000](http://localhost:3000) and log in with `demo@examp
 - [x] Official responses
 - [ ] Public changelog
 - [ ] Email notifications
-- [ ] Slack integration
+- [x] Slack integration
 - [ ] Intercom / Zendesk integration
 - [ ] Jira / Linear integration
 - [ ] Zapier integration
