@@ -9,12 +9,13 @@
 import { drizzle } from 'drizzle-orm/neon-http'
 import { neon } from '@neondatabase/serverless'
 import * as schema from '@quackback/db/schema'
+import { decryptConnectionString } from '@/lib/catalog'
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>
 
 interface CacheEntry {
   db: Database
-  connectionString: string
+  encryptedConnectionString: string
   lastAccessed: number
 }
 
@@ -28,18 +29,24 @@ const TTL_MS = 5 * 60 * 1000
  * Get or create a database connection for a tenant.
  * Connections are cached and reused across requests.
  *
+ * Accepts the ENCRYPTED connection string to avoid expensive scrypt
+ * key derivation on cache hits. Decryption only happens on cache miss.
+ *
  * If the connection string has changed (e.g., password rotation),
  * the old connection is discarded and a new one is created.
  *
  * @param workspaceId - Unique workspace identifier
- * @param connectionString - Neon database connection string
+ * @param encryptedConnectionString - Encrypted Neon database connection string
  * @returns Drizzle database instance
  */
-export function getTenantDb(workspaceId: string, connectionString: string): Database {
+export async function getTenantDb(
+  workspaceId: string,
+  encryptedConnectionString: string
+): Promise<Database> {
   const cached = cache.get(workspaceId)
 
-  // Check if cached and connection string hasn't changed
-  if (cached && cached.connectionString === connectionString) {
+  // Check if cached and encrypted connection string hasn't changed
+  if (cached && cached.encryptedConnectionString === encryptedConnectionString) {
     cached.lastAccessed = Date.now()
     return cached.db
   }
@@ -48,6 +55,9 @@ export function getTenantDb(workspaceId: string, connectionString: string): Data
   if (cached) {
     cache.delete(workspaceId)
   }
+
+  // Decrypt the connection string (expensive scrypt operation - only on cache miss)
+  const connectionString = await decryptConnectionString(encryptedConnectionString, workspaceId)
 
   // Create new connection using Neon HTTP driver (for Cloudflare Workers)
   const sql = neon(connectionString)
@@ -58,7 +68,7 @@ export function getTenantDb(workspaceId: string, connectionString: string): Data
     evictOldest()
   }
 
-  cache.set(workspaceId, { db, connectionString, lastAccessed: Date.now() })
+  cache.set(workspaceId, { db, encryptedConnectionString, lastAccessed: Date.now() })
   return db
 }
 

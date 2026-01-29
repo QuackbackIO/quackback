@@ -6,11 +6,16 @@ import { resolveTenantFromDomain, resetCatalogDb } from '../resolver'
 
 // Hoist mocks so they're available before module imports
 const { mockGetTenantDb, mockDrizzle, mockNeon } = vi.hoisted(() => ({
-  mockGetTenantDb: vi.fn((workspaceId: string, connectionString: string) => ({
-    _workspaceId: workspaceId,
-    _connectionString: connectionString,
-    query: {},
-  })),
+  // getTenantDb is now async, so return a Promise
+  mockGetTenantDb: vi.fn((workspaceId: string, encryptedConnectionString: string) =>
+    Promise.resolve({
+      _workspaceId: workspaceId,
+      _encryptedConnectionString: encryptedConnectionString,
+      query: {
+        settings: { findFirst: vi.fn().mockResolvedValue(null) },
+      },
+    })
+  ),
   mockDrizzle: vi.fn(),
   mockNeon: vi.fn(() => ({})),
 }))
@@ -56,7 +61,13 @@ const mockWorkspace = {
 }
 
 describe('resolver', () => {
-  let mockDb: { query: { workspace: { findFirst: ReturnType<typeof vi.fn> } } }
+  let mockDb: {
+    query: {
+      workspace: { findFirst: ReturnType<typeof vi.fn> }
+      subscription: { findFirst: ReturnType<typeof vi.fn> }
+    }
+    select: ReturnType<typeof vi.fn>
+  }
 
   beforeEach(() => {
     mockGetTenantDb.mockClear()
@@ -64,13 +75,26 @@ describe('resolver', () => {
     mockNeon.mockReset()
     resetCatalogDb()
 
-    // Setup mock database
+    // Setup mock database with all required query methods
     mockDb = {
       query: {
         workspace: {
           findFirst: vi.fn(),
         },
+        subscription: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
       },
+      // Mock select for custom domain lookups (returns chainable mock)
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+      }),
     }
     mockDrizzle.mockReturnValue(mockDb)
     mockNeon.mockReturnValue({})
@@ -194,21 +218,24 @@ describe('resolver', () => {
       expect(result).toBeNull()
     })
 
-    it('should return null when decryption fails (invalid ENCRYPTION_KEY)', async () => {
+    it('should return null when getTenantDb fails (e.g., decryption error)', async () => {
       ;(process.env as Record<string, string | undefined>).CLOUD_CATALOG_DATABASE_URL =
         'postgres://catalog/db'
       ;(process.env as Record<string, string | undefined>).CLOUD_TENANT_BASE_DOMAIN = 'quackback.io'
-      delete (process.env as Record<string, string | undefined>).ENCRYPTION_KEY
+      ;(process.env as Record<string, string | undefined>).ENCRYPTION_KEY = 'test-key'
 
       mockDb.query.workspace.findFirst.mockResolvedValueOnce({
         ...mockWorkspace,
         neonConnectionString: 'invalid:encrypted:string',
       })
 
+      // Make getTenantDb throw an error to simulate decryption failure
+      mockGetTenantDb.mockRejectedValueOnce(new Error('ENCRYPTION_KEY is required'))
+
       const request = createRequest('https://acme.quackback.io/dashboard')
       const result = await resolveTenantFromDomain(request)
 
-      // Should catch decryption error and return null
+      // Should catch error and return null
       expect(result).toBeNull()
     })
 

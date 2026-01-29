@@ -8,7 +8,6 @@ import {
   subscription,
   getCatalogDb,
   resetCatalogDb,
-  decryptConnectionString,
   type CatalogDb,
 } from '@/lib/catalog'
 
@@ -55,16 +54,9 @@ async function lookupCustomDomain(
   return result ?? null
 }
 
-async function getConnectionString(record: typeof workspace.$inferSelect): Promise<string> {
-  if (!record.neonConnectionString) {
-    throw new Error(`Workspace ${record.slug} has no connection string configured`)
-  }
-  return decryptConnectionString(record.neonConnectionString, record.id)
-}
-
 export async function getTenantDbBySlug(
   slug: string
-): Promise<{ db: ReturnType<typeof getTenantDb>; workspaceId: string }> {
+): Promise<{ db: Awaited<ReturnType<typeof getTenantDb>>; workspaceId: string }> {
   const catalogDb = getCatalogDb()
   const record = await catalogDb.query.workspace.findFirst({ where: eq(workspace.slug, slug) })
 
@@ -73,8 +65,12 @@ export async function getTenantDbBySlug(
     throw new Error(`Workspace ${slug} is not ready (status: ${record.migrationStatus})`)
   }
 
-  const connectionString = await getConnectionString(record)
-  return { db: getTenantDb(record.id, connectionString), workspaceId: record.id }
+  if (!record.neonConnectionString) {
+    throw new Error(`Workspace ${record.slug} has no connection string configured`)
+  }
+
+  const db = await getTenantDb(record.id, record.neonConnectionString)
+  return { db, workspaceId: record.id }
 }
 
 export async function resolveTenantFromDomain(request: Request): Promise<TenantInfo | null> {
@@ -108,7 +104,12 @@ export async function resolveTenantFromDomain(request: Request): Promise<TenantI
       return null
     }
 
-    const tenantDb = getTenantDb(record.id, await getConnectionString(record))
+    if (!record.neonConnectionString) {
+      console.error(`[resolver] Workspace ${record.slug} has no connection string configured`)
+      return null
+    }
+
+    const tenantDb = await getTenantDb(record.id, record.neonConnectionString)
 
     const [tenantSettings, sub] = await Promise.all([
       tenantDb.query.settings.findFirst(),
