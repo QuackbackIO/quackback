@@ -10,6 +10,7 @@
  */
 
 import { db, eq, sql, posts, postStatuses, asc } from '@/lib/db'
+import { tenantStorage } from '@/lib/tenant'
 import { toUuid, type StatusId } from '@quackback/ids'
 import {
   NotFoundError,
@@ -296,14 +297,27 @@ export async function getStatusBySlug(slug: string): Promise<Status> {
   return status
 }
 
+const STATUSES_CACHE_KEY = 'public_statuses'
+
 /**
- * List all statuses (public, no authentication required)
+ * List all statuses (public, no authentication required).
+ * Results are cached per-request since statuses rarely change.
  */
 export async function listPublicStatuses(): Promise<Status[]> {
+  // Check request-scoped cache first
+  const ctx = tenantStorage.getStore()
+  const cached = ctx?.cache.get(STATUSES_CACHE_KEY) as Status[] | undefined
+  if (cached) {
+    return cached
+  }
+
   try {
     const statuses = await db.query.postStatuses.findMany({
       orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
     })
+
+    // Cache for subsequent calls within this request
+    ctx?.cache.set(STATUSES_CACHE_KEY, statuses)
 
     return statuses
   } catch (error) {

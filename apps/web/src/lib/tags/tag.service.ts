@@ -11,6 +11,7 @@
  */
 
 import { db, eq, asc, type Tag, tags, boards, postTags, posts } from '@/lib/db'
+import { tenantStorage } from '@/lib/tenant'
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
@@ -211,17 +212,30 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
   return tagList
 }
 
+const TAGS_CACHE_KEY = 'public_tags'
+
 /**
  * List all tags (public, no authentication required)
  *
  * Returns tags ordered by name.
  * This method is used for public endpoints like feedback portal filtering.
+ * Results are cached per-request since tags rarely change.
  */
 export async function listPublicTags(): Promise<Tag[]> {
+  // Check request-scoped cache first
+  const ctx = tenantStorage.getStore()
+  const cached = ctx?.cache.get(TAGS_CACHE_KEY) as Tag[] | undefined
+  if (cached) {
+    return cached
+  }
+
   try {
     const tagList = await db.query.tags.findMany({
       orderBy: [asc(tags.name)],
     })
+
+    // Cache for subsequent calls within this request
+    ctx?.cache.set(TAGS_CACHE_KEY, tagList)
 
     return tagList
   } catch (error) {

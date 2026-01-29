@@ -74,12 +74,14 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
       return { success: false as const, error: 'Unauthorized', status: 401 as const }
     }
 
-    // Parallelize member and settings queries - they're independent
+    // Get settings from context (already populated by server.ts) or fallback to query
+    const ctx = tenantStorage.getStore()
     const [memberRecord, appSettings] = await Promise.all([
       db.query.member.findFirst({
         where: eq(member.userId, session.user.id),
       }),
-      db.query.settings.findFirst(),
+      // Use cached settings from context if available
+      ctx?.settings ? Promise.resolve(ctx.settings) : db.query.settings.findFirst(),
     ])
 
     if (!memberRecord) {
