@@ -13,17 +13,16 @@ import {
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
-import { getOptionalAuth, requireAuth } from './auth-helpers'
+import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
 import { getSettings } from './workspace'
 import {
   listPublicPosts,
-  hasUserVoted,
   getAllUserVotedPostIds,
   getPublicRoadmapPostsPaginated,
+  getVoteAndSubscriptionStatus,
 } from '@/lib/posts/post.public'
 import {
-  canEditPost,
-  canDeletePost,
+  getPostPermissions,
   userEditPost,
   softDeletePost,
   voteOnPost,
@@ -34,7 +33,6 @@ import { getDefaultStatus } from '@/lib/statuses/status.service'
 import { getMemberByUser } from '@/lib/members/member.service'
 import { dispatchPostCreated } from '@/lib/events/dispatch'
 import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps/roadmap.service'
-import { getSubscriptionStatus } from '@/lib/subscriptions/subscription.service'
 
 // ============================================
 // Schemas
@@ -127,8 +125,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
       `[fn:public-posts] listPublicPostsFn: sort=${data.sort}, board=${data.boardSlug || 'all'}`
     )
     try {
-      await getOptionalAuth()
-
+      // No auth needed - this is public data
       const result = await listPublicPosts({
         boardSlug: data.boardSlug,
         search: data.search,
@@ -173,6 +170,12 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
     }> => {
       console.log(`[fn:public-posts] getPostPermissionsFn: postId=${data.postId}`)
       try {
+        // Early bailout: no session cookie = no permissions (skip DB queries)
+        if (!hasSessionCookie()) {
+          console.log(`[fn:public-posts] getPostPermissionsFn: no session cookie, skipping auth`)
+          return { canEdit: false, canDelete: false }
+        }
+
         const ctx = await getOptionalAuth()
         const postId = data.postId as PostId
 
@@ -188,20 +191,17 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
           role: ctx.member.role,
         }
 
-        // Check permissions
-        const [editResult, deleteResult] = await Promise.all([
-          canEditPost(postId, actor),
-          canDeletePost(postId, actor),
-        ])
+        // Combined permission check - queries post, config, and status only once
+        const { canEdit, canDelete } = await getPostPermissions(postId, actor)
 
         console.log(
-          `[fn:public-posts] getPostPermissionsFn: canEdit=${editResult.allowed}, canDelete=${deleteResult.allowed}`
+          `[fn:public-posts] getPostPermissionsFn: canEdit=${canEdit.allowed}, canDelete=${canDelete.allowed}`
         )
         return {
-          canEdit: editResult.allowed,
-          canDelete: deleteResult.allowed,
-          editReason: editResult.reason,
-          deleteReason: deleteResult.reason,
+          canEdit: canEdit.allowed,
+          canDelete: canDelete.allowed,
+          editReason: canEdit.reason,
+          deleteReason: canDelete.reason,
         }
       } catch (error) {
         // Post not found or other error - return no permissions
@@ -307,16 +307,23 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       const { boardId: boardIdRaw, title, content, contentJson } = data
       const boardId = boardIdRaw as BoardId
 
-      // Get board and verify it exists and is public
-      const board = await getPublicBoardById(boardId)
+      // Run all independent lookups in parallel (board, member, defaultStatus, settings)
+      const [board, memberRecord, defaultStatus, settings] = await Promise.all([
+        getPublicBoardById(boardId),
+        getMemberByUser(ctx.user.id as UserId),
+        getDefaultStatus(),
+        getSettings(),
+      ])
+
+      // Validate results
       if (!board || !board.isPublic) {
         throw new Error('Board not found')
       }
-
-      // Get member record (re-query for full details)
-      const memberRecord = await getMemberByUser(ctx.user.id as UserId)
       if (!memberRecord) {
         throw new Error('You must be a member to submit feedback.')
+      }
+      if (!settings) {
+        throw new Error('Organization settings not found')
       }
 
       // Build author info
@@ -325,9 +332,6 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         name: ctx.user.name || ctx.user.email,
         email: ctx.user.email,
       }
-
-      // Get default status
-      const defaultStatus = await getDefaultStatus()
 
       // Create the post
       const post = await createPost(
@@ -340,12 +344,6 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         },
         author
       )
-
-      // Get settings for organization info
-      const settings = await getSettings()
-      if (!settings) {
-        throw new Error('Organization settings not found')
-      }
 
       // Dispatch post.created event (must await for Cloudflare Workers)
       await dispatchPostCreated(
@@ -388,6 +386,12 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
     console.log(`[fn:public-posts] getVotedPostsFn`)
     try {
+      // Early bailout: no session cookie = no votes (skip DB queries)
+      if (!hasSessionCookie()) {
+        console.log(`[fn:public-posts] getVotedPostsFn: no session cookie, skipping auth`)
+        return { votedPostIds: [] }
+      }
+
       const ctx = await getOptionalAuth()
 
       // Optional auth - return empty if not authenticated
@@ -413,8 +417,7 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
 export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:public-posts] listPublicRoadmapsFn`)
   try {
-    await getOptionalAuth()
-
+    // No auth needed - this is public data
     const result = await listPublicRoadmaps()
 
     console.log(`[fn:public-posts] listPublicRoadmapsFn: count=${result.length}`)
@@ -443,8 +446,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
     console.log(`[fn:public-posts] getPublicRoadmapPostsFn: roadmapId=${data.roadmapId}`)
     try {
-      await getOptionalAuth()
-
+      // No auth needed - this is public data
       const { roadmapId, statusId, limit, offset } = data
 
       const result = await getPublicRoadmapPosts(roadmapId as RoadmapId, {
@@ -488,8 +490,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
     console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: statusId=${data.statusId}`)
     try {
-      await getOptionalAuth()
-
+      // No auth needed - this is public data
       const { statusId, page, limit } = data
 
       const result = await getPublicRoadmapPostsPaginated({
@@ -523,47 +524,58 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     const startTime = Date.now()
     console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
     try {
+      // Early bailout: no session cookie = anonymous user (skip all DB queries)
+      if (!hasSessionCookie()) {
+        console.log(
+          `[fn:public-posts] getVoteSidebarDataFn: no session cookie, returning defaults (${Date.now() - startTime}ms)`
+        )
+        return {
+          isMember: false,
+          hasVoted: false,
+          subscriptionStatus: {
+            subscribed: false,
+            level: 'none' as const,
+            reason: null,
+          },
+        }
+      }
+
       const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
       console.log(
         `[fn:public-posts] getVoteSidebarDataFn: auth resolved in ${Date.now() - startTime}ms`
       )
 
-      let isMember = false
-      let hasVoted = false
-      let subscriptionStatus: {
-        subscribed: boolean
-        level: 'all' | 'status_only' | 'none'
-        reason: string | null
-      } = {
-        subscribed: false,
-        level: 'none',
-        reason: null,
-      }
-
-      if (ctx?.user && ctx?.member) {
-        isMember = true
-
-        // Run queries in parallel for better performance
-        const [voted, subStatus] = await Promise.all([
-          hasUserVoted(postId, ctx.member.id),
-          getSubscriptionStatus(ctx.member.id, postId),
-        ])
-        hasVoted = voted
-        subscriptionStatus = {
-          subscribed: subStatus.subscribed,
-          level: subStatus.level,
-          reason: subStatus.reason,
+      // No authenticated user (invalid/expired session)
+      if (!ctx?.user || !ctx?.member) {
+        console.log(
+          `[fn:public-posts] getVoteSidebarDataFn: no auth context (${Date.now() - startTime}ms)`
+        )
+        return {
+          isMember: false,
+          hasVoted: false,
+          subscriptionStatus: {
+            subscribed: false,
+            level: 'none' as const,
+            reason: null,
+          },
         }
       }
 
+      // Authenticated user - fetch vote and subscription data in a single query
+      const { hasVoted, subscription } = await getVoteAndSubscriptionStatus(postId, ctx.member.id)
+
       console.log(
-        `[fn:public-posts] getVoteSidebarDataFn: isMember=${isMember}, hasVoted=${hasVoted}, total=${Date.now() - startTime}ms`
+        `[fn:public-posts] getVoteSidebarDataFn: isMember=true, hasVoted=${hasVoted}, total=${Date.now() - startTime}ms`
       )
       return {
-        isMember,
+        isMember: true,
         hasVoted,
-        subscriptionStatus,
+        subscriptionStatus: {
+          subscribed: subscription.subscribed,
+          level: subscription.level,
+          reason: subscription.reason,
+        },
       }
     } catch (error) {
       const elapsed = Date.now() - startTime

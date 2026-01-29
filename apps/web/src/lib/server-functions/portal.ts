@@ -8,7 +8,7 @@ import {
   type UserId,
 } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
-import { getOptionalAuth } from './auth-helpers'
+import { getOptionalAuth, hasSessionCookie } from './auth-helpers'
 import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/db'
 import { listPublicBoardsWithStats, getPublicBoardBySlug } from '@/lib/boards/board.public'
 import {
@@ -134,10 +134,16 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
-    const ctx = await getOptionalAuth()
-    const result = await getPublicPostDetail(data.postId as PostId, ctx?.member?.id)
+    // Only fetch auth if user has a session cookie (for highlighting own comments)
+    const memberId = hasSessionCookie() ? (await getOptionalAuth())?.member?.id : undefined
+    const result = await getPublicPostDetail(data.postId as PostId, memberId)
 
     if (!result) return null
+
+    // Helper to safely convert Date or string to ISO string
+    // Raw SQL may return dates as strings depending on the driver
+    const toISOString = (date: Date | string): string =>
+      typeof date === 'string' ? date : date.toISOString()
 
     type CommentType = (typeof result.comments)[0]
     type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
@@ -147,7 +153,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     function serializeComment(c: CommentType): SerializedComment {
       return {
         ...c,
-        createdAt: c.createdAt.toISOString(),
+        createdAt: toISOString(c.createdAt),
         replies: c.replies.map(serializeComment),
       }
     }
@@ -155,12 +161,12 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     return {
       ...result,
       contentJson: result.contentJson ?? {},
-      createdAt: result.createdAt.toISOString(),
+      createdAt: toISOString(result.createdAt),
       comments: result.comments.map(serializeComment),
       officialResponse: result.officialResponse
         ? {
             ...result.officialResponse,
-            respondedAt: result.officialResponse.respondedAt.toISOString(),
+            respondedAt: toISOString(result.officialResponse.respondedAt),
           }
         : null,
     }
@@ -289,6 +295,15 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
   })
 
 export const getCommentsSectionDataFn = createServerFn({ method: 'GET' }).handler(async () => {
+  // Early bailout: no session cookie = anonymous user (skip DB queries)
+  if (!hasSessionCookie()) {
+    return {
+      isMember: false,
+      canComment: false,
+      user: undefined,
+    }
+  }
+
   const ctx = await getOptionalAuth()
   const isMember = !!(ctx?.user && ctx?.member)
 

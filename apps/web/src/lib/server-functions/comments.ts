@@ -20,7 +20,7 @@ import {
   userEditComment,
 } from '@/lib/comments/comment.service'
 import { dispatchCommentCreated } from '@/lib/events/dispatch'
-import { getOptionalAuth, requireAuth } from './auth-helpers'
+import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
 
 // Schemas
 const createCommentSchema = z.object({
@@ -175,6 +175,12 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] getCommentPermissionsFn: commentId=${data.commentId}`)
     try {
+      // Early bailout: no session cookie = no permissions (skip DB queries)
+      if (!hasSessionCookie()) {
+        console.log(`[fn:comments] getCommentPermissionsFn: no session cookie, skipping auth`)
+        return { canEdit: false, canDelete: false }
+      }
+
       const ctx = await getOptionalAuth()
       if (!ctx?.member) {
         console.log(`[fn:comments] getCommentPermissionsFn: no auth context`)
@@ -296,6 +302,12 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:comments] canPinCommentFn: commentId=${data.commentId}`)
     try {
+      // Early bailout: no session cookie = can't pin (skip DB queries)
+      if (!hasSessionCookie()) {
+        console.log(`[fn:comments] canPinCommentFn: no session cookie, skipping auth`)
+        return { canPin: false, reason: 'Only team members can pin comments' }
+      }
+
       const ctx = await getOptionalAuth()
       // Must be a team member to pin
       if (!ctx?.member || !['admin', 'member'].includes(ctx.member.role)) {

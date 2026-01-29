@@ -47,6 +47,18 @@ function setCachedMember(userId: UserId, data: Member): void {
 }
 
 /**
+ * Quick check if the request has a session cookie.
+ * This allows early bailout for anonymous users WITHOUT hitting the database.
+ * Use this before calling getOptionalAuth() for endpoints that return
+ * default/empty data for anonymous users.
+ */
+export function hasSessionCookie(): boolean {
+  const headers = getRequestHeaders()
+  const cookie = headers.get('cookie') ?? ''
+  return cookie.includes('better-auth.session_token')
+}
+
+/**
  * Get session directly from better-auth (not through server function).
  * This avoids nested server function call issues.
  * Results are cached per-request to avoid redundant auth lookups.
