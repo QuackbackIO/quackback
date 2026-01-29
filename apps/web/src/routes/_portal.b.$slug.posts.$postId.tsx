@@ -46,14 +46,14 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     queryClient.prefetchQuery(portalDetailQueries.votedPosts())
 
     // Await only critical data needed for initial render
-    const [board, post] = await Promise.all([
-      queryClient.ensureQueryData(portalDetailQueries.board(slug)),
+    // Note: Post detail already includes board data (JOINed), so no separate board query needed
+    const [post] = await Promise.all([
       queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
       queryClient.ensureQueryData(portalQueries.statuses()),
     ])
     console.log(`[postDetail] ⏱️ loader TOTAL: ${Date.now() - loaderStart}ms`)
 
-    if (!board || !post || post.board.slug !== slug) {
+    if (!post || post.board.slug !== slug) {
       throw notFound()
     }
 
@@ -68,7 +68,7 @@ function PostDetailPage() {
   const [isEditingPost, setIsEditingPost] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
-  const boardQuery = useSuspenseQuery(portalDetailQueries.board(slug))
+  // Post detail already includes board data (JOINed in query)
   const postQuery = useSuspenseQuery(portalDetailQueries.postDetail(postId))
   const statusesQuery = useSuspenseQuery(portalQueries.statuses())
 
@@ -90,15 +90,16 @@ function PostDetailPage() {
     onDeleteSuccess: () => setDeleteDialogOpen(false),
   })
 
-  const board = boardQuery.data
   const post = postQuery.data
+  // Use board data from post (already JOINed in the query)
+  const board = post?.board
 
   if (!post || !board) {
     return <div>Post not found</div>
   }
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
-  const workspaceName = settings?.name ?? 'Team'
+  const workspaceName = settings?.settings?.name ?? 'Team'
 
   const typedPost: PublicPostDetailView = {
     ...post,
