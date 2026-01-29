@@ -63,8 +63,14 @@ RUN groupadd --system --gid 1001 nodejs && \
 # Copy the built output
 COPY --from=builder --chown=quackback:nodejs /app/apps/web/.output ./.output
 
+# Create writable directories for Bun runtime
+RUN mkdir -p /app/.cache && chown -R quackback:nodejs /app/.cache
+
 # Switch to non-root user
 USER quackback
+
+# Set Bun's cache directory to a writable location
+ENV BUN_INSTALL_CACHE_DIR=/app/.cache
 
 EXPOSE 3000
 ENV PORT=3000
