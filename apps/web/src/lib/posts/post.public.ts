@@ -4,7 +4,6 @@ import {
   and,
   inArray,
   desc,
-  asc,
   sql,
   posts,
   boards,
@@ -16,6 +15,7 @@ import {
   postStatuses,
   postRoadmaps,
   roadmaps,
+  postSubscriptions,
   member as memberTable,
   user as userTable,
 } from '@/lib/db'
@@ -275,7 +275,9 @@ export async function getPublicPostDetail(
   postId: PostId,
   memberId?: MemberId
 ): Promise<PublicPostDetail | null> {
-  // Run post and comments queries in parallel (faster than single complex query)
+  const postUuid = toUuid(postId)
+
+  // Run post and comments queries in parallel (2 queries total)
   const [postResults, commentsWithReactions] = await Promise.all([
     // Query 1: Post with embedded tags, roadmaps, and author avatar
     db
@@ -326,35 +328,55 @@ export async function getPublicPostDetail(
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(eq(posts.id, postId))
       .limit(1),
-    // Query 2: Comments with avatars and reactions
-    db
-      .select({
-        id: comments.id,
-        postId: comments.postId,
-        parentId: comments.parentId,
-        memberId: comments.memberId,
-        authorId: comments.authorId,
-        authorName: comments.authorName,
-        authorEmail: comments.authorEmail,
-        content: comments.content,
-        isTeamMember: comments.isTeamMember,
-        createdAt: comments.createdAt,
-        deletedAt: comments.deletedAt,
-        imageBlob: userTable.imageBlob,
-        imageType: userTable.imageType,
-        image: userTable.image,
-        reactionsJson: sql<string>`COALESCE(
-          (SELECT json_agg(json_build_object('emoji', cr.emoji, 'memberId', cr.member_id))
-           FROM ${commentReactions} cr
-           WHERE cr.comment_id = ${comments.id}),
+
+    // Query 2: Comments with avatars AND reactions (single query using GROUP BY + json_agg)
+    // This is more elegant than separate queries + app-side join
+    // Note: Raw SQL may return dates as strings depending on driver (neon-http vs postgres-js)
+    db.execute<{
+      id: string
+      post_id: string
+      parent_id: string | null
+      member_id: string | null
+      author_id: string | null
+      author_name: string | null
+      author_email: string | null
+      content: string
+      is_team_member: boolean
+      created_at: Date | string
+      deleted_at: Date | string | null
+      image_blob: Buffer | null
+      image_type: string | null
+      image: string | null
+      reactions_json: string
+    }>(sql`
+      SELECT
+        c.id,
+        c.post_id,
+        c.parent_id,
+        c.member_id,
+        c.author_id,
+        c.author_name,
+        c.author_email,
+        c.content,
+        c.is_team_member,
+        c.created_at,
+        c.deleted_at,
+        u.image_blob,
+        u.image_type,
+        u.image,
+        COALESCE(
+          json_agg(json_build_object('emoji', cr.emoji, 'memberId', cr.member_id))
+          FILTER (WHERE cr.id IS NOT NULL),
           '[]'
-        )`.as('reactions_json'),
-      })
-      .from(comments)
-      .leftJoin(memberTable, eq(comments.memberId, memberTable.id))
-      .leftJoin(userTable, eq(memberTable.userId, userTable.id))
-      .where(eq(comments.postId, postId))
-      .orderBy(asc(comments.createdAt)),
+        ) as reactions_json
+      FROM ${comments} c
+      LEFT JOIN ${memberTable} m ON c.member_id = m.id
+      LEFT JOIN ${userTable} u ON m.user_id = u.id
+      LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
+      WHERE c.post_id = ${postUuid}::uuid
+      GROUP BY c.id, u.image_blob, u.image_type, u.image
+      ORDER BY c.created_at ASC
+    `),
   ])
 
   const postResult = postResults[0]
@@ -370,19 +392,47 @@ export async function getPublicPostDetail(
   )
   const authorAvatarUrl = parseAvatarData(postResult.authorAvatarData)
 
-  const commentsResult = commentsWithReactions.map((comment) => ({
+  // Extract rows from execute result (handles both postgres-js and neon-http formats)
+  const commentsRaw = getExecuteRows<{
+    id: string
+    post_id: string
+    parent_id: string | null
+    member_id: string | null
+    author_id: string | null
+    author_name: string | null
+    author_email: string | null
+    content: string
+    is_team_member: boolean
+    created_at: Date | string
+    deleted_at: Date | string | null
+    image_blob: Buffer | null
+    image_type: string | null
+    image: string | null
+    reactions_json: string
+  }>(commentsWithReactions)
+
+  // Helper to ensure Date objects (raw SQL may return strings depending on driver)
+  const ensureDate = (value: Date | string): Date =>
+    typeof value === 'string' ? new Date(value) : value
+
+  // Map to expected format
+  const commentsResult = commentsRaw.map((comment) => ({
     id: comment.id,
-    postId: comment.postId,
-    parentId: comment.parentId,
-    memberId: comment.memberId,
-    authorId: comment.authorId,
-    authorName: comment.authorName,
-    authorEmail: comment.authorEmail,
+    postId: comment.post_id,
+    parentId: comment.parent_id,
+    memberId: comment.member_id,
+    authorId: comment.author_id,
+    authorName: comment.author_name,
+    authorEmail: comment.author_email,
     content: comment.content,
-    isTeamMember: comment.isTeamMember,
-    createdAt: comment.createdAt,
-    avatarUrl: computeAvatarUrl(comment),
-    reactions: parseJson<Array<{ emoji: string; memberId: string }>>(comment.reactionsJson),
+    isTeamMember: comment.is_team_member,
+    createdAt: ensureDate(comment.created_at),
+    avatarUrl: computeAvatarUrl({
+      imageBlob: comment.image_blob,
+      imageType: comment.image_type,
+      image: comment.image,
+    }),
+    reactions: parseJson<Array<{ emoji: string; memberId: string }>>(comment.reactions_json),
   }))
 
   const commentTree = buildCommentTree(commentsResult, memberId)
@@ -404,16 +454,20 @@ export async function getPublicPostDetail(
 
   let pinnedComment: PinnedComment | null = null
   if (postResult.pinnedCommentId) {
-    const pinnedCommentData = commentsWithReactions.find((c) => c.id === postResult.pinnedCommentId)
-    if (pinnedCommentData && !pinnedCommentData.deletedAt) {
+    const pinnedCommentData = commentsRaw.find((c) => c.id === postResult.pinnedCommentId)
+    if (pinnedCommentData && !pinnedCommentData.deleted_at) {
       pinnedComment = {
         id: pinnedCommentData.id as CommentId,
         content: pinnedCommentData.content,
-        authorName: pinnedCommentData.authorName,
-        memberId: pinnedCommentData.memberId,
-        avatarUrl: computeAvatarUrl(pinnedCommentData),
-        createdAt: pinnedCommentData.createdAt,
-        isTeamMember: pinnedCommentData.isTeamMember,
+        authorName: pinnedCommentData.author_name,
+        memberId: pinnedCommentData.member_id as MemberId | null,
+        avatarUrl: computeAvatarUrl({
+          imageBlob: pinnedCommentData.image_blob,
+          imageType: pinnedCommentData.image_type,
+          image: pinnedCommentData.image,
+        }),
+        createdAt: ensureDate(pinnedCommentData.created_at),
+        isTeamMember: pinnedCommentData.is_team_member,
       }
     }
   }
@@ -530,6 +584,96 @@ export async function hasUserVoted(postId: PostId, memberId: MemberId): Promise<
     where: and(eq(votes.postId, postId), eq(votes.memberId, memberId)),
   })
   return !!vote
+}
+
+/**
+ * Safely extract rows from db.execute() result.
+ * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
+ */
+function getExecuteRows<T>(result: unknown): T[] {
+  if (
+    result &&
+    typeof result === 'object' &&
+    'rows' in result &&
+    Array.isArray((result as { rows: unknown }).rows)
+  ) {
+    return (result as { rows: T[] }).rows
+  }
+  if (Array.isArray(result)) {
+    return result as T[]
+  }
+  return []
+}
+
+/**
+ * Combined query to get vote status AND subscription status in a single DB round-trip.
+ * This replaces calling hasUserVoted() and getSubscriptionStatus() separately.
+ *
+ * Uses a LEFT JOIN approach to guarantee exactly 1 row is returned, avoiding
+ * the need for a fallback query when no subscription exists.
+ */
+export async function getVoteAndSubscriptionStatus(
+  postId: PostId,
+  memberId: MemberId
+): Promise<{
+  hasVoted: boolean
+  subscription: {
+    subscribed: boolean
+    level: 'all' | 'status_only' | 'none'
+    reason: string | null
+  }
+}> {
+  // Convert TypeIDs to UUIDs for raw SQL
+  const postUuid = toUuid(postId)
+  const memberUuid = toUuid(memberId)
+
+  // Single query that always returns exactly 1 row using a subquery approach
+  // This avoids the need for a fallback query when no subscription exists
+  const result = await db.execute(sql`
+    SELECT
+      EXISTS(
+        SELECT 1 FROM ${votes}
+        WHERE ${votes.postId} = ${postUuid}::uuid
+        AND ${votes.memberId} = ${memberUuid}::uuid
+      ) as has_voted,
+      ps.post_id IS NOT NULL as subscribed,
+      ps.notify_comments,
+      ps.notify_status_changes,
+      ps.reason
+    FROM (SELECT 1) AS dummy
+    LEFT JOIN ${postSubscriptions} ps
+      ON ps.post_id = ${postUuid}::uuid
+      AND ps.member_id = ${memberUuid}::uuid
+  `)
+
+  type ResultRow = {
+    has_voted: boolean
+    subscribed: boolean
+    notify_comments: boolean | null
+    notify_status_changes: boolean | null
+    reason: string | null
+  }
+  const rows = getExecuteRows<ResultRow>(result)
+  const row = rows[0]
+
+  // Determine subscription level from flags
+  let level: 'all' | 'status_only' | 'none' = 'none'
+  if (row?.subscribed) {
+    if (row.notify_comments && row.notify_status_changes) {
+      level = 'all'
+    } else if (row.notify_status_changes) {
+      level = 'status_only'
+    }
+  }
+
+  return {
+    hasVoted: row?.has_voted ?? false,
+    subscription: {
+      subscribed: row?.subscribed ?? false,
+      level,
+      reason: row?.reason ?? null,
+    },
+  }
 }
 
 export async function getUserVotedPostIds(

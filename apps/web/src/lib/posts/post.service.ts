@@ -26,6 +26,7 @@ import {
   comments,
   postEditHistory,
   votes,
+  postSubscriptions,
   type Post,
 } from '@/lib/db'
 import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
@@ -81,8 +82,20 @@ export async function createPost(
     throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
   }
 
-  // Validate board exists and belongs to this organization
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, input.boardId) })
+  // Validate board exists and get default status in parallel (when no statusId provided)
+  const needsDefaultStatus = !input.statusId
+  const [board, defaultStatus] = await Promise.all([
+    db.query.boards.findFirst({ where: eq(boards.id, input.boardId) }),
+    needsDefaultStatus
+      ? db
+          .select()
+          .from(postStatuses)
+          .where(eq(postStatuses.slug, 'open'))
+          .limit(1)
+          .then((rows) => rows[0])
+      : Promise.resolve(null),
+  ])
+
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
   }
@@ -90,20 +103,12 @@ export async function createPost(
   // Determine statusId - either from input or use default "open" status
   let statusId = input.statusId
   if (!statusId) {
-    // Look up default "open" status
-    const [defaultStatus] = await db
-      .select()
-      .from(postStatuses)
-      .where(eq(postStatuses.slug, 'open'))
-      .limit(1)
-
     if (!defaultStatus) {
       throw new ValidationError(
         'VALIDATION_ERROR',
         'Default "open" status not found. Please ensure post statuses are configured for this organization.'
       )
     }
-
     statusId = defaultStatus.id
   }
 
@@ -245,69 +250,90 @@ export async function updatePost(
  * @returns Result containing vote status and new count, or an error
  */
 export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<VoteResult> {
-  // Verify post exists
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
-
-  // Verify post belongs to this organization
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) {
-    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
-  }
-
-  // Toggle vote using single atomic CTE query (Neon HTTP driver doesn't support transactions)
   const postUuid = toUuid(postId)
   const memberUuid = toUuid(memberId)
 
-  // Atomic toggle: delete if exists, insert if not, update count accordingly
-  await db.execute(sql`
-    WITH existing AS (
-      SELECT id FROM votes
-      WHERE post_id = ${postUuid} AND member_id = ${memberUuid}
+  // Single atomic CTE: validate post/board, toggle vote, update count, auto-subscribe
+  // Reduces 5-6 sequential queries to 1
+  const result = await db.execute<{
+    post_exists: boolean
+    board_exists: boolean
+    newly_voted: boolean
+    vote_count: number
+  }>(sql`
+    WITH post_check AS (
+      SELECT id, board_id, vote_count FROM ${posts}
+      WHERE id = ${postUuid}::uuid
+    ),
+    board_check AS (
+      SELECT 1 FROM ${boards}
+      WHERE id = (SELECT board_id FROM post_check)
+    ),
+    existing AS (
+      SELECT id FROM ${votes}
+      WHERE post_id = ${postUuid}::uuid AND member_id = ${memberUuid}::uuid
     ),
     deleted AS (
-      DELETE FROM votes
+      DELETE FROM ${votes}
       WHERE id IN (SELECT id FROM existing)
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO votes (id, post_id, member_id, updated_at)
-      SELECT gen_random_uuid(), ${postUuid}, ${memberUuid}, NOW()
+      INSERT INTO ${votes} (id, post_id, member_id, updated_at)
+      SELECT gen_random_uuid(), ${postUuid}::uuid, ${memberUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
+        AND EXISTS (SELECT 1 FROM post_check)
+        AND EXISTS (SELECT 1 FROM board_check)
       ON CONFLICT (post_id, member_id) DO NOTHING
       RETURNING id
+    ),
+    updated_post AS (
+      UPDATE ${posts}
+      SET vote_count = GREATEST(0, vote_count +
+        CASE
+          WHEN EXISTS (SELECT 1 FROM inserted) THEN 1
+          WHEN EXISTS (SELECT 1 FROM deleted) THEN -1
+          ELSE 0
+        END
+      )
+      WHERE id = ${postUuid}::uuid
+      RETURNING vote_count
+    ),
+    subscribed AS (
+      INSERT INTO ${postSubscriptions} (post_id, member_id, reason, notify_comments, notify_status_changes)
+      SELECT ${postUuid}::uuid, ${memberUuid}::uuid, 'vote', true, true
+      WHERE EXISTS (SELECT 1 FROM inserted)
+      ON CONFLICT (post_id, member_id) DO NOTHING
+      RETURNING 1
     )
-    UPDATE posts
-    SET vote_count = GREATEST(0, vote_count +
-      CASE
-        WHEN EXISTS (SELECT 1 FROM inserted) THEN 1
-        WHEN EXISTS (SELECT 1 FROM deleted) THEN -1
-        ELSE 0
-      END
-    )
-    WHERE id = ${postUuid}
+    SELECT
+      EXISTS(SELECT 1 FROM post_check) as post_exists,
+      EXISTS(SELECT 1 FROM board_check) as board_exists,
+      EXISTS(SELECT 1 FROM inserted) as newly_voted,
+      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
   `)
 
-  // Query final state (safe - previous query already committed)
-  const [voteState] = await db
-    .select({ voteCount: posts.voteCount })
-    .from(posts)
-    .where(eq(posts.id, postId))
-
-  const [existingVote] = await db
-    .select({ id: votes.id })
-    .from(votes)
-    .where(and(eq(votes.postId, postId), eq(votes.memberId, memberId)))
-
-  const voted = existingVote !== undefined
-  const voteCount = voteState?.voteCount ?? post.voteCount
-
-  // Auto-subscribe voter when they upvote
-  if (voted) {
-    await subscribeToPost(memberId, postId, 'vote')
+  type VoteResultRow = {
+    post_exists: boolean
+    board_exists: boolean
+    newly_voted: boolean
+    vote_count: number
   }
+  const rows = getExecuteRows<VoteResultRow>(result)
+  const row = rows[0]
+
+  if (!row?.post_exists) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  if (!row?.board_exists) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board not found for post ${postId}`)
+  }
+
+  // newly_voted = true means we inserted a vote (user now has vote)
+  // newly_voted = false means we deleted a vote (user no longer has vote)
+  const voted = row.newly_voted
+  const voteCount = row.vote_count ?? 0
 
   return { voted, voteCount }
 }
@@ -380,14 +406,18 @@ export async function changeStatus(
  * @returns Result containing the post with details or an error
  */
 export async function getPostById(postId: PostId): Promise<Post> {
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  // Single query with board relation (validates both exist)
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    with: { board: { columns: { id: true } } },
+  })
+
   if (!post) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Verify post belongs to this organization
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) {
+  // Board relation validates post belongs to a valid board
+  if (!post.board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
@@ -878,6 +908,117 @@ export async function canDeletePost(
 }
 
 /**
+ * Combined permission check for edit and delete operations.
+ * This is more efficient than calling canEditPost and canDeletePost separately
+ * because it queries the post, portal config, and status only once.
+ *
+ * @param postId - Post ID to check
+ * @param actor - Actor information (memberId, role)
+ * @returns Both edit and delete permission results
+ */
+export async function getPostPermissions(
+  postId: PostId,
+  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+): Promise<{
+  canEdit: PermissionCheckResult
+  canDelete: PermissionCheckResult
+}> {
+  const { db } = await import('@/lib/db')
+
+  // Get the post with status in single query (eliminates separate isDefaultStatus query)
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    with: { postStatus: { columns: { isDefault: true } } },
+  })
+
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  // Check if post is deleted - affects both permissions
+  if (post.deletedAt) {
+    return {
+      canEdit: { allowed: false, reason: 'Cannot edit a deleted post' },
+      canDelete: { allowed: false, reason: 'Post has already been deleted' },
+    }
+  }
+
+  // Team members (admin, member) can always edit and delete
+  if (['admin', 'member'].includes(actor.role)) {
+    return {
+      canEdit: { allowed: true },
+      canDelete: { allowed: true },
+    }
+  }
+
+  // For regular users, must be the author
+  if (post.memberId !== actor.memberId) {
+    return {
+      canEdit: { allowed: false, reason: 'You can only edit your own posts' },
+      canDelete: { allowed: false, reason: 'You can only delete your own posts' },
+    }
+  }
+
+  // Get portal config once for both checks
+  const config = await getPortalConfig()
+
+  // Status is default if no statusId or the status has isDefault=true
+  const isDefault = !post.statusId || post.postStatus?.isDefault === true
+
+  // Initialize results
+  let canEdit: PermissionCheckResult = { allowed: true }
+  let canDelete: PermissionCheckResult = { allowed: true }
+
+  // Status check for edit
+  if (!isDefault && !config.features.allowEditAfterEngagement) {
+    canEdit = { allowed: false, reason: 'Cannot edit posts that have been reviewed by the team' }
+  }
+
+  // Status check for delete
+  if (!isDefault && !config.features.allowDeleteAfterEngagement) {
+    canDelete = {
+      allowed: false,
+      reason: 'Cannot delete posts that have been reviewed by the team',
+    }
+  }
+
+  // Vote check affects both (if still allowed)
+  if (post.voteCount > 0) {
+    if (canEdit.allowed && !config.features.allowEditAfterEngagement) {
+      canEdit = { allowed: false, reason: 'Cannot edit posts that have received votes' }
+    }
+    if (canDelete.allowed && !config.features.allowDeleteAfterEngagement) {
+      canDelete = { allowed: false, reason: 'Cannot delete posts that have received votes' }
+    }
+  }
+
+  // Comment checks - use combined query if either check is needed
+  const needsEditCommentCheck = canEdit.allowed && !config.features.allowEditAfterEngagement
+  const needsDeleteCommentCheck = canDelete.allowed && !config.features.allowDeleteAfterEngagement
+
+  if (needsEditCommentCheck || needsDeleteCommentCheck) {
+    // Single query to get both total count and other-user comment count
+    const { totalCount, hasOtherComments } = await getCommentStatsForPermissions(
+      postId,
+      actor.memberId
+    )
+
+    if (needsEditCommentCheck && hasOtherComments) {
+      canEdit = {
+        allowed: false,
+        reason: 'Cannot edit posts that have comments from other users',
+      }
+    }
+
+    if (needsDeleteCommentCheck && totalCount > 0) {
+      canDelete = { allowed: false, reason: 'Cannot delete posts that have comments' }
+    }
+  }
+
+  return { canEdit, canDelete }
+}
+
+/**
  * User edits their own post
  * Validates permissions and records edit history if enabled
  *
@@ -891,19 +1032,7 @@ export async function userEditPost(
   input: UserEditPostInput,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<Post> {
-  // Check permission first (throws NotFoundError if post doesn't exist)
-  const permResult = await canEditPost(postId, actor)
-  if (!permResult.allowed) {
-    throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
-  }
-
-  // Get the existing post
-  const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
-  if (!existingPost) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
-
-  // Validate input
+  // Validate input first (no DB needed)
   if (!input.title?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   }
@@ -917,8 +1046,54 @@ export async function userEditPost(
     throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
   }
 
-  // Get portal config to check if edit history is enabled
-  const config = await getPortalConfig()
+  // Fetch post with status + portal config in parallel (eliminates duplicate fetches)
+  const [existingPost, config] = await Promise.all([
+    db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { postStatus: { columns: { isDefault: true } } },
+    }),
+    getPortalConfig(),
+  ])
+
+  if (!existingPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  // Check if post is deleted
+  if (existingPost.deletedAt) {
+    throw new ForbiddenError('EDIT_NOT_ALLOWED', 'Cannot edit a deleted post')
+  }
+
+  // Team members (admin, member) can always edit - skip further checks
+  if (!['admin', 'member'].includes(actor.role)) {
+    // Must be the author
+    if (existingPost.memberId !== actor.memberId) {
+      throw new ForbiddenError('EDIT_NOT_ALLOWED', 'You can only edit your own posts')
+    }
+
+    // Check engagement restrictions for regular users
+    if (!config.features.allowEditAfterEngagement) {
+      // Status is default if no statusId or the status has isDefault=true
+      const isDefault = !existingPost.statusId || existingPost.postStatus?.isDefault === true
+      if (!isDefault) {
+        throw new ForbiddenError(
+          'EDIT_NOT_ALLOWED',
+          'Cannot edit posts that have been reviewed by the team'
+        )
+      }
+      if (existingPost.voteCount > 0) {
+        throw new ForbiddenError('EDIT_NOT_ALLOWED', 'Cannot edit posts that have received votes')
+      }
+      // Check for comments from others
+      const hasOtherComments = await hasCommentsFromOthers(postId, actor.memberId)
+      if (hasOtherComments) {
+        throw new ForbiddenError(
+          'EDIT_NOT_ALLOWED',
+          'Cannot edit posts that have comments from other users'
+        )
+      }
+    }
+  }
 
   // Record edit history if enabled
   if (config.features.showPublicEditHistory) {
@@ -961,10 +1136,53 @@ export async function softDeletePost(
   postId: PostId,
   actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
-  // Check permission first (throws NotFoundError if post doesn't exist)
-  const permResult = await canDeletePost(postId, actor)
-  if (!permResult.allowed) {
-    throw new ForbiddenError('DELETE_NOT_ALLOWED', permResult.reason || 'Delete not allowed')
+  // Fetch post with status + portal config in parallel (eliminates duplicate fetches)
+  const [existingPost, config] = await Promise.all([
+    db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { postStatus: { columns: { isDefault: true } } },
+    }),
+    getPortalConfig(),
+  ])
+
+  if (!existingPost) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  // Check if post is already deleted
+  if (existingPost.deletedAt) {
+    throw new ForbiddenError('DELETE_NOT_ALLOWED', 'Post has already been deleted')
+  }
+
+  // Team members (admin, member) can always delete - skip further checks
+  if (!['admin', 'member'].includes(actor.role)) {
+    // Must be the author
+    if (existingPost.memberId !== actor.memberId) {
+      throw new ForbiddenError('DELETE_NOT_ALLOWED', 'You can only delete your own posts')
+    }
+
+    // Check engagement restrictions for regular users
+    if (!config.features.allowDeleteAfterEngagement) {
+      // Status is default if no statusId or the status has isDefault=true
+      const isDefault = !existingPost.statusId || existingPost.postStatus?.isDefault === true
+      if (!isDefault) {
+        throw new ForbiddenError(
+          'DELETE_NOT_ALLOWED',
+          'Cannot delete posts that have been reviewed by the team'
+        )
+      }
+      if (existingPost.voteCount > 0) {
+        throw new ForbiddenError(
+          'DELETE_NOT_ALLOWED',
+          'Cannot delete posts that have received votes'
+        )
+      }
+      // Check for any comments
+      const commentCount = await getCommentCount(postId)
+      if (commentCount > 0) {
+        throw new ForbiddenError('DELETE_NOT_ALLOWED', 'Cannot delete posts that have comments')
+      }
+    }
   }
 
   // Set deletedAt and deletedByMemberId
@@ -1063,7 +1281,7 @@ async function hasCommentsFromOthers(
 
   const { db } = await import('@/lib/db')
 
-  // Find any comment not from the author and not deleted
+  // Find any comment not from the author and not deleted (LIMIT 1 is faster than COUNT)
   const otherComment = await db.query.comments.findFirst({
     where: and(
       eq(comments.postId, postId),
@@ -1087,6 +1305,58 @@ async function getCommentCount(postId: PostId): Promise<number> {
     .where(and(eq(comments.postId, postId), isNull(comments.deletedAt)))
 
   return result[0]?.count ?? 0
+}
+
+/**
+ * Safely extract rows from db.execute() result.
+ * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
+ */
+function getExecuteRows<T>(result: unknown): T[] {
+  if (
+    result &&
+    typeof result === 'object' &&
+    'rows' in result &&
+    Array.isArray((result as { rows: unknown }).rows)
+  ) {
+    return (result as { rows: T[] }).rows
+  }
+  if (Array.isArray(result)) {
+    return result as T[]
+  }
+  return []
+}
+
+/**
+ * Combined query to get comment stats for permission checks.
+ * Returns both total count and whether there are comments from others in a single query.
+ * This is more efficient than calling hasCommentsFromOthers and getCommentCount separately.
+ */
+async function getCommentStatsForPermissions(
+  postId: PostId,
+  authorMemberId: MemberId | null | undefined
+): Promise<{ totalCount: number; hasOtherComments: boolean }> {
+  const { db } = await import('@/lib/db')
+
+  // Use conditional aggregation to get both values in one query
+  const postUuid = toUuid(postId)
+  const memberUuid = authorMemberId ? toUuid(authorMemberId) : null
+
+  const result = await db.execute(sql`
+    SELECT
+      COUNT(*) as total_count,
+      COUNT(*) FILTER (WHERE ${comments.memberId} IS NOT NULL AND ${comments.memberId} != ${memberUuid}::uuid) as other_count
+    FROM ${comments}
+    WHERE ${comments.postId} = ${postUuid}::uuid
+      AND ${comments.deletedAt} IS NULL
+  `)
+
+  type ResultRow = { total_count: number; other_count: number }
+  const rows = getExecuteRows<ResultRow>(result)
+  const row = rows[0]
+  return {
+    totalCount: Number(row?.total_count ?? 0),
+    hasOtherComments: Number(row?.other_count ?? 0) > 0,
+  }
 }
 
 /**
