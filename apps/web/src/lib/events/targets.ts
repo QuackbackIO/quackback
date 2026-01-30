@@ -3,8 +3,17 @@
  * Queries database to determine all targets for an event.
  */
 
-import type { PostId, UserId } from '@quackback/ids'
-import { db, integrations, integrationEventMappings, decryptToken, eq, and, member } from '@/lib/db'
+import type { PostId, UserId, WebhookId } from '@quackback/ids'
+import {
+  db,
+  integrations,
+  integrationEventMappings,
+  decryptToken,
+  eq,
+  and,
+  member,
+  webhooks,
+} from '@/lib/db'
 import {
   getSubscribersForEvent,
   batchGetNotificationPreferences,
@@ -34,6 +43,7 @@ function getNotificationEventType(eventType: string): NotificationEventType | nu
 const EMAIL_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
 const NOTIFICATION_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
 const AI_EVENT_TYPES = ['post.created'] as const
+const WEBHOOK_EVENT_TYPES = ['post.created', 'post.status_changed', 'comment.created'] as const
 
 /**
  * Get all hook targets for an event.
@@ -75,6 +85,12 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
         target: { type: 'ai' },
         config: {},
       })
+    }
+
+    // Webhook targets - external HTTP endpoints
+    if (WEBHOOK_EVENT_TYPES.includes(event.type as (typeof WEBHOOK_EVENT_TYPES)[number])) {
+      const webhookTargets = await getWebhookTargets(event)
+      targets.push(...webhookTargets)
     }
 
     return targets
@@ -369,5 +385,73 @@ async function buildNotificationConfig(
     }
   }
 
+  return null
+}
+
+// ============================================================================
+// Webhook Targets
+// ============================================================================
+
+/**
+ * Get webhook hook targets for an event.
+ * Queries active webhooks subscribed to this event type and filters by board.
+ */
+async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
+  try {
+    // Get all active webhooks (we filter in JS for simplicity)
+    const activeWebhooks = await db.query.webhooks.findMany({
+      where: eq(webhooks.status, 'active'),
+    })
+
+    if (activeWebhooks.length === 0) {
+      return []
+    }
+
+    // Extract boardId from event for filtering
+    const boardId = extractBoardId(event)
+
+    // Filter webhooks by event type and board
+    const matchingWebhooks = activeWebhooks.filter((webhook) => {
+      // Must be subscribed to this event type
+      if (!webhook.events.includes(event.type)) {
+        return false
+      }
+
+      // If webhook has board filter, must match
+      if (webhook.boardIds && webhook.boardIds.length > 0) {
+        if (!boardId || !webhook.boardIds.includes(boardId)) {
+          return false
+        }
+      }
+
+      return true
+    })
+
+    console.log(
+      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardId ? ` (board: ${boardId})` : ''}`
+    )
+
+    // Build targets
+    return matchingWebhooks.map((webhook) => ({
+      type: 'webhook',
+      target: { url: webhook.url },
+      config: { secret: webhook.secret, webhookId: webhook.id as WebhookId },
+    }))
+  } catch (error) {
+    console.error('[Targets] Failed to resolve webhook targets:', error)
+    return []
+  }
+}
+
+/**
+ * Extract board ID from event data.
+ */
+function extractBoardId(event: EventData): string | null {
+  if (event.type === 'post.created') {
+    return event.data.post.boardId
+  }
+  // For status_changed and comment.created, we don't have boardId in the event
+  // This is a limitation - board filtering won't work for these events
+  // unless we extend the event payload
   return null
 }

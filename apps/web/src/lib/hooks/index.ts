@@ -12,6 +12,7 @@ import { slackHook } from './slack/handler'
 import { emailHook } from './email/handler'
 import { notificationHook } from './notification/handler'
 import { aiHook } from './ai/handler'
+import { webhookHook } from './webhook/handler'
 
 // Initialize hooks Map AFTER imports are resolved
 const hooks = new Map<string, HookHandler>([
@@ -19,6 +20,7 @@ const hooks = new Map<string, HookHandler>([
   ['email', emailHook],
   ['notification', notificationHook],
   ['ai', aiHook],
+  ['webhook', webhookHook],
 ])
 
 /**
@@ -49,3 +51,4 @@ export type {
 } from './types'
 
 export type { NotificationTarget, NotificationConfig } from './notification'
+export type { WebhookTarget, WebhookConfig } from './webhook'

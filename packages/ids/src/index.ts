@@ -97,6 +97,8 @@ export type {
   VerificationId,
   DomainId,
   TransferTokenId,
+  ApiKeyId,
+  WebhookId,
   // Billing
   SubscriptionId,
   InvoiceId,

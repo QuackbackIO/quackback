@@ -185,6 +185,12 @@ export {
   // Schema tables - sentiment
   postSentiment,
   postSentimentRelations,
+  // Schema tables - api keys
+  apiKeys,
+  apiKeysRelations,
+  // Schema tables - webhooks
+  webhooks,
+  webhooksRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
