@@ -122,7 +122,7 @@ docker pull ghcr.io/quackbackhq/quackback:latest-enterprise
 
 ## Database Setup
 
-Quackback requires PostgreSQL 16+.
+Quackback requires PostgreSQL 18+ (for native `uuidv7()` support).
 
 ### Create Database
 
@@ -163,7 +163,7 @@ pg_restore -d quackback quackback_backup.dump
 ### Prerequisites
 
 - **Bun** 1.3.3+
-- **PostgreSQL** 16+
+- **PostgreSQL** 17+
 - **Node.js** 20+ (for some dev tools)
 
 ### Build Steps

@@ -545,7 +545,7 @@ export async function toggleReaction(
     ),
     inserted AS (
       INSERT INTO comment_reactions (id, comment_id, member_id, emoji, created_at)
-      SELECT gen_random_uuid(), ${commentUuid}, ${memberUuid}, ${emoji}, NOW()
+      SELECT uuidv7(), ${commentUuid}, ${memberUuid}, ${emoji}, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
       ON CONFLICT (comment_id, member_id, emoji) DO NOTHING
       RETURNING id

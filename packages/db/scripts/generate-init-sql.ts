@@ -19,12 +19,12 @@ const OUTPUT_FILE = path.join(import.meta.dirname, '../src/init-sql.generated.ts
 
 /**
  * Generate SQL INSERT statements for default statuses.
- * Uses gen_random_uuid() for IDs since they're generated at runtime.
+ * Uses uuidv7() for IDs since they're generated at runtime (requires PostgreSQL 18+).
  */
 function generateSeedSQL(): string {
   const values = DEFAULT_STATUSES.map(
     (s) =>
-      `(gen_random_uuid(), '${s.name}', '${s.slug}', '${s.color}', '${s.category}', ${s.position}, ${s.showOnRoadmap}, ${s.isDefault}, NOW())`
+      `(uuidv7(), '${s.name}', '${s.slug}', '${s.color}', '${s.category}', ${s.position}, ${s.showOnRoadmap}, ${s.isDefault}, NOW())`
   ).join(',\n  ')
 
   return `INSERT INTO "post_statuses" ("id", "name", "slug", "color", "category", "position", "show_on_roadmap", "is_default", "created_at")

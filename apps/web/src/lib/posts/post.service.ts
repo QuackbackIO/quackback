@@ -280,7 +280,7 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
     ),
     inserted AS (
       INSERT INTO ${votes} (id, post_id, member_id, updated_at)
-      SELECT gen_random_uuid(), ${postUuid}::uuid, ${memberUuid}::uuid, NOW()
+      SELECT uuidv7(), ${postUuid}::uuid, ${memberUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)

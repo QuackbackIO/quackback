@@ -4,8 +4,8 @@
  * DO NOT EDIT MANUALLY - regenerate with:
  *   bun packages/db/scripts/generate-init-sql.ts
  *
- * Generated: 2026-01-25T18:50:11.417Z
- * Migrations: 12
+ * Generated: 2026-01-30T11:38:40.211Z
+ * Migrations: 14
  */
 
 export interface Migration {
@@ -97,12 +97,24 @@ export const MIGRATIONS: Migration[] = [
     hash: '92c6c26a318cec654982421150f3839c155fc075142a3be7e9f77ef4f0dbee8c',
     sql: '-- Migration: Drop deprecated billing tables from tenant database\n--\n-- Billing has been moved to the catalog database (website codebase).\n-- These tables were created in migration 0003 but are no longer used.\n-- The subscription table in the catalog database now handles all billing.\n\n-- Drop tables\nDROP TABLE IF EXISTS "invoices";--> statement-breakpoint\nDROP TABLE IF EXISTS "billing_subscriptions";--> statement-breakpoint\n\n-- Drop indexes (if any remain after table drop)\nDROP INDEX IF EXISTS "subscriptions_stripe_customer_idx";--> statement-breakpoint\nDROP INDEX IF EXISTS "subscriptions_stripe_subscription_idx";--> statement-breakpoint\nDROP INDEX IF EXISTS "invoices_stripe_invoice_idx";--> statement-breakpoint\n\n-- Drop enums (order matters - must drop after tables that use them)\nDROP TYPE IF EXISTS "invoice_status";--> statement-breakpoint\nDROP TYPE IF EXISTS "subscription_status";--> statement-breakpoint\nDROP TYPE IF EXISTS "cloud_tier";\n',
   },
+  {
+    tag: '0012_add_public_indexes',
+    when: 1769206800000,
+    hash: '12df9ffa7c6b30609f082da543eedd45f9301d5c00d7f4464da4c74b1f5ad48a',
+    sql: '-- Add indexes for public filtering (used by all portal queries)\n-- These indexes optimize WHERE is_public = true conditions\n\nCREATE INDEX IF NOT EXISTS "boards_is_public_idx" ON "boards" ("is_public");\nCREATE INDEX IF NOT EXISTS "roadmaps_is_public_idx" ON "roadmaps" ("is_public");\n',
+  },
+  {
+    tag: '0013_authenticated_voting',
+    when: 1769293200000,
+    hash: '8708d0ffd2ea1529e7ce17a162edab694d5e5f8e235b6f9ff75a69eb4b6d23f5',
+    sql: '-- Migration: Require authentication for voting and reactions\n-- This removes anonymous voting support and makes member_id required\n\n-- ============================================\n-- VOTES TABLE\n-- ============================================\n\n-- Step 1: Add member_id column as UUID (nullable first for migration)\nALTER TABLE "votes" ADD COLUMN IF NOT EXISTS "member_id" uuid;\n\n-- Step 2: Delete any existing anonymous votes (votes without member_id)\nDELETE FROM "votes" WHERE "member_id" IS NULL;\n\n-- Step 3: Make member_id NOT NULL\nALTER TABLE "votes" ALTER COLUMN "member_id" SET NOT NULL;\n\n-- Step 4: Add foreign key if not exists (idempotent)\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_constraint WHERE conname = \'votes_member_id_member_id_fk\'\n  ) THEN\n    ALTER TABLE "votes" ADD CONSTRAINT "votes_member_id_member_id_fk"\n      FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;\n  END IF;\nEND $$;\n\n-- Step 5: Drop old user_identifier column and its index\nDROP INDEX IF EXISTS "votes_unique_idx";\nALTER TABLE "votes" DROP COLUMN IF EXISTS "user_identifier";\n\n-- Step 6: Create new unique index on (post_id, member_id)\nCREATE UNIQUE INDEX IF NOT EXISTS "votes_member_post_idx" ON "votes" USING btree ("post_id", "member_id");\n\n-- Step 7: Create index for member lookups\nCREATE INDEX IF NOT EXISTS "votes_member_id_idx" ON "votes" USING btree ("member_id");\nCREATE INDEX IF NOT EXISTS "votes_member_created_at_idx" ON "votes" USING btree ("member_id", "created_at");\n\n-- ============================================\n-- COMMENT_REACTIONS TABLE\n-- ============================================\n\n-- Step 1: Add member_id column as UUID (nullable first for migration)\nALTER TABLE "comment_reactions" ADD COLUMN IF NOT EXISTS "member_id" uuid;\n\n-- Step 2: Delete any existing anonymous reactions (reactions without member_id)\nDELETE FROM "comment_reactions" WHERE "member_id" IS NULL;\n\n-- Step 3: Make member_id NOT NULL\nALTER TABLE "comment_reactions" ALTER COLUMN "member_id" SET NOT NULL;\n\n-- Step 4: Add foreign key if not exists (idempotent)\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_constraint WHERE conname = \'comment_reactions_member_id_member_id_fk\'\n  ) THEN\n    ALTER TABLE "comment_reactions" ADD CONSTRAINT "comment_reactions_member_id_member_id_fk"\n      FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;\n  END IF;\nEND $$;\n\n-- Step 5: Drop old user_identifier column and its index\nDROP INDEX IF EXISTS "comment_reactions_unique_idx";\nALTER TABLE "comment_reactions" DROP COLUMN IF EXISTS "user_identifier";\n\n-- Step 6: Create new unique index on (comment_id, member_id, emoji)\nCREATE UNIQUE INDEX IF NOT EXISTS "comment_reactions_unique_idx" ON "comment_reactions" USING btree ("comment_id", "member_id", "emoji");\n\n-- Step 7: Create index for member lookups\nCREATE INDEX IF NOT EXISTS "comment_reactions_member_id_idx" ON "comment_reactions" USING btree ("member_id");\n',
+  },
 ]
 
 /**
  * Schema version identifier (tag of last migration)
  */
-export const SCHEMA_VERSION = '0011_drop_deprecated_billing'
+export const SCHEMA_VERSION = '0013_authenticated_voting'
 
 /**
  * Parse a migration SQL into individual statements.
@@ -158,9 +170,9 @@ SELECT hash FROM drizzle.__drizzle_migrations
  */
 export const SEED_SQL = `INSERT INTO "post_statuses" ("id", "name", "slug", "color", "category", "position", "show_on_roadmap", "is_default", "created_at")
 VALUES
-  (gen_random_uuid(), 'Open', 'open', '#3b82f6', 'active', 0, false, true, NOW()),
-  (gen_random_uuid(), 'Under Review', 'under_review', '#eab308', 'active', 1, false, false, NOW()),
-  (gen_random_uuid(), 'Planned', 'planned', '#a855f7', 'active', 2, true, false, NOW()),
-  (gen_random_uuid(), 'In Progress', 'in_progress', '#f97316', 'active', 3, true, false, NOW()),
-  (gen_random_uuid(), 'Complete', 'complete', '#22c55e', 'complete', 0, true, false, NOW()),
-  (gen_random_uuid(), 'Closed', 'closed', '#6b7280', 'closed', 0, false, false, NOW());`
+  (uuidv7(), 'Open', 'open', '#3b82f6', 'active', 0, false, true, NOW()),
+  (uuidv7(), 'Under Review', 'under_review', '#eab308', 'active', 1, false, false, NOW()),
+  (uuidv7(), 'Planned', 'planned', '#a855f7', 'active', 2, true, false, NOW()),
+  (uuidv7(), 'In Progress', 'in_progress', '#f97316', 'active', 3, true, false, NOW()),
+  (uuidv7(), 'Complete', 'complete', '#22c55e', 'complete', 0, true, false, NOW()),
+  (uuidv7(), 'Closed', 'closed', '#6b7280', 'closed', 0, false, false, NOW());`
