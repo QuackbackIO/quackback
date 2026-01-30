@@ -300,8 +300,8 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
       RETURNING vote_count
     ),
     subscribed AS (
-      INSERT INTO ${postSubscriptions} (post_id, member_id, reason, notify_comments, notify_status_changes)
-      SELECT ${postUuid}::uuid, ${memberUuid}::uuid, 'vote', true, true
+      INSERT INTO ${postSubscriptions} (id, post_id, member_id, reason, notify_comments, notify_status_changes)
+      SELECT uuidv7(), ${postUuid}::uuid, ${memberUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
       ON CONFLICT (post_id, member_id) DO NOTHING
       RETURNING 1
