@@ -37,16 +37,16 @@ export const Route = createFileRoute('/onboarding/_layout/account')({
 
 function AccountStep() {
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
   const [name, setName] = useState('')
-  const [step, setStep] = useState<'email' | 'code' | 'name'>('email')
+  const [code, setCode] = useState('')
+  const [step, setStep] = useState<'details' | 'code'>('details')
   const [resendCooldown, setResendCooldown] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [_needsName, setNeedsName] = useState(false)
 
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>(Array(6).fill(null))
   const autoSubmittedCodeRef = useRef<string>('')
+  const pendingNameRef = useRef<string>('')
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -62,8 +62,19 @@ function AccountStep() {
   }, [step])
 
   async function sendCode() {
+    if (!name.trim() || name.trim().length < 2) {
+      setError('Please enter your name')
+      return
+    }
+
+    if (!email.trim()) {
+      setError('Please enter your email')
+      return
+    }
+
     setError('')
     setIsLoading(true)
+    pendingNameRef.current = name.trim()
 
     try {
       const result = await authClient.emailOtp.sendVerificationOtp({
@@ -99,14 +110,12 @@ function AccountStep() {
           throw new Error(result.error.message || 'Failed to verify code')
         }
 
-        // Check if user has a name set
-        const session = await authClient.getSession()
-        if (!session.data?.user?.name) {
-          setNeedsName(true)
-          setStep('name')
-        } else {
-          window.location.href = '/onboarding/usecase'
+        // Save the name that was entered before verification
+        if (pendingNameRef.current) {
+          await saveUserNameFn({ data: { name: pendingNameRef.current } })
         }
+
+        window.location.href = '/onboarding/usecase'
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to verify code')
         autoSubmittedCodeRef.current = ''
@@ -116,25 +125,6 @@ function AccountStep() {
     },
     [email]
   )
-
-  async function saveName() {
-    if (!name.trim() || name.trim().length < 2) {
-      setError('Please enter your name')
-      return
-    }
-
-    setError('')
-    setIsLoading(true)
-
-    try {
-      await saveUserNameFn({ data: { name: name.trim() } })
-      window.location.href = '/onboarding/usecase'
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save name')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   useEffect(() => {
     if (code.length === 6 && code !== autoSubmittedCodeRef.current && !isLoading) {
@@ -148,31 +138,21 @@ function AccountStep() {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      {/* Logo */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-          <img src="/logo.png" alt="Quackback" width={24} height={24} className="relative" />
-        </div>
-        <span className="text-xl font-bold">Quackback</span>
-      </div>
-
       {/* Main card */}
       <div className="overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-card/90 to-card/70 backdrop-blur-sm">
         <div className="p-8">
           <div className="mb-6 text-center">
             <h1 className="text-2xl font-bold">
-              {step === 'email' && 'Welcome to Quackback'}
+              {step === 'details' && 'Welcome to Quackback'}
               {step === 'code' && 'Check your email'}
-              {step === 'name' && 'What should we call you?'}
             </h1>
             <p className="mt-2 text-muted-foreground">
-              {step === 'email' && 'Enter your email to get started'}
+              {step === 'details' && 'Create your account to get started'}
               {step === 'code' && (
                 <>
                   We sent a code to <span className="text-foreground font-medium">{email}</span>
                 </>
               )}
-              {step === 'name' && 'Enter your name to continue'}
             </p>
           </div>
 
@@ -182,14 +162,32 @@ function AccountStep() {
             </div>
           )}
 
-          {step === 'email' && (
+          {step === 'details' && (
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                if (email.trim()) sendCode()
+                sendCode()
               }}
               className="space-y-4"
             >
+              <div className="space-y-2">
+                <label htmlFor="name" className="text-sm font-medium">
+                  Your name
+                </label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="Jane Doe"
+                  autoComplete="name"
+                  autoFocus
+                  disabled={isLoading}
+                  className="h-11"
+                />
+              </div>
+
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium">
                   Email address
@@ -202,12 +200,16 @@ function AccountStep() {
                   required
                   placeholder="you@company.com"
                   autoComplete="email"
-                  autoFocus
+                  disabled={isLoading}
                   className="h-11"
                 />
               </div>
 
-              <Button type="submit" disabled={isLoading || !email.trim()} className="w-full h-11">
+              <Button
+                type="submit"
+                disabled={isLoading || !email.trim() || !name.trim()}
+                className="w-full h-11"
+              >
                 {isLoading ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : 'Continue'}
               </Button>
             </form>
@@ -326,7 +328,7 @@ function AccountStep() {
                 <button
                   type="button"
                   onClick={() => {
-                    setStep('email')
+                    setStep('details')
                     setCode('')
                     setError('')
                     autoSubmittedCodeRef.current = ''
@@ -355,37 +357,6 @@ function AccountStep() {
                 )}
               </div>
             </div>
-          )}
-
-          {step === 'name' && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                saveName()
-              }}
-              className="space-y-4"
-            >
-              <div className="space-y-2">
-                <label htmlFor="name" className="text-sm font-medium">
-                  Your name
-                </label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  placeholder="Jane Doe"
-                  autoComplete="name"
-                  autoFocus
-                  className="h-11"
-                />
-              </div>
-
-              <Button type="submit" disabled={isLoading || !name.trim()} className="w-full h-11">
-                {isLoading ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : 'Continue'}
-              </Button>
-            </form>
           )}
         </div>
       </div>
