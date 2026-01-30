@@ -9,7 +9,6 @@ import {
   PaintBrushIcon,
   PuzzlePieceIcon,
   GlobeAltIcon,
-  KeyIcon,
   CreditCardIcon,
   ChevronUpIcon,
   ChevronDownIcon,
@@ -25,8 +24,6 @@ interface NavItem {
   cloudOnly?: boolean
   /** Show only for self-hosted deployments */
   selfHostedOnly?: boolean
-  /** Show only for enterprise tier (cloud subscription or self-hosted with license) */
-  enterpriseOnly?: boolean
   /** If true, opens in new tab as external link */
   external?: boolean
 }
@@ -42,13 +39,7 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
       { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
-      { label: 'License', to: '/admin/settings/license', icon: KeyIcon, selfHostedOnly: true },
-      {
-        label: 'Security',
-        to: '/admin/settings/security',
-        icon: ShieldCheckIcon,
-        enterpriseOnly: true,
-      },
+      { label: 'Security', to: '/admin/settings/security', icon: ShieldCheckIcon },
       // Domains is now managed on the website
       {
         label: 'Domains',
@@ -112,7 +103,7 @@ interface SettingsNavProps {
 export function SettingsNav({ isCloud, workspaceId }: SettingsNavProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
-  // Filter sections based on edition (enterprise items always shown with upgrade indicator)
+  // Filter sections based on deployment type (cloud vs self-hosted)
   const filteredSections = navSections.map((section) => ({
     ...section,
     items: section.items.filter(
