@@ -87,6 +87,21 @@ function BoardsStep() {
     }
   }
 
+  async function handleSkip() {
+    setIsLoading(true)
+    setError('')
+
+    try {
+      // Call with empty array to mark onboarding as complete without creating boards
+      await createBoardsBatchFn({ data: { boards: [] } })
+      navigate({ to: '/onboarding/complete' })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   async function handleContinue() {
     setIsLoading(true)
     setError('')
@@ -102,6 +117,7 @@ function BoardsStep() {
 
       const boardsToCreate = [...defaultBoardsToCreate, ...customBoardsToCreate]
 
+      // Always call to mark onboarding complete (handles empty array)
       await createBoardsBatchFn({ data: { boards: boardsToCreate } })
 
       navigate({ to: '/onboarding/complete' })
@@ -264,7 +280,7 @@ function BoardsStep() {
         <Button
           type="button"
           variant="ghost"
-          onClick={handleContinue}
+          onClick={handleSkip}
           disabled={isLoading}
           className="flex-1 h-11"
         >

@@ -1,5 +1,13 @@
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
+import { CheckIcon } from '@heroicons/react/24/solid'
+
+const ONBOARDING_STEPS = [
+  { path: '/onboarding/account', label: 'Account' },
+  { path: '/onboarding/usecase', label: 'Use case' },
+  { path: '/onboarding/workspace', label: 'Workspace' },
+  { path: '/onboarding/boards', label: 'Boards' },
+] as const
 
 /**
  * Shared layout for all onboarding steps.
@@ -24,6 +32,64 @@ export const Route = createFileRoute('/onboarding/_layout')({
   component: OnboardingLayout,
 })
 
+function OnboardingHeader() {
+  const location = useLocation()
+  const currentPath = location.pathname
+  const currentStepIndex = ONBOARDING_STEPS.findIndex((s) => s.path === currentPath)
+
+  // Show step indicator on main setup steps (usecase, workspace, boards)
+  const showSteps = currentStepIndex !== -1
+
+  return (
+    <div className="mb-10">
+      {/* Logo - always visible */}
+      <div className="flex items-center justify-center gap-2 mb-6">
+        <img src="/logo.png" alt="Quackback" width={32} height={32} />
+        <span className="text-xl font-bold">Quackback</span>
+      </div>
+
+      {/* Step indicator container - fixed height to prevent layout jumps */}
+      <div className="h-7">
+        {showSteps && (
+          <div className="flex items-center justify-center gap-3">
+            {ONBOARDING_STEPS.map((step, index) => {
+              const isCompleted = index < currentStepIndex
+              const isCurrent = index === currentStepIndex
+
+              return (
+                <div key={step.path} className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`
+                        flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium transition-colors
+                        ${isCompleted ? 'bg-primary text-primary-foreground' : ''}
+                        ${isCurrent ? 'bg-primary text-primary-foreground' : ''}
+                        ${!isCompleted && !isCurrent ? 'bg-muted text-muted-foreground' : ''}
+                      `}
+                    >
+                      {isCompleted ? <CheckIcon className="h-3.5 w-3.5" /> : index + 1}
+                    </div>
+                    <span
+                      className={`text-sm ${isCurrent ? 'text-foreground font-medium' : 'text-muted-foreground'}`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  {index < ONBOARDING_STEPS.length - 1 && (
+                    <div
+                      className={`h-px w-8 ${index < currentStepIndex ? 'bg-primary' : 'bg-border'}`}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function OnboardingLayout() {
   return (
     <div className="min-h-screen bg-background">
@@ -40,6 +106,7 @@ function OnboardingLayout() {
 
       <main className="relative flex min-h-screen items-center justify-center px-4 py-16">
         <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <OnboardingHeader />
           <Outlet />
         </div>
       </main>

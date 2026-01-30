@@ -23,14 +23,16 @@ export const Route = createFileRoute('/onboarding/')({
       throw redirect({ to: '/auth/login' })
     }
 
-    // Determine which step to go to
+    // Determine which step to go to based on progress
     if (state.setupState?.steps?.workspace) {
-      // Workspace done, go to boards
       throw redirect({ to: '/onboarding/boards' })
     }
 
-    // Need to setup workspace
-    throw redirect({ to: '/onboarding/workspace' })
+    if (state.setupState?.useCase) {
+      throw redirect({ to: '/onboarding/workspace' })
+    }
+
+    throw redirect({ to: '/onboarding/usecase' })
   },
   component: () => null, // This route only redirects
 })
