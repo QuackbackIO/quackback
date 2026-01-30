@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@react-email/components": "^1",
+    "nodemailer": "^7",
     "react": "^19",
     "resend": "^4"
   },
   "devDependencies": {
+    "@types/nodemailer": "^6",
     "@types/react": "^19"
   }
 }

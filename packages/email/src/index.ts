@@ -1,10 +1,15 @@
 /**
  * Email sending module for Quackback
  *
- * Uses Resend SDK with React Email components directly.
+ * Uses Nodemailer for SMTP or Resend API with React Email components.
  * No build step required - React components are rendered at runtime.
+ *
+ * Priority: SMTP (if EMAIL_SMTP_HOST set) → Resend (if EMAIL_RESEND_API_KEY set) → Console logging (dev mode)
  */
 
+import { render } from '@react-email/components'
+import nodemailer from 'nodemailer'
+import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { SigninCodeEmail } from './templates/signin-code'
 import { InvitationEmail } from './templates/invitation'
@@ -12,22 +17,86 @@ import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 
-const FROM_EMAIL = process.env.EMAIL_FROM || 'Quackback <noreply@quackback.io>'
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Quackback <noreply@quackback.io>'
 
-// Lazy-initialized Resend client
+// Lazy-initialized transports
+let smtpTransporter: Transporter | null = null
 let resendClient: Resend | null = null
 
-function getResend(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    return null
-  }
+type EmailProvider = 'smtp' | 'resend' | 'console'
 
+function getProvider(): EmailProvider {
+  if (process.env.EMAIL_SMTP_HOST) return 'smtp'
+  if (process.env.EMAIL_RESEND_API_KEY) return 'resend'
+  return 'console'
+}
+
+function getSmtpTransporter(): Transporter {
+  if (!smtpTransporter) {
+    console.log('[Email] Initializing SMTP transporter')
+    smtpTransporter = nodemailer.createTransport({
+      host: process.env.EMAIL_SMTP_HOST,
+      port: parseInt(process.env.EMAIL_SMTP_PORT || '587', 10),
+      secure: process.env.EMAIL_SMTP_SECURE === 'true',
+      auth:
+        process.env.EMAIL_SMTP_USER || process.env.EMAIL_SMTP_PASS
+          ? {
+              user: process.env.EMAIL_SMTP_USER || '',
+              pass: process.env.EMAIL_SMTP_PASS || '',
+            }
+          : undefined,
+    })
+  }
+  return smtpTransporter
+}
+
+function getResend(): Resend {
   if (!resendClient) {
     console.log('[Email] Initializing Resend client')
-    resendClient = new Resend(apiKey)
+    resendClient = new Resend(process.env.EMAIL_RESEND_API_KEY)
   }
   return resendClient
+}
+
+/**
+ * Send an email using the configured transport (SMTP or Resend).
+ * Falls back to console logging if neither is configured.
+ */
+async function sendEmail(options: {
+  to: string
+  subject: string
+  react: React.ReactElement
+}): Promise<void> {
+  const provider = getProvider()
+
+  if (provider === 'smtp') {
+    const html = await render(options.react)
+    const result = await getSmtpTransporter().sendMail({
+      from: EMAIL_FROM,
+      to: options.to,
+      subject: options.subject,
+      html,
+    })
+    console.log(`[Email] Sent via SMTP to ${options.to}, messageId: ${result.messageId}`)
+    return
+  }
+
+  if (provider === 'resend') {
+    const result = await getResend().emails.send({
+      from: EMAIL_FROM,
+      to: options.to,
+      subject: options.subject,
+      react: options.react,
+    })
+    if (result.error) {
+      console.error(`[Email] Resend API error:`, JSON.stringify(result.error, null, 2))
+      throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
+    }
+    console.log(`[Email] Sent via Resend to ${options.to}, id: ${result.data?.id}`)
+    return
+  }
+
+  // Console mode - caller handles logging
 }
 
 // ============================================================================
@@ -45,8 +114,7 @@ interface SendInvitationParams {
 export async function sendInvitationEmail(params: SendInvitationParams) {
   const { to, invitedByName, inviteeName, workspaceName, inviteLink } = params
 
-  const resend = getResend()
-  if (!resend) {
+  if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Invitation Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -59,8 +127,7 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
     return
   }
 
-  const result = await resend.emails.send({
-    from: FROM_EMAIL,
+  await sendEmail({
     to,
     subject: `You've been invited to join ${workspaceName} on Quackback`,
     react: InvitationEmail({
@@ -70,16 +137,6 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
       inviteLink,
     }),
   })
-
-  if (result.error) {
-    console.error(
-      `[Email] Resend API error for invitation to ${to}:`,
-      JSON.stringify(result.error, null, 2)
-    )
-    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
-  }
-
-  console.log(`[Email] Invitation sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
@@ -96,8 +153,7 @@ interface SendWelcomeParams {
 export async function sendWelcomeEmail(params: SendWelcomeParams) {
   const { to, name, workspaceName, dashboardUrl } = params
 
-  const resend = getResend()
-  if (!resend) {
+  if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Welcome Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -109,22 +165,11 @@ export async function sendWelcomeEmail(params: SendWelcomeParams) {
     return
   }
 
-  const result = await resend.emails.send({
-    from: FROM_EMAIL,
+  await sendEmail({
     to,
     subject: `Welcome to ${workspaceName} on Quackback!`,
     react: WelcomeEmail({ name, workspaceName, dashboardUrl }),
   })
-
-  if (result.error) {
-    console.error(
-      `[Email] Resend API error for welcome to ${to}:`,
-      JSON.stringify(result.error, null, 2)
-    )
-    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
-  }
-
-  console.log(`[Email] Welcome email sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
@@ -139,8 +184,7 @@ interface SendSigninCodeParams {
 export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
   const { to, code } = params
 
-  const resend = getResend()
-  if (!resend) {
+  if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Sign-in Code Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -151,34 +195,11 @@ export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
   }
 
   console.log(`[Email] Sending sign-in code to ${to}`)
-  console.log(`[Email] Using from address: ${FROM_EMAIL}`)
-  try {
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
-      to,
-      subject: `Your Quackback sign-in code is ${code}`,
-      react: SigninCodeEmail({ code }),
-    })
-
-    // Resend SDK returns { data, error } - check both
-    if (result.error) {
-      console.error(`[Email] Resend API error for ${to}:`, JSON.stringify(result.error, null, 2))
-      throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
-    }
-
-    if (!result.data?.id) {
-      console.error(
-        `[Email] Resend returned no email ID for ${to}. Full result:`,
-        JSON.stringify(result, null, 2)
-      )
-      throw new Error('Resend API returned no email ID - email may not have been sent')
-    }
-
-    console.log(`[Email] Sign-in code sent successfully to ${to}, id: ${result.data.id}`)
-  } catch (error) {
-    console.error(`[Email] Failed to send sign-in code to ${to}:`, error)
-    throw error
-  }
+  await sendEmail({
+    to,
+    subject: `Your Quackback sign-in code is ${code}`,
+    react: SigninCodeEmail({ code }),
+  })
 }
 
 // ============================================================================
@@ -199,8 +220,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
   const { to, postTitle, postUrl, previousStatus, newStatus, workspaceName, unsubscribeUrl } =
     params
 
-  const resend = getResend()
-  if (!resend) {
+  if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] Status Change Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -215,8 +235,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
 
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
 
-  const result = await resend.emails.send({
-    from: FROM_EMAIL,
+  await sendEmail({
     to,
     subject: `Your feedback is now ${formattedNewStatus}!`,
     react: StatusChangeEmail({
@@ -228,16 +247,6 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
       unsubscribeUrl,
     }),
   })
-
-  if (result.error) {
-    console.error(
-      `[Email] Resend API error for status change to ${to}:`,
-      JSON.stringify(result.error, null, 2)
-    )
-    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
-  }
-
-  console.log(`[Email] Status change email sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
@@ -267,8 +276,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     unsubscribeUrl,
   } = params
 
-  const resend = getResend()
-  if (!resend) {
+  if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
     console.log('│ [DEV] New Comment Email')
     console.log('├────────────────────────────────────────────────────────────')
@@ -282,8 +290,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     return
   }
 
-  const result = await resend.emails.send({
-    from: FROM_EMAIL,
+  await sendEmail({
     to,
     subject: `New comment on "${postTitle}"`,
     react: NewCommentEmail({
@@ -296,16 +303,6 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
       unsubscribeUrl,
     }),
   })
-
-  if (result.error) {
-    console.error(
-      `[Email] Resend API error for new comment to ${to}:`,
-      JSON.stringify(result.error, null, 2)
-    )
-    throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
-  }
-
-  console.log(`[Email] New comment email sent to ${to}, id: ${result.data?.id}`)
 }
 
 // ============================================================================
