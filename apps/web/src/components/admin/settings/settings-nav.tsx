@@ -13,6 +13,8 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   ArrowTopRightOnSquareIcon,
+  KeyIcon,
+  BoltIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
 
@@ -65,6 +67,13 @@ const navSections: NavSection[] = [
       { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
       { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
       { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
+    ],
+  },
+  {
+    label: 'Developers',
+    items: [
+      { label: 'API Keys', to: '/admin/settings/api-keys', icon: KeyIcon },
+      { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
     ],
   },
 ]
