@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ChevronUpIcon, ChatBubbleLeftIcon, FolderIcon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
 import { RowQuickActions } from './row-quick-actions'
@@ -46,33 +47,41 @@ export function FeedbackRow({
 
       {/* Main content */}
       <div className="flex-1 min-w-0 px-3 py-2.5">
-        {/* Title row */}
+        {/* Status badge - above title */}
+        {currentStatus && (
+          <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-1" />
+        )}
+
+        {/* Title */}
         <h3 className="font-medium text-sm text-foreground line-clamp-1 pr-24">{post.title}</h3>
 
-        {/* Preview - single line */}
+        {/* Description */}
         {post.content && (
           <p className="text-xs text-muted-foreground/70 line-clamp-1 mt-0.5 pr-24">
             {post.content}
           </p>
         )}
 
-        {/* Meta row */}
+        {/* Tags - own row */}
+        {post.tags.length > 0 && (
+          <div className="flex items-center gap-1 mt-1.5">
+            {post.tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag.id}
+                variant="secondary"
+                className="text-[10px] font-normal px-1.5 py-0"
+              >
+                {tag.name}
+              </Badge>
+            ))}
+            {post.tags.length > 3 && (
+              <span className="text-[10px] text-muted-foreground/60">+{post.tags.length - 3}</span>
+            )}
+          </div>
+        )}
+
+        {/* Meta row - simplified */}
         <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-          {currentStatus && (
-            <span className="flex items-center gap-1.5">
-              <span
-                className="h-2 w-2 rounded-full shrink-0"
-                style={{ backgroundColor: currentStatus.color }}
-              />
-              <span className="text-foreground/80">{currentStatus.name}</span>
-            </span>
-          )}
-          {currentStatus && <span className="text-muted-foreground/40">·</span>}
-          <span className="flex items-center gap-1">
-            <FolderIcon className="h-3 w-3" />
-            {post.board.name}
-          </span>
-          <span className="text-muted-foreground/40">·</span>
           <span>{post.authorName || 'Anonymous'}</span>
           <span className="text-muted-foreground/40">·</span>
           <TimeAgo date={new Date(post.createdAt)} className="text-muted-foreground/70" />
@@ -85,25 +94,8 @@ export function FeedbackRow({
               </span>
             </>
           )}
-          {/* Tags inline */}
-          {post.tags.length > 0 && (
-            <div className="flex items-center gap-1 ml-1">
-              {post.tags.slice(0, 2).map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant="secondary"
-                  className="text-[10px] font-normal px-1.5 py-0"
-                >
-                  {tag.name}
-                </Badge>
-              ))}
-              {post.tags.length > 2 && (
-                <span className="text-[10px] text-muted-foreground/60">
-                  +{post.tags.length - 2}
-                </span>
-              )}
-            </div>
-          )}
+          <span className="text-muted-foreground/40">·</span>
+          <span className="text-muted-foreground/70">in {post.board.name}</span>
         </div>
       </div>
 
