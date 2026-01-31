@@ -22,6 +22,7 @@
     "deploy:cloud:production": "EDITION=cloud bun run --filter @quackback/web deploy:production",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest",
+    "test:api": "vitest apps/web/src/lib/api/__tests__/api-integration.test.ts",
     "test:e2e": "bun run --filter @quackback/web test:e2e",
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
