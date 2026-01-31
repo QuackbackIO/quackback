@@ -1,6 +1,6 @@
-import { useEffect, Suspense, useCallback } from 'react'
+import { Suspense, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { adminQueries } from '@/lib/queries/admin'
 import { FeedbackDetailPage } from '@/components/admin/feedback/detail/feedback-detail-page'
@@ -58,7 +58,6 @@ function LoadingState() {
 
 export function PostModal({ postId, currentUser }: PostModalProps) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const search = Route.useSearch()
   const isOpen = !!postId
 
@@ -71,14 +70,6 @@ export function PostModal({ postId, currentUser }: PostModalProps) {
       // Invalid post ID - will close modal
     }
   }
-
-  // Prefetch post data when modal opens
-  useEffect(() => {
-    if (validatedPostId) {
-      queryClient.prefetchQuery(adminQueries.postDetail(validatedPostId))
-      queryClient.prefetchQuery(adminQueries.roadmaps())
-    }
-  }, [validatedPostId, queryClient])
 
   // Close modal by removing post param from URL
   const close = useCallback(() => {
