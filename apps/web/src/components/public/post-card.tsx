@@ -9,7 +9,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -119,7 +119,8 @@ export function PostCard({
   showAvatar = true,
   density = 'comfortable',
 }: PostCardProps): React.ReactElement {
-  const { openAuthPopover } = useAuthPopover()
+  // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
+  const authPopover = useAuthPopoverSafe()
   const isCompact = density === 'compact'
   const isAdminMode = canChangeStatus || !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
@@ -137,7 +138,7 @@ export function PostCard({
     e.stopPropagation()
     if (!isAuthenticated) {
       e.preventDefault()
-      openAuthPopover({ mode: 'login' })
+      authPopover?.openAuthPopover({ mode: 'login' })
       return
     }
     handleVote(e)
