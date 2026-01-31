@@ -1,4 +1,4 @@
-import { useEffect, Suspense } from 'react'
+import { useEffect, Suspense, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -14,7 +14,19 @@ interface PostModalProps {
   currentUser: CurrentUser
 }
 
-function PostModalContent({ postId, currentUser }: { postId: PostId; currentUser: CurrentUser }) {
+interface PostModalContentProps {
+  postId: PostId
+  currentUser: CurrentUser
+  onNavigateToPost: (postId: string) => void
+  onClose: () => void
+}
+
+function PostModalContent({
+  postId,
+  currentUser,
+  onNavigateToPost,
+  onClose,
+}: PostModalContentProps) {
   const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
   const tagsQuery = useSuspenseQuery(adminQueries.tags())
@@ -29,6 +41,9 @@ function PostModalContent({ postId, currentUser }: { postId: PostId; currentUser
       statuses={statusesQuery.data}
       roadmaps={roadmapsQuery.data}
       currentUser={currentUser}
+      isModal
+      onNavigateToPost={onNavigateToPost}
+      onClose={onClose}
     />
   )
 }
@@ -66,35 +81,26 @@ export function PostModal({ postId, currentUser }: PostModalProps) {
   }, [validatedPostId, queryClient])
 
   // Close modal by removing post param from URL
-  const close = () => {
+  const close = useCallback(() => {
     const { post: _, ...restSearch } = search
     navigate({
       to: '/admin/feedback',
       search: restSearch,
       replace: true,
     })
-  }
+  }, [navigate, search])
 
-  // Keyboard navigation
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if in input/textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
-      }
-
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        close()
-      }
-      // j/k navigation is handled inside FeedbackDetailPage via useNavigationContext
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen])
+  // Navigate to a different post within the modal
+  const navigateToPost = useCallback(
+    (newPostId: string) => {
+      navigate({
+        to: '/admin/feedback',
+        search: { ...search, post: newPostId },
+        replace: true,
+      })
+    },
+    [navigate, search]
+  )
 
   if (!validatedPostId) {
     return null
@@ -102,10 +108,15 @@ export function PostModal({ postId, currentUser }: PostModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-w-5xl h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+      <DialogContent className="max-w-7xl w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
         <DialogTitle className="sr-only">Post details</DialogTitle>
         <Suspense fallback={<LoadingState />}>
-          <PostModalContent postId={validatedPostId} currentUser={currentUser} />
+          <PostModalContent
+            postId={validatedPostId}
+            currentUser={currentUser}
+            onNavigateToPost={navigateToPost}
+            onClose={close}
+          />
         </Suspense>
       </DialogContent>
     </Dialog>

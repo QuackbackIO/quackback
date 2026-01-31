@@ -27,6 +27,12 @@ interface FeedbackDetailPageProps {
   statuses: PostStatusEntity[]
   roadmaps: Roadmap[]
   currentUser: CurrentUser
+  /** When true, navigation uses URL search params instead of route params */
+  isModal?: boolean
+  /** Callback to navigate to a different post in modal mode */
+  onNavigateToPost?: (postId: string) => void
+  /** Callback to close the modal */
+  onClose?: () => void
 }
 
 export function FeedbackDetailPage({
@@ -36,6 +42,9 @@ export function FeedbackDetailPage({
   statuses,
   roadmaps,
   currentUser,
+  isModal = false,
+  onNavigateToPost,
+  onClose,
 }: FeedbackDetailPageProps): React.ReactElement {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -68,25 +77,35 @@ export function FeedbackDetailPage({
         case 'j':
           e.preventDefault()
           if (navigationContext.nextId) {
-            // Just navigate to the post - sessionStorage has the full list for context
-            navigate({
-              to: '/admin/feedback/posts/$postId',
-              params: { postId: navigationContext.nextId },
-            })
+            if (isModal && onNavigateToPost) {
+              onNavigateToPost(navigationContext.nextId)
+            } else {
+              navigate({
+                to: '/admin/feedback/posts/$postId',
+                params: { postId: navigationContext.nextId },
+              })
+            }
           }
           break
         case 'k':
           e.preventDefault()
           if (navigationContext.prevId) {
-            // Just navigate to the post - sessionStorage has the full list for context
-            navigate({
-              to: '/admin/feedback/posts/$postId',
-              params: { postId: navigationContext.prevId },
-            })
+            if (isModal && onNavigateToPost) {
+              onNavigateToPost(navigationContext.prevId)
+            } else {
+              navigate({
+                to: '/admin/feedback/posts/$postId',
+                params: { postId: navigationContext.prevId },
+              })
+            }
           }
           break
         case 'Escape':
-          navigate({ to: navigationContext.backUrl })
+          if (isModal && onClose) {
+            onClose()
+          } else {
+            navigate({ to: navigationContext.backUrl })
+          }
           break
         case 'e':
           e.preventDefault()
@@ -97,7 +116,7 @@ export function FeedbackDetailPage({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [navigationContext, navigate, setEditDialogOpen])
+  }, [navigationContext, navigate, setEditDialogOpen, isModal, onNavigateToPost, onClose])
 
   // Handlers
   const handleStatusChange = async (statusId: StatusId) => {
