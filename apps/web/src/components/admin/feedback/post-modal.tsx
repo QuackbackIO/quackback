@@ -4,6 +4,7 @@ import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { adminQueries } from '@/lib/queries/admin'
 import { FeedbackDetailPage } from '@/components/admin/feedback/detail/feedback-detail-page'
+import { Route } from '@/routes/admin/feedback'
 import { ensureTypeId, type PostId } from '@quackback/ids'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
 import { Loader2 } from 'lucide-react'
@@ -51,7 +52,8 @@ function PostModalContent({
 }
 
 export function PostModal({ postId, currentUser }: PostModalProps) {
-  const navigate = useNavigate()
+  const navigate = useNavigate({ from: Route.fullPath })
+  const search = Route.useSearch()
   const isOpen = !!postId
 
   // Validate and convert postId
@@ -64,29 +66,26 @@ export function PostModal({ postId, currentUser }: PostModalProps) {
     }
   }
 
-  // Close modal instantly by removing post param from URL
-  // Uses functional navigation to avoid search dependency
+  // Close modal by removing post param from URL
   const close = useCallback(() => {
+    const { post: _, ...restSearch } = search
     navigate({
       to: '/admin/feedback',
-      search: (prev) => {
-        const { post: _, ...rest } = prev
-        return rest
-      },
+      search: restSearch,
       replace: true,
     })
-  }, [navigate])
+  }, [navigate, search])
 
   // Navigate to a different post within the modal
   const navigateToPost = useCallback(
     (newPostId: string) => {
       navigate({
         to: '/admin/feedback',
-        search: (prev) => ({ ...prev, post: newPostId }),
+        search: { ...search, post: newPostId },
         replace: true,
       })
     },
-    [navigate]
+    [navigate, search]
   )
 
   if (!validatedPostId) {
