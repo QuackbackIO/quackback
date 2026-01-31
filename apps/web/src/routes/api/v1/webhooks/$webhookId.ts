@@ -1,15 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuthAdmin } from '@/lib/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
-  notFoundResponse,
   handleDomainError,
 } from '@/lib/api/responses'
 import { validateTypeId, validateTypeIdArray } from '@/lib/api/validation'
-import { isValidWebhookUrl, WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
+import { WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
+import { toWebhookResponse } from '@/lib/api/webhooks'
 import type { WebhookId } from '@quackback/ids'
 
 // Input validation schema
@@ -29,7 +29,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       GET: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuthAdmin(request)
         if (authResult instanceof Response) return authResult
 
         try {
@@ -39,28 +39,10 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { db, webhooks, eq } = await import('@/lib/db')
+          const { getWebhookById } = await import('@/lib/webhooks')
+          const webhook = await getWebhookById(webhookId as WebhookId)
 
-          const webhook = await db.query.webhooks.findFirst({
-            where: eq(webhooks.id, webhookId as WebhookId),
-          })
-
-          if (!webhook) {
-            return notFoundResponse('Webhook')
-          }
-
-          return successResponse({
-            id: webhook.id,
-            url: webhook.url,
-            events: webhook.events,
-            boardIds: webhook.boardIds,
-            status: webhook.status,
-            failureCount: webhook.failureCount,
-            lastError: webhook.lastError,
-            lastTriggeredAt: webhook.lastTriggeredAt?.toISOString() ?? null,
-            createdAt: webhook.createdAt.toISOString(),
-            updatedAt: webhook.updatedAt.toISOString(),
-          })
+          return successResponse(toWebhookResponse(webhook))
         } catch (error) {
           return handleDomainError(error)
         }
@@ -72,7 +54,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       PATCH: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuthAdmin(request)
         if (authResult instanceof Response) return authResult
 
         try {
@@ -92,13 +74,6 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             })
           }
 
-          // Validate URL if provided
-          if (parsed.data.url && !isValidWebhookUrl(parsed.data.url)) {
-            return badRequestResponse('Invalid webhook URL', {
-              detail: 'URL must be HTTPS (in production) and cannot target private networks',
-            })
-          }
-
           // Validate board IDs if provided
           if (parsed.data.boardIds && parsed.data.boardIds.length > 0) {
             const boardValidationError = validateTypeIdArray(
@@ -109,46 +84,15 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             if (boardValidationError) return boardValidationError
           }
 
-          const { db, webhooks, eq } = await import('@/lib/db')
-
-          // Build update object
-          const updateData: Record<string, unknown> = {
-            updatedAt: new Date(),
-          }
-          if (parsed.data.url !== undefined) updateData.url = parsed.data.url
-          if (parsed.data.events !== undefined) updateData.events = parsed.data.events
-          if (parsed.data.boardIds !== undefined) updateData.boardIds = parsed.data.boardIds
-          if (parsed.data.status !== undefined) {
-            updateData.status = parsed.data.status
-            // Reset failure count when re-enabling
-            if (parsed.data.status === 'active') {
-              updateData.failureCount = 0
-              updateData.lastError = null
-            }
-          }
-
-          const [webhook] = await db
-            .update(webhooks)
-            .set(updateData)
-            .where(eq(webhooks.id, webhookId as WebhookId))
-            .returning()
-
-          if (!webhook) {
-            return notFoundResponse('Webhook')
-          }
-
-          return successResponse({
-            id: webhook.id,
-            url: webhook.url,
-            events: webhook.events,
-            boardIds: webhook.boardIds,
-            status: webhook.status,
-            failureCount: webhook.failureCount,
-            lastError: webhook.lastError,
-            lastTriggeredAt: webhook.lastTriggeredAt?.toISOString() ?? null,
-            createdAt: webhook.createdAt.toISOString(),
-            updatedAt: webhook.updatedAt.toISOString(),
+          const { updateWebhook } = await import('@/lib/webhooks')
+          const webhook = await updateWebhook(webhookId as WebhookId, {
+            url: parsed.data.url,
+            events: parsed.data.events,
+            boardIds: parsed.data.boardIds,
+            status: parsed.data.status,
           })
+
+          return successResponse(toWebhookResponse(webhook))
         } catch (error) {
           return handleDomainError(error)
         }
@@ -160,7 +104,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       DELETE: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuthAdmin(request)
         if (authResult instanceof Response) return authResult
 
         try {
@@ -170,16 +114,8 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { db, webhooks, eq } = await import('@/lib/db')
-
-          const [deleted] = await db
-            .delete(webhooks)
-            .where(eq(webhooks.id, webhookId as WebhookId))
-            .returning()
-
-          if (!deleted) {
-            return notFoundResponse('Webhook')
-          }
+          const { deleteWebhook } = await import('@/lib/webhooks')
+          await deleteWebhook(webhookId as WebhookId)
 
           return noContentResponse()
         } catch (error) {

@@ -1,15 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import crypto from 'crypto'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuthAdmin } from '@/lib/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
 } from '@/lib/api/responses'
-import { isValidWebhookUrl, WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
+import { WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
 import { validateTypeIdArray } from '@/lib/api/validation'
+import { toWebhookListResponse } from '@/lib/api/webhooks'
 
 // Input validation schema
 const createWebhookSchema = z.object({
@@ -27,29 +27,14 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       GET: async ({ request }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuthAdmin(request)
         if (authResult instanceof Response) return authResult
 
         try {
-          const { db } = await import('@/lib/db')
+          const { listWebhooks } = await import('@/lib/webhooks')
+          const allWebhooks = await listWebhooks()
 
-          const allWebhooks = await db.query.webhooks.findMany({
-            orderBy: (table, { desc }) => [desc(table.createdAt)],
-          })
-
-          return successResponse(
-            allWebhooks.map((webhook) => ({
-              id: webhook.id,
-              url: webhook.url,
-              events: webhook.events,
-              boardIds: webhook.boardIds,
-              status: webhook.status,
-              failureCount: webhook.failureCount,
-              lastTriggeredAt: webhook.lastTriggeredAt?.toISOString() ?? null,
-              createdAt: webhook.createdAt.toISOString(),
-              updatedAt: webhook.updatedAt.toISOString(),
-            }))
-          )
+          return successResponse(allWebhooks.map(toWebhookListResponse))
         } catch (error) {
           return handleDomainError(error)
         }
@@ -61,7 +46,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       POST: async ({ request }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuthAdmin(request)
         if (authResult instanceof Response) return authResult
         const { memberId } = authResult
 
@@ -76,54 +61,31 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
             })
           }
 
-          // Validate URL for SSRF protection
-          if (!isValidWebhookUrl(parsed.data.url)) {
-            return badRequestResponse('Invalid webhook URL', {
-              detail: 'URL must be HTTPS (in production) and cannot target private networks',
-            })
-          }
-
           // Validate board IDs if provided
           if (parsed.data.boardIds && parsed.data.boardIds.length > 0) {
             const validationError = validateTypeIdArray(parsed.data.boardIds, 'board', 'board IDs')
             if (validationError) return validationError
           }
 
-          const { db, webhooks } = await import('@/lib/db')
-
-          // Check webhook limit (25 per workspace)
-          const existingCount = await db.query.webhooks.findMany()
-          if (existingCount.length >= 25) {
-            return badRequestResponse('Webhook limit reached', {
-              detail: 'Maximum of 25 webhooks allowed per workspace',
-            })
-          }
-
-          // Generate signing secret
-          const secret = `whsec_${crypto.randomBytes(32).toString('base64url')}`
-
-          const { createId } = await import('@quackback/ids')
-          const [webhook] = await db
-            .insert(webhooks)
-            .values({
-              id: createId('webhook'),
-              createdById: memberId,
+          const { createWebhook } = await import('@/lib/webhooks')
+          const result = await createWebhook(
+            {
               url: parsed.data.url,
-              secret,
               events: parsed.data.events,
-              boardIds: parsed.data.boardIds ?? null,
-            })
-            .returning()
+              boardIds: parsed.data.boardIds,
+            },
+            memberId
+          )
 
           // Return with secret (only shown once)
           return createdResponse({
-            id: webhook.id,
-            url: webhook.url,
-            secret, // Only returned on creation!
-            events: webhook.events,
-            boardIds: webhook.boardIds,
-            status: webhook.status,
-            createdAt: webhook.createdAt.toISOString(),
+            id: result.webhook.id,
+            url: result.webhook.url,
+            secret: result.secret, // Only returned on creation!
+            events: result.webhook.events,
+            boardIds: result.webhook.boardIds,
+            status: result.webhook.status,
+            createdAt: result.webhook.createdAt.toISOString(),
           })
         } catch (error) {
           return handleDomainError(error)
