@@ -120,6 +120,12 @@ export type DomainId = TypeId<'domain'>
 /** Transfer token ID - e.g., transfer_token_01h455vb4pex5vsknk084sn02q */
 export type TransferTokenId = TypeId<'transfer_token'>
 
+/** API key ID - e.g., api_key_01h455vb4pex5vsknk084sn02q */
+export type ApiKeyId = TypeId<'api_key'>
+
+/** Webhook ID - e.g., webhook_01h455vb4pex5vsknk084sn02q */
+export type WebhookId = TypeId<'webhook'>
+
 // ============================================
 // Billing Entity IDs
 // ============================================
@@ -173,6 +179,8 @@ export interface EntityIdMap {
   verification: VerificationId
   domain: DomainId
   transfer_token: TransferTokenId
+  api_key: ApiKeyId
+  webhook: WebhookId
   subscription: SubscriptionId
   invoice: InvoiceId
 }

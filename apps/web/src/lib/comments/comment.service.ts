@@ -23,9 +23,10 @@ import {
   boards,
   type Comment,
 } from '@/lib/db'
-import { toUuid, type CommentId, type PostId, type MemberId } from '@quackback/ids'
+import { toUuid, type CommentId, type PostId, type MemberId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
+import { dispatchCommentCreated } from '@/lib/events/dispatch'
 import type {
   CreateCommentInput,
   CreateCommentResult,
@@ -94,14 +95,17 @@ async function hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
  * - Parent comment exists if specified
  * - Input data is valid
  *
+ * Dispatches a comment.created event for webhooks, Slack, etc.
+ *
  * @param input - Comment creation data
- * @param author - Author information with memberId, name, email, and role
+ * @param author - Author information with memberId, userId, name, email, and role
  * @returns Result containing the created comment or an error
  */
 export async function createComment(
   input: CreateCommentInput,
   author: {
     memberId: MemberId
+    userId: UserId
     name: string
     email: string
     role: 'admin' | 'member' | 'user'
@@ -165,7 +169,22 @@ export async function createComment(
     await subscribeToPost(author.memberId, input.postId, 'comment')
   }
 
-  // Return comment with post info for event building in API route
+  // Dispatch comment.created event for webhooks, Slack, etc.
+  await dispatchCommentCreated(
+    { type: 'user', userId: author.userId, email: author.email },
+    {
+      id: comment.id,
+      content: comment.content,
+      authorEmail: comment.authorEmail ?? undefined,
+    },
+    {
+      id: post.id,
+      title: post.title,
+      boardId: board.id,
+      boardSlug: board.slug,
+    }
+  )
+
   return { comment, post: { id: post.id, title: post.title, boardSlug: board.slug } }
 }
 

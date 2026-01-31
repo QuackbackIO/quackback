@@ -109,7 +109,10 @@ export function PostCard({
       to="/b/$slug/posts/$postId"
       params={{ slug: boardSlug, postId: id }}
       data-post-id={id}
-      className="post-card flex transition-all duration-200 ease-out bg-[var(--post-card-background)] hover:bg-muted/30"
+      className={cn(
+        'post-card flex items-center gap-3 transition-all duration-200 ease-out hover:bg-muted/30',
+        isCompact ? 'py-2 px-3' : 'py-3 px-4'
+      )}
     >
       <button
         type="button"
@@ -123,11 +126,11 @@ export function PostCard({
         onClick={handleVoteClick}
         disabled={isPending}
         className={cn(
-          'post-card__vote group flex flex-col items-center justify-center shrink-0 border-r !border-r-[rgba(0,0,0,0.05)] dark:!border-r-[rgba(255,255,255,0.06)] transition-all duration-200',
-          isCompact ? 'w-12' : 'w-16',
+          'post-card__vote group flex flex-col items-center justify-center shrink-0 rounded-lg border transition-all duration-200',
+          isCompact ? 'w-11 py-1.5' : 'w-14 py-2',
           currentHasVoted
-            ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/8'
-            : 'text-muted-foreground hover:bg-muted/40',
+            ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/30'
+            : 'text-muted-foreground bg-muted/40 border-border/50 hover:bg-muted/60 hover:border-border',
           isPending && 'opacity-70 cursor-wait'
         )}
       >
@@ -142,8 +145,8 @@ export function PostCard({
         <span
           data-testid="vote-count"
           className={cn(
-            'font-semibold tabular-nums mt-0.5',
-            isCompact ? 'text-xs' : 'text-sm',
+            'font-semibold tabular-nums',
+            isCompact ? 'text-sm' : 'text-base',
             !currentHasVoted && 'text-foreground'
           )}
         >
@@ -152,9 +155,7 @@ export function PostCard({
       </button>
 
       {/* Content section */}
-      <div
-        className={cn('post-card__content flex-1 min-w-0', isCompact ? 'px-3 py-2' : 'px-4 py-3')}
-      >
+      <div className="post-card__content flex-1 min-w-0">
         {/* Compact: Inline status and title */}
         {isCompact ? (
           <div className="flex items-center gap-2 mb-1">

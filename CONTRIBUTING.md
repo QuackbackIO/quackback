@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Quackback! This guide will help y
 
 ```bash
 # Clone the repository
-git clone https://github.com/quackback/quackback.git
+git clone https://github.com/quackbackio/quackback.git
 cd quackback
 
 # Run setup (installs dependencies, starts Docker, runs migrations, seeds demo data)
@@ -22,41 +22,71 @@ Open http://localhost:3000 to see the app.
 
 ```
 quackback/
-├── apps/web/              # Next.js application
-│   ├── app/               # App Router pages and API routes
-│   ├── components/        # UI and feature components
-│   └── lib/               # Utilities, auth config, services
+├── apps/web/              # TanStack Start application
+│   ├── src/
+│   │   ├── routes/        # File-based routing (TanStack Router)
+│   │   ├── components/    # UI and feature components
+│   │   └── lib/           # Business logic, auth config, services
+│   └── e2e/               # Playwright E2E tests
 ├── packages/
-│   ├── db/                # Database (Drizzle schema, migrations, queries)
-│   ├── domain/            # Business logic (services, result types)
-│   ├── email/             # Email service (Resend)
-│   ├── integrations/      # Third-party integrations
-│   └── shared/            # Shared types, constants, utilities
+│   ├── db/                # Database (Drizzle schema, migrations)
+│   ├── ids/               # TypeID system (branded UUIDs)
+│   └── email/             # Email service (Resend + React Email)
 ├── ee/                    # Enterprise Edition features (SSO, SCIM, etc.)
-└── docker-compose.yml     # Local PostgreSQL
+└── docker-compose.yml     # Local PostgreSQL 18
 ```
 
 ## Architecture
 
-Quackback follows a **modular monolith** architecture with clear separation of concerns:
+Quackback uses **TanStack Start** with **TanStack Router** for file-based routing and server functions.
 
-### Domain Layer (`packages/domain/`)
+### Server Functions (`apps/web/src/lib/server-functions/`)
 
-- **Services**: Business logic with `Result<T, E>` error handling
-- **Errors**: Domain-specific error types
-- **Types**: Input/output types for service operations
+Type-safe RPC endpoints using `createServerFn`:
 
-### Data Layer (`packages/db/`)
+```typescript
+import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 
-- **Repositories**: Data access with clean interfaces
-- **Unit of Work**: Transaction management with RLS context
-- **Migrations**: Drizzle ORM migrations
+export const createPostFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ title: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth()
+    return createPost(data, auth.member)
+  })
+```
 
-### API Layer (`apps/web/app/api/`)
+### Service Layer (`apps/web/src/lib/{feature}/`)
 
-- **Route handlers**: Map HTTP to service calls
-- **Validation**: Zod schemas for request validation
-- **Error mapping**: Domain errors to HTTP responses
+Business logic with typed error handling:
+
+```typescript
+import { ValidationError } from '@/lib/shared/errors'
+
+export async function createPost(input: CreatePostInput, author: Author) {
+  if (!input.title?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title is required')
+  }
+  // Business logic...
+}
+```
+
+### Database Access
+
+Always import from `@/lib/db`, not `@quackback/db`:
+
+```typescript
+import { db, posts, eq } from '@/lib/db'
+
+const post = await db.query.posts.findFirst({
+  where: eq(posts.id, postId),
+})
+```
+
+### Multi-tenancy
+
+- **Self-hosted**: Single workspace, `DATABASE_URL` singleton
+- **Cloud**: Multi-tenant via domain resolution with per-tenant Neon databases
 
 ## Development Guidelines
 
@@ -65,64 +95,7 @@ Quackback follows a **modular monolith** architecture with clear separation of c
 - **Files**: kebab-case (`user-profile.tsx`)
 - **Components**: PascalCase (`UserProfile`)
 - **Functions**: camelCase (`getUserProfile`)
-- **Database tables**: snake_case (`feedback_items`)
-
-### Writing Services
-
-Services should:
-
-1. Return `Result<T, E>` for error handling
-2. Use `withUnitOfWork()` for database transactions
-3. Validate input and authorization
-4. Keep business logic testable and framework-agnostic
-
-```typescript
-async createPost(input: CreatePostInput, ctx: ServiceContext): Promise<Result<Post, PostError>> {
-  return withUnitOfWork(ctx.organizationId, async (uow) => {
-    // Validate
-    if (!input.title?.trim()) {
-      return err(PostError.validationError('Title is required'))
-    }
-
-    // Execute business logic
-    const post = await new PostRepository(uow.db).create({...})
-
-    return ok(post)
-  })
-}
-```
-
-### Writing API Routes
-
-API routes should:
-
-1. Use `withApiHandler` for auth and error handling
-2. Call services, not database directly
-3. Map domain errors to HTTP status codes
-
-```typescript
-export const POST = withApiHandler(async (request, { validation }) => {
-  const body = await request.json()
-  const input = validateBody(schema, body)
-
-  const ctx = buildServiceContext(validation)
-  const result = await getPostService().createPost(input, ctx)
-
-  if (!result.success) {
-    throw new ApiError(result.error.message, mapErrorToStatus(result.error))
-  }
-
-  return successResponse(result.value, 201)
-})
-```
-
-### Multi-tenancy
-
-Quackback uses PostgreSQL Row Level Security (RLS) for tenant isolation:
-
-- All data tables have `organization_id`
-- The `app_user` role enforces RLS policies
-- Use `withUnitOfWork()` to set tenant context
+- **Database tables**: snake_case (`post_tags`)
 
 ### Testing
 
@@ -131,10 +104,10 @@ Quackback uses PostgreSQL Row Level Security (RLS) for tenant isolation:
 bun run test
 
 # Run specific test file
-bun run test packages/db/src/foo.test.ts
+bun run test path/to/test.ts
 
 # Run E2E tests
-cd apps/web && bun run test:e2e
+bun run test:e2e
 ```
 
 ## Contributor License Agreement

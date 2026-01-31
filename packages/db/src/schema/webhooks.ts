@@ -1,0 +1,62 @@
+/**
+ * Webhooks schema for external event notifications
+ *
+ * Webhooks are created by admins and used to notify external services
+ * when events occur in Quackback (post.created, post.status_changed, comment.created).
+ */
+import { pgTable, text, timestamp, integer, index } from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
+import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
+import { member } from './auth'
+
+/**
+ * Webhooks table
+ *
+ * Stores webhook configurations for external integrations.
+ * The signing secret is only shown once on creation.
+ */
+export const webhooks = pgTable(
+  'webhooks',
+  {
+    id: typeIdWithDefault('webhook')('id').primaryKey(),
+    /** Member who created this webhook */
+    createdById: typeIdColumn('member')('created_by_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'cascade' }),
+    /** HTTPS endpoint URL to receive webhook payloads */
+    url: text('url').notNull(),
+    /** Encrypted secret for HMAC-SHA256 signing (AES-256-GCM encrypted) */
+    secret: text('secret').notNull(),
+    /** Event types to trigger this webhook */
+    events: text('events').array().notNull(),
+    /** Optional filter: only trigger for posts in these boards */
+    boardIds: text('board_ids').array(),
+    /** Webhook status: active or disabled */
+    status: text('status', { enum: ['active', 'disabled'] })
+      .notNull()
+      .default('active'),
+    /** Consecutive delivery failures (reset on success) */
+    failureCount: integer('failure_count').notNull().default(0),
+    /** Last error message from failed delivery */
+    lastError: text('last_error'),
+    /** When the webhook was last triggered */
+    lastTriggeredAt: timestamp('last_triggered_at', { withTimezone: true }),
+    /** When the webhook was created */
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** When the webhook was last updated */
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Index for finding active webhooks
+    index('webhooks_status_idx').on(table.status),
+    // Index for listing webhooks by creator
+    index('webhooks_created_by_id_idx').on(table.createdById),
+  ]
+)
+
+export const webhooksRelations = relations(webhooks, ({ one }) => ({
+  createdBy: one(member, {
+    fields: [webhooks.createdById],
+    references: [member.id],
+  }),
+}))

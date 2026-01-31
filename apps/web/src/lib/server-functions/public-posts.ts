@@ -31,7 +31,6 @@ import {
 import { getPublicBoardById } from '@/lib/boards/board.public'
 import { getDefaultStatus } from '@/lib/statuses/status.service'
 import { getMemberByUser } from '@/lib/members/member.service'
-import { dispatchPostCreated } from '@/lib/events/dispatch'
 import { listPublicRoadmaps, getPublicRoadmapPosts } from '@/lib/roadmaps/roadmap.service'
 
 // ============================================
@@ -329,11 +328,12 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       // Build author info
       const author = {
         memberId: memberRecord.id as MemberId,
+        userId: ctx.user.id as UserId,
         name: ctx.user.name || ctx.user.email,
         email: ctx.user.email,
       }
 
-      // Create the post
+      // Create the post (events dispatched by service layer)
       const post = await createPost(
         {
           boardId,
@@ -343,20 +343,6 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
           statusId: defaultStatus?.id,
         },
         author
-      )
-
-      // Dispatch post.created event (must await for Cloudflare Workers)
-      await dispatchPostCreated(
-        { type: 'user', userId: ctx.user.id as UserId, email: ctx.user.email },
-        {
-          id: post.id,
-          title: post.title,
-          content: post.content,
-          boardId: post.boardId,
-          boardSlug: board.slug,
-          authorEmail: ctx.user.email,
-          voteCount: post.voteCount,
-        }
       )
 
       console.log(`[fn:public-posts] createPublicPostFn: id=${post.id}`)

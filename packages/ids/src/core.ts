@@ -150,6 +150,8 @@ export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean
     if (expectedPrefix && tid.getType() !== expectedPrefix) {
       return false
     }
+    // Also verify the suffix is valid base32 by attempting UUID conversion
+    tid.toUUID()
     return true
   } catch {
     return false

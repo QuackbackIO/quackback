@@ -1,0 +1,193 @@
+import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
+import { withApiKeyAuth } from '@/lib/api/auth'
+import {
+  successResponse,
+  createdResponse,
+  badRequestResponse,
+  handleDomainError,
+  decodeCursor,
+  encodeCursor,
+} from '@/lib/api/responses'
+import { validateTypeId, validateOptionalTypeId, validateTypeIdArray } from '@/lib/api/validation'
+import type { BoardId, StatusId, TagId, UserId } from '@quackback/ids'
+
+// Input validation schemas
+const createPostSchema = z.object({
+  boardId: z.string().min(1, 'Board ID is required'),
+  title: z.string().min(1, 'Title is required').max(200),
+  content: z.string().min(1, 'Content is required').max(10000),
+  statusId: z.string().optional(),
+  tagIds: z.array(z.string()).optional(),
+})
+
+export const Route = createFileRoute('/api/v1/posts/')({
+  server: {
+    handlers: {
+      /**
+       * GET /api/v1/posts
+       * List posts with optional filtering and pagination
+       */
+      GET: async ({ request }) => {
+        // Authenticate
+        const authResult = await withApiKeyAuth(request)
+        if (authResult instanceof Response) return authResult
+
+        try {
+          const url = new URL(request.url)
+
+          // Parse pagination (cursor-based)
+          const cursor = url.searchParams.get('cursor') ?? undefined
+          const limit = Math.min(
+            100,
+            Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
+          )
+          const offset = decodeCursor(cursor)
+          const page = Math.floor(offset / limit) + 1
+
+          // Parse filters
+          const boardIdParam = url.searchParams.get('boardId') ?? undefined
+          const statusSlug = url.searchParams.get('status') ?? undefined
+          const tagIdsParam = url.searchParams.get('tagIds') ?? undefined
+          const search = url.searchParams.get('search') ?? undefined
+          const sort = (url.searchParams.get('sort') as 'newest' | 'oldest' | 'votes') ?? 'newest'
+
+          // Validate boardId filter if provided
+          const { isValidTypeId } = await import('@quackback/ids')
+          const boardId =
+            boardIdParam && isValidTypeId(boardIdParam, 'board')
+              ? (boardIdParam as BoardId)
+              : undefined
+
+          // Import service function
+          const { listInboxPosts } = await import('@/lib/posts/post.service')
+
+          // Convert comma-separated tagIds to array (filter out invalid ones)
+          const tagIdArray = tagIdsParam
+            ? (tagIdsParam.split(',').filter((id) => id && isValidTypeId(id, 'tag')) as TagId[])
+            : undefined
+
+          // Fetch posts
+          const result = await listInboxPosts({
+            boardIds: boardId ? [boardId] : undefined,
+            statusSlugs: statusSlug ? [statusSlug] : undefined,
+            tagIds: tagIdArray,
+            search,
+            sort,
+            limit,
+            page,
+          })
+
+          // Calculate next cursor
+          const nextOffset = offset + result.items.length
+          const nextCursor = result.hasMore ? encodeCursor(nextOffset) : null
+
+          return successResponse(
+            result.items.map((post) => ({
+              id: post.id,
+              title: post.title,
+              content: post.content,
+              voteCount: post.voteCount,
+              commentCount: post.commentCount,
+              boardId: post.boardId,
+              boardSlug: post.board?.slug,
+              boardName: post.board?.name,
+              statusId: post.statusId,
+              authorName: post.authorName,
+              ownerId: post.ownerId,
+              tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
+              createdAt: post.createdAt.toISOString(),
+              updatedAt: post.updatedAt.toISOString(),
+            })),
+            {
+              pagination: {
+                cursor: nextCursor,
+                hasMore: result.hasMore,
+                total: result.total,
+              },
+            }
+          )
+        } catch (error) {
+          return handleDomainError(error)
+        }
+      },
+
+      /**
+       * POST /api/v1/posts
+       * Create a new post
+       */
+      POST: async ({ request }) => {
+        // Authenticate
+        const authResult = await withApiKeyAuth(request)
+        if (authResult instanceof Response) return authResult
+        const { memberId } = authResult
+
+        try {
+          // Parse and validate body
+          const body = await request.json()
+          const parsed = createPostSchema.safeParse(body)
+
+          if (!parsed.success) {
+            return badRequestResponse('Invalid request body', {
+              errors: parsed.error.flatten().fieldErrors,
+            })
+          }
+
+          // Validate TypeID formats in request body
+          let validationError = validateTypeId(parsed.data.boardId, 'board', 'board ID')
+          if (validationError) return validationError
+          validationError = validateOptionalTypeId(parsed.data.statusId, 'status', 'status ID')
+          if (validationError) return validationError
+          validationError = validateTypeIdArray(parsed.data.tagIds, 'tag', 'tag IDs')
+          if (validationError) return validationError
+
+          // Import service and get member details
+          const { createPost } = await import('@/lib/posts/post.service')
+          const { db, member, eq } = await import('@/lib/db')
+
+          // Get member info for author details
+          const memberRecord = await db.query.member.findFirst({
+            where: eq(member.id, memberId),
+            with: { user: true },
+          })
+
+          if (!memberRecord?.user) {
+            return badRequestResponse('Member not found')
+          }
+
+          const result = await createPost(
+            {
+              boardId: parsed.data.boardId as BoardId,
+              title: parsed.data.title,
+              content: parsed.data.content,
+              statusId: parsed.data.statusId as StatusId | undefined,
+              tagIds: parsed.data.tagIds as TagId[] | undefined,
+            },
+            {
+              memberId,
+              userId: memberRecord.user.id as UserId,
+              name: memberRecord.user.name,
+              email: memberRecord.user.email,
+            }
+          )
+
+          // Events are dispatched by the service layer
+
+          return createdResponse({
+            id: result.id,
+            title: result.title,
+            content: result.content,
+            voteCount: result.voteCount,
+            boardId: result.boardId,
+            statusId: result.statusId,
+            authorName: result.authorName,
+            createdAt: result.createdAt.toISOString(),
+            updatedAt: result.updatedAt.toISOString(),
+          })
+        } catch (error) {
+          return handleDomainError(error)
+        }
+      },
+    },
+  },
+})

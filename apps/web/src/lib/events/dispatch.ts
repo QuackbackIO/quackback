@@ -34,6 +34,7 @@ export interface PostCreatedInput {
 export interface PostStatusChangedInput {
   id: PostId
   title: string
+  boardId: BoardId
   boardSlug: string
 }
 
@@ -46,6 +47,7 @@ export interface CommentCreatedInput {
 export interface CommentPostInput {
   id: PostId
   title: string
+  boardId: BoardId
   boardSlug: string
 }
 
@@ -105,7 +107,7 @@ export async function dispatchPostStatusChanged(
     timestamp: new Date().toISOString(),
     actor,
     data: {
-      post: { id: post.id, title: post.title, boardSlug: post.boardSlug },
+      post: { id: post.id, title: post.title, boardId: post.boardId, boardSlug: post.boardSlug },
       previousStatus,
       newStatus,
     },
@@ -132,7 +134,7 @@ export async function dispatchCommentCreated(
         content: comment.content,
         authorEmail: comment.authorEmail,
       },
-      post: { id: post.id, title: post.title, boardSlug: post.boardSlug },
+      post: { id: post.id, title: post.title, boardId: post.boardId, boardSlug: post.boardSlug },
     },
   }
   await dispatchEvent(event)

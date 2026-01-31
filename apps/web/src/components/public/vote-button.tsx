@@ -43,13 +43,11 @@ export function VoteButton({
       aria-pressed={hasVoted}
       className={cn(
         'group relative flex items-center justify-center transition-all duration-200 cursor-pointer',
-        'border',
-        compact
-          ? 'flex-row gap-1 py-1 px-2 rounded-md text-xs'
-          : 'flex-col py-3 px-4 rounded-xl border-2',
+        'border rounded-lg',
+        compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-14 py-2',
         hasVoted
-          ? 'bg-primary/10 border-primary/30 text-primary shadow-sm shadow-primary/10'
-          : 'bg-muted/30 border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border/50',
+          ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/30 text-[var(--post-card-voted-color)]'
+          : 'bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:border-border',
         isPending && 'opacity-70 cursor-wait',
         disabled && 'cursor-not-allowed opacity-50'
       )}
@@ -60,7 +58,7 @@ export function VoteButton({
         className={cn(
           'transition-transform duration-200',
           compact ? 'h-3.5 w-3.5' : 'h-5 w-5',
-          hasVoted && 'fill-primary',
+          hasVoted && 'fill-[var(--post-card-voted-color)]',
           !isPending && !disabled && 'group-hover:-translate-y-0.5'
         )}
       />
@@ -68,8 +66,8 @@ export function VoteButton({
         data-testid="vote-count"
         className={cn(
           'font-semibold tabular-nums',
-          compact ? 'text-xs' : 'text-xl mt-0.5',
-          hasVoted ? 'text-primary' : 'text-foreground'
+          compact ? 'text-xs' : 'text-base',
+          hasVoted ? 'text-[var(--post-card-voted-color)]' : 'text-foreground'
         )}
       >
         {voteCount}

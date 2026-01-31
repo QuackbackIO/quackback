@@ -41,6 +41,7 @@ export interface EventPostData {
 export interface EventPostRef {
   id: string
   title: string
+  boardId: string
   boardSlug: string
 }
 

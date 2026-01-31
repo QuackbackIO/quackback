@@ -62,6 +62,13 @@ export const ID_PREFIXES = {
 
   subscription: 'subscription',
   invoice: 'invoice',
+
+  // ============================================
+  // API
+  // ============================================
+
+  api_key: 'api_key',
+  webhook: 'webhook',
 } as const
 
 /**

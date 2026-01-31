@@ -49,10 +49,13 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
   try {
     const teamMembers = await db
       .select({
-        id: user.id,
+        id: member.id,
+        userId: user.id,
         name: user.name,
         email: user.email,
         image: user.image,
+        role: member.role,
+        createdAt: member.createdAt,
       })
       .from(member)
       .innerJoin(user, eq(member.userId, user.id))

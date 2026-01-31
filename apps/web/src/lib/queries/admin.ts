@@ -12,6 +12,8 @@ import {
   fetchIntegrationByType,
   listPortalUsersFn,
 } from '@/lib/server-functions/admin'
+import { fetchApiKeys } from '@/lib/server-functions/api-keys'
+import { fetchWebhooks } from '@/lib/server-functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server-functions/roadmaps'
 import { fetchPostWithDetails } from '@/lib/server-functions/posts'
 import { fetchPublicStatuses } from '@/lib/server-functions/portal'
@@ -235,6 +237,43 @@ export const adminQueries = {
         }
       },
       staleTime: 30 * 1000, // 30s - frequently updated
+    }),
+
+  /**
+   * List all API keys
+   */
+  apiKeys: () =>
+    queryOptions({
+      queryKey: ['admin', 'api-keys'],
+      queryFn: async () => {
+        const data = await fetchApiKeys()
+        return data.map((k) => ({
+          ...k,
+          createdAt: new Date(k.createdAt),
+          lastUsedAt: k.lastUsedAt ? new Date(k.lastUsedAt) : null,
+          expiresAt: k.expiresAt ? new Date(k.expiresAt) : null,
+          revokedAt: k.revokedAt ? new Date(k.revokedAt) : null,
+        }))
+      },
+      staleTime: 30 * 1000, // 30s - may change when creating/revoking keys
+    }),
+
+  /**
+   * List all webhooks
+   */
+  webhooks: () =>
+    queryOptions({
+      queryKey: ['admin', 'webhooks'],
+      queryFn: async () => {
+        const data = await fetchWebhooks()
+        return data.map((w) => ({
+          ...w,
+          createdAt: new Date(w.createdAt),
+          updatedAt: new Date(w.updatedAt),
+          lastTriggeredAt: w.lastTriggeredAt ? new Date(w.lastTriggeredAt) : null,
+        }))
+      },
+      staleTime: 30 * 1000, // 30s - may change when creating/updating webhooks
     }),
 }
 

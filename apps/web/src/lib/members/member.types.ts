@@ -5,14 +5,17 @@
  * no database dependencies.
  */
 
-import type { UserId } from '@quackback/ids'
+import type { MemberId, UserId } from '@quackback/ids'
 
 /**
  * Team member info with user details
  */
 export interface TeamMember {
-  id: UserId
+  id: MemberId
+  userId: UserId
   name: string | null
   email: string
   image: string | null
+  role: string
+  createdAt: Date
 }

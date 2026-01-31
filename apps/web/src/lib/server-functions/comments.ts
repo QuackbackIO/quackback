@@ -19,7 +19,6 @@ import {
   updateComment,
   userEditComment,
 } from '@/lib/comments/comment.service'
-import { dispatchCommentCreated } from '@/lib/events/dispatch'
 import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
 
 // Schemas
@@ -81,26 +80,14 @@ export const createCommentFn = createServerFn({ method: 'POST' })
         },
         {
           memberId: auth.member.id,
+          userId: auth.user.id as UserId,
           name: auth.user.name,
           email: auth.user.email,
           role: auth.member.role,
         }
       )
 
-      // Dispatch comment.created event (must await for Cloudflare Workers)
-      await dispatchCommentCreated(
-        { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
-        {
-          id: result.comment.id,
-          content: result.comment.content,
-          authorEmail: auth.user.email,
-        },
-        {
-          id: result.post.id,
-          title: result.post.title,
-          boardSlug: result.post.boardSlug,
-        }
-      )
+      // Events are dispatched by the service layer
 
       console.log(`[fn:comments] createCommentFn: id=${result.comment.id}`)
       return result
