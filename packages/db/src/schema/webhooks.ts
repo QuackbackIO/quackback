@@ -25,7 +25,7 @@ export const webhooks = pgTable(
       .references(() => member.id, { onDelete: 'cascade' }),
     /** HTTPS endpoint URL to receive webhook payloads */
     url: text('url').notNull(),
-    /** Secret for HMAC-SHA256 signing (prefixed with whsec_) */
+    /** Encrypted secret for HMAC-SHA256 signing (AES-256-GCM encrypted) */
     secret: text('secret').notNull(),
     /** Event types to trigger this webhook */
     events: text('events').array().notNull(),
