@@ -431,12 +431,22 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
       `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardId ? ` (board: ${boardId})` : ''}`
     )
 
-    // Build targets
-    return matchingWebhooks.map((webhook) => ({
-      type: 'webhook',
-      target: { url: webhook.url },
-      config: { secret: webhook.secret, webhookId: webhook.id as WebhookId },
-    }))
+    // Build targets - decrypt secrets for delivery
+    const targets: HookTarget[] = []
+    for (const webhook of matchingWebhooks) {
+      try {
+        const secret = decryptToken(webhook.secret, webhook.id)
+        targets.push({
+          type: 'webhook',
+          target: { url: webhook.url },
+          config: { secret, webhookId: webhook.id as WebhookId },
+        })
+      } catch (error) {
+        console.error(`[Targets] Failed to decrypt webhook secret for ${webhook.id}:`, error)
+        // Skip this webhook rather than crash all
+      }
+    }
+    return targets
   } catch (error) {
     console.error('[Targets] Failed to resolve webhook targets:', error)
     return []
@@ -447,11 +457,9 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
  * Extract board ID from event data.
  */
 function extractBoardId(event: EventData): string | null {
-  if (event.type === 'post.created') {
+  // All event types now include boardId in post reference
+  if ('post' in event.data) {
     return event.data.post.boardId
   }
-  // For status_changed and comment.created, we don't have boardId in the event
-  // This is a limitation - board filtering won't work for these events
-  // unless we extend the event payload
   return null
 }
