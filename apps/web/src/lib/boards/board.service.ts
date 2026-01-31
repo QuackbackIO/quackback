@@ -8,7 +8,18 @@
  * - Validation
  */
 
-import { db, type Board, type BoardSettings, eq, posts, boards, sql, inArray, asc } from '@/lib/db'
+import {
+  db,
+  type Board,
+  type BoardSettings,
+  eq,
+  posts,
+  boards,
+  webhooks,
+  sql,
+  inArray,
+  asc,
+} from '@/lib/db'
 import type { BoardId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
@@ -160,6 +171,8 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
 
 /**
  * Delete a board
+ *
+ * Also removes the board ID from webhook board_ids filters to maintain referential integrity.
  */
 export async function deleteBoard(id: BoardId): Promise<void> {
   // Delete the board and check if it existed
@@ -167,6 +180,19 @@ export async function deleteBoard(id: BoardId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
+
+  // Clean up webhook board_ids references (fire-and-forget)
+  // Removes deleted board ID from any webhook filters
+  db.update(webhooks)
+    .set({
+      boardIds: sql`array_remove(${webhooks.boardIds}, ${id})`,
+      updatedAt: new Date(),
+    })
+    .where(sql`${webhooks.boardIds} @> ARRAY[${id}]::text[]`)
+    .execute()
+    .catch((error) => {
+      console.error('[Board] Failed to clean up webhook board_ids:', error)
+    })
 }
 
 /**

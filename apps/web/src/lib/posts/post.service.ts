@@ -29,7 +29,15 @@ import {
   postSubscriptions,
   type Post,
 } from '@/lib/db'
-import { toUuid, type PostId, type BoardId, type StatusId, type MemberId } from '@quackback/ids'
+import {
+  toUuid,
+  type PostId,
+  type BoardId,
+  type StatusId,
+  type MemberId,
+  type UserId,
+} from '@quackback/ids'
+import { dispatchPostCreated, dispatchPostStatusChanged } from '@/lib/events/dispatch'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/settings'
 import { subscribeToPost } from '@/lib/subscriptions/subscription.service'
@@ -57,13 +65,15 @@ import type {
  * - User has permission to create posts
  * - Input data is valid
  *
+ * Dispatches a post.created event for webhooks, Slack, etc.
+ *
  * @param input - Post creation data
- * @param author - Author information (memberId, name, email)
+ * @param author - Author information (memberId, userId, name, email)
  * @returns Result containing the created post or an error
  */
 export async function createPost(
   input: CreatePostInput,
-  author: { memberId: MemberId; name: string; email: string }
+  author: { memberId: MemberId; userId: UserId; name: string; email: string }
 ): Promise<CreatePostResult> {
   // Basic validation (also done at action layer, but enforced here for direct service calls)
   const title = input.title?.trim()
@@ -82,9 +92,9 @@ export async function createPost(
     throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
   }
 
-  // Validate board exists and get default status in parallel (when no statusId provided)
+  // Validate board exists and get status in parallel
   const needsDefaultStatus = !input.statusId
-  const [board, defaultStatus] = await Promise.all([
+  const [board, statusResult] = await Promise.all([
     db.query.boards.findFirst({ where: eq(boards.id, input.boardId) }),
     needsDefaultStatus
       ? db
@@ -93,7 +103,7 @@ export async function createPost(
           .where(eq(postStatuses.slug, 'open'))
           .limit(1)
           .then((rows) => rows[0])
-      : Promise.resolve(null),
+      : db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId!) }),
   ])
 
   if (!board) {
@@ -103,13 +113,18 @@ export async function createPost(
   // Determine statusId - either from input or use default "open" status
   let statusId = input.statusId
   if (!statusId) {
-    if (!defaultStatus) {
+    if (!statusResult) {
       throw new ValidationError(
         'VALIDATION_ERROR',
         'Default "open" status not found. Please ensure post statuses are configured for this organization.'
       )
     }
-    statusId = defaultStatus.id
+    statusId = statusResult.id
+  } else {
+    // Validate provided statusId exists
+    if (!statusResult) {
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${input.statusId} not found`)
+    }
   }
 
   // Create the post with member-scoped identity
@@ -138,7 +153,20 @@ export async function createPost(
   // Auto-subscribe the author to their own post
   await subscribeToPost(author.memberId, post.id, 'author')
 
-  // Return post with board info for event building in API route
+  // Dispatch post.created event for webhooks, Slack, AI processing, etc.
+  await dispatchPostCreated(
+    { type: 'user', userId: author.userId, email: author.email },
+    {
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      boardId: post.boardId,
+      boardSlug: board.slug,
+      authorEmail: author.email,
+      voteCount: post.voteCount,
+    }
+  )
+
   return { ...post, boardSlug: board.slug }
 }
 
@@ -345,15 +373,19 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
  * - Post exists and belongs to the organization
  * - New status is valid
  *
+ * Dispatches a post.status_changed event for webhooks, Slack, etc.
+ *
  * Note: Authorization is handled at the action layer before calling this function.
  *
  * @param postId - Post ID to update
  * @param statusId - New status ID
+ * @param actor - Who is making the change (userId, email)
  * @returns Result containing the updated post or an error
  */
 export async function changeStatus(
   postId: PostId,
-  statusId: StatusId
+  statusId: StatusId,
+  actor: { userId: UserId; email: string }
 ): Promise<ChangeStatusResult> {
   // Get existing post
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -390,7 +422,19 @@ export async function changeStatus(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Return post with status change info for event building in API route
+  // Dispatch post.status_changed event for webhooks, Slack, etc.
+  await dispatchPostStatusChanged(
+    { type: 'user', userId: actor.userId, email: actor.email },
+    {
+      id: updatedPost.id,
+      title: updatedPost.title,
+      boardId: board.id,
+      boardSlug: board.slug,
+    },
+    previousStatusName,
+    newStatus.name
+  )
+
   return {
     ...updatedPost,
     boardSlug: board.slug,
@@ -582,6 +626,9 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Build conditions array
   const conditions = []
+
+  // Exclude soft-deleted posts
+  conditions.push(isNull(posts.deletedAt))
 
   // Board filter
   if (boardIds?.length) {

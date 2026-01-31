@@ -25,7 +25,6 @@ import {
   restorePost,
 } from '@/lib/posts/post.service'
 import { hasUserVoted } from '@/lib/posts/post.public'
-import { dispatchPostCreated, dispatchPostStatusChanged } from '@/lib/events/dispatch'
 
 // ============================================
 // Helpers
@@ -281,25 +280,14 @@ export const createPostFn = createServerFn({ method: 'POST' })
         },
         {
           memberId: auth.member.id,
+          userId: auth.user.id as UserId,
           name: auth.user.name,
           email: auth.user.email,
         }
       )
       console.log(`[fn:posts] createPostFn: id=${result.id}`)
 
-      // Dispatch post.created event (must await for Cloudflare Workers)
-      await dispatchPostCreated(
-        { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
-        {
-          id: result.id,
-          title: result.title,
-          content: result.content,
-          boardId: result.boardId,
-          boardSlug: result.boardSlug,
-          authorEmail: auth.user.email,
-          voteCount: result.voteCount,
-        }
-      )
+      // Events are now dispatched by the service layer
 
       return serializePostDates(result)
     } catch (error) {
@@ -372,19 +360,12 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await changeStatus(data.id as PostId, data.statusId as StatusId)
+      const result = await changeStatus(data.id as PostId, data.statusId as StatusId, {
+        userId: auth.user.id as UserId,
+        email: auth.user.email,
+      })
 
-      // Dispatch post.status_changed event (must await for Cloudflare Workers)
-      await dispatchPostStatusChanged(
-        { type: 'user', userId: auth.user.id as UserId, email: auth.user.email },
-        {
-          id: result.id,
-          title: result.title,
-          boardSlug: result.boardSlug,
-        },
-        result.previousStatus,
-        result.newStatus
-      )
+      // Events are dispatched by the service layer
 
       console.log(`[fn:posts] changePostStatusFn: id=${data.id}, newStatus=${result.newStatus}`)
       return serializePostDates(result)
