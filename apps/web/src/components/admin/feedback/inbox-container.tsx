@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { Route } from '@/routes/admin/feedback'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
 import { FeedbackTableView } from '@/components/admin/feedback/table'
@@ -36,6 +37,7 @@ export function InboxContainer({
 }: InboxContainerProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const search = Route.useSearch()
 
   // URL-based filter state
   const {
@@ -86,19 +88,23 @@ export function InboxContainer({
 
   const handleNavigateToPost = useCallback(
     (postId: string) => {
-      // Save navigation context for prev/next on detail page
+      // Save navigation context for prev/next navigation in modal
       const backUrl = window.location.pathname + window.location.search
       saveNavigationContext(
         posts.map((p) => p.id),
         backUrl
       )
 
+      // Open modal by adding post param to URL
       navigate({
-        to: '/admin/feedback/posts/$postId',
-        params: { postId },
+        to: '/admin/feedback',
+        search: {
+          ...search,
+          post: postId,
+        },
       })
     },
-    [navigate, posts]
+    [navigate, posts, search]
   )
 
   const handleStatusChange = useCallback(

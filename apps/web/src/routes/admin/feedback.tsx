@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/queries/admin'
+import { PostModal } from '@/components/admin/feedback/post-modal'
 
 const searchSchema = z.object({
   board: z.array(z.string()).optional(),
@@ -13,6 +14,7 @@ const searchSchema = z.object({
   minVotes: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
   selected: z.string().optional(),
+  post: z.string().optional(), // Post ID for modal view
 })
 
 export const Route = createFileRoute('/admin/feedback')({
@@ -20,14 +22,35 @@ export const Route = createFileRoute('/admin/feedback')({
   loader: async ({ context }) => {
     const { queryClient } = context
 
+    // Get user and member from parent's beforeLoad context
+    const { user, member } = context as {
+      user: NonNullable<typeof context.user>
+      member: NonNullable<typeof context.member>
+      queryClient: typeof context.queryClient
+    }
+
     // Pre-fetch boards for the feedback views
     await queryClient.ensureQueryData(adminQueries.boards())
 
-    return {}
+    return {
+      currentUser: {
+        name: user.name,
+        email: user.email,
+        memberId: member.id,
+      },
+    }
   },
   component: FeedbackLayout,
 })
 
 function FeedbackLayout() {
-  return <Outlet />
+  const { currentUser } = Route.useLoaderData()
+  const search = Route.useSearch()
+
+  return (
+    <>
+      <Outlet />
+      <PostModal postId={search.post} currentUser={currentUser} />
+    </>
+  )
 }
