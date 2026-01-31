@@ -51,7 +51,7 @@ bun run typecheck        # TypeScript type checking (in apps/web)
 | Framework  | TanStack Start + TanStack Router (file-based) |
 | Database   | PostgreSQL + Drizzle ORM                      |
 | Auth       | Better Auth with emailOTP plugin              |
-| Runtime    | Bun 1.3.4+                                    |
+| Runtime    | Bun 1.3.7+                                    |
 | Styling    | Tailwind CSS v4 + shadcn/ui                   |
 | Validation | Zod                                           |
 | State      | TanStack Query (server) + Zustand (client)    |
