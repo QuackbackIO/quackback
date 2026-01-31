@@ -117,7 +117,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('GET /webhooks returns list', async () => {
       if (skipIfNoServer()) return
 
-      const { status } = await api('GET', '/webhooks')
+      const { status, data } = await api('GET', '/webhooks')
       expect(status).toBe(200)
       expect((data as { data: unknown[] }).data).toBeInstanceOf(Array)
     })
@@ -125,7 +125,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('POST /webhooks creates webhook', async () => {
       if (skipIfNoServer()) return
 
-      const { status } = await api('POST', '/webhooks', {
+      const { status, data } = await api('POST', '/webhooks', {
         url: 'https://example.com/webhook',
         events: ['post.created'],
       })
@@ -141,7 +141,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('POST /webhooks with all events', async () => {
       if (skipIfNoServer()) return
 
-      const { status } = await api('POST', '/webhooks', {
+      const { status, data } = await api('POST', '/webhooks', {
         url: 'https://example.com/all-events',
         events: ['post.created', 'post.status_changed', 'comment.created'],
       })
@@ -157,7 +157,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('POST /webhooks with board filter', async () => {
       if (skipIfNoServer() || !testBoardId) return
 
-      const { status } = await api('POST', '/webhooks', {
+      const { status, data } = await api('POST', '/webhooks', {
         url: 'https://example.com/board-filter',
         events: ['post.created'],
         boardIds: [testBoardId],
@@ -173,7 +173,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
       if (skipIfNoServer() || createdIds.webhooks.length === 0) return
 
       const webhookId = createdIds.webhooks[0]
-      const { status } = await api('GET', `/webhooks/${webhookId}`)
+      const { status, data } = await api('GET', `/webhooks/${webhookId}`)
 
       expect(status).toBe(200)
       expect((data as { data: { id: string } }).data.id).toBe(webhookId)
@@ -183,7 +183,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
       if (skipIfNoServer() || createdIds.webhooks.length === 0) return
 
       const webhookId = createdIds.webhooks[0]
-      const { status } = await api('PATCH', `/webhooks/${webhookId}`, {
+      const { status, data } = await api('PATCH', `/webhooks/${webhookId}`, {
         url: 'https://example.com/updated-webhook',
       })
 
@@ -197,7 +197,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
       if (skipIfNoServer() || createdIds.webhooks.length === 0) return
 
       const webhookId = createdIds.webhooks[0]
-      const { status } = await api('PATCH', `/webhooks/${webhookId}`, {
+      const { status, data } = await api('PATCH', `/webhooks/${webhookId}`, {
         status: 'disabled',
       })
 
@@ -232,7 +232,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('rejects webhook without URL', async () => {
       if (skipIfNoServer()) return
 
-      const { status } = await api('POST', '/webhooks', {
+      const { status, data } = await api('POST', '/webhooks', {
         events: ['post.created'],
       })
 
@@ -243,7 +243,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('rejects webhook without events', async () => {
       if (skipIfNoServer()) return
 
-      const { status } = await api('POST', '/webhooks', {
+      const { status, data } = await api('POST', '/webhooks', {
         url: 'https://example.com/webhook',
       })
 
@@ -333,7 +333,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
 
       const webhookId = createdIds.webhooks[0]
 
-      const { status } = await api('POST', `/webhooks/${webhookId}/rotate`)
+      const { status, data } = await api('POST', `/webhooks/${webhookId}/rotate`)
 
       expect(status).toBe(200)
       const newSecret = (data as { data: { secret: string } }).data.secret
@@ -345,7 +345,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('list response has correct structure', async () => {
       if (skipIfNoServer()) return
 
-      const { data: _data } = await api('GET', '/webhooks')
+      const { data } = await api('GET', '/webhooks')
       const webhooks = (data as { data: unknown[] }).data
 
       expect(webhooks).toBeInstanceOf(Array)
@@ -365,7 +365,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
       if (skipIfNoServer() || createdIds.webhooks.length === 0) return
 
       const webhookId = createdIds.webhooks[0]
-      const { data: _data } = await api('GET', `/webhooks/${webhookId}`)
+      const { data } = await api('GET', `/webhooks/${webhookId}`)
       const webhook = (data as { data: Record<string, unknown> }).data
 
       expect(webhook).toHaveProperty('id')
@@ -385,7 +385,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
       if (skipIfNoServer() || createdIds.webhooks.length === 0) return
 
       const webhookId = createdIds.webhooks[0]
-      const { data: _data } = await api('GET', `/webhooks/${webhookId}`)
+      const { data } = await api('GET', `/webhooks/${webhookId}`)
       const webhook = (data as { data: { createdAt: string } }).data
 
       expect(webhook.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
@@ -425,7 +425,7 @@ describe.skipIf(SKIP_INTEGRATION)('Webhook API Integration Tests', () => {
     it('returns proper error structure', async () => {
       if (skipIfNoServer()) return
 
-      const { status } = await api('POST', '/webhooks', {})
+      const { status, data } = await api('POST', '/webhooks', {})
       expect(status).toBe(400)
       expect((data as { error: { code: string; message: string } }).error).toMatchObject({
         code: expect.any(String),

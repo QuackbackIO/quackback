@@ -8,12 +8,25 @@ vi.mock('@/lib/api-keys', () => ({
   verifyApiKey: vi.fn(),
 }))
 
+// Mock the database
+vi.mock('@/lib/db', () => ({
+  db: {
+    query: {
+      member: {
+        findFirst: vi.fn().mockResolvedValue({ role: 'admin' }),
+      },
+    },
+  },
+  member: { id: 'id' },
+  eq: vi.fn(),
+}))
+
 describe('API Auth', () => {
   const mockApiKey: ApiKey = {
-    id: 'apikey_123' as ApiKeyId,
+    id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
     name: 'Test Key',
     keyPrefix: 'qb_test',
-    createdById: 'member_456' as MemberId,
+    createdById: 'member_01h455vb4pex5vsknk084sn02r' as MemberId,
     createdAt: new Date(),
     lastUsedAt: null,
     expiresAt: null,
@@ -76,6 +89,7 @@ describe('API Auth', () => {
       expect(result).toEqual({
         apiKey: mockApiKey,
         memberId: mockApiKey.createdById,
+        role: 'admin',
       })
     })
 
@@ -144,6 +158,7 @@ describe('API Auth', () => {
       expect(result).toEqual({
         apiKey: mockApiKey,
         memberId: mockApiKey.createdById,
+        role: 'admin',
       })
     })
 
