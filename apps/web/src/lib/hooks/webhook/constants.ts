@@ -63,7 +63,7 @@ const PRIVATE_IP_PATTERNS = [
   /^0\./, // "This" network
   /^localhost$/i, // Localhost hostname
   /^::1$/, // IPv6 loopback
-  /^fc00:/i, // IPv6 private
+  /^f[cd]00:/i, // IPv6 unique local (fc00::/7 = fc00::/8 + fd00::/8)
   /^fe80:/i, // IPv6 link-local
 ]
 

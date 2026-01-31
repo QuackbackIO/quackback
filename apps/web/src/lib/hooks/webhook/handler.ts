@@ -14,6 +14,7 @@ import dns from 'dns/promises'
 import type { HookHandler, HookResult } from '../types'
 import type { EventData } from '@/lib/events/types'
 import type { WebhookTarget, WebhookConfig } from './constants'
+import type { WebhookId } from '@quackback/ids'
 
 export type { WebhookTarget, WebhookConfig }
 
@@ -135,6 +136,7 @@ export const webhookHook: HookHandler = {
         headers,
         body: payload,
         signal: controller.signal,
+        redirect: 'error', // Prevent SSRF via redirects to internal IPs
       })
 
       clearTimeout(timeoutId)
