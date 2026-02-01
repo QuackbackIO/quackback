@@ -3,4 +3,4 @@
  */
 
 export { cn } from './cn'
-export { getInitials } from './string'
+export { getInitials, stripHtml } from './string'
