@@ -1,0 +1,79 @@
+/**
+ * Zod Schemas for Changelog Operations
+ *
+ * Shared validation schemas used by both client and server.
+ */
+
+import { z } from 'zod'
+
+/**
+ * Publish state schema
+ */
+export const publishStateSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('draft') }),
+  z.object({ type: z.literal('scheduled'), publishAt: z.coerce.date() }),
+  z.object({ type: z.literal('published') }),
+])
+
+/**
+ * Create changelog input schema
+ */
+export const createChangelogSchema = z.object({
+  boardId: z.string().min(1),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1),
+  contentJson: z.any().optional(),
+  linkedPostIds: z.array(z.string()).optional(),
+  publishState: publishStateSchema,
+})
+
+/**
+ * Update changelog input schema
+ */
+export const updateChangelogSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).optional(),
+  contentJson: z.any().optional(),
+  linkedPostIds: z.array(z.string()).optional(),
+  publishState: publishStateSchema.optional(),
+})
+
+/**
+ * List changelogs params schema
+ */
+export const listChangelogsSchema = z.object({
+  boardId: z.string().optional(),
+  status: z.enum(['draft', 'scheduled', 'published', 'all']).optional(),
+  cursor: z.string().optional(),
+  limit: z.number().int().positive().max(100).optional(),
+})
+
+/**
+ * Get changelog by ID schema
+ */
+export const getChangelogSchema = z.object({
+  id: z.string().min(1),
+})
+
+/**
+ * Delete changelog schema
+ */
+export const deleteChangelogSchema = z.object({
+  id: z.string().min(1),
+})
+
+/**
+ * List public changelogs params schema
+ */
+export const listPublicChangelogsSchema = z.object({
+  boardId: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z.number().int().positive().max(100).optional(),
+})
+
+// Export types inferred from schemas
+export type CreateChangelogInput = z.infer<typeof createChangelogSchema>
+export type UpdateChangelogInput = z.infer<typeof updateChangelogSchema>
+export type ListChangelogsParams = z.infer<typeof listChangelogsSchema>
+export type PublishState = z.infer<typeof publishStateSchema>
