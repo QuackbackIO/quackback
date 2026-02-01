@@ -36,7 +36,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
           if (validationError) return validationError
 
           // Import service function
-          const { getCommentsWithReplies } = await import('@/lib/posts/post.service')
+          const { getCommentsWithReplies } = await import('@/lib/posts/post.query')
 
           const comments = await getCommentsWithReplies(postId as PostId)
 

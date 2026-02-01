@@ -21,13 +21,9 @@ import {
   getPublicRoadmapPostsPaginated,
   getVoteAndSubscriptionStatus,
 } from '@/lib/posts/post.public'
-import {
-  getPostPermissions,
-  userEditPost,
-  softDeletePost,
-  voteOnPost,
-  createPost,
-} from '@/lib/posts/post.service'
+import { createPost } from '@/lib/posts/post.service'
+import { voteOnPost } from '@/lib/posts/post.voting'
+import { getPostPermissions, userEditPost, softDeletePost } from '@/lib/posts/post.permissions'
 import { getPublicBoardById } from '@/lib/boards/board.public'
 import { getDefaultStatus } from '@/lib/statuses/status.service'
 import { getMemberByUser } from '@/lib/members/member.service'

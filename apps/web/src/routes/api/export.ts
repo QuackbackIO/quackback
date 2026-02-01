@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/export')({
         const { validateApiWorkspaceAccess } = await import('@/lib/server-functions/workspace')
         const { canAccess } = await import('@/lib/auth')
         type Role = 'admin' | 'member' | 'user'
-        const { listPostsForExport } = await import('@/lib/posts/post.service')
+        const { listPostsForExport } = await import('@/lib/posts/post.query')
         const { getBoardById } = await import('@/lib/boards/board.service')
 
         const url = new URL(request.url)

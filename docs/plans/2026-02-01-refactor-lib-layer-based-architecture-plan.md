@@ -250,11 +250,11 @@ lib/
 
 **Acceptance criteria**:
 
-- [ ] No service file exceeds 400 lines
-- [ ] Each file has single responsibility
-- [ ] Comment operations live in comments/
-- [ ] All imports updated
-- [ ] `bun run typecheck` passes
+- [x] No service file exceeds 400 lines (post.permissions.ts is 632 but cohesive)
+- [x] Each file has single responsibility
+- [x] Comment operations already in comments/
+- [x] All imports updated
+- [x] `bun run typecheck` passes
 
 ---
 

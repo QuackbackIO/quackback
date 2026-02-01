@@ -14,16 +14,10 @@ import {
 } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/schemas/posts'
 import { requireAuth } from './auth-helpers'
-import {
-  listInboxPosts,
-  getPostWithDetails,
-  getCommentsWithReplies,
-  createPost,
-  updatePost,
-  softDeletePost,
-  changeStatus,
-  restorePost,
-} from '@/lib/posts/post.service'
+import { createPost, updatePost } from '@/lib/posts/post.service'
+import { listInboxPosts, getPostWithDetails, getCommentsWithReplies } from '@/lib/posts/post.query'
+import { changeStatus } from '@/lib/posts/post.status'
+import { softDeletePost, restorePost } from '@/lib/posts/post.permissions'
 import { hasUserVoted } from '@/lib/posts/post.public'
 
 // ============================================

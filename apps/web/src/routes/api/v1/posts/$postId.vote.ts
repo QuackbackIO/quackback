@@ -25,7 +25,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
           if (validationError) return validationError
 
           // Import service function
-          const { voteOnPost } = await import('@/lib/posts/post.service')
+          const { voteOnPost } = await import('@/lib/posts/post.voting')
 
           const result = await voteOnPost(postId as PostId, memberId)
 
