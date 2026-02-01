@@ -9,12 +9,9 @@ import {
   decodeCursor,
   encodeCursor,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
-import type { BoardId } from '@quackback/ids'
 
 // Input validation schema
 const createChangelogSchema = z.object({
-  boardId: z.string().min(1, 'Board ID is required'),
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   publishedAt: z.string().datetime().optional(),
@@ -35,33 +32,17 @@ export const Route = createFileRoute('/api/v1/changelog/')({
         try {
           // Parse query params
           const url = new URL(request.url)
-          const boardIdParam = url.searchParams.get('boardId')
           const published = url.searchParams.get('published')
           const cursor = url.searchParams.get('cursor') ?? undefined
           const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
           const offset = decodeCursor(cursor)
 
-          // Validate boardId if provided
-          let boardId: BoardId | null = null
-          if (boardIdParam) {
-            const { isValidTypeId } = await import('@quackback/ids')
-            if (!isValidTypeId(boardIdParam, 'board')) {
-              return badRequestResponse('Invalid board ID format', {
-                errors: { boardId: ['Must be a valid board TypeID'] },
-              })
-            }
-            boardId = boardIdParam as BoardId
-          }
-
           // Import db
-          const { db, changelogEntries, eq, desc, and, isNotNull, isNull } =
+          const { db, changelogEntries, desc, and, isNotNull, isNull } =
             await import('@/lib/server/db')
 
           // Build conditions
           const conditions = []
-          if (boardId) {
-            conditions.push(eq(changelogEntries.boardId, boardId))
-          }
           if (published === 'true') {
             conditions.push(isNotNull(changelogEntries.publishedAt))
           } else if (published === 'false') {
@@ -76,9 +57,6 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             orderBy: [desc(changelogEntries.createdAt)],
             limit: limit + 1, // Fetch one extra to check hasMore
             offset,
-            with: {
-              board: true,
-            },
           })
 
           // Determine if there are more items
@@ -92,8 +70,6 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           return successResponse(
             items.map((entry) => ({
               id: entry.id,
-              boardId: entry.boardId,
-              boardName: entry.board?.name,
               title: entry.title,
               content: entry.content,
               publishedAt: entry.publishedAt?.toISOString() || null,
@@ -132,30 +108,13 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             })
           }
 
-          // Validate TypeID format in request body
-          const validationError = validateTypeId(parsed.data.boardId, 'board', 'board ID')
-          if (validationError) return validationError
-
           // Import db
-          const { db, changelogEntries, boards, eq } = await import('@/lib/server/db')
-          const { NotFoundError } = await import('@/lib/shared/errors')
-
-          // Verify board exists
-          const board = await db.query.boards.findFirst({
-            where: eq(boards.id, parsed.data.boardId as BoardId),
-          })
-          if (!board) {
-            throw new NotFoundError(
-              'BOARD_NOT_FOUND',
-              `Board with ID ${parsed.data.boardId} not found`
-            )
-          }
+          const { db, changelogEntries } = await import('@/lib/server/db')
 
           // Create the changelog entry
           const [entry] = await db
             .insert(changelogEntries)
             .values({
-              boardId: parsed.data.boardId as BoardId,
               title: parsed.data.title,
               content: parsed.data.content,
               publishedAt: parsed.data.publishedAt ? new Date(parsed.data.publishedAt) : null,
@@ -164,7 +123,6 @@ export const Route = createFileRoute('/api/v1/changelog/')({
 
           return createdResponse({
             id: entry.id,
-            boardId: entry.boardId,
             title: entry.title,
             content: entry.content,
             publishedAt: entry.publishedAt?.toISOString() || null,

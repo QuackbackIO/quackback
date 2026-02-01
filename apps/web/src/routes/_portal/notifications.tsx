@@ -49,7 +49,7 @@ function NotificationsPage() {
   const groups = groupNotificationsByDate(notifications)
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4 sm:px-6">
+    <div className="py-8">
       {/* Page Header */}
       <header className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
         <div className="flex items-start justify-between gap-4">

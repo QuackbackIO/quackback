@@ -36,6 +36,7 @@ interface PortalHeaderProps {
 const navItems = [
   { to: '/', label: 'Feedback' },
   { to: '/roadmap', label: 'Roadmap' },
+  { to: '/changelog', label: 'Changelog' },
 ]
 
 export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {
@@ -162,7 +163,7 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
     <div className="portal-header w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)]">
       {/* Row 1: Logo + Name + Auth */}
       <div>
-        <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center justify-between">
             <Link to="/" className="portal-header__logo flex items-center gap-2">
               {orgLogo ? (
@@ -187,7 +188,7 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
 
       {/* Row 2: Navigation */}
       <div className="mt-2">
-        <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
           <div className="flex items-center">
             <Navigation />
           </div>

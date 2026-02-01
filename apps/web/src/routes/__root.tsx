@@ -112,6 +112,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         rel: 'stylesheet',
         href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
       },
+      {
+        rel: 'alternate',
+        type: 'application/rss+xml',
+        title: 'Changelog RSS Feed',
+        href: '/changelog/feed',
+      },
     ],
   }),
   component: RootComponent,

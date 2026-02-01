@@ -10,13 +10,12 @@ import {
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
   ValidationErrorSchema,
+  PaginationMetaSchema,
 } from './common'
 
-// Changelog entry schema
+// Changelog entry schema (API response)
 const ChangelogEntrySchema = z.object({
   id: TypeIdSchema.meta({ example: 'changelog_01h455vb4pex5vsknk084sn02q' }),
-  boardId: TypeIdSchema,
-  boardName: z.string().optional().meta({ description: 'Associated board name' }),
   title: z.string().meta({ example: 'New Dark Mode Feature' }),
   content: z.string().meta({ example: "We've added a dark mode option..." }),
   publishedAt: NullableTimestampSchema.meta({
@@ -29,10 +28,6 @@ const ChangelogEntrySchema = z.object({
 // Request body schemas
 const CreateChangelogEntrySchema = z
   .object({
-    boardId: TypeIdSchema.meta({
-      description: 'Associated board ID',
-      example: 'board_01h455vb4pex5vsknk084sn02q',
-    }),
     title: z
       .string()
       .min(1)
@@ -63,11 +58,8 @@ const UpdateChangelogEntrySchema = z
 // Response schemas
 const ChangelogListResponseSchema = z
   .object({
-    data: z.object({
-      items: z.array(ChangelogEntrySchema),
-      page: z.number(),
-      limit: z.number(),
-    }),
+    data: z.array(ChangelogEntrySchema),
+    pagination: PaginationMetaSchema,
   })
   .meta({ description: 'Paginated changelog entries' })
 
@@ -76,14 +68,8 @@ registerPath('/changelog', {
   get: {
     tags: ['Changelog'],
     summary: 'List changelog entries',
-    description: 'Returns changelog entries with optional filtering',
+    description: 'Returns changelog entries with optional filtering by published status',
     parameters: [
-      {
-        name: 'boardId',
-        in: 'query',
-        schema: { type: 'string' },
-        description: 'Filter by board ID',
-      },
       {
         name: 'published',
         in: 'query',
@@ -91,10 +77,10 @@ registerPath('/changelog', {
         description: 'Filter by published status',
       },
       {
-        name: 'page',
+        name: 'cursor',
         in: 'query',
-        schema: { type: 'integer', default: 1 },
-        description: 'Page number',
+        schema: { type: 'string' },
+        description: 'Pagination cursor for next page',
       },
       {
         name: 'limit',
@@ -150,10 +136,6 @@ registerPath('/changelog', {
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
-      },
-      404: {
-        description: 'Board not found',
-        content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
   },

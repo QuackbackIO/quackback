@@ -11,7 +11,7 @@ import type {
   postNotes,
 } from './schema/posts'
 import type { integrations } from './schema/integrations'
-import type { changelogEntries } from './schema/changelog'
+import type { changelogEntries, changelogEntryPosts } from './schema/changelog'
 import type { member } from './schema/auth'
 
 // Note: Billing types (Subscription, Invoice) are no longer in the tenant database.
@@ -166,6 +166,8 @@ export type IntegrationStatus = Integration['status']
 // Changelog types
 export type ChangelogEntry = InferSelectModel<typeof changelogEntries>
 export type NewChangelogEntry = InferInsertModel<typeof changelogEntries>
+export type ChangelogEntryPost = InferSelectModel<typeof changelogEntryPosts>
+export type NewChangelogEntryPost = InferInsertModel<typeof changelogEntryPosts>
 
 // Member types
 export type Member = InferSelectModel<typeof member>

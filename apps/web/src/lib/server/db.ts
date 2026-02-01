@@ -156,6 +156,8 @@ export {
   // Schema tables - changelog
   changelogEntries,
   changelogEntriesRelations,
+  changelogEntryPosts,
+  changelogEntryPostsRelations,
   // Schema tables - notifications
   inAppNotifications,
   inAppNotificationsRelations,

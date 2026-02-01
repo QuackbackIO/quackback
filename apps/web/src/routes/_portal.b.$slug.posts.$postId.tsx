@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
-import { createFileRoute, Link, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { BackLink } from '@/components/ui/back-link'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
@@ -147,14 +147,13 @@ function PostDetailPage() {
     <div className="py-6">
       <UnsubscribeBanner postId={post.id as PostId} />
 
-      <Link
+      <BackLink
         to="/"
         search={{ board: slug }}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+        className="mb-6 animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
       >
-        <ArrowLeftIcon className="h-4 w-4" />
-        <span>{board.name}</span>
-      </Link>
+        {board.name}
+      </BackLink>
 
       <div
         className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"

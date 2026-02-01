@@ -77,8 +77,8 @@ function PublicPortalPage() {
   // Show empty state if no boards exist
   if (loaderData.isEmpty && !isFetching && (!portalData || portalData.boards.length === 0)) {
     return (
-      <main className="py-6">
-        <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
+      <div className="py-6">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
           <div className="rounded-full bg-muted p-4 mb-6">
             <ChatBubbleOvalLeftEllipsisIcon className="h-10 w-10 text-muted-foreground" />
           </div>
@@ -88,25 +88,25 @@ function PublicPortalPage() {
             suggestions.
           </p>
         </div>
-      </main>
+      </div>
     )
   }
 
   // Handle initial loading state (should be rare due to SSR)
   if (!portalData) {
     return (
-      <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
+      <div className="py-6">
         <div className="flex justify-center py-16">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
         </div>
-      </main>
+      </div>
     )
   }
 
   const user = session?.user ? { name: session.user.name, email: session.user.email } : null
 
   return (
-    <main className="mx-auto max-w-5xl w-full flex-1 py-6 sm:px-6 lg:px-8">
+    <div className="py-6">
       <FeedbackContainer
         workspaceName={org.name}
         workspaceSlug={org.slug}
@@ -123,6 +123,6 @@ function PublicPortalPage() {
         defaultBoardId={portalData.boards[0]?.id}
         user={user}
       />
-    </main>
+    </div>
   )
 }
