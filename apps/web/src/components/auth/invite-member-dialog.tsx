@@ -83,7 +83,7 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Invite Team Member</DialogTitle>
         </DialogHeader>

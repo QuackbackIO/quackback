@@ -587,7 +587,7 @@ function CreateStatusDialog({ open, onOpenChange, category, onSubmit }: CreateSt
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add new status</DialogTitle>
           <DialogDescription>
