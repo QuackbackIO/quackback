@@ -35,6 +35,20 @@ export const SlugSchema = z.string().min(1).max(100).meta({
   example: 'feature-requests',
 })
 
+// Pagination meta schema
+export const PaginationMetaSchema = z
+  .object({
+    cursor: z.string().nullable().meta({
+      description: 'Cursor for fetching next page (null if no more pages)',
+    }),
+    hasMore: z.boolean().meta({
+      description: 'Whether there are more items to fetch',
+    }),
+  })
+  .meta({
+    description: 'Cursor-based pagination metadata',
+  })
+
 // Common error response schemas
 export const UnauthorizedErrorSchema = z
   .object({
