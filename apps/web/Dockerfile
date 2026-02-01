@@ -3,15 +3,9 @@
 # ============================================================================
 # Quackback Docker Build
 #
-# Build args:
-#   EDITION: self-hosted (default) | cloud
-#
-# Example builds:
+# Example:
 #   docker build -t quackback .
-#   docker build --build-arg EDITION=cloud -t quackback:cloud .
 # ============================================================================
-
-ARG EDITION=self-hosted
 
 # Base image with Bun
 FROM oven/bun:1.3.7 AS base
@@ -21,7 +15,6 @@ WORKDIR /app
 # Builder stage - install deps and build
 # ============================================================================
 FROM base AS builder
-ARG EDITION
 
 WORKDIR /app
 
@@ -29,17 +22,12 @@ WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY apps/web ./apps/web
 COPY packages ./packages
-COPY scripts ./scripts
 
 # Install all dependencies (including devDependencies for build)
 RUN bun install --frozen-lockfile
 
 # Set build-time environment
 ENV NODE_ENV=production
-ENV EDITION=${EDITION}
-
-# Run edition preparation (route exclusion based on edition)
-RUN bun scripts/prepare-edition.ts
 
 # Build the TanStack Start application
 WORKDIR /app/apps/web
@@ -49,12 +37,10 @@ RUN bun run build
 # Production runner
 # ============================================================================
 FROM oven/bun:1.3.7-slim AS runner
-ARG EDITION
 
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV EDITION=${EDITION}
 
 # Create non-root user for security
 RUN groupadd --system --gid 1001 nodejs && \

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["dom", "dom.iterable", "ES2022"],
-    "types": ["node", "@cloudflare/workers-types"],
+    "types": ["node"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -23,6 +23,6 @@
     "resolvePackageJsonImports": true,
     "customConditions": ["import", "module"]
   },
-  "include": ["worker-configuration.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", ".tanstack", "build"]
 }
