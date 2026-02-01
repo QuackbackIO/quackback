@@ -8,7 +8,6 @@ import {
 import { PortalAuthFormInline } from './portal-auth-form-inline'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
-import type { PublicOIDCConfig } from '@/lib/server/domains/settings'
 
 interface OrgAuthConfig {
   found: boolean
@@ -16,13 +15,11 @@ interface OrgAuthConfig {
     google: boolean
     github: boolean
   }
-  oidc?: PublicOIDCConfig | null
   openSignup?: boolean
 }
 
 interface AuthDialogProps {
   authConfig?: OrgAuthConfig | null
-  orgSlug: string
 }
 
 /**
@@ -32,7 +29,7 @@ interface AuthDialogProps {
  * Opens when triggered via useAuthPopover context.
  * Listens for auth success via BroadcastChannel.
  */
-export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
+export function AuthDialog({ authConfig }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
 
   // Listen for auth success broadcasts from popup windows
@@ -53,12 +50,7 @@ export function AuthDialog({ authConfig, orgSlug }: AuthDialogProps) {
               : 'Sign up to vote and comment on feedback'}
           </DialogDescription>
         </DialogHeader>
-        <PortalAuthFormInline
-          mode={mode}
-          authConfig={authConfig}
-          orgSlug={orgSlug}
-          onModeSwitch={setMode}
-        />
+        <PortalAuthFormInline mode={mode} authConfig={authConfig} onModeSwitch={setMode} />
       </DialogContent>
     </Dialog>
   )

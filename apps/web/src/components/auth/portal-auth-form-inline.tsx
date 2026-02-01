@@ -7,14 +7,12 @@ import {
   InformationCircleIcon,
   EnvelopeIcon,
   ArrowLeftIcon,
-  KeyIcon,
 } from '@heroicons/react/24/solid'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
 import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/server/auth/client'
-import type { PublicOIDCConfig } from '@/lib/server/domains/settings'
 
-type OAuthProvider = 'google' | 'github' | 'oidc'
+type OAuthProvider = 'google' | 'github'
 
 interface OrgAuthConfig {
   found: boolean
@@ -22,7 +20,6 @@ interface OrgAuthConfig {
     google: boolean
     github: boolean
   }
-  oidc?: PublicOIDCConfig | null
   openSignup?: boolean
 }
 
@@ -38,8 +35,6 @@ interface PortalAuthFormInlineProps {
   mode: 'login' | 'signup'
   authConfig?: OrgAuthConfig | null
   invitationId?: string | null
-  /** Organization slug for OAuth */
-  orgSlug: string
   /** Called to switch between login/signup modes */
   onModeSwitch?: (mode: 'login' | 'signup') => void
 }
@@ -81,7 +76,7 @@ function OAuthButton({
 /**
  * Inline Portal Auth Form for use in dialogs/popovers
  *
- * Supports email OTP, OAuth, and OIDC authentication.
+ * Supports email OTP and OAuth (GitHub, Google) authentication.
  *
  * Unlike the full-page PortalAuthForm, this version:
  * - Opens OAuth in popup windows instead of redirecting
@@ -92,7 +87,6 @@ export function PortalAuthFormInline({
   mode,
   authConfig,
   invitationId,
-  orgSlug,
   onModeSwitch,
 }: PortalAuthFormInlineProps) {
   const [step, setStep] = useState<Step>('email')
@@ -100,9 +94,9 @@ export function PortalAuthFormInline({
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   // Track which specific action is loading (null = not loading)
-  const [loadingAction, setLoadingAction] = useState<
-    'email' | 'code' | 'google' | 'github' | 'oidc' | null
-  >(null)
+  const [loadingAction, setLoadingAction] = useState<'email' | 'code' | 'google' | 'github' | null>(
+    null
+  )
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
   const [loadingInvitation, setLoadingInvitation] = useState(!!invitationId)
@@ -248,12 +242,7 @@ export function PortalAuthFormInline({
   }
 
   /**
-   * Initiate OAuth login
-   *
-   * All providers use popup windows for authentication.
-   * All providers use the custom /api/auth/oauth/[provider] route which:
-   * - Handles OAuth initiation with signed state containing workspace info
-   * - Redirects callback to app domain, then transfers session to tenant domain
+   * Initiate OAuth login using Better Auth's socialProviders
    */
   const initiateOAuth = (provider: OAuthProvider) => {
     setError('')
@@ -267,17 +256,12 @@ export function PortalAuthFormInline({
     setLoadingAction(provider)
     setPopupBlocked(false)
 
-    // Build OAuth initiation URL with workspace info
-    const returnDomain = window.location.host
+    // Build OAuth URL using Better Auth's socialProviders
     const params = new URLSearchParams({
-      workspace: orgSlug,
-      returnDomain,
-      callbackUrl: '/auth/auth-complete',
-      popup: 'true',
-      ...(provider === 'oidc' ? { type: 'portal' } : {}),
+      callbackURL: '/auth/auth-complete',
     })
+    const oauthUrl = `/api/auth/sign-in/${provider}?${params}`
 
-    const oauthUrl = `/api/auth/oauth/${provider}?${params}`
     const popup = openAuthPopup(oauthUrl)
     if (!popup) {
       setPopupBlocked(true)
@@ -290,9 +274,7 @@ export function PortalAuthFormInline({
   // Determine which OAuth methods to show
   const showGoogle = authConfig?.oauth?.google ?? false
   const showGithub = authConfig?.oauth?.github ?? false
-  const showOidc = authConfig?.oidc?.enabled === true
-  const oidcDisplayName = authConfig?.oidc?.displayName || 'SSO'
-  const showOAuth = showGoogle || showGithub || showOidc
+  const showOAuth = showGoogle || showGithub
 
   // Loading invitation
   if (loadingInvitation) {
@@ -353,17 +335,6 @@ export function PortalAuthFormInline({
       {showOAuth && step === 'email' && !invitation && (
         <>
           <div className="space-y-3">
-            {showOidc && (
-              <OAuthButton
-                provider="oidc"
-                icon={<KeyIcon className="h-5 w-5" />}
-                label={oidcDisplayName}
-                mode={mode}
-                loading={loadingAction === 'oidc'}
-                disabled={loadingAction !== null}
-                onClick={() => initiateOAuth('oidc')}
-              />
-            )}
             {showGoogle && (
               <OAuthButton
                 provider="google"

@@ -13,8 +13,6 @@ import appCss from '../globals.css?url'
 import { cn } from '@/lib/shared/utils'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { TenantSettings } from '@/lib/server/domains/settings'
-import type { RequestContext } from '@/lib/server/tenant'
-import { WorkspaceNotFoundPage } from '@/components/workspace-not-found'
 import { ThemeProvider } from '@/components/theme-provider'
 
 // Lazy load devtools in development only
@@ -47,7 +45,6 @@ const systemThemeScript = `
 
 export interface RouterContext {
   queryClient: QueryClient
-  requestContext?: RequestContext
   session?: BootstrapData['session']
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
@@ -69,11 +66,7 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const { requestContext, session, settings, userRole } = await getBootstrapData()
-
-    if (requestContext.type === 'app-domain' || requestContext.type === 'unknown') {
-      return { requestContext }
-    }
+    const { session, settings, userRole } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
@@ -82,7 +75,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       }
     }
 
-    return { requestContext, session, settings, userRole }
+    return { session, settings, userRole }
   },
   head: () => ({
     meta: [
@@ -125,27 +118,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootComponent() {
-  const { requestContext } = Route.useRouteContext()
-
-  // App domain routes (e.g., /get-started) bypass workspace check
-  if (requestContext?.type === 'app-domain') {
-    return (
-      <RootDocument>
-        <Outlet />
-      </RootDocument>
-    )
-  }
-
-  // Unknown domain in multi-tenant mode - show workspace not found
-  if (requestContext?.type === 'unknown') {
-    return (
-      <RootDocument>
-        <WorkspaceNotFoundPage />
-      </RootDocument>
-    )
-  }
-
-  // Self-hosted or tenant mode - render normally with devtools
   return (
     <RootDocument>
       <Outlet />

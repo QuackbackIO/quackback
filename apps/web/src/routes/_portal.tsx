@@ -42,7 +42,6 @@ export const Route = createFileRoute('/_portal')({
     const authConfig = {
       found: true,
       oauth: portalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
-      oidc: portalConfig?.oidc ?? null,
     }
 
     return {
@@ -88,7 +87,7 @@ function PortalLayout() {
         <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
           <Outlet />
         </main>
-        <AuthDialog authConfig={authConfig} orgSlug={org.slug} />
+        <AuthDialog authConfig={authConfig} />
       </div>
     </AuthPopoverProvider>
   )

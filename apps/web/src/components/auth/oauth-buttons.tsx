@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { KeyIcon } from '@heroicons/react/24/solid'
-import type { PublicOIDCConfig } from '@/lib/server/domains/settings'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
 import {
   openAuthPopup,
@@ -10,16 +8,11 @@ import {
 } from '@/lib/client/hooks/use-auth-broadcast'
 
 interface OAuthButtonsProps {
-  orgSlug: string
   callbackUrl?: string
   /** Whether to show GitHub sign-in button (default: true) */
   showGitHub?: boolean
   /** Whether to show Google sign-in button (default: true) */
   showGoogle?: boolean
-  /** OIDC provider config (optional) */
-  oidcConfig?: PublicOIDCConfig | null
-  /** OIDC type: 'portal' for portal users, 'team' for team members (default: 'portal') */
-  oidcType?: 'portal' | 'team'
   /** Callback when auth succeeds (for popup flow) */
   onSuccess?: () => void
 }
@@ -27,19 +20,13 @@ interface OAuthButtonsProps {
 /**
  * OAuth Buttons Component
  *
- * Renders GitHub, Google, and custom OIDC sign-in buttons.
+ * Renders GitHub and Google sign-in buttons.
  * All providers use popup windows for authentication.
- * All providers use the custom /api/auth/oauth/[provider] route which:
- * - Handles OAuth initiation with signed state containing workspace info
- * - Redirects callback to app domain, then transfers session to tenant domain
  */
 export function OAuthButtons({
-  orgSlug,
   callbackUrl = '/',
   showGitHub = true,
   showGoogle = true,
-  oidcConfig,
-  oidcType = 'portal',
   onSuccess,
 }: OAuthButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
@@ -62,7 +49,7 @@ export function OAuthButtons({
     },
   })
 
-  function handleOAuthLogin(provider: 'github' | 'google' | 'oidc'): void {
+  function handleOAuthLogin(provider: 'github' | 'google'): void {
     if (hasPopup()) {
       focusPopup()
       return
@@ -71,19 +58,11 @@ export function OAuthButtons({
     setLoadingProvider(provider)
     setPopupBlocked(false)
 
-    // Build OAuth initiation URL with workspace info
-    // All providers use the same custom route which handles:
-    // - OAuth initiation with signed state
-    // - Callback on app domain
-    // - Session transfer to tenant domain
+    // Build OAuth URL using Better Auth's socialProviders
     const params = new URLSearchParams({
-      workspace: orgSlug,
-      returnDomain: window.location.host,
-      callbackUrl: '/auth/auth-complete',
-      popup: 'true',
-      ...(provider === 'oidc' ? { type: oidcType } : {}),
+      callbackURL: callbackUrl,
     })
-    const oauthUrl = `/api/auth/oauth/${provider}?${params}`
+    const oauthUrl = `/api/auth/sign-in/${provider}?${params}`
 
     const popup = openAuthPopup(oauthUrl)
     if (!popup) {
@@ -94,10 +73,8 @@ export function OAuthButtons({
     trackPopup(popup)
   }
 
-  const showOIDC = oidcConfig?.enabled === true
-
   // Don't render anything if all providers are disabled
-  if (!showGitHub && !showGoogle && !showOIDC) {
+  if (!showGitHub && !showGoogle) {
     return null
   }
 
@@ -107,20 +84,6 @@ export function OAuthButtons({
         <p className="text-sm text-destructive text-center">
           Popup blocked. Please allow popups for this site.
         </p>
-      )}
-      {showOIDC && (
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() => handleOAuthLogin('oidc')}
-          disabled={loadingProvider !== null}
-        >
-          <KeyIcon className="mr-2 h-4 w-4" />
-          {loadingProvider === 'oidc'
-            ? 'Signing in...'
-            : `Continue with ${oidcConfig?.displayName || 'SSO'}`}
-        </Button>
       )}
       {showGitHub && (
         <Button
