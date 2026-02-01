@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
-import { useAuthPopover } from '@/components/auth/auth-popover-context'
+import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
 import { useCreateComment } from '@/lib/hooks/use-comment-actions'
 import type { PublicCommentView } from '@/lib/queries/portal-detail'
-import type { PostId, MemberId } from '@quackback/ids'
+import type { CommentId, PostId, MemberId } from '@quackback/ids'
 
 interface AuthCommentsSectionProps {
   postId: PostId
@@ -15,6 +15,15 @@ interface AuthCommentsSectionProps {
   user?: { name: string | null; email: string; memberId?: MemberId }
   /** ID of the pinned comment (for showing pinned indicator) */
   pinnedCommentId?: string | null
+  // Admin mode props
+  /** Enable comment pinning (admin only) */
+  canPinComments?: boolean
+  /** Callback when comment is pinned */
+  onPinComment?: (commentId: CommentId) => void
+  /** Callback when comment is unpinned */
+  onUnpinComment?: () => void
+  /** Whether pin/unpin is in progress */
+  isPinPending?: boolean
 }
 
 /**
@@ -30,11 +39,16 @@ export function AuthCommentsSection({
   allowCommenting: serverAllowCommenting = false,
   user: serverUser,
   pinnedCommentId,
+  canPinComments = false,
+  onPinComment,
+  onUnpinComment,
+  isPinPending = false,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { session } = useRouteContext({ from: '__root__' })
-  const { openAuthPopover } = useAuthPopover()
+  // Use safe version - returns null in admin context where provider isn't available
+  const authPopover = useAuthPopoverSafe()
 
   // Refresh page on auth change to get updated server state (member status, user data)
   useAuthBroadcast({
@@ -71,9 +85,13 @@ export function AuthCommentsSection({
       comments={comments}
       allowCommenting={allowCommenting}
       user={userData}
-      onAuthRequired={() => openAuthPopover({ mode: 'login' })}
+      onAuthRequired={() => authPopover?.openAuthPopover({ mode: 'login' })}
       createComment={createComment}
       pinnedCommentId={pinnedCommentId}
+      canPinComments={canPinComments}
+      onPinComment={onPinComment}
+      onUnpinComment={onUnpinComment}
+      isPinPending={isPinPending}
     />
   )
 }
