@@ -24,6 +24,7 @@ import {
   gt,
   desc,
   inArray,
+  sql,
 } from '@/lib/server/db'
 import type { BoardId, ChangelogId, MemberId, PostId, StatusId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -699,4 +700,63 @@ function computeStatus(publishedAt: Date | null): 'draft' | 'scheduled' | 'publi
   if (!publishedAt) return 'draft'
   if (publishedAt > new Date()) return 'scheduled'
   return 'published'
+}
+
+// ============================================================================
+// Shipped Posts Search
+// ============================================================================
+
+/**
+ * Search posts with status category 'complete' for linking to changelogs
+ *
+ * @param params - Search parameters
+ * @returns List of shipped posts matching the search query
+ */
+export async function searchShippedPosts(params: {
+  query?: string
+  boardId?: BoardId
+  limit?: number
+}): Promise<Array<{ id: PostId; title: string; voteCount: number; boardSlug: string }>> {
+  const { query, boardId, limit = 20 } = params
+
+  // Get all status IDs with category 'complete'
+  const completeStatuses = await db.query.postStatuses.findMany({
+    where: eq(postStatuses.category, 'complete'),
+    columns: { id: true },
+  })
+
+  if (completeStatuses.length === 0) {
+    return []
+  }
+
+  const statusIds = completeStatuses.map((s) => s.id)
+
+  // Build conditions
+  const conditions = [inArray(posts.statusId, statusIds), isNull(posts.deletedAt)]
+
+  if (boardId) {
+    conditions.push(eq(posts.boardId, boardId))
+  }
+
+  // Search by title if query provided
+  if (query?.trim()) {
+    const searchTerm = `%${query.trim().toLowerCase()}%`
+    conditions.push(sql`LOWER(${posts.title}) LIKE ${searchTerm}`)
+  }
+
+  // Fetch posts with board slug
+  const results = await db
+    .select({
+      id: posts.id,
+      title: posts.title,
+      voteCount: posts.voteCount,
+      boardSlug: boards.slug,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(boards.id, posts.boardId))
+    .where(and(...conditions))
+    .orderBy(desc(posts.voteCount), desc(posts.createdAt))
+    .limit(limit)
+
+  return results
 }

@@ -8,6 +8,7 @@ import {
   Cog6ToothIcon,
   Bars3Icon,
   ArrowTopRightOnSquareIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -36,6 +37,7 @@ interface AdminSidebarProps {
 const navItems = [
   { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
+  { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
   { label: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon },
 ]

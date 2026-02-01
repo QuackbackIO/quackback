@@ -13,6 +13,7 @@ export {
   listChangelogs,
   getPublicChangelogById,
   listPublicChangelogs,
+  searchShippedPosts,
 } from './changelog.service'
 
 // Types

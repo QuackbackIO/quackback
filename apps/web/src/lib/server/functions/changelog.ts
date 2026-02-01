@@ -15,8 +15,10 @@ import {
   listChangelogs,
   getPublicChangelogById,
   listPublicChangelogs,
+  searchShippedPosts,
   type PublishState,
 } from '@/lib/server/domains/changelog'
+import { z } from 'zod'
 import {
   createChangelogSchema,
   updateChangelogSchema,
@@ -206,4 +208,29 @@ export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
         publishedAt: toIsoString(entry.publishedAt),
       })),
     }
+  })
+
+// ============================================================================
+// Shipped Posts Search (for linking)
+// ============================================================================
+
+const searchShippedPostsSchema = z.object({
+  query: z.string().optional(),
+  boardId: z.string().optional(),
+  limit: z.number().int().positive().max(50).optional(),
+})
+
+/**
+ * Search posts with status category 'complete' for linking to changelogs
+ */
+export const searchShippedPostsFn = createServerFn({ method: 'GET' })
+  .inputValidator(searchShippedPostsSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+
+    return searchShippedPosts({
+      query: data.query,
+      boardId: data.boardId as BoardId | undefined,
+      limit: data.limit,
+    })
   })
