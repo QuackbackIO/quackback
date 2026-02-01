@@ -493,10 +493,10 @@ lib/
 - [x] All tests pass (`bun run typecheck` passes)
 - [x] Build succeeds (verified)
 
-**Optional documentation** (can be done later):
+**Documentation**:
 
-- [ ] Clear documentation in lib/README.md
-- [ ] CLAUDE.md updated with new structure
+- [x] Clear documentation in lib/README.md
+- [x] CLAUDE.md updated with new structure
 
 **Completed work**:
 
