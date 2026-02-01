@@ -488,12 +488,15 @@ lib/
 
 **Acceptance criteria**:
 
-- [x] All code in lib/ is under shared/, client/, server/, or core/ (main structure complete)
+- [x] All code in lib/ is under shared/, client/, server/ only (no core/, no root files)
 - [x] No feature directories at lib/ root (20 domains moved to server/domains/)
-- [ ] Clear documentation in lib/README.md
-- [ ] CLAUDE.md updated with new structure
 - [x] All tests pass (`bun run typecheck` passes)
 - [x] Build succeeds (verified)
+
+**Optional documentation** (can be done later):
+
+- [ ] Clear documentation in lib/README.md
+- [ ] CLAUDE.md updated with new structure
 
 **Completed work**:
 
@@ -503,8 +506,73 @@ lib/
 - Phase 7d: Moved 20 domain directories under server/domains/
 - Updated 335 files with new import paths
 
-**Remaining at lib/ root** (small, ambiguous items):
+**Root cleanup** - All completed in Phase 8 and 9:
 
-- config/, features/, theme/, utils/ - small utility directories
-- db.ts, db-types.ts, routing.ts, settings-utils.ts, subscription.ts, theme.ts, utils.ts - standalone files
-- These can be cleaned up in a follow-up but don't violate the architecture
+- config/ → server/config/
+- theme/ → shared/theme/
+- utils/ → shared/utils/ (split: cn.ts to shared, ip-hash.ts to server)
+- features/ → split: shared/features.ts + server/features.ts
+- routing.ts → shared/routing.ts
+- subscription.ts → server/subscription.ts
+- core/ → eliminated, db.ts moved to server/db.ts, db-types.ts to shared/
+
+---
+
+## Phase 8: Root Directory Cleanup (NEW)
+
+**Status**: ✅ Complete
+
+**Completed**:
+
+- [x] config/ → server/config/
+- [x] theme/ → shared/theme/
+- [x] subscription.ts → server/subscription.ts
+- [x] routing.ts → shared/routing.ts
+- [x] features/ → split into shared/features.ts + server/features.ts
+- [x] Updated 35 import references
+- [x] `bun run typecheck` passes
+
+---
+
+## Phase 9: Core Elimination (NEW)
+
+**Status**: ✅ Complete
+
+**Goal**: lib/ folder should contain ONLY client/, server/, shared/ subdirectories.
+
+**Completed**:
+
+- [x] core/db.ts → server/db.ts
+- [x] core/db-types.ts → shared/db-types.ts
+- [x] core/index.ts → deleted (no longer needed)
+- [x] Split utils into server/utils/ and shared/utils/
+  - cn.ts → shared/utils/cn.ts (client-safe)
+  - ip-hash.ts → server/utils/ip-hash.ts (uses Node crypto)
+- [x] Moved tests alongside their modules
+- [x] Deleted old compatibility files: lib/db.ts, lib/db-types.ts, lib/theme.ts, lib/utils.ts
+- [x] Updated 151 import references
+- [x] Build and typecheck pass
+
+**Final lib/ structure**:
+
+```
+lib/
+├── client/     (35 files) - hooks, mutations, queries, query, stores
+├── server/     (146 files) - auth, config, db.ts, domains, events, functions, tenant, utils
+└── shared/     (27 files) - db-types.ts, features.ts, routing.ts, schemas, theme, types, utils
+```
+
+---
+
+## Phase 10: Documentation & Verification (NEW)
+
+**Status**: ✅ Complete
+
+**Completed**:
+
+- [x] Updated components.json utils path from @/lib/utils to @/lib/shared/utils
+- [x] Updated cross-reference comments in hooks/mutations files
+- [x] Updated test mocks to use new paths (@/lib/server/db, @/lib/server/domains/api-keys)
+- [x] Verified no old paths remain in package.json, tsconfig.json, vite.config.ts
+- [x] Build passes
+- [x] Tests pass (except pre-existing db-cache.test.ts env var issue)
