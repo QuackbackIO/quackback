@@ -4,12 +4,12 @@ import type { ApiKey } from '@/lib/server/domains/api-keys'
 import type { MemberId, ApiKeyId } from '@quackback/ids'
 
 // Mock the verifyApiKey function
-vi.mock('@/lib/api-keys', () => ({
+vi.mock('@/lib/server/domains/api-keys', () => ({
   verifyApiKey: vi.fn(),
 }))
 
 // Mock the database
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
       member: {

@@ -2,7 +2,7 @@
  * Notification query hooks
  *
  * Query hooks for fetching notification data.
- * Mutations are in @/lib/mutations/notifications.
+ * Mutations are in @/lib/client/mutations/notifications.
  */
 
 import { useQuery } from '@tanstack/react-query'

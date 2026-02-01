@@ -2,7 +2,7 @@
  * Notification mutations
  *
  * Mutation hooks for notification management (read, archive).
- * Query hooks are in @/lib/hooks/use-notifications-queries.
+ * Query hooks are in @/lib/client/hooks/use-notifications-queries.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'

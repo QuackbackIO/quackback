@@ -2,7 +2,7 @@
  * Board query hooks
  *
  * Query hooks for fetching board data.
- * Mutations are in @/lib/mutations/boards.
+ * Mutations are in @/lib/client/mutations/boards.
  */
 
 import { useQuery } from '@tanstack/react-query'

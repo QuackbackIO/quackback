@@ -2,7 +2,7 @@
  * User query hooks
  *
  * Query hooks for fetching portal user data.
- * Mutations are in @/lib/mutations/users.
+ * Mutations are in @/lib/client/mutations/users.
  */
 
 import { useQuery, useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'

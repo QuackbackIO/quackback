@@ -2,7 +2,7 @@
  * Settings query hooks
  *
  * Query hooks for workspace settings.
- * Mutations are in @/lib/mutations/settings.
+ * Mutations are in @/lib/client/mutations/settings.
  */
 
 import { useQuery } from '@tanstack/react-query'

@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from 'vitest'
 import crypto from 'crypto'
 
 // Mock the db import before importing the handler
-vi.mock('@/lib/db', () => ({
+vi.mock('@/lib/server/db', () => ({
   db: {
     update: vi.fn(() => ({
       set: vi.fn(() => ({

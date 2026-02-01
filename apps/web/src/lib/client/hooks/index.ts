@@ -106,7 +106,7 @@ export {
 
 // ============================================================================
 // Event Hook System (re-exports for backwards compatibility)
-// The hook system has moved to @/lib/events/.
+// The hook system is in @/lib/server/events/.
 // Prefer importing directly from '@/lib/server/events' in new code.
 // ============================================================================
 

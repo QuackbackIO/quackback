@@ -2,7 +2,7 @@
  * Roadmap query hooks
  *
  * Query hooks for fetching roadmap data.
- * Mutations are in @/lib/mutations/roadmaps.
+ * Mutations are in @/lib/client/mutations/roadmaps.
  */
 
 import { useQuery } from '@tanstack/react-query'

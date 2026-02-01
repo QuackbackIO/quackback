@@ -2,7 +2,7 @@
  * Portal comment mutations
  *
  * Mutation hooks for portal comment operations (create, edit, delete, reactions, pin).
- * Query hooks are in @/lib/hooks/use-comments-query.
+ * Query hooks are in @/lib/client/hooks/use-comments-query.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'

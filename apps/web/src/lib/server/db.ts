@@ -2,7 +2,7 @@
  * Core database connection for the web app.
  *
  * This module contains the actual database initialization and connection logic.
- * For most imports, use '@/lib/db' which re-exports everything from here.
+ * This is the canonical location for database imports.
  *
  * @example
  * import { db, eq, and, posts } from '@/lib/server/db'

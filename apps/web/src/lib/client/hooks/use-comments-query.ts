@@ -2,7 +2,7 @@
  * Comment query hooks
  *
  * Query hooks for fetching comment permissions.
- * Mutations are in @/lib/mutations/portal-comments.
+ * Mutations are in @/lib/client/mutations/portal-comments.
  */
 
 import { useQuery } from '@tanstack/react-query'
