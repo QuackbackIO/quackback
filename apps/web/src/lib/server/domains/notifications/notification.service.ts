@@ -19,7 +19,7 @@ import {
   posts,
   boards,
   type Transaction,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import type { NotificationId, MemberId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'

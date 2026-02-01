@@ -10,7 +10,7 @@ import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSelfHosted, isCloud } from '@/lib/shared/features'
 import { getSession } from './auth'
-import { db, member, eq } from '@/lib/db'
+import { db, member, eq } from '@/lib/server/db'
 
 const requireWorkspaceRoleSchema = z.object({
   allowedRoles: z.array(z.string()),

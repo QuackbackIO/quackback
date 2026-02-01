@@ -15,7 +15,7 @@ import { toggleVoteFn } from '@/lib/server/functions/public-posts'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { PostDetails } from '@/lib/shared/types'
-import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db-types'
+import type { PostListItem, InboxPostListResult, Tag } from '@/lib/shared/db-types'
 import type { MemberId, PostId, StatusId, TagId } from '@quackback/ids'
 import type { CreatePostInput } from '@/lib/server/domains/posts'
 

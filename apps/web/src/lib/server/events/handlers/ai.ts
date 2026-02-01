@@ -11,7 +11,7 @@ import { isAIEnabled } from '@/lib/server/domains/ai/config'
 import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment'
 import { generatePostEmbedding } from '@/lib/server/domains/embeddings'
 import type { PostId } from '@quackback/ids'
-import { db, postTags, tags, eq } from '@/lib/db'
+import { db, postTags, tags, eq } from '@/lib/server/db'
 
 /**
  * AI hook handler - processes sentiment and embeddings for new posts.

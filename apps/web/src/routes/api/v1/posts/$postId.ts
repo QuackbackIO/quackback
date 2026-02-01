@@ -123,7 +123,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
 
           // Import service and get member details
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for responder details
           const memberRecord = await db.query.member.findFirst({
@@ -184,7 +184,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
 
           // Import service and get member details
           const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
-          const { db, member, eq } = await import('@/lib/db')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for role
           const memberRecord = await db.query.member.findFirst({

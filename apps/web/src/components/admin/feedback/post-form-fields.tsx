@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
+import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 
 interface PostFormFieldsProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

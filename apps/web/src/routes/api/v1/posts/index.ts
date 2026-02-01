@@ -147,7 +147,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
 
           // Import service and get member details
           const { createPost } = await import('@/lib/server/domains/posts/post.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for author details
           const memberRecord = await db.query.member.findFirst({

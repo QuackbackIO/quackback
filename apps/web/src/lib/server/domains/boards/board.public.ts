@@ -1,4 +1,4 @@
-import { db, eq, sql, boards, posts, type Board } from '@/lib/db'
+import { db, eq, sql, boards, posts, type Board } from '@/lib/server/db'
 import type { BoardId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type { BoardWithStats } from './board.types'

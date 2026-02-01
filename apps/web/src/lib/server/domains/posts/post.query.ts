@@ -20,7 +20,7 @@ import {
   asc,
   sql,
   isNull,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import type { PostId, BoardId, MemberId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, type CommentTreeNode } from '@/lib/shared'

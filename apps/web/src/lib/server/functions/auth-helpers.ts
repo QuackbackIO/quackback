@@ -10,7 +10,7 @@ import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
-import { db, member, eq, type Member } from '@/lib/db'
+import { db, member, eq, type Member } from '@/lib/server/db'
 import { tenantStorage } from '@/lib/server/tenant'
 
 // Type alias for session result

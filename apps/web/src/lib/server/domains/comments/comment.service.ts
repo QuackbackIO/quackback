@@ -22,7 +22,7 @@ import {
   posts,
   boards,
   type Comment,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import { toUuid, type CommentId, type PostId, type MemberId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'

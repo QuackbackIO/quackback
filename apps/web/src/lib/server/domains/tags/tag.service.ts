@@ -10,7 +10,7 @@
  * Note: Authorization is handled at the action/API layer, not in services.
  */
 
-import { db, eq, asc, type Tag, tags, boards, postTags, posts } from '@/lib/db'
+import { db, eq, asc, type Tag, tags, boards, postTags, posts } from '@/lib/server/db'
 import { tenantStorage } from '@/lib/server/tenant'
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'

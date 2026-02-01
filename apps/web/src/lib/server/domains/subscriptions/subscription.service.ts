@@ -28,7 +28,7 @@ import {
   member,
   user,
   type Transaction,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import type { MemberId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
 import type {

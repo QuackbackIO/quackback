@@ -22,8 +22,8 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
-import { cn, getInitials } from '@/lib/utils'
-import type { PostStatusEntity } from '@/lib/db-types'
+import { cn, getInitials } from '@/lib/shared/utils'
+import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { PostId, StatusId, TagId, RoadmapId } from '@quackback/ids'
 
 export function MetadataSidebarSkeleton() {

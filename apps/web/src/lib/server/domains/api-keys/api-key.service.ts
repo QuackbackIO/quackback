@@ -5,7 +5,7 @@
  * for public API authentication.
  */
 
-import { db, apiKeys, eq, and, isNull } from '@/lib/db'
+import { db, apiKeys, eq, and, isNull } from '@/lib/server/db'
 import type { MemberId, TypeId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { createHash, randomBytes } from 'crypto'

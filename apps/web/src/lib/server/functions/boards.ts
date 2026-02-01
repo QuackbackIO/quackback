@@ -8,7 +8,7 @@ import type { BoardId } from '@quackback/ids'
 import type { BoardSettings, SetupState } from '@quackback/db/types'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, settings, eq } from '@/lib/db'
+import { db, settings, eq } from '@/lib/server/db'
 import {
   listBoards,
   getBoardById,

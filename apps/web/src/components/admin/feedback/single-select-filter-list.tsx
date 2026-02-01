@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 interface FilterListProps<T extends { id: string; name: string }> {
   items: T[]

@@ -23,7 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { signOut } from '@/lib/server/auth/client'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { NotificationBell } from '@/components/notifications'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 interface AdminSidebarProps {
   initialUserData?: {

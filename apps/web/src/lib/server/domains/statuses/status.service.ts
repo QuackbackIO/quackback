@@ -9,7 +9,7 @@
  * - Validation
  */
 
-import { db, eq, sql, posts, postStatuses, asc } from '@/lib/db'
+import { db, eq, sql, posts, postStatuses, asc } from '@/lib/server/db'
 import { tenantStorage } from '@/lib/server/tenant'
 import { toUuid, type StatusId } from '@quackback/ids'
 import {

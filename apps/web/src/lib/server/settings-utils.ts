@@ -31,7 +31,7 @@ export interface BrandingData {
  * Get the first (and only) settings record for single workspace deployment.
  */
 async function getSettingsRecord() {
-  const { db } = await import('@/lib/db')
+  const { db } = await import('@/lib/server/db')
   return db.query.settings.findFirst()
 }
 

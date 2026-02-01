@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 const themes = [
   { value: 'system', label: 'System', icon: ComputerDesktopIcon },

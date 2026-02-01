@@ -2,7 +2,7 @@
 
 import { Link, useRouterState } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { getNotificationTypeConfig } from './notification-type-config'
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
 

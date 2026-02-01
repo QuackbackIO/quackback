@@ -5,7 +5,7 @@ import { requireAuth } from './auth-helpers'
 import { signOAuthState } from '@/lib/server/auth/oauth-state'
 import { tenantStorage } from '@/lib/server/tenant'
 import { isMultiTenant } from '@/lib/shared/features'
-import { db, integrations, integrationEventMappings, decryptToken, eq, sql } from '@/lib/db'
+import { db, integrations, integrationEventMappings, decryptToken, eq, sql } from '@/lib/server/db'
 import { listSlackChannels } from '@/lib/server/events/integrations/slack/oauth'
 import type { MemberId, IntegrationId } from '@quackback/ids'
 

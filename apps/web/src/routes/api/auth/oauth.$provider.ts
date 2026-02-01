@@ -50,7 +50,7 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        const { db, settings, eq } = await import('@/lib/db')
+        const { db, settings, eq } = await import('@/lib/server/db')
         const { signOAuthState, encryptOIDCConfig, encryptCodeVerifier } =
           await import('@/lib/server/auth/oauth-state')
 

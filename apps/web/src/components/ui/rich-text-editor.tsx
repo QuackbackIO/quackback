@@ -3,7 +3,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import { useEffect, useCallback } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { Bold, Italic, ListOrdered } from 'lucide-react'
 import {
   ArrowUturnLeftIcon,

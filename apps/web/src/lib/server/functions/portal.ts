@@ -9,7 +9,7 @@ import {
 } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
 import { getOptionalAuth, hasSessionCookie } from './auth-helpers'
-import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/db'
+import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import {
   listPublicBoardsWithStats,
   getPublicBoardBySlug,

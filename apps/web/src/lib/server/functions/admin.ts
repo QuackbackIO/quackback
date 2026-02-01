@@ -10,7 +10,7 @@ import {
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, invitation, member, user, eq, and } from '@/lib/db'
+import { db, invitation, member, user, eq, and } from '@/lib/server/db'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.query'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
@@ -293,7 +293,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ roles: ['admin'] })
 
-      const { integrations } = await import('@/lib/db')
+      const { integrations } = await import('@/lib/server/db')
 
       const integration = await db.query.integrations.findFirst({
         where: eq(integrations.integrationType, data.type),
@@ -585,7 +585,7 @@ async function generateInvitationMagicLink(
   console.log(`[fn:admin] generateInvitationMagicLink: token retrieved, length=${token.length}`)
 
   // Debug: Check if verification record was created in the database
-  const { verification } = await import('@/lib/db')
+  const { verification } = await import('@/lib/server/db')
   const verificationRecord = await db.query.verification.findFirst({
     where: eq(verification.identifier, email.toLowerCase()),
     orderBy: (v, { desc }) => [desc(v.createdAt)],

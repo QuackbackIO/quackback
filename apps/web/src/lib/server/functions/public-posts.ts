@@ -654,7 +654,7 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
     console.log(`[fn:public-posts] findSimilarPostsFn: title="${data.title.slice(0, 30)}..."`)
     try {
       const { db, posts, boards, postStatuses, and, isNull, desc, sql, inArray } =
-        await import('@/lib/db')
+        await import('@/lib/server/db')
       const { generateEmbedding } = await import('@/lib/server/domains/embeddings')
       const { isAIEnabled } = await import('@/lib/server/domains/ai/config')
 

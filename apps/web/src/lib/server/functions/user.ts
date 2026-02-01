@@ -4,7 +4,7 @@ import { type UserId, type MemberId } from '@quackback/ids'
 import { getSession } from './auth'
 import { requireAuth } from './auth-helpers'
 import { getCurrentUserRole } from './workspace'
-import { db, user, member, eq } from '@/lib/db'
+import { db, user, member, eq } from '@/lib/server/db'
 import {
   getNotificationPreferences,
   updateNotificationPreferences,

@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 const Collapsible = CollapsiblePrimitive.Root
 

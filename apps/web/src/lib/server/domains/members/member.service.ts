@@ -4,7 +4,7 @@
  * Provides member lookup operations.
  */
 
-import { db, eq, sql, member, user, type Member } from '@/lib/db'
+import { db, eq, sql, member, user, type Member } from '@/lib/server/db'
 import type { MemberId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import type { TeamMember } from './member.types'

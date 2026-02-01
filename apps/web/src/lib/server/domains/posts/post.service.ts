@@ -12,7 +12,7 @@
  * - post.permissions.ts - User edit/delete permissions
  */
 
-import { db, boards, eq, postStatuses, posts, postTags, type Post } from '@/lib/db'
+import { db, boards, eq, postStatuses, posts, postTags, type Post } from '@/lib/server/db'
 import { type PostId, type MemberId, type UserId } from '@quackback/ids'
 import { dispatchPostCreated } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'

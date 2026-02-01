@@ -8,7 +8,7 @@ import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-
 import { createCommentFn, toggleReactionFn } from '@/lib/server/functions/comments'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostDetails, CommentReaction, CommentWithReplies } from '@/lib/shared/types'
-import type { InboxPostListResult } from '@/lib/db-types'
+import type { InboxPostListResult } from '@/lib/shared/db-types'
 import type { CommentId, MemberId, PostId } from '@quackback/ids'
 
 // ============================================================================

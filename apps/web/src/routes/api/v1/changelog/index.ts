@@ -55,7 +55,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
 
           // Import db
           const { db, changelogEntries, eq, desc, and, isNotNull, isNull } =
-            await import('@/lib/db')
+            await import('@/lib/server/db')
 
           // Build conditions
           const conditions = []
@@ -137,7 +137,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           if (validationError) return validationError
 
           // Import db
-          const { db, changelogEntries, boards, eq } = await import('@/lib/db')
+          const { db, changelogEntries, boards, eq } = await import('@/lib/server/db')
           const { NotFoundError } = await import('@/lib/shared/errors')
 
           // Verify board exists

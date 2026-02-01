@@ -38,10 +38,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
-import type { Roadmap } from '@/lib/db-types'
+import type { Roadmap } from '@/lib/shared/db-types'
 
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null

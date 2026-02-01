@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { InviteId, MemberId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
-import { db, invitation, member, eq } from '@/lib/db'
+import { db, invitation, member, eq } from '@/lib/server/db'
 import { getSession } from './auth'
 
 /**

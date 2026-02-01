@@ -4,7 +4,7 @@
  * Handles vote operations for posts with atomic SQL to prevent race conditions.
  */
 
-import { db, posts, votes, postSubscriptions, boards, sql } from '@/lib/db'
+import { db, posts, votes, postSubscriptions, boards, sql } from '@/lib/server/db'
 import { toUuid, type PostId, type MemberId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'

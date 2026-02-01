@@ -19,7 +19,7 @@ import {
   sql,
   inArray,
   asc,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import type { BoardId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'

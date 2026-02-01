@@ -5,7 +5,7 @@
  * Moved here to centralize domain types and fix import direction.
  */
 
-import type { Board, Tag } from '@/lib/db-types'
+import type { Board, Tag } from '@/lib/shared/db-types'
 import type { PostId, StatusId, CommentId, MemberId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 

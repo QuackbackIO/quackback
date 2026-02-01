@@ -85,7 +85,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
 
           // Import service and get member details
           const { updateComment } = await import('@/lib/server/domains/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for role
           const memberRecord = await db.query.member.findFirst({
@@ -132,7 +132,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
 
           // Import service and get member details
           const { deleteComment } = await import('@/lib/server/domains/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for role
           const memberRecord = await db.query.member.findFirst({

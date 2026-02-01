@@ -97,7 +97,7 @@ async function createAuth() {
     member: memberTable,
     invitation: invitationTable,
     eq,
-  } = await import('@/lib/db')
+  } = await import('@/lib/server/db')
   const { sendSigninCodeEmail } = await import('@quackback/email')
 
   // Get plugins

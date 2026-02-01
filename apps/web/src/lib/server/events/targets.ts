@@ -13,7 +13,7 @@ import {
   and,
   member,
   webhooks,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import {
   getSubscribersForEvent,
   batchGetNotificationPreferences,

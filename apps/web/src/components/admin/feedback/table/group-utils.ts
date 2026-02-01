@@ -1,4 +1,4 @@
-import type { PostListItem, PostStatusEntity } from '@/lib/db-types'
+import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
 import type { StatusId } from '@quackback/ids'
 
 export interface StatusGroup {

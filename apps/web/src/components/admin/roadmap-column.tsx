@@ -2,7 +2,7 @@ import { useEffect, useRef, memo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { RoadmapCard } from './roadmap-card'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   useRoadmapPostsByRoadmap,
   flattenRoadmapPostEntries,

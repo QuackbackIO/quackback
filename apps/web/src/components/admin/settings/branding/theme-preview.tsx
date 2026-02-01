@@ -9,7 +9,7 @@ import {
   FireIcon,
 } from '@heroicons/react/24/solid'
 import { oklchToHex, type ThemeVariables } from '@/lib/shared/theme'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 /** Map font family names to Google Fonts URL */
 const GOOGLE_FONT_MAP: Record<string, string> = {

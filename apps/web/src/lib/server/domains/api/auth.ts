@@ -56,7 +56,7 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
   }
 
   // Fetch member role for authorization checks
-  const { db, member, eq } = await import('@/lib/db')
+  const { db, member, eq } = await import('@/lib/server/db')
   const memberRecord = await db.query.member.findFirst({
     where: eq(member.id, apiKey.createdById),
     columns: { role: true },

@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
 
           // Import service functions
           const { getMemberById } = await import('@/lib/server/domains/members/member.service')
-          const { db, eq, user } = await import('@/lib/db')
+          const { db, eq, user } = await import('@/lib/server/db')
 
           const foundMember = await getMemberById(memberId as MemberId)
 
@@ -103,7 +103,7 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
           // Import service functions
           const { updateMemberRole, getMemberById } =
             await import('@/lib/server/domains/members/member.service')
-          const { db, eq, user } = await import('@/lib/db')
+          const { db, eq, user } = await import('@/lib/server/db')
 
           await updateMemberRole(memberId as MemberId, parsed.data.role, actingMemberId)
 

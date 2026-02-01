@@ -1,5 +1,5 @@
 import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import type { BoardWithStats } from '@/lib/server/domains/boards'
 
 interface FeedbackSidebarProps {

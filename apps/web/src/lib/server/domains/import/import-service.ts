@@ -6,7 +6,7 @@
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { db, posts, tags, postTags, postStatuses, eq } from '@/lib/db'
+import { db, posts, tags, postTags, postStatuses, eq } from '@/lib/server/db'
 import {
   boardIdSchema,
   createId,

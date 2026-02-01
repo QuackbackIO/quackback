@@ -1,6 +1,6 @@
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 
 interface VoteButtonProps {

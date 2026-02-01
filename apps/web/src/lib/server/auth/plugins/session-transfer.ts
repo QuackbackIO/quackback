@@ -74,7 +74,7 @@ export const sessionTransfer = () => {
             return ctx.redirect('/admin/login?error=invalid_token')
           }
 
-          const { db, user, member, eq } = await import('@/lib/db')
+          const { db, user, member, eq } = await import('@/lib/server/db')
 
           // 2. Find or create user
           const existingUser = await db.query.user.findFirst({

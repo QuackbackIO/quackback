@@ -8,7 +8,7 @@
 import { useQuery, useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
 import { fetchInboxPostsForAdmin, fetchPostWithDetails } from '@/lib/server/functions/posts'
 import type { InboxFilters, PostDetails } from '@/lib/shared/types'
-import type { PostListItem, InboxPostListResult } from '@/lib/db-types'
+import type { PostListItem, InboxPostListResult } from '@/lib/shared/db-types'
 import type { BoardId, MemberId, PostId, TagId } from '@quackback/ids'
 
 // ============================================================================

@@ -22,7 +22,7 @@ export const Route = createFileRoute('/api/auth/$')({
 
           // Check if verification record exists before Better Auth processes
           try {
-            const { db, verification, eq } = await import('@/lib/db')
+            const { db, verification, eq } = await import('@/lib/server/db')
             const records = await db.query.verification.findMany({
               orderBy: (v, { desc }) => [desc(v.createdAt)],
               limit: 5,

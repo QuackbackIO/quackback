@@ -11,7 +11,7 @@ import { PencilSquareIcon } from '@heroicons/react/24/solid'
 import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
+import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 import { Form } from '@/components/ui/form'
 import { PostFormFields } from './post-form-fields'
 

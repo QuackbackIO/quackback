@@ -16,7 +16,7 @@ import {
   eq,
   asc,
   DEFAULT_STATUSES,
-} from '@/lib/db'
+} from '@/lib/server/db'
 
 /**
  * Server functions for onboarding workflow.

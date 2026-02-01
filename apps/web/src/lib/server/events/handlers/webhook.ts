@@ -176,7 +176,7 @@ export const webhookHook: HookHandler = {
  */
 async function updateWebhookSuccess(webhookId: WebhookId): Promise<void> {
   try {
-    const { db, webhooks, eq } = await import('@/lib/db')
+    const { db, webhooks, eq } = await import('@/lib/server/db')
     await db
       .update(webhooks)
       .set({
@@ -198,7 +198,7 @@ async function updateWebhookFailure(
   error: string | undefined
 ): Promise<void> {
   try {
-    const { db, webhooks, eq, sql } = await import('@/lib/db')
+    const { db, webhooks, eq, sql } = await import('@/lib/server/db')
 
     // Increment failure count and potentially disable
     await db

@@ -4,7 +4,17 @@
  * Handles user permission checks for editing and deleting their own posts.
  */
 
-import { db, posts, comments, postEditHistory, eq, and, sql, isNull, type Post } from '@/lib/db'
+import {
+  db,
+  posts,
+  comments,
+  postEditHistory,
+  eq,
+  and,
+  sql,
+  isNull,
+  type Post,
+} from '@/lib/server/db'
 import { toUuid, type PostId, type MemberId, type StatusId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
@@ -499,7 +509,7 @@ export async function permanentDeletePost(postId: PostId): Promise<void> {
 async function isDefaultStatus(statusId: StatusId | null): Promise<boolean> {
   if (!statusId) return true // No status = treat as default
 
-  const { postStatuses, eq, and } = await import('@/lib/db')
+  const { postStatuses, eq, and } = await import('@/lib/server/db')
 
   const status = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.id, statusId), eq(postStatuses.isDefault, true)),

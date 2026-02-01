@@ -13,7 +13,7 @@ import {
   type UpdateBoardInput,
   type DeleteBoardInput,
 } from '@/lib/server/functions/boards'
-import type { Board } from '@/lib/db-types'
+import type { Board } from '@/lib/shared/db-types'
 import type { BoardId } from '@quackback/ids'
 import { boardKeys } from '@/lib/client/hooks/use-boards-query'
 

@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImageCropper } from '@/components/ui/image-cropper'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   BrandingLayout,
   BrandingControlsPanel,

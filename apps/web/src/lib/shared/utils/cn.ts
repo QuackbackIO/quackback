@@ -1,9 +1,9 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
+/**
+ * Merge Tailwind CSS classes with clsx
+ */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
-
-// Re-export utilities from shared
-export { getInitials } from './shared/utils/string'

@@ -5,7 +5,7 @@
  * For most imports, use '@/lib/db' which re-exports everything from here.
  *
  * @example
- * import { db, eq, and, posts } from '@/lib/db'
+ * import { db, eq, and, posts } from '@/lib/server/db'
  */
 
 import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'

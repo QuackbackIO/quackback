@@ -16,7 +16,7 @@ import { RoadmapCardOverlay } from './roadmap-card'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useRoadmapSelection } from './use-roadmap-selection'
 import { useChangePostStatusId } from '@/lib/client/mutations/posts'
-import type { PostStatusEntity } from '@/lib/db-types'
+import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
 import type { StatusId, PostId, RoadmapId } from '@quackback/ids'
 

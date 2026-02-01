@@ -18,11 +18,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { REACTION_EMOJIS } from '@/lib/db-types'
+import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { toggleReactionFn } from '@/lib/server/functions/comments'
 import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
-import { cn, getInitials } from '@/lib/utils'
+import { cn, getInitials } from '@/lib/shared/utils'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
 import type { CommentId, PostId } from '@quackback/ids'
 

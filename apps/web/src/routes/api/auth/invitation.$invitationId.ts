@@ -9,7 +9,7 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
        * Public endpoint to get invitation details for signup form
        */
       GET: async ({ request: _request, params }) => {
-        const { db, invitation, eq } = await import('@/lib/db')
+        const { db, invitation, eq } = await import('@/lib/server/db')
 
         const { invitationId: invitationIdParam } = params
         console.log(`[auth] GET invitation: id=${invitationIdParam.slice(0, 12)}...`)

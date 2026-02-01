@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 interface BrandingLayoutProps {
   children: React.ReactNode

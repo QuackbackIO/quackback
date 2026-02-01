@@ -4,7 +4,7 @@
  * Handles status change operations for posts.
  */
 
-import { db, posts, boards, postStatuses, eq } from '@/lib/db'
+import { db, posts, boards, postStatuses, eq } from '@/lib/server/db'
 import { type PostId, type StatusId, type UserId } from '@quackback/ids'
 import { dispatchPostStatusChanged } from '@/lib/server/events/dispatch'
 import { NotFoundError } from '@/lib/shared/errors'

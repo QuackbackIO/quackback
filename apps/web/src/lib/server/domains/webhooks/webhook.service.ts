@@ -5,7 +5,7 @@
  */
 
 import crypto from 'crypto'
-import { db, webhooks, eq, sql, encryptToken } from '@/lib/db'
+import { db, webhooks, eq, sql, encryptToken } from '@/lib/server/db'
 import { createId, type MemberId, type WebhookId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isValidWebhookUrl } from '@/lib/server/events/integrations/webhook/constants'

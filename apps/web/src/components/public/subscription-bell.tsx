@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { BellIcon, BellAlertIcon, CheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,

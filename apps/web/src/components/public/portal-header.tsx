@@ -1,5 +1,5 @@
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/server/auth/client'
 import {

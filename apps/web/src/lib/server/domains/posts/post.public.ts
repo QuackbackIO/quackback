@@ -18,7 +18,7 @@ import {
   postSubscriptions,
   member as memberTable,
   user as userTable,
-} from '@/lib/db'
+} from '@/lib/server/db'
 import {
   toUuid,
   type PostId,

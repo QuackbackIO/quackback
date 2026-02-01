@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { BellIcon, InboxIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   useNotifications,
   type SerializedNotification,

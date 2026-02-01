@@ -59,7 +59,7 @@ export function oauthComplete(): BetterAuthPlugin {
             return redirectWithError(ctx, isExpired ? 'token_expired' : 'invalid_token')
           }
 
-          const { db, user, account, member, eq, and } = await import('@/lib/db')
+          const { db, user, account, member, eq, and } = await import('@/lib/server/db')
           const { generateId } = await import('@quackback/ids')
           const isTeamSSO = payload.provider === 'team-sso'
 

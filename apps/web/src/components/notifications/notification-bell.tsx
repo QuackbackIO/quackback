@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUnreadCount } from '@/lib/client/hooks/use-notifications-queries'
 import { NotificationDropdown } from './notification-dropdown'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 interface NotificationBellProps {
   className?: string

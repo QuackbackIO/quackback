@@ -60,6 +60,6 @@ async function getDbContext(workspaceSlug: string) {
     return { db, encryptToken, integrations }
   }
 
-  const { db, encryptToken, integrations } = await import('@/lib/db')
+  const { db, encryptToken, integrations } = await import('@/lib/server/db')
   return { db, encryptToken, integrations }
 }

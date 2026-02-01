@@ -3,7 +3,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
-import { db, member, eq } from '@/lib/db'
+import { db, member, eq } from '@/lib/server/db'
 import { tenantStorage } from '@/lib/server/tenant'
 import { getSession } from './auth'
 

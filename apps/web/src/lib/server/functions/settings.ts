@@ -33,7 +33,7 @@ import {
 import { fetchOIDCDiscovery } from '@/lib/server/auth/oidc.service'
 import { requireAuth } from './auth-helpers'
 import { getSession } from './auth'
-import { db, member, user, invitation, eq, ne } from '@/lib/db'
+import { db, member, user, invitation, eq, ne } from '@/lib/server/db'
 
 // ============================================
 // Read Operations

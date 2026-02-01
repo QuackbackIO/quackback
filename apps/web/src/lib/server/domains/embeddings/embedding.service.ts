@@ -5,7 +5,7 @@
  * Used for finding similar posts and duplicate detection.
  */
 
-import { db, posts, eq, and, isNull, sql, desc, ne } from '@/lib/db'
+import { db, posts, eq, and, isNull, sql, desc, ne } from '@/lib/server/db'
 import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'

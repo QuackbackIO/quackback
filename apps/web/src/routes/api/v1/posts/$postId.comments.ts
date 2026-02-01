@@ -97,7 +97,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
 
           // Import service and get member details
           const { createComment } = await import('@/lib/server/domains/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for author details
           const memberRecord = await db.query.member.findFirst({

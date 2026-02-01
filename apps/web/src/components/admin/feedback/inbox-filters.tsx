@@ -3,7 +3,7 @@ import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import { toggleItem } from './filter-utils'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { Board, Tag, PostStatusEntity } from '@/lib/db-types'
+import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 
 interface InboxFiltersProps {
   filters: InboxFilters

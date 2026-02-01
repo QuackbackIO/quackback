@@ -1,4 +1,4 @@
-import { db, eq, settings } from '@/lib/db'
+import { db, eq, settings } from '@/lib/server/db'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import { tenantStorage } from '@/lib/server/tenant'
 import type {

@@ -1,6 +1,6 @@
 /**
- * Shared utility functions
+ * Shared utility functions (client-safe)
  */
 
+export { cn } from './cn'
 export { getInitials } from './string'
-export { hashIP } from './ip-hash'
