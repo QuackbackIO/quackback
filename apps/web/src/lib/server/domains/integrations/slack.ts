@@ -1,11 +1,10 @@
 /**
  * Slack integration database operations.
  */
-import { isMultiTenant } from '@/lib/shared/features'
+import { db, encryptToken, integrations } from '@/lib/server/db'
 import type { MemberId } from '@quackback/ids'
 
 interface SaveIntegrationParams {
-  workspaceSlug: string
   workspaceId: string
   memberId: MemberId
   accessToken: string
@@ -15,11 +14,9 @@ interface SaveIntegrationParams {
 
 /**
  * Save or update a Slack integration.
- * Handles multi-tenant and self-hosted modes.
  */
 export async function saveIntegration(params: SaveIntegrationParams): Promise<void> {
-  const { workspaceSlug, workspaceId, memberId, accessToken, teamId, teamName } = params
-  const { db, encryptToken, integrations } = await getDbContext(workspaceSlug)
+  const { workspaceId, memberId, accessToken, teamId, teamName } = params
   const encryptedToken = encryptToken(accessToken, workspaceId)
   const now = new Date()
 
@@ -50,16 +47,4 @@ export async function saveIntegration(params: SaveIntegrationParams): Promise<vo
         updatedAt: now,
       },
     })
-}
-
-async function getDbContext(workspaceSlug: string) {
-  if (isMultiTenant()) {
-    const { getTenantDbBySlug } = await import('@/lib/server/tenant')
-    const { encryptToken, integrations } = await import('@quackback/db')
-    const { db } = await getTenantDbBySlug(workspaceSlug)
-    return { db, encryptToken, integrations }
-  }
-
-  const { db, encryptToken, integrations } = await import('@/lib/server/db')
-  return { db, encryptToken, integrations }
 }

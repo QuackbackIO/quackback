@@ -25,11 +25,6 @@ export function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 export function buildCallbackUri(integration: string, request: Request): string {
-  const appDomain = process.env.CLOUD_APP_DOMAIN
-  if (appDomain) {
-    return `https://${appDomain}/oauth/${integration}/callback`
-  }
-
   const host = request.headers.get('host')
   const protocol = request.headers.get('x-forwarded-proto') || 'https'
   return `${protocol}://${host}/oauth/${integration}/callback`
@@ -60,14 +55,9 @@ export function clearCookie(name: string, isSecure: boolean): string {
 }
 
 /**
- * Validate that a domain is a valid tenant subdomain.
- * Prevents open redirect attacks in cloud mode.
+ * Validate that a domain is a valid return domain.
+ * For self-hosted, all domains are considered valid.
  */
-export function isValidTenantDomain(domain: string): boolean {
-  const baseDomain = process.env.CLOUD_TENANT_BASE_DOMAIN as string | undefined
-  if (!baseDomain) return true
-
-  const escapedBase = baseDomain.replace(/\./g, '\\.')
-  const pattern = new RegExp(`^[a-z0-9][a-z0-9-]*\\.${escapedBase}$`, 'i')
-  return pattern.test(domain)
+export function isValidTenantDomain(_domain: string): boolean {
+  return true
 }

@@ -73,70 +73,6 @@ export interface PortalFeatures {
   showPublicEditHistory: boolean
 }
 
-// =============================================================================
-// OIDC Configuration (Tenant-specific identity provider)
-// =============================================================================
-
-/** Default OIDC scopes */
-export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile']
-
-/**
- * Full OIDC config (stored in portalConfig JSON)
- * Contains all settings including encrypted secret
- */
-export interface OIDCProviderConfig {
-  /** Whether OIDC is enabled for this workspace */
-  enabled: boolean
-  /** Display name shown on login button (e.g., "Sign in with Acme Corp") */
-  displayName: string
-  /** OIDC issuer URL (e.g., https://auth.acmecorp.com) */
-  issuer: string
-  /** OAuth client ID from the IdP */
-  clientId: string
-  /** Encrypted client secret (AES-256-GCM) */
-  clientSecretEncrypted: string
-  /** OAuth scopes to request (defaults to DEFAULT_OIDC_SCOPES) */
-  scopes?: string[]
-  /** Optional email domain restriction (e.g., "acmecorp.com") */
-  emailDomain?: string
-}
-
-/**
- * Public OIDC config (no secrets - for portal login page)
- */
-export interface PublicOIDCConfig {
-  enabled: boolean
-  displayName: string
-}
-
-/**
- * Admin OIDC config (for settings page - shows hasSecret flag, not actual secret)
- */
-export interface AdminOIDCConfig {
-  enabled: boolean
-  displayName: string
-  issuer: string
-  clientId: string
-  /** Indicates whether a secret is configured (true if secret exists) */
-  hasSecret: boolean
-  scopes?: string[]
-  emailDomain?: string
-}
-
-/**
- * Input for updating OIDC config (partial update)
- */
-export interface UpdateOIDCConfigInput {
-  enabled?: boolean
-  displayName?: string
-  issuer?: string
-  clientId?: string
-  /** Plain text secret - will be encrypted before storage */
-  clientSecret?: string
-  scopes?: string[]
-  emailDomain?: string
-}
-
 /**
  * Portal configuration
  * Controls the public feedback portal behavior
@@ -146,8 +82,6 @@ export interface PortalConfig {
   oauth: PortalAuthMethods
   /** Feature toggles */
   features: PortalFeatures
-  /** Custom OIDC provider configuration (optional) */
-  oidc?: OIDCProviderConfig
 }
 
 /**
@@ -267,96 +201,4 @@ export interface PublicAuthConfig {
 export interface PublicPortalConfig {
   oauth: PortalAuthMethods
   features: PortalFeatures
-  /** Public OIDC config (no secrets) for displaying custom SSO button */
-  oidc?: PublicOIDCConfig
-}
-
-// =============================================================================
-// Security Configuration (Team SSO and auth method restrictions)
-// =============================================================================
-
-/**
- * SSO enforcement level
- * - optional: Team can use SSO or other methods
- * - required: Team must use SSO (admins can bypass via email)
- */
-export type SSOEnforcement = 'optional' | 'required'
-
-/**
- * Team sign-in method configuration
- * Controls which authentication methods are available for team sign-in
- */
-export interface TeamSocialLoginConfig {
-  email: boolean
-  github: boolean
-  google: boolean
-}
-
-/**
- * Full security configuration (stored in database)
- * Contains all settings including encrypted SSO provider config
- */
-export interface SecurityConfig {
-  /** SSO configuration for team sign-in */
-  sso: {
-    enabled: boolean
-    enforcement: SSOEnforcement
-    /** OIDC provider config (reuses existing type) */
-    provider?: OIDCProviderConfig
-  }
-  /** Social login toggles for team members */
-  teamSocialLogin: TeamSocialLoginConfig
-}
-
-/**
- * Default security config for new organizations
- */
-export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
-  sso: {
-    enabled: false,
-    enforcement: 'optional',
-  },
-  teamSocialLogin: {
-    email: true,
-    github: true,
-    google: true,
-  },
-}
-
-/**
- * Public security config (no secrets - for team login page)
- */
-export interface PublicSecurityConfig {
-  sso: {
-    enabled: boolean
-    enforcement: SSOEnforcement
-    /** Display name for SSO button */
-    displayName?: string
-  }
-  teamSocialLogin: TeamSocialLoginConfig
-}
-
-/**
- * Admin security config (for settings page - shows hasSecret flag, not actual secret)
- */
-export interface AdminSecurityConfig {
-  sso: {
-    enabled: boolean
-    enforcement: SSOEnforcement
-    /** Admin view of OIDC config (has hasSecret flag, no actual secret) */
-    provider?: AdminOIDCConfig
-  }
-  teamSocialLogin: TeamSocialLoginConfig
-}
-
-/**
- * Input for updating security config (partial update)
- */
-export interface UpdateSecurityConfigInput {
-  sso?: {
-    enabled?: boolean
-    enforcement?: SSOEnforcement
-    provider?: UpdateOIDCConfigInput
-  }
-  teamSocialLogin?: Partial<TeamSocialLoginConfig>
 }
