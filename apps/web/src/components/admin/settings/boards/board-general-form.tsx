@@ -12,7 +12,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
+import { useUpdateBoard } from '@/lib/mutations'
 import type { BoardId } from '@quackback/ids'
 
 interface Board {

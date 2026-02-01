@@ -3,7 +3,7 @@ import { useRouter, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createBoardSchema, type CreateBoardOutput } from '@/lib/schemas/boards'
-import { useCreateBoard } from '@/lib/hooks/use-board-actions'
+import { useCreateBoard } from '@/lib/mutations'
 import {
   Dialog,
   DialogContent,

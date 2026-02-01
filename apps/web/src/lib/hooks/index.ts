@@ -22,6 +22,9 @@ export {
   flattenPublicPosts,
 } from './use-portal-posts-query'
 
+// Board queries
+export { boardKeys, useBoards, useBoardDetail } from './use-boards-query'
+
 // ============================================================================
 // Mutation Hooks (re-exported from lib/mutations for convenience)
 // ============================================================================
@@ -43,6 +46,10 @@ export {
   useCreatePublicPost,
   useUserEditPost,
   useUserDeletePost,
+  // Board mutations
+  useCreateBoard,
+  useUpdateBoard,
+  useDeleteBoard,
 } from '@/lib/mutations'
 
 // ============================================================================

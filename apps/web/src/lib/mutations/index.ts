@@ -25,3 +25,6 @@ export {
   useUserEditPost,
   useUserDeletePost,
 } from './portal-posts'
+
+// Board mutations
+export { useCreateBoard, useUpdateBoard, useDeleteBoard } from './boards'
