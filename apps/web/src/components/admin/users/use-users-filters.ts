@@ -1,14 +1,9 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/users'
 import { useMemo, useCallback } from 'react'
+import type { UsersFilters } from '@/lib/types'
 
-export interface UsersFilters {
-  search?: string
-  verified?: boolean
-  dateFrom?: string
-  dateTo?: string
-  sort?: 'newest' | 'oldest' | 'most_active' | 'name'
-}
+export type { UsersFilters }
 
 export function useUsersFilters() {
   const navigate = useNavigate()

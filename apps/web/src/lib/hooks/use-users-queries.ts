@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import type { UsersFilters } from '@/components/admin/users/use-users-filters'
+import type { UsersFilters } from '@/lib/types'
 import type {
   PortalUserListResultView,
   PortalUserListItemView,

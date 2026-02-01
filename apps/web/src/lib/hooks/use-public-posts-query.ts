@@ -15,7 +15,7 @@ import {
   userDeletePostFn,
 } from '@/lib/server-functions/public-posts'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
-import type { PublicFeedbackFilters } from '@/components/public/feedback/use-public-filters'
+import type { PublicFeedbackFilters } from '@/lib/types'
 import type { PublicPostListItem } from '@/lib/posts'
 import type { PostId, BoardId, StatusId, TagId } from '@quackback/ids'
 

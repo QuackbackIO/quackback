@@ -1,14 +1,9 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/_portal/index'
 import { useMemo, useCallback, useRef, useSyncExternalStore } from 'react'
+import type { PublicFeedbackFilters } from '@/lib/types'
 
-export interface PublicFeedbackFilters {
-  board?: string
-  search?: string
-  sort?: 'top' | 'new' | 'trending'
-  status?: string[]
-  tagIds?: string[]
-}
+export type { PublicFeedbackFilters }
 
 // Simple store for optimistic filter state that persists across renders
 // but resets on navigation completion

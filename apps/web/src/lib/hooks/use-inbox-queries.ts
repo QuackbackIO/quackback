@@ -15,12 +15,7 @@ import {
 } from '@/lib/server-functions/posts'
 import { toggleVoteFn } from '@/lib/server-functions/public-posts'
 import { createCommentFn, toggleReactionFn } from '@/lib/server-functions/comments'
-import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type {
-  PostDetails,
-  CommentReaction,
-  CommentWithReplies,
-} from '@/components/admin/feedback/inbox-types'
+import type { InboxFilters, PostDetails, CommentReaction, CommentWithReplies } from '@/lib/types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/db-types'
 import type { BoardId, CommentId, MemberId, PostId, StatusId, TagId } from '@quackback/ids'
 import type { CreatePostInput } from '@/lib/posts'
