@@ -154,27 +154,8 @@ export function PostCard({
     }
   }
 
-  // Vote button - interactive in portal, display-only in admin
-  const voteButton = isAdminMode ? (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center shrink-0 border-r border-border/30',
-        isCompact ? 'w-12 py-1.5' : 'w-16 py-2.5'
-      )}
-    >
-      <ChevronUpIcon
-        className={cn('text-muted-foreground', isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4')}
-      />
-      <span
-        className={cn(
-          'font-semibold text-foreground tabular-nums',
-          isCompact ? 'text-xs' : 'text-sm'
-        )}
-      >
-        {voteCount}
-      </span>
-    </div>
-  ) : (
+  // Vote button - always interactive
+  const voteButton = (
     <button
       type="button"
       data-testid="vote-button"
@@ -187,8 +168,8 @@ export function PostCard({
       onClick={handleVoteClick}
       disabled={isVotePending}
       className={cn(
-        'flex flex-col items-center justify-center shrink-0 rounded-lg border transition-all duration-200',
-        isCompact ? 'w-11 py-1.5 mx-2' : 'w-14 py-2 mx-3',
+        'group/vote flex flex-col items-center justify-center shrink-0 self-center rounded-lg border transition-all duration-200',
+        isCompact ? 'w-11 py-1.5 mx-2' : 'w-13 py-2 mx-3',
         currentHasVoted
           ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/30'
           : 'text-muted-foreground bg-muted/40 border-border/50 hover:bg-muted/60 hover:border-border',
@@ -200,7 +181,7 @@ export function PostCard({
           'transition-transform duration-200',
           isCompact ? 'h-4 w-4' : 'h-5 w-5',
           currentHasVoted && 'fill-[var(--post-card-voted-color)]',
-          !isVotePending && 'group-hover:-translate-y-0.5'
+          !isVotePending && 'group-hover/vote:-translate-y-0.5'
         )}
       />
       <span
