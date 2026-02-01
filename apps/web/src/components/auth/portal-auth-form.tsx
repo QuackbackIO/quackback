@@ -10,7 +10,7 @@ import {
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/server/auth/client'
-import type { PortalAuthMethods, PublicOIDCConfig } from '@/lib/server/domains/settings'
+import type { PortalAuthMethods } from '@/lib/server/domains/settings'
 
 interface InvitationInfo {
   id: string
@@ -24,16 +24,10 @@ interface InvitationInfo {
 interface PortalAuthFormProps {
   invitationId?: string | null
   callbackUrl?: string
-  /** Organization slug for OAuth flows */
-  orgSlug?: string
   /** Whether to show OAuth buttons (GitHub, Google) - legacy prop, prefer authConfig */
   showOAuth?: boolean
   /** Auth method configuration (which methods are enabled) */
   authConfig?: PortalAuthMethods
-  /** OIDC provider configuration (optional custom SSO) */
-  oidcConfig?: PublicOIDCConfig | null
-  /** OIDC type: 'portal' for portal users, 'team' for team members (default: 'portal') */
-  oidcType?: 'portal' | 'team'
 }
 
 type Step = 'email' | 'code'
@@ -44,7 +38,6 @@ type Step = 'email' | 'code'
  * Unified authentication form for portal users supporting:
  * - Email OTP (magic codes)
  * - OAuth (GitHub, Google)
- * - Custom OIDC providers
  *
  * Flow: email → code → redirect (or OAuth redirect)
  * - Better-auth automatically creates users if they don't exist
@@ -54,11 +47,8 @@ type Step = 'email' | 'code'
 export function PortalAuthForm({
   invitationId,
   callbackUrl = '/',
-  orgSlug,
   showOAuth = false,
   authConfig,
-  oidcConfig,
-  oidcType = 'portal',
 }: PortalAuthFormProps) {
   // Derive email enabled state from authConfig (defaults to true for backwards compatibility)
   const emailEnabled = authConfig?.email ?? true
@@ -231,19 +221,15 @@ export function PortalAuthForm({
         </div>
       )}
 
-      {/* OAuth Providers (GitHub, Google, OIDC) - show on initial email step for non-invitation flow */}
-      {orgSlug &&
-        step === 'email' &&
+      {/* OAuth Providers (GitHub, Google) - show on initial email step for non-invitation flow */}
+      {step === 'email' &&
         !invitation &&
-        (authConfig?.github || authConfig?.google || oidcConfig?.enabled || showOAuth) && (
+        (authConfig?.github || authConfig?.google || showOAuth) && (
           <>
             <OAuthButtons
-              orgSlug={orgSlug}
               callbackUrl={callbackUrl}
               showGitHub={authConfig?.github ?? showOAuth}
               showGoogle={authConfig?.google ?? showOAuth}
-              oidcConfig={oidcConfig}
-              oidcType={oidcType}
             />
             {/* Divider - only show when email is also enabled */}
             {emailEnabled && (

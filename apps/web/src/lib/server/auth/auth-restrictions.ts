@@ -2,21 +2,16 @@
  * Auth Restrictions - Validates authentication methods based on user role and config
  *
  * This module provides functions to check if a given authentication method is
- * allowed for a specific user role, based on the security and portal configurations.
+ * allowed for a specific user role, based on the portal configuration.
  *
  * Key rules:
  * - Portal users (role: 'user') use portalConfig settings
- * - Team members (role: 'admin' | 'member') use securityConfig settings
- * - Email is always allowed for team members (admin bypass safety measure)
- * - When SSO is required, social logins are disabled for team members
+ * - Team members (role: 'admin' | 'member') can always use email, github, google
  */
 
-import {
-  getFullSecurityConfig,
-  getPublicPortalConfig,
-} from '@/lib/server/domains/settings/settings.service'
+import { getPublicPortalConfig } from '@/lib/server/domains/settings/settings.service'
 
-export type AuthProvider = 'email' | 'github' | 'google' | 'oidc' | 'team-sso'
+export type AuthProvider = 'email' | 'github' | 'google'
 export type Role = 'admin' | 'member' | 'user'
 
 interface AuthMethodResult {
@@ -40,19 +35,15 @@ export async function isAuthMethodAllowed(
     return checkPortalAuthMethod(provider)
   }
 
-  // Team members (admin/member) use security config
-  return checkTeamAuthMethod(provider)
+  // Team members (admin/member) can always use any provider
+  return { allowed: true }
 }
 
 async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethodResult> {
-  if (provider === 'team-sso') {
-    return { allowed: false, error: 'auth_method_not_allowed' }
-  }
-
   const portalConfig = await getPublicPortalConfig()
 
   if (provider === 'email') {
-    // Email can now be disabled in portal config (defaults to true for backwards compatibility)
+    // Email can be disabled in portal config (defaults to true for backwards compatibility)
     const enabled = portalConfig.oauth.email ?? true
     return enabled ? { allowed: true } : { allowed: false, error: 'email_method_not_allowed' }
   }
@@ -62,47 +53,7 @@ async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethod
     return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
   }
 
-  if (provider === 'oidc') {
-    return portalConfig.oidc?.enabled
-      ? { allowed: true }
-      : { allowed: false, error: 'oidc_not_configured' }
-  }
-
   return { allowed: false, error: 'auth_method_not_allowed' }
-}
-
-async function checkTeamAuthMethod(provider: AuthProvider): Promise<AuthMethodResult> {
-  if (provider === 'email') {
-    return { allowed: true }
-  }
-
-  if (provider === 'oidc') {
-    return { allowed: false, error: 'auth_method_not_allowed' }
-  }
-
-  const securityConfig = await getFullSecurityConfig()
-  if (!securityConfig) {
-    return { allowed: true }
-  }
-
-  if (provider === 'team-sso') {
-    return securityConfig.sso.enabled
-      ? { allowed: true }
-      : { allowed: false, error: 'sso_not_configured' }
-  }
-
-  // GitHub and Google checks
-  const ssoRequired = securityConfig.sso.enabled && securityConfig.sso.enforcement === 'required'
-  if (ssoRequired) {
-    return { allowed: false, error: 'sso_required' }
-  }
-
-  const enabled =
-    provider === 'github'
-      ? securityConfig.teamSocialLogin.github
-      : securityConfig.teamSocialLogin.google
-
-  return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
 }
 
 /**
@@ -113,22 +64,16 @@ export async function getAllowedAuthMethods(role: Role): Promise<{
   email: boolean
   github: boolean
   google: boolean
-  oidc: boolean
-  teamSso: boolean
 }> {
   const results = await Promise.all([
     isAuthMethodAllowed('email', role),
     isAuthMethodAllowed('github', role),
     isAuthMethodAllowed('google', role),
-    isAuthMethodAllowed('oidc', role),
-    isAuthMethodAllowed('team-sso', role),
   ])
 
   return {
     email: results[0].allowed,
     github: results[1].allowed,
     google: results[2].allowed,
-    oidc: results[3].allowed,
-    teamSso: results[4].allowed,
   }
 }

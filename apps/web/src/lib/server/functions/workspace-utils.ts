@@ -8,7 +8,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { isSelfHosted, isCloud } from '@/lib/shared/features'
 import { getSession } from './auth'
 import { db, member, eq } from '@/lib/server/db'
 
@@ -61,60 +60,3 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
       user: session.user,
     }
   })
-
-// ============================================================================
-// Edition Guards
-// ============================================================================
-
-const requireEditionSchema = z.object({
-  edition: z.enum(['self-hosted', 'cloud']),
-  redirectTo: z.string().optional(),
-})
-
-/**
- * Route guard: require specific edition (self-hosted or cloud).
- * Throws redirect if running in wrong edition.
- *
- * Use in route beforeLoad:
- * @example
- * beforeLoad: async () => {
- *   await requireEdition({ data: { edition: 'self-hosted' } })
- * }
- */
-export const requireEdition = createServerFn({ method: 'GET' })
-  .inputValidator(requireEditionSchema)
-  .handler(async ({ data }) => {
-    const redirectTo = data.redirectTo ?? '/admin/settings'
-
-    if (data.edition === 'self-hosted' && !isSelfHosted()) {
-      throw redirect({ to: redirectTo })
-    }
-
-    if (data.edition === 'cloud' && !isCloud()) {
-      throw redirect({ to: redirectTo })
-    }
-
-    return { edition: data.edition }
-  })
-
-/**
- * Route guard: require self-hosted edition.
- * Convenience wrapper around requireEdition.
- */
-export const requireSelfHosted = createServerFn({ method: 'GET' }).handler(async () => {
-  if (!isSelfHosted()) {
-    throw redirect({ to: '/admin/settings' })
-  }
-  return { edition: 'self-hosted' as const }
-})
-
-/**
- * Route guard: require cloud edition.
- * Convenience wrapper around requireEdition.
- */
-export const requireCloudEdition = createServerFn({ method: 'GET' }).handler(async () => {
-  if (!isCloud()) {
-    throw redirect({ to: '/admin/settings' })
-  }
-  return { edition: 'cloud' as const }
-})

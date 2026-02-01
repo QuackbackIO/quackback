@@ -9,7 +9,6 @@
  */
 
 import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
-import { tenantStorage, type Database as NeonDatabase } from '@/lib/server/tenant'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
 // with nested barrel exports. If we use `export { asc } from 'drizzle-orm'`,
@@ -63,8 +62,8 @@ export const avg = _avg
 export const min = _min
 export const max = _max
 
-// Database can be either postgres.js (self-hosted) or neon-http (cloud)
-export type Database = PostgresDatabase | NeonDatabase
+// Database type - postgres.js for self-hosted
+export type Database = PostgresDatabase
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 // Use globalThis to persist database instance across hot reloads in development
@@ -74,25 +73,9 @@ declare global {
 
 /**
  * Get the database instance.
- *
- * For self-hosted deployments: Returns a singleton using DATABASE_URL.
- * For cloud multi-tenant: Returns tenant DB from AsyncLocalStorage context.
+ * Returns a singleton connection using DATABASE_URL.
  */
 function getDatabase(): Database {
-  // Cloud multi-tenant mode: get tenant database from request context
-  if (process.env.CLOUD_CATALOG_DATABASE_URL) {
-    const ctx = tenantStorage.getStore()
-    if (ctx?.db) {
-      return ctx.db
-    }
-    // No tenant context in cloud mode - this is an error
-    // Requests must go through server.ts which sets up tenant context
-    throw new Error(
-      'No tenant context available. In cloud mode, all database access must occur within a request that has been resolved to a tenant.'
-    )
-  }
-
-  // Self-hosted singleton mode
   if (!globalThis.__db) {
     const connectionString = process.env.DATABASE_URL
     if (!connectionString) {

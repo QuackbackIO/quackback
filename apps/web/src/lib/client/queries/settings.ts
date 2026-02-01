@@ -7,10 +7,6 @@ import {
   fetchPublicAuthConfig,
   fetchTeamMembersAndInvitations,
   fetchUserProfile,
-  fetchOIDCConfigFn,
-  fetchSecurityConfigFn,
-  fetchPublicSecurityConfigFn,
-  getWorkspaceFeaturesFn,
 } from '@/lib/server/functions/settings'
 import {
   fetchSettingsLogoData,
@@ -76,34 +72,5 @@ export const settingsQueries = {
       queryKey: ['settings', 'userProfile', userId],
       queryFn: () => fetchUserProfile({ data: userId }),
       staleTime: STALE_TIME_MEDIUM,
-    }),
-
-  oidcConfig: () =>
-    queryOptions({
-      queryKey: ['settings', 'oidcConfig'],
-      queryFn: fetchOIDCConfigFn,
-      staleTime: STALE_TIME_LONG,
-    }),
-
-  securityConfig: () =>
-    queryOptions({
-      queryKey: ['settings', 'securityConfig'],
-      queryFn: fetchSecurityConfigFn,
-      staleTime: STALE_TIME_LONG,
-    }),
-
-  publicSecurityConfig: () =>
-    queryOptions({
-      queryKey: ['settings', 'publicSecurityConfig'],
-      queryFn: fetchPublicSecurityConfigFn,
-      staleTime: STALE_TIME_LONG,
-    }),
-
-  // Note: Uses same key as useWorkspaceFeatures to share cache
-  workspaceFeatures: () =>
-    queryOptions({
-      queryKey: ['features', 'workspace'],
-      queryFn: getWorkspaceFeaturesFn,
-      staleTime: STALE_TIME_LONG,
     }),
 }

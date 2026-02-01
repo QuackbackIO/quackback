@@ -75,7 +75,8 @@ export const notificationPreferences = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index('notification_preferences_member_idx').on(table.memberId)]
+  // Note: notification_preferences_member_id_unique constraint already provides the index; no separate index needed
+  () => []
 )
 
 /**
@@ -99,7 +100,7 @@ export const unsubscribeTokens = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('unsubscribe_tokens_token_idx').on(table.token),
+    // Note: unsubscribe_tokens_token_unique constraint already provides the index; no separate index needed
     index('unsubscribe_tokens_member_idx').on(table.memberId),
   ]
 )

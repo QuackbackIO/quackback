@@ -1,4 +1,4 @@
-import { betterAuth, type BetterAuthPlugin } from 'better-auth'
+import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { emailOTP, oneTimeToken, magicLink } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
@@ -29,57 +29,6 @@ export function getMagicLinkToken(email: string): string | undefined {
   return stored.token
 }
 
-// Build-time constants (defined in vite.config.ts)
-declare const __EDITION__: 'cloud' | 'self-hosted'
-
-// Conditionally import session-transfer only for cloud edition
-// This allows tree-shaking for self-hosted builds
-const getSessionTransferPlugin = async (): Promise<BetterAuthPlugin | null> => {
-  if (__EDITION__ !== 'cloud') return null
-  const { sessionTransfer } = await import('./plugins/session-transfer')
-  return sessionTransfer()
-}
-
-// OAuth callback plugin for GitHub/Google/OIDC
-// Handles OAuth callbacks and transfers session to tenant domain
-const getOAuthCallbackPlugin = async (): Promise<BetterAuthPlugin> => {
-  const { oauthCallback } = await import('./plugins/oauth-callback')
-  return oauthCallback()
-}
-
-// OAuth complete plugin - completes OAuth on tenant domain after app domain callback
-const getOAuthCompletePlugin = async (): Promise<BetterAuthPlugin> => {
-  const { oauthComplete } = await import('./plugins/oauth-complete')
-  return oauthComplete()
-}
-
-async function getTrustedOrigins(request?: Request): Promise<string[]> {
-  if (!request) return []
-
-  const trusted: string[] = []
-  const requestHost = request.headers.get('host')
-
-  // Trust the request host (for GET requests like magic link clicks without Origin header)
-  if (requestHost) {
-    const protocol = new URL(request.url).protocol || 'https:'
-    trusted.push(`${protocol}//${requestHost}`)
-  }
-
-  // Trust Origin header if it matches request host
-  const origin = request.headers.get('origin')
-  if (origin) {
-    try {
-      if (requestHost && new URL(origin).host === requestHost) {
-        trusted.push(origin)
-      }
-    } catch {
-      // Invalid origin header, ignore
-    }
-  }
-
-  return [...new Set(trusted)]
-}
-
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
 let _auth: ReturnType<typeof betterAuth> | null = null
@@ -100,10 +49,22 @@ async function createAuth() {
   } = await import('@/lib/server/db')
   const { sendSigninCodeEmail } = await import('@quackback/email')
 
-  // Get plugins
-  const sessionTransferPlugin = await getSessionTransferPlugin()
-  const oauthCallbackPlugin = await getOAuthCallbackPlugin()
-  const oauthCompletePlugin = await getOAuthCompletePlugin()
+  // Build socialProviders config based on available env vars
+  const socialProviders: Parameters<typeof betterAuth>[0]['socialProviders'] = {}
+
+  if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+    socialProviders.github = {
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    }
+  }
+
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    socialProviders.google = {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }
+  }
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -135,29 +96,17 @@ async function createAuth() {
     account: {
       accountLinking: {
         enabled: true,
-        trustedProviders: ['github', 'google', 'oidc', 'team-sso'],
+        trustedProviders: ['github', 'google'],
       },
     },
 
-    // Note: GitHub/Google OAuth is handled by our custom oauth-callback plugin
-    // instead of Better Auth's built-in socialProviders. This allows callbacks
-    // on the app domain with session transfer to tenant domains.
+    // GitHub/Google OAuth via Better Auth's built-in socialProviders
+    socialProviders,
 
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 days
       updateAge: 60 * 60 * 24, // Update session every 24 hours
-      // Cookie caching disabled - causes issues with manual session creation
-      // during onboarding. TODO: Re-enable once onboarding uses proper auth flow.
-      // cookieCache: {
-      //   enabled: true,
-      //   maxAge: 60 * 5, // 5 minutes - re-validate from DB periodically
-      //   encoding: 'jwt', // JWT encoding allows signature verification without DB
-      // },
     },
-
-    // Trusted origins for CSRF protection
-    // Dynamically checks main domain, subdomains, and verified custom domains
-    trustedOrigins: getTrustedOrigins,
 
     advanced: {
       // Use TypeID format for user IDs to match our schema
@@ -244,15 +193,6 @@ async function createAuth() {
       oneTimeToken({
         expiresIn: 60, // 1 minute - tokens are used immediately after generation
       }),
-
-      // Session transfer for post-provisioning auth from website (cloud only)
-      ...(sessionTransferPlugin ? [sessionTransferPlugin] : []),
-
-      // OAuth callback for GitHub/Google/OIDC - handles callbacks and session transfer
-      oauthCallbackPlugin,
-
-      // OAuth complete - completes OAuth on tenant domain after app domain callback
-      oauthCompletePlugin,
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),

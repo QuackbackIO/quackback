@@ -10,41 +10,10 @@ import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
-import { db, member, eq, type Member } from '@/lib/server/db'
-import { tenantStorage } from '@/lib/server/tenant'
+import { db, member, eq } from '@/lib/server/db'
 
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
-
-/** Check if session is cached (distinguishes cache miss from cached null) */
-function hasSessionCache(): boolean {
-  const ctx = tenantStorage.getStore()
-  return ctx?.cache.has('session') ?? false
-}
-
-/** Get session from request-scoped cache */
-function getCachedSession(): SessionResult | null {
-  const ctx = tenantStorage.getStore()
-  return (ctx?.cache.get('session') as SessionResult | null) ?? null
-}
-
-/** Store session in request-scoped cache */
-function setCachedSession(data: SessionResult | null): void {
-  const ctx = tenantStorage.getStore()
-  ctx?.cache.set('session', data)
-}
-
-/** Get member from request-scoped cache (returns undefined if not cached) */
-function getCachedMember(userId: UserId): Member | undefined {
-  const ctx = tenantStorage.getStore()
-  return ctx?.cache.get(`member:${userId}`) as Member | undefined
-}
-
-/** Store member in request-scoped cache (only cache if member exists) */
-function setCachedMember(userId: UserId, data: Member): void {
-  const ctx = tenantStorage.getStore()
-  ctx?.cache.set(`member:${userId}`, data)
-}
 
 /**
  * Quick check if the request has a session cookie.
@@ -61,21 +30,10 @@ export function hasSessionCookie(): boolean {
 /**
  * Get session directly from better-auth (not through server function).
  * This avoids nested server function call issues.
- * Results are cached per-request to avoid redundant auth lookups.
  */
 async function getSessionDirect(): Promise<SessionResult | null> {
-  // Check cache first (use has() to distinguish cache miss from cached null)
-  if (hasSessionCache()) {
-    return getCachedSession()
-  }
-
   try {
-    const session = await auth.api.getSession({ headers: getRequestHeaders() })
-
-    // Cache the result (including null to avoid repeated lookups)
-    setCachedSession(session)
-
-    return session
+    return await auth.api.getSession({ headers: getRequestHeaders() })
   } catch (error) {
     console.error('[auth] Failed to get session:', error)
     return null
@@ -128,16 +86,9 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
     throw new Error('Workspace not configured')
   }
 
-  // Check member cache first
-  let memberRecord = getCachedMember(userId)
-  if (!memberRecord) {
-    memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, userId),
-    })
-    if (memberRecord) {
-      setCachedMember(userId, memberRecord)
-    }
-  }
+  const memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, userId),
+  })
 
   if (!memberRecord) {
     throw new Error('Access denied: Not a team member')
@@ -187,30 +138,23 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     return null
   }
 
-  // Check member cache first
-  let memberRecord = getCachedMember(userId)
+  let memberRecord = await db.query.member.findFirst({
+    where: eq(member.userId, userId),
+  })
+
+  // Auto-create member record for authenticated users without one
   if (!memberRecord) {
-    memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, userId),
-    })
-
-    // Auto-create member record for authenticated users without one
-    if (!memberRecord) {
-      const newMemberId = generateId('member')
-      const [created] = await db
-        .insert(member)
-        .values({
-          id: newMemberId,
-          userId,
-          role: 'user',
-          createdAt: new Date(),
-        })
-        .returning()
-      memberRecord = created
-    }
-
-    // Cache the member (either found or just created)
-    setCachedMember(userId, memberRecord)
+    const newMemberId = generateId('member')
+    const [created] = await db
+      .insert(member)
+      .values({
+        id: newMemberId,
+        userId,
+        role: 'user',
+        createdAt: new Date(),
+      })
+      .returning()
+    memberRecord = created
   }
 
   return {

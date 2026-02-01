@@ -1,5 +1,0 @@
-# Local secrets - never commit!
-.dev.vars
-
-# Wrangler state
-.wrangler/

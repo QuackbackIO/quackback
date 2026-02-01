@@ -5,16 +5,10 @@
   "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
-    "cf-typegen": "wrangler types",
-    "postinstall": "bun run cf-typegen",
     "dev": "bun --env-file=../../.env vite dev",
-    "dev:cloud": "EDITION=cloud bun --env-file=../../.env vite dev",
     "build": "vite build",
-    "build:cloud": "EDITION=cloud vite build",
     "preview": "vite preview",
     "start": "bun --env-file=../../.env .output/server/index.mjs",
-    "deploy:dev": "bun run build:cloud && wrangler deploy -c ../../deploy/cloud/wrangler.dev.jsonc",
-    "deploy:production": "bun run build:cloud && wrangler deploy -c ../../deploy/cloud/wrangler.production.jsonc",
     "lint": "eslint .",
     "generate:routes": "bunx @tanstack/router-cli generate",
     "typecheck": "bun run generate:routes && tsc --noEmit",
@@ -23,14 +17,11 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@better-auth/sso": "1.4.17",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.2.2",
-    "@neondatabase/api-client": "^2.6.0",
-    "@neondatabase/serverless": "^1.0.2",
     "@quackback/db": "workspace:*",
     "@quackback/email": "workspace:*",
     "@quackback/ids": "workspace:*",
@@ -90,8 +81,6 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.22.0",
-    "@cloudflare/workers-types": "^4.20260127.0",
     "@playwright/test": "^1.58.0",
     "@tailwindcss/vite": "^4.1.18",
     "@types/bcryptjs": "^3.0.0",
@@ -105,7 +94,6 @@
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vite-tsconfig-paths": "^6.0.5",
-    "wrangler": "^4.61.0"
+    "vite-tsconfig-paths": "^6.0.5"
   }
 }

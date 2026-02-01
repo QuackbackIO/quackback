@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Quackback is an open-source customer feedback platform. Collect, organize, and act on user feedback with public boards, roadmaps, and changelogs.
 
-**License**: AGPL-3.0 (core), proprietary (ee/)
+**License**: AGPL-3.0
 
 ## Quick Start
 
@@ -21,8 +21,7 @@ Login: `demo@example.com` (OTP code appears in console)
 
 ```bash
 # Development
-bun run dev              # Start dev server (self-hosted mode)
-bun run dev:cloud        # Start in cloud multi-tenant mode
+bun run dev              # Start dev server
 bun run build            # Build for production
 
 # Database
@@ -50,7 +49,7 @@ bun run typecheck        # TypeScript type checking (in apps/web)
 | ---------- | --------------------------------------------- |
 | Framework  | TanStack Start + TanStack Router (file-based) |
 | Database   | PostgreSQL + Drizzle ORM                      |
-| Auth       | Better Auth with emailOTP plugin              |
+| Auth       | Better Auth with emailOTP + socialProviders   |
 | Runtime    | Bun 1.3.7+                                    |
 | Styling    | Tailwind CSS v4 + shadcn/ui                   |
 | Validation | Zod                                           |
@@ -72,23 +71,17 @@ apps/web/                    # TanStack Start application
 │   │   ├── functions/       # TanStack server functions (RPC)
 │   │   ├── domains/         # Business logic services
 │   │   ├── events/          # Event dispatch & handlers
-│   │   ├── auth/            # Better Auth configuration
-│   │   └── tenant/          # Multi-tenant context
+│   │   └── auth/            # Better Auth configuration
 │   └── shared/              # Used by both client and server
 │       ├── types/           # Type definitions
 │       ├── schemas/         # Zod validation schemas
 │       └── utils/           # Utility functions (cn, etc.)
 
-packages/                    # Shared packages (AGPL-3.0)
+packages/                    # Shared packages
 ├── db/                      # Drizzle schema, migrations, seed
 ├── ids/                     # TypeID system (branded UUIDs)
 ├── email/                   # Email service (Resend + React Email)
 └── integrations/            # Slack integration
-
-ee/packages/                 # Enterprise Edition (proprietary)
-├── sso/                     # SSO/SAML authentication
-├── scim/                    # SCIM user provisioning
-└── audit/                   # Audit logging
 ```
 
 ### Route Groups (TanStack Router)
@@ -132,7 +125,6 @@ The `lib/` directory uses explicit server/client separation:
 | **server/domains/**   | Business logic services     | Domain-specific logic       |
 | **server/events/**    | Event dispatch & handlers   | Webhooks, notifications     |
 | **server/auth/**      | Better Auth configuration   | Authentication              |
-| **server/tenant/**    | Multi-tenant context        | Tenant resolution           |
 
 **Key conventions**:
 
@@ -169,10 +161,7 @@ const post = await db.query.posts.findFirst({
 })
 ```
 
-The `db` export is a proxy that handles:
-
-- Self-hosted: Singleton postgres.js connection
-- Cloud: Tenant DB from AsyncLocalStorage context
+The `db` export uses a singleton postgres.js connection with lazy initialization via Proxy.
 
 ### TypeIDs
 
@@ -184,19 +173,6 @@ import { createId, toUuid, type PostId, type BoardId } from '@quackback/ids'
 const postId = createId('post') // => PostId (branded type)
 const uuid = toUuid(postId) // => raw UUID string
 ```
-
-### Multi-Tenancy (Cloud vs Self-Hosted)
-
-- **Self-hosted**: Single workspace, `DATABASE_URL` singleton
-- **Cloud**: Multi-tenant via domain resolution
-  - `server.ts` resolves tenant from request domain
-  - Tenant context stored in `AsyncLocalStorage`
-  - Per-tenant Neon databases
-
-Build variants controlled by env vars:
-
-- `EDITION=self-hosted|cloud`
-- `INCLUDE_EE=true|false`
 
 ## Auth Context
 

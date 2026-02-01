@@ -8,11 +8,8 @@ import {
   LockClosedIcon,
   PaintBrushIcon,
   PuzzlePieceIcon,
-  GlobeAltIcon,
-  CreditCardIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  ArrowTopRightOnSquareIcon,
   KeyIcon,
   BoltIcon,
 } from '@heroicons/react/24/solid'
@@ -22,12 +19,6 @@ interface NavItem {
   label: string
   to: string
   icon: typeof Cog6ToothIcon
-  /** Show only for cloud deployments */
-  cloudOnly?: boolean
-  /** Show only for self-hosted deployments */
-  selfHostedOnly?: boolean
-  /** If true, opens in new tab as external link */
-  external?: boolean
 }
 
 interface NavSection {
@@ -42,22 +33,6 @@ const navSections: NavSection[] = [
       { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
       { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
       { label: 'Security', to: '/admin/settings/security', icon: ShieldCheckIcon },
-      // Domains is now managed on the website
-      {
-        label: 'Domains',
-        to: '__DOMAINS_EXTERNAL__',
-        icon: GlobeAltIcon,
-        cloudOnly: true,
-        external: true,
-      },
-      // Billing is now managed on the website
-      {
-        label: 'Billing',
-        to: '__BILLING_EXTERNAL__',
-        icon: CreditCardIcon,
-        cloudOnly: true,
-        external: true,
-      },
     ],
   },
   {
@@ -104,60 +79,16 @@ function NavSection({
   )
 }
 
-interface SettingsNavProps {
-  isCloud: boolean
-  workspaceId?: string
-}
-
-export function SettingsNav({ isCloud, workspaceId }: SettingsNavProps) {
+export function SettingsNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-
-  // Filter sections based on deployment type (cloud vs self-hosted)
-  const filteredSections = navSections.map((section) => ({
-    ...section,
-    items: section.items.filter(
-      (item) => !(item.cloudOnly && !isCloud) && !(item.selfHostedOnly && isCloud)
-    ),
-  }))
-
-  // Build external URLs with workspaceId
-  const domainsUrl = workspaceId
-    ? `https://www.quackback.io/workspaces/${workspaceId}/domains`
-    : 'https://www.quackback.io/workspaces'
-  const billingUrl = workspaceId
-    ? `https://www.quackback.io/workspaces/${workspaceId}/billing`
-    : 'https://www.quackback.io/workspaces'
 
   return (
     <div className="space-y-1">
-      {filteredSections.map((section) => (
+      {navSections.map((section) => (
         <NavSection key={section.label} label={section.label}>
           {section.items.map((item) => {
             const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
             const Icon = item.icon
-
-            // Handle external links (domains, billing)
-            if (item.external) {
-              let href = item.to
-              if (item.to === '__DOMAINS_EXTERNAL__') href = domainsUrl
-              else if (item.to === '__BILLING_EXTERNAL__') href = billingUrl
-              return (
-                <a
-                  key={item.to}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate flex-1">{item.label}</span>
-                  <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0 opacity-50" />
-                </a>
-              )
-            }
 
             return (
               <Link
