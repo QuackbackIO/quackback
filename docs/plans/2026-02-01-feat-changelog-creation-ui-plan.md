@@ -588,12 +588,12 @@ erDiagram
 
 ### Phase 5: Public Changelog Page
 
-- [ ] Create `/changelog` portal route with list view
-- [ ] Create `/changelog/$entryId` portal route with detail view
-- [ ] Create public changelog components
-- [ ] Add pagination to list view
-- [ ] Add empty state for no changelogs
-- [ ] Handle 404 for unpublished entries
+- [x] Create `/changelog` portal route with list view
+- [x] Create `/changelog/$entryId` portal route with detail view
+- [x] Create public changelog components
+- [x] Add pagination to list view
+- [x] Add empty state for no changelogs
+- [x] Handle 404 for unpublished entries
 
 ### Testing
 
