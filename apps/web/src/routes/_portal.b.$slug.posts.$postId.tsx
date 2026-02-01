@@ -20,7 +20,8 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
-import { usePostPermissions, usePostActions } from '@/lib/hooks/use-post-actions'
+import { usePostPermissions } from '@/lib/hooks/use-portal-posts-query'
+import { usePostActions } from '@/lib/mutations'
 import { isValidTypeId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/schemas/posts'
 

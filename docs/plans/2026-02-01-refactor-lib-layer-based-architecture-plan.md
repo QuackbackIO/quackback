@@ -350,7 +350,7 @@ well-organized and moving them would require updating many imports with limited 
 
 **Goal**: Ensure ALL mutations are in `mutations/`, achieving 100% consistency.
 
-**Status**: In progress
+**Status**: ✅ Complete
 
 **Completed**:
 
@@ -360,26 +360,24 @@ well-organized and moving them would require updating many imports with limited 
 - [x] `mutations/boards.ts` - board CRUD mutations
 - [x] `hooks/use-boards-query.ts` - query-only board hooks
 - [x] Deleted dead code: `use-status-actions.ts`, `use-tag-actions.ts`, `use-subscription-actions.ts`
-
-**Remaining**:
-
-| File to Extract                | Lines | Consumers | New Location                       |
-| ------------------------------ | ----- | --------- | ---------------------------------- |
-| `use-comment-actions.ts`       | 377   | 2         | `mutations/portal-comments.ts`     |
-| `use-post-actions.ts`          | 128   | 2         | `mutations/portal-post-actions.ts` |
-| `use-integration-actions.ts`   | 35    | 2         | `mutations/integrations.ts`        |
-| `use-roadmap-posts-query.ts`   | 150   | ?         | Extract mutations only             |
-| `use-roadmaps-query.ts`        | 157   | ?         | Extract mutations only             |
-| `use-settings-queries.ts`      | 126   | ?         | Extract mutations only             |
-| `use-notifications-queries.ts` | 200   | ?         | Extract mutations only             |
-| `use-users-queries.ts`         | 167   | ?         | Extract mutations only             |
+- [x] `mutations/portal-comments.ts` - portal comment mutations (from `use-comment-actions.ts`)
+- [x] `mutations/portal-post-actions.ts` - portal post edit/delete (from `use-post-actions.ts`)
+- [x] `mutations/integrations.ts` - integration mutations (from `use-integration-actions.ts`)
+- [x] `mutations/roadmap-posts.ts` - roadmap-post association mutations
+- [x] `mutations/roadmaps.ts` - roadmap CRUD mutations
+- [x] `mutations/settings.ts` - logo/header mutations
+- [x] `mutations/notifications.ts` - notification read/archive mutations
+- [x] `mutations/users.ts` - portal user removal mutation
+- [x] Deleted action files: `use-comment-actions.ts`, `use-post-actions.ts`, `use-integration-actions.ts`, `use-board-actions.ts`
+- [x] Query files now query-only: `use-roadmaps-query.ts`, `use-settings-queries.ts`, `use-notifications-queries.ts`, `use-users-queries.ts`, `use-roadmap-posts-query.ts`
+- [x] Consumer imports updated across all files
 
 **Acceptance criteria**:
 
-- [ ] No `useMutation` in any `hooks/*.ts` file
-- [ ] All mutation hooks exported from `mutations/index.ts`
-- [ ] Consumer imports updated
-- [ ] `bun run typecheck` passes
+- [x] No `useMutation` in any `hooks/*.ts` file (verified)
+- [x] All mutation hooks exported from `mutations/index.ts`
+- [x] Consumer imports updated
+- [x] `bun run typecheck` passes
 
 ---
 

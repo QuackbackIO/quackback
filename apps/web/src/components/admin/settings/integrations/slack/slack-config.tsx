@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { useUpdateIntegration } from '@/lib/hooks/use-integration-actions'
+import { useUpdateIntegration } from '@/lib/mutations'
 import { fetchSlackChannelsFn, type SlackChannel } from '@/lib/server-functions/integrations'
 
 interface EventMapping {

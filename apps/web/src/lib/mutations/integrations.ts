@@ -1,3 +1,9 @@
+/**
+ * Integration mutations
+ *
+ * Mutation hooks for managing integrations (Slack, webhooks, etc.)
+ */
+
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   updateIntegrationFn,

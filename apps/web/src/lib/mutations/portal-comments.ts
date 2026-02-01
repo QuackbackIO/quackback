@@ -1,27 +1,26 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+/**
+ * Portal comment mutations
+ *
+ * Mutation hooks for portal comment operations (create, edit, delete, reactions, pin).
+ * Query hooks are in @/lib/hooks/use-comments-query.
+ */
+
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   createCommentFn,
-  getCommentPermissionsFn,
   userEditCommentFn,
   userDeleteCommentFn,
   toggleReactionFn,
   pinCommentFn,
   unpinCommentFn,
-  canPinCommentFn,
 } from '@/lib/server-functions/comments'
 import type { PostId, CommentId } from '@quackback/ids'
 import { portalDetailQueries } from '@/lib/queries/portal-detail'
+import { commentKeys } from '@/lib/hooks/use-comments-query'
 
 // ============================================================================
 // Types
 // ============================================================================
-
-interface CommentPermissions {
-  canEdit: boolean
-  canDelete: boolean
-  editReason?: string
-  deleteReason?: string
-}
 
 interface OptimisticComment {
   id: CommentId
@@ -75,41 +74,65 @@ interface UseToggleReactionOptions {
   onError?: (error: Error) => void
 }
 
-// ============================================================================
-// Query Key Factory
-// ============================================================================
+interface UsePinCommentOptions {
+  postId: PostId
+  onSuccess?: () => void
+  onError?: (error: Error) => void
+}
 
-export const commentKeys = {
-  all: ['comments'] as const,
-  permissions: () => [...commentKeys.all, 'permissions'] as const,
-  permission: (commentId: CommentId) => [...commentKeys.permissions(), commentId] as const,
+interface UseUnpinCommentOptions {
+  postId: PostId
+  onSuccess?: () => void
+  onError?: (error: Error) => void
 }
 
 // ============================================================================
-// Query Hook
+// Helper Functions
 // ============================================================================
 
-/**
- * Hook to get edit/delete permissions for a comment.
- */
-export function useCommentPermissions({
-  commentId,
-  enabled = true,
-}: {
-  commentId: CommentId
-  enabled?: boolean
-}) {
-  return useQuery({
-    queryKey: commentKeys.permission(commentId),
-    queryFn: async (): Promise<CommentPermissions> => {
-      try {
-        return await getCommentPermissionsFn({ data: { commentId } })
-      } catch {
-        return { canEdit: false, canDelete: false }
+/** Add a reply to the correct parent in a nested comment structure */
+function addReplyToComments(
+  comments: OptimisticComment[],
+  parentId: string,
+  reply: OptimisticComment
+): OptimisticComment[] {
+  return comments.map((comment) => {
+    if (comment.id === parentId) {
+      return { ...comment, replies: [...comment.replies, reply] }
+    }
+    if (comment.replies.length > 0) {
+      return { ...comment, replies: addReplyToComments(comment.replies, parentId, reply) }
+    }
+    return comment
+  })
+}
+
+/** Replace optimistic comment with real server data */
+function replaceOptimisticInComments(
+  comments: OptimisticComment[],
+  parentId: string | null,
+  content: string,
+  serverComment: { id: CommentId; createdAt: Date }
+): OptimisticComment[] {
+  return comments.map((comment) => {
+    if (comment.id.startsWith('comment_optimistic_')) {
+      const sameParent = (comment.parentId || null) === (parentId || null)
+      const sameContent = comment.content === content
+      if (sameParent && sameContent) {
+        const createdAt =
+          typeof serverComment.createdAt === 'string'
+            ? serverComment.createdAt
+            : serverComment.createdAt.toISOString()
+        return { ...comment, id: serverComment.id, createdAt }
       }
-    },
-    enabled,
-    staleTime: 30 * 1000,
+    }
+    if (comment.replies.length > 0) {
+      return {
+        ...comment,
+        replies: replaceOptimisticInComments(comment.replies, parentId, content, serverComment),
+      }
+    }
+    return comment
   })
 }
 
@@ -247,96 +270,6 @@ export function useToggleReaction({
       onSuccess?.(data)
     },
     onError,
-  })
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/** Add a reply to the correct parent in a nested comment structure */
-function addReplyToComments(
-  comments: OptimisticComment[],
-  parentId: string,
-  reply: OptimisticComment
-): OptimisticComment[] {
-  return comments.map((comment) => {
-    if (comment.id === parentId) {
-      return { ...comment, replies: [...comment.replies, reply] }
-    }
-    if (comment.replies.length > 0) {
-      return { ...comment, replies: addReplyToComments(comment.replies, parentId, reply) }
-    }
-    return comment
-  })
-}
-
-/** Replace optimistic comment with real server data */
-function replaceOptimisticInComments(
-  comments: OptimisticComment[],
-  parentId: string | null,
-  content: string,
-  serverComment: { id: CommentId; createdAt: Date }
-): OptimisticComment[] {
-  return comments.map((comment) => {
-    if (comment.id.startsWith('comment_optimistic_')) {
-      const sameParent = (comment.parentId || null) === (parentId || null)
-      const sameContent = comment.content === content
-      if (sameParent && sameContent) {
-        const createdAt =
-          typeof serverComment.createdAt === 'string'
-            ? serverComment.createdAt
-            : serverComment.createdAt.toISOString()
-        return { ...comment, id: serverComment.id, createdAt }
-      }
-    }
-    if (comment.replies.length > 0) {
-      return {
-        ...comment,
-        replies: replaceOptimisticInComments(comment.replies, parentId, content, serverComment),
-      }
-    }
-    return comment
-  })
-}
-
-// ============================================================================
-// Pin/Unpin Hooks (Official Response)
-// ============================================================================
-
-interface UsePinCommentOptions {
-  postId: PostId
-  onSuccess?: () => void
-  onError?: (error: Error) => void
-}
-
-interface UseUnpinCommentOptions {
-  postId: PostId
-  onSuccess?: () => void
-  onError?: (error: Error) => void
-}
-
-/**
- * Hook to check if a comment can be pinned as the official response.
- */
-export function useCanPinComment({
-  commentId,
-  enabled = true,
-}: {
-  commentId: CommentId
-  enabled?: boolean
-}) {
-  return useQuery({
-    queryKey: [...commentKeys.all, 'canPin', commentId],
-    queryFn: async () => {
-      try {
-        return await canPinCommentFn({ data: { commentId } })
-      } catch {
-        return { canPin: false, reason: 'An error occurred' }
-      }
-    },
-    enabled,
-    staleTime: 30 * 1000,
   })
 }
 

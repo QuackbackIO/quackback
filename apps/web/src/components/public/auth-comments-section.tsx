@@ -3,7 +3,7 @@ import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { useCreateComment } from '@/lib/hooks/use-comment-actions'
+import { useCreateComment } from '@/lib/mutations'
 import type { PublicCommentView } from '@/lib/queries/portal-detail'
 import type { CommentId, PostId, MemberId } from '@quackback/ids'
 

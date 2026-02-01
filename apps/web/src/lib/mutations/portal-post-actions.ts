@@ -1,24 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+/**
+ * Portal post action mutations
+ *
+ * Mutation hooks for portal users to edit/delete their own posts.
+ */
+
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
-import {
-  getPostPermissionsFn,
-  userEditPostFn,
-  userDeletePostFn,
-} from '@/lib/server-functions/public-posts'
+import { userEditPostFn, userDeletePostFn } from '@/lib/server-functions/public-posts'
 import { portalDetailQueries } from '@/lib/queries/portal-detail'
+import { postPermissionsKeys } from '@/lib/hooks/use-portal-posts-query'
 
 // ============================================================================
 // Types
 // ============================================================================
-
-interface PostPermissions {
-  canEdit: boolean
-  canDelete: boolean
-  editReason?: string
-  deleteReason?: string
-}
 
 export interface EditPostInput {
   title: string
@@ -34,45 +30,7 @@ interface UsePostActionsOptions {
 }
 
 // ============================================================================
-// Query Key Factory
-// ============================================================================
-
-export const postActionKeys = {
-  all: ['post-actions'] as const,
-  permissions: () => [...postActionKeys.all, 'permissions'] as const,
-  permission: (postId: PostId) => [...postActionKeys.permissions(), postId] as const,
-}
-
-// ============================================================================
-// Query Hook
-// ============================================================================
-
-/**
- * Hook to get edit/delete permissions for a post.
- */
-export function usePostPermissions({
-  postId,
-  enabled = true,
-}: {
-  postId: PostId
-  enabled?: boolean
-}) {
-  return useQuery({
-    queryKey: postActionKeys.permission(postId),
-    queryFn: async (): Promise<PostPermissions> => {
-      try {
-        return await getPostPermissionsFn({ data: { postId } })
-      } catch {
-        return { canEdit: false, canDelete: false }
-      }
-    },
-    enabled,
-    staleTime: 30 * 1000, // 30s
-  })
-}
-
-// ============================================================================
-// Mutation Hooks
+// Mutation Hook
 // ============================================================================
 
 /**
@@ -101,7 +59,7 @@ export function usePostActions({
       // Invalidate post detail to refresh with updated content
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       // Invalidate permissions in case edit window expired
-      queryClient.invalidateQueries({ queryKey: postActionKeys.permission(postId) })
+      queryClient.invalidateQueries({ queryKey: postPermissionsKeys.detail(postId) })
       onEditSuccess?.()
     },
   })

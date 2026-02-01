@@ -4,11 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationItem } from '@/components/notifications/notification-item'
-import {
-  useNotifications,
-  useMarkNotificationAsRead,
-  useMarkAllNotificationsAsRead,
-} from '@/lib/hooks/use-notifications-queries'
+import { useNotifications } from '@/lib/hooks/use-notifications-queries'
+import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/mutations'
 
 export const Route = createFileRoute('/admin/notifications')({
   component: NotificationsPage,

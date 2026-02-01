@@ -1,17 +1,8 @@
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-  type InfiniteData,
-} from '@tanstack/react-query'
+import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
 import type { RoadmapPost, RoadmapPostListResult } from '@/lib/posts'
 import type { RoadmapPostsListResult, RoadmapPostEntry } from '@/lib/roadmaps'
-import type { RoadmapId, StatusId, PostId } from '@quackback/ids'
-import {
-  getRoadmapPostsFn,
-  addPostToRoadmapFn,
-  removePostFromRoadmapFn,
-} from '@/lib/server-functions/roadmaps'
+import type { RoadmapId, StatusId } from '@quackback/ids'
+import { getRoadmapPostsFn } from '@/lib/server-functions/roadmaps'
 import { getRoadmapPostsByStatusFn } from '@/lib/server-functions/public-posts'
 
 // ============================================================================
@@ -100,32 +91,6 @@ export function usePublicRoadmapPosts({
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
     enabled,
-  })
-}
-
-// ============================================================================
-// Mutation Hooks
-// ============================================================================
-
-export function useAddPostToRoadmap(roadmapId: RoadmapId) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (postId: PostId) => addPostToRoadmapFn({ data: { roadmapId, postId } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId] })
-    },
-  })
-}
-
-export function useRemovePostFromRoadmap(roadmapId: RoadmapId) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (postId: PostId) => removePostFromRoadmapFn({ data: { roadmapId, postId } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...roadmapPostsKeys.all, 'roadmap', roadmapId] })
-    },
   })
 }
 

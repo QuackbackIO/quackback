@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   useNotifications,
-  useMarkNotificationAsRead,
-  useMarkAllNotificationsAsRead,
   type SerializedNotification,
 } from '@/lib/hooks/use-notifications-queries'
+import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/mutations'
 import { getNotificationTypeConfig } from '@/components/notifications/notification-type-config'
 
 export const Route = createFileRoute('/_portal/notifications')({

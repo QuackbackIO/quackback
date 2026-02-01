@@ -39,12 +39,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
-import {
-  useRoadmaps,
-  useCreateRoadmap,
-  useUpdateRoadmap,
-  useDeleteRoadmap,
-} from '@/lib/hooks/use-roadmaps-query'
+import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
+import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/mutations'
 import type { Roadmap } from '@/lib/db-types'
 
 interface RoadmapSidebarProps {

@@ -31,11 +31,8 @@ import {
   FONT_OPTIONS,
 } from '@/components/admin/settings/branding/use-branding-state'
 import type { ThemeConfig } from '@/lib/theme'
-import {
-  useWorkspaceLogo,
-  useUploadWorkspaceLogo,
-  useDeleteWorkspaceLogo,
-} from '@/lib/hooks/use-settings-queries'
+import { useWorkspaceLogo } from '@/lib/hooks/use-settings-queries'
+import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/mutations/settings'
 import { updateWorkspaceNameFn } from '@/lib/server-functions/settings'
 
 export const Route = createFileRoute('/admin/settings/branding')({
