@@ -22,6 +22,7 @@ WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY apps/web ./apps/web
 COPY packages ./packages
+COPY scripts ./scripts
 
 # Install all dependencies (including devDependencies for build)
 RUN bun install --frozen-lockfile
