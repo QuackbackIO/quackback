@@ -62,11 +62,18 @@ bun run typecheck        # TypeScript type checking (in apps/web)
 apps/web/                    # TanStack Start application
 ├── src/routes/              # File-based routing (TanStack Router)
 ├── src/components/          # UI and feature components
-├── src/lib/                 # Core utilities
-│   ├── auth/                # Better Auth configuration
-│   ├── db.ts                # Database proxy (tenant-aware)
+├── src/lib/                 # Core utilities (layer-based architecture)
+│   ├── core/                # Infrastructure (db, types)
+│   ├── types/               # Shared type definitions
 │   ├── server-functions/    # TanStack server functions (RPC)
-│   ├── posts/               # Post service & types
+│   ├── hooks/               # React Query hooks (queries only)
+│   ├── mutations/           # React Query mutations
+│   ├── events/              # Event dispatch & handlers
+│   ├── stores/              # Zustand client state
+│   ├── posts/               # Post service modules
+│   ├── comments/            # Comment service & types
+│   ├── auth/                # Better Auth configuration
+│   ├── tenant/              # Multi-tenant context
 │   └── settings/            # Workspace settings
 
 packages/                    # Shared packages (AGPL-3.0)
@@ -107,6 +114,28 @@ export const createPostFn = createServerFn({ method: 'POST' })
     return createPost(data, auth.member)
   })
 ```
+
+### lib/ Layer Architecture
+
+The `lib/` directory follows a layer-based architecture with clear responsibilities:
+
+| Layer               | Purpose                          | Import Direction                 |
+| ------------------- | -------------------------------- | -------------------------------- |
+| `core/`             | Infrastructure (db, config)      | Can import from packages/        |
+| `types/`            | Shared type definitions          | Can import from core/            |
+| `server-functions/` | TanStack RPC layer               | Can import from services, types  |
+| `hooks/`            | React Query hooks (queries only) | Can import from server-functions |
+| `mutations/`        | React Query mutations            | Can import from server-functions |
+| `events/`           | Event dispatch & handlers        | Can import from services         |
+| `stores/`           | Zustand client state             | Can import from types            |
+| `{feature}/`        | Business logic services          | Can import from core/, types/    |
+
+**Key conventions**:
+
+- Hooks: `use-{feature}-query.ts` for queries, mutations in `mutations/`
+- Services: Split by domain (`post.service.ts`, `post.query.ts`, `post.voting.ts`)
+- Import direction: lib/ never imports from components/
+- No file should exceed 400 lines (services) or 300 lines (hooks)
 
 ### Service Layer
 
