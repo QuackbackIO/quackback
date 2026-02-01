@@ -25,8 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { adminQueries } from '@/lib/queries/admin'
-import { inboxKeys } from '@/lib/hooks/use-inbox-query'
+import { adminQueries } from '@/lib/client/queries/admin'
+import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { VoteButton } from '@/components/public/vote-button'
 import { PostContentSection } from '@/components/public/post-detail/post-content-section'
 import {
@@ -43,11 +43,11 @@ import {
 } from '@/components/public/post-detail/official-response-section'
 import { EditPostDialog } from '@/components/admin/feedback/edit-post-dialog'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
-import { useInboxUIStore } from '@/lib/stores/inbox-ui'
-import { useUpdatePostStatus, useUpdatePostTags } from '@/lib/mutations/posts'
-import { usePinComment, useUnpinComment } from '@/lib/mutations'
-import { usePostDetailKeyboard } from '@/lib/hooks/use-post-detail-keyboard'
-import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server-functions/roadmaps'
+import { useInboxUIStore } from '@/lib/client/stores/inbox-ui'
+import { useUpdatePostStatus, useUpdatePostTags } from '@/lib/client/mutations/posts'
+import { usePinComment, useUnpinComment } from '@/lib/client/mutations'
+import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
+import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/feedback'
 import {
   ensureTypeId,
@@ -58,7 +58,7 @@ import {
   type CommentId,
 } from '@quackback/ids'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
-import type { PublicPostDetailView } from '@/lib/queries/portal-detail'
+import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 
 interface PostModalProps {
   postId: string | undefined

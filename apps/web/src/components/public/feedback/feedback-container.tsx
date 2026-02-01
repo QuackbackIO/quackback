@@ -6,15 +6,15 @@ import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import { MobileBoardSheet } from '@/components/public/feedback/mobile-board-sheet'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PostCard, type PostCardDensity } from '@/components/public/post-card'
-import type { BoardWithStats } from '@/lib/boards'
+import type { BoardWithStats } from '@/lib/server/domains/boards'
 import type { PostStatusEntity, Tag } from '@/lib/db-types'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
   flattenPublicPosts,
   usePublicPosts,
   useVotedPosts,
-} from '@/lib/hooks/use-portal-posts-query'
-import type { PublicPostListItem } from '@/lib/posts'
+} from '@/lib/client/hooks/use-portal-posts-query'
+import type { PublicPostListItem } from '@/lib/server/domains/posts'
 import { cn } from '@/lib/utils'
 
 interface FeedbackContainerProps {

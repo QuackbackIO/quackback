@@ -3,7 +3,7 @@ import { EnvelopeIcon, ArrowPathIcon, ClockIcon, XMarkIcon } from '@heroicons/re
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { cancelInvitationFn, resendInvitationFn } from '@/lib/server-functions/admin'
+import { cancelInvitationFn, resendInvitationFn } from '@/lib/server/functions/admin'
 import type { InviteId } from '@quackback/ids'
 
 interface PendingInvitation {

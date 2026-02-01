@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { adminQueries } from '@/lib/queries/admin'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'

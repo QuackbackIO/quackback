@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId, validateOptionalTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId, validateOptionalTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId, CommentId, UserId } from '@quackback/ids'
 
 // Input validation schema
@@ -36,7 +36,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
           if (validationError) return validationError
 
           // Import service function
-          const { getCommentsWithReplies } = await import('@/lib/posts/post.query')
+          const { getCommentsWithReplies } = await import('@/lib/server/domains/posts/post.query')
 
           const comments = await getCommentsWithReplies(postId as PostId)
 
@@ -96,7 +96,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
           if (bodyValidationError) return bodyValidationError
 
           // Import service and get member details
-          const { createComment } = await import('@/lib/comments/comment.service')
+          const { createComment } = await import('@/lib/server/domains/comments/comment.service')
           const { db, member, eq } = await import('@/lib/db')
 
           // Get member info for author details

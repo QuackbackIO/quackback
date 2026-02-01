@@ -14,7 +14,7 @@ import { CreateApiKeyDialog } from './create-api-key-dialog'
 import { ApiKeyRevealDialog } from './api-key-reveal-dialog'
 import { RevokeApiKeyDialog } from './revoke-api-key-dialog'
 import { RotateApiKeyDialog } from './rotate-api-key-dialog'
-import type { ApiKey } from '@/lib/api-keys'
+import type { ApiKey } from '@/lib/server/domains/api-keys'
 import { formatDistanceToNow } from 'date-fns'
 
 interface ApiKeysSettingsProps {

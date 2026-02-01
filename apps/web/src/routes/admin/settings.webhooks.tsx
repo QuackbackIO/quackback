@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BoltIcon } from '@heroicons/react/24/solid'
-import { adminQueries } from '@/lib/queries/admin'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WebhooksSettings } from '@/components/admin/settings/webhooks/webhooks-settings'
 
 export const Route = createFileRoute('/admin/settings/webhooks')({
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
+    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
     await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
 
     const { queryClient } = context

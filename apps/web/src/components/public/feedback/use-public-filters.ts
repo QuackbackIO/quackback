@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/_portal/index'
 import { useMemo, useCallback, useRef, useSyncExternalStore } from 'react'
-import type { PublicFeedbackFilters } from '@/lib/types'
+import type { PublicFeedbackFilters } from '@/lib/shared/types'
 
 export type { PublicFeedbackFilters }
 

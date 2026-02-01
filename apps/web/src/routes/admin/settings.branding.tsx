@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { settingsQueries } from '@/lib/queries/settings'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { SunIcon, MoonIcon, CheckIcon, ArrowPathIcon, CameraIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,9 +31,9 @@ import {
   FONT_OPTIONS,
 } from '@/components/admin/settings/branding/use-branding-state'
 import type { ThemeConfig } from '@/lib/theme'
-import { useWorkspaceLogo } from '@/lib/hooks/use-settings-queries'
-import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/mutations/settings'
-import { updateWorkspaceNameFn } from '@/lib/server-functions/settings'
+import { useWorkspaceLogo } from '@/lib/client/hooks/use-settings-queries'
+import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
+import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 
 export const Route = createFileRoute('/admin/settings/branding')({
   loader: async ({ context }) => {

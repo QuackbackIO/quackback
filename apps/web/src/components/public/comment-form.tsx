@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { UseMutationResult } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { commentSchema, type CommentInput } from '@/lib/schemas/comments'
+import { commentSchema, type CommentInput } from '@/lib/shared/schemas/comments'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -13,9 +13,9 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { signOut } from '@/lib/auth/client'
+import { signOut } from '@/lib/server/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import type { PostId, CommentId } from '@quackback/ids'
 

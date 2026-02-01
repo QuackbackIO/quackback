@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { StatusId } from '@quackback/ids'
 
 // Input validation schema - matches UpdateStatusInput from service
@@ -41,7 +41,7 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getStatusById } = await import('@/lib/statuses/status.service')
+          const { getStatusById } = await import('@/lib/server/domains/statuses/status.service')
 
           const status = await getStatusById(statusId as StatusId)
 
@@ -88,7 +88,7 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
           }
 
           // Import service function
-          const { updateStatus } = await import('@/lib/statuses/status.service')
+          const { updateStatus } = await import('@/lib/server/domains/statuses/status.service')
 
           const status = await updateStatus(statusId as StatusId, {
             name: parsed.data.name,
@@ -130,7 +130,7 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
           if (validationError) return validationError
 
           // Import service function
-          const { deleteStatus } = await import('@/lib/statuses/status.service')
+          const { deleteStatus } = await import('@/lib/server/domains/statuses/status.service')
 
           await deleteStatus(statusId as StatusId)
 

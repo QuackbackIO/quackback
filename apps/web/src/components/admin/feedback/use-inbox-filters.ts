@@ -2,7 +2,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/feedback'
 import { useMemo, useCallback } from 'react'
 import { isItemSelected, toggleItem } from './filter-utils'
-import type { InboxFilters } from '@/lib/types'
+import type { InboxFilters } from '@/lib/shared/types'
 
 export type { InboxFilters }
 

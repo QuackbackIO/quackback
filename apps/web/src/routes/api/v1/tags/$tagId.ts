@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { TagId } from '@quackback/ids'
 
 // Input validation schema
@@ -39,7 +39,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getTagById } = await import('@/lib/tags/tag.service')
+          const { getTagById } = await import('@/lib/server/domains/tags/tag.service')
 
           const tag = await getTagById(tagId as TagId)
 
@@ -81,7 +81,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
           }
 
           // Import service function
-          const { updateTag } = await import('@/lib/tags/tag.service')
+          const { updateTag } = await import('@/lib/server/domains/tags/tag.service')
 
           const tag = await updateTag(tagId as TagId, {
             name: parsed.data.name,
@@ -116,7 +116,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
           if (validationError) return validationError
 
           // Import service function
-          const { deleteTag } = await import('@/lib/tags/tag.service')
+          const { deleteTag } = await import('@/lib/server/domains/tags/tag.service')
 
           await deleteTag(tagId as TagId)
 

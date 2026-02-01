@@ -11,9 +11,9 @@ import {
   SELF_HOSTED_TIER_CONFIG,
   getMinimumCloudTierForFeature,
 } from '@/lib/features'
-import { getSubscription, isSubscriptionActive } from '../subscription'
-import { tenantStorage } from '../tenant/storage'
-import { getBillingUrl } from '../config'
+import { getSubscription, isSubscriptionActive } from '@/lib/subscription'
+import { tenantStorage } from '@/lib/server/tenant/storage'
+import { getBillingUrl } from '@/lib/config'
 
 // ============================================================================
 // Types

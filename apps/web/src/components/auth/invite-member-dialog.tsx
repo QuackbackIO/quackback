@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
-import { inviteSchema, type InviteInput } from '@/lib/schemas/auth'
+import { inviteSchema, type InviteInput } from '@/lib/shared/schemas/auth'
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { sendInvitationFn } from '@/lib/server-functions/admin'
+import { sendInvitationFn } from '@/lib/server/functions/admin'
 
 interface InviteMemberDialogProps {
   open: boolean

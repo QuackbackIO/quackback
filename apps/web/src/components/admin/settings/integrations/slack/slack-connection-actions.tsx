@@ -13,8 +13,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { getSlackConnectUrl } from '@/lib/server-functions/integrations'
-import { useDeleteIntegration } from '@/lib/mutations'
+import { getSlackConnectUrl } from '@/lib/server/functions/integrations'
+import { useDeleteIntegration } from '@/lib/client/mutations'
 
 interface SlackConnectionActionsProps {
   integrationId?: string

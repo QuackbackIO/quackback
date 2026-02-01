@@ -1,5 +1,5 @@
 import { isCloud, type CloudTier } from '@/lib/features'
-import { tenantStorage } from '@/lib/tenant/storage'
+import { tenantStorage } from '@/lib/server/tenant/storage'
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
 

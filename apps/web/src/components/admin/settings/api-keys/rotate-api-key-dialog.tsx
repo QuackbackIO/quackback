@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { rotateApiKeyFn } from '@/lib/server-functions/api-keys'
-import type { ApiKey } from '@/lib/api-keys'
+import { rotateApiKeyFn } from '@/lib/server/functions/api-keys'
+import type { ApiKey } from '@/lib/server/domains/api-keys'
 
 interface RotateApiKeyDialogProps {
   open: boolean

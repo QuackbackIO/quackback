@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { settingsQueries } from '@/lib/queries/settings'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { UserIcon } from '@heroicons/react/24/solid'
 import { ProfileForm } from '@/components/settings/profile-form'
 

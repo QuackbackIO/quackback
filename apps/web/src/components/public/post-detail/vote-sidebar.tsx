@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { portalDetailQueries } from '@/lib/queries/portal-detail'
+import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import type { PostId } from '@quackback/ids'
 
 const SIDEBAR_CLASS =

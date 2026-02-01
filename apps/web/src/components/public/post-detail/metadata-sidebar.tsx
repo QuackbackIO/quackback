@@ -12,7 +12,7 @@ import {
   XMarkIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline'
-import { portalDetailQueries } from '@/lib/queries/portal-detail'
+import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { StatusDropdown } from '@/components/shared/status-dropdown'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Badge } from '@/components/ui/badge'

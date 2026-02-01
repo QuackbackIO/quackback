@@ -7,7 +7,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import {
   usePublicRoadmapPosts,
   flattenRoadmapPostEntries,
-} from '@/lib/hooks/use-roadmap-posts-query'
+} from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { RoadmapId, StatusId } from '@quackback/ids'
 
 interface RoadmapColumnProps {

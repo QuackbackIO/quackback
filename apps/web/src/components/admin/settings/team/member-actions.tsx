@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { updateMemberRoleFn, removeTeamMemberFn } from '@/lib/server-functions/admin'
+import { updateMemberRoleFn, removeTeamMemberFn } from '@/lib/server/functions/admin'
 
 interface MemberActionsProps {
   memberId: string

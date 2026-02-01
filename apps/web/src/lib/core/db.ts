@@ -9,7 +9,7 @@
  */
 
 import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
-import { tenantStorage, type Database as NeonDatabase } from '@/lib/tenant'
+import { tenantStorage, type Database as NeonDatabase } from '@/lib/server/tenant'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
 // with nested barrel exports. If we use `export { asc } from 'drizzle-orm'`,

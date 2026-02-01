@@ -9,7 +9,7 @@ import {
   type ThemeVariables,
   type MinimalThemeVariables,
 } from '@/lib/theme'
-import { updateThemeFn } from '@/lib/server-functions/settings'
+import { updateThemeFn } from '@/lib/server/functions/settings'
 
 export const FONT_OPTIONS = [
   {

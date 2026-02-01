@@ -11,9 +11,9 @@ import {
 import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import appCss from '../globals.css?url'
 import { cn } from '@/lib/utils'
-import { getBootstrapData, type BootstrapData } from '@/lib/server-functions/bootstrap'
-import type { TenantSettings } from '@/lib/settings'
-import type { RequestContext } from '@/lib/tenant'
+import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
+import type { TenantSettings } from '@/lib/server/domains/settings'
+import type { RequestContext } from '@/lib/server/tenant'
 import { WorkspaceNotFoundPage } from '@/components/workspace-not-found'
 import { ThemeProvider } from '@/components/theme-provider'
 

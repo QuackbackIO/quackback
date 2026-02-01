@@ -1,5 +1,5 @@
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
-import { usePostVote } from '@/lib/hooks/use-post-vote'
+import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/utils'
 import type { PostId } from '@quackback/ids'
 

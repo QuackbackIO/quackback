@@ -10,9 +10,9 @@ import {
   KeyIcon,
 } from '@heroicons/react/24/solid'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
-import { openAuthPopup, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
-import { authClient } from '@/lib/auth/client'
-import type { PublicOIDCConfig } from '@/lib/settings'
+import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
+import { authClient } from '@/lib/server/auth/client'
+import type { PublicOIDCConfig } from '@/lib/server/domains/settings'
 
 type OAuthProvider = 'google' | 'github' | 'oidc'
 
@@ -208,7 +208,7 @@ export function PortalAuthFormInline({
 
       // Success - session is now established
       // Broadcast success to other components (dialog will close, page will refresh)
-      const { postAuthSuccess } = await import('@/lib/hooks/use-auth-broadcast')
+      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
       // Loading will be cleared when parent handles the broadcast
     } catch (err) {

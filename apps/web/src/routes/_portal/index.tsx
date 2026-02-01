@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
-import { portalQueries } from '@/lib/queries/portal'
+import { portalQueries } from '@/lib/client/queries/portal'
 
 const searchSchema = z.object({
   board: z.string().optional(),

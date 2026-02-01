@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/users'
 import { useMemo, useCallback } from 'react'
-import type { UsersFilters } from '@/lib/types'
+import type { UsersFilters } from '@/lib/shared/types'
 
 export type { UsersFilters }
 

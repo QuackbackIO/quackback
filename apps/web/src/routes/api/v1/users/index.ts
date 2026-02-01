@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuth } from '@/lib/api/auth'
-import { successResponse, handleDomainError, decodeCursor, encodeCursor } from '@/lib/api/responses'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import {
+  successResponse,
+  handleDomainError,
+  decodeCursor,
+  encodeCursor,
+} from '@/lib/server/domains/api/responses'
 
 export const Route = createFileRoute('/api/v1/users/')({
   server: {
@@ -33,7 +38,7 @@ export const Route = createFileRoute('/api/v1/users/')({
           const page = Math.floor(offset / limit) + 1
 
           // Import service function
-          const { listPortalUsers } = await import('@/lib/users/user.service')
+          const { listPortalUsers } = await import('@/lib/server/domains/users/user.service')
 
           const result = await listPortalUsers({
             search,

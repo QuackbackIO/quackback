@@ -14,7 +14,7 @@ import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/db-types'
-import type { TeamMember } from '@/lib/members'
+import type { TeamMember } from '@/lib/server/domains/members'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { StatusId } from '@quackback/ids'
 

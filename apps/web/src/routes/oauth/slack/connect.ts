@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getSlackOAuthUrl } from '@/lib/events/integrations/slack/oauth'
-import { verifyOAuthState } from '@/lib/auth/oauth-state'
+import { getSlackOAuthUrl } from '@/lib/server/events/integrations/slack/oauth'
+import { verifyOAuthState } from '@/lib/server/auth/oauth-state'
 import {
   STATE_EXPIRY_MS,
   isSecureRequest,
@@ -8,8 +8,8 @@ import {
   buildCallbackUri,
   redirectResponse,
   createStateCookie,
-} from '@/lib/integrations/oauth'
-import type { SlackOAuthState } from '@/lib/server-functions/integrations'
+} from '@/lib/server/domains/integrations/oauth'
+import type { SlackOAuthState } from '@/lib/server/functions/integrations'
 
 export const Route = createFileRoute('/oauth/slack/connect')({
   server: {

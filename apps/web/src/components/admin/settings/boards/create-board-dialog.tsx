@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useRouter, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { createBoardSchema, type CreateBoardOutput } from '@/lib/schemas/boards'
-import { useCreateBoard } from '@/lib/mutations'
+import { createBoardSchema, type CreateBoardOutput } from '@/lib/shared/schemas/boards'
+import { useCreateBoard } from '@/lib/client/mutations'
 import {
   Dialog,
   DialogContent,

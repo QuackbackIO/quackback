@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { adminQueries } from '@/lib/queries/admin'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
 import type { InboxPostListResult } from '@/lib/db-types'

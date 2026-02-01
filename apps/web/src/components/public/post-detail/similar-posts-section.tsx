@@ -7,7 +7,7 @@ import { ChevronRightIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { findSimilarPostsFn, type SimilarPost } from '@/lib/server-functions/public-posts'
+import { findSimilarPostsFn, type SimilarPost } from '@/lib/server/functions/public-posts'
 import type { PostId } from '@quackback/ids'
 
 interface SimilarPostItemProps {

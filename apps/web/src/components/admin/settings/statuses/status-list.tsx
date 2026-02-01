@@ -51,7 +51,7 @@ import {
   deleteStatusFn,
   reorderStatusesFn,
   createStatusFn,
-} from '@/lib/server-functions/statuses'
+} from '@/lib/server/functions/statuses'
 
 interface StatusListProps {
   initialStatuses: PostStatusEntity[]

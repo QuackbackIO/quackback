@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { PostStatusEntity } from '@/lib/db-types'
-import { usePublicRoadmaps, type RoadmapView } from '@/lib/hooks/use-roadmaps-query'
+import { usePublicRoadmaps, type RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
 import { RoadmapColumn } from './roadmap-column'
 import { usePublicRoadmapSelection } from './use-public-roadmap-selection'
 

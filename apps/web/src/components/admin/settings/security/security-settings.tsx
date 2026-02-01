@@ -3,8 +3,8 @@ import { useRouter } from '@tanstack/react-router'
 import { ArrowPathIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { updateSecurityConfigFn } from '@/lib/server-functions/settings'
-import type { AdminSecurityConfig } from '@/lib/settings'
+import { updateSecurityConfigFn } from '@/lib/server/functions/settings'
+import type { AdminSecurityConfig } from '@/lib/server/domains/settings'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
 
 interface SecuritySettingsProps {

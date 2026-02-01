@@ -10,10 +10,10 @@ export const Route = createFileRoute('/api/v1/openapi/json')({
        * This endpoint is public and does not require authentication.
        */
       GET: async () => {
-        const { generateOpenAPISpec } = await import('@/lib/api/openapi')
+        const { generateOpenAPISpec } = await import('@/lib/server/domains/api/openapi')
 
         // Import all schema registrations
-        await import('@/lib/api/schemas')
+        await import('@/lib/server/domains/api/schemas')
 
         const spec = generateOpenAPISpec()
 

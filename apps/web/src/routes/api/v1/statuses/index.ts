@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
+} from '@/lib/server/domains/api/responses'
 
 // Input validation schema
 const createStatusSchema = z.object({
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
 
         try {
           // Import service function
-          const { listStatuses } = await import('@/lib/statuses/status.service')
+          const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
 
           const statuses = await listStatuses()
 
@@ -80,7 +80,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
           }
 
           // Import service function
-          const { createStatus } = await import('@/lib/statuses/status.service')
+          const { createStatus } = await import('@/lib/server/domains/statuses/status.service')
 
           const status = await createStatus({
             name: parsed.data.name,

@@ -16,11 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { updateWebhookFn } from '@/lib/server-functions/webhooks'
+import { updateWebhookFn } from '@/lib/server/functions/webhooks'
 import { ArrowPathIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
-import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/events/integrations/webhook/constants'
+import {
+  WEBHOOK_EVENTS,
+  WEBHOOK_EVENT_CONFIG,
+} from '@/lib/server/events/integrations/webhook/constants'
 import { RotateWebhookSecretDialog } from './rotate-webhook-secret-dialog'
-import type { Webhook } from '@/lib/webhooks'
+import type { Webhook } from '@/lib/server/domains/webhooks'
 
 interface EditWebhookDialogProps {
   webhook: Webhook

@@ -24,7 +24,7 @@ import { StatusDropdown } from '@/components/shared/status-dropdown'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PostStatusEntity } from '@/lib/db-types'
-import { usePostVote } from '@/lib/hooks/use-post-vote'
+import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn, getInitials } from '@/lib/utils'
 import type { PostId, StatusId } from '@quackback/ids'
 

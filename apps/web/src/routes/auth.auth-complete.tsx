@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { postAuthSuccess } from '@/lib/hooks/use-auth-broadcast'
+import { postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 
 /**

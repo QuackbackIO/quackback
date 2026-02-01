@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
 import {
   useNotifications,
   type SerializedNotification,
-} from '@/lib/hooks/use-notifications-queries'
-import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/mutations'
+} from '@/lib/client/hooks/use-notifications-queries'
+import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
 import { getNotificationTypeConfig } from '@/components/notifications/notification-type-config'
 
 export const Route = createFileRoute('/_portal/notifications')({

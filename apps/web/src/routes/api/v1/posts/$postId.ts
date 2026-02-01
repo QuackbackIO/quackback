@@ -1,13 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId, validateOptionalTypeId, validateTypeIdArray } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import {
+  validateTypeId,
+  validateOptionalTypeId,
+  validateTypeIdArray,
+} from '@/lib/server/domains/api/validation'
 import type { PostId, StatusId, TagId } from '@quackback/ids'
 
 // Input validation schema
@@ -40,7 +44,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getPostWithDetails } = await import('@/lib/posts/post.query')
+          const { getPostWithDetails } = await import('@/lib/server/domains/posts/post.query')
 
           const post = await getPostWithDetails(postId as PostId)
 
@@ -118,7 +122,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           if (bodyValidationError) return bodyValidationError
 
           // Import service and get member details
-          const { updatePost } = await import('@/lib/posts/post.service')
+          const { updatePost } = await import('@/lib/server/domains/posts/post.service')
           const { db, member, eq } = await import('@/lib/db')
 
           // Get member info for responder details
@@ -179,7 +183,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           if (validationError) return validationError
 
           // Import service and get member details
-          const { softDeletePost } = await import('@/lib/posts/post.permissions')
+          const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
           const { db, member, eq } = await import('@/lib/db')
 
           // Get member info for role

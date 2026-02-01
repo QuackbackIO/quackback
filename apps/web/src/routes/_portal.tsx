@@ -1,9 +1,9 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { fetchUserAvatar } from '@/lib/server-functions/portal'
+import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
-import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 import { theme } from '@/lib/theme'
 
 export const Route = createFileRoute('/_portal')({

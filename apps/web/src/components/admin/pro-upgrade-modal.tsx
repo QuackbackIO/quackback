@@ -8,7 +8,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { useWorkspaceId } from '@/lib/hooks/use-workspace-id'
+import { useWorkspaceId } from '@/lib/client/hooks/use-workspace-id'
 
 interface ProUpgradeModalProps {
   open: boolean

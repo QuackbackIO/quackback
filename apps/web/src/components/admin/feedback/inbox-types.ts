@@ -1,7 +1,7 @@
 /**
  * Re-exports from @/lib/types/inbox for backwards compatibility.
  *
- * Prefer importing directly from '@/lib/types' in new code.
+ * Prefer importing directly from '@/lib/shared/types' in new code.
  */
 export type {
   OfficialResponse,
@@ -10,4 +10,4 @@ export type {
   CommentWithReplies,
   PostDetails,
   CurrentUser,
-} from '@/lib/types'
+} from '@/lib/shared/types'

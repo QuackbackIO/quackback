@@ -4,7 +4,7 @@ import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { isCloud } from '@/lib/features'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useWorkspaceId } from '@/lib/hooks/use-workspace-id'
+import { useWorkspaceId } from '@/lib/client/hooks/use-workspace-id'
 
 export const Route = createFileRoute('/admin/settings')({
   component: SettingsLayout,

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { PuzzlePieceIcon } from '@heroicons/react/24/solid'
-import { adminQueries } from '@/lib/queries/admin'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationList } from '@/components/admin/settings/integrations/integration-list'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({

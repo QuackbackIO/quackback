@@ -4,7 +4,7 @@ import {
   SparklesIcon,
   BellIcon,
 } from '@heroicons/react/24/solid'
-import type { NotificationType } from '@/lib/notifications/notification.types'
+import type { NotificationType } from '@/lib/server/domains/notifications/notification.types'
 
 export interface NotificationTypeConfig {
   icon: typeof BellIcon

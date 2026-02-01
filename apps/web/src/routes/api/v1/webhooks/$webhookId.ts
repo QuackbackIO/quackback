@@ -1,15 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuthAdmin } from '@/lib/api/auth'
+import { withApiKeyAuthAdmin } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId, validateTypeIdArray } from '@/lib/api/validation'
-import { WEBHOOK_EVENTS } from '@/lib/events/integrations/webhook/constants'
-import { toWebhookResponse } from '@/lib/api/webhooks'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId, validateTypeIdArray } from '@/lib/server/domains/api/validation'
+import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
+import { toWebhookResponse } from '@/lib/server/domains/api/webhooks'
 import type { WebhookId } from '@quackback/ids'
 
 // Input validation schema
@@ -39,7 +39,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { getWebhookById } = await import('@/lib/webhooks')
+          const { getWebhookById } = await import('@/lib/server/domains/webhooks')
           const webhook = await getWebhookById(webhookId as WebhookId)
 
           return successResponse(toWebhookResponse(webhook))
@@ -84,7 +84,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             if (boardValidationError) return boardValidationError
           }
 
-          const { updateWebhook } = await import('@/lib/webhooks')
+          const { updateWebhook } = await import('@/lib/server/domains/webhooks')
           const webhook = await updateWebhook(webhookId as WebhookId, {
             url: parsed.data.url,
             events: parsed.data.events,
@@ -114,7 +114,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { deleteWebhook } = await import('@/lib/webhooks')
+          const { deleteWebhook } = await import('@/lib/server/domains/webhooks')
           await deleteWebhook(webhookId as WebhookId)
 
           return noContentResponse()

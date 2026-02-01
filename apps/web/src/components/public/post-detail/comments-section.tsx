@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { portalDetailQueries, type PublicCommentView } from '@/lib/queries/portal-detail'
+import { portalDetailQueries, type PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { CommentId, PostId } from '@quackback/ids'

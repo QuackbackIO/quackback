@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId } from '@quackback/ids'
 
 // Input validation schema
@@ -38,7 +38,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getBoardById } = await import('@/lib/boards/board.service')
+          const { getBoardById } = await import('@/lib/server/domains/boards/board.service')
 
           const board = await getBoardById(boardId as BoardId)
 
@@ -84,7 +84,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
           }
 
           // Import service function
-          const { updateBoard } = await import('@/lib/boards/board.service')
+          const { updateBoard } = await import('@/lib/server/domains/boards/board.service')
 
           const board = await updateBoard(boardId as BoardId, {
             name: parsed.data.name,
@@ -125,7 +125,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
           if (validationError) return validationError
 
           // Import service function
-          const { deleteBoard } = await import('@/lib/boards/board.service')
+          const { deleteBoard } = await import('@/lib/server/domains/boards/board.service')
 
           await deleteBoard(boardId as BoardId)
 

@@ -4,7 +4,7 @@ import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import {
   processUnsubscribeTokenFn,
   type UnsubscribeResult,
-} from '@/lib/server-functions/subscriptions'
+} from '@/lib/server/functions/subscriptions'
 
 const searchSchema = z.object({
   token: z.string().optional(),

@@ -7,7 +7,7 @@ import {
   generateCodeVerifier,
   generateCodeChallenge,
   generateNonce,
-} from '@/lib/auth/oauth-utils'
+} from '@/lib/server/auth/oauth-utils'
 
 const OAUTH_PROVIDERS = {
   github: {
@@ -52,7 +52,7 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
       GET: async ({ request, params }) => {
         const { db, settings, eq } = await import('@/lib/db')
         const { signOAuthState, encryptOIDCConfig, encryptCodeVerifier } =
-          await import('@/lib/auth/oauth-state')
+          await import('@/lib/server/auth/oauth-state')
 
         const { provider } = params
         console.log(`[oauth] Initiating OAuth: provider=${provider}`)
@@ -140,8 +140,9 @@ export const Route = createFileRoute('/api/auth/oauth/$provider')({
         }
 
         const { getFullOIDCConfig, getFullSecurityConfig } =
-          await import('@/lib/settings/settings.service')
-        const { buildOIDCAuthUrl, decryptOIDCSecret } = await import('@/lib/auth/oidc.service')
+          await import('@/lib/server/domains/settings/settings.service')
+        const { buildOIDCAuthUrl, decryptOIDCSecret } =
+          await import('@/lib/server/auth/oidc.service')
 
         const oidcConfig =
           oidcType === 'team'

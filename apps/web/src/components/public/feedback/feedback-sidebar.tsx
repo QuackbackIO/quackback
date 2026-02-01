@@ -1,6 +1,6 @@
 import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/utils'
-import type { BoardWithStats } from '@/lib/boards'
+import type { BoardWithStats } from '@/lib/server/domains/boards'
 
 interface FeedbackSidebarProps {
   boards: BoardWithStats[]

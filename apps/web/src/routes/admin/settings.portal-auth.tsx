@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { settingsQueries } from '@/lib/queries/settings'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { LockClosedIcon } from '@heroicons/react/24/solid'
 import { PortalAuthSettings } from '@/components/admin/settings/portal-auth/portal-auth-settings'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -9,7 +9,7 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
   loader: async ({ context }) => {
     // Settings is validated in root layout
     // Only owners and admins can access portal auth settings (more restrictive than parent)
-    const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
+    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
     await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
 
     const { queryClient } = context

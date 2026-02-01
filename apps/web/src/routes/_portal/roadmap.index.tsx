@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
-import { portalQueries } from '@/lib/queries/portal'
+import { portalQueries } from '@/lib/client/queries/portal'
 
 const searchSchema = z.object({
   roadmap: z.string().optional(),

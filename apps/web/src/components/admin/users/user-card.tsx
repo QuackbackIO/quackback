@@ -7,7 +7,7 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/utils'
-import type { PortalUserListItemView } from '@/lib/users'
+import type { PortalUserListItemView } from '@/lib/server/domains/users'
 
 interface UserCardProps {
   user: PortalUserListItemView

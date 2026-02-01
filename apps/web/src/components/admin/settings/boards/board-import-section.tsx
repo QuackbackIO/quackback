@@ -10,8 +10,8 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { CSV_TEMPLATE } from '@/lib/schemas/import'
-import type { ImportResult } from '@/lib/import/types'
+import { CSV_TEMPLATE } from '@/lib/shared/schemas/import'
+import type { ImportResult } from '@/lib/server/domains/import/types'
 
 const errorResponseSchema = z.object({
   error: z.string().optional(),

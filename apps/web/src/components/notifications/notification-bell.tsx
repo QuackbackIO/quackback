@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { BellIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useUnreadCount } from '@/lib/hooks/use-notifications-queries'
+import { useUnreadCount } from '@/lib/client/hooks/use-notifications-queries'
 import { NotificationDropdown } from './notification-dropdown'
 import { cn } from '@/lib/utils'
 

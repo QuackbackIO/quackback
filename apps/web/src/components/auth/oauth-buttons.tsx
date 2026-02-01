@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { KeyIcon } from '@heroicons/react/24/solid'
-import type { PublicOIDCConfig } from '@/lib/settings'
+import type { PublicOIDCConfig } from '@/lib/server/domains/settings'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
-import { openAuthPopup, useAuthBroadcast, usePopupTracker } from '@/lib/hooks/use-auth-broadcast'
+import {
+  openAuthPopup,
+  useAuthBroadcast,
+  usePopupTracker,
+} from '@/lib/client/hooks/use-auth-broadcast'
 
 interface OAuthButtonsProps {
   orgSlug: string

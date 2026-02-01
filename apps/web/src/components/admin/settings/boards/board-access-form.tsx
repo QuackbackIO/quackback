@@ -10,7 +10,7 @@ import {
   FormItem,
   FormLabel,
 } from '@/components/ui/form'
-import { useUpdateBoard } from '@/lib/mutations'
+import { useUpdateBoard } from '@/lib/client/mutations'
 import { GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import type { BoardId } from '@quackback/ids'
 
