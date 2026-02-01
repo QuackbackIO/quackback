@@ -2,6 +2,7 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { ChangelogEntryDetail } from '@/components/portal/changelog'
+import { BackLink } from '@/components/ui/back-link'
 import type { ChangelogId } from '@quackback/ids'
 
 export const Route = createFileRoute('/_portal/changelog/$entryId')({
@@ -49,9 +50,7 @@ function ChangelogNotFound() {
       <p className="text-muted-foreground mb-6">
         This entry may have been removed or is not yet published.
       </p>
-      <a href="/changelog" className="text-primary hover:underline">
-        Back to changelog
-      </a>
+      <BackLink to="/changelog">Changelog</BackLink>
     </div>
   )
 }

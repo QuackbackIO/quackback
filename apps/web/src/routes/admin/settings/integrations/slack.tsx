@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { BackLink } from '@/components/ui/back-link'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { SlackConnectionActions } from '@/components/admin/settings/integrations/slack/slack-connection-actions'
 import { SlackConfig } from '@/components/admin/settings/integrations/slack/slack-config'
@@ -37,13 +37,7 @@ function SlackIntegrationPage() {
   return (
     <div className="space-y-6">
       {/* Back Link */}
-      <Link
-        to="/admin/settings/integrations"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeftIcon className="h-4 w-4" />
-        Back to integrations
-      </Link>
+      <BackLink to="/admin/settings/integrations">Integrations</BackLink>
 
       {/* Page Header */}
       <div className="flex items-start justify-between">
