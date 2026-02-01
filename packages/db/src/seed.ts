@@ -8,6 +8,7 @@ import { config } from 'dotenv'
 config({ path: '../../.env', quiet: true })
 
 import { drizzle } from 'drizzle-orm/postgres-js'
+import { eq } from 'drizzle-orm'
 import postgres from 'postgres'
 import { generateId } from '@quackback/ids'
 import type {
@@ -46,10 +47,6 @@ const DEMO_ORG = {
   slug: 'acme',
 }
 
-function uuid() {
-  return crypto.randomUUID()
-}
-
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
@@ -60,12 +57,12 @@ function randomDate(daysAgo: number): Date {
   return date
 }
 
-function textToTipTapJson(text: string): object {
+function textToTipTapJson(text: string) {
   return {
-    type: 'doc',
+    type: 'doc' as const,
     content: text.split('\n').map((line) => ({
-      type: 'paragraph',
-      content: line ? [{ type: 'text', text: line }] : [],
+      type: 'paragraph' as const,
+      content: line ? [{ type: 'text' as const, text: line }] : [],
     })),
   }
 }
@@ -221,116 +218,169 @@ function generateVoteCount(): number {
 async function seed() {
   console.log('Seeding database...\n')
 
-  // Create settings (the singleton settings record)
-  const settingsId: WorkspaceId = generateId('workspace')
-  await db.insert(settings).values({
-    id: settingsId,
-    name: DEMO_ORG.name,
-    slug: DEMO_ORG.slug,
-    createdAt: new Date(),
-  })
-  console.log('Created settings: Acme Corp')
-
-  // Create statuses
-  const statusMap = new Map<string, StatusId>()
-  for (const status of DEFAULT_STATUSES) {
-    const result = await db.insert(postStatuses).values(status).returning()
-    statusMap.set(status.slug, result[0].id)
+  // Create settings (the singleton settings record) - skip if exists
+  const existingSettings = await db.select().from(settings).limit(1)
+  if (existingSettings.length === 0) {
+    const settingsId: WorkspaceId = generateId('workspace')
+    await db.insert(settings).values({
+      id: settingsId,
+      name: DEMO_ORG.name,
+      slug: DEMO_ORG.slug,
+      createdAt: new Date(),
+    })
+    console.log('Created settings: Acme Corp')
+  } else {
+    console.log('Settings already exist, skipping')
   }
-  console.log('Created default statuses')
 
-  // Create demo user (owner)
-  const demoUserId: UserId = generateId('user')
-  const demoMemberId: MemberId = generateId('member')
-  await db.insert(user).values({
-    id: demoUserId,
-    name: DEMO_USER.name,
-    email: DEMO_USER.email,
-    emailVerified: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })
-  await db.insert(member).values({
-    id: demoMemberId,
-    userId: demoUserId,
-    role: 'admin',
-    createdAt: new Date(),
-  })
+  // Create statuses - use existing or create new
+  const statusMap = new Map<string, StatusId>()
+  const existingStatuses = await db.select().from(postStatuses)
+  if (existingStatuses.length > 0) {
+    for (const status of existingStatuses) {
+      statusMap.set(status.slug, status.id)
+    }
+    console.log('Using existing statuses')
+  } else {
+    for (const status of DEFAULT_STATUSES) {
+      const result = await db.insert(postStatuses).values(status).returning()
+      statusMap.set(status.slug, result[0].id)
+    }
+    console.log('Created default statuses')
+  }
 
-  // Create sample users
-  const members: Array<{ id: MemberId; name: string }> = [
-    { id: demoMemberId, name: DEMO_USER.name },
-  ]
-  for (let i = 0; i < CONFIG.users; i++) {
-    const userId: UserId = generateId('user')
-    const memberId: MemberId = generateId('member')
-    const name = `${pick(firstNames)} ${pick(lastNames)}`
-    const email = `user${i + 1}@example.com`
+  // Get or create users and members
+  const existingMembers = await db
+    .select({ id: member.id, name: user.name })
+    .from(member)
+    .innerJoin(user, eq(member.userId, user.id))
 
+  const members: Array<{ id: MemberId; name: string }> = existingMembers.map((m) => ({
+    id: m.id as MemberId,
+    name: m.name,
+  }))
+
+  if (members.length === 0) {
+    // Create demo user (owner)
+    const demoUserId: UserId = generateId('user')
+    const demoMemberId: MemberId = generateId('member')
     await db.insert(user).values({
-      id: userId,
-      name,
-      email,
+      id: demoUserId,
+      name: DEMO_USER.name,
+      email: DEMO_USER.email,
       emailVerified: true,
-      createdAt: randomDate(90),
+      createdAt: new Date(),
       updatedAt: new Date(),
     })
     await db.insert(member).values({
-      id: memberId,
-      userId: userId,
-      role: i < 3 ? 'admin' : 'user', // First 3 are admins
-      createdAt: randomDate(90),
+      id: demoMemberId,
+      userId: demoUserId,
+      role: 'admin',
+      createdAt: new Date(),
     })
-    members.push({ id: memberId, name })
-  }
-  console.log(`Created ${members.length} users`)
+    members.push({ id: demoMemberId, name: DEMO_USER.name })
 
-  // Create tags
+    // Create sample users
+    for (let i = 0; i < CONFIG.users; i++) {
+      const userId: UserId = generateId('user')
+      const memberId: MemberId = generateId('member')
+      const name = `${pick(firstNames)} ${pick(lastNames)}`
+      const email = `user${i + 1}@example.com`
+
+      await db.insert(user).values({
+        id: userId,
+        name,
+        email,
+        emailVerified: true,
+        createdAt: randomDate(90),
+        updatedAt: new Date(),
+      })
+      await db.insert(member).values({
+        id: memberId,
+        userId: userId,
+        role: i < 3 ? 'admin' : 'user', // First 3 are admins
+        createdAt: randomDate(90),
+      })
+      members.push({ id: memberId, name })
+    }
+    console.log(`Created ${members.length} users`)
+  } else {
+    console.log(`Using ${members.length} existing users`)
+  }
+
+  // Create or get tags
   const tagIds: TagId[] = []
-  for (const t of tagPresets) {
-    const tagId = generateId('tag')
-    await db.insert(tags).values({
-      id: tagId,
-      name: t.name,
-      color: t.color,
-    })
-    tagIds.push(tagId)
+  const existingTags = await db.select().from(tags)
+  if (existingTags.length > 0) {
+    tagIds.push(...existingTags.map((t) => t.id))
+    console.log(`Using ${existingTags.length} existing tags`)
+  } else {
+    for (const t of tagPresets) {
+      const tagId = generateId('tag')
+      await db.insert(tags).values({
+        id: tagId,
+        name: t.name,
+        color: t.color,
+      })
+      tagIds.push(tagId)
+    }
+    console.log(`Created ${tagPresets.length} tags`)
   }
-  console.log(`Created ${tagPresets.length} tags`)
 
-  // Create boards
+  // Create or get boards
   const boardIds: BoardId[] = []
-  for (const b of boardPresets) {
-    const boardId = generateId('board')
-    await db.insert(boards).values({
-      id: boardId,
-      slug: b.slug,
-      name: b.name,
-      description: b.description,
-      isPublic: true,
-      createdAt: randomDate(60),
-    })
-    boardIds.push(boardId)
+  const existingBoards = await db.select().from(boards)
+  if (existingBoards.length > 0) {
+    boardIds.push(...existingBoards.map((b) => b.id))
+    console.log(`Using ${existingBoards.length} existing boards`)
+  } else {
+    for (const b of boardPresets) {
+      const boardId = generateId('board')
+      await db.insert(boards).values({
+        id: boardId,
+        slug: b.slug,
+        name: b.name,
+        description: b.description,
+        isPublic: true,
+        createdAt: randomDate(60),
+      })
+      boardIds.push(boardId)
+    }
+    console.log(`Created ${boardPresets.length} boards`)
   }
-  console.log(`Created ${boardPresets.length} boards`)
 
-  // Create roadmaps
+  // Create or get roadmaps
   const roadmapIds: RoadmapId[] = []
-  for (let i = 0; i < roadmapPresets.length; i++) {
-    const r = roadmapPresets[i]
-    const roadmapId = generateId('roadmap')
-    await db.insert(roadmaps).values({
-      id: roadmapId,
-      slug: r.slug,
-      name: r.name,
-      description: r.description,
-      isPublic: true,
-      position: i,
-      createdAt: randomDate(30),
-    })
-    roadmapIds.push(roadmapId)
+  const existingRoadmaps = await db.select().from(roadmaps)
+  if (existingRoadmaps.length > 0) {
+    roadmapIds.push(...existingRoadmaps.map((r) => r.id))
+    console.log(`Using ${existingRoadmaps.length} existing roadmaps`)
+  } else {
+    for (let i = 0; i < roadmapPresets.length; i++) {
+      const r = roadmapPresets[i]
+      const roadmapId = generateId('roadmap')
+      await db.insert(roadmaps).values({
+        id: roadmapId,
+        slug: r.slug,
+        name: r.name,
+        description: r.description,
+        isPublic: true,
+        position: i,
+        createdAt: randomDate(30),
+      })
+      roadmapIds.push(roadmapId)
+    }
+    console.log(`Created ${roadmapPresets.length} roadmaps`)
   }
-  console.log(`Created ${roadmapPresets.length} roadmaps`)
+
+  // Check if posts already exist
+  const existingPostCount = await db.select({ id: posts.id }).from(posts).limit(1)
+  if (existingPostCount.length > 0) {
+    console.log('Posts already exist, skipping seed')
+    console.log('\n✅ Seed complete (used existing data)!\n')
+    await client.end()
+    return
+  }
 
   // Create posts in batches
   console.log(`Creating ${CONFIG.posts} posts...`)
@@ -423,21 +473,25 @@ async function seed() {
   }
   console.log(`Assigned ${postRoadmapInserts.length} posts to roadmaps`)
 
-  // Create votes (sample, not all)
+  // Create votes (sample, not all) - votes require memberId
   console.log('Creating votes...')
   const voteInserts: (typeof votes.$inferInsert)[] = []
   for (const post of postRecords) {
-    const numVotes = Math.min(post.voteCount, 10) // Cap at 10 actual vote records per post
+    const numVotes = Math.min(post.voteCount, members.length) // Cap at number of members
+    const shuffledMembers = [...members].sort(() => Math.random() - 0.5)
     for (let v = 0; v < numVotes; v++) {
       voteInserts.push({
         postId: post.id,
-        userIdentifier: `user:${uuid()}`,
+        memberId: shuffledMembers[v % shuffledMembers.length].id,
         createdAt: randomDate(60),
       })
     }
   }
   for (let i = 0; i < voteInserts.length; i += BATCH_SIZE) {
-    await db.insert(votes).values(voteInserts.slice(i, i + BATCH_SIZE))
+    await db
+      .insert(votes)
+      .values(voteInserts.slice(i, i + BATCH_SIZE))
+      .onConflictDoNothing() // Skip duplicate votes (same member + post)
   }
   console.log(`Created ${voteInserts.length} votes`)
 
