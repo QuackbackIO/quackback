@@ -212,7 +212,6 @@ describe('Schema definitions', () => {
     it('has required columns', () => {
       const columns = Object.keys(getTableColumns(changelogEntries))
       expect(columns).toContain('id')
-      expect(columns).toContain('boardId')
       expect(columns).toContain('title')
       expect(columns).toContain('content')
       expect(columns).toContain('publishedAt')

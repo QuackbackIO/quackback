@@ -130,6 +130,10 @@ export interface PublicChangelogLinkedPost {
   title: string
   voteCount: number
   boardSlug: string
+  status: {
+    name: string
+    color: string
+  } | null
 }
 
 /**

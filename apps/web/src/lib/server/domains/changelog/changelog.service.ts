@@ -445,7 +445,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     )
   }
 
-  // Get linked posts with board slugs
+  // Get linked posts with board slugs and status
   const linkedPostRecords = await db.query.changelogEntryPosts.findMany({
     where: eq(changelogEntryPosts.changelogEntryId, id),
     with: {
@@ -455,6 +455,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
           title: true,
           voteCount: true,
           boardId: true,
+          statusId: true,
         },
         with: {
           board: {
@@ -467,6 +468,21 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     },
   })
 
+  // Get status info for linked posts
+  const statusIds = new Set<StatusId>()
+  linkedPostRecords.forEach((lp) => {
+    if (lp.post.statusId) statusIds.add(lp.post.statusId)
+  })
+
+  const statusMap = new Map<StatusId, { name: string; color: string }>()
+  if (statusIds.size > 0) {
+    const statuses = await db.query.postStatuses.findMany({
+      where: inArray(postStatuses.id, Array.from(statusIds) as StatusId[]),
+      columns: { id: true, name: true, color: true },
+    })
+    statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
+  }
+
   return {
     id: entry.id,
     title: entry.title,
@@ -478,6 +494,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
       title: lp.post.title,
       voteCount: lp.post.voteCount,
       boardSlug: lp.post.board?.slug ?? '',
+      status: lp.post.statusId ? (statusMap.get(lp.post.statusId) ?? null) : null,
     })),
   }
 }
@@ -535,6 +552,7 @@ export async function listPublicChangelogs(params: {
                 title: true,
                 voteCount: true,
                 boardId: true,
+                statusId: true,
               },
               with: {
                 board: {
@@ -556,6 +574,21 @@ export async function listPublicChangelogs(params: {
     linkedPostsMap.set(lp.changelogEntryId, existing)
   }
 
+  // Get status info for all linked posts
+  const publicStatusIds = new Set<StatusId>()
+  allLinkedPosts.forEach((lp) => {
+    if (lp.post.statusId) publicStatusIds.add(lp.post.statusId)
+  })
+
+  const publicStatusMap = new Map<StatusId, { name: string; color: string }>()
+  if (publicStatusIds.size > 0) {
+    const statuses = await db.query.postStatuses.findMany({
+      where: inArray(postStatuses.id, Array.from(publicStatusIds) as StatusId[]),
+      columns: { id: true, name: true, color: true },
+    })
+    statuses.forEach((s) => publicStatusMap.set(s.id, { name: s.name, color: s.color }))
+  }
+
   // Transform to output format (no author info for public view)
   const result: PublicChangelogEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
@@ -572,6 +605,7 @@ export async function listPublicChangelogs(params: {
           title: lp.post.title,
           voteCount: lp.post.voteCount,
           boardSlug: lp.post.board?.slug ?? '',
+          status: lp.post.statusId ? (publicStatusMap.get(lp.post.statusId) ?? null) : null,
         })),
       }
     })
