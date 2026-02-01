@@ -21,9 +21,9 @@ import {
   type Subscriber,
   type NotificationEventType,
 } from '@/lib/subscriptions/subscription.service'
-import type { HookTarget } from '@/lib/hooks/types'
-import { stripHtml, truncate } from '@/lib/hooks/utils'
-import { buildHookContext, type HookContext } from '@/lib/hooks/context'
+import type { HookTarget } from './hook-types'
+import { stripHtml, truncate } from './hook-utils'
+import { buildHookContext, type HookContext } from './hook-context'
 import type { EventData, EventActor } from './types'
 
 /**

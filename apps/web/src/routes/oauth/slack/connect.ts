@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { getSlackOAuthUrl } from '@/lib/hooks/slack'
+import { getSlackOAuthUrl } from '@/lib/events/integrations/slack/oauth'
 import { verifyOAuthState } from '@/lib/auth/oauth-state'
 import {
   STATE_EXPIRY_MS,

@@ -8,7 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/api/responses'
 import { validateTypeId, validateTypeIdArray } from '@/lib/api/validation'
-import { WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
+import { WEBHOOK_EVENTS } from '@/lib/events/integrations/webhook/constants'
 import { toWebhookResponse } from '@/lib/api/webhooks'
 import type { WebhookId } from '@quackback/ids'
 

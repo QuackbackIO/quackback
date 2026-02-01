@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { updateWebhookFn } from '@/lib/server-functions/webhooks'
 import { ArrowPathIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
-import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/hooks/webhook'
+import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/events/integrations/webhook/constants'
 import { RotateWebhookSecretDialog } from './rotate-webhook-secret-dialog'
 import type { Webhook } from '@/lib/webhooks'
 

@@ -11,9 +11,9 @@
 
 import crypto from 'crypto'
 import dns from 'dns/promises'
-import type { HookHandler, HookResult } from '../types'
-import type { EventData } from '@/lib/events/types'
-import type { WebhookTarget, WebhookConfig } from './constants'
+import type { HookHandler, HookResult } from '../hook-types'
+import type { EventData } from '../types'
+import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
 
 export type { WebhookTarget, WebhookConfig }

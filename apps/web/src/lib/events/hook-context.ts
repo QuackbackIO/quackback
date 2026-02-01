@@ -9,7 +9,7 @@ import { drizzle } from 'drizzle-orm/neon-http'
 import { neon } from '@neondatabase/serverless'
 import { eq, and } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { getRootUrl } from './utils'
+import { getRootUrl } from './hook-utils'
 import { workspace, workspaceDomain } from '@/lib/catalog'
 
 let catalogDb: ReturnType<typeof drizzle> | null = null

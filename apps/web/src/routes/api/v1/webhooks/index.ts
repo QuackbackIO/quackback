@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/api/responses'
-import { WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
+import { WEBHOOK_EVENTS } from '@/lib/events/integrations/webhook/constants'
 import { validateTypeIdArray } from '@/lib/api/validation'
 import { toWebhookListResponse } from '@/lib/api/webhooks'
 

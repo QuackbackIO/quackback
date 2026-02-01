@@ -6,7 +6,7 @@
  * decides WHICH hooks to trigger, handlers decide HOW to deliver.
  */
 
-import type { EventData } from '@/lib/events/types'
+import type { EventData } from './types'
 
 /**
  * Result of running a hook.

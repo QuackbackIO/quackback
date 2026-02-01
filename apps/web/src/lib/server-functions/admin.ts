@@ -18,7 +18,7 @@ import { listStatuses } from '@/lib/statuses/status.service'
 import { listTeamMembers, updateMemberRole, removeTeamMember } from '@/lib/members/member.service'
 import { listPortalUsers, getPortalUserDetail, removePortalUser } from '@/lib/users/user.service'
 import { sendInvitationEmail } from '@quackback/email'
-import { resolvePortalUrl } from '@/lib/hooks/context'
+import { resolvePortalUrl } from '@/lib/events/hook-context'
 import { getAuth, getMagicLinkToken } from '@/lib/auth'
 
 /**

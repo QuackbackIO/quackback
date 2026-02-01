@@ -3,8 +3,8 @@
  * Creates Block Kit formatted messages for different event types.
  */
 
-import type { EventData } from '@/lib/events/types'
-import { stripHtml, formatStatus, getStatusEmoji } from '../utils'
+import type { EventData } from '../../types'
+import { stripHtml, formatStatus, getStatusEmoji } from '../../hook-utils'
 
 interface SlackMessage {
   text: string

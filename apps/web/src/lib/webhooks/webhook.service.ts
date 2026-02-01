@@ -8,7 +8,7 @@ import crypto from 'crypto'
 import { db, webhooks, eq, sql, encryptToken } from '@/lib/db'
 import { createId, type MemberId, type WebhookId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { isValidWebhookUrl } from '@/lib/hooks/webhook'
+import { isValidWebhookUrl } from '@/lib/events/integrations/webhook/constants'
 
 /** Maximum webhooks per workspace */
 const MAX_WEBHOOKS = 25

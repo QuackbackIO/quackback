@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { createWebhookFn } from '@/lib/server-functions/webhooks'
-import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/hooks/webhook'
+import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/events/integrations/webhook/constants'
 
 interface CreateWebhookDialogProps {
   open: boolean

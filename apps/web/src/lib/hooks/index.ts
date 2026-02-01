@@ -1,41 +1,12 @@
 /**
- * Hook registry.
+ * Hook system re-exports for backwards compatibility.
  *
- * Hooks are triggered when events occur. All hook types register here.
- * The event processor uses getHook() to run hooks.
+ * The hook system has moved to @/lib/events/.
+ * Prefer importing directly from '@/lib/events' in new code.
  */
 
-import type { HookHandler } from './types'
-
-// Import handlers (they export their hook objects, don't self-register)
-import { slackHook } from './slack/handler'
-import { emailHook } from './email/handler'
-import { notificationHook } from './notification/handler'
-import { aiHook } from './ai/handler'
-import { webhookHook } from './webhook/handler'
-
-// Initialize hooks Map AFTER imports are resolved
-const hooks = new Map<string, HookHandler>([
-  ['slack', slackHook],
-  ['email', emailHook],
-  ['notification', notificationHook],
-  ['ai', aiHook],
-  ['webhook', webhookHook],
-])
-
-/**
- * Get a registered hook by type.
- */
-export function getHook(type: string): HookHandler | undefined {
-  return hooks.get(type)
-}
-
-/**
- * Register a hook handler.
- */
-export function registerHook(type: string, handler: HookHandler): void {
-  hooks.set(type, handler)
-}
+// Re-export registry functions
+export { getHook, registerHook } from '@/lib/events/registry'
 
 // Re-export types
 export type {
@@ -48,7 +19,7 @@ export type {
   SlackConfig,
   EmailTarget,
   EmailConfig,
-} from './types'
+} from '@/lib/events/hook-types'
 
-export type { NotificationTarget, NotificationConfig } from './notification'
-export type { WebhookTarget, WebhookConfig } from './webhook'
+export type { NotificationTarget, NotificationConfig } from '@/lib/events/handlers/notification'
+export type { WebhookTarget, WebhookConfig } from '@/lib/events/handlers/webhook'

@@ -5,8 +5,8 @@
  * Runs on post.created events to analyze and index content.
  */
 
-import type { HookHandler, HookResult } from '../types'
-import type { EventData } from '@/lib/events/types'
+import type { HookHandler, HookResult } from '../hook-types'
+import type { EventData } from '../types'
 import { isAIEnabled } from '@/lib/ai/config'
 import { analyzeSentiment, saveSentiment } from '@/lib/sentiment'
 import { generatePostEmbedding } from '@/lib/embeddings'

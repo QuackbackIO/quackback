@@ -6,12 +6,12 @@
  * subscriber IDs at once and batch inserts for efficiency.
  */
 
-import type { HookHandler, HookResult } from '../types'
-import type { EventData } from '@/lib/events/types'
+import type { HookHandler, HookResult } from '../hook-types'
+import type { EventData } from '../types'
 import { createNotificationsBatch } from '@/lib/notifications'
 import type { CreateNotificationInput, NotificationType } from '@/lib/notifications'
 import type { MemberId, PostId, CommentId } from '@quackback/ids'
-import { truncate } from '../utils'
+import { truncate } from '../hook-utils'
 
 /**
  * Target for notification hooks - contains all member IDs to notify

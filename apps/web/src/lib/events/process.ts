@@ -2,8 +2,8 @@
  * Event processing - runs hooks for events.
  */
 
-import { getHook } from '@/lib/hooks'
-import type { ProcessResult } from '@/lib/hooks/types'
+import { getHook } from './registry'
+import type { ProcessResult } from './hook-types'
 import { getHookTargets } from './targets'
 import type { EventData } from './types'
 

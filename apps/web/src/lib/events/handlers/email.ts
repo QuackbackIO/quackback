@@ -4,8 +4,8 @@
  */
 
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
-import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../types'
-import type { EventData } from '@/lib/events/types'
+import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
+import type { EventData } from '../types'
 export const emailHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
     const { email, unsubscribeUrl } = target as EmailTarget
