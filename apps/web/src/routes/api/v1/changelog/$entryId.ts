@@ -42,9 +42,6 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
 
           const entry = await db.query.changelogEntries.findFirst({
             where: eq(changelogEntries.id, entryId as ChangelogId),
-            with: {
-              board: true,
-            },
           })
 
           if (!entry) {
@@ -56,8 +53,6 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
 
           return successResponse({
             id: entry.id,
-            boardId: entry.boardId,
-            boardName: entry.board?.name,
             title: entry.title,
             content: entry.content,
             publishedAt: entry.publishedAt?.toISOString() || null,
@@ -127,7 +122,6 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
 
           return successResponse({
             id: updated.id,
-            boardId: updated.boardId,
             title: updated.title,
             content: updated.content,
             publishedAt: updated.publishedAt?.toISOString() || null,

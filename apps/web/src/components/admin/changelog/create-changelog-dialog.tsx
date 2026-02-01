@@ -10,18 +10,16 @@ import { Button } from '@/components/ui/button'
 import { PlusIcon } from '@heroicons/react/24/solid'
 import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
-import type { Board } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { type PublishState } from './publish-controls'
 
 interface CreateChangelogDialogProps {
-  boards: Board[]
   onChangelogCreated?: () => void
 }
 
-export function CreateChangelogDialog({ boards, onChangelogCreated }: CreateChangelogDialogProps) {
+export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDialogProps) {
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
@@ -33,7 +31,6 @@ export function CreateChangelogDialog({ boards, onChangelogCreated }: CreateChan
     defaultValues: {
       title: '',
       content: '',
-      boardId: boards[0]?.id || '',
       linkedPostIds: [] as string[],
       publishState: { type: 'draft' as const },
     },
@@ -53,7 +50,6 @@ export function CreateChangelogDialog({ boards, onChangelogCreated }: CreateChan
       {
         title: data.title,
         content: data.content,
-        boardId: data.boardId,
         contentJson,
         linkedPostIds,
         publishState,
@@ -123,7 +119,6 @@ export function CreateChangelogDialog({ boards, onChangelogCreated }: CreateChan
             <div className="flex-1 overflow-y-auto">
               <ChangelogFormFields
                 form={form}
-                boards={boards}
                 contentJson={contentJson}
                 onContentChange={handleContentChange}
                 linkedPostIds={linkedPostIds}

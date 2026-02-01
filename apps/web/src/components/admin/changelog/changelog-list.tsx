@@ -24,29 +24,20 @@ import { CreateChangelogDialog } from './create-changelog-dialog'
 import { ChangelogListItem } from './changelog-list-item'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import { useDeleteChangelog } from '@/lib/client/mutations/changelog'
-import type { Board } from '@/lib/shared/db-types'
-import type { BoardId, ChangelogId } from '@quackback/ids'
+import type { ChangelogId } from '@quackback/ids'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
-
-interface ChangelogListProps {
-  boards: Board[]
-  initialBoardId?: BoardId
-}
 
 type StatusFilter = 'all' | 'draft' | 'scheduled' | 'published'
 
-export function ChangelogList({ boards, initialBoardId }: ChangelogListProps) {
+export function ChangelogList() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [boardFilter, setBoardFilter] = useState<string>(initialBoardId ?? 'all')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [entryToDelete, setEntryToDelete] = useState<ChangelogId | null>(null)
 
   const deleteChangelogMutation = useDeleteChangelog()
 
-  const boardId = boardFilter === 'all' ? undefined : (boardFilter as BoardId)
-
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
-    changelogQueries.list({ boardId, status: statusFilter })
+    changelogQueries.list({ status: statusFilter })
   )
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
@@ -78,47 +69,30 @@ export function ChangelogList({ boards, initialBoardId }: ChangelogListProps) {
       <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b bg-card/50">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">Changelog</h1>
-          <div className="flex items-center gap-2">
-            <Select value={boardFilter} onValueChange={setBoardFilter}>
-              <SelectTrigger className="w-[140px] h-8 text-xs">
-                <SelectValue placeholder="All boards" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">
-                  All boards
-                </SelectItem>
-                {boards.map((board) => (
-                  <SelectItem key={board.id} value={board.id} className="text-xs">
-                    {board.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => setStatusFilter(value as StatusFilter)}
-            >
-              <SelectTrigger className="w-[120px] h-8 text-xs">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">
-                  All statuses
-                </SelectItem>
-                <SelectItem value="draft" className="text-xs">
-                  Draft
-                </SelectItem>
-                <SelectItem value="scheduled" className="text-xs">
-                  Scheduled
-                </SelectItem>
-                <SelectItem value="published" className="text-xs">
-                  Published
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+          >
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">
+                All statuses
+              </SelectItem>
+              <SelectItem value="draft" className="text-xs">
+                Draft
+              </SelectItem>
+              <SelectItem value="scheduled" className="text-xs">
+                Scheduled
+              </SelectItem>
+              <SelectItem value="published" className="text-xs">
+                Published
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <CreateChangelogDialog boards={boards} />
+        <CreateChangelogDialog />
       </div>
 
       {/* List */}
@@ -131,7 +105,7 @@ export function ChangelogList({ boards, initialBoardId }: ChangelogListProps) {
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <DocumentTextIcon className="h-12 w-12 text-muted-foreground/30" />
             <div className="text-sm text-muted-foreground">No changelog entries yet</div>
-            <CreateChangelogDialog boards={boards} />
+            <CreateChangelogDialog />
           </div>
         ) : (
           <>

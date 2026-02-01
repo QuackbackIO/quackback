@@ -6,6 +6,7 @@
 
 import { createServerFn } from '@tanstack/react-start'
 import type { BoardId, ChangelogId, PostId } from '@quackback/ids'
+// Note: BoardId is only used for searchShippedPosts filtering
 import { requireAuth } from './auth-helpers'
 import {
   createChangelog,
@@ -69,7 +70,6 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
 
     const entry = await createChangelog(
       {
-        boardId: data.boardId as BoardId,
         title: data.title,
         content: data.content,
         contentJson: data.contentJson ?? null,
@@ -154,7 +154,6 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listChangelogs({
-      boardId: data.boardId as BoardId | undefined,
       status: data.status,
       cursor: data.cursor,
       limit: data.limit,
@@ -196,7 +195,6 @@ export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
   .inputValidator(listPublicChangelogsSchema)
   .handler(async ({ data }) => {
     const result = await listPublicChangelogs({
-      boardId: data.boardId as BoardId | undefined,
       cursor: data.cursor,
       limit: data.limit,
     })

@@ -1,7 +1,6 @@
 import { pgTable, text, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { boards } from './boards'
 import { member } from './auth'
 import { posts } from './posts'
 import type { TiptapContent } from '../types'
@@ -10,14 +9,11 @@ export const changelogEntries = pgTable(
   'changelog_entries',
   {
     id: typeIdWithDefault('changelog')('id').primaryKey(),
-    boardId: typeIdColumn('board')('board_id')
-      .notNull()
-      .references(() => boards.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     content: text('content').notNull(),
     // Rich content stored as TipTap JSON (optional, for rich text support)
     contentJson: jsonb('content_json').$type<TiptapContent>(),
-    // Author tracking (member who created/last edited the changelog entry)
+    // Author tracking (member who created/last edited - only shown in admin views)
     memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
       onDelete: 'set null',
     }),
@@ -26,7 +22,6 @@ export const changelogEntries = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('changelog_board_id_idx').on(table.boardId),
     index('changelog_published_at_idx').on(table.publishedAt),
     index('changelog_member_id_idx').on(table.memberId),
   ]
@@ -52,10 +47,6 @@ export const changelogEntryPosts = pgTable(
 )
 
 export const changelogEntriesRelations = relations(changelogEntries, ({ one, many }) => ({
-  board: one(boards, {
-    fields: [changelogEntries.boardId],
-    references: [boards.id],
-  }),
   author: one(member, {
     fields: [changelogEntries.memberId],
     references: [member.id],

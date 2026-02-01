@@ -3,7 +3,7 @@
  */
 
 import type { TiptapContent } from '@quackback/db/types'
-import type { BoardId, ChangelogId, MemberId, PostId } from '@quackback/ids'
+import type { ChangelogId, MemberId, PostId } from '@quackback/ids'
 
 // ============================================================================
 // Input Types
@@ -13,7 +13,6 @@ import type { BoardId, ChangelogId, MemberId, PostId } from '@quackback/ids'
  * Input for creating a new changelog entry
  */
 export interface CreateChangelogInput {
-  boardId: BoardId
   title: string
   content: string
   contentJson?: TiptapContent | null
@@ -48,7 +47,6 @@ export type PublishState =
  * Parameters for listing changelog entries
  */
 export interface ListChangelogParams {
-  boardId?: BoardId
   /** Filter by status */
   status?: 'draft' | 'scheduled' | 'published' | 'all'
   /** Cursor-based pagination */
@@ -62,11 +60,10 @@ export interface ListChangelogParams {
 // ============================================================================
 
 /**
- * Changelog entry with author and linked posts
+ * Changelog entry with author and linked posts (admin view)
  */
 export interface ChangelogEntryWithDetails {
   id: ChangelogId
-  boardId: BoardId
   title: string
   content: string
   contentJson: TiptapContent | null
@@ -74,7 +71,7 @@ export interface ChangelogEntryWithDetails {
   publishedAt: Date | null
   createdAt: Date
   updatedAt: Date
-  /** Author information (if available) */
+  /** Author information - only shown in admin views */
   author: ChangelogAuthor | null
   /** Linked posts */
   linkedPosts: ChangelogLinkedPost[]
@@ -114,7 +111,7 @@ export interface ChangelogListResult {
 }
 
 /**
- * Public changelog entry for portal view
+ * Public changelog entry for portal view (no author info)
  */
 export interface PublicChangelogEntry {
   id: ChangelogId
@@ -122,7 +119,6 @@ export interface PublicChangelogEntry {
   content: string
   contentJson: TiptapContent | null
   publishedAt: Date
-  author: ChangelogAuthor | null
   linkedPosts: PublicChangelogLinkedPost[]
 }
 

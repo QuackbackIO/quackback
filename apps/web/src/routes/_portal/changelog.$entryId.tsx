@@ -35,7 +35,6 @@ function ChangelogEntryPage() {
           content={entry.content}
           contentJson={entry.contentJson}
           publishedAt={entry.publishedAt}
-          author={entry.author}
           linkedPosts={entry.linkedPosts}
         />
       </div>

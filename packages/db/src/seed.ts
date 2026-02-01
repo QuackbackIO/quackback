@@ -577,7 +577,6 @@ async function seed() {
   for (const preset of changelogPresets) {
     const changelogId: ChangelogId = generateId('changelog')
     const author = pick(adminMembers)
-    const boardId = pick(boardIds) // Assign to a random board
 
     let publishedAt: Date | null = null
     if (preset.status === 'published') {
@@ -591,7 +590,6 @@ async function seed() {
 
     changelogInserts.push({
       id: changelogId,
-      boardId,
       title: preset.title,
       content: preset.content,
       contentJson: textToTipTapJson(preset.content),

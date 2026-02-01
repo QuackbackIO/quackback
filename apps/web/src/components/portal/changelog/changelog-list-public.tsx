@@ -5,15 +5,10 @@ import { Button } from '@/components/ui/button'
 import { ChangelogEntryCard } from './changelog-entry-card'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
-import type { BoardId } from '@quackback/ids'
 
-interface ChangelogListPublicProps {
-  boardId?: BoardId
-}
-
-export function ChangelogListPublic({ boardId }: ChangelogListPublicProps) {
+export function ChangelogListPublic() {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
-    publicChangelogQueries.list(boardId)
+    publicChangelogQueries.list()
   )
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
@@ -51,7 +46,6 @@ export function ChangelogListPublic({ boardId }: ChangelogListPublicProps) {
             title={entry.title}
             content={entry.content}
             publishedAt={entry.publishedAt}
-            author={entry.author}
             linkedPosts={entry.linkedPosts}
           />
         </div>

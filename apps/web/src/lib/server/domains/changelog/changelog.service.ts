@@ -27,6 +27,7 @@ import {
   sql,
 } from '@/lib/server/db'
 import type { BoardId, ChangelogId, MemberId, PostId, StatusId } from '@quackback/ids'
+// Note: BoardId is only used for searchShippedPosts filtering, not for changelog entries
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type {
   CreateChangelogInput,
@@ -70,12 +71,6 @@ export async function createChangelog(
     throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
   }
 
-  // Validate board exists
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, input.boardId) })
-  if (!board) {
-    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
-  }
-
   // Determine publishedAt based on publish state
   const publishedAt = getPublishedAtFromState(input.publishState)
 
@@ -83,7 +78,6 @@ export async function createChangelog(
   const [entry] = await db
     .insert(changelogEntries)
     .values({
-      boardId: input.boardId,
       title,
       content,
       contentJson: input.contentJson ?? null,
@@ -264,7 +258,6 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
 
   return {
     id: entry.id,
-    boardId: entry.boardId,
     title: entry.title,
     content: entry.content,
     contentJson: entry.contentJson,
@@ -285,15 +278,11 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
  * @returns Paginated list of changelog entries
  */
 export async function listChangelogs(params: ListChangelogParams): Promise<ChangelogListResult> {
-  const { boardId, status = 'all', cursor, limit = 20 } = params
+  const { status = 'all', cursor, limit = 20 } = params
   const now = new Date()
 
   // Build where conditions
   const conditions = []
-
-  if (boardId) {
-    conditions.push(eq(changelogEntries.boardId, boardId))
-  }
 
   // Filter by status
   if (status === 'draft') {
@@ -403,7 +392,6 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
     return {
       id: entry.id,
-      boardId: entry.boardId,
       title: entry.title,
       content: entry.content,
       contentJson: entry.contentJson,
@@ -457,29 +445,6 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     )
   }
 
-  // Get author info
-  let author: ChangelogAuthor | null = null
-  if (entry.memberId) {
-    const memberWithUser = await db.query.member.findFirst({
-      where: eq(member.id, entry.memberId),
-      with: {
-        user: {
-          columns: {
-            name: true,
-            image: true,
-          },
-        },
-      },
-    })
-    if (memberWithUser?.user) {
-      author = {
-        id: memberWithUser.id,
-        name: memberWithUser.user.name,
-        avatarUrl: memberWithUser.user.image,
-      }
-    }
-  }
-
   // Get linked posts with board slugs
   const linkedPostRecords = await db.query.changelogEntryPosts.findMany({
     where: eq(changelogEntryPosts.changelogEntryId, id),
@@ -508,7 +473,6 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     content: entry.content,
     contentJson: entry.contentJson,
     publishedAt: entry.publishedAt,
-    author,
     linkedPosts: linkedPostRecords.map((lp) => ({
       id: lp.post.id,
       title: lp.post.title,
@@ -525,11 +489,10 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
  * @returns Paginated list of public changelog entries
  */
 export async function listPublicChangelogs(params: {
-  boardId?: BoardId
   cursor?: string
   limit?: number
 }): Promise<PublicChangelogListResult> {
-  const { boardId, cursor, limit = 20 } = params
+  const { cursor, limit = 20 } = params
   const now = new Date()
 
   // Build where conditions - only published entries
@@ -537,10 +500,6 @@ export async function listPublicChangelogs(params: {
     isNotNull(changelogEntries.publishedAt),
     lte(changelogEntries.publishedAt, now),
   ]
-
-  if (boardId) {
-    conditions.push(eq(changelogEntries.boardId, boardId))
-  }
 
   // Cursor-based pagination
   if (cursor) {
@@ -562,33 +521,6 @@ export async function listPublicChangelogs(params: {
 
   const hasMore = entries.length > limit
   const items = hasMore ? entries.slice(0, limit) : entries
-
-  // Get member IDs for author lookup
-  const memberIds = items.map((e) => e.memberId).filter((id): id is MemberId => id !== null)
-  const authorMap = new Map<MemberId, ChangelogAuthor>()
-
-  if (memberIds.length > 0) {
-    const membersWithUsers = await db.query.member.findMany({
-      where: inArray(member.id, memberIds),
-      with: {
-        user: {
-          columns: {
-            name: true,
-            image: true,
-          },
-        },
-      },
-    })
-    for (const m of membersWithUsers) {
-      if (m.user) {
-        authorMap.set(m.id, {
-          id: m.id,
-          name: m.user.name,
-          avatarUrl: m.user.image,
-        })
-      }
-    }
-  }
 
   // Get linked posts for all entries
   const entryIds = items.map((e) => e.id)
@@ -624,7 +556,7 @@ export async function listPublicChangelogs(params: {
     linkedPostsMap.set(lp.changelogEntryId, existing)
   }
 
-  // Transform to output format
+  // Transform to output format (no author info for public view)
   const result: PublicChangelogEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
     .map((entry) => {
@@ -635,7 +567,6 @@ export async function listPublicChangelogs(params: {
         content: entry.content,
         contentJson: entry.contentJson,
         publishedAt: entry.publishedAt!,
-        author: entry.memberId ? (authorMap.get(entry.memberId) ?? null) : null,
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.post.id,
           title: lp.post.title,

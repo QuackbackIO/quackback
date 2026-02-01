@@ -36,6 +36,7 @@ interface PortalHeaderProps {
 const navItems = [
   { to: '/', label: 'Feedback' },
   { to: '/roadmap', label: 'Roadmap' },
+  { to: '/changelog', label: 'Changelog' },
 ]
 
 export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {

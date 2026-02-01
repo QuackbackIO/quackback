@@ -19,7 +19,6 @@ export const publishStateSchema = z.discriminatedUnion('type', [
  * Create changelog input schema
  */
 export const createChangelogSchema = z.object({
-  boardId: z.string().min(1),
   title: z.string().min(1).max(200),
   content: z.string().min(1),
   contentJson: z.any().optional(),
@@ -43,7 +42,6 @@ export const updateChangelogSchema = z.object({
  * List changelogs params schema
  */
 export const listChangelogsSchema = z.object({
-  boardId: z.string().optional(),
   status: z.enum(['draft', 'scheduled', 'published', 'all']).optional(),
   cursor: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
@@ -67,7 +65,6 @@ export const deleteChangelogSchema = z.object({
  * List public changelogs params schema
  */
 export const listPublicChangelogsSchema = z.object({
-  boardId: z.string().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
 })

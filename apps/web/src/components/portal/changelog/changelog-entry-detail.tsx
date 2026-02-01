@@ -1,11 +1,10 @@
 'use client'
 
 import { Link } from '@tanstack/react-router'
-import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
 import { CalendarIcon, ArrowLeftIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
-import type { ChangelogId, MemberId, PostId } from '@quackback/ids'
+import type { ChangelogId, PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@quackback/db/types'
 
@@ -22,11 +21,6 @@ interface ChangelogEntryDetailProps {
   content: string
   contentJson: TiptapContent | null
   publishedAt: string
-  author: {
-    id: MemberId
-    name: string
-    avatarUrl: string | null
-  } | null
   linkedPosts: LinkedPost[]
 }
 
@@ -35,7 +29,6 @@ export function ChangelogEntryDetail({
   content,
   contentJson,
   publishedAt,
-  author,
   linkedPosts,
 }: ChangelogEntryDetailProps) {
   const formattedDate = new Date(publishedAt).toLocaleDateString('en-US', {
@@ -64,15 +57,7 @@ export function ChangelogEntryDetail({
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-bold mb-4">{title}</h1>
-
-        {/* Author */}
-        {author && (
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8" src={author.avatarUrl} name={author.name} />
-            <span className="text-sm text-muted-foreground">by {author.name}</span>
-          </div>
-        )}
+        <h1 className="text-3xl font-bold">{title}</h1>
       </header>
 
       {/* Content */}

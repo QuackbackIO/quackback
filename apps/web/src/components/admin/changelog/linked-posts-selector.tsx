@@ -11,33 +11,26 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ChevronUpDownIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { searchShippedPostsFn } from '@/lib/server/functions/changelog'
-import type { PostId, BoardId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 import { cn } from '@/lib/shared/utils'
 
 interface LinkedPostsSelectorProps {
   value: PostId[]
   onChange: (postIds: PostId[]) => void
-  boardId?: BoardId
   className?: string
 }
 
-export function LinkedPostsSelector({
-  value,
-  onChange,
-  boardId,
-  className,
-}: LinkedPostsSelectorProps) {
+export function LinkedPostsSelector({ value, onChange, className }: LinkedPostsSelectorProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
-  // Debounced search query
+  // Search shipped posts across all boards
   const { data: posts = [], isLoading } = useQuery({
-    queryKey: ['shipped-posts', search, boardId],
+    queryKey: ['shipped-posts', search],
     queryFn: () =>
       searchShippedPostsFn({
         data: {
           query: search || undefined,
-          boardId,
           limit: 30,
         },
       }),
