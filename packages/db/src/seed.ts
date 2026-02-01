@@ -20,11 +20,13 @@ import type {
   RoadmapId,
   UserId,
   WorkspaceId,
+  ChangelogId,
 } from '@quackback/ids'
 import { user, settings, member } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
+import { changelogEntries, changelogEntryPosts } from './schema/changelog'
 
 const connectionString = process.env.DATABASE_URL!
 const client = postgres(connectionString)
@@ -192,6 +194,50 @@ const commentContents = [
   'Same here, this is blocking us.',
   'Would love to see this shipped soon!',
   'Thanks for considering this!',
+]
+
+const changelogPresets = [
+  {
+    title: 'Introducing Dark Mode',
+    content:
+      'We heard your feedback loud and clear! Dark mode is finally here. Toggle it from Settings > Appearance or let your system preference decide. This update also includes improved contrast ratios for better accessibility.',
+    status: 'published' as const,
+    daysAgo: 3,
+  },
+  {
+    title: 'Slack Integration Now Available',
+    content:
+      'Connect your workspace to Slack and get real-time notifications for new feedback, votes, and status changes. Set up custom channels for different boards and never miss important updates from your users.',
+    status: 'published' as const,
+    daysAgo: 14,
+  },
+  {
+    title: 'Export Your Data to CSV',
+    content:
+      'You can now export your posts, votes, and comments to CSV format. Perfect for reporting, analysis, or backing up your data. Find the export option in Settings > Data.',
+    status: 'published' as const,
+    daysAgo: 30,
+  },
+  {
+    title: 'Coming Soon: Mobile App',
+    content:
+      'We are excited to announce that our mobile app is in development! Stay tuned for iOS and Android apps that let you manage feedback on the go. Beta testing will begin next month.',
+    status: 'scheduled' as const,
+    daysAhead: 7,
+  },
+  {
+    title: 'Improved Search & Filtering',
+    content:
+      'Finding feedback just got easier. Our new search now supports fuzzy matching, filters by status/board/tag, and remembers your recent searches. Plus, saved views are coming soon!',
+    status: 'draft' as const,
+  },
+  {
+    title: 'Q1 2025 Roadmap Update',
+    content:
+      'Here is what we shipped this quarter and what is coming next. Thank you to everyone who submitted feedback - your input directly shapes our product direction.',
+    status: 'published' as const,
+    daysAgo: 45,
+  },
 ]
 
 const statusSlugs = ['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed']
@@ -516,6 +562,67 @@ async function seed() {
     await db.insert(comments).values(commentInserts.slice(i, i + BATCH_SIZE))
   }
   console.log(`Created ${commentInserts.length} comments`)
+
+  // Create changelog entries
+  console.log('Creating changelog entries...')
+
+  // Get posts with 'complete' status for linking
+  const completePosts = postRecords.filter((p) => p.statusSlug === 'complete')
+  let completePostIndex = 0
+
+  const changelogInserts: (typeof changelogEntries.$inferInsert)[] = []
+  const changelogPostInserts: (typeof changelogEntryPosts.$inferInsert)[] = []
+  const adminMembers = members.slice(0, 4) // First 4 members are admins
+
+  for (const preset of changelogPresets) {
+    const changelogId: ChangelogId = generateId('changelog')
+    const author = pick(adminMembers)
+    const boardId = pick(boardIds) // Assign to a random board
+
+    let publishedAt: Date | null = null
+    if (preset.status === 'published') {
+      publishedAt = randomDate(preset.daysAgo ?? 30)
+    } else if (preset.status === 'scheduled' && preset.daysAhead) {
+      const futureDate = new Date()
+      futureDate.setDate(futureDate.getDate() + preset.daysAhead)
+      publishedAt = futureDate
+    }
+    // Draft entries have null publishedAt
+
+    changelogInserts.push({
+      id: changelogId,
+      boardId,
+      title: preset.title,
+      content: preset.content,
+      contentJson: textToTipTapJson(preset.content),
+      memberId: author.id,
+      publishedAt,
+      createdAt: publishedAt ?? new Date(),
+      updatedAt: new Date(),
+    })
+
+    // Link 0-3 completed posts to some changelog entries (not all)
+    // Published entries are more likely to have linked posts
+    const shouldLink = preset.status === 'published' && Math.random() > 0.3
+    if (shouldLink && completePosts.length > 0) {
+      const numLinks = 1 + Math.floor(Math.random() * 3) // 1-3 posts
+      for (let l = 0; l < numLinks && completePostIndex < completePosts.length; l++) {
+        changelogPostInserts.push({
+          changelogEntryId: changelogId,
+          postId: completePosts[completePostIndex].id,
+        })
+        completePostIndex++
+      }
+    }
+  }
+
+  await db.insert(changelogEntries).values(changelogInserts)
+  if (changelogPostInserts.length > 0) {
+    await db.insert(changelogEntryPosts).values(changelogPostInserts)
+  }
+  console.log(
+    `Created ${changelogInserts.length} changelog entries (${changelogPostInserts.length} linked to posts)`
+  )
 
   console.log('\n✅ Seed complete!\n')
   console.log('Demo account:')
