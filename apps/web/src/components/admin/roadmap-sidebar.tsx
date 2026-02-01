@@ -156,7 +156,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                 <PlusIcon className="h-4 w-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Create Roadmap</DialogTitle>
                 <DialogDescription>
@@ -276,7 +276,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Roadmap</DialogTitle>
             <DialogDescription>Update your roadmap settings.</DialogDescription>

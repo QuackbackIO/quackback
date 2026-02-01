@@ -1,20 +1,30 @@
-import { Suspense, useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { Suspense, useState, useEffect, useCallback, startTransition } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PencilIcon,
   EllipsisHorizontalIcon,
   ArrowTopRightOnSquareIcon,
   LinkIcon,
-  ExclamationCircleIcon,
   ExclamationTriangleIcon,
   ArrowPathRoundedSquareIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { TrashIcon } from '@heroicons/react/24/outline'
+import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { adminQueries } from '@/lib/queries/admin'
 import { inboxKeys } from '@/lib/hooks/use-inbox-queries'
 import { VoteButton } from '@/components/public/vote-button'
@@ -32,21 +42,13 @@ import {
   PinnedCommentSection,
 } from '@/components/public/post-detail/official-response-section'
 import { EditPostDialog } from '@/components/admin/feedback/edit-post-dialog'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
 import { useUpdatePostStatus, useUpdatePostTags } from '@/lib/hooks/use-inbox-queries'
 import { usePinComment, useUnpinComment } from '@/lib/hooks/use-comment-actions'
 import { usePostDetailKeyboard } from '@/lib/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server-functions/roadmaps'
+import { Route } from '@/routes/admin/feedback'
 import {
   ensureTypeId,
   type PostId,
@@ -55,65 +57,19 @@ import {
   type RoadmapId,
   type CommentId,
 } from '@quackback/ids'
-import type { PostDetails } from '@/components/admin/feedback/inbox-types'
+import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { PublicPostDetailView } from '@/lib/queries/portal-detail'
 
-export const Route = createFileRoute('/admin/feedback/posts/$postId')({
-  errorComponent: DetailErrorComponent,
-  loader: async ({ params, context }) => {
-    const { postId } = params
-    const {
-      user: currentUser,
-      member,
-      queryClient,
-    } = context as {
-      user: NonNullable<typeof context.user>
-      member: NonNullable<typeof context.member>
-      queryClient: typeof context.queryClient
-    }
+interface PostModalProps {
+  postId: string | undefined
+  currentUser: CurrentUser
+}
 
-    let validatedPostId: PostId
-    try {
-      validatedPostId = ensureTypeId(postId, 'post')
-    } catch {
-      throw new Error('Invalid post ID format')
-    }
-
-    await Promise.all([
-      queryClient.ensureQueryData(adminQueries.postDetail(validatedPostId)),
-      queryClient.ensureQueryData(adminQueries.boards()),
-      queryClient.ensureQueryData(adminQueries.tags()),
-      queryClient.ensureQueryData(adminQueries.statuses()),
-      queryClient.ensureQueryData(adminQueries.roadmaps()),
-    ])
-
-    return {
-      postId: validatedPostId,
-      currentUser: {
-        name: currentUser.name,
-        email: currentUser.email,
-        memberId: member.id,
-      },
-    }
-  },
-  component: FeedbackDetailRoute,
-})
-
-function DetailErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  return (
-    <div className="flex items-center justify-center min-h-[400px] p-4">
-      <Alert variant="destructive" className="max-w-2xl">
-        <ExclamationCircleIcon className="h-4 w-4" />
-        <AlertTitle>Failed to load feedback</AlertTitle>
-        <AlertDescription className="mt-2">
-          <p className="mb-4">{error.message}</p>
-          <Button onClick={reset} variant="outline" size="sm">
-            Try again
-          </Button>
-        </AlertDescription>
-      </Alert>
-    </div>
-  )
+interface PostModalContentProps {
+  postId: PostId
+  currentUser: CurrentUser
+  onNavigateToPost: (postId: string) => void
+  onClose: () => void
 }
 
 /** Convert admin PostDetails to portal-compatible view */
@@ -131,7 +87,7 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
     createdAt: post.createdAt,
     board: post.board,
     tags: post.tags,
-    roadmaps: [], // Will be populated from roadmaps query
+    roadmaps: [],
     comments: post.comments.map((c) => ({
       id: c.id as CommentId,
       content: c.content,
@@ -152,7 +108,7 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
         isTeamMember: r.isTeamMember,
         avatarUrl: (r.memberId && post.avatarUrls?.[r.memberId]) || null,
         reactions: r.reactions,
-        replies: [], // Flatten beyond 2 levels
+        replies: [],
       })),
     })),
     officialResponse: post.officialResponse,
@@ -161,22 +117,22 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
   }
 }
 
-function FeedbackDetailRoute(): React.ReactElement {
-  const { postId, currentUser } = Route.useLoaderData()
-  const navigate = useNavigate()
+function PostModalContent({
+  postId,
+  currentUser,
+  onNavigateToPost,
+  onClose,
+}: PostModalContentProps) {
   const queryClient = useQueryClient()
 
   // Queries
   const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
-  const boardsQuery = useSuspenseQuery(adminQueries.boards())
-  const tagsQuery = useSuspenseQuery(adminQueries.tags())
-  const statusesQuery = useSuspenseQuery(adminQueries.statuses())
-  const roadmapsQuery = useSuspenseQuery(adminQueries.roadmaps())
+  const { data: boards = [] } = useQuery(adminQueries.boards())
+  const { data: tags = [] } = useQuery(adminQueries.tags())
+  const { data: statuses = [] } = useQuery(adminQueries.statuses())
+  const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
 
   const post = postQuery.data as PostDetails
-  const statuses = statusesQuery.data
-  const tags = tagsQuery.data
-  const roadmaps = roadmapsQuery.data
 
   // UI state
   const { isEditDialogOpen, setEditDialogOpen } = useInboxUIStore()
@@ -197,21 +153,15 @@ function FeedbackDetailRoute(): React.ReactElement {
     enabled: true,
     onNextPost: () => {
       if (navigationContext.nextId) {
-        navigate({
-          to: '/admin/feedback/posts/$postId',
-          params: { postId: navigationContext.nextId },
-        })
+        onNavigateToPost(navigationContext.nextId)
       }
     },
     onPrevPost: () => {
       if (navigationContext.prevId) {
-        navigate({
-          to: '/admin/feedback/posts/$postId',
-          params: { postId: navigationContext.prevId },
-        })
+        onNavigateToPost(navigationContext.prevId)
       }
     },
-    onClose: () => navigate({ to: navigationContext.backUrl }),
+    onClose,
     onEdit: () => setEditDialogOpen(true),
   })
 
@@ -273,7 +223,6 @@ function FeedbackDetailRoute(): React.ReactElement {
 
   // Convert post to portal-compatible view
   const portalPost = toPortalPostView(post)
-  // Map roadmapIds to full roadmap objects
   const postRoadmaps = (post.roadmapIds || [])
     .map((id) => roadmaps.find((r) => r.id === id))
     .filter(Boolean) as Array<{ id: string; name: string; slug: string }>
@@ -291,12 +240,11 @@ function FeedbackDetailRoute(): React.ReactElement {
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => navigate({ to: navigationContext.backUrl })}
-                className="gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-150"
+                size="icon"
+                onClick={onClose}
+                className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-150"
               >
-                <ArrowLeftIcon className="h-3.5 w-3.5" />
-                <span className="text-sm">Back</span>
+                <XMarkIcon className="h-4 w-4" />
               </Button>
 
               <div className="hidden sm:flex items-center gap-2 text-sm">
@@ -319,11 +267,7 @@ function FeedbackDetailRoute(): React.ReactElement {
                       variant="ghost"
                       size="icon"
                       onClick={() =>
-                        navigationContext.prevId &&
-                        navigate({
-                          to: '/admin/feedback/posts/$postId',
-                          params: { postId: navigationContext.prevId },
-                        })
+                        navigationContext.prevId && onNavigateToPost(navigationContext.prevId)
                       }
                       disabled={!navigationContext.prevId}
                       className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
@@ -334,11 +278,7 @@ function FeedbackDetailRoute(): React.ReactElement {
                       variant="ghost"
                       size="icon"
                       onClick={() =>
-                        navigationContext.nextId &&
-                        navigate({
-                          to: '/admin/feedback/posts/$postId',
-                          params: { postId: navigationContext.nextId },
-                        })
+                        navigationContext.nextId && onNavigateToPost(navigationContext.nextId)
                       }
                       disabled={!navigationContext.nextId}
                       className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
@@ -393,10 +333,10 @@ function FeedbackDetailRoute(): React.ReactElement {
         </header>
 
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto">
           {/* Deleted post alert */}
           {post.deletedAt && (
-            <Alert variant="destructive" className="mb-6 rounded-lg">
+            <Alert variant="destructive" className="m-4 rounded-lg">
               <ExclamationTriangleIcon className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
                 <span>
@@ -424,76 +364,73 @@ function FeedbackDetailRoute(): React.ReactElement {
             </Alert>
           )}
 
-          {/* Post card */}
-          <div className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex">
-              {/* Vote sidebar */}
-              <div className="flex flex-col items-center justify-start py-6 px-4 border-r !border-r-[rgba(0,0,0,0.05)] dark:!border-r-[rgba(255,255,255,0.06)] bg-muted/10">
-                <VoteButton postId={postId} voteCount={post.voteCount} />
-              </div>
+          {/* Post content layout */}
+          <div className="flex border-b border-border/30">
+            {/* Vote sidebar */}
+            <div className="flex flex-col items-center justify-start py-6 px-4 border-r !border-r-[rgba(0,0,0,0.05)] dark:!border-r-[rgba(255,255,255,0.06)] bg-muted/10">
+              <VoteButton postId={postId} voteCount={post.voteCount} />
+            </div>
 
-              {/* Main content */}
-              <PostContentSection
-                post={portalPost}
-                currentStatus={currentStatus}
+            {/* Main content */}
+            <PostContentSection
+              post={portalPost}
+              currentStatus={currentStatus}
+              authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
+            />
+
+            {/* Metadata sidebar */}
+            <Suspense fallback={<MetadataSidebarSkeleton />}>
+              <MetadataSidebar
+                postId={postId}
+                voteCount={post.voteCount}
+                status={currentStatus}
+                board={post.board}
+                authorName={post.authorName}
                 authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
+                createdAt={new Date(post.createdAt)}
+                tags={post.tags}
+                roadmaps={postRoadmaps}
+                canEdit
+                allStatuses={statuses}
+                allTags={tags}
+                allRoadmaps={roadmaps}
+                onStatusChange={handleStatusChange}
+                onTagsChange={handleTagsChange}
+                onRoadmapAdd={handleRoadmapAdd}
+                onRoadmapRemove={handleRoadmapRemove}
+                isUpdating={isUpdating || !!pendingRoadmapId}
+                hideSubscribe
+                hideVote
               />
+            </Suspense>
+          </div>
 
-              {/* Metadata sidebar */}
-              <Suspense fallback={<MetadataSidebarSkeleton />}>
-                <MetadataSidebar
-                  postId={postId}
-                  voteCount={post.voteCount}
-                  status={currentStatus}
-                  board={post.board}
-                  authorName={post.authorName}
-                  authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
-                  createdAt={new Date(post.createdAt)}
-                  tags={post.tags}
-                  roadmaps={postRoadmaps}
-                  // Admin mode props
-                  canEdit
-                  allStatuses={statuses}
-                  allTags={tags}
-                  allRoadmaps={roadmaps}
-                  onStatusChange={handleStatusChange}
-                  onTagsChange={handleTagsChange}
-                  onRoadmapAdd={handleRoadmapAdd}
-                  onRoadmapRemove={handleRoadmapRemove}
-                  isUpdating={isUpdating || !!pendingRoadmapId}
-                  hideSubscribe
-                  hideVote
-                />
-              </Suspense>
-            </div>
+          {/* Official response / Pinned comment */}
+          {post.pinnedComment ? (
+            <PinnedCommentSection comment={post.pinnedComment} workspaceName="Team" />
+          ) : post.officialResponse ? (
+            <OfficialResponseSection
+              content={post.officialResponse.content}
+              authorName={post.officialResponse.authorName}
+              respondedAt={post.officialResponse.respondedAt}
+              workspaceName="Team"
+            />
+          ) : null}
 
-            {/* Official response / Pinned comment */}
-            {post.pinnedComment ? (
-              <PinnedCommentSection comment={post.pinnedComment} workspaceName="Team" />
-            ) : post.officialResponse ? (
-              <OfficialResponseSection
-                content={post.officialResponse.content}
-                authorName={post.officialResponse.authorName}
-                respondedAt={post.officialResponse.respondedAt}
-                workspaceName="Team"
+          {/* Comments */}
+          <div className="bg-muted/20">
+            <Suspense fallback={<CommentsSectionSkeleton />}>
+              <CommentsSection
+                postId={postId}
+                comments={portalPost.comments}
+                pinnedCommentId={post.pinnedCommentId}
+                canPinComments
+                onPinComment={handlePinComment}
+                onUnpinComment={handleUnpinComment}
+                isPinPending={pinComment.isPending || unpinComment.isPending}
+                adminUser={currentUser}
               />
-            ) : null}
-
-            {/* Comments */}
-            <div className="bg-muted/20">
-              <Suspense fallback={<CommentsSectionSkeleton />}>
-                <CommentsSection
-                  postId={postId}
-                  comments={portalPost.comments}
-                  pinnedCommentId={post.pinnedCommentId}
-                  canPinComments
-                  onPinComment={handlePinComment}
-                  onUnpinComment={handleUnpinComment}
-                  isPinPending={pinComment.isPending || unpinComment.isPending}
-                  adminUser={currentUser}
-                />
-              </Suspense>
-            </div>
+            </Suspense>
           </div>
         </div>
       </div>
@@ -501,12 +438,91 @@ function FeedbackDetailRoute(): React.ReactElement {
       {/* Edit dialog */}
       <EditPostDialog
         post={post}
-        boards={boardsQuery.data}
-        tags={tagsQuery.data}
-        statuses={statusesQuery.data}
+        boards={boards}
+        tags={tags}
+        statuses={statuses}
         open={isEditDialogOpen}
         onOpenChange={setEditDialogOpen}
       />
     </>
+  )
+}
+
+export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
+  const navigate = useNavigate({ from: Route.fullPath })
+  const search = Route.useSearch()
+
+  // Local state for instant UI - syncs with URL
+  const [localPostId, setLocalPostId] = useState<string | undefined>(urlPostId)
+  const isOpen = !!localPostId
+
+  // Sync local state when URL changes (e.g., browser back/forward)
+  useEffect(() => {
+    setLocalPostId(urlPostId)
+  }, [urlPostId])
+
+  // Validate and convert postId
+  let validatedPostId: PostId | null = null
+  if (localPostId) {
+    try {
+      validatedPostId = ensureTypeId(localPostId, 'post')
+    } catch {
+      // Invalid post ID format
+    }
+  }
+
+  // Close modal instantly, then update URL in background
+  const close = useCallback(() => {
+    setLocalPostId(undefined) // Instant UI update
+    startTransition(() => {
+      const { post: _, ...restSearch } = search
+      navigate({
+        to: '/admin/feedback',
+        search: restSearch,
+        replace: true,
+      })
+    })
+  }, [navigate, search])
+
+  // Navigate to a different post - instant UI, background URL update
+  const navigateToPost = useCallback(
+    (newPostId: string) => {
+      setLocalPostId(newPostId) // Instant UI update
+      startTransition(() => {
+        navigate({
+          to: '/admin/feedback',
+          search: { ...search, post: newPostId },
+          replace: true,
+        })
+      })
+    },
+    [navigate, search]
+  )
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
+      <DialogContent
+        className="w-[95vw] sm:w-[90vw] lg:max-w-6xl xl:max-w-7xl h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
+        showCloseButton={false}
+      >
+        <DialogTitle className="sr-only">Post details</DialogTitle>
+        {validatedPostId && (
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            }
+          >
+            <PostModalContent
+              postId={validatedPostId}
+              currentUser={currentUser}
+              onNavigateToPost={navigateToPost}
+              onClose={close}
+            />
+          </Suspense>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }

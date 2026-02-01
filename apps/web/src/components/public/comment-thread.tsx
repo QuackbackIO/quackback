@@ -3,12 +3,19 @@ import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  EllipsisVerticalIcon,
   FaceSmileIcon,
   MapPinIcon,
 } from '@heroicons/react/24/solid'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/db-types'
@@ -17,7 +24,7 @@ import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/queries/portal-detail'
 import { cn, getInitials } from '@/lib/utils'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
-import type { PostId } from '@quackback/ids'
+import type { CommentId, PostId } from '@quackback/ids'
 
 interface CommentThreadProps {
   postId: PostId
@@ -30,6 +37,15 @@ interface CommentThreadProps {
   createComment?: CreateCommentMutation
   /** ID of the pinned comment (for showing pinned indicator) */
   pinnedCommentId?: string | null
+  // Admin mode props
+  /** Enable comment pinning (admin only) */
+  canPinComments?: boolean
+  /** Callback when comment is pinned */
+  onPinComment?: (commentId: CommentId) => void
+  /** Callback when comment is unpinned */
+  onUnpinComment?: () => void
+  /** Whether pin/unpin is in progress */
+  isPinPending?: boolean
 }
 
 export function CommentThread({
@@ -40,6 +56,10 @@ export function CommentThread({
   onAuthRequired,
   createComment,
   pinnedCommentId,
+  canPinComments = false,
+  onPinComment,
+  onUnpinComment,
+  isPinPending = false,
 }: CommentThreadProps): React.ReactElement {
   const sortedComments = [...comments].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -73,6 +93,10 @@ export function CommentThread({
               user={user}
               createComment={createComment}
               pinnedCommentId={pinnedCommentId}
+              canPinComments={canPinComments}
+              onPinComment={onPinComment}
+              onUnpinComment={onUnpinComment}
+              isPinPending={isPinPending}
             />
           ))}
         </div>
@@ -89,6 +113,11 @@ interface CommentItemProps {
   user?: { name: string | null; email: string }
   createComment?: CreateCommentMutation
   pinnedCommentId?: string | null
+  // Admin mode props
+  canPinComments?: boolean
+  onPinComment?: (commentId: CommentId) => void
+  onUnpinComment?: () => void
+  isPinPending?: boolean
 }
 
 const MAX_NESTING_DEPTH = 5
@@ -101,6 +130,10 @@ function CommentItem({
   user,
   createComment,
   pinnedCommentId,
+  canPinComments = false,
+  onPinComment,
+  onUnpinComment,
+  isPinPending = false,
 }: CommentItemProps): React.ReactElement {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -115,6 +148,8 @@ function CommentItem({
   const canNest = depth < MAX_NESTING_DEPTH
   const hasReplies = comment.replies.length > 0
   const isPinned = pinnedCommentId === comment.id
+  // Can pin: admin mode enabled, team member comment, root-level (no parent), not deleted
+  const canPin = canPinComments && comment.isTeamMember && !comment.parentId && depth === 0
 
   async function handleReaction(emoji: string): Promise<void> {
     setShowEmojiPicker(false)
@@ -170,6 +205,36 @@ function CommentItem({
             )}
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
+            {/* Admin pin/unpin dropdown */}
+            {canPin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-60 hover:opacity-100 ml-auto"
+                  >
+                    <EllipsisVerticalIcon className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {isPinned ? (
+                    <DropdownMenuItem onClick={onUnpinComment} disabled={isPinPending}>
+                      <MapPinIcon className="h-4 w-4 mr-2" />
+                      Unpin Response
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => onPinComment?.(comment.id as CommentId)}
+                      disabled={isPinPending}
+                    >
+                      <MapPinIcon className="h-4 w-4 mr-2" />
+                      Pin as Official Response
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           {/* Comment content - always visible */}
@@ -302,6 +367,10 @@ function CommentItem({
                   user={user}
                   createComment={createComment}
                   pinnedCommentId={pinnedCommentId}
+                  canPinComments={canPinComments}
+                  onPinComment={onPinComment}
+                  onUnpinComment={onUnpinComment}
+                  isPinPending={isPinPending}
                 />
               ))}
             </div>

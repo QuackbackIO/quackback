@@ -591,7 +591,12 @@ export interface SettingsBrandingData {
 }
 
 export interface TenantSettings {
+  /** Raw settings record from database */
   settings: Awaited<ReturnType<typeof requireSettings>>
+  /** Workspace name (convenience property) */
+  name: string
+  /** Workspace slug (convenience property) */
+  slug: string
   authConfig: AuthConfig
   portalConfig: PortalConfig
   brandingConfig: BrandingConfig
@@ -623,6 +628,8 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 
     return {
       settings: org,
+      name: org.name,
+      slug: org.slug,
       authConfig,
       portalConfig,
       brandingConfig,

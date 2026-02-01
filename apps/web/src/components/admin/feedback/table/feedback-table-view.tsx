@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -47,24 +47,26 @@ interface FeedbackTableViewProps {
 
 function TableSkeleton() {
   return (
-    <div className="divide-y divide-border/30">
-      {Array.from({ length: 6 }).map((_, rowIdx) => (
-        <div key={rowIdx} className="flex">
-          <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 py-2.5">
-            <Skeleton className="h-4 w-4 mb-1" />
-            <Skeleton className="h-4 w-6" />
-          </div>
-          <div className="flex-1 min-w-0 px-3 py-2.5">
-            <Skeleton className="h-4 w-3/4 mb-1" />
-            <Skeleton className="h-3 w-full mb-1.5" />
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-12" />
+    <div className="p-3">
+      <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+        {Array.from({ length: 6 }).map((_, rowIdx) => (
+          <div key={rowIdx} className="flex py-1 px-3">
+            <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 py-2.5">
+              <Skeleton className="h-4 w-4 mb-1" />
+              <Skeleton className="h-4 w-6" />
+            </div>
+            <div className="flex-1 min-w-0 px-3 py-2.5">
+              <Skeleton className="h-4 w-3/4 mb-1" />
+              <Skeleton className="h-3 w-full mb-1.5" />
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-12" />
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
@@ -263,25 +265,32 @@ export function FeedbackTableView({
     <div>
       {headerContent}
 
-      {/* Flat Post List */}
-      <div className="divide-y divide-border/30">
-        {posts.map((post) => (
-          <FeedbackRow
-            key={post.id}
-            post={post}
-            statuses={statuses}
-            isFocused={post.id === focusedPostId}
-            onClick={() => onNavigateToPost(post.id)}
-            onStatusChange={(statusId) => onStatusChange(post.id, statusId)}
-          />
-        ))}
+      {/* Post List */}
+      <div className="p-3">
+        <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+          {posts.map((post, index) => (
+            <div
+              key={post.id}
+              className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+              style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+            >
+              <FeedbackRow
+                post={post}
+                statuses={statuses}
+                isFocused={post.id === focusedPostId}
+                onClick={() => onNavigateToPost(post.id)}
+                onStatusChange={(statusId) => onStatusChange(post.id, statusId)}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Load more trigger */}
       {hasMore && (
-        <div ref={loadMoreRef} className="py-4 flex justify-center">
+        <div ref={loadMoreRef} className="px-3 pb-3 flex justify-center">
           {isLoadingMore ? (
-            <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="h-5 w-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
           ) : (
             <Button
               variant="ghost"

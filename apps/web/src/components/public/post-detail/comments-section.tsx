@@ -1,9 +1,9 @@
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { portalDetailQueries, type PublicCommentView } from '@/lib/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PostId } from '@quackback/ids'
+import type { CommentId, PostId } from '@quackback/ids'
 
 /**
  * Recursively count all comments including nested replies
@@ -52,15 +52,37 @@ interface CommentsSectionProps {
   postId: PostId
   comments: PublicCommentView[]
   pinnedCommentId?: string | null
+  // Admin mode props
+  /** Enable comment pinning (admin only) */
+  canPinComments?: boolean
+  /** Callback when comment is pinned */
+  onPinComment?: (commentId: CommentId) => void
+  /** Callback when comment is unpinned */
+  onUnpinComment?: () => void
+  /** Whether pin/unpin is in progress */
+  isPinPending?: boolean
+  /** Override user for admin context */
+  adminUser?: { name: string | null; email: string }
 }
 
-export function CommentsSection({ postId, comments, pinnedCommentId }: CommentsSectionProps) {
+export function CommentsSection({
+  postId,
+  comments,
+  pinnedCommentId,
+  canPinComments = false,
+  onPinComment,
+  onUnpinComment,
+  isPinPending = false,
+  adminUser,
+}: CommentsSectionProps) {
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
-  // useSuspenseQuery reads from cache if available (prefetched in loader), fetches if not
-  // Suspense boundary handles loading state, so no skeleton needed here
-  // Avatar data is now included directly in each comment from getPublicPostDetail
-  const { data } = useSuspenseQuery(portalDetailQueries.commentsSectionData(postId))
+  // useQuery reads from cache if available (prefetched in loader), fetches if not
+  // Skip query in admin mode where we provide user directly
+  const { data } = useQuery({
+    ...portalDetailQueries.commentsSectionData(postId),
+    enabled: !adminUser,
+  })
 
   return (
     <div
@@ -74,9 +96,13 @@ export function CommentsSection({ postId, comments, pinnedCommentId }: CommentsS
       <AuthCommentsSection
         postId={postId}
         comments={comments}
-        allowCommenting={data.canComment}
-        user={data.user}
+        allowCommenting={adminUser ? true : data?.canComment}
+        user={adminUser ?? data?.user}
         pinnedCommentId={pinnedCommentId}
+        canPinComments={canPinComments}
+        onPinComment={onPinComment}
+        onUnpinComment={onUnpinComment}
+        isPinPending={isPinPending}
       />
     </div>
   )
