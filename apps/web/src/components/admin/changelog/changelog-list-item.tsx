@@ -76,8 +76,15 @@ export function ChangelogListItem({
   // Truncate content for preview
   const contentPreview = content.length > 150 ? content.slice(0, 150) + '...' : content
 
+  const handleRowClick = () => {
+    onEdit?.(id)
+  }
+
   return (
-    <div className="group relative flex items-start gap-4 p-4 hover:bg-muted/30 transition-colors border-b last:border-b-0">
+    <div
+      className="group relative flex items-start gap-4 p-4 hover:bg-muted/30 transition-colors border-b last:border-b-0 cursor-pointer"
+      onClick={handleRowClick}
+    >
       {/* Author avatar */}
       <Avatar className="h-8 w-8 shrink-0" src={author?.avatarUrl} name={author?.name} />
 
@@ -96,6 +103,7 @@ export function ChangelogListItem({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                onClick={(e) => e.stopPropagation()}
               >
                 <EllipsisHorizontalIcon className="h-4 w-4" />
               </Button>
