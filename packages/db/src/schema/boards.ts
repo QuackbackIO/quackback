@@ -1,13 +1,4 @@
-import {
-  pgTable,
-  text,
-  timestamp,
-  boolean,
-  jsonb,
-  integer,
-  uniqueIndex,
-  index,
-} from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, jsonb, integer, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import type { BoardSettings } from '../types'
@@ -25,7 +16,7 @@ export const boards = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('boards_slug_idx').on(table.slug),
+    // Note: boards_slug_unique constraint already provides uniqueness; no separate index needed
     index('boards_is_public_idx').on(table.isPublic),
   ]
 )
@@ -43,7 +34,7 @@ export const roadmaps = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('roadmaps_slug_idx').on(table.slug),
+    // Note: roadmaps_slug_unique constraint already provides uniqueness; no separate index needed
     index('roadmaps_position_idx').on(table.position),
     index('roadmaps_is_public_idx').on(table.isPublic),
   ]
@@ -57,7 +48,8 @@ export const tags = pgTable(
     color: text('color').default('#6b7280').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [uniqueIndex('tags_name_idx').on(table.name)]
+  // Note: tags_name_unique constraint already provides uniqueness; no separate index needed
+  () => []
 )
 
 // Relations - defined after posts import to avoid circular dependency

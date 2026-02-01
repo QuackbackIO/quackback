@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, uniqueIndex, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, integer, index } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import { STATUS_CATEGORIES, type StatusCategory } from '../types'
 
@@ -19,7 +19,7 @@ export const postStatuses = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('post_statuses_slug_idx').on(table.slug),
+    // Note: post_statuses_slug_unique constraint already provides uniqueness; no separate index needed
     index('post_statuses_position_idx').on(table.category, table.position),
   ]
 )

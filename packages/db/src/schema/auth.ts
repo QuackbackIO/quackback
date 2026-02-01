@@ -249,8 +249,7 @@ export const member = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   },
   (table) => [
-    index('member_userId_idx').on(table.userId),
-    // Ensure one member record per user
+    // Ensure one member record per user (also serves as lookup index)
     uniqueIndex('member_user_idx').on(table.userId),
     // Index for user listings filtered by role
     index('member_role_idx').on(table.role),
