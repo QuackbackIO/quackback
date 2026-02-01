@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { adminQueries } from '@/lib/queries/admin'
-import { inboxKeys } from '@/lib/hooks/use-inbox-queries'
+import { inboxKeys } from '@/lib/hooks/use-inbox-query'
 import { VoteButton } from '@/components/public/vote-button'
 import { PostContentSection } from '@/components/public/post-detail/post-content-section'
 import {
@@ -44,7 +44,7 @@ import {
 import { EditPostDialog } from '@/components/admin/feedback/edit-post-dialog'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import { useInboxUIStore } from '@/lib/stores/inbox-ui'
-import { useUpdatePostStatus, useUpdatePostTags } from '@/lib/hooks/use-inbox-queries'
+import { useUpdatePostStatus, useUpdatePostTags } from '@/lib/mutations/posts'
 import { usePinComment, useUnpinComment } from '@/lib/hooks/use-comment-actions'
 import { usePostDetailKeyboard } from '@/lib/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server-functions/roadmaps'

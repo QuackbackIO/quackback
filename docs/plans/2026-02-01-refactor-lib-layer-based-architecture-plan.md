@@ -148,10 +148,10 @@ lib/
 
 **Acceptance criteria**:
 
-- [ ] No event handlers remain in lib/hooks/
-- [ ] lib/hooks/ contains only React hooks
-- [ ] All imports updated
-- [ ] `bun run typecheck` passes
+- [x] No event handlers remain in lib/hooks/
+- [x] lib/hooks/ contains only React hooks
+- [x] All imports updated
+- [x] `bun run typecheck` passes
 
 ---
 
@@ -210,11 +210,11 @@ lib/
 
 **Acceptance criteria**:
 
-- [ ] No hook file exceeds 300 lines
-- [ ] hooks/ contains only query hooks and pure React hooks
-- [ ] mutations/ contains all mutation definitions
-- [ ] Consistent naming: `use-{feature}-query.ts` for queries
-- [ ] `bun run typecheck` passes
+- [x] No hook file exceeds 300 lines
+- [x] hooks/ contains only query hooks and pure React hooks
+- [x] mutations/ contains all mutation definitions
+- [x] Consistent naming: `use-{feature}-query.ts` for queries
+- [x] `bun run typecheck` passes
 
 ---
 

@@ -7,12 +7,8 @@ import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
 import { FeedbackTableView } from '@/components/admin/feedback/table'
 import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog'
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import {
-  useInboxPosts,
-  useUpdatePostStatus,
-  flattenInboxPosts,
-  inboxKeys,
-} from '@/lib/hooks/use-inbox-queries'
+import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/hooks/use-inbox-query'
+import { useUpdatePostStatus } from '@/lib/mutations/posts'
 import type { PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/db-types'

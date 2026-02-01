@@ -13,7 +13,7 @@ import {
   flattenPublicPosts,
   usePublicPosts,
   useVotedPosts,
-} from '@/lib/hooks/use-public-posts-query'
+} from '@/lib/hooks/use-portal-posts-query'
 import type { PublicPostListItem } from '@/lib/posts'
 import { cn } from '@/lib/utils'
 

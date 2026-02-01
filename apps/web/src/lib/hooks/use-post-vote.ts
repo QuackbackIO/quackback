@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useVoteMutation, votedPostsKeys, fetchVotedPosts } from './use-public-posts-query'
+import { votedPostsKeys, fetchVotedPosts } from './use-portal-posts-query'
+import { useVoteMutation } from '@/lib/mutations/portal-posts'
 import type { PostId } from '@quackback/ids'
 
 // ============================================================================
