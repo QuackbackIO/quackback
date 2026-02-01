@@ -343,3 +343,154 @@ well-organized and moving them would require updating many imports with limited 
 - Current hooks: `apps/web/src/lib/hooks/` (40 files, 5,377 lines)
 - Current post service: `apps/web/src/lib/posts/post.service.ts` (1,439 lines)
 - Reverse imports: `use-inbox-queries.ts:18`, `use-public-posts-query.ts:18`, `use-users-queries.ts:8`
+
+---
+
+## Phase 6: Complete Mutations Consolidation (NEW)
+
+**Goal**: Ensure ALL mutations are in `mutations/`, achieving 100% consistency.
+
+**Status**: In progress
+
+**Completed**:
+
+- [x] `mutations/posts.ts` - admin post mutations
+- [x] `mutations/comments.ts` - admin comment mutations
+- [x] `mutations/portal-posts.ts` - portal post mutations
+- [x] `mutations/boards.ts` - board CRUD mutations
+- [x] `hooks/use-boards-query.ts` - query-only board hooks
+- [x] Deleted dead code: `use-status-actions.ts`, `use-tag-actions.ts`, `use-subscription-actions.ts`
+
+**Remaining**:
+
+| File to Extract                | Lines | Consumers | New Location                       |
+| ------------------------------ | ----- | --------- | ---------------------------------- |
+| `use-comment-actions.ts`       | 377   | 2         | `mutations/portal-comments.ts`     |
+| `use-post-actions.ts`          | 128   | 2         | `mutations/portal-post-actions.ts` |
+| `use-integration-actions.ts`   | 35    | 2         | `mutations/integrations.ts`        |
+| `use-roadmap-posts-query.ts`   | 150   | ?         | Extract mutations only             |
+| `use-roadmaps-query.ts`        | 157   | ?         | Extract mutations only             |
+| `use-settings-queries.ts`      | 126   | ?         | Extract mutations only             |
+| `use-notifications-queries.ts` | 200   | ?         | Extract mutations only             |
+| `use-users-queries.ts`         | 167   | ?         | Extract mutations only             |
+
+**Acceptance criteria**:
+
+- [ ] No `useMutation` in any `hooks/*.ts` file
+- [ ] All mutation hooks exported from `mutations/index.ts`
+- [ ] Consumer imports updated
+- [ ] `bun run typecheck` passes
+
+---
+
+## Phase 7: Maximum Clarity Restructure (NEW)
+
+**Goal**: Reorganize lib/ with explicit server/client separation for maximum clarity.
+
+**Target Structure**:
+
+```
+lib/
+├── shared/                    # Used by both client and server
+│   ├── types/                 # Type definitions
+│   │   ├── index.ts
+│   │   ├── filters.ts
+│   │   ├── inbox.ts
+│   │   └── ...
+│   ├── schemas/               # Zod schemas
+│   └── db-types.ts            # Database type re-exports
+│
+├── client/                    # Client-side only (React)
+│   ├── hooks/                 # Query hooks (no mutations)
+│   │   ├── index.ts
+│   │   ├── use-inbox-query.ts
+│   │   ├── use-boards-query.ts
+│   │   └── ...
+│   ├── mutations/             # All mutation hooks
+│   │   ├── index.ts
+│   │   ├── posts.ts
+│   │   ├── boards.ts
+│   │   └── ...
+│   ├── queries/               # Query key factories
+│   └── stores/                # Zustand stores
+│
+├── server/                    # Server-side only
+│   ├── functions/             # TanStack server functions (RPC)
+│   │   ├── index.ts
+│   │   ├── posts.ts
+│   │   ├── boards.ts
+│   │   └── ...
+│   ├── domains/               # Business logic services
+│   │   ├── posts/
+│   │   │   ├── post.service.ts
+│   │   │   ├── post.query.ts
+│   │   │   ├── post.voting.ts
+│   │   │   ├── post.status.ts
+│   │   │   ├── post.permissions.ts
+│   │   │   └── post.types.ts
+│   │   ├── comments/
+│   │   ├── boards/
+│   │   ├── tags/
+│   │   ├── statuses/
+│   │   ├── roadmaps/
+│   │   ├── members/
+│   │   ├── notifications/
+│   │   ├── users/
+│   │   ├── subscriptions/
+│   │   ├── webhooks/
+│   │   ├── integrations/
+│   │   ├── sentiment/
+│   │   ├── settings/
+│   │   ├── catalog/
+│   │   ├── api-keys/
+│   │   ├── ai/
+│   │   ├── embeddings/
+│   │   └── import/
+│   ├── events/                # Event dispatch & handlers
+│   │   ├── dispatch.ts
+│   │   ├── handlers/
+│   │   └── integrations/
+│   ├── auth/                  # Better Auth configuration
+│   └── tenant/                # Multi-tenant context
+│
+└── core/                      # Infrastructure (db connection)
+    ├── db.ts
+    ├── db-types.ts
+    └── index.ts
+```
+
+**Benefits**:
+
+1. **Crystal clear separation** - Instantly know if code runs on client or server
+2. **Prevents accidental imports** - Can't import server code in client components
+3. **Better tree-shaking** - Cleaner bundle boundaries
+4. **Matches mental model** - TanStack Start has clear RPC boundary
+
+**Migration Strategy**:
+
+1. Create new directory structure
+2. Move files one layer at a time with re-exports for backwards compatibility:
+   - Phase 7a: Create `shared/` and move types/schemas
+   - Phase 7b: Create `client/` and move hooks/mutations/queries/stores
+   - Phase 7c: Create `server/` and move functions/events/auth/tenant
+   - Phase 7d: Create `server/domains/` and move all feature directories
+3. Update imports (can use codemod tooling)
+4. Remove backwards-compat re-exports once stable
+
+**Effort Estimate**:
+
+| Sub-phase    | Files to Move | Import Updates | Risk   |
+| ------------ | ------------- | -------------- | ------ |
+| 7a: shared/  | ~15           | ~30            | Low    |
+| 7b: client/  | ~25           | ~50            | Low    |
+| 7c: server/  | ~40           | ~80            | Medium |
+| 7d: domains/ | ~60           | ~100           | Medium |
+
+**Acceptance criteria**:
+
+- [ ] All code in lib/ is under shared/, client/, server/, or core/
+- [ ] No feature directories at lib/ root
+- [ ] Clear documentation in lib/README.md
+- [ ] CLAUDE.md updated with new structure
+- [ ] All tests pass
+- [ ] Build succeeds
