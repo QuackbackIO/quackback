@@ -1,9 +1,10 @@
 'use client'
 
 import { Link } from '@tanstack/react-router'
-import { Badge } from '@/components/ui/badge'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
-import { CalendarIcon, ArrowLeftIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { BackLink } from '@/components/ui/back-link'
+import { CalendarIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import type { ChangelogId, PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@quackback/db/types'
@@ -13,6 +14,10 @@ interface LinkedPost {
   title: string
   voteCount: number
   boardSlug: string
+  status: {
+    name: string
+    color: string
+  } | null
 }
 
 interface ChangelogEntryDetailProps {
@@ -38,15 +43,11 @@ export function ChangelogEntryDetail({
   })
 
   return (
-    <article className="max-w-3xl mx-auto">
+    <article>
       {/* Back link */}
-      <Link
-        to="/changelog"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
-      >
-        <ArrowLeftIcon className="h-4 w-4" />
-        Back to changelog
-      </Link>
+      <BackLink to="/changelog" className="mb-6">
+        Changelog
+      </BackLink>
 
       {/* Header */}
       <header className="mb-8">
@@ -90,12 +91,13 @@ export function ChangelogEntryDetail({
                     {post.title}
                   </span>
                 </div>
-                <Badge
-                  variant="secondary"
-                  className="text-xs shrink-0 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                >
-                  Shipped
-                </Badge>
+                {post.status && (
+                  <StatusBadge
+                    name={post.status.name}
+                    color={post.status.color}
+                    className="shrink-0"
+                  />
+                )}
               </Link>
             ))}
           </div>

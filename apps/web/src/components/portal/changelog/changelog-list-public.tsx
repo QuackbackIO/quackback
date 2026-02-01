@@ -34,7 +34,7 @@ export function ChangelogListPublic() {
   }
 
   return (
-    <div className="space-y-6">
+    <div>
       {entries.map((entry, index) => (
         <div
           key={entry.id}
