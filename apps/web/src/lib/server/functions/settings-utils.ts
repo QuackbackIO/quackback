@@ -4,7 +4,7 @@ import {
   getSettingsHeaderLogoData,
   getSettingsBrandingData,
   getSettingsFaviconData,
-} from '@/lib/settings-utils'
+} from '@/lib/server/settings-utils'
 
 /**
  * Server functions for settings utilities (logo/branding data).

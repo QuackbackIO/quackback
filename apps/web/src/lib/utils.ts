@@ -5,5 +5,5 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Re-export utilities from utils directory
-export { getInitials } from './utils/string'
+// Re-export utilities from shared
+export { getInitials } from './shared/utils/string'

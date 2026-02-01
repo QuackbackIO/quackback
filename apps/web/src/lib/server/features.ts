@@ -10,10 +10,10 @@ import {
   CLOUD_TIER_ORDER,
   SELF_HOSTED_TIER_CONFIG,
   getMinimumCloudTierForFeature,
-} from '@/lib/features'
-import { getSubscription, isSubscriptionActive } from '@/lib/subscription'
+} from '@/lib/shared/features'
+import { getSubscription, isSubscriptionActive } from '@/lib/server/subscription'
 import { tenantStorage } from '@/lib/server/tenant/storage'
-import { getBillingUrl } from '@/lib/config'
+import { getBillingUrl } from '@/lib/server/config'
 
 // ============================================================================
 // Types
@@ -175,4 +175,4 @@ export async function checkFeatureAccess(feature: Feature): Promise<FeatureCheck
 }
 
 // Re-export Feature enum for convenience
-export { Feature } from '@/lib/features'
+export { Feature } from '@/lib/shared/features'

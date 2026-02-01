@@ -30,7 +30,7 @@ import {
   ALL_FONTS_URL,
   FONT_OPTIONS,
 } from '@/components/admin/settings/branding/use-branding-state'
-import type { ThemeConfig } from '@/lib/theme'
+import type { ThemeConfig } from '@/lib/shared/theme'
 import { useWorkspaceLogo } from '@/lib/client/hooks/use-settings-queries'
 import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'

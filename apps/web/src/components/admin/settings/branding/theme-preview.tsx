@@ -8,7 +8,7 @@ import {
   ClockIcon,
   FireIcon,
 } from '@heroicons/react/24/solid'
-import { oklchToHex, type ThemeVariables } from '@/lib/theme'
+import { oklchToHex, type ThemeVariables } from '@/lib/shared/theme'
 import { cn } from '@/lib/utils'
 
 /** Map font family names to Google Fonts URL */

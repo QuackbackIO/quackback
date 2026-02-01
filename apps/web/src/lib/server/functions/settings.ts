@@ -7,7 +7,7 @@ import {
   type UpdatePortalConfigInput,
 } from '@/lib/server/domains/settings'
 import { userIdSchema, type UserId } from '@quackback/ids'
-import { getWorkspaceFeatures } from '@/lib/features/server'
+import { getWorkspaceFeatures } from '@/lib/server/features'
 import {
   getBrandingConfig,
   getPortalConfig,

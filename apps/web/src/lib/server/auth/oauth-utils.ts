@@ -6,7 +6,7 @@
  */
 
 import crypto from 'crypto'
-import { config } from '@/lib/config'
+import { config } from '@/lib/server/config'
 
 /** OAuth state must be validated within 5 minutes */
 export const STATE_EXPIRY_MS = 5 * 60 * 1000

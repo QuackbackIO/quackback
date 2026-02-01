@@ -5,7 +5,7 @@ import {
   type SelfHostedTier,
   type CloudTier,
   type TierLimits,
-} from '@/lib/features'
+} from '@/lib/shared/features'
 import { getWorkspaceFeaturesFn } from '@/lib/server/functions/settings'
 
 // ============================================================================

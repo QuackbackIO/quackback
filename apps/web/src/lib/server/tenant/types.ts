@@ -4,7 +4,7 @@
 import type { Database } from './db-cache'
 import type { settings } from '@quackback/db'
 import type { InferSelectModel } from 'drizzle-orm'
-import type { CloudTier } from '@/lib/features'
+import type { CloudTier } from '@/lib/shared/features'
 
 /** Settings table row type */
 export type Settings = InferSelectModel<typeof settings>

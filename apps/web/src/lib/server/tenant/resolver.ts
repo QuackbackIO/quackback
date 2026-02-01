@@ -1,7 +1,7 @@
 import { eq, and } from 'drizzle-orm'
 import { getTenantDb } from './db-cache'
 import type { TenantInfo, SubscriptionContext } from './types'
-import type { CloudTier } from '@/lib/features'
+import type { CloudTier } from '@/lib/shared/features'
 import {
   workspace,
   workspaceDomain,

@@ -1,5 +1,5 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
-import { isMultiTenant } from '@/lib/features'
+import { isMultiTenant } from '@/lib/shared/features'
 import { resolveTenantFromDomain, type TenantContext, tenantStorage } from '@/lib/server/tenant'
 import { db } from '@/lib/db'
 

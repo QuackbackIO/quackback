@@ -8,7 +8,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { isSelfHosted, isCloud } from '@/lib/features'
+import { isSelfHosted, isCloud } from '@/lib/shared/features'
 import { getSession } from './auth'
 import { db, member, eq } from '@/lib/db'
 

@@ -4,7 +4,7 @@ import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
-import { theme } from '@/lib/theme'
+import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
@@ -28,8 +28,8 @@ export const Route = createFileRoute('/_portal')({
     const portalConfig = settings?.publicPortalConfig ?? null
 
     const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
-    const themeStyles = hasThemeConfig ? theme.generateThemeCSS(brandingConfig) : ''
-    const googleFontsUrl = theme.getGoogleFontsUrl(brandingConfig)
+    const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
+    const googleFontsUrl = getGoogleFontsUrl(brandingConfig)
 
     const initialUserData = session?.user
       ? {

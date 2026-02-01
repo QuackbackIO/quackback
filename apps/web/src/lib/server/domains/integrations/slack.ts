@@ -1,7 +1,7 @@
 /**
  * Slack integration database operations.
  */
-import { isMultiTenant } from '@/lib/features'
+import { isMultiTenant } from '@/lib/shared/features'
 import type { MemberId } from '@quackback/ids'
 
 interface SaveIntegrationParams {

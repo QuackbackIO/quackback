@@ -8,7 +8,7 @@ import {
   type ThemeConfig,
   type ThemeVariables,
   type MinimalThemeVariables,
-} from '@/lib/theme'
+} from '@/lib/shared/theme'
 import { updateThemeFn } from '@/lib/server/functions/settings'
 
 export const FONT_OPTIONS = [
