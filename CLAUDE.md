@@ -63,18 +63,21 @@ apps/web/                    # TanStack Start application
 ├── src/routes/              # File-based routing (TanStack Router)
 ├── src/components/          # UI and feature components
 ├── src/lib/                 # Core utilities (layer-based architecture)
-│   ├── core/                # Infrastructure (db, types)
-│   ├── types/               # Shared type definitions
-│   ├── server-functions/    # TanStack server functions (RPC)
-│   ├── hooks/               # React Query hooks (queries only)
-│   ├── mutations/           # React Query mutations
-│   ├── events/              # Event dispatch & handlers
-│   ├── stores/              # Zustand client state
-│   ├── posts/               # Post service modules
-│   ├── comments/            # Comment service & types
-│   ├── auth/                # Better Auth configuration
-│   ├── tenant/              # Multi-tenant context
-│   └── settings/            # Workspace settings
+│   ├── client/              # Client-side only (React)
+│   │   ├── hooks/           # React Query hooks (queries only)
+│   │   ├── mutations/       # React Query mutations
+│   │   ├── queries/         # Query key factories
+│   │   └── stores/          # Zustand client state
+│   ├── server/              # Server-side only
+│   │   ├── functions/       # TanStack server functions (RPC)
+│   │   ├── domains/         # Business logic services
+│   │   ├── events/          # Event dispatch & handlers
+│   │   ├── auth/            # Better Auth configuration
+│   │   └── tenant/          # Multi-tenant context
+│   └── shared/              # Used by both client and server
+│       ├── types/           # Type definitions
+│       ├── schemas/         # Zod validation schemas
+│       └── utils/           # Utility functions (cn, etc.)
 
 packages/                    # Shared packages (AGPL-3.0)
 ├── db/                      # Drizzle schema, migrations, seed
@@ -117,29 +120,30 @@ export const createPostFn = createServerFn({ method: 'POST' })
 
 ### lib/ Layer Architecture
 
-The `lib/` directory follows a layer-based architecture with clear responsibilities:
+The `lib/` directory uses explicit server/client separation:
 
-| Layer               | Purpose                          | Import Direction                 |
-| ------------------- | -------------------------------- | -------------------------------- |
-| `core/`             | Infrastructure (db, config)      | Can import from packages/        |
-| `types/`            | Shared type definitions          | Can import from core/            |
-| `server-functions/` | TanStack RPC layer               | Can import from services, types  |
-| `hooks/`            | React Query hooks (queries only) | Can import from server-functions |
-| `mutations/`        | React Query mutations            | Can import from server-functions |
-| `events/`           | Event dispatch & handlers        | Can import from services         |
-| `stores/`           | Zustand client state             | Can import from types            |
-| `{feature}/`        | Business logic services          | Can import from core/, types/    |
+| Layer                 | Purpose                     | Location                    |
+| --------------------- | --------------------------- | --------------------------- |
+| **shared/**           | Types, schemas, utilities   | Used by both client/server  |
+| **client/hooks/**     | React Query hooks (queries) | Client-side data fetching   |
+| **client/mutations/** | React Query mutations       | Client-side data mutations  |
+| **client/stores/**    | Zustand state               | Client-side state           |
+| **server/functions/** | TanStack RPC layer          | Server function definitions |
+| **server/domains/**   | Business logic services     | Domain-specific logic       |
+| **server/events/**    | Event dispatch & handlers   | Webhooks, notifications     |
+| **server/auth/**      | Better Auth configuration   | Authentication              |
+| **server/tenant/**    | Multi-tenant context        | Tenant resolution           |
 
 **Key conventions**:
 
-- Hooks: `use-{feature}-query.ts` for queries, mutations in `mutations/`
-- Services: Split by domain (`post.service.ts`, `post.query.ts`, `post.voting.ts`)
+- Hooks: `use-{feature}-query.ts` for queries, mutations in `client/mutations/`
+- Services: In `server/domains/{feature}/` (e.g., `posts/post.service.ts`)
 - Import direction: lib/ never imports from components/
 - No file should exceed 400 lines (services) or 300 lines (hooks)
 
 ### Service Layer
 
-Services in `src/lib/{feature}/` throw typed errors:
+Services in `src/lib/server/domains/{feature}/` throw typed errors:
 
 ```typescript
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
@@ -154,10 +158,10 @@ export async function createPost(input: CreatePostInput, author: Author) {
 
 ### Database Access
 
-Always import from `@/lib/db`, not `@quackback/db`:
+Always import from `@/lib/server/db`, not `@quackback/db`:
 
 ```typescript
-import { db, posts, eq, and, desc } from '@/lib/db'
+import { db, posts, eq, and, desc } from '@/lib/server/db'
 
 const post = await db.query.posts.findFirst({
   where: eq(posts.id, postId),
