@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { settingsQueries } from '@/lib/queries/settings'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { SecuritySettings } from '@/components/admin/settings/security/security-settings'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 
 export const Route = createFileRoute('/admin/settings/security')({
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
+    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
     await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
 
     const { queryClient } = context

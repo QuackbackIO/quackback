@@ -2,9 +2,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { useCreateComment } from '@/lib/hooks/use-comment-actions'
-import type { PublicCommentView } from '@/lib/queries/portal-detail'
+import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
+import { useCreateComment } from '@/lib/client/mutations'
+import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import type { CommentId, PostId, MemberId } from '@quackback/ids'
 
 interface AuthCommentsSectionProps {

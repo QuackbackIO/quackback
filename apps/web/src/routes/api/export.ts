@@ -34,11 +34,11 @@ export const Route = createFileRoute('/api/export')({
        * Export posts to CSV format
        */
       GET: async ({ request }) => {
-        const { validateApiWorkspaceAccess } = await import('@/lib/server-functions/workspace')
-        const { canAccess } = await import('@/lib/auth')
+        const { validateApiWorkspaceAccess } = await import('@/lib/server/functions/workspace')
+        const { canAccess } = await import('@/lib/server/auth')
         type Role = 'admin' | 'member' | 'user'
-        const { listPostsForExport } = await import('@/lib/posts/post.service')
-        const { getBoardById } = await import('@/lib/boards/board.service')
+        const { listPostsForExport } = await import('@/lib/server/domains/posts/post.query')
+        const { getBoardById } = await import('@/lib/server/domains/boards/board.service')
 
         const url = new URL(request.url)
         const boardIdParam = url.searchParams.get('boardId')

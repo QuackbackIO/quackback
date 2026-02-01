@@ -2,8 +2,8 @@ import { Suspense, useEffect, useState } from 'react'
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
-import { portalDetailQueries, type PublicPostDetailView } from '@/lib/queries/portal-detail'
-import { portalQueries } from '@/lib/queries/portal'
+import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
+import { portalQueries } from '@/lib/client/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
 import { PostContentSection } from '@/components/public/post-detail/post-content-section'
@@ -20,9 +20,10 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
-import { usePostPermissions, usePostActions } from '@/lib/hooks/use-post-actions'
+import { usePostPermissions } from '@/lib/client/hooks/use-portal-posts-query'
+import { usePostActions } from '@/lib/client/mutations'
 import { isValidTypeId, type PostId } from '@quackback/ids'
-import type { TiptapContent } from '@/lib/schemas/posts'
+import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {

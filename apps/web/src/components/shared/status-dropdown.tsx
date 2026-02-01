@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { cn } from '@/lib/utils'
-import type { PostStatusEntity } from '@/lib/db-types'
+import { cn } from '@/lib/shared/utils'
+import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { StatusId } from '@quackback/ids'
 
 interface StatusDropdownProps {

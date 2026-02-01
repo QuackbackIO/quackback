@@ -11,7 +11,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { UserCard } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
-import type { PortalUserListItemView } from '@/lib/users'
+import type { PortalUserListItemView } from '@/lib/server/domains/users'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 
 interface UsersListProps {

@@ -1,8 +1,8 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { CheckCircleIcon, ArrowRightIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { checkOnboardingState } from '@/lib/server-functions/admin'
-import { getSettings } from '@/lib/server-functions/workspace'
+import { checkOnboardingState } from '@/lib/server/functions/admin'
+import { getSettings } from '@/lib/server/functions/workspace'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
   loader: async ({ context }) => {

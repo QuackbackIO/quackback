@@ -3,9 +3,9 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon, CheckIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { createBoardsBatchFn } from '@/lib/server-functions/boards'
-import { checkOnboardingState } from '@/lib/server-functions/admin'
-import { listBoardsForOnboarding } from '@/lib/server-functions/onboarding'
+import { createBoardsBatchFn } from '@/lib/server/functions/boards'
+import { checkOnboardingState } from '@/lib/server/functions/admin'
+import { listBoardsForOnboarding } from '@/lib/server/functions/onboarding'
 import {
   getBoardsForUseCase,
   getBoardOptionsForUseCase,

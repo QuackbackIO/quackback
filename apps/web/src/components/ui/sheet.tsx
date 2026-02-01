@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as SheetPrimitive from '@radix-ui/react-dialog'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 function Sheet(props: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />

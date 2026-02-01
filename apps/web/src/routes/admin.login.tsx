@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
-import { settingsQueries } from '@/lib/queries/settings'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { useSuspenseQuery } from '@tanstack/react-query'
 
 // Error messages for login failures

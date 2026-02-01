@@ -13,12 +13,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
-import { useCreatePublicPost } from '@/lib/hooks/use-public-posts-query'
+import { useCreatePublicPost } from '@/lib/client/mutations/portal-posts'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import { useSimilarPosts } from '@/lib/hooks/use-similar-posts'
+import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
+import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
-import { signOut } from '@/lib/auth/client'
+import { signOut } from '@/lib/server/auth/client'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {

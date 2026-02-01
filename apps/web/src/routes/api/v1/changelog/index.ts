@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
@@ -8,8 +8,8 @@ import {
   handleDomainError,
   decodeCursor,
   encodeCursor,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId } from '@quackback/ids'
 
 // Input validation schema
@@ -55,7 +55,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
 
           // Import db
           const { db, changelogEntries, eq, desc, and, isNotNull, isNull } =
-            await import('@/lib/db')
+            await import('@/lib/server/db')
 
           // Build conditions
           const conditions = []
@@ -137,7 +137,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           if (validationError) return validationError
 
           // Import db
-          const { db, changelogEntries, boards, eq } = await import('@/lib/db')
+          const { db, changelogEntries, boards, eq } = await import('@/lib/server/db')
           const { NotFoundError } = await import('@/lib/shared/errors')
 
           // Verify board exists

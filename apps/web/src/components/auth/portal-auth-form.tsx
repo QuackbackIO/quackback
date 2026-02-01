@@ -9,8 +9,8 @@ import {
   EnvelopeIcon,
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
-import { authClient } from '@/lib/auth/client'
-import type { PortalAuthMethods, PublicOIDCConfig } from '@/lib/settings'
+import { authClient } from '@/lib/server/auth/client'
+import type { PortalAuthMethods, PublicOIDCConfig } from '@/lib/server/domains/settings'
 
 interface InvitationInfo {
   id: string

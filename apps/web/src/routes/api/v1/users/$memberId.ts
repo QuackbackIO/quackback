@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   notFoundResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { MemberId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/users/$memberId')({
@@ -29,7 +29,7 @@ export const Route = createFileRoute('/api/v1/users/$memberId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getPortalUserDetail } = await import('@/lib/users/user.service')
+          const { getPortalUserDetail } = await import('@/lib/server/domains/users/user.service')
 
           const user = await getPortalUserDetail(memberId as MemberId)
 
@@ -88,7 +88,7 @@ export const Route = createFileRoute('/api/v1/users/$memberId')({
           if (validationError) return validationError
 
           // Import service function
-          const { removePortalUser } = await import('@/lib/users/user.service')
+          const { removePortalUser } = await import('@/lib/server/domains/users/user.service')
 
           await removePortalUser(memberId as MemberId)
 

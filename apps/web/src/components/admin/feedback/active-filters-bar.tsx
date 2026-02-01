@@ -9,11 +9,11 @@ import {
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { InboxFilters } from './use-inbox-filters'
-import type { Board, Tag as TagType, PostStatusEntity } from '@/lib/db-types'
-import type { TeamMember } from '@/lib/members'
+import type { Board, Tag as TagType, PostStatusEntity } from '@/lib/shared/db-types'
+import type { TeamMember } from '@/lib/server/domains/members'
 
 interface FilterOption {
   id: string

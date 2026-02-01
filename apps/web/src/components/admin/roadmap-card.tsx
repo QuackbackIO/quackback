@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
-import type { RoadmapPostEntry } from '@/lib/roadmaps'
+import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
 
 interface RoadmapCardProps {
   post: RoadmapPostEntry

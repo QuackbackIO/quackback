@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { BellIcon, BellAlertIcon, CheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,9 +14,9 @@ import {
   subscribeToPostFn,
   unsubscribeFromPostFn,
   updateSubscriptionLevelFn,
-} from '@/lib/server-functions/subscriptions'
+} from '@/lib/server/functions/subscriptions'
 import type { PostId } from '@quackback/ids'
-import type { SubscriptionLevel } from '@/lib/subscriptions/subscription.types'
+import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.types'
 
 interface SubscriptionStatus {
   subscribed: boolean

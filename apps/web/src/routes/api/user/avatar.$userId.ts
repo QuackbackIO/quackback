@@ -9,7 +9,7 @@ export const Route = createFileRoute('/api/user/avatar/$userId')({
        * Serve user avatar image.
        */
       GET: async ({ params }) => {
-        const { db, user, eq } = await import('@/lib/db')
+        const { db, user, eq } = await import('@/lib/server/db')
 
         try {
           const userIdParam = params.userId

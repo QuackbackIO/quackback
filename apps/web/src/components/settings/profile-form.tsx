@@ -6,9 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
-import { authClient } from '@/lib/auth/client'
+import { authClient } from '@/lib/server/auth/client'
 import { useRouter } from '@tanstack/react-router'
-import { updateProfileNameFn, removeAvatarFn } from '@/lib/server-functions/user'
+import { updateProfileNameFn, removeAvatarFn } from '@/lib/server/functions/user'
 
 const errorResponseSchema = z.object({
   error: z.string().optional(),

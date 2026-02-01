@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 
 interface UsersFiltersProps {

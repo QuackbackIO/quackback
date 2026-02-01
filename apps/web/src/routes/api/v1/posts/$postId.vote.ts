@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuth } from '@/lib/api/auth'
-import { successResponse, handleDomainError } from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
@@ -25,7 +25,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
           if (validationError) return validationError
 
           // Import service function
-          const { voteOnPost } = await import('@/lib/posts/post.service')
+          const { voteOnPost } = await import('@/lib/server/domains/posts/post.voting')
 
           const result = await voteOnPost(postId as PostId, memberId)
 

@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId, PostId, StatusId } from '@quackback/ids'
 
 // Input validation schema
@@ -41,7 +41,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
           const offset = parseInt(url.searchParams.get('offset') || '0', 10)
 
           // Import service function
-          const { getRoadmapPosts } = await import('@/lib/roadmaps/roadmap.service')
+          const { getRoadmapPosts } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const result = await getRoadmapPosts(roadmapId as RoadmapId, {
             statusId: statusId || undefined,
@@ -101,7 +101,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
           if (bodyValidationError) return bodyValidationError
 
           // Import service function
-          const { addPostToRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+          const { addPostToRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           await addPostToRoadmap({
             roadmapId: roadmapId as RoadmapId,

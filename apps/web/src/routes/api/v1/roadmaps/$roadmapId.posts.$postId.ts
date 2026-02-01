@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuth } from '@/lib/api/auth'
-import { noContentResponse, handleDomainError } from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { noContentResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId, PostId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts/$postId')({
@@ -26,7 +26,8 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts/$postId'
           if (validationError) return validationError
 
           // Import service function
-          const { removePostFromRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+          const { removePostFromRoadmap } =
+            await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           await removePostFromRoadmap(postId as PostId, roadmapId as RoadmapId)
 

@@ -2,11 +2,11 @@ import { useEffect, useRef, memo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { RoadmapCard } from './roadmap-card'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   useRoadmapPostsByRoadmap,
   flattenRoadmapPostEntries,
-} from '@/lib/hooks/use-roadmap-posts-query'
+} from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { RoadmapId, StatusId } from '@quackback/ids'
 
 interface RoadmapColumnProps {

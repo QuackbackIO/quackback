@@ -4,7 +4,7 @@ import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import {
   getNotificationPreferencesFn,
   updateNotificationPreferencesFn,
-} from '@/lib/server-functions/user'
+} from '@/lib/server/functions/user'
 interface Preferences {
   emailStatusChange: boolean
   emailNewComment: boolean

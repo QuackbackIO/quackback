@@ -1,15 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuthAdmin } from '@/lib/api/auth'
+import { withApiKeyAuthAdmin } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { WEBHOOK_EVENTS } from '@/lib/hooks/webhook'
-import { validateTypeIdArray } from '@/lib/api/validation'
-import { toWebhookListResponse } from '@/lib/api/webhooks'
+} from '@/lib/server/domains/api/responses'
+import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
+import { validateTypeIdArray } from '@/lib/server/domains/api/validation'
+import { toWebhookListResponse } from '@/lib/server/domains/api/webhooks'
 
 // Input validation schema
 const createWebhookSchema = z.object({
@@ -31,7 +31,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
         if (authResult instanceof Response) return authResult
 
         try {
-          const { listWebhooks } = await import('@/lib/webhooks')
+          const { listWebhooks } = await import('@/lib/server/domains/webhooks')
           const allWebhooks = await listWebhooks()
 
           return successResponse(allWebhooks.map(toWebhookListResponse))
@@ -67,7 +67,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
             if (validationError) return validationError
           }
 
-          const { createWebhook } = await import('@/lib/webhooks')
+          const { createWebhook } = await import('@/lib/server/domains/webhooks')
           const result = await createWebhook(
             {
               url: parsed.data.url,

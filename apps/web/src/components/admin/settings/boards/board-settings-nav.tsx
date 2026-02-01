@@ -4,7 +4,7 @@ import {
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { useBoardSelection, type BoardTab } from './use-board-selection'
 
 const navItems: { label: string; tab: BoardTab; icon: typeof Cog6ToothIcon }[] = [

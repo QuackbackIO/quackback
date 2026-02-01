@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
-import type { EditPostInput } from '@/lib/hooks/use-post-actions'
-import type { PublicPostDetailView } from '@/lib/queries/portal-detail'
+import type { EditPostInput } from '@/lib/client/mutations'
+import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { PostActionsMenu } from './post-actions-menu'
 
 export function PostContentSectionSkeleton(): React.ReactElement {

@@ -11,8 +11,8 @@ export const Route = createFileRoute('/api/user/profile')({
        * Get current user's profile information.
        */
       GET: async () => {
-        const { db, user, eq } = await import('@/lib/db')
-        const { getSession } = await import('@/lib/server-functions/auth')
+        const { db, user, eq } = await import('@/lib/server/db')
+        const { getSession } = await import('@/lib/server/functions/auth')
 
         console.log(`[api] GET /user/profile`)
 
@@ -54,8 +54,8 @@ export const Route = createFileRoute('/api/user/profile')({
        * Update current user's profile.
        */
       PATCH: async ({ request }) => {
-        const { db, user, eq } = await import('@/lib/db')
-        const { getSession } = await import('@/lib/server-functions/auth')
+        const { db, user, eq } = await import('@/lib/server/db')
+        const { getSession } = await import('@/lib/server/functions/auth')
 
         console.log(`[api] PATCH /user/profile`)
 
@@ -156,8 +156,8 @@ export const Route = createFileRoute('/api/user/profile')({
        * Remove custom avatar.
        */
       DELETE: async () => {
-        const { db, user, eq } = await import('@/lib/db')
-        const { getSession } = await import('@/lib/server-functions/auth')
+        const { db, user, eq } = await import('@/lib/server/db')
+        const { getSession } = await import('@/lib/server/functions/auth')
 
         console.log(`[api] DELETE /user/profile (avatar)`)
 

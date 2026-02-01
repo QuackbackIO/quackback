@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId } from '@quackback/ids'
 
 // Input validation schema
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+          const { getRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const roadmap = await getRoadmap(roadmapId as RoadmapId)
 
@@ -82,7 +82,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
           }
 
           // Import service function
-          const { updateRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+          const { updateRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const roadmap = await updateRoadmap(roadmapId as RoadmapId, {
             name: parsed.data.name,
@@ -121,7 +121,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
           if (validationError) return validationError
 
           // Import service function
-          const { deleteRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+          const { deleteRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           await deleteRoadmap(roadmapId as RoadmapId)
 

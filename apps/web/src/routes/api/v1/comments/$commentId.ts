@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { CommentId } from '@quackback/ids'
 
 // Input validation schema
@@ -35,7 +35,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getCommentById } = await import('@/lib/comments/comment.service')
+          const { getCommentById } = await import('@/lib/server/domains/comments/comment.service')
 
           const comment = await getCommentById(commentId as CommentId)
 
@@ -84,8 +84,8 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
           }
 
           // Import service and get member details
-          const { updateComment } = await import('@/lib/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { updateComment } = await import('@/lib/server/domains/comments/comment.service')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for role
           const memberRecord = await db.query.member.findFirst({
@@ -131,8 +131,8 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
           if (validationError) return validationError
 
           // Import service and get member details
-          const { deleteComment } = await import('@/lib/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { deleteComment } = await import('@/lib/server/domains/comments/comment.service')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for role
           const memberRecord = await db.query.member.findFirst({

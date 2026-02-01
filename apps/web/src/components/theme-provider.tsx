@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
-import { setThemeCookie, type Theme } from '@/lib/theme'
+import { setThemeCookie, type Theme } from '@/lib/shared/theme'
 
 function ThemeCookieSync() {
   const { theme } = useTheme()

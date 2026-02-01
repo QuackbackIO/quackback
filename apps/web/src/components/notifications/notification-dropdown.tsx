@@ -5,11 +5,8 @@ import { InboxIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationItem } from './notification-item'
-import {
-  useNotifications,
-  useMarkNotificationAsRead,
-  useMarkAllNotificationsAsRead,
-} from '@/lib/hooks/use-notifications-queries'
+import { useNotifications } from '@/lib/client/hooks/use-notifications-queries'
+import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
 
 interface NotificationDropdownProps {
   onClose?: () => void

@@ -1,8 +1,8 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { settingsQueries } from '@/lib/queries/settings'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
-import { DEFAULT_PORTAL_CONFIG } from '@/lib/settings'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 
 /**
  * Portal Login Page

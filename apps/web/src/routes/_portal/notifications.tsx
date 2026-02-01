@@ -2,13 +2,12 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { BellIcon, InboxIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import {
   useNotifications,
-  useMarkNotificationAsRead,
-  useMarkAllNotificationsAsRead,
   type SerializedNotification,
-} from '@/lib/hooks/use-notifications-queries'
+} from '@/lib/client/hooks/use-notifications-queries'
+import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
 import { getNotificationTypeConfig } from '@/components/notifications/notification-type-config'
 
 export const Route = createFileRoute('/_portal/notifications')({

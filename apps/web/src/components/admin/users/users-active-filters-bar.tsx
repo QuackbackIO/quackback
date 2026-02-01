@@ -6,7 +6,7 @@ import {
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 

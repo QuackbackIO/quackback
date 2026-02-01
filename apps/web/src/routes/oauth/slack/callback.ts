@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { exchangeSlackCode } from '@/lib/hooks/slack'
-import { verifyOAuthState } from '@/lib/auth/oauth-state'
+import { exchangeSlackCode } from '@/lib/server/events/integrations/slack/oauth'
+import { verifyOAuthState } from '@/lib/server/auth/oauth-state'
 import {
   STATE_EXPIRY_MS,
   isSecureRequest,
@@ -10,9 +10,9 @@ import {
   redirectResponse,
   clearCookie,
   isValidTenantDomain,
-} from '@/lib/integrations/oauth'
-import { saveIntegration } from '@/lib/integrations/slack'
-import type { SlackOAuthState } from '@/lib/server-functions/integrations'
+} from '@/lib/server/domains/integrations/oauth'
+import { saveIntegration } from '@/lib/server/domains/integrations/slack'
+import type { SlackOAuthState } from '@/lib/server/functions/integrations'
 
 const FALLBACK_URL = 'https://quackback.io'
 const SETTINGS_PATH = '/admin/settings/integrations/slack'

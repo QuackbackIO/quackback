@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
+} from '@/lib/server/domains/api/responses'
 
 // Input validation schema
 const createRoadmapSchema = z.object({
@@ -34,7 +34,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
 
         try {
           // Import service function
-          const { listRoadmaps } = await import('@/lib/roadmaps/roadmap.service')
+          const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const roadmaps = await listRoadmaps()
 
@@ -75,7 +75,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
           }
 
           // Import service function
-          const { createRoadmap } = await import('@/lib/roadmaps/roadmap.service')
+          const { createRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const roadmap = await createRoadmap({
             name: parsed.data.name,

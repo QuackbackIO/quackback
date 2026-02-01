@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
@@ -8,8 +8,12 @@ import {
   handleDomainError,
   decodeCursor,
   encodeCursor,
-} from '@/lib/api/responses'
-import { validateTypeId, validateOptionalTypeId, validateTypeIdArray } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import {
+  validateTypeId,
+  validateOptionalTypeId,
+  validateTypeIdArray,
+} from '@/lib/server/domains/api/validation'
 import type { BoardId, StatusId, TagId, UserId } from '@quackback/ids'
 
 // Input validation schemas
@@ -60,7 +64,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
               : undefined
 
           // Import service function
-          const { listInboxPosts } = await import('@/lib/posts/post.service')
+          const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
 
           // Convert comma-separated tagIds to array (filter out invalid ones)
           const tagIdArray = tagIdsParam
@@ -142,8 +146,8 @@ export const Route = createFileRoute('/api/v1/posts/')({
           if (validationError) return validationError
 
           // Import service and get member details
-          const { createPost } = await import('@/lib/posts/post.service')
-          const { db, member, eq } = await import('@/lib/db')
+          const { createPost } = await import('@/lib/server/domains/posts/post.service')
+          const { db, member, eq } = await import('@/lib/server/db')
 
           // Get member info for author details
           const memberRecord = await db.query.member.findFirst({

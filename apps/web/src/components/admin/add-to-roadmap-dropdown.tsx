@@ -8,8 +8,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { useRoadmaps } from '@/lib/hooks/use-roadmaps-query'
-import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server-functions/roadmaps'
+import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
+import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import type { PostId, RoadmapId } from '@quackback/ids'
 
 interface AddToRoadmapDropdownProps {

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuthAdmin } from '@/lib/api/auth'
-import { successResponse, handleDomainError } from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+import { withApiKeyAuthAdmin } from '@/lib/server/domains/api/auth'
+import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { WebhookId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/webhooks/$webhookId/rotate')({
@@ -23,7 +23,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId/rotate')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { rotateWebhookSecret } = await import('@/lib/webhooks')
+          const { rotateWebhookSecret } = await import('@/lib/server/domains/webhooks')
           const result = await rotateWebhookSecret(webhookId as WebhookId)
 
           // Return the new secret (only shown once!)

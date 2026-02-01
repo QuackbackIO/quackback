@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
-import { acceptInvitationFn } from '@/lib/server-functions/invitations'
+import { acceptInvitationFn } from '@/lib/server/functions/invitations'
 
 export const Route = createFileRoute('/accept-invitation/$id')({
   loader: async ({ params, context }) => {

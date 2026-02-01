@@ -6,8 +6,8 @@ import { Link } from '@tanstack/react-router'
 import { ChevronRightIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
-import { findSimilarPostsFn, type SimilarPost } from '@/lib/server-functions/public-posts'
+import { cn } from '@/lib/shared/utils'
+import { findSimilarPostsFn, type SimilarPost } from '@/lib/server/functions/public-posts'
 import type { PostId } from '@quackback/ids'
 
 interface SimilarPostItemProps {

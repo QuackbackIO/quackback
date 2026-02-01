@@ -3,9 +3,9 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { setupWorkspaceFn } from '@/lib/server-functions/onboarding'
-import { checkOnboardingState } from '@/lib/server-functions/admin'
-import { getSettings } from '@/lib/server-functions/workspace'
+import { setupWorkspaceFn } from '@/lib/server/functions/onboarding'
+import { checkOnboardingState } from '@/lib/server/functions/admin'
+import { getSettings } from '@/lib/server/functions/workspace'
 
 export const Route = createFileRoute('/onboarding/_layout/workspace')({
   loader: async ({ context }) => {

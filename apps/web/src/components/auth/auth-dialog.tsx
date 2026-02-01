@@ -7,8 +7,8 @@ import {
 } from '@/components/ui/dialog'
 import { PortalAuthFormInline } from './portal-auth-form-inline'
 import { useAuthPopover } from './auth-popover-context'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
-import type { PublicOIDCConfig } from '@/lib/settings'
+import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
+import type { PublicOIDCConfig } from '@/lib/server/domains/settings'
 
 interface OrgAuthConfig {
   found: boolean

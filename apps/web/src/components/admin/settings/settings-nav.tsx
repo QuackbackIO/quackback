@@ -16,7 +16,7 @@ import {
   KeyIcon,
   BoltIcon,
 } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 interface NavItem {
   label: string

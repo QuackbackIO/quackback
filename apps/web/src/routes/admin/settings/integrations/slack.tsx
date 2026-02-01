@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
-import { adminQueries } from '@/lib/queries/admin'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { SlackConnectionActions } from '@/components/admin/settings/integrations/slack/slack-connection-actions'
 import { SlackConfig } from '@/components/admin/settings/integrations/slack/slack-config'
 import { Badge } from '@/components/ui/badge'

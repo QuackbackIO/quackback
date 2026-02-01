@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { ChangelogId } from '@quackback/ids'
 
 // Input validation schema
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
           if (validationError) return validationError
 
           // Import db
-          const { db, changelogEntries, eq } = await import('@/lib/db')
+          const { db, changelogEntries, eq } = await import('@/lib/server/db')
           const { NotFoundError } = await import('@/lib/shared/errors')
 
           const entry = await db.query.changelogEntries.findFirst({
@@ -96,7 +96,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
           }
 
           // Import db
-          const { db, changelogEntries, eq } = await import('@/lib/db')
+          const { db, changelogEntries, eq } = await import('@/lib/server/db')
           const { NotFoundError } = await import('@/lib/shared/errors')
 
           // Build update data
@@ -156,7 +156,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
           if (validationError) return validationError
 
           // Import db
-          const { db, changelogEntries, eq } = await import('@/lib/db')
+          const { db, changelogEntries, eq } = await import('@/lib/server/db')
           const { NotFoundError } = await import('@/lib/shared/errors')
 
           // Delete the entry

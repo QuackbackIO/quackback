@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { checkOnboardingState } from '@/lib/server-functions/admin'
+import { checkOnboardingState } from '@/lib/server/functions/admin'
 
 /**
  * Onboarding index route - redirects to the appropriate step.

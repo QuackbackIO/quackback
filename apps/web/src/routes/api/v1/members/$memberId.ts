@@ -1,14 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   noContentResponse,
   badRequestResponse,
   notFoundResponse,
   handleDomainError,
-} from '@/lib/api/responses'
-import { validateTypeId } from '@/lib/api/validation'
+} from '@/lib/server/domains/api/responses'
+import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { MemberId } from '@quackback/ids'
 
 // Input validation schema for updating member role
@@ -36,8 +36,8 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
           if (validationError) return validationError
 
           // Import service functions
-          const { getMemberById } = await import('@/lib/members/member.service')
-          const { db, eq, user } = await import('@/lib/db')
+          const { getMemberById } = await import('@/lib/server/domains/members/member.service')
+          const { db, eq, user } = await import('@/lib/server/db')
 
           const foundMember = await getMemberById(memberId as MemberId)
 
@@ -101,8 +101,9 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
           }
 
           // Import service functions
-          const { updateMemberRole, getMemberById } = await import('@/lib/members/member.service')
-          const { db, eq, user } = await import('@/lib/db')
+          const { updateMemberRole, getMemberById } =
+            await import('@/lib/server/domains/members/member.service')
+          const { db, eq, user } = await import('@/lib/server/db')
 
           await updateMemberRole(memberId as MemberId, parsed.data.role, actingMemberId)
 
@@ -154,7 +155,7 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
           if (validationError) return validationError
 
           // Import service function
-          const { removeTeamMember } = await import('@/lib/members/member.service')
+          const { removeTeamMember } = await import('@/lib/server/domains/members/member.service')
 
           await removeTeamMember(memberId as MemberId, actingMemberId)
 

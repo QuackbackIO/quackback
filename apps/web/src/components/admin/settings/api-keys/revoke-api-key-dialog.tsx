@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { revokeApiKeyFn } from '@/lib/server-functions/api-keys'
-import type { ApiKey } from '@/lib/api-keys'
+import { revokeApiKeyFn } from '@/lib/server/functions/api-keys'
+import type { ApiKey } from '@/lib/server/domains/api-keys'
 
 interface RevokeApiKeyDialogProps {
   open: boolean

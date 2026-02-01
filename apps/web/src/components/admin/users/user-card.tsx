@@ -6,8 +6,8 @@ import {
 } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { cn } from '@/lib/utils'
-import type { PortalUserListItemView } from '@/lib/users'
+import { cn } from '@/lib/shared/utils'
+import type { PortalUserListItemView } from '@/lib/server/domains/users'
 
 interface UserCardProps {
   user: PortalUserListItemView

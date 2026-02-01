@@ -2,19 +2,9 @@ import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/feedback'
 import { useMemo, useCallback } from 'react'
 import { isItemSelected, toggleItem } from './filter-utils'
+import type { InboxFilters } from '@/lib/shared/types'
 
-export interface InboxFilters {
-  search?: string
-  /** Status slugs for filtering (e.g., 'open', 'planned') */
-  status?: string[]
-  board?: string[]
-  tags?: string[]
-  owner?: string | 'unassigned'
-  dateFrom?: string
-  dateTo?: string
-  minVotes?: number
-  sort?: 'newest' | 'oldest' | 'votes'
-}
+export type { InboxFilters }
 
 export function useInboxFilters() {
   const navigate = useNavigate()

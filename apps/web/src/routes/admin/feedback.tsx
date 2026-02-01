@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { z } from 'zod'
-import { adminQueries } from '@/lib/queries/admin'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { PostModal } from '@/components/admin/feedback/post-modal'
 
 const searchSchema = z.object({

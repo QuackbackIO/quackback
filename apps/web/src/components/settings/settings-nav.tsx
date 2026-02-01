@@ -1,6 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { UserIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 const navItems = [
   { label: 'Profile', to: '/settings/profile', icon: UserIcon },

@@ -27,8 +27,8 @@ import {
   updateOIDCConfigFn,
   deleteOIDCConfigFn,
   testOIDCDiscoveryFn,
-} from '@/lib/server-functions/settings'
-import type { AdminOIDCConfig } from '@/lib/settings'
+} from '@/lib/server/functions/settings'
+import type { AdminOIDCConfig } from '@/lib/server/domains/settings'
 import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
 
 interface PortalAuthSettingsProps {

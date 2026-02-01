@@ -15,7 +15,7 @@ import {
 import { CreateWebhookDialog } from './create-webhook-dialog'
 import { EditWebhookDialog } from './edit-webhook-dialog'
 import { DeleteWebhookDialog } from './delete-webhook-dialog'
-import type { Webhook } from '@/lib/webhooks'
+import type { Webhook } from '@/lib/server/domains/webhooks'
 
 const EVENT_LABELS: Record<string, string> = {
   'post.created': 'New Post',

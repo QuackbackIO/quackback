@@ -1,7 +1,7 @@
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
-import { signOut } from '@/lib/auth/client'
+import { signOut } from '@/lib/server/auth/client'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
   ShieldCheckIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { useAuthBroadcast } from '@/lib/hooks/use-auth-broadcast'
+import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 
 interface PortalHeaderProps {

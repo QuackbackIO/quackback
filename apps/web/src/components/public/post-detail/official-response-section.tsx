@@ -1,7 +1,7 @@
 import { OfficialResponse } from '@/components/public/official-response'
 import { PinnedComment } from '@/components/public/pinned-comment'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PinnedCommentView } from '@/lib/queries/portal-detail'
+import type { PinnedCommentView } from '@/lib/client/queries/portal-detail'
 
 export function OfficialResponseSectionSkeleton() {
   return (

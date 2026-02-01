@@ -44,14 +44,14 @@ import {
 import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { PostStatusEntity, StatusCategory } from '@/lib/db-types'
-import { cn } from '@/lib/utils'
+import type { PostStatusEntity, StatusCategory } from '@/lib/shared/db-types'
+import { cn } from '@/lib/shared/utils'
 import {
   updateStatusFn,
   deleteStatusFn,
   reorderStatusesFn,
   createStatusFn,
-} from '@/lib/server-functions/statuses'
+} from '@/lib/server/functions/statuses'
 
 interface StatusListProps {
   initialStatuses: PostStatusEntity[]

@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
+} from '@/lib/server/domains/api/responses'
 
 // Input validation schema
 const createTagSchema = z.object({
@@ -32,7 +32,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
 
         try {
           // Import service function
-          const { listTags } = await import('@/lib/tags/tag.service')
+          const { listTags } = await import('@/lib/server/domains/tags/tag.service')
 
           const tags = await listTags()
 
@@ -70,7 +70,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
           }
 
           // Import service function
-          const { createTag } = await import('@/lib/tags/tag.service')
+          const { createTag } = await import('@/lib/server/domains/tags/tag.service')
 
           const tag = await createTag({
             name: parsed.data.name,

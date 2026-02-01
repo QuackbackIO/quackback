@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { PostCard } from '@/components/public/post-card'
-import type { PostListItem, PostStatusEntity } from '@/lib/db-types'
+import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
 import type { StatusId } from '@quackback/ids'
 
 interface FeedbackRowProps {

@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import type { PostStatusEntity, Tag } from '@/lib/db-types'
-import { cn } from '@/lib/utils'
+import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
+import { cn } from '@/lib/shared/utils'
 
 interface FeedbackToolbarProps {
   currentSort: 'top' | 'new' | 'trending'

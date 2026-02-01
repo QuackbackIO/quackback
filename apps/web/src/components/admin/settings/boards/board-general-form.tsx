@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { updateBoardSchema, type UpdateBoardInput } from '@/lib/schemas/boards'
+import { updateBoardSchema, type UpdateBoardInput } from '@/lib/shared/schemas/boards'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { useUpdateBoard } from '@/lib/hooks/use-board-actions'
+import { useUpdateBoard } from '@/lib/client/mutations'
 import type { BoardId } from '@quackback/ids'
 
 interface Board {

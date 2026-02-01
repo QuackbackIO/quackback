@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { ListBulletIcon, ChatBubbleLeftIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { cn } from '@/lib/utils'
-import type { BoardWithStats } from '@/lib/boards'
+import { cn } from '@/lib/shared/utils'
+import type { BoardWithStats } from '@/lib/server/domains/boards'
 
 interface MobileBoardSheetProps {
   boards: BoardWithStats[]

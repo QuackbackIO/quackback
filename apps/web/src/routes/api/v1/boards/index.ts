@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuth } from '@/lib/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
   badRequestResponse,
   handleDomainError,
-} from '@/lib/api/responses'
+} from '@/lib/server/domains/api/responses'
 
 // Input validation schema
 const createBoardSchema = z.object({
@@ -35,7 +35,8 @@ export const Route = createFileRoute('/api/v1/boards/')({
 
         try {
           // Import service function
-          const { listBoardsWithDetails } = await import('@/lib/boards/board.service')
+          const { listBoardsWithDetails } =
+            await import('@/lib/server/domains/boards/board.service')
 
           const boards = await listBoardsWithDetails()
 
@@ -77,7 +78,7 @@ export const Route = createFileRoute('/api/v1/boards/')({
           }
 
           // Import service function
-          const { createBoard } = await import('@/lib/boards/board.service')
+          const { createBoard } = await import('@/lib/server/domains/boards/board.service')
 
           const board = await createBoard({
             name: parsed.data.name,

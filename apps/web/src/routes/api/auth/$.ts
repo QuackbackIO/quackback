@@ -22,7 +22,7 @@ export const Route = createFileRoute('/api/auth/$')({
 
           // Check if verification record exists before Better Auth processes
           try {
-            const { db, verification, eq } = await import('@/lib/db')
+            const { db, verification, eq } = await import('@/lib/server/db')
             const records = await db.query.verification.findMany({
               orderBy: (v, { desc }) => [desc(v.createdAt)],
               limit: 5,
@@ -46,7 +46,7 @@ export const Route = createFileRoute('/api/auth/$')({
         }
 
         // Dynamic import to prevent client bundling of auth config
-        const { auth } = await import('@/lib/auth/index')
+        const { auth } = await import('@/lib/server/auth/index')
         return await auth.handler(request)
       },
 
@@ -59,7 +59,7 @@ export const Route = createFileRoute('/api/auth/$')({
         console.log(`[auth] POST ${url.pathname.replace('/api/auth', '')}`)
 
         // Dynamic import to prevent client bundling of auth config
-        const { auth } = await import('@/lib/auth/index')
+        const { auth } = await import('@/lib/server/auth/index')
         return await auth.handler(request)
       },
     },

@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { fetchUserAvatar } from '@/lib/server-functions/portal'
+import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 
 export const Route = createFileRoute('/admin')({
@@ -13,7 +13,7 @@ export const Route = createFileRoute('/admin')({
 
     // Only team members (admin, member roles) can access admin dashboard
     // Portal users (role='user') don't have access to this
-    const { requireWorkspaceRole } = await import('@/lib/server-functions/workspace-utils')
+    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
     const { user, member } = await requireWorkspaceRole({
       data: { allowedRoles: ['admin', 'member'] },
     })

@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { rotateWebhookSecretFn } from '@/lib/server-functions/webhooks'
-import type { Webhook } from '@/lib/webhooks'
+import { rotateWebhookSecretFn } from '@/lib/server/functions/webhooks'
+import type { Webhook } from '@/lib/server/domains/webhooks'
 
 interface RotateWebhookSecretDialogProps {
   webhook: Webhook

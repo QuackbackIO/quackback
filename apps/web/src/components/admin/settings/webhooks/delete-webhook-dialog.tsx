@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { deleteWebhookFn } from '@/lib/server-functions/webhooks'
-import type { Webhook } from '@/lib/webhooks'
+import { deleteWebhookFn } from '@/lib/server/functions/webhooks'
+import type { Webhook } from '@/lib/server/domains/webhooks'
 
 interface DeleteWebhookDialogProps {
   webhook: Webhook

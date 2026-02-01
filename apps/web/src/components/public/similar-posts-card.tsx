@@ -5,9 +5,9 @@ import { Link } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronUpIcon, LightBulbIcon } from '@heroicons/react/24/solid'
 import { StatusBadge } from '@/components/ui/status-badge'
-import type { MatchStrength, SimilarPost } from '@/lib/hooks/use-similar-posts'
-import { usePostVote } from '@/lib/hooks/use-post-vote'
-import { cn } from '@/lib/utils'
+import type { MatchStrength, SimilarPost } from '@/lib/client/hooks/use-similar-posts'
+import { usePostVote } from '@/lib/client/hooks/use-post-vote'
+import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 
 const MATCH_STRENGTH_CONFIG: Record<MatchStrength, { label: string; textClass: string }> = {
