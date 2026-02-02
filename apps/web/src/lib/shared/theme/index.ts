@@ -60,3 +60,6 @@ export {
   serializeThemeConfig,
   getGoogleFontsUrl,
 } from './generator'
+
+export type { ParsedCssVariables } from './css-parser'
+export { extractCssVariables } from './css-parser'

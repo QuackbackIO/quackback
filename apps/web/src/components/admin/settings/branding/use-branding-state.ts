@@ -1,14 +1,16 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   themePresets,
   expandTheme,
   extractMinimal,
   hexToOklch,
   oklchToHex,
+  extractCssVariables,
   type ThemeConfig,
   type ThemeVariables,
   type MinimalThemeVariables,
   type ThemeMode,
+  type ParsedCssVariables,
 } from '@/lib/shared/theme'
 import { updateThemeFn, updateCustomCssFn } from '@/lib/server/functions/settings'
 import { type BrandingMode } from '@/lib/server/domains/settings/settings.types'
@@ -191,6 +193,9 @@ export interface BrandingState {
   effectiveLight: ThemeVariables
   effectiveDark: ThemeVariables
 
+  // Parsed CSS variables (for live custom CSS preview)
+  parsedCssVariables: ParsedCssVariables
+
   // Save
   saveTheme: () => Promise<void>
   isSaving: boolean
@@ -242,6 +247,19 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
 
   // Custom CSS state
   const [customCss, setCustomCss] = useState(initialCustomCss)
+
+  // Parsed CSS variables for live preview (debounced)
+  const [parsedCssVariables, setParsedCssVariables] = useState<ParsedCssVariables>(() =>
+    extractCssVariables(initialCustomCss)
+  )
+
+  // Debounce CSS parsing for live preview
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setParsedCssVariables(extractCssVariables(customCss))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [customCss])
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -401,6 +419,9 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     // Computed
     effectiveLight,
     effectiveDark,
+
+    // Parsed CSS variables for live preview
+    parsedCssVariables,
 
     // Save
     saveTheme,

@@ -399,57 +399,46 @@ function BrandingPage() {
           <BrandingPreviewPanel
             label="Preview"
             headerRight={
-              state.brandingMode === 'simple' ? (
-                <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md">
-                  <button
-                    onClick={() => state.setPreviewMode('light')}
-                    className={cn(
-                      'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                      state.previewMode === 'light'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <SunIcon className="h-3 w-3" />
-                    Light
-                  </button>
-                  <button
-                    onClick={() => state.setPreviewMode('dark')}
-                    className={cn(
-                      'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                      state.previewMode === 'dark'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <MoonIcon className="h-3 w-3" />
-                    Dark
-                  </button>
-                </div>
-              ) : null
+              <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md">
+                <button
+                  onClick={() => state.setPreviewMode('light')}
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                    state.previewMode === 'light'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <SunIcon className="h-3 w-3" />
+                  Light
+                </button>
+                <button
+                  onClick={() => state.setPreviewMode('dark')}
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                    state.previewMode === 'dark'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <MoonIcon className="h-3 w-3" />
+                  Dark
+                </button>
+              </div>
             }
           >
-            {state.brandingMode === 'simple' ? (
-              <ThemePreview
-                lightVars={state.effectiveLight}
-                darkVars={state.effectiveDark}
-                previewMode={state.previewMode}
-                radius={`${state.radius}rem`}
-                fontFamily={state.font}
-                logoUrl={state.logoUrl}
-                workspaceName={workspaceName || 'My Workspace'}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                <CodeBracketIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  Preview not available for custom CSS.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Save and view your portal to see changes.
-                </p>
-              </div>
-            )}
+            <ThemePreview
+              lightVars={state.effectiveLight}
+              darkVars={state.effectiveDark}
+              previewMode={state.previewMode}
+              radius={state.brandingMode === 'simple' ? `${state.radius}rem` : undefined}
+              fontFamily={state.brandingMode === 'simple' ? state.font : undefined}
+              logoUrl={state.logoUrl}
+              workspaceName={workspaceName || 'My Workspace'}
+              customCssVariables={
+                state.brandingMode === 'advanced' ? state.parsedCssVariables : undefined
+              }
+            />
           </BrandingPreviewPanel>
         </BrandingLayout>
       </div>
