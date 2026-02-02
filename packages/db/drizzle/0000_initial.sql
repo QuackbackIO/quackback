@@ -108,6 +108,7 @@ CREATE TABLE "boards" (
 	"settings" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
 	CONSTRAINT "boards_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
@@ -120,6 +121,7 @@ CREATE TABLE "roadmaps" (
 	"position" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
 	CONSTRAINT "roadmaps_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
@@ -128,6 +130,7 @@ CREATE TABLE "tags" (
 	"name" text NOT NULL,
 	"color" text DEFAULT '#6b7280' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
 	CONSTRAINT "tags_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
@@ -141,6 +144,7 @@ CREATE TABLE "post_statuses" (
 	"show_on_roadmap" boolean DEFAULT false NOT NULL,
 	"is_default" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
 	CONSTRAINT "post_statuses_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
@@ -284,12 +288,20 @@ CREATE TABLE "integrations" (
 --> statement-breakpoint
 CREATE TABLE "changelog_entries" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"board_id" uuid NOT NULL,
 	"title" text NOT NULL,
 	"content" text NOT NULL,
+	"content_json" jsonb,
+	"member_id" uuid,
 	"published_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "changelog_entry_posts" (
+	"changelog_entry_id" uuid NOT NULL,
+	"post_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "in_app_notifications" (
@@ -377,7 +389,8 @@ CREATE TABLE "webhooks" (
 	"last_error" text,
 	"last_triggered_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -409,7 +422,9 @@ ALTER TABLE "votes" ADD CONSTRAINT "votes_post_id_posts_id_fk" FOREIGN KEY ("pos
 ALTER TABLE "votes" ADD CONSTRAINT "votes_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_event_mappings" ADD CONSTRAINT "event_mappings_integration_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integrations" ADD CONSTRAINT "integrations_connected_by_member_id_member_id_fk" FOREIGN KEY ("connected_by_member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "changelog_entries" ADD CONSTRAINT "changelog_entries_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "changelog_entries" ADD CONSTRAINT "changelog_entries_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "changelog_entry_posts" ADD CONSTRAINT "changelog_entry_posts_changelog_entry_id_changelog_entries_id_fk" FOREIGN KEY ("changelog_entry_id") REFERENCES "public"."changelog_entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "changelog_entry_posts" ADD CONSTRAINT "changelog_entry_posts_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "in_app_notifications" ADD CONSTRAINT "in_app_notifications_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "in_app_notifications" ADD CONSTRAINT "in_app_notifications_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "in_app_notifications" ADD CONSTRAINT "in_app_notifications_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -430,9 +445,13 @@ CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> state
 CREATE UNIQUE INDEX "user_email_idx" ON "user" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint
 CREATE INDEX "boards_is_public_idx" ON "boards" USING btree ("is_public");--> statement-breakpoint
+CREATE INDEX "boards_deleted_at_idx" ON "boards" USING btree ("deleted_at");--> statement-breakpoint
 CREATE INDEX "roadmaps_position_idx" ON "roadmaps" USING btree ("position");--> statement-breakpoint
 CREATE INDEX "roadmaps_is_public_idx" ON "roadmaps" USING btree ("is_public");--> statement-breakpoint
+CREATE INDEX "roadmaps_deleted_at_idx" ON "roadmaps" USING btree ("deleted_at");--> statement-breakpoint
+CREATE INDEX "tags_deleted_at_idx" ON "tags" USING btree ("deleted_at");--> statement-breakpoint
 CREATE INDEX "post_statuses_position_idx" ON "post_statuses" USING btree ("category","position");--> statement-breakpoint
+CREATE INDEX "post_statuses_deleted_at_idx" ON "post_statuses" USING btree ("deleted_at");--> statement-breakpoint
 CREATE INDEX "comment_edit_history_comment_id_idx" ON "comment_edit_history" USING btree ("comment_id");--> statement-breakpoint
 CREATE INDEX "comment_edit_history_created_at_idx" ON "comment_edit_history" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "comment_reactions_comment_id_idx" ON "comment_reactions" USING btree ("comment_id");--> statement-breakpoint
@@ -478,8 +497,12 @@ CREATE INDEX "votes_member_id_idx" ON "votes" USING btree ("member_id");--> stat
 CREATE INDEX "votes_member_created_at_idx" ON "votes" USING btree ("member_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_event_mappings_lookup" ON "integration_event_mappings" USING btree ("integration_id","event_type","enabled");--> statement-breakpoint
 CREATE INDEX "idx_integrations_type_status" ON "integrations" USING btree ("integration_type","status");--> statement-breakpoint
-CREATE INDEX "changelog_board_id_idx" ON "changelog_entries" USING btree ("board_id");--> statement-breakpoint
 CREATE INDEX "changelog_published_at_idx" ON "changelog_entries" USING btree ("published_at");--> statement-breakpoint
+CREATE INDEX "changelog_member_id_idx" ON "changelog_entries" USING btree ("member_id");--> statement-breakpoint
+CREATE INDEX "changelog_deleted_at_idx" ON "changelog_entries" USING btree ("deleted_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "changelog_entry_posts_pk" ON "changelog_entry_posts" USING btree ("changelog_entry_id","post_id");--> statement-breakpoint
+CREATE INDEX "changelog_entry_posts_changelog_id_idx" ON "changelog_entry_posts" USING btree ("changelog_entry_id");--> statement-breakpoint
+CREATE INDEX "changelog_entry_posts_post_id_idx" ON "changelog_entry_posts" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "in_app_notifications_member_created_idx" ON "in_app_notifications" USING btree ("member_id","created_at");--> statement-breakpoint
 CREATE INDEX "in_app_notifications_member_unread_idx" ON "in_app_notifications" USING btree ("member_id") WHERE read_at IS NULL AND archived_at IS NULL;--> statement-breakpoint
 CREATE INDEX "in_app_notifications_post_idx" ON "in_app_notifications" USING btree ("post_id");--> statement-breakpoint
@@ -494,4 +517,5 @@ CREATE INDEX "post_sentiment_sentiment_idx" ON "post_sentiment" USING btree ("se
 CREATE INDEX "api_keys_created_by_id_idx" ON "api_keys" USING btree ("created_by_id");--> statement-breakpoint
 CREATE INDEX "api_keys_revoked_at_idx" ON "api_keys" USING btree ("revoked_at");--> statement-breakpoint
 CREATE INDEX "webhooks_status_idx" ON "webhooks" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "webhooks_created_by_id_idx" ON "webhooks" USING btree ("created_by_id");
+CREATE INDEX "webhooks_created_by_id_idx" ON "webhooks" USING btree ("created_by_id");--> statement-breakpoint
+CREATE INDEX "webhooks_deleted_at_idx" ON "webhooks" USING btree ("deleted_at");
