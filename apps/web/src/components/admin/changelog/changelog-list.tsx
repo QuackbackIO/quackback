@@ -1,7 +1,8 @@
 'use client'
 
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { useState, useCallback, startTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -17,19 +18,19 @@ import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { ChangelogFiltersPanel } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
 import { CreateChangelogDialog } from './create-changelog-dialog'
-import { EditChangelogDialog } from './edit-changelog-dialog'
 import { ChangelogListItem } from './changelog-list-item'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import { useDeleteChangelog } from '@/lib/client/mutations/changelog'
+import { Route } from '@/routes/admin/changelog'
 import type { ChangelogId } from '@quackback/ids'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
 
 export function ChangelogList() {
+  const navigate = useNavigate({ from: Route.fullPath })
+  const search = Route.useSearch()
   const { filters, setFilters, hasActiveFilters } = useChangelogFilters()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [entryToDelete, setEntryToDelete] = useState<ChangelogId | null>(null)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [entryToEdit, setEntryToEdit] = useState<ChangelogId | null>(null)
 
   const deleteChangelogMutation = useDeleteChangelog()
 
@@ -39,10 +40,18 @@ export function ChangelogList() {
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []
 
-  const handleEdit = (id: ChangelogId) => {
-    setEntryToEdit(id)
-    setEditDialogOpen(true)
-  }
+  // Navigate to entry via URL for shareable links
+  const handleEdit = useCallback(
+    (id: ChangelogId) => {
+      startTransition(() => {
+        navigate({
+          to: '/admin/changelog',
+          search: { ...search, entry: id },
+        })
+      })
+    },
+    [navigate, search]
+  )
 
   const handleDelete = (id: ChangelogId) => {
     setEntryToDelete(id)
@@ -154,20 +163,6 @@ export function ChangelogList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Edit dialog */}
-      {entryToEdit && (
-        <EditChangelogDialog
-          id={entryToEdit}
-          open={editDialogOpen}
-          onOpenChange={(open) => {
-            setEditDialogOpen(open)
-            if (!open) {
-              setEntryToEdit(null)
-            }
-          }}
-        />
-      )}
     </>
   )
 }
