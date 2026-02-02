@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
+import { ThemeProvider } from 'next-themes'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -96,38 +97,53 @@ function PortalLayout() {
     authConfig,
   } = Route.useLoaderData()
 
-  // Determine the forced theme class for the HTML element
-  // When themeMode is 'light' or 'dark', we force that mode
-  // When themeMode is 'user', we let the user toggle (handled by theme provider)
-  const forcedThemeClass = themeMode === 'user' ? undefined : themeMode
+  // When theme is forced (not 'user'), we use forcedTheme prop to prevent
+  // next-themes from reading/writing localStorage or respecting system preference
+  const forcedTheme = themeMode !== 'user' ? themeMode : undefined
+
+  const content = (
+    <div className="min-h-screen bg-background flex flex-col">
+      {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
+      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+      {/* Custom CSS is injected after theme styles so it can override */}
+      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+      <PortalHeader
+        orgName={org.name}
+        orgLogo={brandingData?.logoUrl ?? null}
+        userRole={userRole}
+        initialUserData={initialUserData}
+        showThemeToggle={themeMode === 'user'}
+      />
+      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
+        <Outlet />
+      </main>
+      <AuthDialog authConfig={authConfig} />
+    </div>
+  )
 
   return (
     <AuthPopoverProvider>
-      {/* Apply forced theme class when themeMode is not 'user' */}
-      {forcedThemeClass && (
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `document.documentElement.classList.add('${forcedThemeClass}');`,
-          }}
-        />
+      {forcedTheme ? (
+        <>
+          {/* Inline script sets theme class immediately to prevent flash during hydration */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function(){var d=document.documentElement,c=d.classList;c.remove('light','dark','system');c.add('${forcedTheme}');d.style.colorScheme='${forcedTheme}'})()`,
+            }}
+          />
+          {/* Nested ThemeProvider with forcedTheme keeps theme locked after hydration */}
+          <ThemeProvider
+            attribute="class"
+            forcedTheme={forcedTheme}
+            disableTransitionOnChange
+            storageKey="portal-theme-forced"
+          >
+            {content}
+          </ThemeProvider>
+        </>
+      ) : (
+        content
       )}
-      <div className="min-h-screen bg-background flex flex-col">
-        {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
-        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-        {/* Custom CSS is injected after theme styles so it can override */}
-        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
-        <PortalHeader
-          orgName={org.name}
-          orgLogo={brandingData?.logoUrl ?? null}
-          userRole={userRole}
-          initialUserData={initialUserData}
-          showThemeToggle={themeMode === 'user'}
-        />
-        <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
-          <Outlet />
-        </main>
-        <AuthDialog authConfig={authConfig} />
-      </div>
     </AuthPopoverProvider>
   )
 }
