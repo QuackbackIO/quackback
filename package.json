@@ -1,14 +1,36 @@
 {
   "name": "quackback",
-  "private": true,
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^25.0.10",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "3.8.1",
+    "sharp": "^0.34.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
+  },
   "license": "AGPL-3.0",
-  "type": "module",
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "overrides": {
+    "@noble/ciphers": "2.0.0"
+  },
   "packageManager": "bun@1.3.7",
-  "workspaces": [
-    "apps/*",
-    "packages/*",
-    "scripts/*"
-  ],
+  "private": true,
   "resolutions": {
     "zod": "^4.3.6"
   },
@@ -32,32 +54,10 @@
     "ai:backfill": "bun apps/web/scripts/backfill-ai.ts",
     "prepare": "husky"
   },
-  "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "@types/node": "^25.0.10",
-    "dotenv-cli": "^11.0.0",
-    "eslint": "^9.39.2",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "prettier": "3.8.1",
-    "sharp": "^0.34.5",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.54.0",
-    "vitest": "^4.0.18"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write"
-    ]
-  },
-  "overrides": {
-    "@noble/ciphers": "2.0.0"
-  }
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "scripts/*"
+  ]
 }

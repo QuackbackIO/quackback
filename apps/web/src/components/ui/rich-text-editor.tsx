@@ -1,11 +1,22 @@
-import { useEditor, EditorContent, type Editor, type JSONContent } from '@tiptap/react'
+import {
+  useEditor,
+  EditorContent,
+  ReactRenderer,
+  type Editor,
+  type JSONContent,
+} from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { Extension } from '@tiptap/core'
+import type { Range } from '@tiptap/core'
+import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { common, createLowlight } from 'lowlight'
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
+import { computePosition, flip, shift, offset } from '@floating-ui/dom'
 import { cn } from '@/lib/shared/utils'
 import {
   Bold,
@@ -16,6 +27,7 @@ import {
   Heading3,
   Code2,
   ImagePlus,
+  Type,
 } from 'lucide-react'
 import {
   ArrowUturnLeftIcon,
@@ -24,6 +36,8 @@ import {
   ListBulletIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from './button'
+import { Input } from './input'
+import { Popover, PopoverContent, PopoverTrigger } from './popover'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
@@ -43,6 +57,395 @@ export interface EditorFeatures {
   images?: boolean
   /** Enable syntax-highlighted code blocks */
   codeBlocks?: boolean
+  /** Enable floating bubble menu on text selection (default: true) */
+  bubbleMenu?: boolean
+  /** Enable slash "/" command menu for inserting blocks */
+  slashMenu?: boolean
+}
+
+// ============================================================================
+// Slash Menu Types and Extension
+// ============================================================================
+
+interface SlashMenuItem {
+  title: string
+  description: string
+  icon: React.ReactNode
+  command: (props: { editor: Editor; range: Range }) => void
+  aliases?: string[]
+  group: 'text' | 'lists' | 'advanced'
+}
+
+function getSlashMenuItems(
+  features: EditorFeatures,
+  onImageUpload?: (file: File) => Promise<string>
+): SlashMenuItem[] {
+  const items: SlashMenuItem[] = [
+    // Text group - always available
+    {
+      title: 'Text',
+      description: 'Plain paragraph text',
+      icon: <Type className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).setParagraph().run()
+      },
+      aliases: ['p', 'paragraph'],
+      group: 'text',
+    },
+  ]
+
+  // Headings - conditional
+  if (features.headings) {
+    items.push(
+      {
+        title: 'Heading 1',
+        description: 'Large section heading',
+        icon: <Heading1 className="size-4" />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).setHeading({ level: 1 }).run()
+        },
+        aliases: ['h1', '#'],
+        group: 'text',
+      },
+      {
+        title: 'Heading 2',
+        description: 'Medium section heading',
+        icon: <Heading2 className="size-4" />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).setHeading({ level: 2 }).run()
+        },
+        aliases: ['h2', '##'],
+        group: 'text',
+      },
+      {
+        title: 'Heading 3',
+        description: 'Small section heading',
+        icon: <Heading3 className="size-4" />,
+        command: ({ editor, range }) => {
+          editor.chain().focus().deleteRange(range).setHeading({ level: 3 }).run()
+        },
+        aliases: ['h3', '###'],
+        group: 'text',
+      }
+    )
+  }
+
+  // Lists - always available (part of StarterKit)
+  items.push(
+    {
+      title: 'Bullet List',
+      description: 'Unordered list',
+      icon: <ListBulletIcon className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).toggleBulletList().run()
+      },
+      aliases: ['ul', 'bullet', '-'],
+      group: 'lists',
+    },
+    {
+      title: 'Numbered List',
+      description: 'Ordered list',
+      icon: <ListOrdered className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).toggleOrderedList().run()
+      },
+      aliases: ['ol', 'numbered', '1.'],
+      group: 'lists',
+    }
+  )
+
+  // Code blocks - conditional
+  if (features.codeBlocks) {
+    items.push({
+      title: 'Code Block',
+      description: 'Syntax highlighted code',
+      icon: <Code2 className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).toggleCodeBlock().run()
+      },
+      aliases: ['code', '```'],
+      group: 'advanced',
+    })
+  }
+
+  // Images - conditional
+  if (features.images && onImageUpload) {
+    items.push({
+      title: 'Image',
+      description: 'Upload an image',
+      icon: <ImagePlus className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        // Open file picker
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'image/*'
+        input.onchange = async () => {
+          const file = input.files?.[0]
+          if (!file) return
+          try {
+            const src = await onImageUpload(file)
+            editor.chain().focus().setImage({ src }).run()
+          } catch (error) {
+            console.error('Failed to upload image:', error)
+          }
+        }
+        input.click()
+      },
+      aliases: ['img', 'picture'],
+      group: 'advanced',
+    })
+  }
+
+  return items
+}
+
+// Filter items based on search query
+function filterSlashItems(items: SlashMenuItem[], query: string): SlashMenuItem[] {
+  const lowerQuery = query.toLowerCase()
+  return items.filter(
+    (item) =>
+      item.title.toLowerCase().includes(lowerQuery) ||
+      item.aliases?.some((alias) => alias.toLowerCase().includes(lowerQuery))
+  )
+}
+
+// Group items by their group property
+function groupSlashItems(items: SlashMenuItem[]): Record<string, SlashMenuItem[]> {
+  return items.reduce(
+    (acc, item) => {
+      if (!acc[item.group]) {
+        acc[item.group] = []
+      }
+      acc[item.group].push(item)
+      return acc
+    },
+    {} as Record<string, SlashMenuItem[]>
+  )
+}
+
+// Slash menu list component
+interface SlashMenuListRef {
+  onKeyDown: (props: { event: KeyboardEvent }) => boolean
+}
+
+interface SlashMenuListProps {
+  items: SlashMenuItem[]
+  command: (item: SlashMenuItem) => void
+}
+
+const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
+  ({ items, command }, ref) => {
+    const [selectedIndex, setSelectedIndex] = useState(0)
+
+    const selectItem = (index: number) => {
+      const item = items[index]
+      if (item) {
+        command(item)
+      }
+    }
+
+    // Reset selection when items change
+    useEffect(() => {
+      setSelectedIndex(0)
+    }, [items])
+
+    useImperativeHandle(ref, () => ({
+      onKeyDown: ({ event }) => {
+        if (event.key === 'ArrowUp') {
+          setSelectedIndex((prev) => (prev - 1 + items.length) % items.length)
+          return true
+        }
+
+        if (event.key === 'ArrowDown') {
+          setSelectedIndex((prev) => (prev + 1) % items.length)
+          return true
+        }
+
+        if (event.key === 'Enter') {
+          selectItem(selectedIndex)
+          return true
+        }
+
+        return false
+      },
+    }))
+
+    if (items.length === 0) {
+      return (
+        <div className="z-50 w-72 rounded-lg border bg-popover p-2 shadow-lg">
+          <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+            No matching commands
+          </div>
+        </div>
+      )
+    }
+
+    const groupedItems = groupSlashItems(items)
+    const groupLabels: Record<string, string> = {
+      text: 'Text',
+      lists: 'Lists',
+      advanced: 'Advanced',
+    }
+
+    // Calculate global index for selection tracking
+    let globalIndex = -1
+
+    return (
+      <div className="z-50 w-72 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
+        {Object.entries(groupedItems).map(([group, groupItems]) => (
+          <div key={group}>
+            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+              {groupLabels[group] || group}
+            </div>
+            {groupItems.map((item) => {
+              globalIndex++
+              const currentIndex = globalIndex
+              return (
+                <button
+                  key={item.title}
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm',
+                    'hover:bg-accent focus:bg-accent focus:outline-none',
+                    currentIndex === selectedIndex && 'bg-accent'
+                  )}
+                  onClick={() => selectItem(currentIndex)}
+                >
+                  <span className="flex size-8 items-center justify-center rounded-md border bg-background">
+                    {item.icon}
+                  </span>
+                  <div className="flex-1 text-left">
+                    <div className="font-medium">{item.title}</div>
+                    <div className="text-xs text-muted-foreground">{item.description}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    )
+  }
+)
+SlashMenuList.displayName = 'SlashMenuList'
+
+// Create the slash commands extension
+function createSlashCommands(
+  features: EditorFeatures,
+  onImageUpload?: (file: File) => Promise<string>
+) {
+  return Extension.create({
+    name: 'slashCommands',
+
+    addOptions() {
+      return {
+        suggestion: {
+          char: '/',
+          command: ({
+            editor,
+            range,
+            props,
+          }: {
+            editor: Editor
+            range: Range
+            props: SlashMenuItem
+          }) => {
+            props.command({ editor, range })
+          },
+        } satisfies Omit<SuggestionOptions<SlashMenuItem>, 'editor'>,
+      }
+    },
+
+    addProseMirrorPlugins() {
+      return [
+        Suggestion({
+          editor: this.editor,
+          ...this.options.suggestion,
+          allowedPrefixes: null, // Allow anywhere (null = no prefix required)
+          items: ({ query }: { query: string }) => {
+            const allItems = getSlashMenuItems(features, onImageUpload)
+            return filterSlashItems(allItems, query)
+          },
+          allow: ({ editor }: { editor: Editor }) => {
+            // Don't allow in code blocks
+            return !editor.isActive('codeBlock')
+          },
+          render: () => {
+            let component: ReactRenderer<SlashMenuListRef> | null = null
+            let floatingEl: HTMLDivElement | null = null
+
+            const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
+              if (!floatingEl || !clientRect) return
+
+              const rect = clientRect()
+              if (!rect) return
+
+              // Create a virtual element for floating-ui
+              const virtualEl = {
+                getBoundingClientRect: () => rect,
+              }
+
+              const { x, y } = await computePosition(virtualEl, floatingEl, {
+                placement: 'bottom-start',
+                middleware: [offset(8), flip(), shift({ padding: 8 })],
+              })
+
+              Object.assign(floatingEl.style, {
+                left: `${x}px`,
+                top: `${y}px`,
+              })
+            }
+
+            return {
+              onStart: (props: SuggestionProps<SlashMenuItem>) => {
+                component = new ReactRenderer(SlashMenuList, {
+                  props: {
+                    items: props.items,
+                    command: (item: SlashMenuItem) => props.command(item),
+                  },
+                  editor: props.editor,
+                })
+
+                // Create container element
+                floatingEl = document.createElement('div')
+                floatingEl.style.position = 'absolute'
+                floatingEl.style.zIndex = '50'
+                floatingEl.appendChild(component.element)
+                document.body.appendChild(floatingEl)
+
+                updatePosition(props.clientRect ?? null)
+              },
+
+              onUpdate: (props: SuggestionProps<SlashMenuItem>) => {
+                component?.updateProps({
+                  items: props.items,
+                  command: (item: SlashMenuItem) => props.command(item),
+                })
+                updatePosition(props.clientRect ?? null)
+              },
+
+              onKeyDown: (props: { event: KeyboardEvent }) => {
+                if (props.event.key === 'Escape') {
+                  return true
+                }
+
+                return component?.ref?.onKeyDown(props) ?? false
+              },
+
+              onExit: () => {
+                if (floatingEl) {
+                  floatingEl.remove()
+                  floatingEl = null
+                }
+                component?.destroy()
+              },
+            }
+          },
+        }),
+      ]
+    },
+  })
 }
 
 interface RichTextEditorProps {
@@ -120,6 +523,8 @@ export function RichTextEditor({
             }),
           ]
         : []),
+      // Conditionally add slash commands (enabled by default)
+      ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
     ],
     content: value ?? '',
     editable: !disabled,
@@ -192,6 +597,25 @@ export function RichTextEditor({
 
       {/* Editor content */}
       <EditorContent editor={editor} />
+
+      {/* Floating bubble menu on text selection */}
+      {features.bubbleMenu !== false && (
+        <BubbleMenu
+          editor={editor}
+          options={{
+            placement: 'top',
+          }}
+          shouldShow={({ editor, state }) => {
+            // Don't show in code blocks
+            if (editor.isActive('codeBlock')) return false
+            // Only show when text is selected
+            const { from, to } = state.selection
+            return from !== to
+          }}
+        >
+          <BubbleMenuContent editor={editor} disabled={disabled} />
+        </BubbleMenu>
+      )}
 
       {/* Toolbar - bottom position */}
       {showToolbar && toolbarPosition === 'bottom' && (
@@ -361,6 +785,115 @@ function ToolbarButton({ icon, onClick, disabled, isActive, title }: ToolbarButt
 function ToolbarDivider() {
   return <div className="w-px h-4 bg-border mx-1" />
 }
+
+// ============================================================================
+// Bubble Menu Components
+// ============================================================================
+
+interface BubbleMenuContentProps {
+  editor: Editor
+  disabled: boolean
+}
+
+function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
+      <ToolbarButton
+        icon={<Bold className="size-4" />}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        disabled={disabled}
+        isActive={editor.isActive('bold')}
+        title="Bold (Cmd+B)"
+      />
+      <ToolbarButton
+        icon={<Italic className="size-4" />}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        disabled={disabled}
+        isActive={editor.isActive('italic')}
+        title="Italic (Cmd+I)"
+      />
+      <ToolbarDivider />
+      <LinkButton editor={editor} disabled={disabled} />
+    </div>
+  )
+}
+
+function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [url, setUrl] = useState('')
+
+  const currentUrl = editor.getAttributes('link').href as string | undefined
+  const isActive = editor.isActive('link')
+
+  const applyLink = () => {
+    if (!url.trim()) {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+    } else {
+      const finalUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`
+      editor.chain().focus().extendMarkRange('link').setLink({ href: finalUrl }).run()
+    }
+    setIsOpen(false)
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
+          disabled={disabled}
+          onClick={() => {
+            setUrl(currentUrl || '')
+            setIsOpen(true)
+          }}
+          title="Insert Link"
+        >
+          <LinkIcon className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-2" align="start" side="top" sideOffset={8}>
+        <div className="flex gap-2">
+          <Input
+            placeholder="https://example.com"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                applyLink()
+              }
+            }}
+            className="h-8 text-sm"
+            autoFocus
+          />
+          <Button size="sm" className="h-8" onClick={applyLink}>
+            {isActive ? 'Update' : 'Add'}
+          </Button>
+        </div>
+        {isActive && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-2 w-full text-destructive hover:text-destructive"
+            onClick={() => {
+              editor.chain().focus().extendMarkRange('link').unsetLink().run()
+              setIsOpen(false)
+            }}
+          >
+            Remove link
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// ============================================================================
+// Fixed Toolbar Components
+// ============================================================================
 
 interface MenuBarProps {
   editor: Editor
