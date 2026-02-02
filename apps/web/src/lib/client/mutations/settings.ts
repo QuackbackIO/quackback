@@ -2,31 +2,20 @@
  * Settings mutations
  *
  * Mutation hooks for workspace settings (logo, header, etc.)
+ * Uses presigned URLs for direct S3 uploads.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  uploadLogoFn,
   deleteLogoFn,
-  uploadHeaderLogoFn,
   deleteHeaderLogoFn,
   updateHeaderDisplayModeFn,
   updateHeaderDisplayNameFn,
+  saveLogoKeyFn,
+  saveHeaderLogoKeyFn,
 } from '@/lib/server/functions/settings'
+import { getLogoUploadUrlFn, getHeaderLogoUploadUrlFn } from '@/lib/server/functions/uploads'
 import { settingsQueries } from '@/lib/client/queries/settings'
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
 
 // ============================================================================
 // Logo Mutation Hooks
@@ -37,10 +26,30 @@ export function useUploadWorkspaceLogo() {
 
   return useMutation({
     mutationFn: async (file: Blob) => {
-      const arrayBuffer = await file.arrayBuffer()
-      const base64 = arrayBufferToBase64(arrayBuffer)
-      const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-      await uploadLogoFn({ data: { base64, mimeType } })
+      // 1. Get presigned URL from server
+      const { uploadUrl, key } = await getLogoUploadUrlFn({
+        data: {
+          filename: (file as File).name || 'logo.png',
+          contentType: file.type,
+          fileSize: file.size,
+        },
+      })
+
+      // 2. Upload directly to S3
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload logo to storage')
+      }
+
+      // 3. Save the S3 key to the database
+      await saveLogoKeyFn({ data: { key } })
     },
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
@@ -68,10 +77,30 @@ export function useUploadWorkspaceHeaderLogo() {
 
   return useMutation({
     mutationFn: async (file: Blob) => {
-      const arrayBuffer = await file.arrayBuffer()
-      const base64 = arrayBufferToBase64(arrayBuffer)
-      const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/webp'
-      await uploadHeaderLogoFn({ data: { base64, mimeType } })
+      // 1. Get presigned URL from server
+      const { uploadUrl, key } = await getHeaderLogoUploadUrlFn({
+        data: {
+          filename: (file as File).name || 'header-logo.png',
+          contentType: file.type,
+          fileSize: file.size,
+        },
+      })
+
+      // 2. Upload directly to S3
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload header logo to storage')
+      }
+
+      // 3. Save the S3 key to the database
+      await saveHeaderLogoKeyFn({ data: { key } })
     },
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })

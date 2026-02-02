@@ -1,5 +1,6 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
+import { getPublicUrlOrNull, deleteObject } from '@/lib/server/storage/s3'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -146,58 +147,146 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
   }
 }
 
-export async function uploadLogo(data: {
-  blob: Buffer
-  mimeType: string
-}): Promise<{ success: true }> {
+// ============================================================================
+// S3 Key Storage Functions
+// ============================================================================
+
+/**
+ * Save logo S3 key and delete old image if exists.
+ */
+export async function saveLogoKey(key: string): Promise<{ success: true; key: string }> {
   try {
     const org = await requireSettings()
-    await db
-      .update(settings)
-      .set({ logoBlob: data.blob, logoType: data.mimeType })
-      .where(eq(settings.id, org.id))
-    return { success: true }
+
+    // Delete old S3 image if exists
+    if (org.logoKey) {
+      try {
+        await deleteObject(org.logoKey)
+      } catch {
+        // Ignore deletion errors - old file may not exist
+      }
+    }
+
+    await db.update(settings).set({ logoKey: key }).where(eq(settings.id, org.id))
+
+    return { success: true, key }
   } catch (error) {
-    wrapDbError('upload logo', error)
+    wrapDbError('save logo key', error)
   }
 }
 
-export async function deleteLogo(): Promise<{ success: true }> {
+/**
+ * Delete logo from S3 and clear the key.
+ */
+export async function deleteLogoKey(): Promise<{ success: true }> {
   try {
     const org = await requireSettings()
-    await db.update(settings).set({ logoBlob: null, logoType: null }).where(eq(settings.id, org.id))
+
+    if (org.logoKey) {
+      try {
+        await deleteObject(org.logoKey)
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+
+    await db.update(settings).set({ logoKey: null }).where(eq(settings.id, org.id))
+
     return { success: true }
   } catch (error) {
-    wrapDbError('delete logo', error)
+    wrapDbError('delete logo key', error)
   }
 }
 
-export async function uploadHeaderLogo(data: {
-  blob: Buffer
-  mimeType: string
-}): Promise<{ success: true }> {
+/**
+ * Save favicon S3 key and delete old image if exists.
+ */
+export async function saveFaviconKey(key: string): Promise<{ success: true; key: string }> {
   try {
     const org = await requireSettings()
-    await db
-      .update(settings)
-      .set({ headerLogoBlob: data.blob, headerLogoType: data.mimeType })
-      .where(eq(settings.id, org.id))
-    return { success: true }
+
+    if (org.faviconKey) {
+      try {
+        await deleteObject(org.faviconKey)
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+
+    await db.update(settings).set({ faviconKey: key }).where(eq(settings.id, org.id))
+
+    return { success: true, key }
   } catch (error) {
-    wrapDbError('upload header logo', error)
+    wrapDbError('save favicon key', error)
   }
 }
 
-export async function deleteHeaderLogo(): Promise<{ success: true }> {
+/**
+ * Delete favicon from S3 and clear the key.
+ */
+export async function deleteFaviconKey(): Promise<{ success: true }> {
   try {
     const org = await requireSettings()
-    await db
-      .update(settings)
-      .set({ headerLogoBlob: null, headerLogoType: null })
-      .where(eq(settings.id, org.id))
+
+    if (org.faviconKey) {
+      try {
+        await deleteObject(org.faviconKey)
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+
+    await db.update(settings).set({ faviconKey: null }).where(eq(settings.id, org.id))
+
     return { success: true }
   } catch (error) {
-    wrapDbError('delete header logo', error)
+    wrapDbError('delete favicon key', error)
+  }
+}
+
+/**
+ * Save header logo S3 key and delete old image if exists.
+ */
+export async function saveHeaderLogoKey(key: string): Promise<{ success: true; key: string }> {
+  try {
+    const org = await requireSettings()
+
+    if (org.headerLogoKey) {
+      try {
+        await deleteObject(org.headerLogoKey)
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+
+    await db.update(settings).set({ headerLogoKey: key }).where(eq(settings.id, org.id))
+
+    return { success: true, key }
+  } catch (error) {
+    wrapDbError('save header logo key', error)
+  }
+}
+
+/**
+ * Delete header logo from S3 and clear the key.
+ */
+export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
+  try {
+    const org = await requireSettings()
+
+    if (org.headerLogoKey) {
+      try {
+        await deleteObject(org.headerLogoKey)
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+
+    await db.update(settings).set({ headerLogoKey: null }).where(eq(settings.id, org.id))
+
+    return { success: true }
+  } catch (error) {
+    wrapDbError('delete header logo key', error)
   }
 }
 
@@ -279,11 +368,6 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   }
 }
 
-function blobToDataUrl(blob: Buffer | null, mimeType: string | null): string | null {
-  if (!blob || !mimeType) return null
-  return `data:${mimeType};base64,${Buffer.from(blob).toString('base64')}`
-}
-
 export interface SettingsBrandingData {
   name: string
   logoUrl: string | null
@@ -320,9 +404,9 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
-      logoUrl: blobToDataUrl(org.logoBlob, org.logoType),
-      faviconUrl: blobToDataUrl(org.faviconBlob, org.faviconType),
-      headerLogoUrl: blobToDataUrl(org.headerLogoBlob, org.headerLogoType),
+      logoUrl: getPublicUrlOrNull(org.logoKey),
+      faviconUrl: getPublicUrlOrNull(org.faviconKey),
+      headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }

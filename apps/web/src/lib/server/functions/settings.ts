@@ -14,14 +14,15 @@ import {
   getPublicAuthConfig,
   updateBrandingConfig,
   updatePortalConfig,
-  uploadLogo,
-  deleteLogo,
-  uploadHeaderLogo,
-  deleteHeaderLogo,
+  saveLogoKey,
+  deleteLogoKey,
+  saveHeaderLogoKey,
+  deleteHeaderLogoKey,
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
   updateWorkspaceName,
 } from '@/lib/server/domains/settings/settings.service'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { requireAuth } from './auth-helpers'
 import { getSession } from './auth'
 import { db, member, user, invitation, eq, ne } from '@/lib/server/db'
@@ -47,13 +48,9 @@ export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(a
   return getPublicAuthConfig()
 })
 
-function buildAvatarUrl(
-  imageBlob: Buffer | null,
-  imageType: string | null,
-  fallbackUrl: string | null
-): string | null {
-  if (imageBlob && imageType) {
-    return `data:${imageType};base64,${Buffer.from(imageBlob).toString('base64')}`
+function buildAvatarUrl(imageKey: string | null, fallbackUrl: string | null): string | null {
+  if (imageKey) {
+    return getPublicUrlOrNull(imageKey)
   }
   return fallbackUrl
 }
@@ -85,11 +82,11 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
     if (userIds.length > 0) {
       const users = await db.query.user.findMany({
         where: (u, { inArray }) => inArray(u.id, userIds),
-        columns: { id: true, imageBlob: true, imageType: true, image: true },
+        columns: { id: true, imageKey: true, image: true },
       })
 
       for (const u of users) {
-        avatarMap[u.id] = buildAvatarUrl(u.imageBlob, u.imageType, u.image)
+        avatarMap[u.id] = buildAvatarUrl(u.imageKey, u.image)
       }
       for (const userId of userIds) {
         if (!(userId in avatarMap)) {
@@ -127,16 +124,12 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
 
     const userRecord = await db.query.user.findFirst({
       where: eq(user.id, userId),
-      columns: { imageBlob: true, imageType: true, image: true },
+      columns: { imageKey: true, image: true },
     })
 
-    const hasCustomAvatar = !!(userRecord?.imageBlob && userRecord?.imageType)
+    const hasCustomAvatar = !!userRecord?.imageKey
     const oauthAvatarUrl = userRecord?.image ?? null
-    const avatarUrl = buildAvatarUrl(
-      userRecord?.imageBlob ?? null,
-      userRecord?.imageType ?? null,
-      oauthAvatarUrl
-    )
+    const avatarUrl = buildAvatarUrl(userRecord?.imageKey ?? null, oauthAvatarUrl)
 
     return { avatarUrl, oauthAvatarUrl, hasCustomAvatar }
   })
@@ -167,9 +160,8 @@ const updatePortalConfigSchema = z.object({
     .optional(),
 })
 
-const uploadLogoSchema = z.object({
-  base64: z.string(),
-  mimeType: z.string(),
+const saveLogoKeySchema = z.object({
+  key: z.string(),
 })
 
 const updateHeaderDisplayModeSchema = z.object({
@@ -182,7 +174,7 @@ const updateHeaderDisplayNameSchema = z.object({
 
 export type UpdateThemeInput = z.infer<typeof updateThemeSchema>
 export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSchema>
-export type UploadLogoInput = z.infer<typeof uploadLogoSchema>
+export type SaveLogoKeyInput = z.infer<typeof saveLogoKeySchema>
 export type UpdateHeaderDisplayModeInput = z.infer<typeof updateHeaderDisplayModeSchema>
 export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNameSchema>
 
@@ -200,28 +192,28 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
     return updatePortalConfig(data as UpdatePortalConfigInput)
   })
 
-export const uploadLogoFn = createServerFn({ method: 'POST' })
-  .inputValidator(uploadLogoSchema)
+export const saveLogoKeyFn = createServerFn({ method: 'POST' })
+  .inputValidator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
-    return uploadLogo({ blob: Buffer.from(data.base64, 'base64'), mimeType: data.mimeType })
+    return saveLogoKey(data.key)
   })
 
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   await requireAuth({ roles: ['admin'] })
-  return deleteLogo()
+  return deleteLogoKey()
 })
 
-export const uploadHeaderLogoFn = createServerFn({ method: 'POST' })
-  .inputValidator(uploadLogoSchema)
+export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
+  .inputValidator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
-    return uploadHeaderLogo({ blob: Buffer.from(data.base64, 'base64'), mimeType: data.mimeType })
+    return saveHeaderLogoKey(data.key)
   })
 
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   await requireAuth({ roles: ['admin'] })
-  return deleteHeaderLogo()
+  return deleteHeaderLogoKey()
 })
 
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
