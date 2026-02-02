@@ -1,9 +1,6 @@
 // Database client
 export { createDb, getMigrationDb, type Database, type CreateDbOptions } from './src/client'
 
-// Crypto utilities for integration tokens
-export { encryptToken, decryptToken } from './src/crypto'
-
 // Schema
 export * from './src/schema'
 
