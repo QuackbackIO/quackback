@@ -191,8 +191,7 @@ Key variables (see `.env.example`):
 
 - `DATABASE_URL` - PostgreSQL connection string
 - `BETTER_AUTH_SECRET` - Auth secret (32+ chars)
-- `BETTER_AUTH_URL` - Auth callback URL
-- `ROOT_URL` - Public instance URL
+- `BASE_URL` - Public URL for auth, emails, and OAuth callbacks
 
 ## Conventions
 

@@ -8,8 +8,7 @@ on:
 env:
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quackback_test
   BETTER_AUTH_SECRET: test-secret-for-ci-only-must-be-at-least-32-characters
-  BETTER_AUTH_URL: http://localhost:3000
-  ROOT_URL: http://localhost:3000
+  BASE_URL: http://localhost:3000
 
 jobs:
   check:
