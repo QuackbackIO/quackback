@@ -32,13 +32,21 @@ const ReactQueryDevtools = import.meta.env.DEV
     )
   : () => null
 
-// Script to handle system theme preference when theme is set to 'system'
+// Script to handle theme preference
+// Checks for forced theme (from portal settings) first, then falls back to system preference
 const systemThemeScript = `
   (function() {
-    if (document.documentElement.classList.contains('system')) {
-      document.documentElement.classList.remove('system')
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      document.documentElement.classList.add(prefersDark ? 'dark' : 'light')
+    var d = document.documentElement;
+    var forced = document.querySelector('meta[name="theme-forced"]');
+    if (forced) {
+      var theme = forced.getAttribute('content');
+      d.classList.remove('system', 'light', 'dark');
+      d.classList.add(theme);
+      d.style.colorScheme = theme;
+    } else if (d.classList.contains('system')) {
+      d.classList.remove('system');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      d.classList.add(prefersDark ? 'dark' : 'light');
     }
   })()
 `

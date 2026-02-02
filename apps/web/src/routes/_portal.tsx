@@ -76,8 +76,16 @@ export const Route = createFileRoute('/_portal')({
     const faviconUrl =
       loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
 
+    const themeMode = loaderData?.themeMode ?? 'user'
+
+    // Add meta tag for forced theme - read by root's systemThemeScript before hydration
+    const meta: Array<Record<string, string>> = [{ title: loaderData?.org?.name ?? '' }]
+    if (themeMode !== 'user') {
+      meta.push({ name: 'theme-forced', content: themeMode })
+    }
+
     return {
-      meta: [{ title: loaderData?.org?.name }],
+      meta,
       links: [{ rel: 'icon', href: faviconUrl }],
     }
   },
@@ -124,23 +132,16 @@ function PortalLayout() {
   return (
     <AuthPopoverProvider>
       {forcedTheme ? (
-        <>
-          {/* Inline script sets theme class immediately to prevent flash during hydration */}
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `(function(){var d=document.documentElement,c=d.classList;c.remove('light','dark','system');c.add('${forcedTheme}');d.style.colorScheme='${forcedTheme}'})()`,
-            }}
-          />
-          {/* Nested ThemeProvider with forcedTheme keeps theme locked after hydration */}
-          <ThemeProvider
-            attribute="class"
-            forcedTheme={forcedTheme}
-            disableTransitionOnChange
-            storageKey="portal-theme-forced"
-          >
-            {content}
-          </ThemeProvider>
-        </>
+        // Nested ThemeProvider with forcedTheme keeps theme locked after hydration
+        // The root's systemThemeScript handles initial class setting via meta tag
+        <ThemeProvider
+          attribute="class"
+          forcedTheme={forcedTheme}
+          disableTransitionOnChange
+          storageKey="portal-theme-forced"
+        >
+          {content}
+        </ThemeProvider>
       ) : (
         content
       )}
