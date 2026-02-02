@@ -38,6 +38,22 @@
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* List items - remove extra paragraph spacing */
+.tiptap ul li > p,
+.tiptap ol li > p {
+  margin: 0;
+}
+
+.tiptap ul,
+.tiptap ol {
+  margin: 0.5rem 0;
+}
+
+.tiptap ul li,
+.tiptap ol li {
+  margin: 0;
+}
+
 /* Task list */
 .tiptap ul[data-type="taskList"] {
   list-style: none;

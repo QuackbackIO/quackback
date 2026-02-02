@@ -19,30 +19,38 @@ function DropdownMenuTrigger(props: React.ComponentProps<typeof DropdownMenuPrim
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  disablePortal = false,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
-  return (
-    <DropdownMenuPrimitive.Portal>
-      <DropdownMenuPrimitive.Content
-        data-slot="dropdown-menu-content"
-        sideOffset={sideOffset}
-        className={cn(
-          'z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto p-1',
-          'max-h-(--radix-dropdown-menu-content-available-height)',
-          'origin-(--radix-dropdown-menu-content-transform-origin)',
-          'bg-popover text-popover-foreground',
-          'border [border-radius:calc(var(--radius)*0.8)] shadow-md',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-          'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2',
-          'data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-          className
-        )}
-        {...props}
-      />
-    </DropdownMenuPrimitive.Portal>
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+  /** Disable portal to keep menu in DOM hierarchy (useful inside floating elements) */
+  disablePortal?: boolean
+}) {
+  const content = (
+    <DropdownMenuPrimitive.Content
+      data-slot="dropdown-menu-content"
+      sideOffset={sideOffset}
+      className={cn(
+        'z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto p-1',
+        'max-h-(--radix-dropdown-menu-content-available-height)',
+        'origin-(--radix-dropdown-menu-content-transform-origin)',
+        'bg-popover text-popover-foreground',
+        'border [border-radius:calc(var(--radius)*0.8)] shadow-md',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out',
+        'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+        'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2',
+        'data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+        className
+      )}
+      {...props}
+    />
   )
+
+  if (disablePortal) {
+    return content
+  }
+
+  return <DropdownMenuPrimitive.Portal>{content}</DropdownMenuPrimitive.Portal>
 }
 
 function DropdownMenuGroup(props: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {

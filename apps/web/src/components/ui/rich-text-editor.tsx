@@ -1223,7 +1223,7 @@ function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boole
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -1236,7 +1236,7 @@ function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boole
           <ChevronDown className="size-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" sideOffset={8}>
+      <DropdownMenuContent align="start" side="top" sideOffset={8} disablePortal>
         {blockTypes.map((type) => (
           <DropdownMenuItem
             key={type.value}

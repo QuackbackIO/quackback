@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from 'react'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
 import { Button } from '@/components/ui/button'
-import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import {
+  RichTextEditor,
+  richTextToPlainText,
+  type EditorFeatures,
+} from '@/components/ui/rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { EditPostInput } from '@/lib/client/mutations'
@@ -51,6 +55,22 @@ interface PostContentSectionProps {
   onEditSave?: (data: EditPostInput) => void
   onEditCancel?: () => void
   isSaving?: boolean
+  /** Editor features for inline editing (defaults to simple user-friendly options) */
+  editorFeatures?: EditorFeatures
+}
+
+/** Default editor features for end users - simple and focused */
+const DEFAULT_USER_EDITOR_FEATURES: EditorFeatures = {
+  headings: false,
+  images: false,
+  codeBlocks: false,
+  bubbleMenu: true,
+  slashMenu: false,
+  taskLists: false,
+  blockquotes: true,
+  tables: false,
+  dividers: false,
+  embeds: false,
 }
 
 export function PostContentSection({
@@ -67,6 +87,7 @@ export function PostContentSection({
   onEditSave,
   onEditCancel,
   isSaving = false,
+  editorFeatures = DEFAULT_USER_EDITOR_FEATURES,
 }: PostContentSectionProps): React.ReactElement {
   const [editTitle, setEditTitle] = useState(post.title)
   const [editContentJson, setEditContentJson] = useState<JSONContent | null>(
@@ -148,6 +169,7 @@ export function PostContentSection({
             minHeight="150px"
             disabled={isSaving}
             borderless
+            features={editorFeatures}
           />
         </div>
 
