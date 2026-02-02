@@ -249,8 +249,10 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
 // Custom CSS Operations
 // ============================================
 
+const MAX_CUSTOM_CSS_SIZE = 50 * 1024 // 50KB limit
+
 const updateCustomCssSchema = z.object({
-  customCss: z.string().max(100000, 'Custom CSS is too large'),
+  customCss: z.string().max(MAX_CUSTOM_CSS_SIZE, 'Custom CSS exceeds 50KB limit'),
 })
 
 export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>

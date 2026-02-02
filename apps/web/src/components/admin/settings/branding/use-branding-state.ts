@@ -11,6 +11,7 @@ import {
   type ThemeMode,
 } from '@/lib/shared/theme'
 import { updateThemeFn, updateCustomCssFn } from '@/lib/server/functions/settings'
+import { type BrandingMode } from '@/lib/server/domains/settings/settings.types'
 
 export const FONT_OPTIONS = [
   {
@@ -139,9 +140,14 @@ interface UseBrandingStateOptions {
   initialLogoUrl: string | null
   initialThemeConfig: ThemeConfig
   initialCustomCss: string
+  initialBrandingMode?: BrandingMode
 }
 
 export interface BrandingState {
+  // Branding mode (simple = color pickers, advanced = custom CSS)
+  brandingMode: BrandingMode
+  setBrandingMode: (mode: BrandingMode) => void
+
   // Logo
   logoUrl: string | null
   setLogoUrl: (url: string | null) => void
@@ -192,7 +198,12 @@ export interface BrandingState {
 }
 
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {
-  const { initialLogoUrl, initialThemeConfig, initialCustomCss } = options
+  const { initialLogoUrl, initialThemeConfig, initialCustomCss, initialBrandingMode } = options
+
+  // ============================================
+  // Branding mode state (simple vs advanced)
+  // ============================================
+  const [brandingMode, setBrandingMode] = useState<BrandingMode>(initialBrandingMode ?? 'simple')
 
   // ============================================
   // Logo state
@@ -318,16 +329,17 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     setSaveSuccess(false)
 
     try {
-      const themeConfig: ThemeConfig = {
+      const themeConfig: ThemeConfig & { brandingMode: BrandingMode } = {
+        brandingMode,
         themeMode,
         light: { ...lightValues, fontSans: font, radius: `${radius}rem` },
         dark: { ...darkValues, fontSans: font, radius: `${radius}rem` },
       }
 
-      // Save both theme config and custom CSS
+      // Save both theme config and custom CSS (both are always saved, mode determines which is applied)
       await Promise.all([
         updateThemeFn({
-          data: { brandingConfig: themeConfig as Record<string, unknown> },
+          data: { brandingConfig: themeConfig as unknown as Record<string, unknown> },
         }),
         updateCustomCssFn({ data: { customCss } }),
       ])
@@ -339,9 +351,13 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     } finally {
       setIsSaving(false)
     }
-  }, [lightValues, darkValues, font, radius, themeMode, customCss])
+  }, [brandingMode, lightValues, darkValues, font, radius, themeMode, customCss])
 
   return {
+    // Branding mode
+    brandingMode,
+    setBrandingMode,
+
     // Logo
     logoUrl,
     setLogoUrl,

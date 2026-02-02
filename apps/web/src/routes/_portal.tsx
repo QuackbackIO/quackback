@@ -28,12 +28,20 @@ export const Route = createFileRoute('/_portal')({
     const customCss = settings?.customCss ?? ''
     const portalConfig = settings?.publicPortalConfig ?? null
 
+    // Determine branding mode (default to 'simple' for backwards compatibility)
+    const brandingMode = brandingConfig.brandingMode ?? 'simple'
+
     // Determine theme mode (default to 'user' for backwards compatibility)
     const themeMode = brandingConfig.themeMode ?? 'user'
 
+    // Apply CSS based on branding mode - only one or the other, never both
     const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
-    const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
-    const googleFontsUrl = getGoogleFontsUrl(brandingConfig)
+    const themeStyles =
+      brandingMode === 'simple' && hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
+    const customCssToApply = brandingMode === 'advanced' ? customCss : ''
+
+    // Font loading only in simple mode (advanced mode handles its own fonts)
+    const googleFontsUrl = brandingMode === 'simple' ? getGoogleFontsUrl(brandingConfig) : null
 
     const initialUserData = session?.user
       ? {
@@ -55,7 +63,7 @@ export const Route = createFileRoute('/_portal')({
       brandingData,
       faviconData,
       themeStyles,
-      customCss,
+      customCss: customCssToApply,
       themeMode,
       googleFontsUrl,
       initialUserData,

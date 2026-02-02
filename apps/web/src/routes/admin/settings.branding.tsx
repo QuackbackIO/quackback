@@ -9,9 +9,10 @@ import {
   CheckIcon,
   ArrowPathIcon,
   CameraIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
+  PaintBrushIcon,
+  CodeBracketIcon,
 } from '@heroicons/react/24/solid'
+import type { BrandingMode } from '@/lib/server/domains/settings/settings.types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,7 +28,6 @@ import {
 } from '@/components/ui/select'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { Textarea } from '@/components/ui/textarea'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/shared/utils'
 import {
   BrandingLayout,
@@ -69,12 +69,20 @@ function BrandingPage() {
     initialLogoUrl,
     initialThemeConfig: brandingConfig as ThemeConfig,
     initialCustomCss: customCss,
+    initialBrandingMode: (brandingConfig as { brandingMode?: BrandingMode }).brandingMode,
   })
 
   // Workspace name state
   const [workspaceName, setWorkspaceName] = useState(settings?.name || '')
   const [isSavingName, setIsSavingName] = useState(false)
   const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Timer cleanup on unmount to prevent state updates after unmount
+  useEffect(() => {
+    return () => {
+      if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current)
+    }
+  }, [])
 
   // Debounced workspace name save
   const handleNameChange = (value: string) => {
@@ -112,157 +120,261 @@ function BrandingPage() {
         {/* Two-Column Layout */}
         <BrandingLayout>
           <BrandingControlsPanel>
-            {/* Identity Section */}
-            <div className="p-5 space-y-4">
-              <div>
-                <h3 className="text-sm font-medium text-foreground">Identity</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  How your brand appears in the portal header
-                </p>
+            {/* Mode Selector - Segmented Control */}
+            <div className="p-5">
+              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+                <button
+                  onClick={() => state.setBrandingMode('simple')}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                    state.brandingMode === 'simple'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <PaintBrushIcon className="h-4 w-4" />
+                  Simple
+                </button>
+                <button
+                  onClick={() => state.setBrandingMode('advanced')}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                    state.brandingMode === 'advanced'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <CodeBracketIcon className="h-4 w-4" />
+                  Advanced
+                </button>
               </div>
+            </div>
 
-              <div className="flex items-start gap-4">
-                <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
-                <div className="flex-1 space-y-1.5">
-                  <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-                    Workspace Name
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="workspace-name"
-                      value={workspaceName}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      placeholder="My Workspace"
-                    />
-                    {isSavingName && (
-                      <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
+            {state.brandingMode === 'simple' ? (
+              <>
+                {/* Identity Section */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Identity</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      How your brand appears in the portal header
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
+                    <div className="flex-1 space-y-1.5">
+                      <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
+                        Workspace Name
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="workspace-name"
+                          value={workspaceName}
+                          onChange={(e) => handleNameChange(e.target.value)}
+                          placeholder="My Workspace"
+                        />
+                        {isSavingName && (
+                          <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Theme Mode Section */}
-            <div className="p-5 space-y-4 border-t border-border">
-              <div>
-                <h3 className="text-sm font-medium text-foreground">Theme Mode</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Control how light/dark mode works for portal visitors
-                </p>
-              </div>
+                {/* Theme Mode Section */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Theme Mode</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Control how light/dark mode works for portal visitors
+                    </p>
+                  </div>
 
-              <Select value={state.themeMode} onValueChange={state.setThemeMode}>
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">User choice (allow toggle)</SelectItem>
-                  <SelectItem value="light">Light only</SelectItem>
-                  <SelectItem value="dark">Dark only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Colors Section */}
-            <div className="p-5 space-y-4 border-t border-border">
-              <div>
-                <h3 className="text-sm font-medium text-foreground">Colors</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Customize your portal's color palette
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Primary</Label>
-                  <ColorInputInline value={state.primaryColor} onChange={state.setPrimaryColor} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Secondary</Label>
-                  <ColorInputInline
-                    value={state.secondaryColor}
-                    onChange={state.setSecondaryColor}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Accent</Label>
-                  <ColorInputInline value={state.accentColor} onChange={state.setAccentColor} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Background</Label>
-                  <ColorInputInline
-                    value={state.backgroundColor}
-                    onChange={state.setBackgroundColor}
-                  />
-                </div>
-                <div className="space-y-1.5 col-span-2">
-                  <Label className="text-xs text-muted-foreground">Foreground (Text)</Label>
-                  <ColorInputInline
-                    value={state.foregroundColor}
-                    onChange={state.setForegroundColor}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Typography Section */}
-            <div className="p-5 space-y-4 border-t border-border">
-              <div>
-                <h3 className="text-sm font-medium text-foreground">Typography</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Font</Label>
-                  <Select
-                    value={state.currentFontId}
-                    onValueChange={(id) => {
-                      const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
-                      if (selectedFont) state.setFont(selectedFont.value)
-                    }}
-                  >
+                  <Select value={state.themeMode} onValueChange={state.setThemeMode}>
                     <SelectTrigger className="w-full h-10">
-                      <SelectValue>
-                        <span style={{ fontFamily: state.font }}>
-                          {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
-                            'Select font'}
-                        </span>
-                      </SelectValue>
+                      <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      <FontSelectGroup category="Sans Serif" />
-                      <FontSelectGroup category="Serif" />
-                      <FontSelectGroup category="Monospace" />
-                      <FontSelectGroup category="System" />
+                    <SelectContent>
+                      <SelectItem value="user">User choice (allow toggle)</SelectItem>
+                      <SelectItem value="light">Light only</SelectItem>
+                      <SelectItem value="dark">Dark only</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Corner Roundness</Label>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground w-12">Sharp</span>
-                  <Slider
-                    value={[state.radius * 100]}
-                    onValueChange={([v]) => state.setRadius(v / 100)}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
-                  <div
-                    className="h-6 w-6 bg-primary shrink-0"
-                    style={{ borderRadius: `${state.radius}rem` }}
+                {/* Colors Section */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Colors</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Customize your portal's color palette
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Primary</Label>
+                      <ColorInputInline
+                        value={state.primaryColor}
+                        onChange={state.setPrimaryColor}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Secondary</Label>
+                      <ColorInputInline
+                        value={state.secondaryColor}
+                        onChange={state.setSecondaryColor}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Accent</Label>
+                      <ColorInputInline value={state.accentColor} onChange={state.setAccentColor} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Background</Label>
+                      <ColorInputInline
+                        value={state.backgroundColor}
+                        onChange={state.setBackgroundColor}
+                      />
+                    </div>
+                    <div className="space-y-1.5 col-span-2">
+                      <Label className="text-xs text-muted-foreground">Foreground (Text)</Label>
+                      <ColorInputInline
+                        value={state.foregroundColor}
+                        onChange={state.setForegroundColor}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Typography Section */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Typography</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Font</Label>
+                      <Select
+                        value={state.currentFontId}
+                        onValueChange={(id) => {
+                          const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
+                          if (selectedFont) state.setFont(selectedFont.value)
+                        }}
+                      >
+                        <SelectTrigger className="w-full h-10">
+                          <SelectValue>
+                            <span style={{ fontFamily: state.font }}>
+                              {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
+                                'Select font'}
+                            </span>
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          <FontSelectGroup category="Sans Serif" />
+                          <FontSelectGroup category="Serif" />
+                          <FontSelectGroup category="Monospace" />
+                          <FontSelectGroup category="System" />
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Corner Roundness</Label>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-12">Sharp</span>
+                      <Slider
+                        value={[state.radius * 100]}
+                        onValueChange={([v]) => state.setRadius(v / 100)}
+                        min={0}
+                        max={100}
+                        step={5}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
+                      <div
+                        className="h-6 w-6 bg-primary shrink-0"
+                        style={{ borderRadius: `${state.radius}rem` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Advanced Mode: Instructions */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div className="rounded-lg bg-muted/50 p-4 space-y-2">
+                    <p className="text-sm text-foreground font-medium">Custom CSS Mode</p>
+                    <p className="text-xs text-muted-foreground">
+                      Design your theme at{' '}
+                      <a
+                        href="https://tweakcn.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        tweakcn.com
+                      </a>{' '}
+                      then paste the CSS below. Your CSS should include{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">:root {'{ }'}</code>{' '}
+                      and{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">.dark {'{ }'}</code>{' '}
+                      blocks.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Advanced Mode: Theme Mode (shared setting) */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Theme Mode</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Control how light/dark mode works for portal visitors
+                    </p>
+                  </div>
+
+                  <Select value={state.themeMode} onValueChange={state.setThemeMode}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User choice (allow toggle)</SelectItem>
+                      <SelectItem value="light">Light only</SelectItem>
+                      <SelectItem value="dark">Dark only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Advanced Mode: CSS Editor */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Custom CSS</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Paste your theme CSS from tweakcn or write your own
+                    </p>
+                  </div>
+
+                  <Textarea
+                    value={state.customCss}
+                    onChange={(e) => state.setCustomCss(e.target.value)}
+                    placeholder={`:root {
+  --primary: oklch(0.623 0.214 259);
+  --background: oklch(1 0 0);
+}
+.dark {
+  --primary: oklch(0.623 0.214 259);
+  --background: oklch(0.145 0 0);
+}`}
+                    className="font-mono text-xs min-h-[300px] resize-y"
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* Custom CSS Section - Collapsible */}
-            <CustomCssSection customCss={state.customCss} setCustomCss={state.setCustomCss} />
+              </>
+            )}
 
             {/* Save Button */}
             <div className="p-5 border-t border-border">
@@ -287,43 +399,57 @@ function BrandingPage() {
           <BrandingPreviewPanel
             label="Preview"
             headerRight={
-              <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md">
-                <button
-                  onClick={() => state.setPreviewMode('light')}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                    state.previewMode === 'light'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <SunIcon className="h-3 w-3" />
-                  Light
-                </button>
-                <button
-                  onClick={() => state.setPreviewMode('dark')}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                    state.previewMode === 'dark'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <MoonIcon className="h-3 w-3" />
-                  Dark
-                </button>
-              </div>
+              state.brandingMode === 'simple' ? (
+                <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md">
+                  <button
+                    onClick={() => state.setPreviewMode('light')}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                      state.previewMode === 'light'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <SunIcon className="h-3 w-3" />
+                    Light
+                  </button>
+                  <button
+                    onClick={() => state.setPreviewMode('dark')}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
+                      state.previewMode === 'dark'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <MoonIcon className="h-3 w-3" />
+                    Dark
+                  </button>
+                </div>
+              ) : null
             }
           >
-            <ThemePreview
-              lightVars={state.effectiveLight}
-              darkVars={state.effectiveDark}
-              previewMode={state.previewMode}
-              radius={`${state.radius}rem`}
-              fontFamily={state.font}
-              logoUrl={state.logoUrl}
-              workspaceName={workspaceName || 'My Workspace'}
-            />
+            {state.brandingMode === 'simple' ? (
+              <ThemePreview
+                lightVars={state.effectiveLight}
+                darkVars={state.effectiveDark}
+                previewMode={state.previewMode}
+                radius={`${state.radius}rem`}
+                fontFamily={state.font}
+                logoUrl={state.logoUrl}
+                workspaceName={workspaceName || 'My Workspace'}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                <CodeBracketIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-sm text-muted-foreground">
+                  Preview not available for custom CSS.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Save and view your portal to see changes.
+                </p>
+              </div>
+            )}
           </BrandingPreviewPanel>
         </BrandingLayout>
       </div>
@@ -553,68 +679,5 @@ function FontSelectGroup({ category }: { category: FontCategory }) {
         </SelectItem>
       ))}
     </SelectGroup>
-  )
-}
-
-// ==============================================
-// Custom CSS Section (Collapsible)
-// ==============================================
-interface CustomCssSectionProps {
-  customCss: string
-  setCustomCss: (css: string) => void
-}
-
-function CustomCssSection({ customCss, setCustomCss }: CustomCssSectionProps) {
-  const [isOpen, setIsOpen] = useState(false)
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border-t border-border">
-      <CollapsibleTrigger className="flex items-center justify-between w-full p-5 hover:bg-muted/50 transition-colors">
-        <div className="flex items-center gap-2">
-          {isOpen ? (
-            <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
-          )}
-          <div className="text-left">
-            <h3 className="text-sm font-medium text-foreground">Advanced: Custom CSS</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Override styles with raw CSS from theme builders
-            </p>
-          </div>
-        </div>
-      </CollapsibleTrigger>
-
-      <CollapsibleContent className="px-5 pb-5">
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Design your theme at{' '}
-            <a
-              href="https://tweakcn.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              tweakcn.com
-            </a>{' '}
-            then paste the CSS below. Custom CSS is applied after base theme styles.
-          </p>
-
-          <Textarea
-            value={customCss}
-            onChange={(e) => setCustomCss(e.target.value)}
-            placeholder={`:root {
-  --primary: oklch(0.623 0.214 259);
-  --background: oklch(1 0 0);
-}
-.dark {
-  --primary: oklch(0.623 0.214 259);
-  --background: oklch(0.145 0 0);
-}`}
-            className="font-mono text-xs min-h-[200px] resize-y"
-          />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
   )
 }
