@@ -1,5 +1,3 @@
--- Enable pgvector extension for embedding storage
-CREATE EXTENSION IF NOT EXISTS vector;--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -59,12 +57,9 @@ CREATE TABLE "settings" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
-	"logo_blob" "bytea",
-	"logo_type" text,
-	"favicon_blob" "bytea",
-	"favicon_type" text,
-	"header_logo_blob" "bytea",
-	"header_logo_type" text,
+	"logo_key" text,
+	"favicon_key" text,
+	"header_logo_key" text,
 	"created_at" timestamp with time zone NOT NULL,
 	"metadata" text,
 	"auth_config" text,
@@ -83,8 +78,7 @@ CREATE TABLE "user" (
 	"email" text NOT NULL,
 	"email_verified" boolean DEFAULT false NOT NULL,
 	"image" text,
-	"image_blob" "bytea",
-	"image_type" text,
+	"image_key" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"metadata" text
@@ -284,12 +278,19 @@ CREATE TABLE "integrations" (
 --> statement-breakpoint
 CREATE TABLE "changelog_entries" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"board_id" uuid NOT NULL,
 	"title" text NOT NULL,
 	"content" text NOT NULL,
+	"content_json" jsonb,
+	"member_id" uuid,
 	"published_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "changelog_entry_posts" (
+	"changelog_entry_id" uuid NOT NULL,
+	"post_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "in_app_notifications" (
@@ -409,7 +410,9 @@ ALTER TABLE "votes" ADD CONSTRAINT "votes_post_id_posts_id_fk" FOREIGN KEY ("pos
 ALTER TABLE "votes" ADD CONSTRAINT "votes_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_event_mappings" ADD CONSTRAINT "event_mappings_integration_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integrations" ADD CONSTRAINT "integrations_connected_by_member_id_member_id_fk" FOREIGN KEY ("connected_by_member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "changelog_entries" ADD CONSTRAINT "changelog_entries_board_id_boards_id_fk" FOREIGN KEY ("board_id") REFERENCES "public"."boards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "changelog_entries" ADD CONSTRAINT "changelog_entries_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "changelog_entry_posts" ADD CONSTRAINT "changelog_entry_posts_changelog_entry_id_changelog_entries_id_fk" FOREIGN KEY ("changelog_entry_id") REFERENCES "public"."changelog_entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "changelog_entry_posts" ADD CONSTRAINT "changelog_entry_posts_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "in_app_notifications" ADD CONSTRAINT "in_app_notifications_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "in_app_notifications" ADD CONSTRAINT "in_app_notifications_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "in_app_notifications" ADD CONSTRAINT "in_app_notifications_comment_id_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -478,8 +481,11 @@ CREATE INDEX "votes_member_id_idx" ON "votes" USING btree ("member_id");--> stat
 CREATE INDEX "votes_member_created_at_idx" ON "votes" USING btree ("member_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_event_mappings_lookup" ON "integration_event_mappings" USING btree ("integration_id","event_type","enabled");--> statement-breakpoint
 CREATE INDEX "idx_integrations_type_status" ON "integrations" USING btree ("integration_type","status");--> statement-breakpoint
-CREATE INDEX "changelog_board_id_idx" ON "changelog_entries" USING btree ("board_id");--> statement-breakpoint
 CREATE INDEX "changelog_published_at_idx" ON "changelog_entries" USING btree ("published_at");--> statement-breakpoint
+CREATE INDEX "changelog_member_id_idx" ON "changelog_entries" USING btree ("member_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "changelog_entry_posts_pk" ON "changelog_entry_posts" USING btree ("changelog_entry_id","post_id");--> statement-breakpoint
+CREATE INDEX "changelog_entry_posts_changelog_id_idx" ON "changelog_entry_posts" USING btree ("changelog_entry_id");--> statement-breakpoint
+CREATE INDEX "changelog_entry_posts_post_id_idx" ON "changelog_entry_posts" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "in_app_notifications_member_created_idx" ON "in_app_notifications" USING btree ("member_id","created_at");--> statement-breakpoint
 CREATE INDEX "in_app_notifications_member_unread_idx" ON "in_app_notifications" USING btree ("member_id") WHERE read_at IS NULL AND archived_at IS NULL;--> statement-breakpoint
 CREATE INDEX "in_app_notifications_post_idx" ON "in_app_notifications" USING btree ("post_id");--> statement-breakpoint

@@ -1,5 +1,5 @@
 {
-  "id": "863977e3-de05-4d94-8f53-1856cc957337",
+  "id": "7c89c6e3-ed97-4c6e-a9fe-7d25a061e3c1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -487,38 +487,20 @@
           "primaryKey": false,
           "notNull": true
         },
-        "logo_blob": {
-          "name": "logo_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "logo_type": {
-          "name": "logo_type",
+        "logo_key": {
+          "name": "logo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "favicon_blob": {
-          "name": "favicon_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "favicon_type": {
-          "name": "favicon_type",
+        "favicon_key": {
+          "name": "favicon_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "header_logo_blob": {
-          "name": "header_logo_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_logo_type": {
-          "name": "header_logo_type",
+        "header_logo_key": {
+          "name": "header_logo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -628,14 +610,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "image_blob": {
-          "name": "image_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "image_type": {
-          "name": "image_type",
+        "image_key": {
+          "name": "image_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2909,12 +2885,6 @@
           "primaryKey": true,
           "notNull": true
         },
-        "board_id": {
-          "name": "board_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "title": {
           "name": "title",
           "type": "text",
@@ -2926,6 +2896,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "published_at": {
           "name": "published_at",
@@ -2949,21 +2931,6 @@
         }
       },
       "indexes": {
-        "changelog_board_id_idx": {
-          "name": "changelog_board_id_idx",
-          "columns": [
-            {
-              "expression": "board_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "changelog_published_at_idx": {
           "name": "changelog_published_at_idx",
           "columns": [
@@ -2978,14 +2945,132 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "changelog_member_id_idx": {
+          "name": "changelog_member_id_idx",
+          "columns": [
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "changelog_entries_board_id_boards_id_fk": {
-          "name": "changelog_entries_board_id_boards_id_fk",
+        "changelog_entries_member_id_member_id_fk": {
+          "name": "changelog_entries_member_id_member_id_fk",
           "tableFrom": "changelog_entries",
-          "tableTo": "boards",
-          "columnsFrom": ["board_id"],
+          "tableTo": "member",
+          "columnsFrom": ["member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.changelog_entry_posts": {
+      "name": "changelog_entry_posts",
+      "schema": "",
+      "columns": {
+        "changelog_entry_id": {
+          "name": "changelog_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "changelog_entry_posts_pk": {
+          "name": "changelog_entry_posts_pk",
+          "columns": [
+            {
+              "expression": "changelog_entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "changelog_entry_posts_changelog_id_idx": {
+          "name": "changelog_entry_posts_changelog_id_idx",
+          "columns": [
+            {
+              "expression": "changelog_entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "changelog_entry_posts_post_id_idx": {
+          "name": "changelog_entry_posts_post_id_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "changelog_entry_posts_changelog_entry_id_changelog_entries_id_fk": {
+          "name": "changelog_entry_posts_changelog_entry_id_changelog_entries_id_fk",
+          "tableFrom": "changelog_entry_posts",
+          "tableTo": "changelog_entries",
+          "columnsFrom": ["changelog_entry_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "changelog_entry_posts_post_id_posts_id_fk": {
+          "name": "changelog_entry_posts_post_id_posts_id_fk",
+          "tableFrom": "changelog_entry_posts",
+          "tableTo": "posts",
+          "columnsFrom": ["post_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"

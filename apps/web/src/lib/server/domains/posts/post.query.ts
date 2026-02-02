@@ -21,6 +21,7 @@ import {
   sql,
   isNull,
 } from '@/lib/server/db'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { PostId, BoardId, MemberId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, type CommentTreeNode } from '@/lib/shared'
@@ -78,7 +79,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
         author: {
           with: {
             user: {
-              columns: { image: true, imageBlob: true, imageType: true },
+              columns: { image: true, imageKey: true },
             },
           },
         },
@@ -90,10 +91,10 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       let avatarUrl: string | null = null
       if (pinnedCommentData.author?.user) {
         const user = pinnedCommentData.author.user
-        if (user.imageBlob && user.imageType) {
-          const base64 = Buffer.from(user.imageBlob).toString('base64')
-          avatarUrl = `data:${user.imageType};base64,${base64}`
-        } else if (user.image) {
+        if (user.imageKey) {
+          avatarUrl = getPublicUrlOrNull(user.imageKey)
+        }
+        if (!avatarUrl && user.image) {
           avatarUrl = user.image
         }
       }
