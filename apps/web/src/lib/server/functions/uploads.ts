@@ -111,3 +111,102 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
 
     return result
   })
+
+// ============================================================================
+// Branding Image Upload Functions
+// ============================================================================
+
+const brandingImageSchema = z.object({
+  filename: z.string().min(1).max(255),
+  contentType: z.string().min(1).max(100),
+  fileSize: z.number().int().positive().max(MAX_FILE_SIZE),
+})
+
+/**
+ * Get a presigned URL for uploading the workspace logo.
+ */
+export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
+  .inputValidator(brandingImageSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+
+    if (!isS3Configured()) {
+      throw new Error('File storage is not configured. Contact your administrator.')
+    }
+
+    if (!isAllowedImageType(data.contentType)) {
+      throw new Error(
+        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+      )
+    }
+
+    const key = generateStorageKey('logos', data.filename)
+    return generatePresignedUploadUrl(key, data.contentType)
+  })
+
+/**
+ * Get a presigned URL for uploading the workspace favicon.
+ */
+export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
+  .inputValidator(brandingImageSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+
+    if (!isS3Configured()) {
+      throw new Error('File storage is not configured. Contact your administrator.')
+    }
+
+    if (!isAllowedImageType(data.contentType)) {
+      throw new Error(
+        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+      )
+    }
+
+    const key = generateStorageKey('favicons', data.filename)
+    return generatePresignedUploadUrl(key, data.contentType)
+  })
+
+/**
+ * Get a presigned URL for uploading the workspace header logo.
+ */
+export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
+  .inputValidator(brandingImageSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+
+    if (!isS3Configured()) {
+      throw new Error('File storage is not configured. Contact your administrator.')
+    }
+
+    if (!isAllowedImageType(data.contentType)) {
+      throw new Error(
+        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+      )
+    }
+
+    const key = generateStorageKey('header-logos', data.filename)
+    return generatePresignedUploadUrl(key, data.contentType)
+  })
+
+/**
+ * Get a presigned URL for uploading user avatars.
+ */
+export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
+  .inputValidator(brandingImageSchema)
+  .handler(async ({ data }) => {
+    // Any authenticated user can upload their own avatar
+    await requireAuth()
+
+    if (!isS3Configured()) {
+      throw new Error('File storage is not configured. Contact your administrator.')
+    }
+
+    if (!isAllowedImageType(data.contentType)) {
+      throw new Error(
+        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+      )
+    }
+
+    const key = generateStorageKey('avatars', data.filename)
+    return generatePresignedUploadUrl(key, data.contentType)
+  })

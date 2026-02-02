@@ -190,3 +190,69 @@ export function isAllowedImageType(contentType: string): boolean {
  * Maximum allowed file size in bytes (5MB).
  */
 export const MAX_FILE_SIZE = 5 * 1024 * 1024
+
+// ============================================================================
+// Public URL Helpers
+// ============================================================================
+
+/**
+ * Get the public URL for a storage key.
+ * Returns null if the key is null/undefined or S3 is not configured.
+ */
+export function getPublicUrlOrNull(key: string | null | undefined): string | null {
+  if (!key) return null
+  if (!isS3Configured()) return null
+
+  const s3Config = getS3Config()
+
+  if (s3Config.publicUrl) {
+    return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
+  } else if (s3Config.endpoint) {
+    if (s3Config.forcePathStyle) {
+      return `${s3Config.endpoint}/${s3Config.bucket}/${key}`
+    } else {
+      const url = new URL(s3Config.endpoint)
+      url.hostname = `${s3Config.bucket}.${url.hostname}`
+      url.pathname = `/${key}`
+      return url.toString()
+    }
+  } else {
+    return `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${key}`
+  }
+}
+
+/**
+ * Get the public URL for a storage key.
+ * Throws if the key is null/undefined or S3 is not configured.
+ */
+export function getPublicUrl(key: string): string {
+  const url = getPublicUrlOrNull(key)
+  if (!url) {
+    throw new Error('Failed to generate public URL: S3 not configured or invalid key')
+  }
+  return url
+}
+
+// ============================================================================
+// Delete Operations
+// ============================================================================
+
+/**
+ * Delete an object from S3.
+ *
+ * @param key - Storage key (path within bucket) to delete
+ */
+export async function deleteObject(key: string): Promise<void> {
+  const s3Config = getS3Config()
+  const client = await getS3Client()
+
+  // Dynamic import for delete command
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s3Module = (await import('@aws-sdk/client-s3')) as any
+  const command = new s3Module.DeleteObjectCommand({
+    Bucket: s3Config.bucket,
+    Key: key,
+  })
+
+  await client.send(command)
+}

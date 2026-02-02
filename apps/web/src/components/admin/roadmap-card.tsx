@@ -7,9 +7,14 @@ import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
 interface RoadmapCardProps {
   post: RoadmapPostEntry
   statusId: string
+  onClick?: () => void
 }
 
-export const RoadmapCard = memo(function RoadmapCard({ post, statusId }: RoadmapCardProps) {
+export const RoadmapCard = memo(function RoadmapCard({
+  post,
+  statusId,
+  onClick,
+}: RoadmapCardProps) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
     id: post.id,
     data: { type: 'Task', post, statusId },
@@ -18,10 +23,11 @@ export const RoadmapCard = memo(function RoadmapCard({ post, statusId }: Roadmap
   return (
     <div
       ref={setNodeRef}
+      onClick={onClick}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      className="flex bg-card rounded-lg border shadow-sm cursor-pointer hover:bg-card/80 transition-opacity duration-150"
       {...attributes}
       {...listeners}
-      style={{ opacity: isDragging ? 0.4 : 1 }}
-      className="flex bg-card rounded-lg border shadow-sm cursor-grab active:cursor-grabbing transition-opacity duration-150"
     >
       <CardContent post={post} />
     </div>

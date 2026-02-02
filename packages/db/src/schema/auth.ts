@@ -7,50 +7,8 @@
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
 import { relations } from 'drizzle-orm'
-import {
-  pgTable,
-  text,
-  timestamp,
-  boolean,
-  index,
-  uniqueIndex,
-  customType,
-} from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
-
-// Custom type for PostgreSQL bytea (binary data)
-const bytea = customType<{ data: Buffer | null; notNull: false; default: false }>({
-  dataType() {
-    return 'bytea'
-  },
-  toDriver(value: Buffer | null): Buffer | null {
-    return value
-  },
-  fromDriver(value: unknown): Buffer | null {
-    if (value === null || value === undefined) {
-      return null
-    }
-    if (Buffer.isBuffer(value)) {
-      return value as Buffer
-    }
-    if (value instanceof Uint8Array) {
-      return Buffer.from(value)
-    }
-    // Handle hex string format from postgres.js (e.g., '\xDEADBEEF')
-    if (typeof value === 'string') {
-      if (value.startsWith('\\x')) {
-        return Buffer.from(value.slice(2), 'hex')
-      }
-      // Empty string means no data
-      if (value === '') {
-        return null
-      }
-    }
-    // For any other unexpected format, return null rather than crashing
-    console.warn('Unexpected bytea format from database:', typeof value)
-    return null
-  },
-})
 
 /**
  * User table - User identities for the application
@@ -63,9 +21,8 @@ export const user = pgTable(
     email: text('email').notNull(),
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
-    // Profile image stored as blob (alternative to URL in 'image' field)
-    imageBlob: bytea('image_blob'),
-    imageType: text('image_type'), // MIME type: image/jpeg, image/png, etc.
+    // Profile image - S3 storage key (e.g., "avatars/2026/02/abc123-avatar.png")
+    imageKey: text('image_key'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -166,15 +123,12 @@ export const settings = pgTable('settings', {
   id: typeIdWithDefault('workspace')('id').primaryKey(), // Keep workspace prefix for TypeID compatibility
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
-  // Logo stored as blob with MIME type
-  logoBlob: bytea('logo_blob'),
-  logoType: text('logo_type'), // MIME type: image/jpeg, image/png, etc.
-  // Favicon stored as blob
-  faviconBlob: bytea('favicon_blob'),
-  faviconType: text('favicon_type'), // MIME type: image/x-icon, image/png, etc.
-  // Header logo stored as blob (horizontal wordmark/lockup)
-  headerLogoBlob: bytea('header_logo_blob'),
-  headerLogoType: text('header_logo_type'), // MIME type: image/png, image/jpeg, etc.
+  // Logo - S3 storage key (e.g., "logos/2026/02/abc123-logo.png")
+  logoKey: text('logo_key'),
+  // Favicon - S3 storage key
+  faviconKey: text('favicon_key'),
+  // Header logo - S3 storage key
+  headerLogoKey: text('header_logo_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   /**

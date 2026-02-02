@@ -2,17 +2,10 @@
  * Settings utilities for fetching branding/logo data.
  * Simplified for single workspace OSS deployment.
  *
- * Logos are stored as bytea blobs in the database and converted to data URLs on read.
+ * All images are stored in S3.
  */
 
-/**
- * Convert a bytea blob and MIME type to a data URL.
- */
-function blobToDataUrl(blob: Buffer | null, mimeType: string | null): string | null {
-  if (!blob || !mimeType) return null
-  const base64 = Buffer.from(blob).toString('base64')
-  return `data:${mimeType};base64,${base64}`
-}
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
 export interface LogoData {
   url: string | null
@@ -40,10 +33,12 @@ async function getSettingsRecord() {
  */
 export async function getSettingsLogoData(): Promise<LogoData | null> {
   const record = await getSettingsRecord()
-  if (!record?.logoBlob) return null
-  return {
-    url: blobToDataUrl(record.logoBlob, record.logoType),
-  }
+  if (!record) return null
+
+  const url = getPublicUrlOrNull(record.logoKey)
+  if (!url) return null
+
+  return { url }
 }
 
 /**
@@ -51,8 +46,11 @@ export async function getSettingsLogoData(): Promise<LogoData | null> {
  */
 export async function getSettingsFaviconData(): Promise<{ url: string } | null> {
   const record = await getSettingsRecord()
-  const url = blobToDataUrl(record?.faviconBlob ?? null, record?.faviconType ?? null)
+  if (!record) return null
+
+  const url = getPublicUrlOrNull(record.faviconKey)
   if (!url) return null
+
   return { url }
 }
 
@@ -69,7 +67,7 @@ export async function getSettingsHeaderLogoData(): Promise<HeaderLogoData | null
   const record = await getSettingsRecord()
   if (!record) return null
   return {
-    url: blobToDataUrl(record.headerLogoBlob, record.headerLogoType),
+    url: getPublicUrlOrNull(record.headerLogoKey),
     displayMode: record.headerDisplayMode,
     displayName: record.headerDisplayName,
   }
@@ -83,9 +81,9 @@ export async function getSettingsBrandingData(): Promise<BrandingData | null> {
   if (!record) return null
   return {
     name: record.name,
-    logoUrl: blobToDataUrl(record.logoBlob, record.logoType),
-    faviconUrl: blobToDataUrl(record.faviconBlob, record.faviconType),
-    headerLogoUrl: blobToDataUrl(record.headerLogoBlob, record.headerLogoType),
+    logoUrl: getPublicUrlOrNull(record.logoKey),
+    faviconUrl: getPublicUrlOrNull(record.faviconKey),
+    headerLogoUrl: getPublicUrlOrNull(record.headerLogoKey),
     headerDisplayMode: record.headerDisplayMode,
     headerDisplayName: record.headerDisplayName,
   }

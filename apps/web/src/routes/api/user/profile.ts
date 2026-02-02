@@ -1,8 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-
 export const Route = createFileRoute('/api/user/profile')({
   server: {
     handlers: {
@@ -30,8 +27,7 @@ export const Route = createFileRoute('/api/user/profile')({
               name: true,
               email: true,
               image: true,
-              imageBlob: false, // Don't send blob in JSON response
-              imageType: true,
+              imageKey: true,
             },
           })
 
@@ -41,7 +37,7 @@ export const Route = createFileRoute('/api/user/profile')({
 
           return Response.json({
             ...userRecord,
-            hasCustomAvatar: !!userRecord.imageType,
+            hasCustomAvatar: !!userRecord.imageKey,
           })
         } catch (error) {
           console.error(`[api] ❌ Profile fetch failed:`, error)
@@ -51,7 +47,7 @@ export const Route = createFileRoute('/api/user/profile')({
 
       /**
        * PATCH /api/user/profile
-       * Update current user's profile.
+       * Update current user's profile (name only - avatar uploads use presigned URLs).
        */
       PATCH: async ({ request }) => {
         const { db, user, eq } = await import('@/lib/server/db')
@@ -69,38 +65,8 @@ export const Route = createFileRoute('/api/user/profile')({
           const contentType = request.headers.get('content-type') || ''
 
           let name: string | undefined
-          let avatarBuffer: Buffer | undefined
-          let avatarType: string | undefined
 
-          if (contentType.includes('multipart/form-data')) {
-            const formData = await request.formData()
-            const nameField = formData.get('name')
-            const avatarField = formData.get('avatar')
-
-            if (nameField && typeof nameField === 'string') {
-              name = nameField.trim()
-            }
-
-            if (avatarField && avatarField instanceof File && avatarField.size > 0) {
-              if (!ALLOWED_TYPES.includes(avatarField.type)) {
-                return Response.json(
-                  { error: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP' },
-                  { status: 400 }
-                )
-              }
-
-              if (avatarField.size > MAX_FILE_SIZE) {
-                return Response.json(
-                  { error: 'File too large. Maximum size is 5MB' },
-                  { status: 400 }
-                )
-              }
-
-              const arrayBuffer = await avatarField.arrayBuffer()
-              avatarBuffer = Buffer.from(arrayBuffer)
-              avatarType = avatarField.type
-            }
-          } else if (contentType.includes('application/json')) {
+          if (contentType.includes('application/json')) {
             const body = (await request.json()) as { name?: string }
             if (body.name && typeof body.name === 'string') {
               name = body.name.trim()
@@ -111,20 +77,10 @@ export const Route = createFileRoute('/api/user/profile')({
             return Response.json({ error: 'Name must be at least 2 characters' }, { status: 400 })
           }
 
-          const updates: {
-            name?: string
-            image?: string
-            imageBlob?: Buffer
-            imageType?: string
-          } = {}
+          const updates: { name?: string } = {}
 
           if (name !== undefined) {
             updates.name = name
-          }
-
-          if (avatarBuffer && avatarType) {
-            updates.imageBlob = avatarBuffer
-            updates.imageType = avatarType
           }
 
           if (Object.keys(updates).length === 0) {
@@ -142,7 +98,7 @@ export const Route = createFileRoute('/api/user/profile')({
             success: true,
             user: {
               ...updated,
-              hasCustomAvatar: !!updated.imageType,
+              hasCustomAvatar: !!updated.imageKey,
             },
           })
         } catch (error) {
@@ -158,6 +114,7 @@ export const Route = createFileRoute('/api/user/profile')({
       DELETE: async () => {
         const { db, user, eq } = await import('@/lib/server/db')
         const { getSession } = await import('@/lib/server/functions/auth')
+        const { deleteObject } = await import('@/lib/server/storage/s3')
 
         console.log(`[api] DELETE /user/profile (avatar)`)
 
@@ -168,11 +125,25 @@ export const Route = createFileRoute('/api/user/profile')({
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
+          // Get current user to check for existing S3 key
+          const currentUser = await db.query.user.findFirst({
+            where: eq(user.id, session.user.id),
+            columns: { imageKey: true },
+          })
+
+          // Delete old S3 image if exists
+          if (currentUser?.imageKey) {
+            try {
+              await deleteObject(currentUser.imageKey)
+            } catch {
+              // Ignore deletion errors - old file may not exist
+            }
+          }
+
           const [updated] = await db
             .update(user)
             .set({
-              imageBlob: null,
-              imageType: null,
+              imageKey: null,
             })
             .where(eq(user.id, session.user.id))
             .returning()

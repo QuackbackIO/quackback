@@ -37,15 +37,17 @@ import type {
   PinnedComment,
 } from './post.types'
 
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+
 interface AvatarData {
-  imageBlob: Buffer | null
-  imageType: string | null
+  imageKey: string | null
   image: string | null
 }
 
 function computeAvatarUrl(data: AvatarData): string | null {
-  if (data.imageBlob && data.imageType) {
-    return `data:${data.imageType};base64,${Buffer.from(data.imageBlob).toString('base64')}`
+  if (data.imageKey) {
+    const s3Url = getPublicUrlOrNull(data.imageKey)
+    if (s3Url) return s3Url
   }
   return data.image ?? null
 }
@@ -56,9 +58,10 @@ function parseJson<T>(value: string | T): T {
 
 function parseAvatarData(json: string | null): string | null {
   if (!json) return null
-  const data = parseJson<{ blob?: string; type?: string; url?: string }>(json)
-  if (data.blob && data.type) {
-    return `data:${data.type};base64,${data.blob}`
+  const data = parseJson<{ key?: string; url?: string }>(json)
+  if (data.key) {
+    const s3Url = getPublicUrlOrNull(data.key)
+    if (s3Url) return s3Url
   }
   return data.url ?? null
 }
@@ -176,8 +179,8 @@ export async function listPublicPostsWithVotesAndAvatars(
       hasVoted: voteExistsSubquery,
       avatarData: sql<string | null>`(
         SELECT CASE
-          WHEN u.image_blob IS NOT NULL AND u.image_type IS NOT NULL
-          THEN json_build_object('blob', encode(u.image_blob, 'base64'), 'type', u.image_type)
+          WHEN u.image_key IS NOT NULL
+          THEN json_build_object('key', u.image_key)
           ELSE json_build_object('url', u.image)
         END
         FROM ${memberTable} m
@@ -315,8 +318,8 @@ export async function getPublicPostDetail(
         )`.as('roadmaps_json'),
         authorAvatarData: sql<string | null>`(
           SELECT CASE
-            WHEN u.image_blob IS NOT NULL AND u.image_type IS NOT NULL
-            THEN json_build_object('blob', encode(u.image_blob, 'base64'), 'type', u.image_type)
+            WHEN u.image_key IS NOT NULL
+            THEN json_build_object('key', u.image_key)
             ELSE json_build_object('url', u.image)
           END
           FROM ${memberTable} m
@@ -344,8 +347,7 @@ export async function getPublicPostDetail(
       is_team_member: boolean
       created_at: Date | string
       deleted_at: Date | string | null
-      image_blob: Buffer | null
-      image_type: string | null
+      image_key: string | null
       image: string | null
       reactions_json: string
     }>(sql`
@@ -361,8 +363,7 @@ export async function getPublicPostDetail(
         c.is_team_member,
         c.created_at,
         c.deleted_at,
-        u.image_blob,
-        u.image_type,
+        u.image_key,
         u.image,
         COALESCE(
           json_agg(json_build_object('emoji', cr.emoji, 'memberId', cr.member_id))
@@ -374,7 +375,7 @@ export async function getPublicPostDetail(
       LEFT JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
       WHERE c.post_id = ${postUuid}::uuid
-      GROUP BY c.id, u.image_blob, u.image_type, u.image
+      GROUP BY c.id, u.image_key, u.image
       ORDER BY c.created_at ASC
     `),
   ])
@@ -405,8 +406,7 @@ export async function getPublicPostDetail(
     is_team_member: boolean
     created_at: Date | string
     deleted_at: Date | string | null
-    image_blob: Buffer | null
-    image_type: string | null
+    image_key: string | null
     image: string | null
     reactions_json: string
   }>(commentsWithReactions)
@@ -428,8 +428,7 @@ export async function getPublicPostDetail(
     isTeamMember: comment.is_team_member,
     createdAt: ensureDate(comment.created_at),
     avatarUrl: computeAvatarUrl({
-      imageBlob: comment.image_blob,
-      imageType: comment.image_type,
+      imageKey: comment.image_key,
       image: comment.image,
     }),
     reactions: parseJson<Array<{ emoji: string; memberId: string }>>(comment.reactions_json),
@@ -462,8 +461,7 @@ export async function getPublicPostDetail(
         authorName: pinnedCommentData.author_name,
         memberId: pinnedCommentData.member_id as MemberId | null,
         avatarUrl: computeAvatarUrl({
-          imageBlob: pinnedCommentData.image_blob,
-          imageType: pinnedCommentData.image_type,
+          imageKey: pinnedCommentData.image_key,
           image: pinnedCommentData.image,
         }),
         createdAt: ensureDate(pinnedCommentData.created_at),

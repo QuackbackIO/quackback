@@ -6,10 +6,11 @@ export const Route = createFileRoute('/api/user/avatar/$userId')({
     handlers: {
       /**
        * GET /api/user/avatar/[userId]
-       * Serve user avatar image.
+       * Redirect to user avatar image URL (S3 or OAuth provider).
        */
       GET: async ({ params }) => {
         const { db, user, eq } = await import('@/lib/server/db')
+        const { getPublicUrlOrNull } = await import('@/lib/server/storage/s3')
 
         try {
           const userIdParam = params.userId
@@ -23,8 +24,7 @@ export const Route = createFileRoute('/api/user/avatar/$userId')({
           const userRecord = await db.query.user.findFirst({
             where: eq(user.id, userId),
             columns: {
-              imageBlob: true,
-              imageType: true,
+              imageKey: true,
               image: true,
             },
           })
@@ -33,15 +33,12 @@ export const Route = createFileRoute('/api/user/avatar/$userId')({
             return Response.json({ error: 'User not found' }, { status: 404 })
           }
 
-          // If user has a blob avatar, serve it (this takes priority)
-          if (userRecord.imageBlob && userRecord.imageType) {
-            return new Response(new Uint8Array(userRecord.imageBlob), {
-              headers: {
-                'Content-Type': userRecord.imageType,
-                // Short cache with must-revalidate to allow quick updates
-                'Cache-Control': 'public, max-age=60, must-revalidate',
-              },
-            })
+          // If user has an S3 avatar, redirect to it (this takes priority)
+          if (userRecord.imageKey) {
+            const s3Url = getPublicUrlOrNull(userRecord.imageKey)
+            if (s3Url) {
+              return Response.redirect(s3Url)
+            }
           }
 
           // If user has an external URL-based image (from OAuth), redirect to it

@@ -40,7 +40,7 @@ export interface UserProfile {
   name: string | null
   email: string
   image: string | null
-  imageType: string | null
+  imageKey: string | null
   hasCustomAvatar: boolean
   userType?: 'team' | 'portal'
 }
@@ -75,7 +75,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
           name: true,
           email: true,
           image: true,
-          imageType: true,
+          imageKey: true,
         },
       })
 
@@ -102,8 +102,8 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
         name: userRecord.name,
         email: userRecord.email,
         image: userRecord.image,
-        imageType: userRecord.imageType,
-        hasCustomAvatar: !!userRecord.imageType,
+        imageKey: userRecord.imageKey,
+        hasCustomAvatar: !!userRecord.imageKey,
         userType,
       }
     } catch (error) {
@@ -137,7 +137,7 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
       console.log(`[fn:user] updateProfileNameFn: updated id=${updated.id}`)
       return {
         ...updated,
-        hasCustomAvatar: !!updated.imageType,
+        hasCustomAvatar: !!updated.imageKey,
       }
     } catch (error) {
       console.error(`[fn:user] ❌ updateProfileNameFn failed:`, error)
@@ -158,11 +158,26 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
         throw new Error('Authentication required')
       }
 
+      // Get current user to check for existing S3 key
+      const currentUser = await db.query.user.findFirst({
+        where: eq(user.id, session.user.id),
+        columns: { imageKey: true },
+      })
+
+      // Delete old S3 image if exists
+      if (currentUser?.imageKey) {
+        try {
+          const { deleteObject } = await import('@/lib/server/storage/s3')
+          await deleteObject(currentUser.imageKey)
+        } catch {
+          // Ignore deletion errors - old file may not exist
+        }
+      }
+
       const [updated] = await db
         .update(user)
         .set({
-          imageBlob: null,
-          imageType: null,
+          imageKey: null,
         })
         .where(eq(user.id, session.user.id))
         .returning()
