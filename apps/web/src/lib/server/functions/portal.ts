@@ -10,6 +10,7 @@ import {
 import type { BoardSettings } from '@quackback/db/types'
 import { getOptionalAuth, hasSessionCookie } from './auth-helpers'
 import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/server/db'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import {
   listPublicBoardsWithStats,
   getPublicBoardBySlug,
@@ -201,15 +202,15 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const user = await db.query.user.findFirst({
       where: eq(userTable.id, data.userId as UserId),
-      columns: { imageBlob: true, imageType: true, image: true },
+      columns: { imageKey: true, image: true },
     })
 
     if (!user) return { avatarUrl: data.fallbackImageUrl ?? null, hasCustomAvatar: false }
 
-    if (user.imageBlob && user.imageType) {
-      return {
-        avatarUrl: `data:${user.imageType};base64,${Buffer.from(user.imageBlob).toString('base64')}`,
-        hasCustomAvatar: true,
+    if (user.imageKey) {
+      const avatarUrl = getPublicUrlOrNull(user.imageKey)
+      if (avatarUrl) {
+        return { avatarUrl, hasCustomAvatar: true }
       }
     }
 
@@ -225,8 +226,7 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
     const members = await db
       .select({
         memberId: memberTable.id,
-        imageBlob: userTable.imageBlob,
-        imageType: userTable.imageType,
+        imageKey: userTable.imageKey,
         image: userTable.image,
       })
       .from(memberTable)
@@ -235,12 +235,8 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
 
     const avatarMap = new Map<MemberId, string | null>()
     for (const m of members) {
-      avatarMap.set(
-        m.memberId,
-        m.imageBlob && m.imageType
-          ? `data:${m.imageType};base64,${Buffer.from(m.imageBlob).toString('base64')}`
-          : m.image
-      )
+      const s3Url = m.imageKey ? getPublicUrlOrNull(m.imageKey) : null
+      avatarMap.set(m.memberId, s3Url ?? m.image)
     }
     for (const id of memberIds) {
       if (!avatarMap.has(id)) avatarMap.set(id, null)
