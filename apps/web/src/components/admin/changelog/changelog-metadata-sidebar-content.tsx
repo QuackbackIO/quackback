@@ -3,16 +3,15 @@
 import { useState } from 'react'
 import {
   DocumentTextIcon,
-  ClockIcon,
   PlusIcon,
   MagnifyingGlassIcon,
   ChevronUpIcon,
 } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { useQuery } from '@tanstack/react-query'
 import { searchShippedPostsFn } from '@/lib/server/functions/changelog'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -51,14 +50,14 @@ export function ChangelogMetadataSidebarContent({
   const [search, setSearch] = useState('')
 
   // Default scheduled time to tomorrow at 9am
-  const [scheduledDateTime, setScheduledDateTime] = useState<string>(() => {
+  const [scheduledDateTime, setScheduledDateTime] = useState<Date>(() => {
     if (publishState.type === 'scheduled') {
-      return formatDateTimeLocal(publishState.publishAt)
+      return publishState.publishAt
     }
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     tomorrow.setHours(9, 0, 0, 0)
-    return formatDateTimeLocal(tomorrow)
+    return tomorrow
   })
 
   // Search shipped posts
@@ -82,10 +81,12 @@ export function ChangelogMetadataSidebarContent({
     }
   }
 
-  const handleDateTimeChange = (dateTime: string) => {
-    setScheduledDateTime(dateTime)
-    if (publishState.type === 'scheduled') {
-      onPublishStateChange({ type: 'scheduled', publishAt: new Date(dateTime) })
+  const handleDateTimeChange = (date: Date | undefined) => {
+    if (date) {
+      setScheduledDateTime(date)
+      if (publishState.type === 'scheduled') {
+        onPublishStateChange({ type: 'scheduled', publishAt: date })
+      }
     }
   }
 
@@ -115,15 +116,15 @@ export function ChangelogMetadataSidebarContent({
 
       {/* Schedule Date - only show when scheduled */}
       {publishState.type === 'scheduled' && (
-        <SidebarRow icon={<ClockIcon className="h-4 w-4" />} label="Schedule">
-          <Input
-            type="datetime-local"
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Schedule</span>
+          <DateTimePicker
             value={scheduledDateTime}
-            onChange={(e) => handleDateTimeChange(e.target.value)}
-            min={formatDateTimeLocal(new Date())}
-            className="w-auto h-7 text-xs px-2"
+            onChange={handleDateTimeChange}
+            minDate={new Date()}
+            className="h-7 text-xs"
           />
-        </SidebarRow>
+        </div>
       )}
 
       {/* Linked Posts - single unified section */}
@@ -229,13 +230,4 @@ export function ChangelogMetadataSidebarContent({
       </div>
     </div>
   )
-}
-
-function formatDateTimeLocal(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${minutes}`
 }
