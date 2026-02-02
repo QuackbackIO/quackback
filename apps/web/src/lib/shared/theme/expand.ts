@@ -13,6 +13,10 @@ export interface MinimalThemeVariables {
   ring?: string
   fontSans?: string
   radius?: string
+  /** Explicit secondary color - falls back to muted if not provided */
+  secondary?: string
+  /** Explicit accent color - falls back to muted if not provided */
+  accent?: string
 }
 
 export interface MinimalThemeConfig {
@@ -112,9 +116,9 @@ export function expandTheme(
     cardForeground: minimal.foreground,
     popover: minimal.card,
     popoverForeground: minimal.foreground,
-    secondary: minimal.muted,
+    secondary: minimal.secondary ?? minimal.muted,
     secondaryForeground: minimal.foreground,
-    accent: minimal.muted,
+    accent: minimal.accent ?? minimal.muted,
     accentForeground: minimal.foreground,
     input: minimal.border,
     destructiveForeground,
@@ -143,5 +147,8 @@ export function extractMinimal(vars: ThemeVariables): MinimalThemeVariables {
     ring: vars.ring !== vars.primary ? vars.ring : undefined,
     fontSans: vars.fontSans,
     radius: vars.radius,
+    // Only include secondary/accent if they differ from muted
+    secondary: vars.secondary !== vars.muted ? vars.secondary : undefined,
+    accent: vars.accent !== vars.muted ? vars.accent : undefined,
   }
 }

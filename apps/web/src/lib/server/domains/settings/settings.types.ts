@@ -152,11 +152,18 @@ export interface ThemeColors {
 }
 
 /**
+ * Theme mode - controls how light/dark mode is handled on the portal
+ */
+export type ThemeMode = 'light' | 'dark' | 'user'
+
+/**
  * Branding/theme configuration
  */
 export interface BrandingConfig {
   /** Theme preset name */
   preset?: string
+  /** Theme mode: 'light' (force light), 'dark' (force dark), or 'user' (allow toggle) */
+  themeMode?: ThemeMode
   /** Light mode color overrides */
   light?: ThemeColors
   /** Dark mode color overrides */

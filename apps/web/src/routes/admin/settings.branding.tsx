@@ -3,7 +3,15 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { SunIcon, MoonIcon, CheckIcon, ArrowPathIcon, CameraIcon } from '@heroicons/react/24/solid'
+import {
+  SunIcon,
+  MoonIcon,
+  CheckIcon,
+  ArrowPathIcon,
+  CameraIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,6 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImageCropper } from '@/components/ui/image-cropper'
+import { Textarea } from '@/components/ui/textarea'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/shared/utils'
 import {
   BrandingLayout,
@@ -40,6 +50,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
+      context.queryClient.ensureQueryData(settingsQueries.customCss()),
     ])
   },
   component: BrandingPage,
@@ -49,6 +60,7 @@ function BrandingPage() {
   const { settings } = Route.useRouteContext()
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
+  const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
 
   const initialLogoUrl = logoData?.url ?? null
 
@@ -56,6 +68,7 @@ function BrandingPage() {
   const state = useBrandingState({
     initialLogoUrl,
     initialThemeConfig: brandingConfig as ThemeConfig,
+    initialCustomCss: customCss,
   })
 
   // Workspace name state
@@ -129,21 +142,77 @@ function BrandingPage() {
               </div>
             </div>
 
-            {/* Appearance Section */}
+            {/* Theme Mode Section */}
             <div className="p-5 space-y-4 border-t border-border">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Appearance</h3>
+                <h3 className="text-sm font-medium text-foreground">Theme Mode</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Customize colors and typography
+                  Control how light/dark mode works for portal visitors
+                </p>
+              </div>
+
+              <Select value={state.themeMode} onValueChange={state.setThemeMode}>
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User choice (allow toggle)</SelectItem>
+                  <SelectItem value="light">Light only</SelectItem>
+                  <SelectItem value="dark">Dark only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Colors Section */}
+            <div className="p-5 space-y-4 border-t border-border">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Colors</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Customize your portal's color palette
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Brand Color</Label>
-                  <ColorInputInline value={state.brandColor} onChange={state.setBrandColor} />
+                  <Label className="text-xs text-muted-foreground">Primary</Label>
+                  <ColorInputInline value={state.primaryColor} onChange={state.setPrimaryColor} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Secondary</Label>
+                  <ColorInputInline
+                    value={state.secondaryColor}
+                    onChange={state.setSecondaryColor}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Accent</Label>
+                  <ColorInputInline value={state.accentColor} onChange={state.setAccentColor} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Background</Label>
+                  <ColorInputInline
+                    value={state.backgroundColor}
+                    onChange={state.setBackgroundColor}
+                  />
+                </div>
+                <div className="space-y-1.5 col-span-2">
+                  <Label className="text-xs text-muted-foreground">Foreground (Text)</Label>
+                  <ColorInputInline
+                    value={state.foregroundColor}
+                    onChange={state.setForegroundColor}
+                  />
+                </div>
+              </div>
+            </div>
 
+            {/* Typography Section */}
+            <div className="p-5 space-y-4 border-t border-border">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Typography</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Font</Label>
                   <Select
@@ -191,6 +260,9 @@ function BrandingPage() {
                 </div>
               </div>
             </div>
+
+            {/* Custom CSS Section - Collapsible */}
+            <CustomCssSection customCss={state.customCss} setCustomCss={state.setCustomCss} />
 
             {/* Save Button */}
             <div className="p-5 border-t border-border">
@@ -481,5 +553,68 @@ function FontSelectGroup({ category }: { category: FontCategory }) {
         </SelectItem>
       ))}
     </SelectGroup>
+  )
+}
+
+// ==============================================
+// Custom CSS Section (Collapsible)
+// ==============================================
+interface CustomCssSectionProps {
+  customCss: string
+  setCustomCss: (css: string) => void
+}
+
+function CustomCssSection({ customCss, setCustomCss }: CustomCssSectionProps) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border-t border-border">
+      <CollapsibleTrigger className="flex items-center justify-between w-full p-5 hover:bg-muted/50 transition-colors">
+        <div className="flex items-center gap-2">
+          {isOpen ? (
+            <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+          )}
+          <div className="text-left">
+            <h3 className="text-sm font-medium text-foreground">Advanced: Custom CSS</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Override styles with raw CSS from theme builders
+            </p>
+          </div>
+        </div>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="px-5 pb-5">
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Design your theme at{' '}
+            <a
+              href="https://tweakcn.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              tweakcn.com
+            </a>{' '}
+            then paste the CSS below. Custom CSS is applied after base theme styles.
+          </p>
+
+          <Textarea
+            value={customCss}
+            onChange={(e) => setCustomCss(e.target.value)}
+            placeholder={`:root {
+  --primary: oklch(0.623 0.214 259);
+  --background: oklch(1 0 0);
+}
+.dark {
+  --primary: oklch(0.623 0.214 259);
+  --background: oklch(0.145 0 0);
+}`}
+            className="font-mono text-xs min-h-[200px] resize-y"
+          />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

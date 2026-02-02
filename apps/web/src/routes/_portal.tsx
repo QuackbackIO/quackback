@@ -25,7 +25,11 @@ export const Route = createFileRoute('/_portal')({
     const brandingData = settings?.brandingData ?? null
     const faviconData = settings?.faviconData ?? null
     const brandingConfig = settings?.brandingConfig ?? {}
+    const customCss = settings?.customCss ?? ''
     const portalConfig = settings?.publicPortalConfig ?? null
+
+    // Determine theme mode (default to 'user' for backwards compatibility)
+    const themeMode = brandingConfig.themeMode ?? 'user'
 
     const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
     const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
@@ -51,6 +55,8 @@ export const Route = createFileRoute('/_portal')({
       brandingData,
       faviconData,
       themeStyles,
+      customCss,
+      themeMode,
       googleFontsUrl,
       initialUserData,
       authConfig,
@@ -70,19 +76,44 @@ export const Route = createFileRoute('/_portal')({
 })
 
 function PortalLayout() {
-  const { org, userRole, brandingData, themeStyles, googleFontsUrl, initialUserData, authConfig } =
-    Route.useLoaderData()
+  const {
+    org,
+    userRole,
+    brandingData,
+    themeStyles,
+    customCss,
+    themeMode,
+    googleFontsUrl,
+    initialUserData,
+    authConfig,
+  } = Route.useLoaderData()
+
+  // Determine the forced theme class for the HTML element
+  // When themeMode is 'light' or 'dark', we force that mode
+  // When themeMode is 'user', we let the user toggle (handled by theme provider)
+  const forcedThemeClass = themeMode === 'user' ? undefined : themeMode
 
   return (
     <AuthPopoverProvider>
+      {/* Apply forced theme class when themeMode is not 'user' */}
+      {forcedThemeClass && (
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `document.documentElement.classList.add('${forcedThemeClass}');`,
+          }}
+        />
+      )}
       <div className="min-h-screen bg-background flex flex-col">
         {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
         {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+        {/* Custom CSS is injected after theme styles so it can override */}
+        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
         <PortalHeader
           orgName={org.name}
           orgLogo={brandingData?.logoUrl ?? null}
           userRole={userRole}
           initialUserData={initialUserData}
+          showThemeToggle={themeMode === 'user'}
         />
         <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
           <Outlet />

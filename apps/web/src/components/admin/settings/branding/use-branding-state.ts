@@ -8,8 +8,9 @@ import {
   type ThemeConfig,
   type ThemeVariables,
   type MinimalThemeVariables,
+  type ThemeMode,
 } from '@/lib/shared/theme'
-import { updateThemeFn } from '@/lib/server/functions/settings'
+import { updateThemeFn, updateCustomCssFn } from '@/lib/server/functions/settings'
 
 export const FONT_OPTIONS = [
   {
@@ -137,6 +138,7 @@ const DEFAULT_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif'
 interface UseBrandingStateOptions {
   initialLogoUrl: string | null
   initialThemeConfig: ThemeConfig
+  initialCustomCss: string
 }
 
 export interface BrandingState {
@@ -148,7 +150,23 @@ export interface BrandingState {
   previewMode: 'light' | 'dark'
   setPreviewMode: (mode: 'light' | 'dark') => void
 
-  // Brand color (shared across light/dark modes)
+  // Theme mode (controls portal behavior)
+  themeMode: ThemeMode
+  setThemeMode: (mode: ThemeMode) => void
+
+  // Colors (shared across light/dark modes)
+  primaryColor: string
+  setPrimaryColor: (hexColor: string) => void
+  secondaryColor: string
+  setSecondaryColor: (hexColor: string) => void
+  accentColor: string
+  setAccentColor: (hexColor: string) => void
+  backgroundColor: string
+  setBackgroundColor: (hexColor: string) => void
+  foregroundColor: string
+  setForegroundColor: (hexColor: string) => void
+
+  // Legacy alias for backwards compatibility
   brandColor: string
   setBrandColor: (hexColor: string) => void
 
@@ -158,6 +176,10 @@ export interface BrandingState {
   currentFontId: string
   radius: number
   setRadius: (radius: number) => void
+
+  // Custom CSS
+  customCss: string
+  setCustomCss: (css: string) => void
 
   // Computed theme variables for preview
   effectiveLight: ThemeVariables
@@ -170,7 +192,7 @@ export interface BrandingState {
 }
 
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {
-  const { initialLogoUrl, initialThemeConfig } = options
+  const { initialLogoUrl, initialThemeConfig, initialCustomCss } = options
 
   // ============================================
   // Logo state
@@ -181,6 +203,9 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   // Theme state
   // ============================================
   const [editMode, setEditMode] = useState<'light' | 'dark'>('light')
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    () => initialThemeConfig.themeMode ?? 'user'
+  )
 
   const defaultPreset = themePresets.default
 
@@ -204,6 +229,9 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     return match ? parseFloat(match[1]) : 0.625
   })
 
+  // Custom CSS state
+  const [customCss, setCustomCss] = useState(initialCustomCss)
+
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
@@ -224,24 +252,63 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   const currentFontId = FONT_OPTIONS.find((f) => f.value === font)?.id || 'inter'
 
   // ============================================
-  // Color management
+  // Color management helpers
   // ============================================
-  // Brand color is shared across both light and dark modes
-  const setBrandColor = useCallback((hexColor: string) => {
+  const getColorAsHex = useCallback(
+    (colorKey: keyof MinimalThemeVariables, defaultHex: string): string => {
+      const oklch = lightValues[colorKey]
+      if (!oklch || typeof oklch !== 'string') return defaultHex
+      try {
+        return oklchToHex(oklch)
+      } catch {
+        return defaultHex
+      }
+    },
+    [lightValues]
+  )
+
+  const setColorFromHex = useCallback((colorKey: keyof MinimalThemeVariables, hexColor: string) => {
     const oklchColor = hexToOklch(hexColor)
-    setLightValues((prev: MinimalThemeVariables) => ({ ...prev, primary: oklchColor }))
-    setDarkValues((prev: MinimalThemeVariables) => ({ ...prev, primary: oklchColor }))
+    setLightValues((prev: MinimalThemeVariables) => ({ ...prev, [colorKey]: oklchColor }))
+    setDarkValues((prev: MinimalThemeVariables) => ({ ...prev, [colorKey]: oklchColor }))
   }, [])
 
-  const getBrandColor = useCallback((): string => {
-    const oklch = lightValues.primary
-    if (!oklch || typeof oklch !== 'string') return '#3b82f6'
-    try {
-      return oklchToHex(oklch)
-    } catch {
-      return '#3b82f6'
-    }
-  }, [lightValues.primary])
+  // Primary color
+  const setPrimaryColor = useCallback(
+    (hexColor: string) => setColorFromHex('primary', hexColor),
+    [setColorFromHex]
+  )
+
+  // Secondary color
+  const setSecondaryColor = useCallback(
+    (hexColor: string) => setColorFromHex('secondary', hexColor),
+    [setColorFromHex]
+  )
+
+  // Accent color
+  const setAccentColor = useCallback(
+    (hexColor: string) => setColorFromHex('accent', hexColor),
+    [setColorFromHex]
+  )
+
+  // Background color
+  const setBackgroundColor = useCallback(
+    (hexColor: string) => setColorFromHex('background', hexColor),
+    [setColorFromHex]
+  )
+
+  // Foreground color
+  const setForegroundColor = useCallback(
+    (hexColor: string) => setColorFromHex('foreground', hexColor),
+    [setColorFromHex]
+  )
+
+  // Legacy alias
+  const setBrandColor = setPrimaryColor
+  const getBrandColor = useCallback(
+    (): string => getColorAsHex('primary', '#3b82f6'),
+    [getColorAsHex]
+  )
 
   // ============================================
   // Save
@@ -252,12 +319,19 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
 
     try {
       const themeConfig: ThemeConfig = {
+        themeMode,
         light: { ...lightValues, fontSans: font, radius: `${radius}rem` },
         dark: { ...darkValues, fontSans: font, radius: `${radius}rem` },
       }
-      await updateThemeFn({
-        data: { brandingConfig: themeConfig as Record<string, unknown> },
-      })
+
+      // Save both theme config and custom CSS
+      await Promise.all([
+        updateThemeFn({
+          data: { brandingConfig: themeConfig as Record<string, unknown> },
+        }),
+        updateCustomCssFn({ data: { customCss } }),
+      ])
+
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
     } catch (error) {
@@ -265,7 +339,7 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     } finally {
       setIsSaving(false)
     }
-  }, [lightValues, darkValues, font, radius])
+  }, [lightValues, darkValues, font, radius, themeMode, customCss])
 
   return {
     // Logo
@@ -276,7 +350,24 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     previewMode: editMode,
     setPreviewMode: setEditMode,
 
-    // Brand color
+    // Theme mode
+    themeMode,
+    setThemeMode,
+
+    // Colors
+    primaryColor: getColorAsHex('primary', '#3b82f6'),
+    setPrimaryColor,
+    secondaryColor:
+      getColorAsHex('secondary', lightValues.muted) || getColorAsHex('muted', '#f1f5f9'),
+    setSecondaryColor,
+    accentColor: getColorAsHex('accent', lightValues.muted) || getColorAsHex('muted', '#f1f5f9'),
+    setAccentColor,
+    backgroundColor: getColorAsHex('background', '#ffffff'),
+    setBackgroundColor,
+    foregroundColor: getColorAsHex('foreground', '#0f172a'),
+    setForegroundColor,
+
+    // Legacy alias
     brandColor: getBrandColor(),
     setBrandColor,
 
@@ -286,6 +377,10 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     currentFontId,
     radius,
     setRadius,
+
+    // Custom CSS
+    customCss,
+    setCustomCss,
 
     // Computed
     effectiveLight,
