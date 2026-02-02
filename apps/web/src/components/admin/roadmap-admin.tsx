@@ -49,7 +49,15 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
   // Track dragged post for overlay
   const [activePost, setActivePost] = useState<RoadmapPostEntry | null>(null)
 
-  const sensors = useSensors(useSensor(PointerSensor))
+  // Distance threshold: drag only starts after moving 8px (like Trello)
+  // This allows click to work normally if pointer doesn't move much
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  )
 
   function handleDragStart(event: DragStartEvent) {
     const { active } = event
