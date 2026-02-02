@@ -4,6 +4,11 @@ config({ path: '../../.env', quiet: true })
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 async function runMigrations() {
   const connectionString = process.env.DATABASE_URL
@@ -12,17 +17,19 @@ async function runMigrations() {
     throw new Error('DATABASE_URL environment variable is required')
   }
 
+  // Allow overriding migrations folder via env var (for Docker)
+  // Default to ./drizzle relative to this script
+  const migrationsFolder = process.env.MIGRATIONS_FOLDER || path.resolve(__dirname, '../drizzle')
+
   console.log('🔄 Running migrations...')
+  console.log(`   Migrations folder: ${migrationsFolder}`)
 
   // Use a single connection for migrations
   const sql = postgres(connectionString, { max: 1 })
   const db = drizzle(sql)
 
   try {
-    // Run Drizzle migrations
-    // This creates tables, RLS policies, roles, and grants permissions
-    // (app_user permissions are granted in migration 0010_grant_app_user_permissions.sql)
-    await migrate(db, { migrationsFolder: './drizzle' })
+    await migrate(db, { migrationsFolder })
     console.log('✅ Migrations completed successfully!')
   } catch (error) {
     console.error('❌ Migration failed:', error)

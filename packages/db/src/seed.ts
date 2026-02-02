@@ -268,13 +268,25 @@ async function seed() {
   const existingSettings = await db.select().from(settings).limit(1)
   if (existingSettings.length === 0) {
     const settingsId: WorkspaceId = generateId('workspace')
+    // Mark onboarding as complete so dev environment skips the onboarding flow
+    const setupState = {
+      version: 1,
+      steps: {
+        core: true,
+        workspace: true,
+        boards: true,
+      },
+      completedAt: new Date().toISOString(),
+      source: 'self-hosted' as const,
+    }
     await db.insert(settings).values({
       id: settingsId,
       name: DEMO_ORG.name,
       slug: DEMO_ORG.slug,
       createdAt: new Date(),
+      setupState: JSON.stringify(setupState),
     })
-    console.log('Created settings: Acme Corp')
+    console.log('Created settings: Acme Corp (onboarding complete)')
   } else {
     console.log('Settings already exist, skipping')
   }
