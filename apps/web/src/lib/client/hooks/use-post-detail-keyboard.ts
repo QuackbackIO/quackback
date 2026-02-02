@@ -22,7 +22,7 @@ interface UsePostDetailKeyboardOptions {
  * - Escape: Close/back
  * - e: Edit post
  *
- * Ignores key events when focus is in input/textarea.
+ * Ignores key events when focus is in input/textarea/contenteditable.
  */
 export function usePostDetailKeyboard({
   enabled = true,
@@ -35,8 +35,12 @@ export function usePostDetailKeyboard({
     if (!enabled) return
 
     function handleKeyDown(e: KeyboardEvent) {
-      // Ignore if in input/textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Ignore if in input/textarea or contenteditable (TipTap editor)
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
         return
       }
 
