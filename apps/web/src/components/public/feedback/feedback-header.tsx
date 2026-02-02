@@ -281,7 +281,6 @@ export function FeedbackHeader({
                 placeholder="Add more details..."
                 minHeight="150px"
                 borderless
-                toolbarPosition="bottom"
               />
             </motion.div>
 

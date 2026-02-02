@@ -25,8 +25,6 @@ export function useInboxFilters() {
     [search]
   )
 
-  const selectedPostId = search.selected ?? null
-
   const setFilters = useCallback(
     (updates: Partial<InboxFilters>) => {
       void navigate({
@@ -50,26 +48,11 @@ export function useInboxFilters() {
     [navigate, search]
   )
 
-  const setSelectedPostId = useCallback(
-    (postId: string | null) => {
-      void navigate({
-        to: '/admin/feedback',
-        search: {
-          ...search,
-          selected: postId ?? undefined,
-        },
-        replace: true,
-      })
-    },
-    [navigate, search]
-  )
-
   const clearFilters = useCallback(() => {
     void navigate({
       to: '/admin/feedback',
       search: {
         sort: search.sort,
-        selected: search.selected,
       },
       replace: true,
     })
@@ -118,8 +101,6 @@ export function useInboxFilters() {
     filters,
     setFilters,
     clearFilters,
-    selectedPostId,
-    setSelectedPostId,
     hasActiveFilters,
     toggleBoard,
     toggleStatus,

@@ -70,8 +70,6 @@ interface PostCardProps {
   onStatusChange?: (statusId: StatusId) => void
   /** Whether status update is in progress */
   isUpdatingStatus?: boolean
-  /** Enable keyboard focus state (left border indicator) */
-  isFocused?: boolean
   /** Use onClick instead of Link navigation */
   onClick?: () => void
   /** Hover state handlers for quick actions visibility */
@@ -111,7 +109,6 @@ export function PostCard({
   canChangeStatus = false,
   onStatusChange,
   isUpdatingStatus = false,
-  isFocused = false,
   onClick,
   onMouseEnter,
   onMouseLeave,
@@ -413,10 +410,7 @@ export function PostCard({
   )
 
   const rootClassName = cn(
-    'post-card flex cursor-pointer transition-colors relative group',
-    isFocused
-      ? 'bg-muted/50 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-primary'
-      : 'hover:bg-muted/30',
+    'post-card flex cursor-pointer transition-colors relative group hover:bg-muted/30',
     isCompact ? 'py-1 px-2' : 'py-1 px-3'
   )
 

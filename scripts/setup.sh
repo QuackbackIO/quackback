@@ -41,15 +41,15 @@ else
   echo -e "${GREEN}.env already exists${NC}"
 fi
 
-# Generate BETTER_AUTH_SECRET if still placeholder
-if grep -q "your-secret-key-here" .env 2>/dev/null; then
+# Generate SECRET_KEY if empty
+if grep -q '^SECRET_KEY=""' .env 2>/dev/null; then
   SECRET=$(openssl rand -hex 32)
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s/your-secret-key-here/$SECRET/" .env
+    sed -i '' "s/^SECRET_KEY=\"\"/SECRET_KEY=\"$SECRET\"/" .env
   else
-    sed -i "s/your-secret-key-here/$SECRET/" .env
+    sed -i "s/^SECRET_KEY=\"\"/SECRET_KEY=\"$SECRET\"/" .env
   fi
-  echo -e "${GREEN}Generated BETTER_AUTH_SECRET${NC}"
+  echo -e "${GREEN}Generated SECRET_KEY${NC}"
 fi
 
 echo ""
@@ -62,9 +62,9 @@ if docker ps --format '{{.Names}}' | grep -v quackback-db | xargs -I {} docker p
   echo -e "${GREEN}Cleared port 5432${NC}"
 fi
 
-# Start PostgreSQL
-echo "Starting PostgreSQL..."
-docker compose up -d postgres
+# Start PostgreSQL and MinIO (minio-init handles bucket creation automatically)
+echo "Starting PostgreSQL and MinIO..."
+docker compose up -d postgres minio minio-init
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
@@ -72,6 +72,14 @@ until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; d
   sleep 1
 done
 echo -e "${GREEN}PostgreSQL is ready${NC}"
+
+# Wait for MinIO to be ready
+echo "Waiting for MinIO to be ready..."
+sleep 2
+until curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; do
+  sleep 1
+done
+echo -e "${GREEN}MinIO is ready (bucket 'quackback' configured automatically)${NC}"
 echo ""
 
 # Install dependencies

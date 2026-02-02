@@ -40,6 +40,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Creates MinIO bucket and sets public download policy on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: quackback-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb local/quackback --ignore-existing;
+      mc anonymous set download local/quackback;
+      exit 0;
+      "
+    restart: 'no'
+
 volumes:
   postgres_data:
   minio_data:

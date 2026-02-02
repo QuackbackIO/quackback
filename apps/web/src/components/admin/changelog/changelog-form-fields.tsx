@@ -63,7 +63,6 @@ export function ChangelogFormFields({
                 placeholder="Share the details of your update..."
                 minHeight="100%"
                 borderless
-                toolbarPosition="bottom"
                 features={{
                   headings: true,
                   images: true,
@@ -72,6 +71,9 @@ export function ChangelogFormFields({
                   blockquotes: true,
                   tables: true,
                   dividers: true,
+                  bubbleMenu: true,
+                  slashMenu: true,
+                  embeds: true,
                 }}
                 onImageUpload={uploadImage}
               />

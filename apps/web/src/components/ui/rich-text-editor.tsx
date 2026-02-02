@@ -9,7 +9,9 @@ import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import { ResizableImage } from 'tiptap-extension-resizable-image'
+import 'tiptap-extension-resizable-image/styles.css'
+import './rich-text-editor.css'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -18,11 +20,12 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Underline from '@tiptap/extension-underline'
+import Youtube from '@tiptap/extension-youtube'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { common, createLowlight } from 'lowlight'
-import { useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useCallback, useState, forwardRef, useImperativeHandle, useRef } from 'react'
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
 import { cn } from '@/lib/shared/utils'
 import {
@@ -42,6 +45,17 @@ import {
   Minus,
   CheckSquare,
   Table as TableIcon,
+  ChevronDown,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Youtube as YoutubeIcon,
+  Download,
+  Copy,
+  Expand,
+  Link2,
 } from 'lucide-react'
 import {
   ArrowUturnLeftIcon,
@@ -52,6 +66,19 @@ import {
 import { Button } from './button'
 import { Input } from './input'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './dropdown-menu'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from './context-menu'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
@@ -83,6 +110,8 @@ export interface EditorFeatures {
   tables?: boolean
   /** Enable horizontal dividers */
   dividers?: boolean
+  /** Enable YouTube/Figma/Loom embeds */
+  embeds?: boolean
 }
 
 // ============================================================================
@@ -249,7 +278,8 @@ function getSlashMenuItems(
           if (!file) return
           try {
             const src = await onImageUpload(file)
-            editor.chain().focus().setImage({ src }).run()
+            // Use setResizableImage for the resizable image extension
+            editor.commands.setResizableImage({ src, 'data-keep-ratio': true })
           } catch (error) {
             console.error('Failed to upload image:', error)
           }
@@ -276,6 +306,28 @@ function getSlashMenuItems(
           .run()
       },
       aliases: ['table', '|--'],
+      group: 'advanced',
+    })
+  }
+
+  // YouTube embed - conditional
+  if (features.embeds) {
+    items.push({
+      title: 'YouTube',
+      description: 'Embed a YouTube video',
+      icon: <YoutubeIcon className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        const url = window.prompt('Paste YouTube video URL:')
+        if (url && url.trim()) {
+          editor.commands.setYoutubeVideo({
+            src: url.trim(),
+            width: 640,
+            height: 360,
+          })
+        }
+      },
+      aliases: ['youtube', 'video', 'embed'],
       group: 'advanced',
     })
   }
@@ -320,6 +372,7 @@ interface SlashMenuListProps {
 const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
   ({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0)
+    const containerRef = useRef<HTMLDivElement>(null)
 
     const selectItem = (index: number) => {
       const item = items[index]
@@ -327,6 +380,18 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
         command(item)
       }
     }
+
+    // Scroll selected item into view
+    const scrollToSelected = useCallback((index: number) => {
+      const container = containerRef.current
+      if (!container) return
+
+      const buttons = container.querySelectorAll('button')
+      const selectedButton = buttons[index]
+      if (selectedButton) {
+        selectedButton.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }, [])
 
     // Reset selection when items change
     useEffect(() => {
@@ -336,12 +401,16 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
     useImperativeHandle(ref, () => ({
       onKeyDown: ({ event }) => {
         if (event.key === 'ArrowUp') {
-          setSelectedIndex((prev) => (prev - 1 + items.length) % items.length)
+          const newIndex = (selectedIndex - 1 + items.length) % items.length
+          setSelectedIndex(newIndex)
+          scrollToSelected(newIndex)
           return true
         }
 
         if (event.key === 'ArrowDown') {
-          setSelectedIndex((prev) => (prev + 1) % items.length)
+          const newIndex = (selectedIndex + 1) % items.length
+          setSelectedIndex(newIndex)
+          scrollToSelected(newIndex)
           return true
         }
 
@@ -376,7 +445,12 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
     let globalIndex = -1
 
     return (
-      <div className="z-50 w-72 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
+      <div
+        ref={containerRef}
+        className="z-50 w-72 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg"
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {Object.entries(groupedItems).map(([group, groupItems]) => (
           <div key={group}>
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
@@ -394,7 +468,12 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
                     'hover:bg-accent focus:bg-accent focus:outline-none',
                     currentIndex === selectedIndex && 'bg-accent'
                   )}
-                  onClick={() => selectItem(currentIndex)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    selectItem(currentIndex)
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
                 >
                   <span className="flex size-8 items-center justify-center rounded-md border bg-background">
                     {item.icon}
@@ -495,6 +574,7 @@ function createSlashCommands(
                 floatingEl = document.createElement('div')
                 floatingEl.style.position = 'absolute'
                 floatingEl.style.zIndex = '50'
+                floatingEl.style.pointerEvents = 'auto'
                 floatingEl.appendChild(component.element)
                 document.body.appendChild(floatingEl)
 
@@ -540,7 +620,7 @@ interface RichTextEditorProps {
   disabled?: boolean
   minHeight?: string
   borderless?: boolean
-  toolbarPosition?: 'top' | 'bottom' | 'none'
+  toolbarPosition?: 'top' | 'none'
   /** Feature flags for enabling advanced features */
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
@@ -589,10 +669,10 @@ export function RichTextEditor({
           class: 'text-primary underline',
         },
       }),
-      // Conditionally add Image extension
+      // Conditionally add ResizableImage extension (with selection, resize, drag-drop support)
       ...(features.images
         ? [
-            Image.configure({
+            ResizableImage.configure({
               HTMLAttributes: {
                 class: 'max-w-full h-auto rounded-lg',
               },
@@ -649,6 +729,19 @@ export function RichTextEditor({
             }),
           ]
         : []),
+      // Conditionally add YouTube extension
+      ...(features.embeds
+        ? [
+            Youtube.configure({
+              controls: true,
+              nocookie: true,
+              width: 640,
+              height: 360,
+              allowFullscreen: true,
+              autoplay: false,
+            }),
+          ]
+        : []),
       // Conditionally add slash commands (enabled by default)
       ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
     ],
@@ -695,6 +788,38 @@ export function RichTextEditor({
     }
   }, [disabled, editor])
 
+  // Image context menu state - stores the src of the right-clicked image
+  const [contextMenuImageSrc, setContextMenuImageSrc] = useState<string | null>(null)
+
+  // Handle right-click - check if it's on an image and store the src
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if (!editor || !features.images) {
+        setContextMenuImageSrc(null)
+        return
+      }
+
+      // Check if right-clicked on an image
+      const target = e.target as HTMLElement
+      const imageWrapper = target.closest('.resizable-image-wrapper')
+      const img = imageWrapper?.querySelector('img') || (target.tagName === 'IMG' ? target : null)
+
+      if (img && img instanceof HTMLImageElement) {
+        setContextMenuImageSrc(img.src)
+      } else {
+        // Not an image - prevent Radix context menu from opening
+        setContextMenuImageSrc(null)
+      }
+    },
+    [editor, features.images]
+  )
+
+  // Use shared image actions hook for context menu
+  const contextMenuActions = useImageActions({
+    src: contextMenuImageSrc ?? undefined,
+    editor,
+  })
+
   if (!editor) {
     return null
   }
@@ -702,27 +827,58 @@ export function RichTextEditor({
   const showToolbar = toolbarPosition !== 'none'
 
   return (
-    <div
-      className={cn(
-        'overflow-hidden',
-        !borderless && 'rounded-md border border-input bg-background',
-        disabled && 'opacity-50 cursor-not-allowed',
-        className
-      )}
-    >
-      {/* Toolbar - top position */}
-      {showToolbar && toolbarPosition === 'top' && (
-        <MenuBar
-          editor={editor}
-          disabled={disabled}
-          position="top"
-          features={features}
-          onImageUpload={onImageUpload}
-        />
-      )}
+    <ContextMenu>
+      <ContextMenuTrigger asChild disabled={!features.images}>
+        <div
+          className={cn(
+            'overflow-hidden',
+            !borderless && 'rounded-md border border-input bg-background',
+            disabled && 'opacity-50 cursor-not-allowed',
+            className
+          )}
+          onContextMenu={handleContextMenu}
+        >
+          {/* Toolbar */}
+          {showToolbar && (
+            <MenuBar
+              editor={editor}
+              disabled={disabled}
+              features={features}
+              onImageUpload={onImageUpload}
+            />
+          )}
 
-      {/* Editor content */}
-      <EditorContent editor={editor} />
+          {/* Editor content */}
+          <EditorContent editor={editor} />
+        </div>
+      </ContextMenuTrigger>
+
+      {/* Image context menu (shadcn/Radix - Linear-style) */}
+      {contextMenuImageSrc && (
+        <ContextMenuContent className="min-w-[180px]">
+          <ContextMenuItem onClick={contextMenuActions.viewImage}>
+            <Expand className="mr-3 size-4 text-muted-foreground" />
+            View image
+          </ContextMenuItem>
+          <ContextMenuItem onClick={contextMenuActions.downloadImage}>
+            <Download className="mr-3 size-4 text-muted-foreground" />
+            Download
+          </ContextMenuItem>
+          <ContextMenuItem onClick={contextMenuActions.copyImage}>
+            <Copy className="mr-3 size-4 text-muted-foreground" />
+            Copy to clipboard
+          </ContextMenuItem>
+          <ContextMenuItem onClick={contextMenuActions.copyLink}>
+            <Link2 className="mr-3 size-4 text-muted-foreground" />
+            Copy link
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={contextMenuActions.deleteImage}>
+            <Trash2 className="mr-3 size-4 text-muted-foreground" />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      )}
 
       {/* Floating bubble menu on text selection */}
       {features.bubbleMenu !== false && (
@@ -732,8 +888,9 @@ export function RichTextEditor({
             placement: 'top',
           }}
           shouldShow={({ editor, state }) => {
-            // Don't show in code blocks
+            // Don't show in code blocks or tables
             if (editor.isActive('codeBlock')) return false
+            if (editor.isActive('table')) return false
             // Only show when text is selected
             const { from, to } = state.selection
             return from !== to
@@ -743,136 +900,36 @@ export function RichTextEditor({
         </BubbleMenu>
       )}
 
-      {/* Toolbar - bottom position */}
-      {showToolbar && toolbarPosition === 'bottom' && (
-        <MenuBar
+      {/* Floating table toolbar when cursor is in table */}
+      {features.tables && (
+        <BubbleMenu
           editor={editor}
-          disabled={disabled}
-          position="bottom"
-          features={features}
-          onImageUpload={onImageUpload}
-        />
+          options={{
+            placement: 'top',
+          }}
+          shouldShow={({ editor }) => {
+            return editor.isActive('table')
+          }}
+        >
+          <TableToolbar editor={editor} disabled={disabled} />
+        </BubbleMenu>
       )}
 
-      <style>{`
-        .tiptap p.is-editor-empty:first-child::before {
-          color: color-mix(in oklch, var(--muted-foreground), transparent 50%);
-          content: attr(data-placeholder);
-          float: left;
-          height: 0;
-          pointer-events: none;
-        }
-
-        /* Code block syntax highlighting */
-        .tiptap pre {
-          background: var(--muted);
-          border-radius: 0.5rem;
-          padding: 1rem;
-          overflow-x: auto;
-        }
-
-        .tiptap pre code {
-          background: none;
-          color: inherit;
-          font-size: 0.875rem;
-          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-          padding: 0;
-        }
-
-        /* Inline code */
-        .tiptap code:not(pre code) {
-          background: var(--muted);
-          padding: 0.125rem 0.25rem;
-          border-radius: 0.25rem;
-          font-size: 0.875em;
-          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-        }
-
-        /* Task list */
-        .tiptap ul[data-type="taskList"] {
-          list-style: none;
-          padding-left: 0;
-        }
-
-        .tiptap ul[data-type="taskList"] li {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-        }
-
-        .tiptap ul[data-type="taskList"] li > label {
-          flex-shrink: 0;
-          margin-top: 0.25rem;
-        }
-
-        .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
-          cursor: pointer;
-          width: 1rem;
-          height: 1rem;
-          accent-color: var(--primary);
-        }
-
-        .tiptap ul[data-type="taskList"] li > div {
-          flex: 1;
-        }
-
-        /* Blockquote */
-        .tiptap blockquote {
-          border-left: 4px solid var(--border);
-          padding-left: 1rem;
-          margin-left: 0;
-          font-style: italic;
-          color: var(--muted-foreground);
-        }
-
-        /* Horizontal rule */
-        .tiptap hr {
-          border: none;
-          border-top: 1px solid var(--border);
-          margin: 1.5rem 0;
-        }
-
-        /* Tables */
-        .tiptap table {
-          border-collapse: collapse;
-          width: 100%;
-          margin: 1rem 0;
-        }
-
-        .tiptap th,
-        .tiptap td {
-          border: 1px solid var(--border);
-          padding: 0.5rem;
-          text-align: left;
-          min-width: 100px;
-        }
-
-        .tiptap th {
-          background: color-mix(in oklch, var(--muted), transparent 50%);
-          font-weight: 600;
-        }
-
-        .tiptap .selectedCell {
-          background: color-mix(in oklch, var(--primary), transparent 85%);
-        }
-
-        /* Syntax highlighting colors */
-        .hljs-keyword,
-        .hljs-selector-tag,
-        .hljs-built_in { color: var(--syntax-keyword, #c792ea); }
-        .hljs-string,
-        .hljs-attr { color: var(--syntax-string, #c3e88d); }
-        .hljs-number,
-        .hljs-literal { color: var(--syntax-number, #f78c6c); }
-        .hljs-comment { color: var(--syntax-comment, #546e7a); }
-        .hljs-function,
-        .hljs-title { color: var(--syntax-function, #82aaff); }
-        .hljs-variable,
-        .hljs-template-variable { color: var(--syntax-variable, #f07178); }
-        .hljs-type,
-        .hljs-class { color: var(--syntax-type, #ffcb6b); }
-      `}</style>
-    </div>
+      {/* Floating image toolbar when image is selected */}
+      {features.images && (
+        <BubbleMenu
+          editor={editor}
+          options={{
+            placement: 'top',
+          }}
+          shouldShow={({ editor }) => {
+            return editor.isActive('resizableImage')
+          }}
+        >
+          <ImageToolbar editor={editor} disabled={disabled} />
+        </BubbleMenu>
+      )}
+    </ContextMenu>
   )
 }
 
@@ -911,7 +968,9 @@ function handleImageDrop(
 
     images.forEach((image) => {
       onImageUpload(image).then((src) => {
-        const node = schema.nodes.image?.create({ src })
+        // Use resizableImage node type for resizable images
+        const nodeType = schema.nodes.resizableImage || schema.nodes.image
+        const node = nodeType?.create({ src, 'data-keep-ratio': true })
         if (node && coordinates) {
           const transaction = view.state.tr.insert(coordinates.pos, node)
           view.dispatch(transaction)
@@ -945,7 +1004,9 @@ function handleImagePaste(
 
       onImageUpload(file).then((src) => {
         const { schema } = view.state
-        const node = schema.nodes.image?.create({ src })
+        // Use resizableImage node type for resizable images
+        const nodeType = schema.nodes.resizableImage || schema.nodes.image
+        const node = nodeType?.create({ src, 'data-keep-ratio': true })
         if (node) {
           const transaction = view.state.tr.replaceSelectionWith(node)
           view.dispatch(transaction)
@@ -967,9 +1028,17 @@ interface ToolbarButtonProps {
   disabled: boolean
   isActive?: boolean
   title?: string
+  'aria-label'?: string
 }
 
-function ToolbarButton({ icon, onClick, disabled, isActive, title }: ToolbarButtonProps) {
+function ToolbarButton({
+  icon,
+  onClick,
+  disabled,
+  isActive,
+  title,
+  'aria-label': ariaLabel,
+}: ToolbarButtonProps) {
   return (
     <Button
       type="button"
@@ -979,6 +1048,7 @@ function ToolbarButton({ icon, onClick, disabled, isActive, title }: ToolbarButt
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel || title}
     >
       {icon}
     </Button>
@@ -1038,6 +1108,8 @@ function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
         title="Inline Code (Cmd+E)"
       />
       <LinkButton editor={editor} disabled={disabled} />
+      <ToolbarDivider />
+      <HeadingDropdown editor={editor} disabled={disabled} />
     </div>
   )
 }
@@ -1115,6 +1187,277 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
   )
 }
 
+function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+  // Determine current block type
+  const getCurrentBlockType = () => {
+    if (editor.isActive('heading', { level: 1 })) return 'H1'
+    if (editor.isActive('heading', { level: 2 })) return 'H2'
+    if (editor.isActive('heading', { level: 3 })) return 'H3'
+    return 'Text'
+  }
+
+  const currentType = getCurrentBlockType()
+
+  const blockTypes = [
+    { label: 'Text', value: 'paragraph', icon: <Type className="size-4" /> },
+    { label: 'Heading 1', value: 'h1', icon: <Heading1 className="size-4" /> },
+    { label: 'Heading 2', value: 'h2', icon: <Heading2 className="size-4" /> },
+    { label: 'Heading 3', value: 'h3', icon: <Heading3 className="size-4" /> },
+  ]
+
+  const handleSelect = (value: string) => {
+    switch (value) {
+      case 'paragraph':
+        editor.chain().focus().setParagraph().run()
+        break
+      case 'h1':
+        editor.chain().focus().toggleHeading({ level: 1 }).run()
+        break
+      case 'h2':
+        editor.chain().focus().toggleHeading({ level: 2 }).run()
+        break
+      case 'h3':
+        editor.chain().focus().toggleHeading({ level: 3 }).run()
+        break
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 gap-1 text-xs font-medium"
+          disabled={disabled}
+        >
+          {currentType}
+          <ChevronDown className="size-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top" sideOffset={8}>
+        {blockTypes.map((type) => (
+          <DropdownMenuItem
+            key={type.value}
+            onClick={() => handleSelect(type.value)}
+            className="gap-2"
+          >
+            {type.icon}
+            {type.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+interface TableToolbarProps {
+  editor: Editor
+  disabled: boolean
+}
+
+function TableToolbar({ editor, disabled }: TableToolbarProps) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
+      {/* Add row above */}
+      <ToolbarButton
+        icon={<ArrowUp className="size-4" />}
+        onClick={() => editor.chain().focus().addRowBefore().run()}
+        disabled={disabled}
+        title="Add row above"
+      />
+      {/* Add row below */}
+      <ToolbarButton
+        icon={<ArrowDown className="size-4" />}
+        onClick={() => editor.chain().focus().addRowAfter().run()}
+        disabled={disabled}
+        title="Add row below"
+      />
+      <ToolbarDivider />
+      {/* Add column left */}
+      <ToolbarButton
+        icon={<ArrowLeft className="size-4" />}
+        onClick={() => editor.chain().focus().addColumnBefore().run()}
+        disabled={disabled}
+        title="Add column left"
+      />
+      {/* Add column right */}
+      <ToolbarButton
+        icon={<ArrowRight className="size-4" />}
+        onClick={() => editor.chain().focus().addColumnAfter().run()}
+        disabled={disabled}
+        title="Add column right"
+      />
+      <ToolbarDivider />
+      {/* Delete row */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 gap-1 text-xs font-medium text-destructive hover:text-destructive"
+            disabled={disabled}
+          >
+            <Trash2 className="size-4" />
+            <ChevronDown className="size-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="top" sideOffset={8}>
+          <DropdownMenuItem
+            onClick={() => editor.chain().focus().deleteRow().run()}
+            className="gap-2"
+          >
+            Delete row
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => editor.chain().focus().deleteColumn().run()}
+            className="gap-2"
+          >
+            Delete column
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            className="gap-2 text-destructive focus:text-destructive"
+          >
+            Delete table
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+// ============================================================================
+// Shared Image Actions Hook (DRY - used by toolbar and context menu)
+// ============================================================================
+
+interface UseImageActionsProps {
+  src: string | undefined
+  editor: Editor | null
+  onComplete?: () => void
+}
+
+function useImageActions({ src, editor, onComplete }: UseImageActionsProps) {
+  const viewImage = useCallback(() => {
+    if (src) {
+      window.open(src, '_blank')
+    }
+    onComplete?.()
+  }, [src, onComplete])
+
+  const downloadImage = useCallback(async () => {
+    if (!src) return
+    try {
+      const response = await fetch(src)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = src.split('/').pop() || 'image'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(src, '_blank')
+    }
+    onComplete?.()
+  }, [src, onComplete])
+
+  const copyImage = useCallback(async () => {
+    if (!src) return
+    try {
+      const response = await fetch(src)
+      const blob = await response.blob()
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+    } catch {
+      // Fallback: copy URL
+      if (src) navigator.clipboard.writeText(src)
+    }
+    onComplete?.()
+  }, [src, onComplete])
+
+  const copyLink = useCallback(() => {
+    if (src) {
+      navigator.clipboard.writeText(src)
+    }
+    onComplete?.()
+  }, [src, onComplete])
+
+  const deleteImage = useCallback(() => {
+    editor?.chain().focus().deleteSelection().run()
+    onComplete?.()
+  }, [editor, onComplete])
+
+  return { viewImage, downloadImage, copyImage, copyLink, deleteImage }
+}
+
+// ============================================================================
+// Image Toolbar (Linear-style floating menu when image is selected)
+// ============================================================================
+
+interface ImageToolbarProps {
+  editor: Editor
+  disabled: boolean
+}
+
+function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
+  const attrs = editor.getAttributes('resizableImage')
+  const src = attrs.src as string | undefined
+
+  const { viewImage, downloadImage, copyImage, copyLink, deleteImage } = useImageActions({
+    src,
+    editor,
+  })
+
+  return (
+    <div
+      className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md"
+      role="toolbar"
+      aria-label="Image options"
+    >
+      <ToolbarButton
+        icon={<Expand className="size-4" />}
+        onClick={viewImage}
+        disabled={disabled}
+        title="View image"
+        aria-label="View image in new tab"
+      />
+      <ToolbarButton
+        icon={<Download className="size-4" />}
+        onClick={downloadImage}
+        disabled={disabled}
+        title="Download"
+        aria-label="Download image"
+      />
+      <ToolbarButton
+        icon={<Copy className="size-4" />}
+        onClick={copyImage}
+        disabled={disabled}
+        title="Copy to clipboard"
+        aria-label="Copy image to clipboard"
+      />
+      <ToolbarButton
+        icon={<Link2 className="size-4" />}
+        onClick={copyLink}
+        disabled={disabled}
+        title="Copy link"
+        aria-label="Copy image link"
+      />
+      <ToolbarDivider />
+      <ToolbarButton
+        icon={<Trash2 className="size-4" />}
+        onClick={deleteImage}
+        disabled={disabled}
+        title="Delete"
+        aria-label="Delete image"
+      />
+    </div>
+  )
+}
+
 // ============================================================================
 // Fixed Toolbar Components
 // ============================================================================
@@ -1122,18 +1465,11 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
 interface MenuBarProps {
   editor: Editor
   disabled: boolean
-  position?: 'top' | 'bottom'
   features?: EditorFeatures
   onImageUpload?: (file: File) => Promise<string>
 }
 
-function MenuBar({
-  editor,
-  disabled,
-  position = 'top',
-  features = {},
-  onImageUpload,
-}: MenuBarProps) {
+function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProps) {
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -1164,7 +1500,8 @@ function MenuBar({
 
       try {
         const src = await onImageUpload(file)
-        editor.chain().focus().setImage({ src }).run()
+        // Use setResizableImage for resizable images
+        editor.commands.setResizableImage({ src, 'data-keep-ratio': true })
       } catch (error) {
         console.error('Failed to upload image:', error)
       }
@@ -1176,12 +1513,7 @@ function MenuBar({
   const canRedo = editor.can().chain().focus().redo().run()
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-1 flex-wrap',
-        position === 'top' ? 'px-2 py-1.5 border-b border-input bg-muted/30' : 'pt-2'
-      )}
-    >
+    <div className="flex items-center gap-1 flex-wrap px-2 py-1.5 border-b border-input bg-muted/30">
       {/* Heading buttons */}
       {features.headings && (
         <>
@@ -1302,6 +1634,85 @@ interface RichTextContentProps {
   className?: string
 }
 
+// ============================================================================
+// HTML Sanitization Utilities (XSS Prevention)
+// ============================================================================
+
+/**
+ * Escape HTML special characters in attribute values to prevent XSS
+ */
+function escapeHtmlAttr(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+/**
+ * Sanitize URLs for use in href attributes - only allow safe protocols
+ */
+function sanitizeUrl(url: string): string {
+  if (!url || typeof url !== 'string') return ''
+
+  try {
+    // Handle relative URLs by using a base
+    const parsed = new URL(url, 'https://example.com')
+
+    // Only allow safe protocols
+    const safeProtocols = ['http:', 'https:', 'mailto:']
+    if (!safeProtocols.includes(parsed.protocol)) {
+      return ''
+    }
+
+    // Return the original URL if it was relative, otherwise the full href
+    return url.startsWith('/') ? url : parsed.href
+  } catch {
+    // Invalid URL - reject it
+    return ''
+  }
+}
+
+/**
+ * Sanitize image URLs - allow http(s) and safe data URIs
+ */
+function sanitizeImageUrl(url: string): string {
+  if (!url || typeof url !== 'string') return ''
+
+  // Allow data URIs only for images
+  if (url.startsWith('data:image/')) {
+    return url
+  }
+
+  try {
+    const parsed = new URL(url, 'https://example.com')
+
+    // Only allow http(s) for image sources
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return ''
+    }
+
+    return url.startsWith('/') ? url : parsed.href
+  } catch {
+    return ''
+  }
+}
+
+// Extract YouTube video ID from various URL formats
+function extractYoutubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/v\/([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#]+)/,
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match) return match[1]
+  }
+  return null
+}
+
 // Generate HTML from TipTap JSON content for SSR
 function generateContentHTML(content: JSONContent): string {
   // Simple recursive HTML generator for common node types
@@ -1347,8 +1758,12 @@ function generateContentHTML(content: JSONContent): string {
                 text = `<code class="bg-muted px-1 py-0.5 rounded text-sm">${text}</code>`
                 break
               case 'link': {
-                const href = mark.attrs?.href ?? ''
-                text = `<a href="${href}" class="text-primary underline" target="_blank" rel="noopener noreferrer">${text}</a>`
+                const rawHref = mark.attrs?.href ?? ''
+                const href = escapeHtmlAttr(sanitizeUrl(rawHref))
+                // Only render link if href is valid after sanitization
+                if (href) {
+                  text = `<a href="${href}" class="text-primary underline" target="_blank" rel="noopener noreferrer">${text}</a>`
+                }
                 break
               }
             }
@@ -1400,10 +1815,33 @@ function generateContentHTML(content: JSONContent): string {
         return `<pre class="not-prose rounded-lg bg-muted p-4 overflow-x-auto"><code class="language-${language}">${codeContent}</code></pre>`
       }
 
-      case 'image': {
+      case 'image':
+      case 'resizableImage': {
+        const rawSrc = node.attrs?.src ?? ''
+        const rawAlt = node.attrs?.alt ?? ''
+        const src = escapeHtmlAttr(sanitizeImageUrl(rawSrc))
+        const alt = escapeHtmlAttr(rawAlt)
+        // Only render image if src is valid after sanitization
+        if (!src) return ''
+        const width = node.attrs?.width
+        const height = node.attrs?.height
+        const style =
+          width || height
+            ? `style="${width ? `width:${typeof width === 'number' ? width : parseInt(width, 10)}px;` : ''}${height ? `height:${typeof height === 'number' ? height : parseInt(height, 10)}px;` : ''}"`
+            : ''
+        return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" ${style} />`
+      }
+
+      case 'youtube': {
         const src = node.attrs?.src ?? ''
-        const alt = node.attrs?.alt ?? ''
-        return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" />`
+        const width = node.attrs?.width ?? 640
+        const height = node.attrs?.height ?? 360
+        // Extract video ID and create embed URL
+        const videoId = extractYoutubeId(src)
+        if (videoId) {
+          return `<div class="relative aspect-video my-4 rounded-lg overflow-hidden"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}" width="${width}" height="${height}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="absolute inset-0 w-full h-full"></iframe></div>`
+        }
+        return ''
       }
 
       case 'hardBreak':
