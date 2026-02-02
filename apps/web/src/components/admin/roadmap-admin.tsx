@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from '@tanstack/react-router'
 import {
   DndContext,
   DragOverlay,
@@ -16,6 +17,7 @@ import { RoadmapCardOverlay } from './roadmap-card'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useRoadmapSelection } from './use-roadmap-selection'
 import { useChangePostStatusId } from '@/lib/client/mutations/posts'
+import { Route } from '@/routes/admin/roadmap'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
 import type { StatusId, PostId, RoadmapId } from '@quackback/ids'
@@ -25,9 +27,15 @@ interface RoadmapAdminProps {
 }
 
 export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
+  const navigate = useNavigate({ from: Route.fullPath })
+  const search = Route.useSearch()
   const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection()
   const { data: roadmaps } = useRoadmaps()
   const changeStatus = useChangePostStatusId()
+
+  const handleCardClick = (postId: string) => {
+    navigate({ search: { ...search, post: postId } })
+  }
 
   // Auto-select first roadmap
   useEffect(() => {
@@ -98,6 +106,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
                       statusId={status.id}
                       title={status.name}
                       color={status.color}
+                      onCardClick={handleCardClick}
                     />
                   ))}
                 </div>

@@ -1,15 +1,20 @@
 import { memo } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { ChevronUpIcon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, Bars3Icon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
 
 interface RoadmapCardProps {
   post: RoadmapPostEntry
   statusId: string
+  onClick?: () => void
 }
 
-export const RoadmapCard = memo(function RoadmapCard({ post, statusId }: RoadmapCardProps) {
+export const RoadmapCard = memo(function RoadmapCard({
+  post,
+  statusId,
+  onClick,
+}: RoadmapCardProps) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
     id: post.id,
     data: { type: 'Task', post, statusId },
@@ -18,11 +23,20 @@ export const RoadmapCard = memo(function RoadmapCard({ post, statusId }: Roadmap
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+      onClick={onClick}
       style={{ opacity: isDragging ? 0.4 : 1 }}
-      className="flex bg-card rounded-lg border shadow-sm cursor-grab active:cursor-grabbing transition-opacity duration-150"
+      className="flex bg-card rounded-lg border shadow-sm cursor-pointer hover:bg-card/80 transition"
     >
+      {/* Drag handle - only this area initiates drag */}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center justify-center w-8 shrink-0 border-r border-border/50 cursor-grab active:cursor-grabbing touch-none hover:bg-muted/50"
+      >
+        <Bars3Icon className="h-4 w-4 text-muted-foreground" />
+      </button>
       <CardContent post={post} />
     </div>
   )

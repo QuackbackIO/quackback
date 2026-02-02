@@ -14,6 +14,7 @@ interface RoadmapColumnProps {
   statusId: StatusId
   title: string
   color: string
+  onCardClick?: (postId: string) => void
 }
 
 export const RoadmapColumn = memo(function RoadmapColumn({
@@ -21,6 +22,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
   statusId,
   title,
   color,
+  onCardClick,
 }: RoadmapColumnProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -86,7 +88,12 @@ export const RoadmapColumn = memo(function RoadmapColumn({
         ) : (
           <>
             {posts.map((post) => (
-              <RoadmapCard key={post.id} post={post} statusId={statusId} />
+              <RoadmapCard
+                key={post.id}
+                post={post}
+                statusId={statusId}
+                onClick={onCardClick ? () => onCardClick(post.id) : undefined}
+              />
             ))}
             {hasNextPage && (
               <div ref={sentinelRef} className="py-2 flex justify-center">
