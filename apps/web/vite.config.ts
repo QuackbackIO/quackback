@@ -20,7 +20,9 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths({
         projects: ['./tsconfig.json'],
       }),
-      nitro({ preset: 'bun' }),
+      nitro({
+        preset: 'bun',
+      }),
       tanstackStart({
         srcDirectory: 'src',
         router: {

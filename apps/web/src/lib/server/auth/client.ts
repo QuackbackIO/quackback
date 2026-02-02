@@ -9,9 +9,10 @@ import { emailOTPClient } from 'better-auth/client/plugins'
  * - Session is fetched server-side in root loader
  * - Access session via route context: Route.useRouteContext()
  * - Use router.invalidate() to refetch session after auth actions
+ *
+ * Note: No baseURL needed - Better Auth client defaults to current origin
  */
 export const authClient = createAuthClient({
-  baseURL: process.env.BETTER_AUTH_URL || '',
   plugins: [emailOTPClient()],
 })
 

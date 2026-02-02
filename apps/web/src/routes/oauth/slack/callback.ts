@@ -40,7 +40,7 @@ export const Route = createFileRoute('/oauth/slack/callback')({
           return redirectResponse(buildSettingsUrl(FALLBACK_URL, 'error', 'state_expired'))
         }
 
-        const { returnDomain, workspaceId, memberId } = stateData
+        const { returnDomain, memberId } = stateData
         const tenantUrl = `https://${returnDomain}`
 
         if (!isValidTenantDomain(returnDomain)) {
@@ -66,7 +66,6 @@ export const Route = createFileRoute('/oauth/slack/callback')({
           const { accessToken, teamId, teamName } = await exchangeSlackCode(code, callbackUri)
 
           await saveIntegration({
-            workspaceId,
             memberId,
             accessToken,
             teamId,

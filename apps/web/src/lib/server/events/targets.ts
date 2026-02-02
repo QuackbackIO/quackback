@@ -8,12 +8,13 @@ import {
   db,
   integrations,
   integrationEventMappings,
-  decryptToken,
   eq,
   and,
   member,
   webhooks,
 } from '@/lib/server/db'
+import { decryptIntegrationToken } from '@/lib/server/domains/integrations/encryption'
+import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import {
   getSubscribersForEvent,
   batchGetNotificationPreferences,
@@ -144,7 +145,7 @@ async function getIntegrationTargets(
     let accessToken: string | undefined
     if (m.accessTokenEncrypted) {
       try {
-        accessToken = decryptToken(m.accessTokenEncrypted, context.workspaceId)
+        accessToken = decryptIntegrationToken(m.accessTokenEncrypted)
       } catch (error) {
         console.error(`[Targets] Failed to decrypt token for ${m.integrationType}:`, error)
         continue // Skip this integration rather than crash all
@@ -435,7 +436,7 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
     const targets: HookTarget[] = []
     for (const webhook of matchingWebhooks) {
       try {
-        const secret = decryptToken(webhook.secret, webhook.id)
+        const secret = decryptWebhookSecret(webhook.secret)
         targets.push({
           type: 'webhook',
           target: { url: webhook.url },

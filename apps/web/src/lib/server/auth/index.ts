@@ -3,6 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { emailOTP, oneTimeToken, magicLink } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
+import { config, isProduction } from '@/lib/server/config'
 
 /** Temporary storage for magic link tokens during invitation flow */
 const pendingMagicLinkTokens = new Map<string, { token: string; timestamp: number }>()
@@ -52,21 +53,27 @@ async function createAuth() {
   // Build socialProviders config based on available env vars
   const socialProviders: Parameters<typeof betterAuth>[0]['socialProviders'] = {}
 
-  if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  if (config.githubClientId && config.githubClientSecret) {
     socialProviders.github = {
-      clientId: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      clientId: config.githubClientId,
+      clientSecret: config.githubClientSecret,
     }
   }
 
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  if (config.googleClientId && config.googleClientSecret) {
     socialProviders.google = {
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: config.googleClientId,
+      clientSecret: config.googleClientSecret,
     }
   }
+
+  // BASE_URL is required for auth callbacks and redirects
+  const baseURL = config.baseUrl
 
   return betterAuth({
+    // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
+    secret: config.secretKey,
+
     database: drizzleAdapter(db, {
       provider: 'pg',
       // Pass our custom schema so Better-auth uses our TypeID column types
@@ -83,8 +90,11 @@ async function createAuth() {
       },
     }),
 
-    // Base URL derived from request (no hardcoded URL needed)
-    baseURL: process.env.BETTER_AUTH_URL,
+    // Base URL for auth callbacks and redirects
+    baseURL,
+
+    // Trusted origins for CORS/CSRF protection
+    trustedOrigins: [baseURL],
 
     // Password auth disabled - users sign in via OTP email codes
     emailAndPassword: {
@@ -122,7 +132,7 @@ async function createAuth() {
       defaultCookieAttributes: {
         sameSite: 'lax',
         // Secure cookies in production
-        secure: (process.env.NODE_ENV as string) === 'production',
+        secure: isProduction(),
       },
     },
 

@@ -9,6 +9,7 @@
  */
 
 import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
+import { config } from '@/lib/server/config'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
 // with nested barrel exports. If we use `export { asc } from 'drizzle-orm'`,
@@ -77,11 +78,7 @@ declare global {
  */
 function getDatabase(): Database {
   if (!globalThis.__db) {
-    const connectionString = process.env.DATABASE_URL
-    if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is required')
-    }
-    globalThis.__db = createDb(connectionString, { max: 50 })
+    globalThis.__db = createDb(config.databaseUrl, { max: 50 })
   }
   return globalThis.__db
 }
@@ -182,9 +179,6 @@ export {
   // Client functions
   createDb,
   getMigrationDb,
-  // Crypto
-  encryptToken,
-  decryptToken,
 } from '@quackback/db'
 
 // Re-export types (for client components that need types without side effects)

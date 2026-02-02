@@ -8,6 +8,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 // Store original env
 const originalEnv = { ...process.env }
 
+// Set up minimal config for tests
+function setupMinimalConfig() {
+  process.env.DATABASE_URL = 'postgres://localhost/quackback'
+  process.env.BASE_URL = 'http://localhost:3000'
+  process.env.SECRET_KEY = 'test-secret-key-that-is-at-least-32-characters-long'
+}
+
 // Hoist the mock factory so it's available before module imports
 const { mockCreateDb } = vi.hoisted(() => {
   const mockDb = { query: {}, _mock: true }
@@ -22,13 +29,16 @@ vi.mock('@quackback/db/client', () => ({
 }))
 
 describe('db module', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockCreateDb.mockClear()
     vi.resetModules()
     // Reset globalThis.__db
     delete (globalThis as Record<string, unknown>).__db
     // Reset environment
     process.env = { ...originalEnv }
+    // Reset config cache
+    const { resetConfig } = await import('../config')
+    resetConfig()
   })
 
   afterEach(() => {
@@ -38,7 +48,7 @@ describe('db module', () => {
 
   describe('Self-hosted mode', () => {
     it('should create singleton database from DATABASE_URL', async () => {
-      process.env.DATABASE_URL = 'postgres://localhost/quackback'
+      setupMinimalConfig()
 
       const { db } = await import('../db')
 
@@ -51,7 +61,7 @@ describe('db module', () => {
     })
 
     it('should reuse singleton on subsequent accesses', async () => {
-      process.env.DATABASE_URL = 'postgres://localhost/quackback'
+      setupMinimalConfig()
 
       const { db } = await import('../db')
 
@@ -64,17 +74,20 @@ describe('db module', () => {
     })
 
     it('should throw error when DATABASE_URL not set', async () => {
+      // Set up config without DATABASE_URL
+      process.env.BASE_URL = 'http://localhost:3000'
+      process.env.SECRET_KEY = 'test-secret-key-that-is-at-least-32-characters-long'
       delete (process.env as Record<string, string | undefined>).DATABASE_URL
 
       const { db } = await import('../db')
 
-      expect(() => db.query).toThrow('DATABASE_URL environment variable is required')
+      expect(() => db.query).toThrow('Configuration validation failed')
     })
   })
 
   describe('db proxy behavior', () => {
     it('should lazily access database on property access', async () => {
-      process.env.DATABASE_URL = 'postgres://localhost/quackback'
+      setupMinimalConfig()
 
       const { db } = await import('../db')
 
