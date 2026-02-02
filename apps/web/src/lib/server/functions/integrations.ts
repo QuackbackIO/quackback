@@ -3,8 +3,10 @@ import { randomBytes } from 'crypto'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { signOAuthState } from '@/lib/server/auth/oauth-state'
-import { db, integrations, integrationEventMappings, decryptToken, eq, sql } from '@/lib/server/db'
+import { db, integrations, integrationEventMappings, eq, sql } from '@/lib/server/db'
 import { listSlackChannels } from '@/lib/server/events/integrations/slack/oauth'
+import { decryptIntegrationToken } from '@/lib/server/domains/integrations/encryption'
+import { config } from '@/lib/server/config'
 import type { MemberId, IntegrationId } from '@quackback/ids'
 
 /**
@@ -27,7 +29,7 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
   async (): Promise<string> => {
     const auth = await requireAuth({ roles: ['admin'] })
 
-    const returnDomain = new URL(process.env.ROOT_URL || '').host
+    const returnDomain = new URL(config.baseUrl).host
 
     const state = signOAuthState({
       type: 'slack_oauth',
@@ -192,15 +194,7 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Slack token missing')
     }
 
-    const settingsRecord = await db.query.settings.findFirst({
-      columns: { id: true },
-    })
-
-    if (!settingsRecord) {
-      throw new Error('Workspace not configured')
-    }
-
-    const accessToken = decryptToken(integration.accessTokenEncrypted, settingsRecord.id)
+    const accessToken = decryptIntegrationToken(integration.accessTokenEncrypted)
     const channels = await listSlackChannels(accessToken)
 
     console.log(`[fn:integrations] fetchSlackChannelsFn: ${channels.length} channels`)

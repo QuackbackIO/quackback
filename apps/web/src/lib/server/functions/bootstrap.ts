@@ -14,32 +14,39 @@ export interface BootstrapData {
 }
 
 async function getSessionInternal(): Promise<Session | null> {
-  const session = await auth.api.getSession({
-    headers: getRequestHeaders(),
-  })
+  try {
+    const session = await auth.api.getSession({
+      headers: getRequestHeaders(),
+    })
 
-  if (!session?.user) {
+    if (!session?.user) {
+      return null
+    }
+
+    return {
+      session: {
+        id: session.session.id as SessionId,
+        expiresAt: session.session.expiresAt.toISOString(),
+        token: session.session.token,
+        createdAt: session.session.createdAt.toISOString(),
+        updatedAt: session.session.updatedAt.toISOString(),
+        userId: session.session.userId as UserId,
+      },
+      user: {
+        id: session.user.id as UserId,
+        name: session.user.name,
+        email: session.user.email,
+        emailVerified: session.user.emailVerified,
+        image: session.user.image ?? null,
+        createdAt: session.user.createdAt.toISOString(),
+        updatedAt: session.user.updatedAt.toISOString(),
+      },
+    }
+  } catch (error) {
+    // During SSR, auth might fail due to env var issues
+    // Return null session and let the client retry
+    console.error('[bootstrap] getSession error:', error)
     return null
-  }
-
-  return {
-    session: {
-      id: session.session.id as SessionId,
-      expiresAt: session.session.expiresAt.toISOString(),
-      token: session.session.token,
-      createdAt: session.session.createdAt.toISOString(),
-      updatedAt: session.session.updatedAt.toISOString(),
-      userId: session.session.userId as UserId,
-    },
-    user: {
-      id: session.user.id as UserId,
-      name: session.user.name,
-      email: session.user.email,
-      emailVerified: session.user.emailVerified,
-      image: session.user.image ?? null,
-      createdAt: session.user.createdAt.toISOString(),
-      updatedAt: session.user.updatedAt.toISOString(),
-    },
   }
 }
 
@@ -55,7 +62,7 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
             where: eq(member.userId, session.user.id as UserId),
             columns: { role: true },
           })
-          .then((m) => (m?.role as 'admin' | 'member' | 'user') ?? null)
+          .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)
       : null
 
     return { session, settings, userRole }

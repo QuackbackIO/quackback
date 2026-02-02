@@ -5,17 +5,25 @@
  */
 
 /**
- * Get the root URL.
+ * Get the base URL.
  * On client: uses window.location.origin
- * On server: requires ROOT_URL env var (for absolute URLs in emails, OAuth callbacks, etc.)
+ * On server: returns BASE_URL from env or empty string (never throws during SSR)
+ *
+ * Note: This function is called during SSR where process.env might not be populated.
+ * It gracefully returns empty string on server during SSR to avoid breaking the page load.
+ * The actual URLs will be constructed correctly on the client using window.location.origin.
  */
-export function getRootUrl(): string {
+export function getBaseUrl(): string {
+  // Client-side: always use window.location.origin
   if (typeof window !== 'undefined') {
     return window.location.origin
   }
-  const url = process.env.ROOT_URL
-  if (!url) {
-    throw new Error('ROOT_URL environment variable is required on server')
+
+  // Server-side: read from process.env at runtime
+  // Using a function call prevents Vite from inlining the value at build time
+  try {
+    return process.env.BASE_URL || ''
+  } catch {
+    return ''
   }
-  return url
 }

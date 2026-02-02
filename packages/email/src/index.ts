@@ -17,7 +17,26 @@ import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 
-const EMAIL_FROM = process.env.EMAIL_FROM || 'Quackback <noreply@quackback.io>'
+/**
+ * Get environment variable at runtime.
+ * Reading process.env[key] in a function prevents Vite from inlining the value.
+ */
+function getEnv(key: string): string | undefined {
+  return process.env[key]
+}
+
+function getEmailFrom(): string {
+  const from = getEnv('EMAIL_FROM')
+  if (!from) {
+    throw new Error('EMAIL_FROM environment variable is required for sending emails')
+  }
+  return from
+}
+
+function getResendApiKey(): string | undefined {
+  // Support both EMAIL_RESEND_API_KEY and RESEND_API_KEY
+  return getEnv('EMAIL_RESEND_API_KEY') || getEnv('RESEND_API_KEY')
+}
 
 // Lazy-initialized transports
 let smtpTransporter: Transporter | null = null
@@ -26,8 +45,8 @@ let resendClient: Resend | null = null
 type EmailProvider = 'smtp' | 'resend' | 'console'
 
 function getProvider(): EmailProvider {
-  if (process.env.EMAIL_SMTP_HOST) return 'smtp'
-  if (process.env.EMAIL_RESEND_API_KEY) return 'resend'
+  if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
+  if (getResendApiKey()) return 'resend'
   return 'console'
 }
 
@@ -35,14 +54,14 @@ function getSmtpTransporter(): Transporter {
   if (!smtpTransporter) {
     console.log('[Email] Initializing SMTP transporter')
     smtpTransporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SMTP_HOST,
-      port: parseInt(process.env.EMAIL_SMTP_PORT || '587', 10),
-      secure: process.env.EMAIL_SMTP_SECURE === 'true',
+      host: getEnv('EMAIL_SMTP_HOST'),
+      port: parseInt(getEnv('EMAIL_SMTP_PORT') || '587', 10),
+      secure: getEnv('EMAIL_SMTP_SECURE') === 'true',
       auth:
-        process.env.EMAIL_SMTP_USER || process.env.EMAIL_SMTP_PASS
+        getEnv('EMAIL_SMTP_USER') || getEnv('EMAIL_SMTP_PASS')
           ? {
-              user: process.env.EMAIL_SMTP_USER || '',
-              pass: process.env.EMAIL_SMTP_PASS || '',
+              user: getEnv('EMAIL_SMTP_USER') || '',
+              pass: getEnv('EMAIL_SMTP_PASS') || '',
             }
           : undefined,
     })
@@ -53,7 +72,7 @@ function getSmtpTransporter(): Transporter {
 function getResend(): Resend {
   if (!resendClient) {
     console.log('[Email] Initializing Resend client')
-    resendClient = new Resend(process.env.EMAIL_RESEND_API_KEY)
+    resendClient = new Resend(getResendApiKey())
   }
   return resendClient
 }
@@ -72,7 +91,7 @@ async function sendEmail(options: {
   if (provider === 'smtp') {
     const html = await render(options.react)
     const result = await getSmtpTransporter().sendMail({
-      from: EMAIL_FROM,
+      from: getEmailFrom(),
       to: options.to,
       subject: options.subject,
       html,
@@ -83,7 +102,7 @@ async function sendEmail(options: {
 
   if (provider === 'resend') {
     const result = await getResend().emails.send({
-      from: EMAIL_FROM,
+      from: getEmailFrom(),
       to: options.to,
       subject: options.subject,
       react: options.react,

@@ -5,8 +5,9 @@
  */
 
 import crypto from 'crypto'
-import { db, webhooks, eq, sql, encryptToken } from '@/lib/server/db'
+import { db, webhooks, eq, sql } from '@/lib/server/db'
 import { createId, type MemberId, type WebhookId } from '@quackback/ids'
+import { encryptWebhookSecret } from './encryption'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isValidWebhookUrl } from '@/lib/server/events/integrations/webhook/constants'
 
@@ -90,7 +91,7 @@ export async function createWebhook(
   const webhookId = createId('webhook')
 
   // Encrypt secret for storage using webhookId as salt
-  const secretEncrypted = encryptToken(secret, webhookId)
+  const secretEncrypted = encryptWebhookSecret(secret)
 
   // Create webhook
   const [webhook] = await db
@@ -205,7 +206,7 @@ export async function rotateWebhookSecret(
 ): Promise<{ webhook: Webhook; secret: string }> {
   // Generate new secret
   const secret = generateSecret()
-  const secretEncrypted = encryptToken(secret, id)
+  const secretEncrypted = encryptWebhookSecret(secret)
 
   // Update webhook with new secret
   const [webhook] = await db

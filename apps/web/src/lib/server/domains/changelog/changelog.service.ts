@@ -681,7 +681,16 @@ export async function searchShippedPosts(params: {
   query?: string
   boardId?: BoardId
   limit?: number
-}): Promise<Array<{ id: PostId; title: string; voteCount: number; boardSlug: string }>> {
+}): Promise<
+  Array<{
+    id: PostId
+    title: string
+    voteCount: number
+    boardSlug: string
+    authorName: string | null
+    createdAt: Date
+  }>
+> {
   const { query, boardId, limit = 20 } = params
 
   // Get all status IDs with category 'complete'
@@ -709,13 +718,15 @@ export async function searchShippedPosts(params: {
     conditions.push(sql`LOWER(${posts.title}) LIKE ${searchTerm}`)
   }
 
-  // Fetch posts with board slug
+  // Fetch posts with board slug and author info
   const results = await db
     .select({
       id: posts.id,
       title: posts.title,
       voteCount: posts.voteCount,
       boardSlug: boards.slug,
+      authorName: posts.authorName,
+      createdAt: posts.createdAt,
     })
     .from(posts)
     .innerJoin(boards, eq(boards.id, posts.boardId))

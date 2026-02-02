@@ -4,6 +4,7 @@
  */
 
 import { WebClient } from '@slack/web-api'
+import { config } from '@/lib/server/config'
 
 const SLACK_SCOPES = [
   'channels:read',
@@ -17,7 +18,7 @@ const SLACK_SCOPES = [
  * Generate the Slack OAuth authorization URL.
  */
 export function getSlackOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = process.env.SLACK_CLIENT_ID
+  const clientId = config.slackClientId
   if (!clientId) {
     throw new Error('SLACK_CLIENT_ID environment variable not set')
   }
@@ -43,8 +44,8 @@ export async function exchangeSlackCode(
   teamId: string
   teamName: string
 }> {
-  const clientId = process.env.SLACK_CLIENT_ID
-  const clientSecret = process.env.SLACK_CLIENT_SECRET
+  const clientId = config.slackClientId
+  const clientSecret = config.slackClientSecret
 
   if (!clientId || !clientSecret) {
     throw new Error('SLACK_CLIENT_ID and SLACK_CLIENT_SECRET environment variables must be set')

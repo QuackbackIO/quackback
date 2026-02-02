@@ -46,8 +46,7 @@ docker run -d \
   -p 3000:3000 \
   -e DATABASE_URL="postgresql://user:pass@host:5432/quackback" \
   -e BETTER_AUTH_SECRET="your-secret-key-at-least-32-chars" \
-  -e BETTER_AUTH_URL="https://your-domain.com" \
-  -e ROOT_URL="https://your-domain.com" \
+  -e BASE_URL="https://your-domain.com" \
   ghcr.io/quackbackhq/quackback:latest
 ```
 
@@ -87,8 +86,7 @@ docker pull ghcr.io/quackbackhq/quackback:latest-enterprise
 | -------------------- | ------------------------------- | ------------------------------------------------- |
 | `DATABASE_URL`       | PostgreSQL connection string    | `postgresql://user:pass@localhost:5432/quackback` |
 | `BETTER_AUTH_SECRET` | Auth encryption key (32+ chars) | `your-very-long-random-secret-key`                |
-| `BETTER_AUTH_URL`    | Public URL for auth callbacks   | `https://feedback.yourcompany.com`                |
-| `ROOT_URL`           | Public URL of your instance     | `https://feedback.yourcompany.com`                |
+| `BASE_URL`           | Public URL of your instance     | `https://feedback.yourcompany.com`                |
 
 ### Optional
 

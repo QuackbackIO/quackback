@@ -6,7 +6,7 @@
  */
 
 import { db } from '@/lib/server/db'
-import { getRootUrl } from './hook-utils'
+import { getBaseUrl } from './hook-utils'
 
 /**
  * Centralized hook context containing workspace data needed by all hooks.
@@ -38,7 +38,7 @@ export async function buildHookContext(): Promise<HookContext | null> {
     return null
   }
 
-  const portalBaseUrl = getRootUrl()
+  const portalBaseUrl = getBaseUrl()
 
   return {
     workspaceId: settings.id,
@@ -50,8 +50,8 @@ export async function buildHookContext(): Promise<HookContext | null> {
 
 /**
  * Resolve portal base URL for a workspace slug.
- * Uses ROOT_URL environment variable.
+ * Uses BASE_URL environment variable.
  */
 export function resolvePortalUrl(_slug: string): string {
-  return getRootUrl()
+  return getBaseUrl()
 }

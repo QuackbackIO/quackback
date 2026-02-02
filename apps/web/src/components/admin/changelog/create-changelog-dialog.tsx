@@ -6,14 +6,19 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createChangelogSchema } from '@/lib/shared/schemas/changelog'
 import { useCreateChangelog } from '@/lib/client/mutations/changelog'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { PlusIcon } from '@heroicons/react/24/solid'
+import { PlusIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { richTextToPlainText } from '@/components/ui/rich-text-editor'
-import type { JSONContent } from '@tiptap/react'
-import type { PostId } from '@quackback/ids'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
+import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { type PublishState } from './publish-controls'
+import type { JSONContent } from '@tiptap/react'
+import type { PostId } from '@quackback/ids'
+
+// Mobile-only version of the sidebar content for the sheet
+import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 
 interface CreateChangelogDialogProps {
   onChangelogCreated?: () => void
@@ -24,6 +29,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
 
   const form = useForm({
@@ -79,7 +85,6 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Submit on Cmd/Ctrl + Enter
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
       handleSubmit()
@@ -109,30 +114,40 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="w-[95vw] max-w-3xl p-0 gap-0 overflow-hidden max-h-[90vh]"
+        className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
         onKeyDown={handleKeyDown}
+        showCloseButton={false}
       >
         <DialogTitle className="sr-only">Create changelog entry</DialogTitle>
 
         <Form {...form}>
-          <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
-            <div className="flex-1 overflow-y-auto">
-              <ChangelogFormFields
-                form={form}
-                contentJson={contentJson}
-                onContentChange={handleContentChange}
-                linkedPostIds={linkedPostIds}
-                onLinkedPostsChange={setLinkedPostIds}
+          <form onSubmit={handleSubmit} className="flex flex-col h-full">
+            {/* Main content area - 2 column layout on desktop */}
+            <div className="flex flex-1 min-h-0">
+              {/* Left: Content editor */}
+              <div className="flex-1 overflow-y-auto">
+                <ChangelogFormFields
+                  form={form}
+                  contentJson={contentJson}
+                  onContentChange={handleContentChange}
+                  error={
+                    createChangelogMutation.isError
+                      ? createChangelogMutation.error.message
+                      : undefined
+                  }
+                />
+              </div>
+
+              {/* Right: Metadata sidebar (desktop only) */}
+              <ChangelogMetadataSidebar
                 publishState={publishState}
                 onPublishStateChange={setPublishState}
-                error={
-                  createChangelogMutation.isError
-                    ? createChangelogMutation.error.message
-                    : undefined
-                }
+                linkedPostIds={linkedPostIds}
+                onLinkedPostsChange={setLinkedPostIds}
               />
             </div>
 
+            {/* Footer */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
               <p className="hidden sm:block text-xs text-muted-foreground">
                 <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Cmd</kbd>
@@ -141,6 +156,29 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 <span className="ml-2">to save</span>
               </p>
               <div className="flex items-center gap-2 sm:ml-0 ml-auto">
+                {/* Mobile settings button */}
+                <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
+                  <SheetTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" className="lg:hidden">
+                      <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
+                      Settings
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="bottom" className="h-[70vh]">
+                    <SheetHeader>
+                      <SheetTitle>Entry Settings</SheetTitle>
+                    </SheetHeader>
+                    <div className="py-4 overflow-y-auto">
+                      <ChangelogMetadataSidebarContent
+                        publishState={publishState}
+                        onPublishStateChange={setPublishState}
+                        linkedPostIds={linkedPostIds}
+                        onLinkedPostsChange={setLinkedPostIds}
+                      />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+
                 <Button
                   type="button"
                   variant="ghost"

@@ -2,6 +2,8 @@
  * Shared utilities for hooks.
  */
 
+import { getBaseUrl } from '@/lib/server/config'
+
 /**
  * Strip HTML tags from text.
  */
@@ -24,16 +26,8 @@ export function truncate(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 3) + '...'
 }
 
-/**
- * Get the root URL for links.
- */
-export function getRootUrl(): string {
-  const url = process.env.ROOT_URL
-  if (!url) {
-    throw new Error('ROOT_URL environment variable is required')
-  }
-  return url
-}
+// Re-export getBaseUrl for backwards compatibility
+export { getBaseUrl }
 
 /**
  * Check if an error is retryable (network issues, rate limits, server errors).

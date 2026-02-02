@@ -10,7 +10,7 @@
  * Note: AWS SDK imports are dynamic to avoid build issues when packages aren't installed.
  */
 
-import { getConfig } from '../config'
+import { config } from '@/lib/server/config'
 
 // ============================================================================
 // Configuration
@@ -31,13 +31,7 @@ export interface S3Config {
  * Returns true if all required environment variables are set.
  */
 export function isS3Configured(): boolean {
-  const config = getConfig()
-  return !!(
-    config.S3_BUCKET &&
-    config.S3_REGION &&
-    config.S3_ACCESS_KEY_ID &&
-    config.S3_SECRET_ACCESS_KEY
-  )
+  return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
 }
 
 /**
@@ -45,27 +39,20 @@ export function isS3Configured(): boolean {
  * Throws if required variables are missing.
  */
 export function getS3Config(): S3Config {
-  const config = getConfig()
-
-  if (
-    !config.S3_BUCKET ||
-    !config.S3_REGION ||
-    !config.S3_ACCESS_KEY_ID ||
-    !config.S3_SECRET_ACCESS_KEY
-  ) {
+  if (!config.s3Bucket || !config.s3Region || !config.s3AccessKeyId || !config.s3SecretAccessKey) {
     throw new Error(
       'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
     )
   }
 
   return {
-    endpoint: config.S3_ENDPOINT || undefined,
-    bucket: config.S3_BUCKET,
-    region: config.S3_REGION,
-    accessKeyId: config.S3_ACCESS_KEY_ID,
-    secretAccessKey: config.S3_SECRET_ACCESS_KEY,
-    forcePathStyle: config.S3_FORCE_PATH_STYLE ?? true,
-    publicUrl: config.S3_PUBLIC_URL || undefined,
+    endpoint: config.s3Endpoint || undefined,
+    bucket: config.s3Bucket,
+    region: config.s3Region,
+    accessKeyId: config.s3AccessKeyId,
+    secretAccessKey: config.s3SecretAccessKey,
+    forcePathStyle: config.s3ForcePathStyle ?? true,
+    publicUrl: config.s3PublicUrl || undefined,
   }
 }
 
@@ -84,18 +71,18 @@ let _s3Client: any = null
 async function getS3Client() {
   if (_s3Client) return _s3Client
 
-  const config = getS3Config()
+  const s3Config = getS3Config()
 
   // Dynamic import to avoid build issues when packages aren't properly linked
   const { S3Client } = await import('@aws-sdk/client-s3')
 
   _s3Client = new S3Client({
-    region: config.region,
-    endpoint: config.endpoint,
-    forcePathStyle: config.forcePathStyle,
+    region: s3Config.region,
+    endpoint: s3Config.endpoint,
+    forcePathStyle: s3Config.forcePathStyle,
     credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
+      accessKeyId: s3Config.accessKeyId,
+      secretAccessKey: s3Config.secretAccessKey,
     },
   })
 
@@ -127,7 +114,7 @@ export async function generatePresignedUploadUrl(
   contentType: string,
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
-  const config = getS3Config()
+  const s3Config = getS3Config()
   const client = await getS3Client()
 
   // Dynamic imports
@@ -135,7 +122,7 @@ export async function generatePresignedUploadUrl(
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner')
 
   const command = new PutObjectCommand({
-    Bucket: config.bucket,
+    Bucket: s3Config.bucket,
     Key: key,
     ContentType: contentType,
   })
@@ -144,23 +131,23 @@ export async function generatePresignedUploadUrl(
 
   // Determine public URL
   let publicUrl: string
-  if (config.publicUrl) {
+  if (s3Config.publicUrl) {
     // Custom public URL (e.g., CDN)
-    publicUrl = `${config.publicUrl.replace(/\/$/, '')}/${key}`
-  } else if (config.endpoint) {
+    publicUrl = `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
+  } else if (s3Config.endpoint) {
     // S3-compatible endpoint (MinIO, R2, B2)
-    if (config.forcePathStyle) {
-      publicUrl = `${config.endpoint}/${config.bucket}/${key}`
+    if (s3Config.forcePathStyle) {
+      publicUrl = `${s3Config.endpoint}/${s3Config.bucket}/${key}`
     } else {
       // Virtual-hosted style (bucket in subdomain)
-      const url = new URL(config.endpoint)
-      url.hostname = `${config.bucket}.${url.hostname}`
+      const url = new URL(s3Config.endpoint)
+      url.hostname = `${s3Config.bucket}.${url.hostname}`
       url.pathname = `/${key}`
       publicUrl = url.toString()
     }
   } else {
     // AWS S3 default
-    publicUrl = `https://${config.bucket}.s3.${config.region}.amazonaws.com/${key}`
+    publicUrl = `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${key}`
   }
 
   return {

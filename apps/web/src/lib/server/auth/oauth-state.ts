@@ -6,15 +6,12 @@
  */
 
 import crypto from 'crypto'
+import { config } from '@/lib/server/config'
 
 const SIGNATURE_SEPARATOR = '.'
 
 function getSecret(): string {
-  const secret = process.env.BETTER_AUTH_SECRET
-  if (!secret) {
-    throw new Error('BETTER_AUTH_SECRET is required for OAuth state signing')
-  }
-  return secret
+  return config.secretKey
 }
 
 function computeSignature(json: string): string {

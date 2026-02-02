@@ -1,11 +1,11 @@
 /**
  * Slack integration database operations.
  */
-import { db, encryptToken, integrations } from '@/lib/server/db'
+import { db, integrations } from '@/lib/server/db'
+import { encryptIntegrationToken } from './encryption'
 import type { MemberId } from '@quackback/ids'
 
 interface SaveIntegrationParams {
-  workspaceId: string
   memberId: MemberId
   accessToken: string
   teamId: string
@@ -16,8 +16,8 @@ interface SaveIntegrationParams {
  * Save or update a Slack integration.
  */
 export async function saveIntegration(params: SaveIntegrationParams): Promise<void> {
-  const { workspaceId, memberId, accessToken, teamId, teamName } = params
-  const encryptedToken = encryptToken(accessToken, workspaceId)
+  const { memberId, accessToken, teamId, teamName } = params
+  const encryptedToken = encryptIntegrationToken(accessToken)
   const now = new Date()
 
   await db
