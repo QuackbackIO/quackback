@@ -20,10 +20,13 @@ export const changelogEntries = pgTable(
     publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     index('changelog_published_at_idx').on(table.publishedAt),
     index('changelog_member_id_idx').on(table.memberId),
+    index('changelog_deleted_at_idx').on(table.deletedAt),
   ]
 )
 

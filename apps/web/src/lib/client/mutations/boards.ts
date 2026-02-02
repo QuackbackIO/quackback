@@ -42,6 +42,7 @@ export function useCreateBoard() {
         settings: {},
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       }
       queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
         old ? [...old, optimisticBoard] : [optimisticBoard]

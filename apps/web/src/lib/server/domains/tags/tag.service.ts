@@ -10,7 +10,7 @@
  * Note: Authorization is handled at the action/API layer, not in services.
  */
 
-import { db, eq, asc, type Tag, tags, boards, postTags, posts } from '@/lib/server/db'
+import { db, eq, and, isNull, asc, type Tag, tags, boards, postTags, posts } from '@/lib/server/db'
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
@@ -133,18 +133,22 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
 }
 
 /**
- * Delete a tag
+ * Soft delete a tag
  *
  * Validates that:
- * - Tag exists
+ * - Tag exists and is not already deleted
  *
- * Note: This will remove the tag from all posts that use it.
+ * Note: Sets deletedAt timestamp instead of removing the row.
  * Authorization should be checked at the action/API layer before calling this.
  */
 export async function deleteTag(id: TagId): Promise<void> {
-  // Delete the tag (cascade will remove from post_tags junction table)
-  // Just delete and check the result - no need for separate existence check
-  const result = await db.delete(tags).where(eq(tags.id, id)).returning()
+  // Soft delete the tag by setting deletedAt
+  const result = await db
+    .update(tags)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+    .returning()
+
   if (result.length === 0) {
     throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
   }
@@ -165,10 +169,11 @@ export async function getTagById(id: TagId): Promise<Tag> {
 }
 
 /**
- * List all tags for the organization
+ * List all tags for the organization (excludes soft-deleted)
  */
 export async function listTags(): Promise<Tag[]> {
   const tagList = await db.query.tags.findMany({
+    where: isNull(tags.deletedAt),
     orderBy: [asc(tags.name)],
   })
 

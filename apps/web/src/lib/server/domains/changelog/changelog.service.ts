@@ -8,6 +8,7 @@
  * - Publish, schedule, and unpublish entries
  */
 
+import type { SQL } from 'drizzle-orm'
 import {
   db,
   boards,
@@ -164,12 +165,18 @@ export async function updateChangelog(
 // ============================================================================
 
 /**
- * Delete a changelog entry
+ * Soft delete a changelog entry
+ *
+ * Sets deletedAt timestamp instead of removing the row.
  *
  * @param id - Changelog entry ID
  */
 export async function deleteChangelog(id: ChangelogId): Promise<void> {
-  const result = await db.delete(changelogEntries).where(eq(changelogEntries.id, id)).returning()
+  const result = await db
+    .update(changelogEntries)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(changelogEntries.id, id), isNull(changelogEntries.deletedAt)))
+    .returning()
 
   if (result.length === 0) {
     throw new NotFoundError('CHANGELOG_NOT_FOUND', `Changelog entry with ID ${id} not found`)
@@ -281,20 +288,18 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   const { status = 'all', cursor, limit = 20 } = params
   const now = new Date()
 
-  // Build where conditions
-  const conditions = []
+  // Build where conditions - always exclude soft-deleted entries
+  const conditions: SQL<unknown>[] = [isNull(changelogEntries.deletedAt)]
 
   // Filter by status
   if (status === 'draft') {
     conditions.push(isNull(changelogEntries.publishedAt))
   } else if (status === 'scheduled') {
-    conditions.push(
-      and(isNotNull(changelogEntries.publishedAt), gt(changelogEntries.publishedAt, now))
-    )
+    conditions.push(isNotNull(changelogEntries.publishedAt))
+    conditions.push(gt(changelogEntries.publishedAt, now))
   } else if (status === 'published') {
-    conditions.push(
-      and(isNotNull(changelogEntries.publishedAt), lte(changelogEntries.publishedAt, now))
-    )
+    conditions.push(isNotNull(changelogEntries.publishedAt))
+    conditions.push(lte(changelogEntries.publishedAt, now))
   }
 
   // Cursor-based pagination (cursor is the last entry ID)
@@ -310,7 +315,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
 
   // Fetch entries
   const entries = await db.query.changelogEntries.findMany({
-    where: conditions.length > 0 ? and(...conditions) : undefined,
+    where: and(...conditions),
     orderBy: [desc(changelogEntries.createdAt)],
     limit: limit + 1, // Fetch one extra to check hasMore
   })

@@ -13,6 +13,8 @@ import {
   type Board,
   type BoardSettings,
   eq,
+  and,
+  isNull,
   posts,
   boards,
   webhooks,
@@ -170,13 +172,19 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
 }
 
 /**
- * Delete a board
+ * Soft delete a board
  *
+ * Sets deletedAt timestamp instead of removing the row.
  * Also removes the board ID from webhook board_ids filters to maintain referential integrity.
  */
 export async function deleteBoard(id: BoardId): Promise<void> {
-  // Delete the board and check if it existed
-  const result = await db.delete(boards).where(eq(boards.id, id)).returning()
+  // Soft delete the board by setting deletedAt
+  const result = await db
+    .update(boards)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(boards.id, id), isNull(boards.deletedAt)))
+    .returning()
+
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
@@ -224,21 +232,23 @@ export async function getBoardBySlug(slug: string): Promise<Board> {
 }
 
 /**
- * List all boards
+ * List all boards (excludes soft-deleted)
  */
 export async function listBoards(): Promise<Board[]> {
   const boardList = await db.query.boards.findMany({
+    where: isNull(boards.deletedAt),
     orderBy: [asc(boards.name)],
   })
   return boardList
 }
 
 /**
- * List all boards with post counts
+ * List all boards with post counts (excludes soft-deleted)
  */
 export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
-  // Get all boards ordered by name
+  // Get all active boards ordered by name
   const allBoards = await db.query.boards.findMany({
+    where: isNull(boards.deletedAt),
     orderBy: [asc(boards.name)],
   })
 

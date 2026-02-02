@@ -5,7 +5,7 @@
  */
 
 import crypto from 'crypto'
-import { db, webhooks, eq, sql } from '@/lib/server/db'
+import { db, webhooks, eq, and, isNull, sql } from '@/lib/server/db'
 import { createId, type MemberId, type WebhookId } from '@quackback/ids'
 import { encryptWebhookSecret } from './encryption'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -113,10 +113,11 @@ export async function createWebhook(
 }
 
 /**
- * List all webhooks
+ * List all webhooks (excludes soft-deleted)
  */
 export async function listWebhooks(): Promise<Webhook[]> {
   const result = await db.query.webhooks.findMany({
+    where: isNull(webhooks.deletedAt),
     orderBy: (t, { desc }) => [desc(t.createdAt)],
   })
 
@@ -187,10 +188,16 @@ export async function updateWebhook(id: WebhookId, input: UpdateWebhookInput): P
 }
 
 /**
- * Delete a webhook
+ * Soft delete a webhook
+ *
+ * Sets deletedAt timestamp instead of removing the row.
  */
 export async function deleteWebhook(id: WebhookId): Promise<void> {
-  const [deleted] = await db.delete(webhooks).where(eq(webhooks.id, id)).returning()
+  const [deleted] = await db
+    .update(webhooks)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(webhooks.id, id), isNull(webhooks.deletedAt)))
+    .returning()
 
   if (!deleted) {
     throw new NotFoundError('WEBHOOK_NOT_FOUND', 'Webhook not found')

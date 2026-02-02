@@ -12,6 +12,7 @@ import {
   db,
   eq,
   and,
+  isNull,
   asc,
   desc,
   sql,
@@ -115,11 +116,16 @@ export async function updateRoadmap(id: RoadmapId, input: UpdateRoadmapInput): P
 }
 
 /**
- * Delete a roadmap
+ * Soft delete a roadmap
+ *
+ * Sets deletedAt timestamp instead of removing the row.
  */
 export async function deleteRoadmap(id: RoadmapId): Promise<void> {
-  // Delete the roadmap (cascade will handle post_roadmaps)
-  const result = await db.delete(roadmaps).where(eq(roadmaps.id, id)).returning()
+  const result = await db
+    .update(roadmaps)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(roadmaps.id, id), isNull(roadmaps.deletedAt)))
+    .returning()
 
   if (result.length === 0) {
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${id} not found`)
@@ -153,18 +159,21 @@ export async function getRoadmapBySlug(slug: string): Promise<Roadmap> {
 }
 
 /**
- * List all roadmaps (admin view)
+ * List all roadmaps (admin view, excludes soft-deleted)
  */
 export async function listRoadmaps(): Promise<Roadmap[]> {
-  return db.query.roadmaps.findMany({ orderBy: [asc(roadmaps.position)] })
+  return db.query.roadmaps.findMany({
+    where: isNull(roadmaps.deletedAt),
+    orderBy: [asc(roadmaps.position)],
+  })
 }
 
 /**
- * List public roadmaps (for portal view)
+ * List public roadmaps (for portal view, excludes soft-deleted)
  */
 export async function listPublicRoadmaps(): Promise<Roadmap[]> {
   return db.query.roadmaps.findMany({
-    where: eq(roadmaps.isPublic, true),
+    where: and(eq(roadmaps.isPublic, true), isNull(roadmaps.deletedAt)),
     orderBy: [asc(roadmaps.position)],
   })
 }

@@ -17,10 +17,13 @@ export const postStatuses = pgTable(
     showOnRoadmap: boolean('show_on_roadmap').notNull().default(false),
     isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     // Note: post_statuses_slug_unique constraint already provides uniqueness; no separate index needed
     index('post_statuses_position_idx').on(table.category, table.position),
+    index('post_statuses_deleted_at_idx').on(table.deletedAt),
   ]
 )
 

@@ -45,12 +45,16 @@ export const webhooks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     /** When the webhook was last updated */
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Soft delete support */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     // Index for finding active webhooks
     index('webhooks_status_idx').on(table.status),
     // Index for listing webhooks by creator
     index('webhooks_created_by_id_idx').on(table.createdById),
+    // Index for soft delete filtering
+    index('webhooks_deleted_at_idx').on(table.deletedAt),
   ]
 )
 

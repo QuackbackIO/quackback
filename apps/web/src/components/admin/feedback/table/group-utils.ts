@@ -40,6 +40,7 @@ export function groupPostsByStatus(
             showOnRoadmap: false,
             isDefault: false,
             createdAt: new Date(),
+            deletedAt: null,
           },
           posts: [],
         })

@@ -14,10 +14,13 @@ export const boards = pgTable(
     settings: jsonb('settings').$type<BoardSettings>().default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     // Note: boards_slug_unique constraint already provides uniqueness; no separate index needed
     index('boards_is_public_idx').on(table.isPublic),
+    index('boards_deleted_at_idx').on(table.deletedAt),
   ]
 )
 
@@ -32,11 +35,14 @@ export const roadmaps = pgTable(
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     // Note: roadmaps_slug_unique constraint already provides uniqueness; no separate index needed
     index('roadmaps_position_idx').on(table.position),
     index('roadmaps_is_public_idx').on(table.isPublic),
+    index('roadmaps_deleted_at_idx').on(table.deletedAt),
   ]
 )
 
@@ -47,9 +53,10 @@ export const tags = pgTable(
     name: text('name').notNull().unique(),
     color: text('color').default('#6b7280').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Soft delete support
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  // Note: tags_name_unique constraint already provides uniqueness; no separate index needed
-  () => []
+  (table) => [index('tags_deleted_at_idx').on(table.deletedAt)]
 )
 
 // Relations - defined after posts import to avoid circular dependency

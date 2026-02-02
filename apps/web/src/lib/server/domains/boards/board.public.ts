@@ -1,4 +1,4 @@
-import { db, eq, sql, boards, posts, type Board } from '@/lib/server/db'
+import { db, eq, and, isNull, sql, boards, posts, type Board } from '@/lib/server/db'
 import type { BoardId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type { BoardWithStats } from './board.types'
@@ -36,11 +36,12 @@ export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
         settings: boards.settings,
         createdAt: boards.createdAt,
         updatedAt: boards.updatedAt,
+        deletedAt: boards.deletedAt,
         postCount: sql<number>`count(${posts.id})::int`.as('post_count'),
       })
       .from(boards)
       .leftJoin(posts, eq(posts.boardId, boards.id))
-      .where(eq(boards.isPublic, true))
+      .where(and(eq(boards.isPublic, true), isNull(boards.deletedAt)))
       .groupBy(boards.id)
       .orderBy(boards.name)
 
@@ -53,6 +54,7 @@ export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
       settings: row.settings,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      deletedAt: row.deletedAt,
       postCount: row.postCount ?? 0,
     }))
   } catch (error) {

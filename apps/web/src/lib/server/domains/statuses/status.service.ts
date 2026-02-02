@@ -9,7 +9,7 @@
  * - Validation
  */
 
-import { db, eq, sql, posts, postStatuses, asc } from '@/lib/server/db'
+import { db, eq, and, isNull, sql, posts, postStatuses, asc } from '@/lib/server/db'
 import { toUuid, type StatusId } from '@quackback/ids'
 import {
   NotFoundError,
@@ -148,12 +148,14 @@ export async function updateStatus(id: StatusId, input: UpdateStatusInput): Prom
 }
 
 /**
- * Delete a status
+ * Soft delete a status
+ *
+ * Sets deletedAt timestamp instead of removing the row.
  */
 export async function deleteStatus(id: StatusId): Promise<void> {
   // Get existing status (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.id, id),
+    where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
   })
   if (!existingStatus) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
@@ -181,8 +183,13 @@ export async function deleteStatus(id: StatusId): Promise<void> {
     )
   }
 
-  // Delete the status
-  const deleteResult = await db.delete(postStatuses).where(eq(postStatuses.id, id)).returning()
+  // Soft delete the status by setting deletedAt
+  const deleteResult = await db
+    .update(postStatuses)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)))
+    .returning()
+
   if (deleteResult.length === 0) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
   }
@@ -203,10 +210,11 @@ export async function getStatusById(id: StatusId): Promise<Status> {
 }
 
 /**
- * List all statuses for the organization
+ * List all statuses for the organization (excludes soft-deleted)
  */
 export async function listStatuses(): Promise<Status[]> {
   const statuses = await db.query.postStatuses.findMany({
+    where: isNull(postStatuses.deletedAt),
     orderBy: [
       // Order by category (active, complete, closed) then position
       sql`CASE
