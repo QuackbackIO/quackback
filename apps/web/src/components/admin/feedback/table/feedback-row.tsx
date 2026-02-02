@@ -6,18 +6,11 @@ import type { StatusId } from '@quackback/ids'
 interface FeedbackRowProps {
   post: PostListItem
   statuses: PostStatusEntity[]
-  isFocused: boolean
   onClick: () => void
   onStatusChange: (statusId: StatusId) => void
 }
 
-export function FeedbackRow({
-  post,
-  statuses,
-  isFocused,
-  onClick,
-  onStatusChange,
-}: FeedbackRowProps) {
+export function FeedbackRow({ post, statuses, onClick, onStatusChange }: FeedbackRowProps) {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
@@ -38,11 +31,10 @@ export function FeedbackRow({
       // Admin mode
       canChangeStatus
       onStatusChange={onStatusChange}
-      isFocused={isFocused}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      showQuickActions={isHovered || isFocused}
+      showQuickActions={isHovered}
       // Admin doesn't need avatars in list view
       showAvatar={false}
     />

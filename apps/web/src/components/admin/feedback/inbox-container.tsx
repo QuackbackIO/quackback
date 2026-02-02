@@ -36,16 +36,8 @@ export function InboxContainer({
   const search = Route.useSearch()
 
   // URL-based filter state
-  const {
-    filters,
-    setFilters,
-    clearFilters,
-    selectedPostId,
-    setSelectedPostId,
-    hasActiveFilters,
-    toggleBoard,
-    toggleStatus,
-  } = useInboxFilters()
+  const { filters, setFilters, clearFilters, hasActiveFilters, toggleBoard, toggleStatus } =
+    useInboxFilters()
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -140,8 +132,6 @@ export function InboxContainer({
         hasMore={!!hasMore}
         isLoading={isLoading}
         isLoadingMore={isLoadingMore}
-        focusedPostId={selectedPostId}
-        onFocusPost={setSelectedPostId}
         onNavigateToPost={handleNavigateToPost}
         onLoadMore={handleLoadMore}
         sort={filters.sort}

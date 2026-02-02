@@ -13,7 +13,6 @@ const searchSchema = z.object({
   dateTo: z.string().optional(),
   minVotes: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
-  selected: z.string().optional(),
   post: z.string().optional(), // Post ID for modal view
 })
 

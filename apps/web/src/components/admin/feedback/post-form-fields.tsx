@@ -154,7 +154,13 @@ export function PostFormFields({
                   placeholder="Add more details..."
                   minHeight="200px"
                   borderless
-                  toolbarPosition="bottom"
+                  features={{
+                    headings: true,
+                    codeBlocks: true,
+                    taskLists: true,
+                    blockquotes: true,
+                    dividers: true,
+                  }}
                 />
               </FormControl>
               <FormMessage />

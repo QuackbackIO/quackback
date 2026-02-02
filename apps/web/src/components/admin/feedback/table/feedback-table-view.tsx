@@ -29,8 +29,6 @@ interface FeedbackTableViewProps {
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean
-  focusedPostId: string | null
-  onFocusPost: (id: string | null) => void
   onNavigateToPost: (id: string) => void
   onLoadMore: () => void
   sort: InboxFilters['sort']
@@ -82,8 +80,6 @@ export function FeedbackTableView({
   hasMore,
   isLoading,
   isLoadingMore,
-  focusedPostId,
-  onFocusPost,
   onNavigateToPost,
   onLoadMore,
   sort,
@@ -144,34 +140,7 @@ export function FeedbackTableView({
         return
       }
 
-      const currentIndex = focusedPostId ? posts.findIndex((p) => p.id === focusedPostId) : -1
-
       switch (e.key) {
-        case 'j':
-        case 'ArrowDown':
-          e.preventDefault()
-          if (posts.length > 0) {
-            const nextIndex = Math.min(currentIndex + 1, posts.length - 1)
-            onFocusPost(posts[nextIndex]?.id ?? null)
-          }
-          break
-        case 'k':
-        case 'ArrowUp':
-          e.preventDefault()
-          if (posts.length > 0 && currentIndex > 0) {
-            const prevIndex = Math.max(currentIndex - 1, 0)
-            onFocusPost(posts[prevIndex]?.id ?? null)
-          }
-          break
-        case 'Enter':
-          if (focusedPostId) {
-            e.preventDefault()
-            onNavigateToPost(focusedPostId)
-          }
-          break
-        case 'Escape':
-          onFocusPost(null)
-          break
         case '/':
           e.preventDefault()
           document.querySelector<HTMLInputElement>('[data-search-input]')?.focus()
@@ -181,7 +150,7 @@ export function FeedbackTableView({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [posts, focusedPostId, onFocusPost, onNavigateToPost])
+  }, [])
 
   const headerContent = (
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
@@ -277,7 +246,6 @@ export function FeedbackTableView({
               <FeedbackRow
                 post={post}
                 statuses={statuses}
-                isFocused={post.id === focusedPostId}
                 onClick={() => onNavigateToPost(post.id)}
                 onStatusChange={(statusId) => onStatusChange(post.id, statusId)}
               />
