@@ -208,10 +208,16 @@ export async function updatePost(
     }
   }
 
-  // Update the post
-  const [updatedPost] = await db.update(posts).set(updateData).where(eq(posts.id, id)).returning()
-  if (!updatedPost) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+  // Update the post only if there's data to update
+  let updatedPost: Post
+  if (Object.keys(updateData).length > 0) {
+    const [result] = await db.update(posts).set(updateData).where(eq(posts.id, id)).returning()
+    if (!result) {
+      throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${id} not found`)
+    }
+    updatedPost = result
+  } else {
+    updatedPost = existingPost
   }
 
   // Update tags if provided
