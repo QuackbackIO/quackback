@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
+import { VoteButton } from '@/components/public/vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
@@ -178,7 +179,13 @@ export function MetadataSidebar({
               <ChevronUpIcon className="h-4 w-4" />
               <span>Upvotes</span>
             </div>
-            <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} compact />
+            {canEdit ? (
+              // Admin mode: direct vote button (no auth wrapper needed)
+              <VoteButton postId={postId} voteCount={voteCount} compact />
+            ) : (
+              // Portal mode: interactive vote button with auth
+              <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} compact />
+            )}
           </div>
         )}
 
