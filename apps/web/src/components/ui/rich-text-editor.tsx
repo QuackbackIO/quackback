@@ -11,6 +11,13 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import { Table } from '@tiptap/extension-table'
+import TableRow from '@tiptap/extension-table-row'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import Underline from '@tiptap/extension-underline'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
@@ -21,6 +28,9 @@ import { cn } from '@/lib/shared/utils'
 import {
   Bold,
   Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  Code,
   ListOrdered,
   Heading1,
   Heading2,
@@ -28,6 +38,10 @@ import {
   Code2,
   ImagePlus,
   Type,
+  Quote,
+  Minus,
+  CheckSquare,
+  Table as TableIcon,
 } from 'lucide-react'
 import {
   ArrowUturnLeftIcon,
@@ -61,6 +75,14 @@ export interface EditorFeatures {
   bubbleMenu?: boolean
   /** Enable slash "/" command menu for inserting blocks */
   slashMenu?: boolean
+  /** Enable checklist/task lists */
+  taskLists?: boolean
+  /** Enable blockquotes */
+  blockquotes?: boolean
+  /** Enable table insertion */
+  tables?: boolean
+  /** Enable horizontal dividers */
+  dividers?: boolean
 }
 
 // ============================================================================
@@ -73,7 +95,7 @@ interface SlashMenuItem {
   icon: React.ReactNode
   command: (props: { editor: Editor; range: Range }) => void
   aliases?: string[]
-  group: 'text' | 'lists' | 'advanced'
+  group: 'text' | 'lists' | 'blocks' | 'advanced'
 }
 
 function getSlashMenuItems(
@@ -154,6 +176,48 @@ function getSlashMenuItems(
     }
   )
 
+  // Task list - conditional
+  if (features.taskLists) {
+    items.push({
+      title: 'Checklist',
+      description: 'Task list with checkboxes',
+      icon: <CheckSquare className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).toggleTaskList().run()
+      },
+      aliases: ['todo', 'task', 'checklist', '[]'],
+      group: 'lists',
+    })
+  }
+
+  // Blockquote - conditional
+  if (features.blockquotes) {
+    items.push({
+      title: 'Quote',
+      description: 'Blockquote for citations',
+      icon: <Quote className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).toggleBlockquote().run()
+      },
+      aliases: ['blockquote', 'quote', '>'],
+      group: 'blocks',
+    })
+  }
+
+  // Horizontal divider - conditional
+  if (features.dividers) {
+    items.push({
+      title: 'Divider',
+      description: 'Horizontal line separator',
+      icon: <Minus className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).setHorizontalRule().run()
+      },
+      aliases: ['hr', 'divider', 'line', '---'],
+      group: 'blocks',
+    })
+  }
+
   // Code blocks - conditional
   if (features.codeBlocks) {
     items.push({
@@ -193,6 +257,25 @@ function getSlashMenuItems(
         input.click()
       },
       aliases: ['img', 'picture'],
+      group: 'advanced',
+    })
+  }
+
+  // Table - conditional
+  if (features.tables) {
+    items.push({
+      title: 'Table',
+      description: 'Insert a table',
+      icon: <TableIcon className="size-4" />,
+      command: ({ editor, range }) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+          .run()
+      },
+      aliases: ['table', '|--'],
       group: 'advanced',
     })
   }
@@ -285,6 +368,7 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
     const groupLabels: Record<string, string> = {
       text: 'Text',
       lists: 'Lists',
+      blocks: 'Blocks',
       advanced: 'Advanced',
     }
 
@@ -487,10 +571,14 @@ export function RichTextEditor({
         heading: features.headings ? { levels: [1, 2, 3] } : false,
         // Disable built-in code block if using CodeBlockLowlight
         codeBlock: features.codeBlocks ? false : false,
-        blockquote: false,
-        horizontalRule: false,
+        // Enable blockquote if feature is enabled (use empty object to enable with defaults)
+        blockquote: features.blockquotes ? {} : false,
+        // Enable horizontal rule if feature is enabled (use empty object to enable with defaults)
+        horizontalRule: features.dividers ? {} : false,
         link: false, // Disable built-in Link, we use our own configured version
       }),
+      // Underline extension (always available for bubble menu)
+      Underline,
       Placeholder.configure({
         placeholder,
         emptyEditorClass: 'is-editor-empty',
@@ -519,6 +607,44 @@ export function RichTextEditor({
               lowlight,
               HTMLAttributes: {
                 class: 'not-prose rounded-lg bg-muted p-4 overflow-x-auto',
+              },
+            }),
+          ]
+        : []),
+      // Conditionally add TaskList extension
+      ...(features.taskLists
+        ? [
+            TaskList.configure({
+              HTMLAttributes: {
+                class: 'not-prose',
+              },
+            }),
+            TaskItem.configure({
+              nested: true,
+              HTMLAttributes: {
+                class: 'flex gap-2 items-start',
+              },
+            }),
+          ]
+        : []),
+      // Conditionally add Table extensions
+      ...(features.tables
+        ? [
+            Table.configure({
+              resizable: true,
+              HTMLAttributes: {
+                class: 'not-prose border-collapse w-full',
+              },
+            }),
+            TableRow,
+            TableHeader.configure({
+              HTMLAttributes: {
+                class: 'border border-border bg-muted/50 p-2 text-left font-semibold',
+              },
+            }),
+            TableCell.configure({
+              HTMLAttributes: {
+                class: 'border border-border p-2',
               },
             }),
           ]
@@ -651,6 +777,83 @@ export function RichTextEditor({
           font-size: 0.875rem;
           font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
           padding: 0;
+        }
+
+        /* Inline code */
+        .tiptap code:not(pre code) {
+          background: var(--muted);
+          padding: 0.125rem 0.25rem;
+          border-radius: 0.25rem;
+          font-size: 0.875em;
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        }
+
+        /* Task list */
+        .tiptap ul[data-type="taskList"] {
+          list-style: none;
+          padding-left: 0;
+        }
+
+        .tiptap ul[data-type="taskList"] li {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.5rem;
+        }
+
+        .tiptap ul[data-type="taskList"] li > label {
+          flex-shrink: 0;
+          margin-top: 0.25rem;
+        }
+
+        .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+          cursor: pointer;
+          width: 1rem;
+          height: 1rem;
+          accent-color: var(--primary);
+        }
+
+        .tiptap ul[data-type="taskList"] li > div {
+          flex: 1;
+        }
+
+        /* Blockquote */
+        .tiptap blockquote {
+          border-left: 4px solid var(--border);
+          padding-left: 1rem;
+          margin-left: 0;
+          font-style: italic;
+          color: var(--muted-foreground);
+        }
+
+        /* Horizontal rule */
+        .tiptap hr {
+          border: none;
+          border-top: 1px solid var(--border);
+          margin: 1.5rem 0;
+        }
+
+        /* Tables */
+        .tiptap table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 1rem 0;
+        }
+
+        .tiptap th,
+        .tiptap td {
+          border: 1px solid var(--border);
+          padding: 0.5rem;
+          text-align: left;
+          min-width: 100px;
+        }
+
+        .tiptap th {
+          background: color-mix(in oklch, var(--muted), transparent 50%);
+          font-weight: 600;
+        }
+
+        .tiptap .selectedCell {
+          background: color-mix(in oklch, var(--primary), transparent 85%);
         }
 
         /* Syntax highlighting colors */
@@ -812,7 +1015,28 @@ function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
         isActive={editor.isActive('italic')}
         title="Italic (Cmd+I)"
       />
+      <ToolbarButton
+        icon={<UnderlineIcon className="size-4" />}
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        disabled={disabled}
+        isActive={editor.isActive('underline')}
+        title="Underline (Cmd+U)"
+      />
+      <ToolbarButton
+        icon={<Strikethrough className="size-4" />}
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+        disabled={disabled}
+        isActive={editor.isActive('strike')}
+        title="Strikethrough (Cmd+Shift+S)"
+      />
       <ToolbarDivider />
+      <ToolbarButton
+        icon={<Code className="size-4" />}
+        onClick={() => editor.chain().focus().toggleCode().run()}
+        disabled={disabled}
+        isActive={editor.isActive('code')}
+        title="Inline Code (Cmd+E)"
+      />
       <LinkButton editor={editor} disabled={disabled} />
     </div>
   )
@@ -1113,8 +1337,14 @@ function generateContentHTML(content: JSONContent): string {
               case 'italic':
                 text = `<em>${text}</em>`
                 break
+              case 'underline':
+                text = `<u>${text}</u>`
+                break
+              case 'strike':
+                text = `<s>${text}</s>`
+                break
               case 'code':
-                text = `<code>${text}</code>`
+                text = `<code class="bg-muted px-1 py-0.5 rounded text-sm">${text}</code>`
                 break
               case 'link': {
                 const href = mark.attrs?.href ?? ''
@@ -1136,10 +1366,38 @@ function generateContentHTML(content: JSONContent): string {
       case 'listItem':
         return `<li>${node.content?.map(renderNode).join('') ?? ''}</li>`
 
+      case 'taskList':
+        return `<ul class="not-prose list-none pl-0">${node.content?.map(renderNode).join('') ?? ''}</ul>`
+
+      case 'taskItem': {
+        const checked = node.attrs?.checked ?? false
+        const checkboxHtml = `<input type="checkbox" ${checked ? 'checked' : ''} disabled class="mr-2 mt-1" />`
+        const itemContent = node.content?.map(renderNode).join('') ?? ''
+        return `<li class="flex gap-2 items-start">${checkboxHtml}<div>${itemContent}</div></li>`
+      }
+
+      case 'blockquote':
+        return `<blockquote class="border-l-4 border-border pl-4 italic">${node.content?.map(renderNode).join('') ?? ''}</blockquote>`
+
+      case 'horizontalRule':
+        return '<hr class="my-4 border-border" />'
+
+      case 'table':
+        return `<table class="w-full border-collapse">${node.content?.map(renderNode).join('') ?? ''}</table>`
+
+      case 'tableRow':
+        return `<tr>${node.content?.map(renderNode).join('') ?? ''}</tr>`
+
+      case 'tableHeader':
+        return `<th class="border border-border bg-muted/50 p-2 text-left font-semibold">${node.content?.map(renderNode).join('') ?? ''}</th>`
+
+      case 'tableCell':
+        return `<td class="border border-border p-2">${node.content?.map(renderNode).join('') ?? ''}</td>`
+
       case 'codeBlock': {
         const language = node.attrs?.language ?? ''
         const codeContent = node.content?.map(renderNode).join('') ?? ''
-        return `<pre><code class="language-${language}">${codeContent}</code></pre>`
+        return `<pre class="not-prose rounded-lg bg-muted p-4 overflow-x-auto"><code class="language-${language}">${codeContent}</code></pre>`
       }
 
       case 'image': {

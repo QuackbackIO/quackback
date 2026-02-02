@@ -68,6 +68,10 @@ export function ChangelogFormFields({
                   headings: true,
                   images: true,
                   codeBlocks: true,
+                  taskLists: true,
+                  blockquotes: true,
+                  tables: true,
+                  dividers: true,
                 }}
                 onImageUpload={uploadImage}
               />
