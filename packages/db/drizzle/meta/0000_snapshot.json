@@ -1,6 +1,6 @@
 {
-  "id": "d34aa1c2-2f35-46cf-a4be-23e1366d5bcb",
-  "prevId": "a04406c6-5149-46bc-91d8-7d175c1a452c",
+  "id": "f4a2062e-2b66-4246-93d8-e888a7229a9c",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -487,38 +487,20 @@
           "primaryKey": false,
           "notNull": true
         },
-        "logo_blob": {
-          "name": "logo_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "logo_type": {
-          "name": "logo_type",
+        "logo_key": {
+          "name": "logo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "favicon_blob": {
-          "name": "favicon_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "favicon_type": {
-          "name": "favicon_type",
+        "favicon_key": {
+          "name": "favicon_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "header_logo_blob": {
-          "name": "header_logo_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_logo_type": {
-          "name": "header_logo_type",
+        "header_logo_key": {
+          "name": "header_logo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -628,14 +610,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "image_blob": {
-          "name": "image_blob",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "image_type": {
-          "name": "image_type",
+        "image_key": {
+          "name": "image_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
