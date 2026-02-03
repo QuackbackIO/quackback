@@ -16,7 +16,17 @@ import {
   MetadataSidebar,
   MetadataSidebarSkeleton,
 } from '@/components/public/post-detail/metadata-sidebar'
-import { useUpdatePostStatus, useUpdatePostTags } from '@/lib/client/mutations/posts'
+import {
+  CommentsSection,
+  CommentsSectionSkeleton,
+} from '@/components/public/post-detail/comments-section'
+import { PinnedCommentSection } from '@/components/public/post-detail/official-response-section'
+import {
+  useUpdatePostStatus,
+  useUpdatePostTags,
+  usePinComment,
+  useUnpinComment,
+} from '@/lib/client/mutations'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/roadmap'
 import {
@@ -37,6 +47,7 @@ interface RoadmapModalProps {
 
 interface RoadmapModalContentProps {
   postId: PostId
+  currentUser: CurrentUser
   onClose: () => void
 }
 
@@ -85,7 +96,7 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
   }
 }
 
-function RoadmapModalContent({ postId, onClose }: RoadmapModalContentProps) {
+function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalContentProps) {
   const queryClient = useQueryClient()
 
   // Queries
@@ -103,6 +114,8 @@ function RoadmapModalContent({ postId, onClose }: RoadmapModalContentProps) {
   // Mutations
   const updateStatus = useUpdatePostStatus()
   const updateTags = useUpdatePostTags()
+  const pinComment = usePinComment({ postId: post.id as PostId })
+  const unpinComment = useUnpinComment({ postId: post.id as PostId })
 
   // Handlers
   const handleStatusChange = async (statusId: StatusId) => {
@@ -247,12 +260,33 @@ function RoadmapModalContent({ postId, onClose }: RoadmapModalContentProps) {
             />
           </Suspense>
         </div>
+
+        {/* Pinned comment section */}
+        {post.pinnedComment && (
+          <PinnedCommentSection comment={post.pinnedComment} workspaceName="Team" />
+        )}
+
+        {/* Comments section */}
+        <div className="bg-muted/20">
+          <Suspense fallback={<CommentsSectionSkeleton />}>
+            <CommentsSection
+              postId={postId}
+              comments={portalPost.comments}
+              pinnedCommentId={post.pinnedCommentId}
+              canPinComments
+              onPinComment={(commentId) => pinComment.mutate(commentId)}
+              onUnpinComment={() => unpinComment.mutate()}
+              isPinPending={pinComment.isPending || unpinComment.isPending}
+              adminUser={{ name: currentUser.name, email: currentUser.email }}
+            />
+          </Suspense>
+        </div>
       </div>
     </div>
   )
 }
 
-export function RoadmapModal({ postId: urlPostId }: RoadmapModalProps) {
+export function RoadmapModal({ postId: urlPostId, currentUser }: RoadmapModalProps) {
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
 
@@ -303,7 +337,11 @@ export function RoadmapModal({ postId: urlPostId }: RoadmapModalProps) {
               </div>
             }
           >
-            <RoadmapModalContent postId={validatedPostId} onClose={close} />
+            <RoadmapModalContent
+              postId={validatedPostId}
+              currentUser={currentUser}
+              onClose={close}
+            />
           </Suspense>
         )}
       </DialogContent>

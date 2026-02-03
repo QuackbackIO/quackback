@@ -283,9 +283,12 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   // ============================================
   // Color management helpers
   // ============================================
+  const activeValues = editMode === 'light' ? lightValues : darkValues
+  const setActiveValues = editMode === 'light' ? setLightValues : setDarkValues
+
   const getColorAsHex = useCallback(
     (colorKey: keyof MinimalThemeVariables, defaultHex: string): string => {
-      const oklch = lightValues[colorKey]
+      const oklch = activeValues[colorKey]
       if (!oklch || typeof oklch !== 'string') return defaultHex
       try {
         return oklchToHex(oklch)
@@ -293,14 +296,16 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         return defaultHex
       }
     },
-    [lightValues]
+    [activeValues]
   )
 
-  const setColorFromHex = useCallback((colorKey: keyof MinimalThemeVariables, hexColor: string) => {
-    const oklchColor = hexToOklch(hexColor)
-    setLightValues((prev: MinimalThemeVariables) => ({ ...prev, [colorKey]: oklchColor }))
-    setDarkValues((prev: MinimalThemeVariables) => ({ ...prev, [colorKey]: oklchColor }))
-  }, [])
+  const setColorFromHex = useCallback(
+    (colorKey: keyof MinimalThemeVariables, hexColor: string) => {
+      const oklchColor = hexToOklch(hexColor)
+      setActiveValues((prev: MinimalThemeVariables) => ({ ...prev, [colorKey]: oklchColor }))
+    },
+    [setActiveValues]
+  )
 
   // Primary color
   const setPrimaryColor = useCallback(
@@ -392,13 +397,13 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     primaryColor: getColorAsHex('primary', '#3b82f6'),
     setPrimaryColor,
     secondaryColor:
-      getColorAsHex('secondary', lightValues.muted) || getColorAsHex('muted', '#f1f5f9'),
+      getColorAsHex('secondary', activeValues.muted) || getColorAsHex('muted', '#f1f5f9'),
     setSecondaryColor,
-    accentColor: getColorAsHex('accent', lightValues.muted) || getColorAsHex('muted', '#f1f5f9'),
+    accentColor: getColorAsHex('accent', activeValues.muted) || getColorAsHex('muted', '#f1f5f9'),
     setAccentColor,
-    backgroundColor: getColorAsHex('background', '#ffffff'),
+    backgroundColor: getColorAsHex('background', editMode === 'light' ? '#ffffff' : '#0a0a0a'),
     setBackgroundColor,
-    foregroundColor: getColorAsHex('foreground', '#0f172a'),
+    foregroundColor: getColorAsHex('foreground', editMode === 'light' ? '#0f172a' : '#fafafa'),
     setForegroundColor,
 
     // Legacy alias

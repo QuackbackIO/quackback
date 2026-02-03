@@ -22,8 +22,19 @@ import {
   MetadataSidebar,
   MetadataSidebarSkeleton,
 } from '@/components/public/post-detail/metadata-sidebar'
+import {
+  CommentsSection,
+  CommentsSectionSkeleton,
+} from '@/components/public/post-detail/comments-section'
+import { PinnedCommentSection } from '@/components/public/post-detail/official-response-section'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
-import { useUpdatePost, useUpdatePostStatus, useUpdatePostTags } from '@/lib/client/mutations/posts'
+import {
+  useUpdatePost,
+  useUpdatePostStatus,
+  useUpdatePostTags,
+  usePinComment,
+  useUnpinComment,
+} from '@/lib/client/mutations'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/feedback'
@@ -33,8 +44,10 @@ import {
   type StatusId,
   type TagId,
   type RoadmapId,
+  type CommentId,
 } from '@quackback/ids'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
+import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 
 interface PostModalProps {
   postId: string | undefined
@@ -48,9 +61,26 @@ interface PostModalContentProps {
   onClose: () => void
 }
 
+/** Convert admin comments to portal-compatible format */
+function toPortalComments(post: PostDetails): PublicCommentView[] {
+  const mapComment = (c: PostDetails['comments'][0]): PublicCommentView => ({
+    id: c.id as CommentId,
+    content: c.content,
+    authorName: c.authorName,
+    memberId: c.memberId,
+    createdAt: c.createdAt,
+    parentId: c.parentId as CommentId | null,
+    isTeamMember: c.isTeamMember,
+    avatarUrl: (c.memberId && post.avatarUrls?.[c.memberId]) || null,
+    reactions: c.reactions,
+    replies: c.replies.map(mapComment),
+  })
+  return post.comments.map(mapComment)
+}
+
 function PostModalContent({
   postId,
-  currentUser: _currentUser,
+  currentUser,
   onNavigateToPost,
   onClose,
 }: PostModalContentProps) {
@@ -82,6 +112,8 @@ function PostModalContent({
   const updatePost = useUpdatePost()
   const updateStatus = useUpdatePostStatus()
   const updateTags = useUpdatePostTags()
+  const pinComment = usePinComment({ postId: post.id as PostId })
+  const unpinComment = useUnpinComment({ postId: post.id as PostId })
 
   // Initialize form with post data
   useEffect(() => {
@@ -290,69 +322,93 @@ function PostModalContent({
         </div>
       </header>
 
-      {/* Main content area - 2 column layout */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Content editor */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Title input */}
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="What's the feedback about?"
-            maxLength={200}
-            autoFocus
-            disabled={updatePost.isPending}
-            className="w-full bg-transparent border-0 outline-none text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
-          />
+      {/* Main content area - scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {/* 2-column layout for editor and metadata */}
+        <div className="flex">
+          {/* Left: Content editor */}
+          <div className="flex-1 p-6">
+            {/* Title input */}
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What's the feedback about?"
+              maxLength={200}
+              autoFocus
+              disabled={updatePost.isPending}
+              className="w-full bg-transparent border-0 outline-none text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
+            />
 
-          {/* Rich text editor */}
-          <RichTextEditor
-            value={contentJson || ''}
-            onChange={handleContentChange}
-            placeholder="Add more details..."
-            minHeight="200px"
-            disabled={updatePost.isPending}
-            borderless
-            features={{
-              headings: false,
-              images: false,
-              codeBlocks: false,
-              bubbleMenu: true,
-              slashMenu: false,
-              taskLists: false,
-              blockquotes: true,
-              tables: false,
-              dividers: false,
-              embeds: false,
-            }}
-          />
+            {/* Rich text editor */}
+            <RichTextEditor
+              value={contentJson || ''}
+              onChange={handleContentChange}
+              placeholder="Add more details..."
+              minHeight="200px"
+              disabled={updatePost.isPending}
+              borderless
+              features={{
+                headings: false,
+                images: false,
+                codeBlocks: false,
+                bubbleMenu: true,
+                slashMenu: false,
+                taskLists: false,
+                blockquotes: true,
+                tables: false,
+                dividers: false,
+                embeds: false,
+              }}
+            />
+          </div>
+
+          {/* Right: Metadata sidebar */}
+          <Suspense fallback={<MetadataSidebarSkeleton />}>
+            <MetadataSidebar
+              postId={postId}
+              voteCount={post.voteCount}
+              status={currentStatus}
+              board={post.board}
+              authorName={post.authorName}
+              authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
+              createdAt={new Date(post.createdAt)}
+              tags={post.tags}
+              roadmaps={postRoadmaps}
+              canEdit
+              allStatuses={statuses}
+              allTags={tags}
+              allRoadmaps={roadmaps}
+              onStatusChange={handleStatusChange}
+              onTagsChange={handleTagsChange}
+              onRoadmapAdd={handleRoadmapAdd}
+              onRoadmapRemove={handleRoadmapRemove}
+              isUpdating={isUpdating || !!pendingRoadmapId}
+              hideSubscribe
+            />
+          </Suspense>
         </div>
 
-        {/* Right: Metadata sidebar */}
-        <Suspense fallback={<MetadataSidebarSkeleton />}>
-          <MetadataSidebar
-            postId={postId}
-            voteCount={post.voteCount}
-            status={currentStatus}
-            board={post.board}
-            authorName={post.authorName}
-            authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
-            createdAt={new Date(post.createdAt)}
-            tags={post.tags}
-            roadmaps={postRoadmaps}
-            canEdit
-            allStatuses={statuses}
-            allTags={tags}
-            allRoadmaps={roadmaps}
-            onStatusChange={handleStatusChange}
-            onTagsChange={handleTagsChange}
-            onRoadmapAdd={handleRoadmapAdd}
-            onRoadmapRemove={handleRoadmapRemove}
-            isUpdating={isUpdating || !!pendingRoadmapId}
-            hideSubscribe
-          />
-        </Suspense>
+        {/* Pinned comment section */}
+        {post.pinnedComment && (
+          <PinnedCommentSection comment={post.pinnedComment} workspaceName="Team" />
+        )}
+
+        {/* Comments section */}
+        <div className="bg-muted/20">
+          <Suspense fallback={<CommentsSectionSkeleton />}>
+            <CommentsSection
+              postId={postId}
+              comments={toPortalComments(post)}
+              pinnedCommentId={post.pinnedCommentId}
+              canPinComments
+              onPinComment={(commentId) => pinComment.mutate(commentId)}
+              onUnpinComment={() => unpinComment.mutate()}
+              isPinPending={pinComment.isPending || unpinComment.isPending}
+              adminUser={{ name: currentUser.name, email: currentUser.email }}
+            />
+          </Suspense>
+        </div>
       </div>
 
       {/* Footer */}

@@ -39,7 +39,7 @@ function TeamPage() {
   const isCurrentUserAdmin = currentMember.role === 'admin'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl">
       <TeamHeader workspaceName={settings!.name} />
 
       {/* Pending Invitations */}

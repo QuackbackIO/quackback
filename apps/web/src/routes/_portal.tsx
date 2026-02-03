@@ -1,5 +1,4 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { ThemeProvider } from 'next-themes'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -105,46 +104,29 @@ function PortalLayout() {
     authConfig,
   } = Route.useLoaderData()
 
-  // When theme is forced (not 'user'), we use forcedTheme prop to prevent
-  // next-themes from reading/writing localStorage or respecting system preference
-  const forcedTheme = themeMode !== 'user' ? themeMode : undefined
-
-  const content = (
-    <div className="min-h-screen bg-background flex flex-col">
-      {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
-      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-      {/* Custom CSS is injected after theme styles so it can override */}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
-      <PortalHeader
-        orgName={org.name}
-        orgLogo={brandingData?.logoUrl ?? null}
-        userRole={userRole}
-        initialUserData={initialUserData}
-        showThemeToggle={themeMode === 'user'}
-      />
-      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
-        <Outlet />
-      </main>
-      <AuthDialog authConfig={authConfig} />
-    </div>
-  )
+  // Theme enforcement is handled by the root ThemeProvider (in __root.tsx) which
+  // reads themeMode from settings and sets forcedTheme on portal routes.
+  // The portal only needs to control toggle visibility and inject CSS.
 
   return (
     <AuthPopoverProvider>
-      {forcedTheme ? (
-        // Nested ThemeProvider with forcedTheme keeps theme locked after hydration
-        // The root's systemThemeScript handles initial class setting via meta tag
-        <ThemeProvider
-          attribute="class"
-          forcedTheme={forcedTheme}
-          disableTransitionOnChange
-          storageKey="portal-theme-forced"
-        >
-          {content}
-        </ThemeProvider>
-      ) : (
-        content
-      )}
+      <div className="min-h-screen bg-background flex flex-col">
+        {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
+        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+        {/* Custom CSS is injected after theme styles so it can override */}
+        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+        <PortalHeader
+          orgName={org.name}
+          orgLogo={brandingData?.logoUrl ?? null}
+          userRole={userRole}
+          initialUserData={initialUserData}
+          showThemeToggle={themeMode === 'user'}
+        />
+        <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
+          <Outlet />
+        </main>
+        <AuthDialog authConfig={authConfig} />
+      </div>
     </AuthPopoverProvider>
   )
 }

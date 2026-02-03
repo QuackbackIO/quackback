@@ -61,6 +61,10 @@
     "scripts/*"
   ],
   "dependencies": {
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/language": "^6.12.1",
+    "@codemirror/view": "^6.39.12",
+    "@lezer/highlight": "^1.2.3",
     "@tiptap/extension-image": "^3.18.0",
     "@tiptap/extension-table": "^3.18.0",
     "@tiptap/extension-table-cell": "^3.18.0",
@@ -69,6 +73,8 @@
     "@tiptap/extension-task-item": "^3.18.0",
     "@tiptap/extension-task-list": "^3.18.0",
     "@tiptap/extension-underline": "^3.18.0",
+    "@uiw/codemirror-extensions-color": "^4.25.4",
+    "@uiw/react-codemirror": "^4.25.4",
     "tiptap-extension-resizable-image": "^2.1.0"
   }
 }

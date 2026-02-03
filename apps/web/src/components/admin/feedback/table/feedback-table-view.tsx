@@ -91,7 +91,7 @@ export function FeedbackTableView({
   headerAction,
   onToggleStatus,
   onToggleBoard,
-  onStatusChange,
+  onStatusChange: _onStatusChange,
 }: FeedbackTableViewProps): React.ReactElement {
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [searchValue, setSearchValue] = useState(search || '')
@@ -247,7 +247,6 @@ export function FeedbackTableView({
                 post={post}
                 statuses={statuses}
                 onClick={() => onNavigateToPost(post.id)}
-                onStatusChange={(statusId) => onStatusChange(post.id, statusId)}
               />
             </div>
           ))}

@@ -7,6 +7,7 @@ import {
   HeadContent,
   Scripts,
   redirect,
+  useRouterState,
 } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import appCss from '../globals.css?url'
@@ -143,7 +144,21 @@ function RootComponent() {
   )
 }
 
+// Non-portal routes that should never have a forced theme
+const NON_PORTAL_PREFIXES = ['/admin', '/auth', '/onboarding', '/api', '/accept-invitation']
+
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+  const { settings } = Route.useRouteContext()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+
+  // Determine if we're on a portal route with a forced theme.
+  // The root ThemeProvider must be the one to set forcedTheme, because it controls
+  // the <html> class attribute. A nested ThemeProvider can't reliably override it
+  // since React fires child effects before parent effects.
+  const isPortalRoute = !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
+  const forcedTheme = isPortalRoute && themeMode !== 'user' ? themeMode : undefined
+
   return (
     <html lang="en" className="system" suppressHydrationWarning>
       <head>
@@ -154,7 +169,8 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
-          enableSystem
+          enableSystem={!forcedTheme}
+          forcedTheme={forcedTheme}
           disableTransitionOnChange
         >
           {children}

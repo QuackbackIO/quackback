@@ -21,7 +21,7 @@ function SettingsLayout() {
 
       <main className="flex-1 min-w-0 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-6 max-w-5xl">
+          <div className="p-6">
             <Outlet />
           </div>
         </ScrollArea>

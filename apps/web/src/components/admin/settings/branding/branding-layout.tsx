@@ -10,7 +10,7 @@ interface BrandingLayoutProps {
 export function BrandingLayout({ children }: BrandingLayoutProps) {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr,400px]">{children}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">{children}</div>
     </div>
   )
 }
@@ -27,7 +27,7 @@ export function BrandingControlsPanel({ children, className }: BrandingControlsP
   return (
     <div
       className={cn(
-        'xl:border-r border-border flex flex-col min-w-0 divide-y divide-border',
+        'lg:border-r border-border flex flex-col min-w-0 divide-y divide-border',
         className
       )}
     >
@@ -51,7 +51,7 @@ export function BrandingPreviewPanel({
   headerRight,
 }: BrandingPreviewPanelProps) {
   return (
-    <div className="border-t xl:border-t-0 border-border xl:sticky xl:top-4 xl:self-start p-5">
+    <div className="border-t lg:border-t-0 border-border lg:sticky lg:top-4 lg:self-start p-5">
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm font-medium">{label}</span>
         {headerRight}
