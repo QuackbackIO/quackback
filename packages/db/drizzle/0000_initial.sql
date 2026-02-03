@@ -1,5 +1,5 @@
--- Extensions
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+-- Extensions (pg_cron requires shared_preload_libraries config, skip if unavailable)
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS pg_cron; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'pg_cron not available, skipping'; END $$;
 --> statement-breakpoint
 CREATE EXTENSION IF NOT EXISTS vector;
 --> statement-breakpoint
