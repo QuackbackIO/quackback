@@ -5,7 +5,7 @@
  */
 
 import { db, posts, votes, postSubscriptions, boards, sql } from '@/lib/server/db'
-import { toUuid, type PostId, type MemberId } from '@quackback/ids'
+import { createId, toUuid, type PostId, type MemberId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'
 
@@ -25,6 +25,8 @@ import type { VoteResult } from './post.types'
 export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<VoteResult> {
   const postUuid = toUuid(postId)
   const memberUuid = toUuid(memberId)
+  const voteId = toUuid(createId('vote'))
+  const subscriptionId = toUuid(createId('post_subscription'))
 
   // Single atomic CTE: validate post/board, toggle vote, update count, auto-subscribe
   // Reduces 5-6 sequential queries to 1
@@ -53,7 +55,7 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
     ),
     inserted AS (
       INSERT INTO ${votes} (id, post_id, member_id, updated_at)
-      SELECT uuidv7(), ${postUuid}::uuid, ${memberUuid}::uuid, NOW()
+      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${memberUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
@@ -74,7 +76,7 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
     ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, member_id, reason, notify_comments, notify_status_changes)
-      SELECT uuidv7(), ${postUuid}::uuid, ${memberUuid}::uuid, 'vote', true, true
+      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${memberUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
       ON CONFLICT (post_id, member_id) DO NOTHING
       RETURNING 1

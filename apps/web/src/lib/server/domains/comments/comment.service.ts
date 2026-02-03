@@ -23,7 +23,14 @@ import {
   boards,
   type Comment,
 } from '@/lib/server/db'
-import { toUuid, type CommentId, type PostId, type MemberId, type UserId } from '@quackback/ids'
+import {
+  createId,
+  toUuid,
+  type CommentId,
+  type PostId,
+  type MemberId,
+  type UserId,
+} from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import { dispatchCommentCreated } from '@/lib/server/events/dispatch'
@@ -547,6 +554,7 @@ export async function toggleReaction(
 
   const commentUuid = toUuid(commentId)
   const memberUuid = toUuid(memberId)
+  const reactionId = toUuid(createId('reaction'))
 
   // Atomic toggle: delete if exists, insert if not
   // Uses CTE to avoid race conditions between check and action
@@ -564,7 +572,7 @@ export async function toggleReaction(
     ),
     inserted AS (
       INSERT INTO comment_reactions (id, comment_id, member_id, emoji, created_at)
-      SELECT uuidv7(), ${commentUuid}, ${memberUuid}, ${emoji}, NOW()
+      SELECT ${reactionId}::uuid, ${commentUuid}, ${memberUuid}, ${emoji}, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
       ON CONFLICT (comment_id, member_id, emoji) DO NOTHING
       RETURNING id
