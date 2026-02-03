@@ -22,7 +22,7 @@ function ApiKeysPage() {
   const apiKeysQuery = useSuspenseQuery(adminQueries.apiKeys())
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl">
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <KeyIcon className="h-5 w-5 text-primary" />

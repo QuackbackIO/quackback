@@ -147,6 +147,25 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
   }
 }
 
+export async function getCustomCss(): Promise<string> {
+  try {
+    const org = await requireSettings()
+    return org.customCss ?? ''
+  } catch (error) {
+    wrapDbError('fetch custom CSS', error)
+  }
+}
+
+export async function updateCustomCss(css: string): Promise<string> {
+  try {
+    const org = await requireSettings()
+    await db.update(settings).set({ customCss: css }).where(eq(settings.id, org.id))
+    return css
+  } catch (error) {
+    wrapDbError('update custom CSS', error)
+  }
+}
+
 // ============================================================================
 // S3 Key Storage Functions
 // ============================================================================
@@ -387,6 +406,8 @@ export interface TenantSettings {
   authConfig: AuthConfig
   portalConfig: PortalConfig
   brandingConfig: BrandingConfig
+  /** Custom CSS for portal styling */
+  customCss: string
   publicAuthConfig: PublicAuthConfig
   publicPortalConfig: PublicPortalConfig
   brandingData: SettingsBrandingData
@@ -418,6 +439,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       authConfig,
       portalConfig,
       brandingConfig,
+      customCss: org.customCss ?? '',
       publicAuthConfig: { oauth: authConfig.oauth, openSignup: authConfig.openSignup },
       publicPortalConfig: {
         oauth: portalConfig.oauth,

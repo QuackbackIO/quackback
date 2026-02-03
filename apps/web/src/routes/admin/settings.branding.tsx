@@ -3,7 +3,16 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { SunIcon, MoonIcon, CheckIcon, ArrowPathIcon, CameraIcon } from '@heroicons/react/24/solid'
+import {
+  SunIcon,
+  MoonIcon,
+  CheckIcon,
+  ArrowPathIcon,
+  CameraIcon,
+  PaintBrushIcon,
+  CodeBracketIcon,
+} from '@heroicons/react/24/solid'
+import type { BrandingMode } from '@/lib/server/domains/settings/settings.types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,6 +27,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImageCropper } from '@/components/ui/image-cropper'
+import CodeMirror from '@uiw/react-codemirror'
+import { css } from '@codemirror/lang-css'
+import { color } from '@uiw/codemirror-extensions-color'
+import { EditorView } from '@codemirror/view'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { cn } from '@/lib/shared/utils'
 import {
   BrandingLayout,
@@ -35,11 +50,267 @@ import { useWorkspaceLogo } from '@/lib/client/hooks/use-settings-queries'
 import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 
+// ==============================================
+// Theme Presets (from tweakcn.com)
+// ==============================================
+const THEME_PRESETS = [
+  {
+    id: 'catppuccin',
+    name: 'Catppuccin',
+    colors: { primary: '#8839ef', background: '#eff1f5' },
+    css: `:root {
+  --background: #eff1f5;
+  --foreground: #4c4f69;
+  --card: #ffffff;
+  --card-foreground: #4c4f69;
+  --popover: #ccd0da;
+  --popover-foreground: #4c4f69;
+  --primary: #8839ef;
+  --primary-foreground: #ffffff;
+  --secondary: #ccd0da;
+  --secondary-foreground: #4c4f69;
+  --muted: #dce0e8;
+  --muted-foreground: #6c6f85;
+  --accent: #04a5e5;
+  --accent-foreground: #ffffff;
+  --destructive: #d20f39;
+  --destructive-foreground: #ffffff;
+  --border: #bcc0cc;
+  --input: #ccd0da;
+  --ring: #8839ef;
+  --radius: 0.35rem;
+  --chart-1: #8839ef;
+  --chart-2: #04a5e5;
+  --chart-3: #40a02b;
+  --chart-4: #fe640b;
+  --chart-5: #dc8a78;
+}
+.dark {
+  --background: #181825;
+  --foreground: #cdd6f4;
+  --card: #1e1e2e;
+  --card-foreground: #cdd6f4;
+  --popover: #45475a;
+  --popover-foreground: #cdd6f4;
+  --primary: #cba6f7;
+  --primary-foreground: #1e1e2e;
+  --secondary: #585b70;
+  --secondary-foreground: #cdd6f4;
+  --muted: #292c3c;
+  --muted-foreground: #a6adc8;
+  --accent: #89dceb;
+  --accent-foreground: #1e1e2e;
+  --destructive: #f38ba8;
+  --destructive-foreground: #1e1e2e;
+  --border: #313244;
+  --input: #313244;
+  --ring: #cba6f7;
+  --radius: 0.35rem;
+  --chart-1: #cba6f7;
+  --chart-2: #89dceb;
+  --chart-3: #a6e3a1;
+  --chart-4: #fab387;
+  --chart-5: #f5e0dc;
+}`,
+  },
+  {
+    id: 'supabase',
+    name: 'Supabase',
+    colors: { primary: '#72e3ad', background: '#fcfcfc' },
+    css: `:root {
+  --background: #fcfcfc;
+  --foreground: #171717;
+  --card: #fcfcfc;
+  --card-foreground: #171717;
+  --popover: #fcfcfc;
+  --popover-foreground: #525252;
+  --primary: #72e3ad;
+  --primary-foreground: #1e2723;
+  --secondary: #fdfdfd;
+  --secondary-foreground: #171717;
+  --muted: #ededed;
+  --muted-foreground: #202020;
+  --accent: #ededed;
+  --accent-foreground: #202020;
+  --destructive: #ca3214;
+  --destructive-foreground: #fffcfc;
+  --border: #dfdfdf;
+  --input: #f6f6f6;
+  --ring: #72e3ad;
+  --radius: 0.5rem;
+  --chart-1: #72e3ad;
+  --chart-2: #3b82f6;
+  --chart-3: #8b5cf6;
+  --chart-4: #f59e0b;
+  --chart-5: #10b981;
+}
+.dark {
+  --background: #121212;
+  --foreground: #e2e8f0;
+  --card: #171717;
+  --card-foreground: #e2e8f0;
+  --popover: #242424;
+  --popover-foreground: #a9a9a9;
+  --primary: #006239;
+  --primary-foreground: #dde8e3;
+  --secondary: #242424;
+  --secondary-foreground: #fafafa;
+  --muted: #1f1f1f;
+  --muted-foreground: #a2a2a2;
+  --accent: #313131;
+  --accent-foreground: #fafafa;
+  --destructive: #541c15;
+  --destructive-foreground: #ede9e8;
+  --border: #292929;
+  --input: #242424;
+  --ring: #4ade80;
+  --radius: 0.5rem;
+  --chart-1: #4ade80;
+  --chart-2: #60a5fa;
+  --chart-3: #a78bfa;
+  --chart-4: #fbbf24;
+  --chart-5: #2dd4bf;
+}`,
+  },
+  {
+    id: 'neo-brutalism',
+    name: 'Neo Brutalism',
+    colors: { primary: '#ff3333', background: '#ffffff' },
+    css: `:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #ff3333;
+  --primary-foreground: #ffffff;
+  --secondary: #ffff00;
+  --secondary-foreground: #000000;
+  --muted: #f0f0f0;
+  --muted-foreground: #333333;
+  --accent: #0066ff;
+  --accent-foreground: #ffffff;
+  --destructive: #000000;
+  --destructive-foreground: #ffffff;
+  --border: #000000;
+  --input: #000000;
+  --ring: #ff3333;
+  --radius: 0px;
+  --chart-1: #ff3333;
+  --chart-2: #ffff00;
+  --chart-3: #0066ff;
+  --chart-4: #00cc00;
+  --chart-5: #cc00cc;
+}
+.dark {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #333333;
+  --card-foreground: #ffffff;
+  --popover: #333333;
+  --popover-foreground: #ffffff;
+  --primary: #ff6666;
+  --primary-foreground: #000000;
+  --secondary: #ffff33;
+  --secondary-foreground: #000000;
+  --muted: #1a1a1a;
+  --muted-foreground: #cccccc;
+  --accent: #3399ff;
+  --accent-foreground: #000000;
+  --destructive: #ffffff;
+  --destructive-foreground: #000000;
+  --border: #ffffff;
+  --input: #ffffff;
+  --ring: #ff6666;
+  --radius: 0px;
+  --chart-1: #ff6666;
+  --chart-2: #ffff33;
+  --chart-3: #3399ff;
+  --chart-4: #33cc33;
+  --chart-5: #cc33cc;
+}`,
+  },
+] as const
+
+// ==============================================
+// Custom CodeMirror theme using admin portal CSS variables
+// ==============================================
+const adminEditorTheme = EditorView.theme({
+  '&': {
+    backgroundColor: 'transparent',
+    color: 'var(--foreground)',
+  },
+  '.cm-content': {
+    caretColor: 'var(--foreground)',
+    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+    fontSize: '0.75rem',
+    lineHeight: '1.625',
+  },
+  '.cm-cursor, .cm-dropCursor': {
+    borderLeftColor: 'var(--foreground)',
+  },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+    backgroundColor: 'color-mix(in oklch, var(--primary) 20%, transparent)',
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'transparent',
+  },
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    borderRight: 'none',
+    color: 'var(--muted-foreground)',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'transparent',
+  },
+  '.cm-tooltip': {
+    backgroundColor: 'var(--popover)',
+    color: 'var(--popover-foreground)',
+    border: '1px solid var(--border)',
+    borderRadius: 'calc(var(--radius) - 2px)',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    backgroundColor: 'var(--accent)',
+    color: 'var(--accent-foreground)',
+  },
+  '.cm-searchMatch': {
+    backgroundColor: 'color-mix(in oklch, var(--primary) 30%, transparent)',
+  },
+  '.cm-selectionMatch': {
+    backgroundColor: 'color-mix(in oklch, var(--primary) 15%, transparent)',
+  },
+  '&.cm-focused .cm-matchingBracket': {
+    backgroundColor: 'color-mix(in oklch, var(--primary) 25%, transparent)',
+    outline: 'none',
+  },
+  '.cm-placeholder': {
+    color: 'var(--muted-foreground)',
+  },
+})
+
+const adminHighlightStyle = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.keyword, color: 'var(--primary)' },
+    { tag: tags.propertyName, color: 'var(--chart-1, var(--primary))' },
+    { tag: [tags.string, tags.inserted], color: 'var(--chart-5, var(--primary))' },
+    { tag: [tags.number, tags.color], color: 'var(--chart-4, var(--primary))' },
+    { tag: [tags.className, tags.tagName], color: 'var(--chart-2, var(--primary))' },
+    { tag: tags.punctuation, color: 'var(--muted-foreground)' },
+    { tag: tags.separator, color: 'var(--muted-foreground)' },
+    { tag: tags.comment, color: 'var(--muted-foreground)', fontStyle: 'italic' },
+    { tag: tags.invalid, color: 'var(--destructive)' },
+  ])
+)
+
+const adminEditorExtensions = [css(), color, adminEditorTheme, adminHighlightStyle]
+
 export const Route = createFileRoute('/admin/settings/branding')({
   loader: async ({ context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
+      context.queryClient.ensureQueryData(settingsQueries.customCss()),
     ])
   },
   component: BrandingPage,
@@ -49,6 +320,7 @@ function BrandingPage() {
   const { settings } = Route.useRouteContext()
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
+  const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
 
   const initialLogoUrl = logoData?.url ?? null
 
@@ -56,12 +328,21 @@ function BrandingPage() {
   const state = useBrandingState({
     initialLogoUrl,
     initialThemeConfig: brandingConfig as ThemeConfig,
+    initialCustomCss: customCss,
+    initialBrandingMode: (brandingConfig as { brandingMode?: BrandingMode }).brandingMode,
   })
 
   // Workspace name state
   const [workspaceName, setWorkspaceName] = useState(settings?.name || '')
   const [isSavingName, setIsSavingName] = useState(false)
   const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Timer cleanup on unmount to prevent state updates after unmount
+  useEffect(() => {
+    return () => {
+      if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current)
+    }
+  }, [])
 
   // Debounced workspace name save
   const handleNameChange = (value: string) => {
@@ -99,7 +380,7 @@ function BrandingPage() {
         {/* Two-Column Layout */}
         <BrandingLayout>
           <BrandingControlsPanel>
-            {/* Identity Section */}
+            {/* Identity Section - always visible */}
             <div className="p-5 space-y-4">
               <div>
                 <h3 className="text-sm font-medium text-foreground">Identity</h3>
@@ -129,68 +410,249 @@ function BrandingPage() {
               </div>
             </div>
 
-            {/* Appearance Section */}
+            {/* Theme Mode Section - always visible */}
             <div className="p-5 space-y-4 border-t border-border">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Appearance</h3>
+                <h3 className="text-sm font-medium text-foreground">Theme Mode</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Customize colors and typography
+                  Control how light/dark mode works for portal visitors
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Brand Color</Label>
-                  <ColorInputInline value={state.brandColor} onChange={state.setBrandColor} />
-                </div>
+              <Select value={state.themeMode} onValueChange={state.setThemeMode}>
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User choice (allow toggle)</SelectItem>
+                  <SelectItem value="light">Light only</SelectItem>
+                  <SelectItem value="dark">Dark only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Font</Label>
-                  <Select
-                    value={state.currentFontId}
-                    onValueChange={(id) => {
-                      const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
-                      if (selectedFont) state.setFont(selectedFont.value)
-                    }}
-                  >
-                    <SelectTrigger className="w-full h-10">
-                      <SelectValue>
-                        <span style={{ fontFamily: state.font }}>
-                          {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
-                            'Select font'}
-                        </span>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      <FontSelectGroup category="Sans Serif" />
-                      <FontSelectGroup category="Serif" />
-                      <FontSelectGroup category="Monospace" />
-                      <FontSelectGroup category="System" />
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* Color Scheme Section */}
+            <div className="p-5 space-y-4 border-t border-border">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Color Scheme</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Customize your portal's color palette and typography
+                </p>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Corner Roundness</Label>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground w-12">Sharp</span>
-                  <Slider
-                    value={[state.radius * 100]}
-                    onValueChange={([v]) => state.setRadius(v / 100)}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
-                  <div
-                    className="h-6 w-6 bg-primary shrink-0"
-                    style={{ borderRadius: `${state.radius}rem` }}
-                  />
-                </div>
+              {/* Mode Selector - Segmented Control */}
+              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+                <button
+                  onClick={() => state.setBrandingMode('simple')}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                    state.brandingMode === 'simple'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <PaintBrushIcon className="h-4 w-4" />
+                  Simple
+                </button>
+                <button
+                  onClick={() => state.setBrandingMode('advanced')}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                    state.brandingMode === 'advanced'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <CodeBracketIcon className="h-4 w-4" />
+                  Advanced
+                </button>
               </div>
             </div>
+
+            {state.brandingMode === 'simple' ? (
+              <>
+                {/* Colors */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Primary</Label>
+                      <ColorInputInline
+                        value={state.primaryColor}
+                        onChange={state.setPrimaryColor}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Secondary</Label>
+                      <ColorInputInline
+                        value={state.secondaryColor}
+                        onChange={state.setSecondaryColor}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Accent</Label>
+                      <ColorInputInline value={state.accentColor} onChange={state.setAccentColor} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Background</Label>
+                      <ColorInputInline
+                        value={state.backgroundColor}
+                        onChange={state.setBackgroundColor}
+                      />
+                    </div>
+                    <div className="space-y-1.5 col-span-2">
+                      <Label className="text-xs text-muted-foreground">Foreground (Text)</Label>
+                      <ColorInputInline
+                        value={state.foregroundColor}
+                        onChange={state.setForegroundColor}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Typography */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Typography</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Font</Label>
+                      <Select
+                        value={state.currentFontId}
+                        onValueChange={(id) => {
+                          const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
+                          if (selectedFont) state.setFont(selectedFont.value)
+                        }}
+                      >
+                        <SelectTrigger className="w-full h-10">
+                          <SelectValue>
+                            <span style={{ fontFamily: state.font }}>
+                              {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
+                                'Select font'}
+                            </span>
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          <FontSelectGroup category="Sans Serif" />
+                          <FontSelectGroup category="Serif" />
+                          <FontSelectGroup category="Monospace" />
+                          <FontSelectGroup category="System" />
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Corner Roundness</Label>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-12">Sharp</span>
+                      <Slider
+                        value={[state.radius * 100]}
+                        onValueChange={([v]) => state.setRadius(v / 100)}
+                        min={0}
+                        max={100}
+                        step={5}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
+                      <div
+                        className="h-6 w-6 bg-primary shrink-0"
+                        style={{ borderRadius: `${state.radius}rem` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Advanced Mode: Presets */}
+                <div className="p-5 space-y-3 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Theme Presets</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Start from a preset or design your own at{' '}
+                      <a
+                        href="https://tweakcn.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        tweakcn.com
+                      </a>
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {THEME_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => state.setCustomCss(preset.css)}
+                        className="flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border border-border bg-background text-center text-xs font-medium text-foreground hover:border-primary/50 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex gap-1 shrink-0">
+                          <div
+                            className="h-4 w-4 rounded-full border border-border/50"
+                            style={{ backgroundColor: preset.colors.primary }}
+                          />
+                          <div
+                            className="h-4 w-4 rounded-full border border-border/50"
+                            style={{ backgroundColor: preset.colors.background }}
+                          />
+                        </div>
+                        <span className="truncate">{preset.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Advanced Mode: CSS Editor */}
+                <div className="p-5 space-y-4 border-t border-border">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Custom CSS</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Edit below or paste CSS with{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">:root {'{ }'}</code>{' '}
+                      and{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">.dark {'{ }'}</code>{' '}
+                      blocks
+                    </p>
+                  </div>
+
+                  <CodeMirror
+                    value={state.customCss}
+                    onChange={state.setCustomCss}
+                    height="160px"
+                    theme="none"
+                    extensions={adminEditorExtensions}
+                    placeholder={`:root {
+  --primary: oklch(0.623 0.214 259);
+  --background: oklch(1 0 0);
+}
+.dark {
+  --primary: oklch(0.623 0.214 259);
+  --background: oklch(0.145 0 0);
+}`}
+                    basicSetup={{
+                      lineNumbers: false,
+                      foldGutter: false,
+                      highlightActiveLine: false,
+                      bracketMatching: true,
+                      closeBrackets: true,
+                      autocompletion: true,
+                      tabSize: 2,
+                    }}
+                    className={cn(
+                      'overflow-hidden rounded-md border border-input',
+                      '[&_.cm-editor]:!outline-none',
+                      '[&_.cm-editor.cm-focused]:ring-1 [&_.cm-editor.cm-focused]:ring-ring',
+                      '[&_.cm-scroller]:overflow-auto'
+                    )}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Save Button */}
             <div className="p-5 border-t border-border">
@@ -247,10 +709,13 @@ function BrandingPage() {
               lightVars={state.effectiveLight}
               darkVars={state.effectiveDark}
               previewMode={state.previewMode}
-              radius={`${state.radius}rem`}
-              fontFamily={state.font}
+              radius={state.brandingMode === 'simple' ? `${state.radius}rem` : undefined}
+              fontFamily={state.brandingMode === 'simple' ? state.font : undefined}
               logoUrl={state.logoUrl}
               workspaceName={workspaceName || 'My Workspace'}
+              customCssVariables={
+                state.brandingMode === 'advanced' ? state.parsedCssVariables : undefined
+              }
             />
           </BrandingPreviewPanel>
         </BrandingLayout>

@@ -8,7 +8,7 @@ import {
   ClockIcon,
   FireIcon,
 } from '@heroicons/react/24/solid'
-import { oklchToHex, type ThemeVariables } from '@/lib/shared/theme'
+import { oklchToHex, type ThemeVariables, type ParsedCssVariables } from '@/lib/shared/theme'
 import { cn } from '@/lib/shared/utils'
 
 /** Map font family names to Google Fonts URL */
@@ -55,6 +55,8 @@ interface ThemePreviewProps {
   fontFamily?: string
   logoUrl?: string | null
   workspaceName?: string
+  /** CSS variables extracted from custom CSS (for advanced mode live preview) */
+  customCssVariables?: ParsedCssVariables
 }
 
 export function ThemePreview({
@@ -65,8 +67,10 @@ export function ThemePreview({
   fontFamily,
   logoUrl,
   workspaceName = 'Acme Feedback',
+  customCssVariables,
 }: ThemePreviewProps) {
   const vars = previewMode === 'light' ? lightVars : darkVars
+  const customVars = customCssVariables?.[previewMode] ?? {}
 
   // Convert OKLCH to hex for CSS custom properties
   const cssVars = useMemo(() => {
@@ -116,20 +120,27 @@ export function ThemePreview({
       '--destructive': safeHex(vars.destructive, '#ef4444'),
       '--success': safeHex(vars.success, '#22c55e'),
       '--radius': radius,
-      // Component-level variables with fallbacks to global colors
-      '--header-background': background,
-      '--header-foreground': foreground,
-      '--header-border': border,
-      '--post-card-background': card,
-      '--post-card-border': border,
-      '--post-card-voted-color': primary,
-      '--nav-active-background': muted,
-      '--nav-active-foreground': foreground,
-      '--nav-inactive-color': mutedForeground,
-      '--portal-button-background': primary,
-      '--portal-button-foreground': primaryForeground,
+      // Component-level variables use var() references so they automatically
+      // pick up overrides from custom CSS (e.g., when --primary is overridden)
+      '--header-background': 'var(--background)',
+      '--header-foreground': 'var(--foreground)',
+      '--header-border': 'var(--border)',
+      '--post-card-background': 'var(--card)',
+      '--post-card-border': 'var(--border)',
+      '--post-card-voted-color': 'var(--primary)',
+      '--nav-active-background': 'var(--muted)',
+      '--nav-active-foreground': 'var(--foreground)',
+      '--nav-inactive-color': 'var(--muted-foreground)',
+      '--portal-button-background': 'var(--primary)',
+      '--portal-button-foreground': 'var(--primary-foreground)',
     }
   }, [vars, previewMode, radius])
+
+  // Merge custom CSS variables (from advanced mode) with generated theme variables
+  // Custom CSS variables take precedence to enable live preview in advanced mode
+  const effectiveCssVars = useMemo(() => {
+    return { ...cssVars, ...customVars }
+  }, [cssVars, customVars])
 
   // Get Google Fonts URL for live preview
   const googleFontsUrl = useMemo(() => getGoogleFontsUrl(fontFamily), [fontFamily])
@@ -142,7 +153,7 @@ export function ThemePreview({
         className="rounded-lg border overflow-hidden"
         style={
           {
-            ...cssVars,
+            ...effectiveCssVars,
             backgroundColor: 'var(--background)',
             borderColor: 'var(--border)',
             color: 'var(--foreground)',

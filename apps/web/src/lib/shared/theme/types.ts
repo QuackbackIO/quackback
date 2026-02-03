@@ -36,7 +36,11 @@ export interface ThemeVariables {
   shadow2xl?: string
 }
 
+export type ThemeMode = 'light' | 'dark' | 'user'
+
 export interface ThemeConfig {
+  /** Theme mode: 'light' (force light), 'dark' (force dark), or 'user' (allow toggle) */
+  themeMode?: ThemeMode
   light?: ThemeVariables
   dark?: ThemeVariables
 }

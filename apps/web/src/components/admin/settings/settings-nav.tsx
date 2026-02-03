@@ -4,7 +4,6 @@ import {
   Cog6ToothIcon,
   UsersIcon,
   Squares2X2Icon,
-  ShieldCheckIcon,
   LockClosedIcon,
   PaintBrushIcon,
   PuzzlePieceIcon,
@@ -32,7 +31,6 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
       { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
-      { label: 'Security', to: '/admin/settings/security', icon: ShieldCheckIcon },
     ],
   },
   {

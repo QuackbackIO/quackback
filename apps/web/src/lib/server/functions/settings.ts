@@ -21,6 +21,8 @@ import {
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
   updateWorkspaceName,
+  getCustomCss,
+  updateCustomCss,
 } from '@/lib/server/domains/settings/settings.service'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { requireAuth } from './auth-helpers'
@@ -241,4 +243,27 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     return updateWorkspaceName(data.name)
+  })
+
+// ============================================
+// Custom CSS Operations
+// ============================================
+
+const MAX_CUSTOM_CSS_SIZE = 50 * 1024 // 50KB limit
+
+const updateCustomCssSchema = z.object({
+  customCss: z.string().max(MAX_CUSTOM_CSS_SIZE, 'Custom CSS exceeds 50KB limit'),
+})
+
+export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
+
+export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async () => {
+  return getCustomCss()
+})
+
+export const updateCustomCssFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateCustomCssSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+    return updateCustomCss(data.customCss)
   })

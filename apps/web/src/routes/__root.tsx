@@ -7,6 +7,7 @@ import {
   HeadContent,
   Scripts,
   redirect,
+  useRouterState,
 } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import appCss from '../globals.css?url'
@@ -32,13 +33,21 @@ const ReactQueryDevtools = import.meta.env.DEV
     )
   : () => null
 
-// Script to handle system theme preference when theme is set to 'system'
+// Script to handle theme preference
+// Checks for forced theme (from portal settings) first, then falls back to system preference
 const systemThemeScript = `
   (function() {
-    if (document.documentElement.classList.contains('system')) {
-      document.documentElement.classList.remove('system')
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      document.documentElement.classList.add(prefersDark ? 'dark' : 'light')
+    var d = document.documentElement;
+    var forced = document.querySelector('meta[name="theme-forced"]');
+    if (forced) {
+      var theme = forced.getAttribute('content');
+      d.classList.remove('system', 'light', 'dark');
+      d.classList.add(theme);
+      d.style.colorScheme = theme;
+    } else if (d.classList.contains('system')) {
+      d.classList.remove('system');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      d.classList.add(prefersDark ? 'dark' : 'light');
     }
   })()
 `
@@ -135,7 +144,21 @@ function RootComponent() {
   )
 }
 
+// Non-portal routes that should never have a forced theme
+const NON_PORTAL_PREFIXES = ['/admin', '/auth', '/onboarding', '/api', '/accept-invitation']
+
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+  const { settings } = Route.useRouteContext()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+
+  // Determine if we're on a portal route with a forced theme.
+  // The root ThemeProvider must be the one to set forcedTheme, because it controls
+  // the <html> class attribute. A nested ThemeProvider can't reliably override it
+  // since React fires child effects before parent effects.
+  const isPortalRoute = !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
+  const forcedTheme = isPortalRoute && themeMode !== 'user' ? themeMode : undefined
+
   return (
     <html lang="en" className="system" suppressHydrationWarning>
       <head>
@@ -146,7 +169,8 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
-          enableSystem
+          enableSystem={!forcedTheme}
+          forcedTheme={forcedTheme}
           disableTransitionOnChange
         >
           {children}

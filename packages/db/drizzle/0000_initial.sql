@@ -1,5 +1,8 @@
--- Enable pgvector extension for embedding storage
-CREATE EXTENSION IF NOT EXISTS vector;--> statement-breakpoint
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+--> statement-breakpoint
+CREATE EXTENSION IF NOT EXISTS vector;
+--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -59,12 +62,9 @@ CREATE TABLE "settings" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
-	"logo_blob" "bytea",
-	"logo_type" text,
-	"favicon_blob" "bytea",
-	"favicon_type" text,
-	"header_logo_blob" "bytea",
-	"header_logo_type" text,
+	"logo_key" text,
+	"favicon_key" text,
+	"header_logo_key" text,
 	"created_at" timestamp with time zone NOT NULL,
 	"metadata" text,
 	"auth_config" text,
@@ -83,8 +83,7 @@ CREATE TABLE "user" (
 	"email" text NOT NULL,
 	"email_verified" boolean DEFAULT false NOT NULL,
 	"image" text,
-	"image_blob" "bytea",
-	"image_type" text,
+	"image_key" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"metadata" text

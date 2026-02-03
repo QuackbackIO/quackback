@@ -1,18 +1,13 @@
-import { useState } from 'react'
 import { PostCard } from '@/components/public/post-card'
 import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
-import type { StatusId } from '@quackback/ids'
 
 interface FeedbackRowProps {
   post: PostListItem
   statuses: PostStatusEntity[]
   onClick: () => void
-  onStatusChange: (statusId: StatusId) => void
 }
 
-export function FeedbackRow({ post, statuses, onClick, onStatusChange }: FeedbackRowProps) {
-  const [isHovered, setIsHovered] = useState(false)
-
+export function FeedbackRow({ post, statuses, onClick }: FeedbackRowProps) {
   return (
     <PostCard
       // Core post data
@@ -28,13 +23,8 @@ export function FeedbackRow({ post, statuses, onClick, onStatusChange }: Feedbac
       boardSlug={post.board.slug}
       boardName={post.board.name}
       tags={post.tags}
-      // Admin mode
-      canChangeStatus
-      onStatusChange={onStatusChange}
+      // Admin mode - click to open modal
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      showQuickActions={isHovered}
       // Admin doesn't need avatars in list view
       showAvatar={false}
     />

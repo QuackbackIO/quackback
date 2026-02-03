@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { useTheme } from 'next-themes'
 import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/server/auth/client'
@@ -14,7 +16,10 @@ import { Avatar } from '@/components/ui/avatar'
 import {
   ArrowRightStartOnRectangleIcon,
   Cog6ToothIcon,
+  ComputerDesktopIcon,
+  MoonIcon,
   ShieldCheckIcon,
+  SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -31,6 +36,8 @@ interface PortalHeaderProps {
     email: string | null
     avatarUrl: string | null
   }
+  /** Whether to show the theme toggle (hidden when admin forces a specific theme) */
+  showThemeToggle?: boolean
 }
 
 const navItems = [
@@ -39,12 +46,25 @@ const navItems = [
   { to: '/changelog', label: 'Changelog' },
 ]
 
-export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: PortalHeaderProps) {
+export function PortalHeader({
+  orgName,
+  orgLogo,
+  userRole,
+  initialUserData,
+  showThemeToggle = true,
+}: PortalHeaderProps) {
   const router = useRouter()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { session } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // Avoid hydration mismatch for theme toggle
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
@@ -99,12 +119,52 @@ export function PortalHeader({ orgName, orgLogo, userRole, initialUserData }: Po
     </nav>
   )
 
+  // Compact theme toggle dropdown for the header
+  const ThemeToggle = () => {
+    if (!showThemeToggle || !mounted) return null
+
+    const themeOptions = [
+      { value: 'system', label: 'System', icon: ComputerDesktopIcon },
+      { value: 'light', label: 'Light', icon: SunIcon },
+      { value: 'dark', label: 'Dark', icon: MoonIcon },
+    ] as const
+
+    const currentTheme = themeOptions.find((t) => t.value === theme) ?? themeOptions[0]
+    const CurrentIcon = currentTheme.icon
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-9 w-9">
+            <CurrentIcon className="h-4 w-4" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {themeOptions.map((t) => (
+            <DropdownMenuItem
+              key={t.value}
+              onClick={() => setTheme(t.value)}
+              className={cn(theme === t.value && 'bg-accent')}
+            >
+              <t.icon className="mr-2 h-4 w-4" />
+              {t.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
   // Auth/admin buttons component (reused in both layouts)
   const AuthButtons = () => (
     <div className="flex items-center">
+      {/* Theme Toggle (when admin allows user choice) */}
+      <ThemeToggle />
+
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
-        <Button variant="outline" size="sm" asChild className="mr-2">
+        <Button variant="outline" size="sm" asChild className="ml-1 mr-2">
           <Link to="/admin">
             <ShieldCheckIcon className="mr-2 h-4 w-4" />
             Admin

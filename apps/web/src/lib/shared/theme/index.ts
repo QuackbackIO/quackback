@@ -30,7 +30,13 @@ export function setThemeCookie(themeValue: Theme): void {
 // Theme Types & Utilities
 // ============================================================================
 
-export type { ThemeVariables, ThemeConfig, ThemePreset, CoreThemeVariable } from './types'
+export type {
+  ThemeVariables,
+  ThemeConfig,
+  ThemePreset,
+  CoreThemeVariable,
+  ThemeMode,
+} from './types'
 export { CORE_THEME_VARIABLES } from './types'
 
 export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
@@ -54,3 +60,6 @@ export {
   serializeThemeConfig,
   getGoogleFontsUrl,
 } from './generator'
+
+export type { ParsedCssVariables } from './css-parser'
+export { extractCssVariables } from './css-parser'

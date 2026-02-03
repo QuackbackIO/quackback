@@ -67,7 +67,7 @@ function BoardsSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl">
       <BoardSettingsHeader currentBoard={currentBoard} allBoards={boards} />
 
       <div className="flex gap-8">

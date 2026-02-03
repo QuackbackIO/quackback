@@ -53,6 +53,7 @@ function variablesToCSS(vars: ThemeVariables): string {
 export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
+  const themeMode = config.themeMode ?? 'user'
   const lightVars = config.light
     ? expandTheme(config.light as MinimalThemeVariables, { mode: 'light' })
     : {}
@@ -62,11 +63,26 @@ export function generateThemeCSS(config: ThemeConfig): string {
 
   const parts: string[] = []
 
-  const lightCSS = variablesToCSS(lightVars)
-  if (lightCSS) parts.push(`html:root { ${lightCSS} }`)
+  // Only output light mode CSS if themeMode is not 'dark'
+  // Use :root selector so custom CSS (e.g., from tweakcn) can override via cascade
+  if (themeMode !== 'dark') {
+    const lightCSS = variablesToCSS(lightVars)
+    if (lightCSS) parts.push(`:root { ${lightCSS} }`)
+  }
 
-  const darkCSS = variablesToCSS(darkVars)
-  if (darkCSS) parts.push(`html.dark { ${darkCSS} }`)
+  // Only output dark mode CSS if themeMode is not 'light'
+  if (themeMode !== 'light') {
+    const darkCSS = variablesToCSS(darkVars)
+    // When forcing dark mode, use :root instead of .dark so it applies without the class
+    // Use .dark selector so custom CSS can override via cascade
+    if (darkCSS) {
+      if (themeMode === 'dark') {
+        parts.push(`:root { ${darkCSS} }`)
+      } else {
+        parts.push(`.dark { ${darkCSS} }`)
+      }
+    }
+  }
 
   const bodyDeclarations: string[] = []
   if (lightVars.fontSans) bodyDeclarations.push(`--font-sans: ${lightVars.fontSans}`)
