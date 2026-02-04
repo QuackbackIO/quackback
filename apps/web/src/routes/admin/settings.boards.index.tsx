@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { Squares2X2Icon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
+import { BackLink } from '@/components/ui/back-link'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { BoardSettingsHeader } from '@/components/admin/settings/boards/board-settings-header'
 import { BoardSettingsNav } from '@/components/admin/settings/boards/board-settings-nav'
@@ -68,9 +69,12 @@ function BoardsSettingsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       <BoardSettingsHeader currentBoard={currentBoard} allBoards={boards} />
 
-      <div className="flex gap-8">
+      <div className="flex flex-col lg:flex-row gap-8">
         <BoardSettingsNav />
 
         <div className="flex-1 space-y-6">

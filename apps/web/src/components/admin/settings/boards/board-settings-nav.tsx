@@ -18,9 +18,9 @@ export function BoardSettingsNav() {
   const { selectedTab, setSelectedTab } = useBoardSelection()
 
   return (
-    <nav className="w-48 shrink-0">
-      <div className="sticky top-6">
-        <ul className="space-y-1">
+    <nav className="w-full lg:w-48 shrink-0">
+      <div className="lg:sticky lg:top-6">
+        <ul className="flex lg:flex-col gap-1 overflow-x-auto">
           {navItems.map((item) => {
             const isActive = selectedTab === item.tab
             const Icon = item.icon
@@ -31,7 +31,7 @@ export function BoardSettingsNav() {
                   type="button"
                   onClick={() => setSelectedTab(item.tab)}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+                    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors',
                     isActive
                       ? 'bg-secondary text-foreground font-medium'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'

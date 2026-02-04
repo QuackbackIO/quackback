@@ -34,6 +34,7 @@ import { EditorView } from '@codemirror/view'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { cn } from '@/lib/shared/utils'
+import { BackLink } from '@/components/ui/back-link'
 import {
   BrandingLayout,
   BrandingControlsPanel,
@@ -369,6 +370,9 @@ function BrandingPage() {
       <link rel="stylesheet" href={ALL_FONTS_URL} />
 
       <div className="space-y-6">
+        <div className="lg:hidden">
+          <BackLink to="/admin/settings">Settings</BackLink>
+        </div>
         {/* Page Header */}
         <div>
           <h1 className="text-xl font-semibold text-foreground">Branding</h1>

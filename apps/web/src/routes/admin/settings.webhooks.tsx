@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BoltIcon } from '@heroicons/react/24/solid'
+import { BackLink } from '@/components/ui/back-link'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WebhooksSettings } from '@/components/admin/settings/webhooks/webhooks-settings'
@@ -23,6 +24,9 @@ function WebhooksPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <BoltIcon className="h-5 w-5 text-primary" />

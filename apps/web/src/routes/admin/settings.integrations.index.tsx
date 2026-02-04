@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { PuzzlePieceIcon } from '@heroicons/react/24/solid'
+import { BackLink } from '@/components/ui/back-link'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationList } from '@/components/admin/settings/integrations/integration-list'
 
@@ -31,6 +32,9 @@ function IntegrationsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

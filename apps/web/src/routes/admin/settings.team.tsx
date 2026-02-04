@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { BackLink } from '@/components/ui/back-link'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { Avatar } from '@/components/ui/avatar'
@@ -40,6 +41,9 @@ function TeamPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       <TeamHeader workspaceName={settings!.name} />
 
       {/* Pending Invitations */}

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
+import { BackLink } from '@/components/ui/back-link'
 import { StatusList } from '@/components/admin/settings/statuses/status-list'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
@@ -23,6 +24,9 @@ function StatusesPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
