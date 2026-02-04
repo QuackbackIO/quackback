@@ -23,11 +23,12 @@ describe('Schema definitions', () => {
       expect(columns).toContain('settings')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
+      expect(columns).toContain('deletedAt')
     })
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(boards))
-      expect(columns.length).toBe(8) // Removed workspaceId
+      expect(columns.length).toBe(9)
     })
   })
 
