@@ -12,42 +12,82 @@ import {
 } from '../openapi'
 import {
   TimestampSchema,
+  NullableTimestampSchema,
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
 
-// Comment schema
-const CommentSchema = z.object({
+// Reaction count schema
+const ReactionCountSchema = z.object({
+  emoji: z.string().meta({ example: '👍' }),
+  count: z.number().meta({ example: 3 }),
+  hasReacted: z
+    .boolean()
+    .meta({ description: 'Whether the authenticated user has reacted with this emoji' }),
+})
+
+// Comment list item schema (GET /posts/:id/comments) - threaded with replies
+const CommentListItemSchema: z.ZodType = z.lazy(() =>
+  z.object({
+    id: TypeIdSchema.meta({ example: 'comment_01h455vb4pex5vsknk084sn02q' }),
+    postId: TypeIdSchema,
+    parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
+    content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
+    authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
+    memberId: TypeIdSchema.nullable().meta({ description: 'Member ID of the comment author' }),
+    isTeamMember: z
+      .boolean()
+      .meta({ description: 'Whether the author is a team member', example: false }),
+    createdAt: TimestampSchema,
+    reactions: z.array(ReactionCountSchema).meta({ description: 'Aggregated reaction counts' }),
+    replies: z.array(CommentListItemSchema).meta({ description: 'Nested reply comments' }),
+  })
+)
+
+// Comment detail schema (GET /comments/:id)
+const CommentDetailSchema = z.object({
   id: TypeIdSchema.meta({ example: 'comment_01h455vb4pex5vsknk084sn02q' }),
   postId: TypeIdSchema,
-  content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
-  authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
-  authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
-  isInternal: z.boolean().meta({ description: 'Internal staff comment', example: false }),
   parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
+  content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
+  authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
+  authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
+  memberId: TypeIdSchema.nullable().meta({ description: 'Member ID of the comment author' }),
+  isTeamMember: z
+    .boolean()
+    .meta({ description: 'Whether the author is a team member', example: false }),
   createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
+  deletedAt: NullableTimestampSchema.meta({
+    description: 'When the comment was deleted, null if active',
+  }),
+})
+
+// Comment create/update response schema
+const CommentResponseSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'comment_01h455vb4pex5vsknk084sn02q' }),
+  postId: TypeIdSchema,
+  parentId: TypeIdSchema.nullable(),
+  content: z.string(),
+  authorName: z.string().nullable(),
+  memberId: TypeIdSchema.nullable(),
+  isTeamMember: z.boolean(),
+  createdAt: TimestampSchema,
 })
 
 // Request body schemas
 const CreateCommentSchema = z
   .object({
-    content: z.string().min(1).meta({ description: 'Comment content' }),
-    authorEmail: z.string().email().optional().meta({ description: 'Author email' }),
-    authorName: z.string().optional().meta({ description: 'Author name' }),
-    isInternal: z
-      .boolean()
-      .optional()
-      .meta({ description: 'Mark as internal staff comment', default: false }),
-    parentId: TypeIdSchema.optional().meta({ description: 'Parent comment ID for replies' }),
+    content: z.string().min(1).max(5000).meta({ description: 'Comment content' }),
+    parentId: TypeIdSchema.optional()
+      .nullable()
+      .meta({ description: 'Parent comment ID for replies' }),
   })
   .meta({ description: 'Create comment request body' })
 
 const UpdateCommentSchema = z
   .object({
-    content: z.string().min(1).optional().meta({ description: 'Updated content' }),
-    isInternal: z.boolean().optional().meta({ description: 'Mark as internal staff comment' }),
+    content: z.string().min(1).max(5000).meta({ description: 'Updated content' }),
   })
   .meta({ description: 'Update comment request body' })
 
@@ -56,7 +96,7 @@ registerPath('/posts/{postId}/comments', {
   get: {
     tags: ['Comments'],
     summary: 'List comments on a post',
-    description: 'Returns all comments on a post',
+    description: 'Returns all comments on a post as a threaded tree with nested replies',
     parameters: [
       {
         name: 'postId',
@@ -68,10 +108,10 @@ registerPath('/posts/{postId}/comments', {
     ],
     responses: {
       200: {
-        description: 'List of comments',
+        description: 'Threaded list of comments',
         content: {
           'application/json': {
-            schema: createPaginatedResponseSchema(CommentSchema, 'List of comments'),
+            schema: createPaginatedResponseSchema(CommentListItemSchema, 'List of comments'),
           },
         },
       },
@@ -92,7 +132,8 @@ registerPath('/posts/{postId}/comments', {
   post: {
     tags: ['Comments'],
     summary: 'Add a comment to a post',
-    description: 'Create a new comment on a post',
+    description:
+      'Create a new comment on a post. The comment is attributed to the authenticated API key holder.',
     parameters: [
       {
         name: 'postId',
@@ -115,7 +156,7 @@ registerPath('/posts/{postId}/comments', {
         description: 'Comment created',
         content: {
           'application/json': {
-            schema: createItemResponseSchema(CommentSchema, 'Created comment'),
+            schema: createItemResponseSchema(CommentResponseSchema, 'Created comment'),
           },
         },
       },
@@ -129,6 +170,42 @@ registerPath('/posts/{postId}/comments', {
       },
       404: {
         description: 'Post not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+})
+
+// Register GET /comments/{commentId}
+registerPath('/comments/{commentId}', {
+  get: {
+    tags: ['Comments'],
+    summary: 'Get a comment',
+    description: 'Get a single comment by ID',
+    parameters: [
+      {
+        name: 'commentId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Comment ID',
+      },
+    ],
+    responses: {
+      200: {
+        description: 'Comment details',
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(CommentDetailSchema, 'Comment details'),
+          },
+        },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      404: {
+        description: 'Comment not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
@@ -163,7 +240,7 @@ registerPath('/comments/{commentId}', {
         description: 'Comment updated',
         content: {
           'application/json': {
-            schema: createItemResponseSchema(CommentSchema, 'Updated comment'),
+            schema: createItemResponseSchema(CommentResponseSchema, 'Updated comment'),
           },
         },
       },

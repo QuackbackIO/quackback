@@ -12,23 +12,45 @@ import {
 } from '../openapi'
 import {
   TimestampSchema,
-  HexColorSchema,
   SlugSchema,
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
 
-// Board schema
-const BoardSchema = z.object({
+// Board list item schema (GET /boards)
+const BoardListItemSchema = z.object({
   id: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
   name: z.string().meta({ example: 'Feature Requests' }),
   slug: SlugSchema.meta({ example: 'feature-requests' }),
   description: z.string().nullable().meta({ example: 'Submit and vote on feature ideas' }),
-  color: HexColorSchema,
   isPublic: z.boolean().meta({ example: true }),
-  postCount: z.number().meta({ example: 42 }),
+  postCount: z.number().meta({ description: 'Number of posts in this board', example: 42 }),
   createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+})
+
+// Board detail schema (GET /boards/:id, PATCH /boards/:id)
+const BoardDetailSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
+  name: z.string().meta({ example: 'Feature Requests' }),
+  slug: SlugSchema.meta({ example: 'feature-requests' }),
+  description: z.string().nullable().meta({ example: 'Submit and vote on feature ideas' }),
+  isPublic: z.boolean().meta({ example: true }),
+  settings: z.record(z.string(), z.unknown()).meta({ description: 'Board-specific settings' }),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+})
+
+// Board create response schema (POST /boards)
+const BoardCreateResponseSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
+  name: z.string().meta({ example: 'Feature Requests' }),
+  slug: SlugSchema.meta({ example: 'feature-requests' }),
+  description: z.string().nullable().meta({ example: 'Submit and vote on feature ideas' }),
+  isPublic: z.boolean().meta({ example: true }),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
 })
 
 // Request body schemas
@@ -44,9 +66,12 @@ const CreateBoardSchema = z
       .min(1)
       .max(100)
       .regex(/^[a-z0-9-]+$/)
-      .meta({ description: 'URL-friendly slug', example: 'feature-requests' }),
+      .optional()
+      .meta({
+        description: 'URL-friendly slug (auto-generated from name if omitted)',
+        example: 'feature-requests',
+      }),
     description: z.string().max(500).optional().meta({ description: 'Board description' }),
-    color: HexColorSchema.optional().meta({ description: 'Board color' }),
     isPublic: z
       .boolean()
       .optional()
@@ -57,8 +82,8 @@ const CreateBoardSchema = z
 const UpdateBoardSchema = z
   .object({
     name: z.string().min(1).max(100).optional(),
+    slug: z.string().min(1).max(100).optional(),
     description: z.string().max(500).nullable().optional(),
-    color: HexColorSchema.optional(),
     isPublic: z.boolean().optional(),
   })
   .meta({ description: 'Update board request body' })
@@ -74,7 +99,7 @@ registerPath('/boards', {
         description: 'List of boards',
         content: {
           'application/json': {
-            schema: createPaginatedResponseSchema(BoardSchema, 'List of boards'),
+            schema: createPaginatedResponseSchema(BoardListItemSchema, 'List of boards'),
           },
         },
       },
@@ -104,7 +129,9 @@ registerPath('/boards', {
       201: {
         description: 'Board created',
         content: {
-          'application/json': { schema: createItemResponseSchema(BoardSchema, 'Created board') },
+          'application/json': {
+            schema: createItemResponseSchema(BoardCreateResponseSchema, 'Created board'),
+          },
         },
       },
       400: {
@@ -138,7 +165,9 @@ registerPath('/boards/{boardId}', {
       200: {
         description: 'Board details',
         content: {
-          'application/json': { schema: createItemResponseSchema(BoardSchema, 'Board details') },
+          'application/json': {
+            schema: createItemResponseSchema(BoardDetailSchema, 'Board details'),
+          },
         },
       },
       401: {
@@ -180,7 +209,9 @@ registerPath('/boards/{boardId}', {
       200: {
         description: 'Board updated',
         content: {
-          'application/json': { schema: createItemResponseSchema(BoardSchema, 'Updated board') },
+          'application/json': {
+            schema: createItemResponseSchema(BoardDetailSchema, 'Updated board'),
+          },
         },
       },
       400: {

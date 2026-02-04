@@ -12,48 +12,123 @@ import {
 } from '../openapi'
 import {
   TimestampSchema,
+  NullableTimestampSchema,
   HexColorSchema,
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
   ValidationErrorSchema,
 } from './common'
 
-// Post schema
-const PostSchema = z.object({
+// Tag nested schema (shared between list and detail)
+const TagSchema = z.object({
+  id: TypeIdSchema,
+  name: z.string(),
+  color: HexColorSchema,
+})
+
+// Pinned comment nested schema
+const PinnedCommentSchema = z
+  .object({
+    id: TypeIdSchema,
+    content: z.string(),
+    authorName: z.string().nullable(),
+    createdAt: TimestampSchema,
+  })
+  .nullable()
+
+// Post list item schema (GET /posts)
+const PostListItemSchema = z.object({
   id: TypeIdSchema.meta({ example: 'post_01h455vb4pex5vsknk084sn02q' }),
   title: z.string().meta({ example: 'Add dark mode support' }),
   content: z.string().meta({ example: 'It would be great to have a dark mode option...' }),
-  boardId: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
-  statusId: TypeIdSchema.nullable().meta({ example: 'status_01h455vb4pex5vsknk084sn02q' }),
-  authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
-  authorName: z.string().nullable().meta({ example: 'John Doe' }),
   voteCount: z.number().meta({ example: 42 }),
+  commentCount: z.number().meta({ example: 5 }),
+  boardId: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
+  boardSlug: z
+    .string()
+    .meta({ description: 'Slug of the parent board', example: 'feature-requests' }),
+  boardName: z
+    .string()
+    .meta({ description: 'Name of the parent board', example: 'Feature Requests' }),
+  statusId: TypeIdSchema.nullable().meta({ example: 'status_01h455vb4pex5vsknk084sn02q' }),
+  authorName: z.string().nullable().meta({ example: 'John Doe' }),
+  ownerId: z.string().nullable().meta({ description: 'Assigned team member ID' }),
+  tags: z.array(TagSchema).meta({ description: 'Tags assigned to this post' }),
   createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
 })
 
-const PostListItemSchema = z.object({
+// Post detail schema (GET /posts/:id)
+const PostDetailSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'post_01h455vb4pex5vsknk084sn02q' }),
+  title: z.string().meta({ example: 'Add dark mode support' }),
+  content: z.string().meta({ example: 'It would be great to have a dark mode option...' }),
+  contentJson: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .meta({ description: 'Rich text content as TipTap JSON' }),
+  voteCount: z.number().meta({ example: 42 }),
+  commentCount: z.number().meta({ example: 5 }),
+  boardId: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
+  boardSlug: z
+    .string()
+    .meta({ description: 'Slug of the parent board', example: 'feature-requests' }),
+  boardName: z
+    .string()
+    .meta({ description: 'Name of the parent board', example: 'Feature Requests' }),
+  statusId: TypeIdSchema.nullable().meta({ example: 'status_01h455vb4pex5vsknk084sn02q' }),
+  authorName: z.string().nullable().meta({ example: 'John Doe' }),
+  authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
+  ownerId: z.string().nullable().meta({ description: 'Assigned team member ID' }),
+  officialResponse: z.string().nullable().meta({ description: 'Official team response text' }),
+  officialResponseAuthorName: z
+    .string()
+    .nullable()
+    .meta({ description: 'Name of team member who wrote the official response' }),
+  officialResponseAt: NullableTimestampSchema.meta({
+    description: 'When the official response was posted',
+  }),
+  tags: z.array(TagSchema).meta({ description: 'Tags assigned to this post' }),
+  roadmapIds: z.array(z.string()).meta({ description: 'IDs of roadmaps this post belongs to' }),
+  pinnedComment: PinnedCommentSchema.meta({
+    description: 'Pinned comment used as official response',
+  }),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  deletedAt: NullableTimestampSchema.meta({
+    description: 'When the post was deleted, null if active',
+  }),
+})
+
+// Post create response schema (POST /posts)
+const PostCreateResponseSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'post_01h455vb4pex5vsknk084sn02q' }),
+  title: z.string(),
+  content: z.string(),
+  voteCount: z.number(),
+  boardId: TypeIdSchema,
+  statusId: TypeIdSchema.nullable(),
+  authorName: z.string().nullable(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+})
+
+// Post update response schema (PATCH /posts/:id)
+const PostUpdateResponseSchema = z.object({
   id: TypeIdSchema,
   title: z.string(),
   content: z.string(),
+  contentJson: z.record(z.string(), z.unknown()).nullable(),
+  voteCount: z.number(),
   boardId: TypeIdSchema,
   statusId: TypeIdSchema.nullable(),
-  authorEmail: z.string().nullable(),
   authorName: z.string().nullable(),
-  voteCount: z.number(),
-  commentCount: z.number(),
+  ownerId: z.string().nullable(),
+  officialResponse: z.string().nullable(),
+  officialResponseAuthorName: z.string().nullable(),
+  officialResponseAt: NullableTimestampSchema,
   createdAt: TimestampSchema,
-  board: z.object({
-    id: TypeIdSchema,
-    name: z.string(),
-    slug: z.string(),
-  }),
-  tags: z.array(
-    z.object({
-      id: TypeIdSchema,
-      name: z.string(),
-      color: HexColorSchema,
-    })
-  ),
+  updatedAt: TimestampSchema,
 })
 
 // Request body schemas
@@ -67,13 +142,13 @@ const CreatePostSchema = z
     content: z
       .string()
       .min(1)
+      .max(10000)
       .meta({ description: 'Post content', example: 'It would be great to have...' }),
     boardId: TypeIdSchema.meta({
       description: 'Board ID',
       example: 'board_01h455vb4pex5vsknk084sn02q',
     }),
-    authorEmail: z.string().email().optional().meta({ description: 'Author email' }),
-    authorName: z.string().optional().meta({ description: 'Author name' }),
+    statusId: TypeIdSchema.optional().meta({ description: 'Initial status ID' }),
     tagIds: z.array(TypeIdSchema).optional().meta({ description: 'Tag IDs to assign' }),
   })
   .meta({ description: 'Create post request body' })
@@ -81,10 +156,23 @@ const CreatePostSchema = z
 const UpdatePostSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
-    content: z.string().min(1).optional(),
-    statusId: TypeIdSchema.nullable().optional(),
-    boardId: TypeIdSchema.optional(),
+    content: z.string().min(1).max(10000).optional(),
+    statusId: z
+      .string()
+      .nullable()
+      .optional()
+      .meta({ description: 'Status ID (set to null to clear)' }),
     tagIds: z.array(TypeIdSchema).optional(),
+    ownerId: z
+      .string()
+      .nullable()
+      .optional()
+      .meta({ description: 'Assigned team member ID (set to null to unassign)' }),
+    officialResponse: z
+      .string()
+      .nullable()
+      .optional()
+      .meta({ description: 'Official team response (set to null to clear)' }),
   })
   .meta({ description: 'Update post request body' })
 
@@ -110,7 +198,7 @@ registerPath('/posts', {
         description: 'Filter by board ID',
       },
       {
-        name: 'statusSlug',
+        name: 'status',
         in: 'query',
         schema: { type: 'string' },
         description: 'Filter by status slug',
@@ -134,16 +222,16 @@ registerPath('/posts', {
         description: 'Sort order',
       },
       {
-        name: 'page',
+        name: 'cursor',
         in: 'query',
-        schema: { type: 'integer', default: 1 },
-        description: 'Page number',
+        schema: { type: 'string' },
+        description: 'Pagination cursor from previous response',
       },
       {
         name: 'limit',
         in: 'query',
         schema: { type: 'integer', default: 20, maximum: 100 },
-        description: 'Items per page',
+        description: 'Items per page (max 100)',
       },
     ],
     responses: {
@@ -168,7 +256,8 @@ registerPath('/posts', {
   post: {
     tags: ['Posts'],
     summary: 'Create a post',
-    description: 'Create a new feedback post',
+    description:
+      'Create a new feedback post. The post is created on behalf of the authenticated API key holder.',
     requestBody: {
       required: true,
       content: {
@@ -181,7 +270,9 @@ registerPath('/posts', {
       201: {
         description: 'Post created',
         content: {
-          'application/json': { schema: createItemResponseSchema(PostSchema, 'Created post') },
+          'application/json': {
+            schema: createItemResponseSchema(PostCreateResponseSchema, 'Created post'),
+          },
         },
       },
       400: {
@@ -201,7 +292,7 @@ registerPath('/posts/{postId}', {
   get: {
     tags: ['Posts'],
     summary: 'Get a post',
-    description: 'Get a single post by ID',
+    description: 'Get a single post by ID with full details',
     parameters: [
       {
         name: 'postId',
@@ -215,7 +306,9 @@ registerPath('/posts/{postId}', {
       200: {
         description: 'Post details',
         content: {
-          'application/json': { schema: createItemResponseSchema(PostSchema, 'Post details') },
+          'application/json': {
+            schema: createItemResponseSchema(PostDetailSchema, 'Post details'),
+          },
         },
       },
       401: {
@@ -257,7 +350,9 @@ registerPath('/posts/{postId}', {
       200: {
         description: 'Post updated',
         content: {
-          'application/json': { schema: createItemResponseSchema(PostSchema, 'Updated post') },
+          'application/json': {
+            schema: createItemResponseSchema(PostUpdateResponseSchema, 'Updated post'),
+          },
         },
       },
       400: {
