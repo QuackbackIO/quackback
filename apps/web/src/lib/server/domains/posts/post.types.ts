@@ -27,11 +27,9 @@ export interface UpdatePostInput {
   contentJson?: TiptapContent | null
   statusId?: StatusId
   tagIds?: TagId[]
-  ownerId?: string | null
   ownerMemberId?: MemberId | null
   officialResponse?: string | null
   officialResponseMemberId?: MemberId | null
-  officialResponseAuthorName?: string | null
 }
 
 /**
@@ -70,6 +68,12 @@ export interface PostWithDetails extends Post {
   roadmapIds: string[]
   /** Pinned comment as official response (new approach) */
   pinnedComment: PinnedComment | null
+  /** Author name resolved from member->user relation */
+  authorName: string | null
+  /** Author email resolved from member->user relation */
+  authorEmail: string | null
+  /** Official response author name resolved from member->user relation */
+  officialResponseAuthorName: string | null
 }
 
 /**
@@ -134,6 +138,8 @@ export interface PostListItem extends Post {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Array<Pick<Tag, 'id' | 'name' | 'color'>>
   commentCount: number
+  /** Author name resolved from member->user relation */
+  authorName: string | null
 }
 
 /**

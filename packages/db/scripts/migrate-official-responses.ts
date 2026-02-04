@@ -58,18 +58,12 @@ async function migrateOfficialResponses() {
           continue
         }
 
-        // Determine the author - try to find the member or use fallback
+        // Determine the author member
         const memberId = post.officialResponseMemberId
-        let authorName = post.officialResponseAuthorName || 'Team'
-
-        // If we have a memberId, get the member's name
-        if (memberId) {
-          const member = await db.query.member.findFirst({
-            where: eq(schema.member.id, memberId),
-          })
-          if (member) {
-            authorName = member.displayName || authorName
-          }
+        if (!memberId) {
+          console.warn(`  Post ${post.id}: No officialResponseMemberId, skipping`)
+          skipped++
+          continue
         }
 
         // Create the comment
@@ -79,9 +73,7 @@ async function migrateOfficialResponses() {
         await db.insert(schema.comments).values({
           id: commentId,
           postId: post.id,
-          memberId: memberId || null,
-          authorName,
-          authorEmail: null, // Official responses don't have email
+          memberId,
           content: post.officialResponse,
           isTeamMember: true,
           parentId: null,

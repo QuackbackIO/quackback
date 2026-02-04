@@ -28,6 +28,7 @@ export interface PostCreatedInput {
   boardId: BoardId
   boardSlug: string
   authorEmail?: string
+  authorName?: string
   voteCount: number
 }
 
@@ -42,6 +43,7 @@ export interface CommentCreatedInput {
   id: CommentId
   content: string
   authorEmail?: string
+  authorName?: string
 }
 
 export interface CommentPostInput {
@@ -85,6 +87,7 @@ export async function dispatchPostCreated(
         boardId: post.boardId,
         boardSlug: post.boardSlug,
         authorEmail: post.authorEmail,
+        authorName: post.authorName,
         voteCount: post.voteCount,
       },
     },
@@ -133,6 +136,7 @@ export async function dispatchCommentCreated(
         id: comment.id,
         content: comment.content,
         authorEmail: comment.authorEmail,
+        authorName: comment.authorName,
       },
       post: { id: post.id, title: post.title, boardId: post.boardId, boardSlug: post.boardSlug },
     },

@@ -232,7 +232,7 @@ export function useAddComment() {
           parentId: (parentId || undefined) as CommentId | undefined,
         },
       }),
-    onMutate: async ({ postId, content, parentId, authorName, authorEmail, memberId }) => {
+    onMutate: async ({ postId, content, parentId, authorName, memberId }) => {
       const typedPostId = postId as PostId
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(typedPostId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
@@ -246,10 +246,8 @@ export function useAddComment() {
         id: `comment_temp${Date.now()}` as CommentId,
         postId: typedPostId,
         content,
-        authorId: null,
         authorName: authorName || null,
-        authorEmail: authorEmail || null,
-        memberId: (memberId || null) as MemberId | null,
+        memberId: memberId as MemberId,
         parentId: (parentId || null) as CommentId | null,
         isTeamMember: !!memberId,
         createdAt: new Date(),

@@ -129,7 +129,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             postId: result.comment.postId,
             parentId: result.comment.parentId,
             content: result.comment.content,
-            authorName: result.comment.authorName,
+            authorName: memberRecord.user.name,
             memberId: result.comment.memberId,
             isTeamMember: result.comment.isTeamMember,
             createdAt: result.comment.createdAt.toISOString(),

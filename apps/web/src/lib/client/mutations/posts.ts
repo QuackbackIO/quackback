@@ -146,10 +146,10 @@ export function useUpdatePostOwner() {
       if (previousDetail) {
         queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
           ...previousDetail,
-          ownerId,
+          ownerMemberId: ownerId,
         })
       }
-      updatePostInLists(queryClient, postId, (post) => ({ ...post, ownerId }))
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, ownerMemberId: ownerId }))
 
       return { previousDetail, previousLists }
     },

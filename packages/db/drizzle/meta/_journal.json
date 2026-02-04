@@ -8,6 +8,13 @@
       "when": 1770059748915,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770199095150,
+      "tag": "0001_green_deathstrike",
+      "breakpoints": true
     }
   ]
 }

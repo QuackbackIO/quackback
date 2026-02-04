@@ -310,7 +310,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
           title: data.title,
           content: data.content,
           contentJson: data.contentJson,
-          ownerId: data.ownerId,
+          ownerMemberId: data.ownerId as MemberId | null | undefined,
           officialResponse: data.officialResponse,
         },
         {

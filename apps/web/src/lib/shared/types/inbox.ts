@@ -47,12 +47,11 @@ export interface PostDetails {
   voteCount: number
   hasVoted: boolean
   // Member-scoped identity (Hub-and-Spoke model)
-  memberId: string | null
+  memberId: string
   ownerMemberId: string | null
-  // Legacy/anonymous identity fields
+  // Author info resolved from member->user relation
   authorName: string | null
   authorEmail: string | null
-  ownerId: string | null
   createdAt: Date
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]

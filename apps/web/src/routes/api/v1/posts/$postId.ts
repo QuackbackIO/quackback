@@ -12,7 +12,7 @@ import {
   validateOptionalTypeId,
   validateTypeIdArray,
 } from '@/lib/server/domains/api/validation'
-import type { PostId, StatusId, TagId } from '@quackback/ids'
+import type { PostId, StatusId, TagId, MemberId } from '@quackback/ids'
 
 // Input validation schema
 const updatePostSchema = z.object({
@@ -20,7 +20,7 @@ const updatePostSchema = z.object({
   content: z.string().min(1).max(10000).optional(),
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional(),
-  ownerId: z.string().nullable().optional(),
+  ownerMemberId: z.string().nullable().optional(),
   officialResponse: z.string().nullable().optional(),
 })
 
@@ -59,11 +59,11 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             boardSlug: post.board?.slug,
             boardName: post.board?.name,
             statusId: post.statusId,
-            authorName: post.authorName,
-            authorEmail: post.authorEmail,
-            ownerId: post.ownerId,
+            authorName: post.authorName ?? null,
+            authorEmail: post.authorEmail ?? null,
+            ownerMemberId: post.ownerMemberId,
             officialResponse: post.officialResponse,
-            officialResponseAuthorName: post.officialResponseAuthorName,
+            officialResponseAuthorName: post.officialResponseAuthorName ?? null,
             officialResponseAt: post.officialResponseAt?.toISOString() ?? null,
             tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
             roadmapIds: post.roadmapIds,
@@ -138,7 +138,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
               content: parsed.data.content,
               statusId: parsed.data.statusId as StatusId | undefined,
               tagIds: parsed.data.tagIds as TagId[] | undefined,
-              ownerId: parsed.data.ownerId as string | undefined,
+              ownerMemberId: parsed.data.ownerMemberId as MemberId | null | undefined,
               officialResponse: parsed.data.officialResponse,
             },
             memberRecord?.user ? { memberId, name: memberRecord.user.name } : undefined
@@ -152,10 +152,8 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             voteCount: result.voteCount,
             boardId: result.boardId,
             statusId: result.statusId,
-            authorName: result.authorName,
-            ownerId: result.ownerId,
+            ownerMemberId: result.ownerMemberId,
             officialResponse: result.officialResponse,
-            officialResponseAuthorName: result.officialResponseAuthorName,
             officialResponseAt: result.officialResponseAt?.toISOString() ?? null,
             createdAt: result.createdAt.toISOString(),
             updatedAt: result.updatedAt.toISOString(),

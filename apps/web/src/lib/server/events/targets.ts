@@ -300,7 +300,7 @@ async function buildEmailEventConfig(
     return {
       postTitle: post.title,
       postUrl: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}#comment-${comment.id}`,
-      commenterName: comment.authorEmail?.split('@')[0] ?? 'Someone',
+      commenterName: comment.authorName || comment.authorEmail?.split('@')[0] || 'Someone',
       commentPreview: truncate(stripHtml(comment.content), 200),
       isTeamMember: await isActorTeamMember(event.actor),
     }
@@ -380,7 +380,7 @@ async function buildNotificationConfig(
       boardSlug: post.boardSlug,
       postUrl: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}#comment-${comment.id}`,
       commentId: comment.id,
-      commenterName: comment.authorEmail?.split('@')[0] ?? 'Someone',
+      commenterName: comment.authorName || comment.authorEmail?.split('@')[0] || 'Someone',
       commentPreview: truncate(stripHtml(comment.content), 200),
       isTeamMember: await isActorTeamMember(event.actor),
     }

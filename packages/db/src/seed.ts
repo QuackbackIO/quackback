@@ -466,7 +466,6 @@ async function seed() {
       content,
       contentJson: textToTipTapJson(content),
       memberId: author.id,
-      authorName: author.name,
       statusId,
       voteCount,
       createdAt: randomDate(180),
@@ -563,7 +562,6 @@ async function seed() {
       commentInserts.push({
         postId: post.id,
         memberId: author.id,
-        authorName: author.name,
         content: pick(commentContents),
         isTeamMember: Math.random() < 0.2,
         createdAt: randomDate(60),

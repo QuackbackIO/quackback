@@ -90,7 +90,6 @@ export async function createPost(
   }
 
   // Create the post with member-scoped identity
-  // Convert member TypeID back to raw UUID for database foreign key
   const [post] = await db
     .insert(posts)
     .values({
@@ -100,8 +99,6 @@ export async function createPost(
       contentJson: input.contentJson,
       statusId,
       memberId: author.memberId,
-      authorName: author.name,
-      authorEmail: author.email,
     })
     .returning()
 
@@ -125,6 +122,7 @@ export async function createPost(
       boardId: post.boardId,
       boardSlug: board.slug,
       authorEmail: author.email,
+      authorName: author.name,
       voteCount: post.voteCount,
     }
   )
@@ -187,7 +185,6 @@ export async function updatePost(
   if (input.content !== undefined) updateData.content = input.content.trim()
   if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
   if (input.statusId !== undefined) updateData.statusId = input.statusId
-  if (input.ownerId !== undefined) updateData.ownerId = input.ownerId
   if (input.ownerMemberId !== undefined) updateData.ownerMemberId = input.ownerMemberId
 
   // Handle official response update
@@ -196,14 +193,12 @@ export async function updatePost(
       // Clear the official response
       updateData.officialResponse = null
       updateData.officialResponseMemberId = null
-      updateData.officialResponseAuthorName = null
       updateData.officialResponseAt = null
     } else {
       // Set or update official response with member-scoped identity
       const responseMemberId = input.officialResponseMemberId || responder?.memberId
       updateData.officialResponse = input.officialResponse
       updateData.officialResponseMemberId = responseMemberId
-      updateData.officialResponseAuthorName = input.officialResponseAuthorName || responder?.name
       updateData.officialResponseAt = new Date()
     }
   }

@@ -41,8 +41,19 @@ import type {
  * @returns Result containing the post with details or an error
  */
 export async function getPostWithDetails(postId: PostId): Promise<PostWithDetails> {
-  // Get the post first
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  // Get the post with author relation
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    with: {
+      author: {
+        with: {
+          user: {
+            columns: { name: true, email: true },
+          },
+        },
+      },
+    },
+  })
   if (!post) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
@@ -79,7 +90,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
         author: {
           with: {
             user: {
-              columns: { image: true, imageKey: true },
+              columns: { name: true, image: true, imageKey: true },
             },
           },
         },
@@ -102,13 +113,26 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       pinnedComment = {
         id: pinnedCommentData.id,
         content: pinnedCommentData.content,
-        authorName: pinnedCommentData.authorName,
+        authorName: pinnedCommentData.author?.user?.name ?? null,
         memberId: pinnedCommentData.memberId,
         avatarUrl,
         createdAt: pinnedCommentData.createdAt,
         isTeamMember: pinnedCommentData.isTeamMember,
       }
     }
+  }
+
+  // Resolve official response author name if needed
+  let officialResponseAuthorName: string | null = null
+  if (post.officialResponseMemberId) {
+    // Import member table for the query
+    const { member: memberTable } = await import('@/lib/server/db')
+    const responderMember = await db.query.member.findFirst({
+      where: eq(memberTable.id, post.officialResponseMemberId),
+      columns: {},
+      with: { user: { columns: { name: true } } },
+    })
+    officialResponseAuthorName = responderMember?.user?.name ?? null
   }
 
   const postWithDetails: PostWithDetails = {
@@ -125,6 +149,9 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     })),
     roadmapIds: roadmapsResult.map((r) => r.roadmapId),
     pinnedComment,
+    authorName: post.author?.user?.name ?? null,
+    authorEmail: post.author?.user?.email ?? null,
+    officialResponseAuthorName,
   }
 
   return postWithDetails
@@ -152,17 +179,29 @@ export async function getCommentsWithReplies(
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
-  // Get all comments with reactions
+  // Get all comments with reactions and author info
   const allComments = await db.query.comments.findMany({
     where: eq(comments.postId, postId),
     with: {
       reactions: true,
+      author: {
+        with: {
+          user: {
+            columns: { name: true },
+          },
+        },
+      },
     },
     orderBy: asc(comments.createdAt),
   })
 
   // Build nested tree using the utility function
-  const commentTree = buildCommentTree(allComments, memberId)
+  // Map to include authorName from the member->user relation
+  const commentsWithAuthor = allComments.map((c) => ({
+    ...c,
+    authorName: c.author?.user?.name ?? null,
+  }))
+  const commentTree = buildCommentTree(commentsWithAuthor, memberId)
 
   return commentTree
 }
@@ -214,9 +253,9 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Owner filter
   if (ownerId === null) {
-    conditions.push(sql`${posts.ownerId} IS NULL`)
+    conditions.push(sql`${posts.ownerMemberId} IS NULL`)
   } else if (ownerId) {
-    conditions.push(eq(posts.ownerId, ownerId))
+    conditions.push(eq(posts.ownerMemberId, ownerId as MemberId))
   }
 
   // Search filter
@@ -274,6 +313,13 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
             },
           },
         },
+        author: {
+          with: {
+            user: {
+              columns: { name: true },
+            },
+          },
+        },
       },
     }),
     db
@@ -289,6 +335,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     board: post.board,
     tags: post.tags.map((pt) => pt.tag),
     commentCount: post.commentCount,
+    authorName: post.author?.user?.name ?? null,
   }))
 
   const total = Number(countResult[0].count)
@@ -344,6 +391,13 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
           },
         },
       },
+      author: {
+        with: {
+          user: {
+            columns: { name: true, email: true },
+          },
+        },
+      },
     },
   })
 
@@ -366,8 +420,8 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
     content: post.content,
     statusId: post.statusId,
     voteCount: post.voteCount,
-    authorName: post.authorName,
-    authorEmail: post.authorEmail,
+    authorName: post.author?.user?.name ?? null,
+    authorEmail: post.author?.user?.email ?? null,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     board: {

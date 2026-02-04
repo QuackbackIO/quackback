@@ -21,10 +21,8 @@ export interface CommentWithReactions {
   id: string
   postId: string
   parentId: string | null
-  memberId: string | null
-  authorId: string | null
+  memberId: string
   authorName: string | null
-  authorEmail: string | null
   content: string
   isTeamMember: boolean
   createdAt: Date
@@ -42,10 +40,8 @@ export interface CommentTreeNode {
   id: string
   postId: string
   parentId: string | null
-  memberId: string | null
-  authorId: string | null
+  memberId: string
   authorName: string | null
-  authorEmail: string | null
   content: string
   isTeamMember: boolean
   createdAt: Date
@@ -105,9 +101,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       postId: comment.postId,
       parentId: comment.parentId,
       memberId: comment.memberId,
-      authorId: comment.authorId,
       authorName: comment.authorName,
-      authorEmail: comment.authorEmail,
       content: comment.content,
       isTeamMember: comment.isTeamMember,
       createdAt: comment.createdAt,

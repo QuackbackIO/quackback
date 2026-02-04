@@ -230,7 +230,11 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
           statusId: posts.statusId,
           voteCount: posts.voteCount,
           createdAt: posts.createdAt,
-          authorName: posts.authorName,
+          authorName: sql<string | null>`(
+            SELECT u.name FROM ${member} m
+            INNER JOIN ${user} u ON m.user_id = u.id
+            WHERE m.id = ${posts.memberId}
+          )`.as('author_name'),
           boardSlug: boards.slug,
           boardName: boards.name,
           statusName: postStatuses.name,
@@ -287,7 +291,11 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
               statusId: posts.statusId,
               voteCount: posts.voteCount,
               createdAt: posts.createdAt,
-              authorName: posts.authorName,
+              authorName: sql<string | null>`(
+                SELECT u.name FROM ${member} m
+                INNER JOIN ${user} u ON m.user_id = u.id
+                WHERE m.id = ${posts.memberId}
+              )`.as('author_name'),
               boardSlug: boards.slug,
               boardName: boards.name,
               statusName: postStatuses.name,
