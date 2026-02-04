@@ -165,8 +165,6 @@ export async function createComment(
       content: input.content.trim(),
       parentId: input.parentId || null,
       memberId: author.memberId,
-      authorName: input.authorName || author.name,
-      authorEmail: input.authorEmail || author.email,
       isTeamMember,
     })
     .returning()
@@ -182,7 +180,8 @@ export async function createComment(
     {
       id: comment.id,
       content: comment.content,
-      authorEmail: comment.authorEmail ?? undefined,
+      authorName: author.name,
+      authorEmail: author.email,
     },
     {
       id: post.id,
@@ -319,8 +318,21 @@ export async function deleteComment(
  * @param id - Comment ID to fetch
  * @returns Result containing the comment or an error
  */
-export async function getCommentById(id: CommentId): Promise<Comment> {
-  const comment = await db.query.comments.findFirst({ where: eq(comments.id, id) })
+export async function getCommentById(
+  id: CommentId
+): Promise<Comment & { authorName: string | null; authorEmail: string | null }> {
+  const comment = await db.query.comments.findFirst({
+    where: eq(comments.id, id),
+    with: {
+      author: {
+        with: {
+          user: {
+            columns: { name: true, email: true },
+          },
+        },
+      },
+    },
+  })
   if (!comment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
   }
@@ -336,7 +348,11 @@ export async function getCommentById(id: CommentId): Promise<Comment> {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
   }
 
-  return comment
+  return {
+    ...comment,
+    authorName: comment.author?.user?.name ?? null,
+    authorEmail: comment.author?.user?.email ?? null,
+  }
 }
 
 /**
@@ -365,11 +381,14 @@ export async function getCommentsByPost(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Fetch all comments with reactions using a single query
+  // Fetch all comments with reactions and author info via member->user relation
   const commentsWithReactions = await db.query.comments.findMany({
     where: eq(comments.postId, postId),
     with: {
       reactions: true,
+      author: {
+        with: { user: true },
+      },
     },
     orderBy: asc(comments.createdAt),
   })
@@ -380,9 +399,7 @@ export async function getCommentsByPost(
     postId: comment.postId,
     parentId: comment.parentId,
     memberId: comment.memberId,
-    authorId: comment.authorId,
-    authorName: comment.authorName,
-    authorEmail: comment.authorEmail,
+    authorName: comment.author?.user?.name ?? null,
     content: comment.content,
     isTeamMember: comment.isTeamMember,
     createdAt: comment.createdAt,

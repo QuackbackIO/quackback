@@ -74,11 +74,9 @@ describe('Schema definitions', () => {
       expect(columns).toContain('boardId')
       expect(columns).toContain('title')
       expect(columns).toContain('content')
-      expect(columns).toContain('authorId')
-      expect(columns).toContain('authorName')
-      expect(columns).toContain('authorEmail')
+      expect(columns).toContain('memberId')
       expect(columns).toContain('statusId')
-      expect(columns).toContain('ownerId')
+      expect(columns).toContain('ownerMemberId')
       expect(columns).toContain('voteCount')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
@@ -86,8 +84,8 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      // 23 business columns + 1 searchVector (generated) + 1 commentCount (denormalized) + 3 embedding columns (embedding, embeddingModel, embeddingUpdatedAt)
-      expect(columns.length).toBe(29)
+      // 20 business columns + 1 searchVector (generated) + 1 commentCount (denormalized) + 3 embedding columns (embedding, embeddingModel, embeddingUpdatedAt) - 2 = 23
+      expect(columns.length).toBe(23)
     })
   })
 
@@ -142,9 +140,7 @@ describe('Schema definitions', () => {
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
       expect(columns).toContain('parentId')
-      expect(columns).toContain('authorId')
-      expect(columns).toContain('authorName')
-      expect(columns).toContain('authorEmail')
+      expect(columns).toContain('memberId')
       expect(columns).toContain('content')
       expect(columns).toContain('createdAt')
     })

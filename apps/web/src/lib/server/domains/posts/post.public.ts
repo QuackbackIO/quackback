@@ -84,7 +84,7 @@ export interface PostWithVotesAndAvatars {
   voteCount: number
   commentCount: number
   authorName: string | null
-  memberId: string | null
+  memberId: string
   createdAt: Date
   tags: Array<{ id: TagId; name: string; color: string }>
   board: { id: string; name: string; slug: string }
@@ -163,7 +163,6 @@ export async function listPublicPostsWithVotesAndAvatars(
       statusId: posts.statusId,
       voteCount: posts.voteCount,
       commentCount: posts.commentCount,
-      authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
       boardId: boards.id,
@@ -177,6 +176,11 @@ export async function listPublicPostsWithVotesAndAvatars(
         '[]'
       )`.as('tags_json'),
       hasVoted: voteExistsSubquery,
+      authorName: sql<string | null>`(
+        SELECT u.name FROM ${memberTable} m
+        INNER JOIN ${userTable} u ON m.user_id = u.id
+        WHERE m.id = ${posts.memberId}
+      )`.as('author_name'),
       avatarData: sql<string | null>`(
         SELECT CASE
           WHEN u.image_key IS NOT NULL
@@ -233,7 +237,6 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
       statusId: posts.statusId,
       voteCount: posts.voteCount,
       commentCount: posts.commentCount,
-      authorName: posts.authorName,
       memberId: posts.memberId,
       createdAt: posts.createdAt,
       boardId: boards.id,
@@ -246,6 +249,11 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
          WHERE pt.post_id = ${posts.id}),
         '[]'
       )`.as('tags_json'),
+      authorName: sql<string | null>`(
+        SELECT u.name FROM ${memberTable} m
+        INNER JOIN ${userTable} u ON m.user_id = u.id
+        WHERE m.id = ${posts.memberId}
+      )`.as('author_name'),
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -291,12 +299,11 @@ export async function getPublicPostDetail(
         contentJson: posts.contentJson,
         statusId: posts.statusId,
         voteCount: posts.voteCount,
-        authorName: posts.authorName,
         memberId: posts.memberId,
         createdAt: posts.createdAt,
         pinnedCommentId: posts.pinnedCommentId,
         officialResponse: posts.officialResponse,
-        officialResponseAuthorName: posts.officialResponseAuthorName,
+        officialResponseMemberId: posts.officialResponseMemberId,
         officialResponseAt: posts.officialResponseAt,
         boardId: boards.id,
         boardName: boards.name,
@@ -316,6 +323,11 @@ export async function getPublicPostDetail(
            WHERE pr.post_id = ${posts.id} AND r.is_public = true),
           '[]'
         )`.as('roadmaps_json'),
+        authorName: sql<string | null>`(
+          SELECT u.name FROM ${memberTable} m
+          INNER JOIN ${userTable} u ON m.user_id = u.id
+          WHERE m.id = ${posts.memberId}
+        )`.as('author_name'),
         authorAvatarData: sql<string | null>`(
           SELECT CASE
             WHEN u.image_key IS NOT NULL
@@ -326,6 +338,11 @@ export async function getPublicPostDetail(
           INNER JOIN ${userTable} u ON m.user_id = u.id
           WHERE m.id = ${posts.memberId}
         )`.as('author_avatar_data'),
+        officialResponseAuthorName: sql<string | null>`(
+          SELECT u.name FROM ${memberTable} m
+          INNER JOIN ${userTable} u ON m.user_id = u.id
+          WHERE m.id = ${posts.officialResponseMemberId}
+        )`.as('official_response_author_name'),
       })
       .from(posts)
       .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -339,10 +356,8 @@ export async function getPublicPostDetail(
       id: string
       post_id: string
       parent_id: string | null
-      member_id: string | null
-      author_id: string | null
+      member_id: string
       author_name: string | null
-      author_email: string | null
       content: string
       is_team_member: boolean
       created_at: Date | string
@@ -356,9 +371,7 @@ export async function getPublicPostDetail(
         c.post_id,
         c.parent_id,
         c.member_id,
-        c.author_id,
-        c.author_name,
-        c.author_email,
+        u.name as author_name,
         c.content,
         c.is_team_member,
         c.created_at,
@@ -371,11 +384,11 @@ export async function getPublicPostDetail(
           '[]'
         ) as reactions_json
       FROM ${comments} c
-      LEFT JOIN ${memberTable} m ON c.member_id = m.id
-      LEFT JOIN ${userTable} u ON m.user_id = u.id
+      INNER JOIN ${memberTable} m ON c.member_id = m.id
+      INNER JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
       WHERE c.post_id = ${postUuid}::uuid
-      GROUP BY c.id, u.image_key, u.image
+      GROUP BY c.id, u.name, u.image_key, u.image
       ORDER BY c.created_at ASC
     `),
   ])
@@ -398,10 +411,8 @@ export async function getPublicPostDetail(
     id: string
     post_id: string
     parent_id: string | null
-    member_id: string | null
-    author_id: string | null
+    member_id: string
     author_name: string | null
-    author_email: string | null
     content: string
     is_team_member: boolean
     created_at: Date | string
@@ -421,9 +432,7 @@ export async function getPublicPostDetail(
     postId: comment.post_id,
     parentId: comment.parent_id,
     memberId: comment.member_id,
-    authorId: comment.author_id,
     authorName: comment.author_name,
-    authorEmail: comment.author_email,
     content: comment.content,
     isTeamMember: comment.is_team_member,
     createdAt: ensureDate(comment.created_at),
@@ -459,7 +468,7 @@ export async function getPublicPostDetail(
         id: pinnedCommentData.id as CommentId,
         content: pinnedCommentData.content,
         authorName: pinnedCommentData.author_name,
-        memberId: pinnedCommentData.member_id as MemberId | null,
+        memberId: pinnedCommentData.member_id as MemberId,
         avatarUrl: computeAvatarUrl({
           imageKey: pinnedCommentData.image_key,
           image: pinnedCommentData.image,

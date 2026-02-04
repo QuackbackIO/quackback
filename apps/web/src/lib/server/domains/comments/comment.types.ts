@@ -11,8 +11,6 @@ export interface CreateCommentInput {
   postId: PostId
   content: string
   parentId?: CommentId | null
-  authorName?: string | null
-  authorEmail?: string | null
 }
 
 /**
@@ -31,9 +29,7 @@ export interface CreateCommentResult {
     postId: PostId
     content: string
     parentId: CommentId | null
-    memberId: MemberId | null
-    authorName: string | null
-    authorEmail: string | null
+    memberId: MemberId
     isTeamMember: boolean
     createdAt: Date
   }
@@ -60,10 +56,8 @@ export interface CommentThread {
   id: CommentId
   postId: PostId
   parentId: CommentId | null
-  memberId: MemberId | null
-  authorId: string | null
+  memberId: MemberId
   authorName: string | null
-  authorEmail: string | null
   content: string
   isTeamMember: boolean
   createdAt: Date
@@ -91,8 +85,7 @@ export interface CommentContext {
     postId: PostId
     content: string
     parentId: CommentId | null
-    memberId: MemberId | null
-    authorName: string | null
+    memberId: MemberId
     createdAt: Date
   }
   post: {

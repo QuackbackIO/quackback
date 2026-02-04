@@ -209,6 +209,7 @@ export type PostListItem = Post & {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]
   commentCount: number
+  authorName: string | null
 }
 
 export interface InboxPostListResult {

@@ -45,7 +45,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       const { post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
       const content = stripHtml(post.content)
-      const author = post.authorEmail || 'Anonymous'
+      const author = post.authorName || post.authorEmail || 'Anonymous'
 
       return {
         text: `New post from ${author}: ${post.title}`,
@@ -102,7 +102,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       const { comment, post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
       const content = stripHtml(comment.content)
-      const author = comment.authorEmail || 'Anonymous'
+      const author = comment.authorName || comment.authorEmail || 'Anonymous'
 
       return {
         text: `New comment from ${author}: ${post.title}`,

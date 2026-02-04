@@ -32,6 +32,7 @@ export interface EventPostData {
   boardId: string
   boardSlug: string
   authorEmail?: string
+  authorName?: string
   voteCount: number
 }
 
@@ -52,6 +53,7 @@ export interface EventCommentData {
   id: string
   content: string
   authorEmail?: string
+  authorName?: string
 }
 
 export interface PostCreatedPayload {

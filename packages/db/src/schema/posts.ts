@@ -43,16 +43,10 @@ export const posts = pgTable(
     content: text('content').notNull(),
     // Rich content stored as TipTap JSON (optional, for rich text support)
     contentJson: jsonb('content_json').$type<TiptapContent>(),
-    // Member-scoped identity (Hub-and-Spoke model)
-    // memberId links to the workspace-scoped member record
-    // For anonymous posts, memberId is null and authorName/authorEmail are used
-    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
-      onDelete: 'set null',
-    }),
-    // Legacy fields (kept for anonymous posts and migration compatibility)
-    authorId: text('author_id'),
-    authorName: text('author_name'),
-    authorEmail: text('author_email'),
+    // Member-scoped identity - every post has an author
+    memberId: typeIdColumn('member')('member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'restrict' }),
     // Status reference to post_statuses table
     statusId: typeIdColumn('status')('status_id').references(() => postStatuses.id, {
       onDelete: 'set null',
@@ -61,7 +55,6 @@ export const posts = pgTable(
     ownerMemberId: typeIdColumnNullable('member')('owner_member_id').references(() => member.id, {
       onDelete: 'set null',
     }),
-    ownerId: text('owner_id'), // Legacy, kept for migration
     voteCount: integer('vote_count').default(0).notNull(),
     // Denormalized comment count for performance
     // Automatically maintained by database trigger (see 0006_add_comment_count_trigger.sql)
@@ -73,8 +66,6 @@ export const posts = pgTable(
     ).references(() => member.id, {
       onDelete: 'set null',
     }),
-    officialResponseAuthorId: text('official_response_author_id'), // Legacy
-    officialResponseAuthorName: text('official_response_author_name'),
     officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
     // Pinned comment as official response (replaces direct official response text)
     // References a team member's root-level comment that serves as the official response
@@ -109,7 +100,6 @@ export const posts = pgTable(
     index('posts_status_id_idx').on(table.statusId),
     index('posts_member_id_idx').on(table.memberId),
     index('posts_owner_member_id_idx').on(table.ownerMemberId),
-    index('posts_owner_id_idx').on(table.ownerId), // Legacy index
     index('posts_created_at_idx').on(table.createdAt),
     index('posts_vote_count_idx').on(table.voteCount),
     // Composite indexes for post listings sorted by "top" and "new"
@@ -206,12 +196,9 @@ export const comments = pgTable(
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     parentId: typeIdColumn('comment')('parent_id'),
-    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
-      onDelete: 'set null',
-    }),
-    authorId: text('author_id'),
-    authorName: text('author_name'),
-    authorEmail: text('author_email'),
+    memberId: typeIdColumn('member')('member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
     isTeamMember: boolean('is_team_member').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -299,12 +286,9 @@ export const postNotes = pgTable(
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     // Member who created the note (staff only)
-    memberId: typeIdColumnNullable('member')('member_id').references(() => member.id, {
-      onDelete: 'set null',
-    }),
-    // For imported notes where member doesn't exist yet
-    authorName: text('author_name'),
-    authorEmail: text('author_email'),
+    memberId: typeIdColumn('member')('member_id')
+      .notNull()
+      .references(() => member.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

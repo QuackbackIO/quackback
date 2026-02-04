@@ -16,6 +16,7 @@ import {
   changelogEntryPosts,
   posts,
   member,
+  user,
   postStatuses,
   eq,
   and,
@@ -730,7 +731,11 @@ export async function searchShippedPosts(params: {
       title: posts.title,
       voteCount: posts.voteCount,
       boardSlug: boards.slug,
-      authorName: posts.authorName,
+      authorName: sql<string | null>`(
+        SELECT u.name FROM ${member} m
+        INNER JOIN ${user} u ON m.user_id = u.id
+        WHERE m.id = ${posts.memberId}
+      )`.as('author_name'),
       createdAt: posts.createdAt,
     })
     .from(posts)

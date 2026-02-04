@@ -87,9 +87,10 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
           const { updateComment } = await import('@/lib/server/domains/comments/comment.service')
           const { db, member, eq } = await import('@/lib/server/db')
 
-          // Get member info for role
+          // Get member info for role and author name
           const memberRecord = await db.query.member.findFirst({
             where: eq(member.id, memberId),
+            with: { user: { columns: { name: true } } },
           })
 
           const result = await updateComment(
@@ -98,12 +99,18 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             { memberId, role: (memberRecord?.role as 'admin' | 'member' | 'user') ?? 'user' }
           )
 
+          // Resolve author name from the comment's member->user relation
+          const commentMember = await db.query.member.findFirst({
+            where: eq(member.id, result.memberId),
+            with: { user: { columns: { name: true } } },
+          })
+
           return successResponse({
             id: result.id,
             postId: result.postId,
             parentId: result.parentId,
             content: result.content,
-            authorName: result.authorName,
+            authorName: commentMember?.user?.name ?? null,
             memberId: result.memberId,
             isTeamMember: result.isTeamMember,
             createdAt: result.createdAt.toISOString(),

@@ -11,11 +11,13 @@ import {
   boardIdSchema,
   createId,
   type BoardId,
+  type MemberId,
   type PostId,
   type TagId,
   type StatusId,
 } from '@quackback/ids'
 import type { ImportInput, ImportResult, ImportRowError } from './types'
+import { ImportUserResolver } from './user-resolver'
 
 // Constants
 export const MAX_ERRORS = 100
@@ -74,6 +76,7 @@ interface ProcessedRow {
   voteCount: number
   createdAt: Date
   tagNames: string[]
+  memberId: MemberId
 }
 
 /**
@@ -133,7 +136,9 @@ export function validateImportInput(
 export async function processBatch(
   rows: Record<string, string>[],
   defaultBoardId: BoardId,
-  startIndex: number
+  startIndex: number,
+  userResolver: ImportUserResolver,
+  fallbackMemberId: MemberId
 ): Promise<BatchResult> {
   const result: BatchResult = {
     imported: 0,
@@ -218,6 +223,13 @@ export async function processBatch(
       }
     }
 
+    // Resolve author email to a memberId (creates user+member if needed)
+    const memberId = await userResolver.resolve(
+      row.author_email || null,
+      row.author_name || null,
+      fallbackMemberId
+    )
+
     validRows.push({
       row: {
         title: row.title,
@@ -230,6 +242,7 @@ export async function processBatch(
         voteCount: row.vote_count,
         createdAt: row.created_at,
         tagNames,
+        memberId,
       },
       index: rowIndex,
     })
@@ -254,6 +267,9 @@ export async function processBatch(
   // Pre-generate IDs for all posts
   const postIds = validRows.map(() => createId('post'))
 
+  // Flush any pending user+member creations before inserting posts
+  await userResolver.flushPendingCreates()
+
   // Build all post data with pre-generated IDs
   const postsToInsert = validRows.map(({ row }, index) => ({
     id: postIds[index],
@@ -261,8 +277,7 @@ export async function processBatch(
     title: row.title,
     content: row.content,
     statusId: row.statusId,
-    authorName: row.authorName,
-    authorEmail: row.authorEmail,
+    memberId: row.memberId,
     voteCount: row.voteCount,
     createdAt: row.createdAt,
     updatedAt: row.createdAt,
@@ -328,9 +343,18 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
   const rows = parseCSV(data.csvContent)
   let result: ImportResult = { imported: 0, skipped: 0, errors: [], createdTags: [] }
 
+  // Single UserResolver instance shared across all batches (caches email->memberId lookups)
+  const userResolver = new ImportUserResolver()
+
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
-    const batchResult = await processBatch(batch, data.boardId, i)
+    const batchResult = await processBatch(
+      batch,
+      data.boardId,
+      i,
+      userResolver,
+      data.initiatedByMemberId
+    )
     result = mergeResults(result, batchResult)
   }
 
