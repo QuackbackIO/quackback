@@ -3,7 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { emailOTP, oneTimeToken, magicLink } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
-import { config, isProduction } from '@/lib/server/config'
+import { config } from '@/lib/server/config'
 
 /** Temporary storage for magic link tokens during invitation flow */
 const pendingMagicLinkTokens = new Map<string, { token: string; timestamp: number }>()
@@ -131,8 +131,8 @@ async function createAuth() {
       },
       defaultCookieAttributes: {
         sameSite: 'lax',
-        // Secure cookies in production
-        secure: isProduction(),
+        // Secure cookies only when served over HTTPS
+        secure: baseURL.startsWith('https://'),
       },
     },
 
