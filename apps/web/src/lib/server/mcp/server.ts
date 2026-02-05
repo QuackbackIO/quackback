@@ -12,7 +12,7 @@ import type { McpAuthContext } from './types'
 export function createMcpServer(auth: McpAuthContext): McpServer {
   const server = new McpServer({
     name: 'quackback',
-    version: '2.0.0',
+    version: '1.0.0',
   })
 
   registerTools(server, auth)
