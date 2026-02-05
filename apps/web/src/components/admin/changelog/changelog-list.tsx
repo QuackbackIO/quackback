@@ -4,16 +4,8 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, useCallback, startTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { ChangelogFiltersPanel } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
@@ -94,15 +86,16 @@ export function ChangelogList() {
                 <div className="text-sm text-muted-foreground">Loading...</div>
               </div>
             ) : entries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 gap-3">
-                <DocumentTextIcon className="h-12 w-12 text-muted-foreground/30" />
-                <div className="text-sm text-muted-foreground">
-                  {hasActiveFilters
+              <EmptyState
+                icon={DocumentTextIcon}
+                title={
+                  hasActiveFilters
                     ? 'No changelog entries match your filters'
-                    : 'No changelog entries yet'}
-                </div>
-                {!hasActiveFilters && <CreateChangelogDialog />}
-              </div>
+                    : 'No changelog entries yet'
+                }
+                action={!hasActiveFilters ? <CreateChangelogDialog /> : undefined}
+                className="h-48"
+              />
             ) : (
               <>
                 {entries.map((entry) => (
@@ -141,28 +134,16 @@ export function ChangelogList() {
       </InboxLayout>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete changelog entry?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. The changelog entry will be permanently deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteChangelogMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              disabled={deleteChangelogMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteChangelogMutation.isPending ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete changelog entry?"
+        description="This action cannot be undone. The changelog entry will be permanently deleted."
+        confirmLabel="Delete"
+        variant="destructive"
+        isPending={deleteChangelogMutation.isPending}
+        onConfirm={confirmDelete}
+      />
     </>
   )
 }

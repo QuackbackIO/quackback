@@ -1,19 +1,15 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback, startTransition } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { Suspense, useState, useEffect, useCallback } from 'react'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { ModalFooter } from '@/components/shared/modal-footer'
+import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ArrowTopRightOnSquareIcon,
-  LinkIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/solid'
-import { Loader2 } from 'lucide-react'
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { ModalHeader } from '@/components/shared/modal-header'
+import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -39,7 +35,6 @@ import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboa
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/feedback'
 import {
-  ensureTypeId,
   type PostId,
   type StatusId,
   type TagId,
@@ -209,21 +204,7 @@ function PostModalContent({
     }
   }
 
-  async function handleCopyLink(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      toast.success('Link copied to clipboard')
-    } catch {
-      toast.error('Failed to copy link')
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSubmit()
-    }
-  }
+  const handleKeyDown = useKeyboardSubmit(handleSubmit)
 
   const currentStatus = statuses.find((s) => s.id === post.statusId)
   const postRoadmaps = (post.roadmapIds || [])
@@ -240,87 +221,46 @@ function PostModalContent({
   return (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-gradient-to-b from-card/98 to-card/95 backdrop-blur-md border-b border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="flex items-center justify-between px-6 py-2.5">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-150"
-            >
-              <XMarkIcon className="h-4 w-4" />
-            </Button>
-
-            <div className="hidden sm:flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground/60">Feedback</span>
-              <span className="text-muted-foreground/40">/</span>
-              <span className="text-foreground/80 font-medium truncate max-w-[240px]">
-                {post.title}
-              </span>
+      <ModalHeader
+        section="Feedback"
+        title={post.title}
+        onClose={onClose}
+        viewUrl={`/b/${post.board.slug}/posts/${post.id}`}
+      >
+        {navigationContext.total > 0 && (
+          <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
+            <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
+              {navigationContext.position} / {navigationContext.total}
+            </span>
+            <div className="flex items-center ml-1 border-l border-border/40 pl-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() =>
+                  navigationContext.prevId && onNavigateToPost(navigationContext.prevId)
+                }
+                disabled={!navigationContext.prevId}
+                className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
+              >
+                <ChevronLeftIcon className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() =>
+                  navigationContext.nextId && onNavigateToPost(navigationContext.nextId)
+                }
+                disabled={!navigationContext.nextId}
+                className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
+              >
+                <ChevronRightIcon className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            {navigationContext.total > 0 && (
-              <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
-                <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
-                  {navigationContext.position} / {navigationContext.total}
-                </span>
-                <div className="flex items-center ml-1 border-l border-border/40 pl-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      navigationContext.prevId && onNavigateToPost(navigationContext.prevId)
-                    }
-                    disabled={!navigationContext.prevId}
-                    className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
-                  >
-                    <ChevronLeftIcon className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      navigationContext.nextId && onNavigateToPost(navigationContext.nextId)
-                    }
-                    disabled={!navigationContext.nextId}
-                    className="h-6 w-6 hover:bg-muted/60 disabled:opacity-30 transition-all duration-150"
-                  >
-                    <ChevronRightIcon className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => window.open(`/b/${post.board.slug}/posts/${post.id}`, '_blank')}
-              className="gap-1.5 h-8"
-            >
-              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">View</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleCopyLink}
-              className="gap-1.5 h-8"
-            >
-              <LinkIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Copy Link</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+        )}
+      </ModalHeader>
 
       {/* Main content area - scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -412,112 +352,43 @@ function PostModalContent({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
-        <p className="hidden sm:block text-xs text-muted-foreground">
-          <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Cmd</kbd>
-          <span className="mx-1">+</span>
-          <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Enter</kbd>
-          <span className="ml-2">to save</span>
-        </p>
-        <div className="flex items-center gap-2 sm:ml-0 ml-auto">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            disabled={updatePost.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSubmit}
-            disabled={updatePost.isPending || !hasChanges}
-          >
-            {updatePost.isPending ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </div>
-      </div>
+      <ModalFooter
+        onCancel={onClose}
+        submitLabel={updatePost.isPending ? 'Saving...' : 'Save Changes'}
+        isPending={updatePost.isPending}
+        submitType="button"
+        onSubmit={handleSubmit}
+        submitDisabled={!hasChanges}
+      />
     </div>
   )
 }
 
 export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
-  const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
-
-  // Local state for instant UI - syncs with URL
-  const [localPostId, setLocalPostId] = useState<string | undefined>(urlPostId)
-  const isOpen = !!localPostId
-
-  // Sync local state when URL changes (e.g., browser back/forward)
-  useEffect(() => {
-    setLocalPostId(urlPostId)
-  }, [urlPostId])
-
-  // Validate and convert postId
-  let validatedPostId: PostId | null = null
-  if (localPostId) {
-    try {
-      validatedPostId = ensureTypeId(localPostId, 'post')
-    } catch {
-      // Invalid post ID format
-    }
-  }
-
-  // Close modal instantly, then update URL in background
-  const close = useCallback(() => {
-    setLocalPostId(undefined) // Instant UI update
-    startTransition(() => {
-      const { post: _, ...restSearch } = search
-      navigate({
-        to: '/admin/feedback',
-        search: restSearch,
-        replace: true,
-      })
-    })
-  }, [navigate, search])
-
-  // Navigate to a different post - instant UI, background URL update
-  const navigateToPost = useCallback(
-    (newPostId: string) => {
-      setLocalPostId(newPostId) // Instant UI update
-      startTransition(() => {
-        navigate({
-          to: '/admin/feedback',
-          search: { ...search, post: newPostId },
-          replace: true,
-        })
-      })
-    },
-    [navigate, search]
-  )
+  const { open, validatedId, close, navigateTo } = useUrlModal<PostId>({
+    urlId: urlPostId,
+    idPrefix: 'post',
+    searchParam: 'post',
+    route: '/admin/feedback',
+    search,
+  })
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent
-        className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
-        showCloseButton={false}
-      >
-        <DialogTitle className="sr-only">Edit post</DialogTitle>
-        {validatedPostId && (
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center h-[400px]">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            }
-          >
-            <PostModalContent
-              postId={validatedPostId}
-              currentUser={currentUser}
-              onNavigateToPost={navigateToPost}
-              onClose={close}
-            />
-          </Suspense>
-        )}
-      </DialogContent>
-    </Dialog>
+    <UrlModalShell
+      open={open}
+      onOpenChange={(o) => !o && close()}
+      srTitle="Edit post"
+      hasValidId={!!validatedId}
+    >
+      {validatedId && (
+        <PostModalContent
+          postId={validatedId}
+          currentUser={currentUser}
+          onNavigateToPost={navigateTo}
+          onClose={close}
+        />
+      )}
+    </UrlModalShell>
   )
 }

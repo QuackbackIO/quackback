@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
@@ -126,12 +128,7 @@ export function EditChangelogDialog({ id, open, onOpenChange }: EditChangelogDia
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSubmit()
-    }
-  }
+  const handleKeyDown = useKeyboardSubmit(handleSubmit)
 
   const getSubmitButtonText = () => {
     if (updateChangelogMutation.isPending) {
@@ -189,51 +186,34 @@ export function EditChangelogDialog({ id, open, onOpenChange }: EditChangelogDia
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
-                <p className="hidden sm:block text-xs text-muted-foreground">
-                  <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Cmd</kbd>
-                  <span className="mx-1">+</span>
-                  <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Enter</kbd>
-                  <span className="ml-2">to save</span>
-                </p>
-                <div className="flex items-center gap-2 sm:ml-0 ml-auto">
-                  {/* Mobile settings button */}
-                  <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
-                    <SheetTrigger asChild>
-                      <Button type="button" variant="outline" size="sm" className="lg:hidden">
-                        <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
-                        Settings
-                      </Button>
-                    </SheetTrigger>
-                    <SheetContent side="bottom" className="h-[70vh]">
-                      <SheetHeader>
-                        <SheetTitle>Entry Settings</SheetTitle>
-                      </SheetHeader>
-                      <div className="py-4 overflow-y-auto">
-                        <ChangelogMetadataSidebarContent
-                          publishState={publishState}
-                          onPublishStateChange={setPublishState}
-                          linkedPostIds={linkedPostIds}
-                          onLinkedPostsChange={setLinkedPostIds}
-                        />
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onOpenChange(false)}
-                    disabled={updateChangelogMutation.isPending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" size="sm" disabled={updateChangelogMutation.isPending}>
-                    {getSubmitButtonText()}
-                  </Button>
-                </div>
-              </div>
+              <ModalFooter
+                onCancel={() => onOpenChange(false)}
+                submitLabel={getSubmitButtonText()}
+                isPending={updateChangelogMutation.isPending}
+              >
+                {/* Mobile settings button */}
+                <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
+                  <SheetTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" className="lg:hidden">
+                      <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
+                      Settings
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="bottom" className="h-[70vh]">
+                    <SheetHeader>
+                      <SheetTitle>Entry Settings</SheetTitle>
+                    </SheetHeader>
+                    <div className="py-4 overflow-y-auto">
+                      <ChangelogMetadataSidebarContent
+                        publishState={publishState}
+                        onPublishStateChange={setPublishState}
+                        linkedPostIds={linkedPostIds}
+                        onLinkedPostsChange={setLinkedPostIds}
+                      />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </ModalFooter>
             </form>
           </Form>
         )}

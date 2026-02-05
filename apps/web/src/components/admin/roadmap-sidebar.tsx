@@ -28,16 +28,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
 import { cn } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
@@ -205,15 +197,12 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
               <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : roadmaps?.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 mb-3">
-                <MapIcon className="h-5 w-5 text-primary" />
-              </div>
-              <p className="text-sm font-medium text-foreground">No roadmaps yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Create your first roadmap to get started
-              </p>
-            </div>
+            <EmptyState
+              icon={MapIcon}
+              title="No roadmaps yet"
+              description="Create your first roadmap to get started"
+              className="py-12"
+            />
           ) : (
             <div className="space-y-1">
               {roadmaps?.map((roadmap) => (
@@ -316,27 +305,16 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Roadmap</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{deletingRoadmap?.name}"? This will remove all posts
-              from this roadmap. The posts themselves will not be deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteRoadmap.isPending && <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Roadmap"
+        description={`Are you sure you want to delete "${deletingRoadmap?.name}"? This will remove all posts from this roadmap. The posts themselves will not be deleted.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        isPending={deleteRoadmap.isPending}
+        onConfirm={handleDelete}
+      />
     </aside>
   )
 }

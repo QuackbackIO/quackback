@@ -23,16 +23,7 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import {
   Dialog,
   DialogContent,
@@ -132,7 +123,7 @@ function ColorPickerGrid({
           key={c}
           type="button"
           className={cn(
-            'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
+            'h-6 w-6 rounded-full border-2 transition-colors',
             selectedColor === c ? 'border-foreground' : 'border-transparent'
           )}
           style={{ backgroundColor: c }}
@@ -396,26 +387,15 @@ export function StatusList({ initialStatuses }: StatusListProps) {
       </DndContext>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!deleteStatus} onOpenChange={() => setDeleteStatus(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete status</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deleteStatus?.name}&quot;? This action cannot
-              be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleteStatus}
+        onOpenChange={() => setDeleteStatus(null)}
+        title="Delete status"
+        description={`Are you sure you want to delete "${deleteStatus?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
 
       {/* Create status dialog */}
       <CreateStatusDialog

@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
+import { Spinner } from '@/components/shared/spinner'
 import { acceptInvitationFn } from '@/lib/server/functions/invitations'
 
 export const Route = createFileRoute('/accept-invitation/$id')({
@@ -47,7 +48,7 @@ function AcceptInvitationPage() {
       <div className="w-full max-w-md text-center px-4">
         {retrying ? (
           <div>
-            <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+            <Spinner size="xl" className="border-primary mx-auto" />
             <p className="mt-4 text-muted-foreground">Retrying...</p>
           </div>
         ) : (

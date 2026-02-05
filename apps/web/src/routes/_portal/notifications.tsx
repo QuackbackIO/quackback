@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { BellIcon, InboxIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { EmptyState } from '@/components/shared/empty-state'
+import { Spinner } from '@/components/shared/spinner'
 import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
@@ -90,7 +92,7 @@ function NotificationsPage() {
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
+          <Spinner size="xl" className="border-primary" />
         </div>
       ) : notifications.length > 0 ? (
         <div className="space-y-6">
@@ -125,16 +127,12 @@ function NotificationsPage() {
           className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
           style={{ animationDelay: '75ms' }}
         >
-          <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
-              <InboxIcon className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-medium text-foreground">All caught up!</h3>
-            <p className="text-sm text-muted-foreground mt-2 max-w-xs leading-relaxed">
-              Vote or comment on posts to subscribe. You'll get notified when there are status
-              changes or new activity.
-            </p>
-          </div>
+          <EmptyState
+            icon={InboxIcon}
+            title="All caught up!"
+            description="Vote or comment on posts to subscribe. You'll get notified when there are status changes or new activity."
+            className="py-20 px-6"
+          />
         </div>
       )}
     </div>
@@ -175,7 +173,7 @@ function NotificationRow({ notification, onMarkAsRead, style }: NotificationRowP
       {/* Icon */}
       <div
         className={cn(
-          'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105',
+          'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
           config.bgClass
         )}
       >

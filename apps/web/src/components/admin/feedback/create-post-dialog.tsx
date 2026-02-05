@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createPostSchema } from '@/lib/shared/schemas/posts'
@@ -20,12 +22,25 @@ interface CreatePostDialogProps {
   tags: Tag[]
   statuses: PostStatusEntity[]
   onPostCreated?: () => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  trigger?: React.ReactNode
 }
 
-export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: CreatePostDialogProps) {
+export function CreatePostDialog({
+  boards,
+  tags,
+  statuses,
+  onPostCreated,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  trigger,
+}: CreatePostDialogProps) {
   // Find the default status for new posts
   const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = controlledOnOpenChange ?? setInternalOpen
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const createPostMutation = useCreatePost()
 
@@ -80,13 +95,7 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Submit on Cmd/Ctrl + Enter
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSubmit()
-    }
-  }
+  const handleKeyDown = useKeyboardSubmit(handleSubmit)
 
   // Watch title for similar posts detection
   const watchedTitle = form.watch('title')
@@ -101,9 +110,11 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Create new post">
-          <PencilSquareIcon className="h-4 w-4" />
-        </Button>
+        {trigger ?? (
+          <Button variant="ghost" size="icon" title="Create new post">
+            <PencilSquareIcon className="h-4 w-4" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent
         className="w-[95vw] max-w-3xl p-0 gap-0 overflow-hidden"
@@ -132,28 +143,12 @@ export function CreatePostDialog({ boards, tags, statuses, onPostCreated }: Crea
               />
             </div>
 
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30">
-              <p className="hidden sm:block text-xs text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">⌘</kbd>
-                <span className="mx-1">+</span>
-                <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Enter</kbd>
-                <span className="ml-2">to create</span>
-              </p>
-              <div className="flex items-center gap-2 sm:ml-0 ml-auto">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setOpen(false)}
-                  disabled={createPostMutation.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" size="sm" disabled={createPostMutation.isPending}>
-                  {createPostMutation.isPending ? 'Creating...' : 'Create post'}
-                </Button>
-              </div>
-            </div>
+            <ModalFooter
+              onCancel={() => setOpen(false)}
+              submitLabel={createPostMutation.isPending ? 'Creating...' : 'Create post'}
+              isPending={createPostMutation.isPending}
+              hintAction="to create"
+            />
           </form>
         </Form>
       </DialogContent>

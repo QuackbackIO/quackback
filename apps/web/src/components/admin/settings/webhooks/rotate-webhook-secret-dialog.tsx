@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { WarningBox } from '@/components/shared/warning-box'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -64,18 +64,11 @@ export function RotateWebhookSecretDialog({
         </DialogHeader>
 
         <div className="py-4">
-          <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-4">
-            <ExclamationTriangleIcon className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-amber-600 dark:text-amber-400">
-                The old secret will stop working immediately
-              </p>
-              <p className="text-muted-foreground mt-1">
-                Your endpoint will need to use the new secret to verify webhook signatures. Make
-                sure to update your code before rotating.
-              </p>
-            </div>
-          </div>
+          <WarningBox
+            variant="warning"
+            title="The old secret will stop working immediately"
+            description="Your endpoint will need to use the new secret to verify webhook signatures. Make sure to update your code before rotating."
+          />
 
           <div className="mt-4 rounded-lg border p-3 bg-muted/30">
             <p className="text-xs text-muted-foreground">

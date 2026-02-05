@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { RoadmapCard } from './roadmap-card'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,8 +18,6 @@ interface RoadmapColumnProps {
 }
 
 export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColumnProps) {
-  const sentinelRef = useRef<HTMLDivElement>(null)
-
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
       roadmapId,
@@ -30,23 +28,11 @@ export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColu
   const posts = flattenRoadmapPostEntries(data)
   const total = data?.pages[0]?.total ?? 0
 
-  // Intersection observer for infinite scroll
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel || !hasNextPage) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isFetchingNextPage) {
-          fetchNextPage()
-        }
-      },
-      { rootMargin: '100px' }
-    )
-
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+  const sentinelRef = useInfiniteScroll({
+    hasMore: hasNextPage,
+    isFetching: isFetchingNextPage,
+    onLoadMore: fetchNextPage,
+  })
 
   return (
     <Card className="flex-1 min-w-[300px] max-w-[350px] flex flex-col h-full">

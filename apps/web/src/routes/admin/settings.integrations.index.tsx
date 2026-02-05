@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { PuzzlePieceIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
+import { PageHeader } from '@/components/shared/page-header'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationList } from '@/components/admin/settings/integrations/integration-list'
 
@@ -35,18 +36,11 @@ function IntegrationsPage() {
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
-      {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <PuzzlePieceIcon className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Integrations</h1>
-          <p className="text-sm text-muted-foreground">
-            Connect external services to automate workflows
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={PuzzlePieceIcon}
+        title="Integrations"
+        description="Connect external services to automate workflows"
+      />
 
       {/* Integration Catalog */}
       <IntegrationList integrations={integrations} />

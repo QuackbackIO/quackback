@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/shared/form-error'
 import {
   Select,
   SelectContent,
@@ -101,11 +102,7 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {error && (
-                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
+              {error && <FormError message={error} />}
 
               <FormField
                 control={form.control}

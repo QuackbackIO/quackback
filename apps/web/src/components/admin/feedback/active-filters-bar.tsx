@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import {
-  XMarkIcon,
   Squares2X2Icon,
   TagIcon,
   UserIcon,
@@ -11,15 +10,10 @@ import {
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { InboxFilters } from './use-inbox-filters'
 import type { Board, Tag as TagType, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/members'
-
-interface FilterOption {
-  id: string
-  label: string
-  color?: string
-}
 
 interface ActiveFilter {
   key: string
@@ -305,107 +299,6 @@ function formatDate(dateStr: string): string {
   }
 }
 
-function FilterChip({
-  type,
-  label,
-  value,
-  valueId,
-  color,
-  onRemove,
-  onChange,
-  options,
-}: ActiveFilter) {
-  const Icon = getFilterIcon(type)
-  const [open, setOpen] = useState(false)
-  const hasOptions = options && options.length > 0 && onChange
-
-  const handleSelect = (id: string) => {
-    onChange?.(id)
-    setOpen(false)
-  }
-
-  const chipContent = (
-    <>
-      {color ? (
-        <span
-          className="h-1.5 w-1.5 rounded-full shrink-0"
-          style={{ backgroundColor: color }}
-          aria-hidden="true"
-        />
-      ) : (
-        <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-      )}
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
-    </>
-  )
-
-  return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5',
-        'rounded-full bg-muted/60 text-xs',
-        'border border-border/30 hover:border-border/50',
-        'transition-all duration-150 hover:scale-[1.02]',
-        // Add subtle left border accent based on filter type
-        color && 'border-l-2'
-      )}
-      style={color ? { borderLeftColor: color } : undefined}
-    >
-      {hasOptions ? (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 hover:opacity-70 transition-opacity"
-            >
-              {chipContent}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-44 p-0">
-            <div className="max-h-[250px] overflow-y-auto py-1">
-              {options.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => handleSelect(option.id)}
-                  className={cn(
-                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors',
-                    option.id === valueId ? 'bg-muted/50 font-medium' : 'hover:bg-muted/50'
-                  )}
-                >
-                  {option.color && (
-                    <span
-                      className="h-2 w-2 rounded-full shrink-0"
-                      style={{ backgroundColor: option.color }}
-                    />
-                  )}
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <span className="inline-flex items-center gap-1">{chipContent}</span>
-      )}
-      <button
-        type="button"
-        onClick={onRemove}
-        className={cn(
-          'ml-0.5 p-0.5 rounded-full',
-          'hover:bg-foreground/10',
-          'text-muted-foreground hover:text-foreground',
-          'transition-colors'
-        )}
-        aria-label={`Remove ${label} ${value} filter`}
-      >
-        <XMarkIcon className="h-2.5 w-2.5" />
-      </button>
-    </div>
-  )
-}
-
 function computeActiveFilters(
   filters: InboxFilters,
   boards: Board[],
@@ -627,8 +520,8 @@ export function ActiveFiltersBar({
   return (
     <div className="bg-card/50" role="region" aria-label="Active filters">
       <div className="flex flex-wrap gap-1 items-center">
-        {activeFilters.map(({ key, ...filterProps }) => (
-          <FilterChip key={key} {...filterProps} />
+        {activeFilters.map(({ key, type, ...filterProps }) => (
+          <FilterChip key={key} icon={getFilterIcon(type)} {...filterProps} />
         ))}
 
         <AddFilterButton

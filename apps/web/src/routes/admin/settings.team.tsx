@@ -4,6 +4,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { TeamHeader } from '@/components/admin/settings/team/team-header'
 import { PendingInvitations } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
@@ -50,12 +51,10 @@ function TeamPage() {
       <PendingInvitations invitations={formattedInvitations} />
 
       {/* Members List */}
-      <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-border/50">
-          <p className="text-sm text-muted-foreground">
-            {members.length} member{members.length !== 1 ? 's' : ''}
-          </p>
-        </div>
+      <SettingsCard
+        title={`${members.length} member${members.length !== 1 ? 's' : ''}`}
+        contentClassName="p-0"
+      >
         <ul className="divide-y divide-border/50">
           {members.map(
             (m: {
@@ -108,7 +107,7 @@ function TeamPage() {
             }
           )}
         </ul>
-      </div>
+      </SettingsCard>
     </div>
   )
 }

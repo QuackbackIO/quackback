@@ -1,13 +1,10 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback, startTransition } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { Suspense, useState } from 'react'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowTopRightOnSquareIcon, LinkIcon, XMarkIcon } from '@heroicons/react/24/solid'
-import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+import { ModalHeader } from '@/components/shared/modal-header'
+import { UrlModalShell } from '@/components/shared/url-modal-shell'
+import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { VoteButton } from '@/components/public/vote-button'
@@ -30,7 +27,6 @@ import {
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/roadmap'
 import {
-  ensureTypeId,
   type PostId,
   type StatusId,
   type TagId,
@@ -156,15 +152,6 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
     }
   }
 
-  async function handleCopyLink(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      toast.success('Link copied to clipboard')
-    } catch {
-      toast.error('Failed to copy link')
-    }
-  }
-
   // Convert post to portal-compatible view
   const portalPost = toPortalPostView(post)
   const postRoadmaps = (post.roadmapIds || [])
@@ -178,45 +165,12 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-gradient-to-b from-card/98 to-card/95 backdrop-blur-md border-b border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="flex items-center justify-between px-6 py-2.5">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-150"
-            >
-              <XMarkIcon className="h-4 w-4" />
-            </Button>
-
-            <div className="hidden sm:flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground/60">Roadmap</span>
-              <span className="text-muted-foreground/40">/</span>
-              <span className="text-foreground/80 font-medium truncate max-w-[240px]">
-                {post.title}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => window.open(`/b/${post.board.slug}/posts/${post.id}`, '_blank')}
-              className="gap-1.5 h-8"
-            >
-              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">View</span>
-            </Button>
-
-            <Button variant="ghost" size="sm" onClick={handleCopyLink} className="gap-1.5 h-8">
-              <LinkIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Copy Link</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <ModalHeader
+        section="Roadmap"
+        title={post.title}
+        onClose={onClose}
+        viewUrl={`/b/${post.board.slug}/posts/${post.id}`}
+      />
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">
@@ -287,64 +241,25 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
 }
 
 export function RoadmapModal({ postId: urlPostId, currentUser }: RoadmapModalProps) {
-  const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
-
-  // Local state for instant UI - syncs with URL
-  const [localPostId, setLocalPostId] = useState<string | undefined>(urlPostId)
-  const isOpen = !!localPostId
-
-  // Sync local state when URL changes (e.g., browser back/forward)
-  useEffect(() => {
-    setLocalPostId(urlPostId)
-  }, [urlPostId])
-
-  // Validate and convert postId
-  let validatedPostId: PostId | null = null
-  if (localPostId) {
-    try {
-      validatedPostId = ensureTypeId(localPostId, 'post')
-    } catch {
-      // Invalid post ID format
-    }
-  }
-
-  // Close modal instantly, then update URL in background
-  const close = useCallback(() => {
-    setLocalPostId(undefined) // Instant UI update
-    startTransition(() => {
-      const { post: _, ...restSearch } = search
-      navigate({
-        to: '/admin/roadmap',
-        search: restSearch,
-        replace: true,
-      })
-    })
-  }, [navigate, search])
+  const { open, validatedId, close } = useUrlModal<PostId>({
+    urlId: urlPostId,
+    idPrefix: 'post',
+    searchParam: 'post',
+    route: '/admin/roadmap',
+    search,
+  })
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent
-        className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
-        showCloseButton={false}
-      >
-        <DialogTitle className="sr-only">View post</DialogTitle>
-        {validatedPostId && (
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center h-[400px]">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            }
-          >
-            <RoadmapModalContent
-              postId={validatedPostId}
-              currentUser={currentUser}
-              onClose={close}
-            />
-          </Suspense>
-        )}
-      </DialogContent>
-    </Dialog>
+    <UrlModalShell
+      open={open}
+      onOpenChange={(o) => !o && close()}
+      srTitle="View post"
+      hasValidId={!!validatedId}
+    >
+      {validatedId && (
+        <RoadmapModalContent postId={validatedId} currentUser={currentUser} onClose={close} />
+      )}
+    </UrlModalShell>
   )
 }

@@ -2,6 +2,7 @@
 
 import { Link, useRouterState } from '@tanstack/react-router'
 import { InboxIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationItem } from './notification-item'
@@ -44,7 +45,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center h-48">
-          <div className="animate-spin rounded-full h-5 w-5 border-2 border-muted-foreground border-t-transparent" />
+          <Spinner />
         </div>
       ) : isError ? (
         <div className="flex flex-col items-center justify-center h-48">

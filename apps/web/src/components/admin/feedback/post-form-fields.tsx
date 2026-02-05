@@ -9,6 +9,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
+import { FormError } from '@/components/shared/form-error'
+import { TitleInput } from '@/components/shared/title-input'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 
@@ -115,31 +117,9 @@ export function PostFormFields({
       </div>
 
       <div className="px-4 sm:px-6 py-4 space-y-2">
-        {error && (
-          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive mb-4">
-            {error}
-          </div>
-        )}
+        {error && <FormError message={error} className="px-3 py-2 mb-4" />}
 
-        {/* Title - large, borderless input */}
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <input
-                  type="text"
-                  placeholder="What's the feedback about?"
-                  className="w-full text-lg sm:text-xl font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/50 focus:ring-0"
-                  autoFocus
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <TitleInput control={form.control} placeholder="What's the feedback about?" autoFocus />
 
         {/* Content - seamless rich text editor */}
         <FormField

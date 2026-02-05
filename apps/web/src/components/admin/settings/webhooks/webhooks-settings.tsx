@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { PlusIcon, BoltIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline'
+import { EmptyState } from '@/components/shared/empty-state'
 import { EllipsisVerticalIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -68,19 +69,18 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
     <div className="space-y-4">
       {/* Empty state */}
       {webhooks.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 px-4 text-center rounded-lg border border-dashed">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
-            <BoltIcon className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h3 className="text-sm font-medium mb-1">No webhooks configured</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mb-4">
-            Get notified in real-time when posts are created, statuses change, or votes hit
-            milestones. Connect to Slack, Discord, or your own systems.
-          </p>
-          <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-            <PlusIcon className="h-4 w-4 mr-1.5" />
-            Create your first webhook
-          </Button>
+        <div className="rounded-lg border border-dashed">
+          <EmptyState
+            icon={BoltIcon}
+            title="No webhooks configured"
+            description="Get notified in real-time when posts are created, statuses change, or votes hit milestones. Connect to Slack, Discord, or your own systems."
+            action={
+              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                <PlusIcon className="h-4 w-4 mr-1.5" />
+                Create your first webhook
+              </Button>
+            }
+          />
         </div>
       )}
 

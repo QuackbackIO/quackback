@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createBoardSchema, type CreateBoardOutput } from '@/lib/shared/schemas/boards'
 import { useCreateBoard } from '@/lib/client/mutations'
+import { FormError } from '@/components/shared/form-error'
 import {
   Dialog,
   DialogContent,
@@ -28,8 +29,20 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 
-export function CreateBoardDialog() {
-  const [open, setOpen] = useState(false)
+interface CreateBoardDialogProps {
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  trigger?: React.ReactNode
+}
+
+export function CreateBoardDialog({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  trigger,
+}: CreateBoardDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isOpen = controlledOpen ?? internalOpen
+  const setIsOpen = controlledOnOpenChange ?? setInternalOpen
   const router = useRouter()
   const navigate = useNavigate()
   const mutation = useCreateBoard()
@@ -46,7 +59,7 @@ export function CreateBoardDialog() {
   function onSubmit(data: CreateBoardOutput) {
     mutation.mutate(data, {
       onSuccess: (board) => {
-        setOpen(false)
+        setIsOpen(false)
         form.reset()
         void navigate({
           to: '/admin/settings/boards',
@@ -57,21 +70,23 @@ export function CreateBoardDialog() {
     })
   }
 
-  function handleOpenChange(isOpen: boolean) {
-    setOpen(isOpen)
-    if (!isOpen) {
+  function handleOpenChange(nextOpen: boolean) {
+    setIsOpen(nextOpen)
+    if (!nextOpen) {
       form.reset()
       mutation.reset()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <PlusIcon className="h-4 w-4" />
-          New board
-        </Button>
+        {trigger ?? (
+          <Button>
+            <PlusIcon className="h-4 w-4" />
+            New board
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <Form {...form}>
@@ -85,9 +100,7 @@ export function CreateBoardDialog() {
 
             <div className="space-y-4 py-4">
               {mutation.isError && (
-                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {mutation.error?.message}
-                </div>
+                <FormError message={mutation.error?.message ?? 'An error occurred'} />
               )}
 
               <FormField
@@ -140,7 +153,7 @@ export function CreateBoardDialog() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={mutation.isPending}>

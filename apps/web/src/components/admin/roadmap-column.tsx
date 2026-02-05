@@ -1,6 +1,8 @@
-import { useEffect, useRef, memo } from 'react'
+import { memo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, InboxIcon } from '@heroicons/react/24/solid'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { EmptyState } from '@/components/shared/empty-state'
 import { RoadmapCard } from './roadmap-card'
 import { cn } from '@/lib/shared/utils'
 import {
@@ -24,8 +26,6 @@ export const RoadmapColumn = memo(function RoadmapColumn({
   color,
   onCardClick,
 }: RoadmapColumnProps) {
-  const sentinelRef = useRef<HTMLDivElement>(null)
-
   const { setNodeRef, isOver } = useDroppable({
     id: statusId,
     data: { type: 'Column', statusId },
@@ -37,23 +37,11 @@ export const RoadmapColumn = memo(function RoadmapColumn({
   const posts = flattenRoadmapPostEntries(data)
   const total = data?.pages[0]?.total ?? 0
 
-  // Infinite scroll
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel || !hasNextPage) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isFetchingNextPage) {
-          fetchNextPage()
-        }
-      },
-      { rootMargin: '100px' }
-    )
-
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+  const sentinelRef = useInfiniteScroll({
+    hasMore: hasNextPage,
+    isFetching: isFetchingNextPage,
+    onLoadMore: fetchNextPage,
+  })
 
   return (
     <div
@@ -82,9 +70,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
             <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : posts.length === 0 ? (
-          <div className="flex items-center justify-center py-8">
-            <p className="text-sm text-muted-foreground">No items</p>
-          </div>
+          <EmptyState icon={InboxIcon} title="No items" className="py-8" />
         ) : (
           <>
             {posts.map((post) => (

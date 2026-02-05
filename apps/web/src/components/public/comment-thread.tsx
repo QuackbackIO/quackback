@@ -269,7 +269,7 @@ function CommentItem({
                 disabled={isPending}
                 className={cn(
                   'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all duration-150',
-                  'border hover:bg-muted hover:scale-105',
+                  'border hover:bg-muted',
                   reaction.hasReacted
                     ? 'bg-primary/10 border-primary/30 text-primary'
                     : 'bg-muted/50 border-transparent text-muted-foreground'
@@ -300,7 +300,7 @@ function CommentItem({
                       key={emoji}
                       data-testid="emoji-option"
                       onClick={() => handleReaction(emoji)}
-                      className="h-8 w-8 flex items-center justify-center rounded hover:bg-muted text-lg transition-transform hover:scale-110"
+                      className="h-8 w-8 flex items-center justify-center rounded hover:bg-muted text-lg transition-colors"
                     >
                       {emoji}
                     </button>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   XMarkIcon,
@@ -17,17 +18,8 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/server/domains/users'
 
@@ -53,22 +45,27 @@ function formatDate(date: Date | string): string {
 function DetailSkeleton() {
   return (
     <div className="p-4 space-y-6">
-      {/* Header */}
+      {/* Profile Header */}
       <div className="flex items-start gap-4">
         <Skeleton className="h-16 w-16 rounded-full" />
         <div className="flex-1">
           <Skeleton className="h-6 w-40 mb-2" />
           <Skeleton className="h-4 w-48 mb-2" />
-          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-5 w-20 rounded-md" />
         </div>
       </div>
 
-      {/* Tabs */}
-      <Skeleton className="h-9 w-full" />
+      {/* Activity Stats (3-column grid) */}
+      <div className="grid grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full rounded-lg" />
+        ))}
+      </div>
 
-      {/* Content */}
+      {/* Activity section */}
       <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton className="h-4 w-16" />
+        {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-16 w-full" />
         ))}
       </div>
@@ -76,7 +73,7 @@ function DetailSkeleton() {
   )
 }
 
-function EmptyState({ message }: { message: string }) {
+function EmptyMessage({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
       <p className="text-sm text-muted-foreground">{message}</p>
@@ -169,6 +166,7 @@ export function UserDetail({
   isRemovePending,
   currentMemberRole,
 }: UserDetailProps) {
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   // Check if current user can manage portal users
   const canManageUsers = currentMemberRole === 'admin'
 
@@ -188,13 +186,12 @@ export function UserDetail({
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-69px)] text-center px-4">
-        <UserIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
-        <h3 className="font-medium text-foreground mb-1">No user selected</h3>
-        <p className="text-sm text-muted-foreground">
-          Select a user from the list to view their details and activity
-        </p>
-      </div>
+      <EmptyState
+        icon={UserIcon}
+        title="No user selected"
+        description="Select a user from the list to view their details and activity"
+        className="min-h-[calc(100vh-69px)]"
+      />
     )
   }
 
@@ -253,7 +250,7 @@ export function UserDetail({
         <div>
           <h3 className="text-sm font-medium mb-3">Activity</h3>
           {user.engagedPosts.length === 0 ? (
-            <EmptyState message="No activity yet" />
+            <EmptyMessage message="No activity yet" />
           ) : (
             <div className="border border-border/50 rounded-lg overflow-hidden">
               {user.engagedPosts.map((post) => (
@@ -284,42 +281,30 @@ export function UserDetail({
             <h3 className="text-sm font-medium">Actions</h3>
 
             {/* Remove User */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  disabled={isRemovePending}
-                >
-                  {isRemovePending ? (
-                    <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <TrashIcon className="h-4 w-4 mr-2" />
-                  )}
-                  Remove from portal
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Remove {user.name || 'this user'}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will remove the user from your portal. They will lose access to vote and
-                    comment but their existing activity will remain. Their global account is
-                    preserved and they can sign up again.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={onRemoveUser}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Remove
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              disabled={isRemovePending}
+              onClick={() => setRemoveDialogOpen(true)}
+            >
+              {isRemovePending ? (
+                <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <TrashIcon className="h-4 w-4 mr-2" />
+              )}
+              Remove from portal
+            </Button>
+            <ConfirmDialog
+              open={removeDialogOpen}
+              onOpenChange={setRemoveDialogOpen}
+              title={`Remove ${user.name || 'this user'}?`}
+              description="This will remove the user from your portal. They will lose access to vote and comment but their existing activity will remain. Their global account is preserved and they can sign up again."
+              confirmLabel="Remove"
+              variant="destructive"
+              isPending={isRemovePending}
+              onConfirm={onRemoveUser}
+            />
           </div>
         )}
       </div>

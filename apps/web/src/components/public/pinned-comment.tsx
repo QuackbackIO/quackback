@@ -2,21 +2,12 @@ import { MapPinIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { getInitials } from '@/lib/shared/utils/string'
 import type { PinnedCommentView } from '@/lib/client/queries/portal-detail'
 
 interface PinnedCommentProps {
   comment: PinnedCommentView
   workspaceName: string
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return '?'
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
 }
 
 export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {

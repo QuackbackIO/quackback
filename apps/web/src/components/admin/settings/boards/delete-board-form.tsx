@@ -5,7 +5,8 @@ import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/shared/schemas/b
 import { useDeleteBoard } from '@/lib/client/mutations'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
+import { WarningBox } from '@/components/shared/warning-box'
+import { FormError } from '@/components/shared/form-error'
 import {
   Form,
   FormControl,
@@ -61,22 +62,12 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3 rounded-md bg-destructive/10 p-4">
-        <ExclamationTriangleIcon className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-medium text-destructive">Delete this board</p>
-          <p className="text-sm text-muted-foreground">
-            Once you delete a board, there is no going back. All feedback, votes, and comments
-            associated with this board will be permanently deleted.
-          </p>
-        </div>
-      </div>
+      <WarningBox
+        title="Delete this board"
+        description="Once you delete a board, there is no going back. All feedback, votes, and comments associated with this board will be permanently deleted."
+      />
 
-      {mutation.isError && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {mutation.error?.message}
-        </div>
-      )}
+      {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
