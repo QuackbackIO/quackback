@@ -428,6 +428,30 @@ describe('MCP HTTP Handler', () => {
       expect(text.hasMore).toBe(false)
     })
 
+    it('should handle tools/call for create_post without content', async () => {
+      const { createPost } = await import('@/lib/server/domains/posts/post.service')
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'create_post',
+            arguments: { boardId: 'board_test', title: 'Title only post' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      expect(vi.mocked(createPost)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          boardId: 'board_test',
+          title: 'Title only post',
+          content: '',
+        }),
+        expect.any(Object)
+      )
+    })
+
     // ── get_details tool (post) ─────────────────────────────────────────────
 
     it('should handle tools/call for get_details with post TypeID', async () => {

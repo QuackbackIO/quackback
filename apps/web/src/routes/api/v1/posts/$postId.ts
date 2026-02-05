@@ -17,7 +17,7 @@ import type { PostId, StatusId, TagId, MemberId } from '@quackback/ids'
 // Input validation schema
 const updatePostSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  content: z.string().min(1).max(10000).optional(),
+  content: z.string().max(10000).optional(),
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional(),
   ownerMemberId: z.string().nullable().optional(),

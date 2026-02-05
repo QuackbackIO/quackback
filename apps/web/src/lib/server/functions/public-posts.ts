@@ -63,7 +63,7 @@ const getPostPermissionsSchema = z.object({
 const userEditPostSchema = z.object({
   postId: z.string(),
   title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().min(1, 'Content is required').max(10000),
+  content: z.string().max(10000),
   contentJson: tiptapContentSchema.optional(),
 })
 
@@ -78,7 +78,7 @@ const toggleVoteSchema = z.object({
 const createPublicPostSchema = z.object({
   boardId: z.string(),
   title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().max(10000),
+  content: z.string().max(10000).optional().default(''),
   contentJson: tiptapContentSchema.optional(),
 })
 

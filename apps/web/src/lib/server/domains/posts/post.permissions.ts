@@ -284,9 +284,6 @@ export async function userEditPost(
   if (!input.title?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   }
-  if (!input.content?.trim()) {
-    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
-  }
   if (input.title.length > 200) {
     throw new ValidationError('VALIDATION_ERROR', 'Title must be 200 characters or less')
   }
