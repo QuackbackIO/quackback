@@ -22,7 +22,7 @@ docker run -d \
   --name quackback \
   -p 3000:3000 \
   -e DATABASE_URL="postgresql://user:pass@host:5432/quackback" \
-  -e BETTER_AUTH_SECRET="your-secret-32-chars-minimum" \
+  -e SECRET_KEY="your-secret-32-chars-minimum" \
   -e BASE_URL="https://your-domain.com" \
   ghcr.io/quackbackhq/quackback:latest
 ```

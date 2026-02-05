@@ -69,6 +69,10 @@ Feedback tools should be simple. Quackback focuses on the essentials: voting, ro
 
 Quackback can be deployed anywhere that supports Docker or Node.js.
 
+### One-Click Deploy
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/bcnu9a)
+
 ### Production (Docker)
 
 ```bash
