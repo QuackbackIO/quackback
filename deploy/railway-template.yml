@@ -1,0 +1,56 @@
+# Railway Template Specification
+# This file documents the Railway template configuration.
+# It is NOT consumed by Railway — the template lives in Railway's platform.
+# Keep this in sync with the Railway web UI template.
+#
+# Template ID: bcnu9a
+# Template URL: https://railway.com/deploy/bcnu9a
+# Last updated: 2026-02-05
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    volumes:
+      - mount: /var/lib/postgresql/data
+    env:
+      POSTGRES_DB: quackback
+      POSTGRES_USER: quackback
+      POSTGRES_PASSWORD: ${{secret(32)}}
+    networking: private
+
+  bucket:
+    type: bucket
+    # Railway-provided S3-compatible object storage
+    # Region is selected by the user during deployment
+
+  quackback:
+    image: ghcr.io/quackbackio/quackback:latest
+    healthcheck:
+      path: /api/health
+      timeout: 300
+    restart:
+      policy: ON_FAILURE
+      maxRetries: 3
+    networking: public
+    env:
+      DATABASE_URL: postgresql://quackback:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/quackback
+      SECRET_KEY: ${{secret(64)}}
+      BASE_URL: https://${{RAILWAY_PUBLIC_DOMAIN}}
+      PORT: '3000'
+      NODE_ENV: production
+      S3_ENDPOINT: ${{Bucket.ENDPOINT}}
+      S3_BUCKET: ${{Bucket.BUCKET}}
+      S3_REGION: ${{Bucket.REGION}}
+      S3_ACCESS_KEY_ID: ${{Bucket.ACCESS_KEY_ID}}
+      S3_SECRET_ACCESS_KEY: ${{Bucket.SECRET_ACCESS_KEY}}
+    optional_env:
+      - EMAIL_SMTP_HOST
+      - EMAIL_SMTP_PORT
+      - EMAIL_SMTP_USER
+      - EMAIL_SMTP_PASS
+      - EMAIL_RESEND_API_KEY
+      - EMAIL_FROM
+      - GITHUB_CLIENT_ID
+      - GITHUB_CLIENT_SECRET
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET

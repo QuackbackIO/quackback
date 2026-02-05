@@ -45,7 +45,7 @@ docker run -d \
   --name quackback \
   -p 3000:3000 \
   -e DATABASE_URL="postgresql://user:pass@host:5432/quackback" \
-  -e BETTER_AUTH_SECRET="your-secret-key-at-least-32-chars" \
+  -e SECRET_KEY="your-secret-key-at-least-32-chars" \
   -e BASE_URL="https://your-domain.com" \
   ghcr.io/quackbackhq/quackback:latest
 ```
@@ -82,11 +82,11 @@ docker pull ghcr.io/quackbackhq/quackback:latest-enterprise
 
 ### Required
 
-| Variable             | Description                     | Example                                           |
-| -------------------- | ------------------------------- | ------------------------------------------------- |
-| `DATABASE_URL`       | PostgreSQL connection string    | `postgresql://user:pass@localhost:5432/quackback` |
-| `BETTER_AUTH_SECRET` | Auth encryption key (32+ chars) | `your-very-long-random-secret-key`                |
-| `BASE_URL`           | Public URL of your instance     | `https://feedback.yourcompany.com`                |
+| Variable       | Description                     | Example                                           |
+| -------------- | ------------------------------- | ------------------------------------------------- |
+| `DATABASE_URL` | PostgreSQL connection string    | `postgresql://user:pass@localhost:5432/quackback` |
+| `SECRET_KEY`   | Auth encryption key (32+ chars) | `your-very-long-random-secret-key`                |
+| `BASE_URL`     | Public URL of your instance     | `https://feedback.yourcompany.com`                |
 
 ### Optional
 
@@ -272,7 +272,7 @@ docker run -d \
   --name quackback \
   -p 3000:3000 \
   -e DATABASE_URL="postgresql://..." \
-  -e BETTER_AUTH_SECRET="..." \
+  -e SECRET_KEY="..." \
   -e QUACKBACK_LICENSE_KEY="your-license-key" \
   ghcr.io/quackbackhq/quackback:latest-enterprise
 ```
@@ -393,9 +393,22 @@ curl -X POST 'https://api.resend.com/emails' \
 
 ## One-Click Deployments
 
+### Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/bcnu9a)
+
+Deploys Quackback + PostgreSQL (with pgvector) + S3-compatible storage bucket to Railway. After deploying:
+
+1. **Find your OTP code**: If email is not configured, login codes appear in Railway's deployment logs
+2. **Configure email** (recommended): Add SMTP or Resend API key in the service's environment variables
+3. **Custom domain**: Add a custom domain in Railway, then update the `BASE_URL` environment variable to match
+
+File uploads (logos, avatars, changelog images) work out of the box via the included Railway storage bucket.
+
+> Railway offers a free trial with $5 credit. See [Railway pricing](https://railway.com/pricing) for details.
+
 Coming soon:
 
-- Railway
 - Render
 - DigitalOcean App Platform
 - Fly.io
