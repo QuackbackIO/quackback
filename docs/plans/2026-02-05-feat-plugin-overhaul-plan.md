@@ -222,7 +222,7 @@ These are deferred until there is proven user demand:
 
 ### Quality Gates
 
-- [ ] HTTP MCP endpoint has test coverage:
+- [x] HTTP MCP endpoint has test coverage:
   - Auth flow (valid key, invalid key, missing key, non-team-member key)
   - JSON-RPC message handling (tool calls, resource reads)
   - Error responses (malformed messages, domain errors)
