@@ -35,6 +35,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
+import { PageHeader } from '@/components/shared/page-header'
 import {
   BrandingLayout,
   BrandingControlsPanel,
@@ -373,13 +374,11 @@ function BrandingPage() {
         <div className="lg:hidden">
           <BackLink to="/admin/settings">Settings</BackLink>
         </div>
-        {/* Page Header */}
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Branding</h1>
-          <p className="text-sm text-muted-foreground">
-            Customize your portal's appearance and branding
-          </p>
-        </div>
+        <PageHeader
+          icon={PaintBrushIcon}
+          title="Branding"
+          description="Customize your portal's appearance and branding"
+        />
 
         {/* Two-Column Layout */}
         <BrandingLayout>
@@ -912,7 +911,7 @@ function ColorInputInline({ value, onChange }: ColorInputInlineProps) {
     <div className="flex items-center gap-2 h-10">
       <label className="relative cursor-pointer shrink-0">
         <div
-          className="h-10 w-10 rounded-lg border border-border shadow-sm transition-transform hover:scale-105"
+          className="h-10 w-10 rounded-lg border border-border shadow-sm"
           style={{ backgroundColor: value }}
         />
         <input

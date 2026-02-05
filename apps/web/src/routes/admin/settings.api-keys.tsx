@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { KeyIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
+import { PageHeader } from '@/components/shared/page-header'
 import { ApiKeysSettings } from '@/components/admin/settings/api-keys/api-keys-settings'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 
@@ -27,17 +28,11 @@ function ApiKeysPage() {
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <KeyIcon className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">API Keys</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage API keys for programmatic access to Quackback
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={KeyIcon}
+        title="API Keys"
+        description="Manage API keys for programmatic access to Quackback"
+      />
 
       <SettingsCard
         title="API Keys"

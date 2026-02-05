@@ -1,19 +1,9 @@
 import { useMemo, useState } from 'react'
-import {
-  XMarkIcon,
-  EnvelopeIcon,
-  CalendarIcon,
-  PlusIcon,
-  ChevronRightIcon,
-} from '@heroicons/react/24/solid'
+import { EnvelopeIcon, CalendarIcon, PlusIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { UsersFilters } from '@/components/admin/users/use-users-filters'
-
-interface FilterOption {
-  id: string
-  label: string
-}
 
 interface ActiveFilter {
   key: string
@@ -204,81 +194,6 @@ function formatDate(dateStr: string): string {
   }
 }
 
-function FilterChip({ type, label, value, valueId, onRemove, onChange, options }: ActiveFilter) {
-  const Icon = getFilterIcon(type)
-  const [open, setOpen] = useState(false)
-  const hasOptions = options && options.length > 0 && onChange
-
-  const handleSelect = (id: string) => {
-    onChange?.(id)
-    setOpen(false)
-  }
-
-  const chipContent = (
-    <>
-      <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
-    </>
-  )
-
-  return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5',
-        'rounded-full bg-muted/60 text-xs',
-        'border border-border/30 hover:border-border/50',
-        'transition-colors'
-      )}
-    >
-      {hasOptions ? (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 hover:opacity-70 transition-opacity"
-            >
-              {chipContent}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-40 p-0">
-            <div className="max-h-[250px] overflow-y-auto py-1">
-              {options.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => handleSelect(option.id)}
-                  className={cn(
-                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors',
-                    option.id === valueId ? 'bg-muted/50 font-medium' : 'hover:bg-muted/50'
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <span className="inline-flex items-center gap-1">{chipContent}</span>
-      )}
-      <button
-        type="button"
-        onClick={onRemove}
-        className={cn(
-          'ml-0.5 p-0.5 rounded-full',
-          'hover:bg-foreground/10',
-          'text-muted-foreground hover:text-foreground',
-          'transition-colors'
-        )}
-        aria-label={`Remove ${label} ${value} filter`}
-      >
-        <XMarkIcon className="h-3 w-3" />
-      </button>
-    </div>
-  )
-}
-
 function computeActiveFilters(
   filters: UsersFilters,
   onFiltersChange: (updates: Partial<UsersFilters>) => void
@@ -373,9 +288,9 @@ export function UsersActiveFiltersBar({
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5 items-center">
-      {activeFilters.map(({ key, ...filterProps }) => (
-        <FilterChip key={key} {...filterProps} />
+    <div className="flex flex-wrap gap-1 items-center">
+      {activeFilters.map(({ key, type, ...filterProps }) => (
+        <FilterChip key={key} icon={getFilterIcon(type)} {...filterProps} />
       ))}
 
       <AddFilterButton onFiltersChange={onFiltersChange} filters={filters} />

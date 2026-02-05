@@ -5,6 +5,9 @@ import { useEffect } from 'react'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { Squares2X2Icon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
+import { EmptyState } from '@/components/shared/empty-state'
+import { PageHeader } from '@/components/shared/page-header'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { BoardSettingsHeader } from '@/components/admin/settings/boards/board-settings-header'
@@ -95,24 +98,21 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
     case 'general':
       return (
         <div className="space-y-8">
-          <section className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-            <h2 className="text-base font-semibold mb-4">Board Details</h2>
+          <SettingsCard title="Board Details">
             <BoardGeneralForm board={board} />
-          </section>
+          </SettingsCard>
 
-          <section className="rounded-xl border border-destructive/20 bg-card p-6 shadow-sm">
-            <h2 className="text-base font-semibold mb-4 text-destructive">Danger Zone</h2>
+          <SettingsCard title="Danger Zone" variant="danger">
             <DeleteBoardForm board={board} />
-          </section>
+          </SettingsCard>
         </div>
       )
 
     case 'access':
       return (
-        <section className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-          <h2 className="text-base font-semibold mb-4">Access Control</h2>
+        <SettingsCard title="Access Control">
           <BoardAccessForm board={board} />
-        </section>
+        </SettingsCard>
       )
 
     case 'import':
@@ -146,27 +146,20 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
 function EmptyBoardsState() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Squares2X2Icon className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Board Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure your feedback board settings and preferences
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Squares2X2Icon}
+        title="Board Settings"
+        description="Configure your feedback board settings and preferences"
+      />
 
-      <div className="rounded-xl border border-border/50 bg-card p-8 shadow-sm text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
-          <ChatBubbleLeftIcon className="h-6 w-6 text-primary" />
-        </div>
-        <h2 className="font-semibold text-lg mb-1">No boards yet</h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          Create your first feedback board to start collecting ideas from your users
-        </p>
-        <CreateBoardDialog />
+      <div className="rounded-xl border border-border/50 bg-card p-8 shadow-sm">
+        <EmptyState
+          icon={ChatBubbleLeftIcon}
+          title="No boards yet"
+          description="Create your first feedback board to start collecting ideas from your users"
+          action={<CreateBoardDialog />}
+          className="py-8"
+        />
       </div>
     </div>
   )

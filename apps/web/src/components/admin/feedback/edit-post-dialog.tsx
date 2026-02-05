@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { editPostSchema } from '@/lib/shared/schemas/posts'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { useUpdatePost, useUpdatePostTags } from '@/lib/client/mutations/posts'
 import type { JSONContent } from '@tiptap/react'
@@ -155,13 +156,7 @@ export function EditPostDialog({
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Submit on Cmd/Ctrl + Enter
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSubmit()
-    }
-  }
+  const handleKeyDown = useKeyboardSubmit(handleSubmit)
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChangeLocal}>
@@ -183,28 +178,11 @@ export function EditPostDialog({
               error={error}
             />
 
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30">
-              <p className="hidden sm:block text-xs text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">⌘</kbd>
-                <span className="mx-1">+</span>
-                <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">Enter</kbd>
-                <span className="ml-2">to save</span>
-              </p>
-              <div className="flex items-center gap-2 sm:ml-0 ml-auto">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onOpenChange(false)}
-                  disabled={form.formState.isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" size="sm" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting ? 'Saving...' : 'Save changes'}
-                </Button>
-              </div>
-            </div>
+            <ModalFooter
+              onCancel={() => onOpenChange(false)}
+              submitLabel={form.formState.isSubmitting ? 'Saving...' : 'Save changes'}
+              isPending={form.formState.isSubmitting}
+            />
           </form>
         </Form>
       </DialogContent>

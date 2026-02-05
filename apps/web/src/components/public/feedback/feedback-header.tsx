@@ -1,5 +1,6 @@
 import type { BoardId } from '@quackback/ids'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -146,15 +147,7 @@ export function FeedbackHeader({
     setExpanded(false)
   }
 
-  function handleKeyDown(e: React.KeyboardEvent): void {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSubmit()
-    }
-    if (e.key === 'Escape') {
-      handleCancel()
-    }
-  }
+  const handleKeyDown = useKeyboardSubmit(handleSubmit, handleCancel)
 
   return (
     <motion.div

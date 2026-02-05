@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { UserIcon } from '@heroicons/react/24/solid'
+import { PageHeader } from '@/components/shared/page-header'
 import { ProfileForm } from '@/components/settings/profile-form'
 
 export const Route = createFileRoute('/_portal/settings/profile')({
@@ -32,16 +33,12 @@ function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <UserIcon className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Profile</h1>
-          <p className="text-sm text-muted-foreground">Manage your personal information</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={UserIcon}
+        title="Profile"
+        description="Manage your personal information"
+        animate
+      />
 
       <div
         className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"

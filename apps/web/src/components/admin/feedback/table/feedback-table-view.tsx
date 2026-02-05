@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { useEffect, useState } from 'react'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/shared/search-input'
 import {
   Select,
   SelectContent,
@@ -49,17 +50,27 @@ function TableSkeleton() {
       <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
         {Array.from({ length: 6 }).map((_, rowIdx) => (
           <div key={rowIdx} className="flex py-1 px-3">
-            <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-border/30 py-2.5">
-              <Skeleton className="h-4 w-4 mb-1" />
-              <Skeleton className="h-4 w-6" />
-            </div>
+            {/* Vote button */}
+            <Skeleton className="w-13 h-14 rounded-lg shrink-0 self-center mx-3" />
+            {/* Content */}
             <div className="flex-1 min-w-0 px-3 py-2.5">
+              {/* Status badge */}
+              <Skeleton className="h-5 w-16 rounded-full mb-1" />
+              {/* Title */}
               <Skeleton className="h-4 w-3/4 mb-1" />
+              {/* Description */}
               <Skeleton className="h-3 w-full mb-1.5" />
+              {/* Tags */}
+              <div className="flex items-center gap-1 mb-1.5">
+                <Skeleton className="h-4 w-12 rounded-full" />
+                <Skeleton className="h-4 w-14 rounded-full" />
+              </div>
+              {/* Meta row: author · time · comments · board */}
               <div className="flex items-center gap-2">
                 <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-3 w-20" />
-                <Skeleton className="h-3 w-12" />
+                <Skeleton className="h-3 w-14" />
+                <Skeleton className="h-3 w-10" />
+                <Skeleton className="h-3 w-16" />
               </div>
             </div>
           </div>
@@ -93,7 +104,6 @@ export function FeedbackTableView({
   onToggleBoard,
   onStatusChange: _onStatusChange,
 }: FeedbackTableViewProps): React.ReactElement {
-  const loadMoreRef = useRef<HTMLDivElement>(null)
   const [searchValue, setSearchValue] = useState(search || '')
 
   // Sync input when parent search changes (e.g., clear filters)
@@ -111,23 +121,13 @@ export function FeedbackTableView({
     return () => clearTimeout(timeoutId)
   }, [searchValue, search, onSearchChange])
 
-  // Infinite scroll observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasMore && !isLoading && !isLoadingMore) {
-          onLoadMore()
-        }
-      },
-      { threshold: 0.1 }
-    )
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current)
-    }
-
-    return () => observer.disconnect()
-  }, [hasMore, isLoading, isLoadingMore, onLoadMore])
+  const loadMoreRef = useInfiniteScroll({
+    hasMore,
+    isFetching: isLoading || isLoadingMore,
+    onLoadMore,
+    rootMargin: '0px',
+    threshold: 0.1,
+  })
 
   // Keyboard navigation
   useEffect(() => {
@@ -156,26 +156,12 @@ export function FeedbackTableView({
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
-            data-search-input
-          />
-          {searchValue && (
-            <button
-              type="button"
-              onClick={() => setSearchValue('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <XMarkIcon className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        <SearchInput
+          value={searchValue}
+          onChange={setSearchValue}
+          placeholder="Search..."
+          data-search-input
+        />
         <Select
           value={sort || 'newest'}
           onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
@@ -257,7 +243,7 @@ export function FeedbackTableView({
       {hasMore && (
         <div ref={loadMoreRef} className="px-3 pb-3 flex justify-center">
           {isLoadingMore ? (
-            <span className="h-5 w-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+            <Spinner />
           ) : (
             <Button
               variant="ghost"

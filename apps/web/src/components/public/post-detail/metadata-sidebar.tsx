@@ -29,11 +29,20 @@ import type { PostId, StatusId, TagId, RoadmapId } from '@quackback/ids'
 
 export function MetadataSidebarSkeleton() {
   return (
-    <div className="w-72 shrink-0 border-l border-border/30 bg-muted/5 p-4 space-y-4">
+    <div className="hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5 p-4 space-y-5">
+      {/* Upvotes */}
       <Skeleton className="h-12 w-full rounded-lg" />
+      {/* Status */}
       <Skeleton className="h-8 w-full" />
+      {/* Board */}
       <Skeleton className="h-8 w-full" />
+      {/* Tags */}
       <Skeleton className="h-8 w-full" />
+      {/* Roadmaps */}
+      <Skeleton className="h-8 w-full" />
+      {/* Date */}
+      <Skeleton className="h-8 w-full" />
+      {/* Author */}
       <Skeleton className="h-8 w-full" />
     </div>
   )

@@ -3,6 +3,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { ChangelogEntryCard } from './changelog-entry-card'
+import { EmptyState } from '@/components/shared/empty-state'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
 
@@ -23,13 +24,11 @@ export function ChangelogListPublic() {
 
   if (entries.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <DocumentTextIcon className="h-16 w-16 text-muted-foreground/30 mb-4" />
-        <h2 className="text-lg font-medium mb-2">No updates yet</h2>
-        <p className="text-muted-foreground max-w-md">
-          Check back soon for the latest product updates and shipped features.
-        </p>
-      </div>
+      <EmptyState
+        icon={DocumentTextIcon}
+        title="No updates yet"
+        description="Check back soon for the latest product updates and shipped features."
+      />
     )
   }
 

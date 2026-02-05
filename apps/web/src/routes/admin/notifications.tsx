@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { BellIcon, InboxIcon } from '@heroicons/react/24/outline'
+import { EmptyState } from '@/components/shared/empty-state'
+import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -53,7 +55,7 @@ function NotificationsPage() {
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-muted-foreground border-t-transparent" />
+          <Spinner size="xl" />
         </div>
       ) : notifications.length > 0 ? (
         <ScrollArea className="flex-1">
@@ -69,16 +71,12 @@ function NotificationsPage() {
           </div>
         </ScrollArea>
       ) : (
-        <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-            <InboxIcon className="h-8 w-8 text-muted-foreground/70" />
-          </div>
-          <h3 className="text-base font-medium text-muted-foreground">No notifications yet</h3>
-          <p className="text-sm text-muted-foreground/70 mt-1 max-w-md">
-            You'll see notifications here when there are status changes or new comments on posts
-            you're subscribed to.
-          </p>
-        </div>
+        <EmptyState
+          icon={InboxIcon}
+          title="No notifications yet"
+          description="You'll see notifications here when there are status changes or new comments on posts you're subscribed to."
+          className="py-24"
+        />
       )}
     </div>
   )

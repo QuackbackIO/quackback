@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
 import { Button } from '@/components/ui/button'
@@ -18,17 +19,11 @@ import { PostActionsMenu } from './post-actions-menu'
 export function PostContentSectionSkeleton(): React.ReactElement {
   return (
     <div className="flex-1 p-6">
+      {/* Status badge */}
       <Skeleton className="h-5 w-20 mb-3 rounded-full" />
-      <Skeleton className="h-7 w-3/4 mb-2" />
-      <div className="flex items-center gap-2 mb-4">
-        <Skeleton className="h-6 w-6 rounded-full" />
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-16" />
-      </div>
-      <div className="flex gap-1.5 mb-4">
-        <Skeleton className="h-5 w-14 rounded-full" />
-        <Skeleton className="h-5 w-18 rounded-full" />
-      </div>
+      {/* Title */}
+      <Skeleton className="h-7 w-3/4 mb-4" />
+      {/* Content lines */}
       <div className="space-y-2">
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-full" />
@@ -118,15 +113,7 @@ export function PostContentSection({
     })
   }
 
-  function handleKeyDown(e: React.KeyboardEvent): void {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSave()
-    }
-    if (e.key === 'Escape' && onEditCancel) {
-      onEditCancel()
-    }
-  }
+  const handleKeyDown = useKeyboardSubmit(handleSave, onEditCancel)
 
   const isValid = editTitle.trim().length > 0
   const currentPlainText = editContentJson ? richTextToPlainText(editContentJson) : ''

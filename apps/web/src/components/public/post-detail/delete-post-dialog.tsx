@@ -1,17 +1,6 @@
 'use client'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { buttonVariants } from '@/components/ui/button'
-import { cn } from '@/lib/shared/utils'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 
 interface DeletePostDialogProps {
   open: boolean
@@ -29,25 +18,19 @@ export function DeletePostDialog({
   isPending,
 }: DeletePostDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Post</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to delete &ldquo;{postTitle}&rdquo;? This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isPending}
-            className={cn(buttonVariants({ variant: 'destructive' }))}
-          >
-            {isPending ? 'Deleting...' : 'Delete'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete Post"
+      description={
+        <>
+          Are you sure you want to delete &ldquo;{postTitle}&rdquo;? This action cannot be undone.
+        </>
+      }
+      variant="destructive"
+      confirmLabel={isPending ? 'Deleting...' : 'Delete'}
+      isPending={isPending}
+      onConfirm={onConfirm}
+    />
   )
 }

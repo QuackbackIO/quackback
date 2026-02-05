@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
+import { PageHeader } from '@/components/shared/page-header'
 import { StatusList } from '@/components/admin/settings/statuses/status-list'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
@@ -27,18 +28,11 @@ function StatusesPage() {
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
-      {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Cog6ToothIcon className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Public Statuses</h1>
-          <p className="text-sm text-muted-foreground">
-            Customize the statuses available for feedback posts
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Cog6ToothIcon}
+        title="Public Statuses"
+        description="Customize the statuses available for feedback posts"
+      />
 
       <StatusList initialStatuses={statusesQuery.data} />
     </div>

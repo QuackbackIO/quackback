@@ -17,7 +17,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { updateWebhookFn } from '@/lib/server/functions/webhooks'
-import { ArrowPathIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import { CopyButton } from '@/components/shared/copy-button'
+import { WarningBox } from '@/components/shared/warning-box'
 import {
   WEBHOOK_EVENTS,
   WEBHOOK_EVENT_CONFIG,
@@ -45,7 +47,6 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
   // Rotate secret state
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false)
   const [newSecret, setNewSecret] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   // Reset form when webhook changes
   useEffect(() => {
@@ -54,7 +55,6 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
     setIsEnabled(webhook.status === 'active')
     setError(null)
     setNewSecret(null)
-    setCopied(false)
   }, [webhook])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,14 +95,6 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
 
   const handleSecretRotated = (secret: string) => {
     setNewSecret(secret)
-  }
-
-  const copySecret = async () => {
-    if (newSecret) {
-      await navigator.clipboard.writeText(newSecret)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
   }
 
   const wasAutoDisabled = webhook.status === 'disabled' && webhook.failureCount >= 50
@@ -176,16 +168,11 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
               </div>
 
               {wasAutoDisabled && (
-                <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-4">
-                  <div className="text-sm">
-                    <p className="font-medium text-amber-800 dark:text-amber-200">
-                      Auto-disabled after {webhook.failureCount} failures
-                    </p>
-                    {webhook.lastError && (
-                      <p className="text-muted-foreground mt-1">Last error: {webhook.lastError}</p>
-                    )}
-                  </div>
-                </div>
+                <WarningBox
+                  variant="warning"
+                  title={`Auto-disabled after ${webhook.failureCount} failures`}
+                  description={webhook.lastError ? `Last error: ${webhook.lastError}` : undefined}
+                />
               )}
 
               {/* Rotate Secret Section */}
@@ -195,19 +182,12 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 p-3">
                       <code className="flex-1 text-sm font-mono break-all">{newSecret}</code>
-                      <Button
-                        type="button"
+                      <CopyButton
+                        value={newSecret}
                         variant="ghost"
                         size="sm"
-                        onClick={copySecret}
                         aria-label="Copy secret to clipboard"
-                      >
-                        {copied ? (
-                          <CheckIcon className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <ClipboardDocumentIcon className="h-4 w-4" />
-                        )}
-                      </Button>
+                      />
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Save this secret now. It won't be shown again.

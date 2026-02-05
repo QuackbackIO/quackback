@@ -16,16 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { updateMemberRoleFn, removeTeamMemberFn } from '@/lib/server/functions/admin'
 
 interface MemberActionsProps {
@@ -118,59 +109,46 @@ export function MemberActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Role change confirmation dialog */}
-      <AlertDialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {newRole === 'admin' ? 'Make admin?' : 'Remove admin privileges?'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {newRole === 'admin' ? (
-                <>
-                  <strong>{memberName}</strong> will be able to manage team settings, members, and
-                  all workspace configurations.
-                </>
-              ) : (
-                <>
-                  <strong>{memberName}</strong> will no longer be able to manage team settings or
-                  members.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRoleChange} disabled={isLoading}>
-              {isLoading ? 'Updating...' : newRole === 'admin' ? 'Make admin' : 'Remove admin'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={roleDialogOpen}
+        onOpenChange={setRoleDialogOpen}
+        title={newRole === 'admin' ? 'Make admin?' : 'Remove admin privileges?'}
+        description={
+          newRole === 'admin' ? (
+            <>
+              <strong>{memberName}</strong> will be able to manage team settings, members, and all
+              workspace configurations.
+            </>
+          ) : (
+            <>
+              <strong>{memberName}</strong> will no longer be able to manage team settings or
+              members.
+            </>
+          )
+        }
+        confirmLabel={
+          isLoading ? 'Updating...' : newRole === 'admin' ? 'Make admin' : 'Remove admin'
+        }
+        isPending={isLoading}
+        onConfirm={handleRoleChange}
+      />
 
-      {/* Remove member confirmation dialog */}
-      <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove team member?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{memberName}</strong> will be removed from the team and converted to a portal
-              user. They will lose access to the admin dashboard but can still interact with the
-              feedback portal.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRemove}
-              disabled={isLoading}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isLoading ? 'Removing...' : 'Remove from team'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={removeDialogOpen}
+        onOpenChange={setRemoveDialogOpen}
+        title="Remove team member?"
+        description={
+          <>
+            <strong>{memberName}</strong> will be removed from the team and converted to a portal
+            user. They will lose access to the admin dashboard but can still interact with the
+            feedback portal.
+          </>
+        }
+        variant="destructive"
+        confirmLabel={isLoading ? 'Removing...' : 'Remove from team'}
+        isPending={isLoading}
+        onConfirm={handleRemove}
+      />
     </>
   )
 }

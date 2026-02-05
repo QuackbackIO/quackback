@@ -3,6 +3,7 @@ import { EnvelopeIcon, ArrowPathIcon, ClockIcon, XMarkIcon } from '@heroicons/re
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { FormError } from '@/components/shared/form-error'
 import { cancelInvitationFn, resendInvitationFn } from '@/lib/server/functions/admin'
 import type { InviteId } from '@quackback/ids'
 
@@ -112,11 +113,7 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
         </p>
       </div>
 
-      {error && (
-        <div className="mx-6 mt-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error && <FormError message={error} className="mx-6 mt-4" />}
 
       <ul className="divide-y divide-border/50">
         {invitations.map((inv) => {

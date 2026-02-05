@@ -2,6 +2,8 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
+import { EmptyState } from '@/components/shared/empty-state'
+import { Spinner } from '@/components/shared/spinner'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { portalQueries } from '@/lib/client/queries/portal'
 
@@ -78,16 +80,12 @@ function PublicPortalPage() {
   if (loaderData.isEmpty && !isFetching && (!portalData || portalData.boards.length === 0)) {
     return (
       <div className="py-6">
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="rounded-full bg-muted p-4 mb-6">
-            <ChatBubbleOvalLeftEllipsisIcon className="h-10 w-10 text-muted-foreground" />
-          </div>
-          <h2 className="text-2xl font-semibold text-foreground mb-2">Coming Soon</h2>
-          <p className="text-muted-foreground max-w-md">
-            {org.name} is setting up their feedback portal. Check back soon to share your ideas and
-            suggestions.
-          </p>
-        </div>
+        <EmptyState
+          icon={ChatBubbleOvalLeftEllipsisIcon}
+          title="Coming Soon"
+          description={`${org.name} is setting up their feedback portal. Check back soon to share your ideas and suggestions.`}
+          className="py-24"
+        />
       </div>
     )
   }
@@ -97,7 +95,7 @@ function PublicPortalPage() {
     return (
       <div className="py-6">
         <div className="flex justify-center py-16">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+          <Spinner size="lg" />
         </div>
       </div>
     )

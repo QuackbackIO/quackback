@@ -3,6 +3,8 @@
 import type { UseFormReturn } from 'react-hook-form'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
+import { TitleInput } from '@/components/shared/title-input'
+import { FormError } from '@/components/shared/form-error'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
 
@@ -24,31 +26,9 @@ export function ChangelogFormFields({
 
   return (
     <div className="px-4 sm:px-6 py-4 space-y-4 h-full flex flex-col">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error && <FormError message={error} className="px-3 py-2" />}
 
-      {/* Title - large, borderless input */}
-      <FormField
-        control={form.control}
-        name="title"
-        render={({ field }) => (
-          <FormItem>
-            <FormControl>
-              <input
-                type="text"
-                placeholder="What's new?"
-                className="w-full text-lg sm:text-xl font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/50 focus:ring-0"
-                autoFocus
-                {...field}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      <TitleInput control={form.control} placeholder="What's new?" autoFocus />
 
       {/* Content - rich text editor with images and code blocks */}
       <FormField

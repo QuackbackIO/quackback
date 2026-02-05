@@ -1,5 +1,6 @@
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/shared/form-error'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import {
@@ -46,11 +47,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {mutation.isError && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {mutation.error?.message}
-          </div>
-        )}
+        {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
 
         {/* Board Visibility */}
         <FormField

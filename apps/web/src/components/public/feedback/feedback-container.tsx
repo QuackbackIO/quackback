@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { Spinner } from '@/components/shared/spinner'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
@@ -64,9 +66,6 @@ export function FeedbackContainer({
   const effectiveUser = session?.user
     ? { name: session.user.name, email: session.user.email }
     : user
-
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const fetchNextPageRef = useRef<() => void>(() => {})
 
   // Current filter values (URL state takes precedence over props)
   const activeBoard = filters.board ?? currentBoard
@@ -157,30 +156,11 @@ export function FeedbackContainer({
     },
   })
 
-  // Keep ref in sync with latest fetchNextPage
-  fetchNextPageRef.current = () => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage()
-    }
-  }
-
-  // Intersection observer for infinite scroll
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel || !hasNextPage) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchNextPageRef.current()
-        }
-      },
-      { rootMargin: '100px' }
-    )
-
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasNextPage])
+  const sentinelRef = useInfiniteScroll({
+    hasMore: hasNextPage,
+    isFetching: isFetchingNextPage,
+    onLoadMore: fetchNextPage,
+  })
 
   function handleSortChange(sort: 'top' | 'new' | 'trending'): void {
     setFilters({ sort })
@@ -302,9 +282,7 @@ export function FeedbackContainer({
                 {/* Sentinel element for intersection observer */}
                 {hasNextPage && (
                   <div ref={sentinelRef} className="py-4 flex justify-center">
-                    {isFetchingNextPage && (
-                      <span className="h-5 w-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                    )}
+                    {isFetchingNextPage && <Spinner />}
                   </div>
                 )}
               </>

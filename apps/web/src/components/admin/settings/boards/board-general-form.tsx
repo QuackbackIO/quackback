@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { updateBoardSchema, type UpdateBoardInput } from '@/lib/shared/schemas/boards'
 import { Input } from '@/components/ui/input'
+import { FormError } from '@/components/shared/form-error'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import {
@@ -48,11 +49,7 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {mutation.isError && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {mutation.error?.message}
-          </div>
-        )}
+        {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
 
         <FormField
           control={form.control}

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon, UsersIcon } from '@heroicons/react/24/solid'
-import { Input } from '@/components/ui/input'
+import { ArrowPathIcon, UsersIcon } from '@heroicons/react/24/solid'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { EmptyState } from '@/components/shared/empty-state'
+import { SearchInput } from '@/components/shared/search-input'
 import {
   Select,
   SelectContent,
@@ -33,12 +35,13 @@ function UserListSkeleton() {
   return (
     <div className="divide-y divide-border/50">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 p-3">
+        <div key={i} className="flex items-start gap-3 p-3">
           <Skeleton className="h-10 w-10 rounded-full shrink-0" />
           <div className="flex-1 min-w-0">
             <Skeleton className="h-4 w-32 mb-1.5" />
             <Skeleton className="h-3 w-48 mb-1" />
-            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-24 mb-1.5" />
+            <Skeleton className="h-3 w-20" />
           </div>
         </div>
       ))}
@@ -46,7 +49,7 @@ function UserListSkeleton() {
   )
 }
 
-function EmptyState({
+function UsersEmptyState({
   hasActiveFilters,
   onClearFilters,
 }: {
@@ -54,28 +57,27 @@ function EmptyState({
   onClearFilters: () => void
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="rounded-full bg-muted p-3 mb-4">
-        <UsersIcon className="h-6 w-6 text-muted-foreground" />
-      </div>
-      <h3 className="font-medium text-foreground mb-1">
-        {hasActiveFilters ? 'No users match your filters' : 'No portal users yet'}
-      </h3>
-      <p className="text-sm text-muted-foreground max-w-[250px]">
-        {hasActiveFilters
+    <EmptyState
+      icon={UsersIcon}
+      title={hasActiveFilters ? 'No users match your filters' : 'No portal users yet'}
+      description={
+        hasActiveFilters
           ? "Try adjusting your filters to find what you're looking for."
-          : 'Portal users will appear here when they sign up to your feedback portal.'}
-      </p>
-      {hasActiveFilters && (
-        <button
-          type="button"
-          onClick={onClearFilters}
-          className="mt-3 text-sm text-primary hover:underline"
-        >
-          Clear filters
-        </button>
-      )}
-    </div>
+          : 'Portal users will appear here when they sign up to your feedback portal.'
+      }
+      action={
+        hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="text-sm text-primary hover:underline"
+          >
+            Clear filters
+          </button>
+        ) : undefined
+      }
+      className="py-12"
+    />
   )
 }
 
@@ -93,7 +95,6 @@ export function UsersList({
   onClearFilters,
   total,
 }: UsersListProps) {
-  const loadMoreRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const handleSearchChange = (value: string) => {
@@ -104,23 +105,13 @@ export function UsersList({
     onFiltersChange({ sort: value })
   }
 
-  // Infinite scroll observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasMore && !isLoading && !isLoadingMore) {
-          onLoadMore()
-        }
-      },
-      { threshold: 0.1 }
-    )
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current)
-    }
-
-    return () => observer.disconnect()
-  }, [hasMore, isLoading, isLoadingMore, onLoadMore])
+  const loadMoreRef = useInfiniteScroll({
+    hasMore,
+    isFetching: isLoading || isLoadingMore,
+    onLoadMore,
+    rootMargin: '0px',
+    threshold: 0.1,
+  })
 
   // Keyboard navigation
   useEffect(() => {
@@ -172,26 +163,12 @@ export function UsersList({
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={searchInputRef}
-            type="search"
-            placeholder="Search users..."
-            value={filters.search || ''}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
-          />
-          {filters.search && (
-            <button
-              type="button"
-              onClick={() => handleSearchChange('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <XMarkIcon className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        <SearchInput
+          ref={searchInputRef}
+          value={filters.search || ''}
+          onChange={handleSearchChange}
+          placeholder="Search users..."
+        />
         <Select
           value={filters.sort || 'newest'}
           onValueChange={(value) =>
@@ -239,7 +216,7 @@ export function UsersList({
     return (
       <div>
         {headerContent}
-        <EmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />
+        <UsersEmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />
       </div>
     )
   }

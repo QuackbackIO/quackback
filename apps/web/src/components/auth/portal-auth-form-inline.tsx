@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/shared/form-error'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   ArrowPathIcon,
@@ -374,9 +375,7 @@ export function PortalAuthFormInline({
       {/* Step 1: Email Input */}
       {step === 'email' && (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-          )}
+          {error && <FormError message={error} />}
 
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">
@@ -457,9 +456,7 @@ export function PortalAuthFormInline({
             </p>
           </div>
 
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-          )}
+          {error && <FormError message={error} />}
 
           <div className="space-y-2">
             <label htmlFor="code" className="text-sm font-medium">
