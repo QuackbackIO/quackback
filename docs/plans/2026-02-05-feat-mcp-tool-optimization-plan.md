@@ -197,12 +197,12 @@ server.tool('triage_post', description, schema, handler, {
 - [x] `bun run typecheck` passes in `apps/web`
 - [x] `bun run test` passes (all tests including updated MCP handler tests)
 - [x] `bun run lint` passes
-- [ ] E2E curl test: `search` with `entity: "posts"` returns posts
-- [ ] E2E curl test: `search` with `entity: "changelogs"` returns changelogs
-- [ ] E2E curl test: `get_details` with post TypeID returns post + comments
-- [ ] E2E curl test: `get_details` with changelog TypeID returns changelog
-- [ ] E2E curl test: `get_details` with invalid prefix returns error
-- [ ] E2E curl test: cross-entity cursor returns error or empty results
+- [x] E2E curl test: `search` with `entity: "posts"` returns posts
+- [x] E2E curl test: `search` with `entity: "changelogs"` returns changelogs
+- [x] E2E curl test: `get_details` with post TypeID returns post + comments
+- [x] E2E curl test: `get_details` with changelog TypeID returns changelog
+- [x] E2E curl test: `get_details` with invalid prefix returns error
+- [x] E2E curl test: cross-entity cursor returns error or empty results
 
 ## Dependencies & Risks
 
