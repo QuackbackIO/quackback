@@ -50,6 +50,7 @@
         "@floating-ui/dom": "^1.7.5",
         "@heroicons/react": "^2.2.0",
         "@hookform/resolvers": "^5.2.2",
+        "@modelcontextprotocol/sdk": "^1.12.0",
         "@quackback/db": "workspace:*",
         "@quackback/email": "workspace:*",
         "@quackback/ids": "workspace:*",
@@ -186,23 +187,6 @@
       "peerDependencies": {
         "drizzle-orm": ">=0.30.0",
         "zod": ">=3.0.0",
-      },
-    },
-    "packages/mcp": {
-      "name": "@quackback/mcp",
-      "version": "0.1.0",
-      "bin": {
-        "quackback-mcp": "./src/index.ts",
-      },
-      "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.12.0",
-      },
-      "devDependencies": {
-        "vitest": "^4.0.15",
-        "zod": "^3.23.8",
-      },
-      "peerDependencies": {
-        "zod": ">=3.23.0",
       },
     },
     "scripts/import": {
@@ -759,8 +743,6 @@
     "@quackback/ids": ["@quackback/ids@workspace:packages/ids"],
 
     "@quackback/import": ["@quackback/import@workspace:scripts/import"],
-
-    "@quackback/mcp": ["@quackback/mcp@workspace:packages/mcp"],
 
     "@quackback/web": ["@quackback/web@workspace:apps/web"],
 
