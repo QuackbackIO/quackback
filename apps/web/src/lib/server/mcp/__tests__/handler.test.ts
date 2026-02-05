@@ -20,6 +20,19 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn((_a: unknown, _b: unknown) => 'eq-condition'),
 }))
 
+// Mock getTypeIdPrefix from @quackback/ids — extract prefix from underscore-separated IDs
+vi.mock('@quackback/ids', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    getTypeIdPrefix: vi.fn((id: string) => {
+      const underscoreIndex = id.indexOf('_')
+      if (underscoreIndex === -1) throw new Error(`Invalid TypeID: ${id}`)
+      return id.substring(0, underscoreIndex)
+    }),
+  }
+})
+
 // Mock rate limiting to always allow
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({
   checkRateLimit: vi.fn(() => ({ allowed: true })),
@@ -94,6 +107,33 @@ vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
     status: 'draft',
     publishedAt: null,
     createdAt: new Date('2026-01-01'),
+  }),
+  listChangelogs: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: 'changelog_01test',
+        title: 'v1.0 Release',
+        content: 'New features and improvements.',
+        status: 'published',
+        author: { name: 'Jane Admin' },
+        linkedPosts: [{ id: 'post_test', title: 'Test Post', voteCount: 5 }],
+        publishedAt: new Date('2026-01-15'),
+        createdAt: new Date('2026-01-10'),
+      },
+    ],
+    nextCursor: null,
+    hasMore: false,
+  }),
+  getChangelogById: vi.fn().mockResolvedValue({
+    id: 'changelog_01test',
+    title: 'v1.0 Release',
+    content: 'New features and improvements.',
+    status: 'published',
+    author: { name: 'Jane Admin' },
+    linkedPosts: [{ id: 'post_test', title: 'Test Post', voteCount: 5, status: 'shipped' }],
+    publishedAt: new Date('2026-01-15'),
+    createdAt: new Date('2026-01-10'),
+    updatedAt: new Date('2026-01-15'),
   }),
 }))
 
@@ -176,6 +216,22 @@ async function setupValidAuth() {
   const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
   vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
   mockFindFirst.mockResolvedValue(MOCK_MEMBER_RECORD)
+}
+
+/** Initialize an MCP session and re-setup auth for the next call. */
+async function initializeSession() {
+  const { handleMcpRequest } = await import('../handler')
+  await handleMcpRequest(
+    mcpRequest(
+      jsonRpcRequest('initialize', {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '1.0' },
+      })
+    )
+  )
+  await setupValidAuth()
+  return handleMcpRequest
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -289,29 +345,15 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should handle tools/list request', async () => {
-      const { handleMcpRequest } = await import('../handler')
-
-      // Initialize first
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      // Re-setup auth since mocks are consumed
-      await setupValidAuth()
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('tools/list')))
 
       expect(response.status).toBe(200)
       const body = (await response.json()) as { result: { tools: Array<{ name: string }> } }
       const toolNames = body.result.tools.map((t) => t.name)
-      expect(toolNames).toContain('search_feedback')
-      expect(toolNames).toContain('get_post')
+      expect(toolNames).toContain('search')
+      expect(toolNames).toContain('get_details')
       expect(toolNames).toContain('triage_post')
       expect(toolNames).toContain('add_comment')
       expect(toolNames).toContain('create_post')
@@ -320,19 +362,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should handle resources/list request', async () => {
-      const { handleMcpRequest } = await import('../handler')
-
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      await setupValidAuth()
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('resources/list')))
 
@@ -349,25 +379,15 @@ describe('MCP HTTP Handler', () => {
       expect(uris).toHaveLength(5)
     })
 
-    it('should handle tools/call for search_feedback', async () => {
-      const { handleMcpRequest } = await import('../handler')
+    // ── search tool (posts) ─────────────────────────────────────────────────
 
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      await setupValidAuth()
+    it('should handle tools/call for search (posts, default)', async () => {
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
         mcpRequest(
           jsonRpcRequest('tools/call', {
-            name: 'search_feedback',
+            name: 'search',
             arguments: { query: 'bug', limit: 10 },
           })
         )
@@ -383,26 +403,41 @@ describe('MCP HTTP Handler', () => {
       expect(text.hasMore).toBe(false)
     })
 
-    it('should handle tools/call for get_post', async () => {
-      const { handleMcpRequest } = await import('../handler')
+    // ── search tool (changelogs) ────────────────────────────────────────────
 
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      await setupValidAuth()
+    it('should handle tools/call for search (changelogs)', async () => {
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
         mcpRequest(
           jsonRpcRequest('tools/call', {
-            name: 'get_post',
-            arguments: { postId: 'post_test' },
+            name: 'search',
+            arguments: { entity: 'changelogs', status: 'published' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ type: string; text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.changelogs).toBeDefined()
+      expect(text.changelogs).toHaveLength(1)
+      expect(text.changelogs[0].title).toBe('v1.0 Release')
+      expect(text.hasMore).toBe(false)
+    })
+
+    // ── get_details tool (post) ─────────────────────────────────────────────
+
+    it('should handle tools/call for get_details with post TypeID', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'get_details',
+            arguments: { id: 'post_test' },
           })
         )
       )
@@ -417,20 +452,55 @@ describe('MCP HTTP Handler', () => {
       expect(text.comments).toEqual([])
     })
 
-    it('should handle resources/read for boards', async () => {
-      const { handleMcpRequest } = await import('../handler')
+    // ── get_details tool (changelog) ────────────────────────────────────────
 
-      await handleMcpRequest(
+    it('should handle tools/call for get_details with changelog TypeID', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
         mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
+          jsonRpcRequest('tools/call', {
+            name: 'get_details',
+            arguments: { id: 'changelog_01test' },
           })
         )
       )
 
-      await setupValidAuth()
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ type: string; text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('changelog_01test')
+      expect(text.title).toBe('v1.0 Release')
+      expect(text.status).toBe('published')
+      expect(text.linkedPosts).toHaveLength(1)
+    })
+
+    // ── get_details tool (unsupported prefix) ───────────────────────────────
+
+    it('should return error for get_details with unsupported TypeID prefix', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'get_details',
+            arguments: { id: 'board_01test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('Unsupported entity type')
+    })
+
+    it('should handle resources/read for boards', async () => {
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
         mcpRequest(
@@ -463,25 +533,13 @@ describe('MCP HTTP Handler', () => {
       const { getPostWithDetails } = await import('@/lib/server/domains/posts/post.query')
       vi.mocked(getPostWithDetails).mockRejectedValueOnce(new Error('Post not found'))
 
-      const { handleMcpRequest } = await import('../handler')
-
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      await setupValidAuth()
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
         mcpRequest(
           jsonRpcRequest('tools/call', {
-            name: 'get_post',
-            arguments: { postId: 'post_nonexistent' },
+            name: 'get_details',
+            arguments: { id: 'post_nonexistent' },
           })
         )
       )
@@ -495,19 +553,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should handle JSON-RPC method not found', async () => {
-      const { handleMcpRequest } = await import('../handler')
-
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      await setupValidAuth()
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('nonexistent/method')))
 
@@ -518,19 +564,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should handle tool call with unknown tool name', async () => {
-      const { handleMcpRequest } = await import('../handler')
-
-      await handleMcpRequest(
-        mcpRequest(
-          jsonRpcRequest('initialize', {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '1.0' },
-          })
-        )
-      )
-
-      await setupValidAuth()
+      const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
         mcpRequest(

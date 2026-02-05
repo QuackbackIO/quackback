@@ -2,8 +2,8 @@
  * MCP Tools for Quackback
  *
  * 6 tools calling domain services directly (no HTTP self-loop):
- * - search_feedback: Search and filter posts
- * - get_post: Get a single post with comments
+ * - search: Unified search across posts and changelogs
+ * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, owner, official response
  * - add_comment: Post a comment on a post
  * - create_post: Submit new feedback
@@ -12,15 +12,31 @@
 
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.query'
 import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { createComment } from '@/lib/server/domains/comments/comment.service'
-import { createChangelog } from '@/lib/server/domains/changelog/changelog.service'
-import { encodeCursor, decodeCursor } from '@/lib/server/domains/api/responses'
+import {
+  createChangelog,
+  listChangelogs,
+  getChangelogById,
+} from '@/lib/server/domains/changelog/changelog.service'
+import { getTypeIdPrefix } from '@quackback/ids'
 import type { McpAuthContext } from './types'
-import type { PostId, BoardId, TagId, StatusId, MemberId, CommentId } from '@quackback/ids'
+import type {
+  PostId,
+  BoardId,
+  TagId,
+  StatusId,
+  MemberId,
+  CommentId,
+  ChangelogId,
+} from '@quackback/ids'
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 /** Convert a domain error to an MCP tool error result. */
 function errorResult(err: unknown): CallToolResult {
@@ -31,19 +47,69 @@ function errorResult(err: unknown): CallToolResult {
   }
 }
 
-// Zod schemas — identical names/descriptions to the old stdio tools
-const searchFeedbackSchema = {
-  query: z.string().optional().describe('Text search across post titles and content'),
-  boardId: z.string().optional().describe('Filter by board TypeID (e.g., board_xxx)'),
-  status: z.string().optional().describe('Filter by status slug (e.g., "open", "in_progress")'),
-  tagIds: z.array(z.string()).optional().describe('Filter by tag TypeIDs'),
-  sort: z.enum(['newest', 'oldest', 'votes']).default('newest').describe('Sort order'),
+/** Encode a search cursor with entity type to prevent cross-entity misuse. */
+function encodeSearchCursor(entity: string, value: number | string): string {
+  return Buffer.from(JSON.stringify({ entity, value })).toString('base64url')
+}
+
+/** Decode a search cursor. Returns entity and value, or defaults. */
+function decodeSearchCursor(cursor?: string): { entity: string; value: number | string } {
+  if (!cursor) return { entity: '', value: 0 }
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf-8'))
+    return { entity: decoded.entity ?? '', value: decoded.value ?? 0 }
+  } catch {
+    return { entity: '', value: 0 }
+  }
+}
+
+// ============================================================================
+// Annotations
+// ============================================================================
+
+const READ_ONLY: ToolAnnotations = { readOnlyHint: true, openWorldHint: false }
+const WRITE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+}
+
+// ============================================================================
+// Schemas
+// ============================================================================
+
+const searchSchema = {
+  entity: z
+    .enum(['posts', 'changelogs'])
+    .default('posts')
+    .describe('Entity type to search. Defaults to posts.'),
+  query: z.string().optional().describe('Text search across titles and content'),
+  boardId: z.string().optional().describe('Filter posts by board TypeID (ignored for changelogs)'),
+  status: z
+    .string()
+    .optional()
+    .describe(
+      'Filter by status. For posts: slug like "open", "in_progress". For changelogs: "draft", "published", "scheduled", "all".'
+    ),
+  tagIds: z
+    .array(z.string())
+    .optional()
+    .describe('Filter posts by tag TypeIDs (ignored for changelogs)'),
+  sort: z
+    .enum(['newest', 'oldest', 'votes'])
+    .default('newest')
+    .describe('Sort order. "votes" only applies to posts.'),
   limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
 }
 
-const getPostSchema = {
-  postId: z.string().describe('Post TypeID (e.g., post_xxx)'),
+const getDetailsSchema = {
+  id: z
+    .string()
+    .describe(
+      'TypeID of the entity to fetch (e.g., post_01abc..., changelog_01xyz...). Entity type is auto-detected from the prefix.'
+    ),
 }
 
 const triagePostSchema = {
@@ -82,8 +148,12 @@ const createChangelogSchema = {
   publishedAt: z.string().optional().describe('ISO 8601 publish date (omit to save as draft)'),
 }
 
+// ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion
-type SearchFeedbackArgs = {
+// ============================================================================
+
+type SearchArgs = {
+  entity: 'posts' | 'changelogs'
   query?: string
   boardId?: string
   status?: string
@@ -93,7 +163,7 @@ type SearchFeedbackArgs = {
   cursor?: string
 }
 
-type GetPostArgs = { postId: string }
+type GetDetailsArgs = { id: string }
 
 type TriagePostArgs = {
   postId: string
@@ -123,121 +193,68 @@ type CreateChangelogArgs = {
   publishedAt?: string
 }
 
+// ============================================================================
+// Tool registration
+// ============================================================================
+
 export function registerTools(server: McpServer, auth: McpAuthContext) {
-  // search_feedback
+  // search
   server.tool(
-    'search_feedback',
-    'Search feedback posts with filtering by board, status, tags, text, and sort order. Returns paginated results with a cursor for fetching more.',
-    searchFeedbackSchema,
-    async (args: SearchFeedbackArgs): Promise<CallToolResult> => {
+    'search',
+    `Search feedback posts or changelog entries. Returns paginated results with a cursor for fetching more.
+
+Examples:
+- Search all posts: search()
+- Search by text: search({ query: "dark mode" })
+- Filter by board and status: search({ boardId: "board_01abc...", status: "open" })
+- Search changelogs: search({ entity: "changelogs", status: "published" })
+- Sort by votes: search({ sort: "votes", limit: 10 })`,
+    searchSchema,
+    READ_ONLY,
+    async (args: SearchArgs): Promise<CallToolResult> => {
       try {
-        // Cursor-to-offset translation: MCP exposes cursor, service uses page/limit
-        const offset = decodeCursor(args.cursor)
-        const limit = args.limit || 20
-        const page = Math.floor(offset / limit) + 1
-
-        const result = await listInboxPosts({
-          search: args.query,
-          boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
-          statusSlugs: args.status ? [args.status] : undefined,
-          tagIds: args.tagIds as TagId[] | undefined,
-          sort: args.sort || 'newest',
-          page,
-          limit,
-        })
-
-        // Encode next cursor from current offset
-        const nextOffset = offset + result.items.length
-        const nextCursor = result.hasMore ? encodeCursor(nextOffset) : null
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  posts: result.items.map((p) => ({
-                    id: p.id,
-                    title: p.title,
-                    content: p.content,
-                    voteCount: p.voteCount,
-                    commentCount: p.commentCount,
-                    boardId: p.boardId,
-                    boardName: p.board?.name,
-                    statusId: p.statusId,
-                    authorName: p.authorName,
-                    ownerMemberId: p.ownerMemberId,
-                    tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
-                    createdAt: p.createdAt,
-                  })),
-                  nextCursor,
-                  hasMore: result.hasMore,
-                  total: result.total,
-                },
-                null,
-                2
-              ),
-            },
-          ],
+        if (args.entity === 'changelogs') {
+          return await searchChangelogs(args)
         }
+        return await searchPosts(args)
       } catch (err) {
         return errorResult(err)
       }
     }
   )
 
-  // get_post
+  // get_details
   server.tool(
-    'get_post',
-    'Get a single post with full details including comments, votes, tags, status, and official response.',
-    getPostSchema,
-    async (args: GetPostArgs): Promise<CallToolResult> => {
-      try {
-        const [post, comments] = await Promise.all([
-          getPostWithDetails(args.postId as PostId),
-          getCommentsWithReplies(args.postId as PostId),
-        ])
+    'get_details',
+    `Get full details for any entity by TypeID. Entity type is auto-detected from the ID prefix.
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  id: post.id,
-                  title: post.title,
-                  content: post.content,
-                  voteCount: post.voteCount,
-                  commentCount: post.commentCount,
-                  boardId: post.boardId,
-                  boardName: post.board?.name,
-                  boardSlug: post.board?.slug,
-                  statusId: post.statusId,
-                  authorName: post.authorName,
-                  authorEmail: post.authorEmail,
-                  ownerMemberId: post.ownerMemberId,
-                  officialResponse: post.officialResponse,
-                  officialResponseAuthorName: post.officialResponseAuthorName,
-                  officialResponseAt: post.officialResponseAt,
-                  tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })),
-                  roadmapIds: post.roadmapIds,
-                  pinnedComment: post.pinnedComment
-                    ? {
-                        id: post.pinnedComment.id,
-                        content: post.pinnedComment.content,
-                        authorName: post.pinnedComment.authorName,
-                        createdAt: post.pinnedComment.createdAt,
-                      }
-                    : null,
-                  createdAt: post.createdAt,
-                  updatedAt: post.updatedAt,
-                  comments,
-                },
-                null,
-                2
-              ),
-            },
-          ],
+Examples:
+- Get a post: get_details({ id: "post_01abc..." })
+- Get a changelog: get_details({ id: "changelog_01xyz..." })`,
+    getDetailsSchema,
+    READ_ONLY,
+    async (args: GetDetailsArgs): Promise<CallToolResult> => {
+      try {
+        let prefix: string
+        try {
+          prefix = getTypeIdPrefix(args.id)
+        } catch {
+          return errorResult(
+            new Error(
+              `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., changelog_01xyz...)`
+            )
+          )
+        }
+
+        switch (prefix) {
+          case 'post':
+            return await getPostDetails(args.id as PostId)
+          case 'changelog':
+            return await getChangelogDetails(args.id as ChangelogId)
+          default:
+            return errorResult(
+              new Error(`Unsupported entity type: "${prefix}". Supported: post, changelog`)
+            )
         }
       } catch (err) {
         return errorResult(err)
@@ -248,8 +265,14 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   // triage_post
   server.tool(
     'triage_post',
-    'Update a post: set status, tags, owner, and/or official response. All fields optional — only provided fields are updated.',
+    `Update a post: set status, tags, owner, and/or official response. All fields optional — only provided fields are updated.
+
+Examples:
+- Change status: triage_post({ postId: "post_01abc...", statusId: "status_01xyz..." })
+- Assign owner and set response: triage_post({ postId: "post_01abc...", ownerMemberId: "member_01xyz...", officialResponse: "We're working on this!" })
+- Replace tags: triage_post({ postId: "post_01abc...", tagIds: ["tag_01a...", "tag_01b..."] })`,
     triagePostSchema,
+    WRITE,
     async (args: TriagePostArgs): Promise<CallToolResult> => {
       try {
         const result = await updatePost(
@@ -292,8 +315,13 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   // add_comment
   server.tool(
     'add_comment',
-    'Post a comment on a feedback post. Supports threaded replies via parentId.',
+    `Post a comment on a feedback post. Supports threaded replies via parentId.
+
+Examples:
+- Top-level comment: add_comment({ postId: "post_01abc...", content: "Thanks for the feedback!" })
+- Threaded reply: add_comment({ postId: "post_01abc...", content: "Good point.", parentId: "comment_01xyz..." })`,
     addCommentSchema,
+    WRITE,
     async (args: AddCommentArgs): Promise<CallToolResult> => {
       try {
         const result = await createComment(
@@ -328,8 +356,13 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   // create_post
   server.tool(
     'create_post',
-    'Submit new feedback on a board. Requires board and title; content/status/tags optional.',
+    `Submit new feedback on a board. Requires board and title; content/status/tags optional.
+
+Examples:
+- Minimal: create_post({ boardId: "board_01abc...", title: "Add dark mode" })
+- Full: create_post({ boardId: "board_01abc...", title: "Add dark mode", content: "Would love a dark theme option.", statusId: "status_01xyz...", tagIds: ["tag_01a..."] })`,
     createPostSchema,
+    WRITE,
     async (args: CreatePostArgs): Promise<CallToolResult> => {
       try {
         const result = await createPost(
@@ -375,11 +408,15 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   // create_changelog
   server.tool(
     'create_changelog',
-    'Create a changelog entry. Omit publishedAt to save as draft.',
+    `Create a changelog entry. Omit publishedAt to save as draft.
+
+Examples:
+- Draft: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode..." })
+- Published: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode...", publishedAt: "2026-02-05T00:00:00Z" })`,
     createChangelogSchema,
+    WRITE,
     async (args: CreateChangelogArgs): Promise<CallToolResult> => {
       try {
-        // Translate publishedAt string to publishState discriminated union
         const publishState = args.publishedAt
           ? { type: 'published' as const }
           : { type: 'draft' as const }
@@ -416,4 +453,209 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
       }
     }
   )
+}
+
+// ============================================================================
+// Search dispatchers
+// ============================================================================
+
+async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
+  const decoded = decodeSearchCursor(args.cursor)
+  // Reject cursors from a different entity
+  if (args.cursor && decoded.entity && decoded.entity !== 'posts') {
+    return errorResult(
+      new Error('Cursor is from a different entity type. Do not reuse cursors across entity types.')
+    )
+  }
+  const offset = typeof decoded.value === 'number' ? decoded.value : 0
+  const limit = args.limit || 20
+  const page = Math.floor(offset / limit) + 1
+
+  const result = await listInboxPosts({
+    search: args.query,
+    boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
+    statusSlugs: args.status ? [args.status] : undefined,
+    tagIds: args.tagIds as TagId[] | undefined,
+    sort: args.sort || 'newest',
+    page,
+    limit,
+  })
+
+  const nextOffset = offset + result.items.length
+  const nextCursor = result.hasMore ? encodeSearchCursor('posts', nextOffset) : null
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            posts: result.items.map((p) => ({
+              id: p.id,
+              title: p.title,
+              content: p.content,
+              voteCount: p.voteCount,
+              commentCount: p.commentCount,
+              boardId: p.boardId,
+              boardName: p.board?.name,
+              statusId: p.statusId,
+              authorName: p.authorName,
+              ownerMemberId: p.ownerMemberId,
+              tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
+              createdAt: p.createdAt,
+            })),
+            nextCursor,
+            hasMore: result.hasMore,
+            total: result.total,
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  }
+}
+
+async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
+  const decoded = decodeSearchCursor(args.cursor)
+  // Reject cursors from a different entity
+  if (args.cursor && decoded.entity && decoded.entity !== 'changelogs') {
+    return errorResult(
+      new Error('Cursor is from a different entity type. Do not reuse cursors across entity types.')
+    )
+  }
+  const cursorValue = typeof decoded.value === 'string' ? decoded.value : undefined
+
+  // Map status param — changelogs support draft/published/scheduled/all
+  const status = (['draft', 'published', 'scheduled', 'all'] as const).includes(
+    args.status as 'draft' | 'published' | 'scheduled' | 'all'
+  )
+    ? (args.status as 'draft' | 'published' | 'scheduled' | 'all')
+    : undefined
+
+  const result = await listChangelogs({
+    status,
+    cursor: cursorValue,
+    limit: args.limit || 20,
+  })
+
+  // Encode next cursor using the last item's ID
+  const lastItem = result.items[result.items.length - 1]
+  const nextCursor =
+    result.hasMore && lastItem ? encodeSearchCursor('changelogs', lastItem.id) : null
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            changelogs: result.items.map((c) => ({
+              id: c.id,
+              title: c.title,
+              content: c.content,
+              status: c.status,
+              authorName: c.author?.name ?? null,
+              linkedPosts: c.linkedPosts.map((p) => ({
+                id: p.id,
+                title: p.title,
+                voteCount: p.voteCount,
+              })),
+              publishedAt: c.publishedAt,
+              createdAt: c.createdAt,
+            })),
+            nextCursor,
+            hasMore: result.hasMore,
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  }
+}
+
+// ============================================================================
+// Get details dispatchers
+// ============================================================================
+
+async function getPostDetails(postId: PostId): Promise<CallToolResult> {
+  const [post, comments] = await Promise.all([
+    getPostWithDetails(postId),
+    getCommentsWithReplies(postId),
+  ])
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            id: post.id,
+            title: post.title,
+            content: post.content,
+            voteCount: post.voteCount,
+            commentCount: post.commentCount,
+            boardId: post.boardId,
+            boardName: post.board?.name,
+            boardSlug: post.board?.slug,
+            statusId: post.statusId,
+            authorName: post.authorName,
+            authorEmail: post.authorEmail,
+            ownerMemberId: post.ownerMemberId,
+            officialResponse: post.officialResponse,
+            officialResponseAuthorName: post.officialResponseAuthorName,
+            officialResponseAt: post.officialResponseAt,
+            tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+            roadmapIds: post.roadmapIds,
+            pinnedComment: post.pinnedComment
+              ? {
+                  id: post.pinnedComment.id,
+                  content: post.pinnedComment.content,
+                  authorName: post.pinnedComment.authorName,
+                  createdAt: post.pinnedComment.createdAt,
+                }
+              : null,
+            createdAt: post.createdAt,
+            updatedAt: post.updatedAt,
+            comments,
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  }
+}
+
+async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolResult> {
+  const entry = await getChangelogById(changelogId)
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            id: entry.id,
+            title: entry.title,
+            content: entry.content,
+            status: entry.status,
+            authorName: entry.author?.name ?? null,
+            linkedPosts: entry.linkedPosts.map((p) => ({
+              id: p.id,
+              title: p.title,
+              voteCount: p.voteCount,
+              status: p.status,
+            })),
+            publishedAt: entry.publishedAt,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  }
 }
