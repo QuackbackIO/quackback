@@ -228,6 +228,20 @@ describe.skipIf(SKIP_INTEGRATION)('API Integration Tests', () => {
       createdIds.posts.push(postId)
     })
 
+    it('POST /posts creates post with empty content', async () => {
+      if (skipIfNoServer() || !testBoardId) return
+
+      const { status, data } = await api('POST', '/posts', {
+        boardId: testBoardId,
+        title: `Title Only Post ${Date.now()}`,
+        content: '',
+      })
+      expect(status).toBe(201)
+      const postId = (data as { data: { id: string } }).data.id
+      expect(postId).toBeDefined()
+      createdIds.posts.push(postId)
+    })
+
     it('POST /posts validation error returns 400', async () => {
       if (skipIfNoServer()) return
 

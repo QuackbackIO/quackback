@@ -141,9 +141,8 @@ const CreatePostSchema = z
       .meta({ description: 'Post title', example: 'Add dark mode support' }),
     content: z
       .string()
-      .min(1)
       .max(10000)
-      .meta({ description: 'Post content', example: 'It would be great to have...' }),
+      .meta({ description: 'Post content (optional)', example: 'It would be great to have...' }),
     boardId: TypeIdSchema.meta({
       description: 'Board ID',
       example: 'board_01h455vb4pex5vsknk084sn02q',
@@ -156,7 +155,7 @@ const CreatePostSchema = z
 const UpdatePostSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
-    content: z.string().min(1).max(10000).optional(),
+    content: z.string().max(10000).optional(),
     statusId: z
       .string()
       .nullable()

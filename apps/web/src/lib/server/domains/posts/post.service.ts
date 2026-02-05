@@ -39,13 +39,10 @@ export async function createPost(
 ): Promise<CreatePostResult> {
   // Basic validation (also done at action layer, but enforced here for direct service calls)
   const title = input.title?.trim()
-  const content = input.content?.trim()
+  const content = input.content?.trim() ?? ''
 
   if (!title) {
     throw new ValidationError('VALIDATION_ERROR', 'Title is required')
-  }
-  if (!content) {
-    throw new ValidationError('VALIDATION_ERROR', 'Content is required')
   }
   if (title.length > 200) {
     throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
@@ -171,9 +168,6 @@ export async function updatePost(
     }
   }
   if (input.content !== undefined) {
-    if (!input.content.trim()) {
-      throw new ValidationError('VALIDATION_ERROR', 'Content cannot be empty')
-    }
     if (input.content.length > 10000) {
       throw new ValidationError('VALIDATION_ERROR', 'Content must be 10,000 characters or less')
     }

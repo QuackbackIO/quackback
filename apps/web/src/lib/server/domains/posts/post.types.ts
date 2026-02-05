@@ -12,7 +12,7 @@ import type { CommentReactionCount } from '@/lib/shared'
 export interface CreatePostInput {
   boardId: BoardId
   title: string
-  content: string
+  content?: string
   contentJson?: TiptapContent | null
   statusId?: StatusId
   tagIds?: TagId[]

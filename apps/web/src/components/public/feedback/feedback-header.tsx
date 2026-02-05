@@ -110,10 +110,6 @@ export function FeedbackHeader({
     }
 
     const plainText = contentJson ? richTextToPlainText(contentJson) : ''
-    if (!plainText.trim()) {
-      setError('Please add a description')
-      return
-    }
 
     try {
       const result = await createPost.mutateAsync({

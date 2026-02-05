@@ -102,7 +102,7 @@ const listInboxPostsSchema = z.object({
 
 const createPostSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().min(1, 'Description is required').max(10000),
+  content: z.string().max(10000).optional().default(''),
   contentJson: tiptapContentSchema.optional(),
   boardId: z.string(),
   statusId: z.string().optional(),
