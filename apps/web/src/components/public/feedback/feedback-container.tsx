@@ -255,7 +255,7 @@ export function FeedbackContainer({
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                      className="animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard

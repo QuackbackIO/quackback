@@ -34,7 +34,7 @@ export function RoadmapBoard({
 
   if (availableRoadmaps.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
+      <div className="flex items-center justify-center py-16 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="text-center">
           <MapIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium text-foreground">No roadmaps available</h3>
@@ -78,7 +78,7 @@ export function RoadmapBoard({
             {statuses.map((status, index) => (
               <div
                 key={status.id}
-                className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+                className="animate-in fade-in duration-200 fill-mode-backwards"
                 style={{ animationDelay: `${index * 75}ms` }}
               >
                 <RoadmapColumn

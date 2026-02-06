@@ -20,7 +20,7 @@ function PreferencesPage() {
 
       {/* Appearance */}
       <div
-        className="rounded-xl border border-border/50 bg-card p-6 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+        className="rounded-xl border border-border/50 bg-card p-6 shadow-sm animate-in fade-in duration-200 fill-mode-backwards"
         style={{ animationDelay: '75ms' }}
       >
         <h2 className="font-medium mb-1">Appearance</h2>
@@ -33,7 +33,7 @@ function PreferencesPage() {
 
       {/* Notifications */}
       <div
-        className="rounded-xl border border-border/50 bg-card p-6 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+        className="rounded-xl border border-border/50 bg-card p-6 shadow-sm animate-in fade-in duration-200 fill-mode-backwards"
         style={{ animationDelay: '150ms' }}
       >
         <h2 className="font-medium mb-1">Email Notifications</h2>

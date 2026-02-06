@@ -37,7 +37,7 @@ export function ChangelogListPublic() {
       {entries.map((entry, index) => (
         <div
           key={entry.id}
-          className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+          className="animate-in fade-in duration-200 fill-mode-backwards"
           style={{ animationDelay: `${index * 50}ms` }}
         >
           <ChangelogEntryCard

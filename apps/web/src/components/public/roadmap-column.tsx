@@ -54,7 +54,7 @@ export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColu
               <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : posts.length === 0 ? (
-            <div className="h-full flex items-center justify-center py-8 animate-in fade-in slide-in-from-bottom-1 duration-200">
+            <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
               <p className="text-sm text-muted-foreground">No items yet</p>
             </div>
           ) : (
@@ -62,7 +62,7 @@ export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColu
               {posts.map((post, index) => (
                 <div
                   key={post.id}
-                  className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                  className="animate-in fade-in duration-200 fill-mode-backwards"
                   style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                 >
                   <RoadmapCard

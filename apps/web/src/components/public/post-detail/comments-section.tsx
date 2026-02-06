@@ -86,7 +86,7 @@ export function CommentsSection({
 
   return (
     <div
-      className="border-t border-border/30 p-6 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+      className="border-t border-border/30 p-6 animate-in fade-in duration-200 fill-mode-backwards"
       style={{ animationDelay: '150ms' }}
     >
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">

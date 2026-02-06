@@ -53,7 +53,7 @@ function NotificationsPage() {
   return (
     <div className="py-8">
       {/* Page Header */}
-      <header className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
+      <header className="mb-8 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -99,7 +99,7 @@ function NotificationsPage() {
           {groups.map((group, groupIndex) => (
             <section
               key={group.label}
-              className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+              className="animate-in fade-in duration-200 fill-mode-backwards"
               style={{ animationDelay: `${groupIndex * 75}ms` }}
             >
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
@@ -124,7 +124,7 @@ function NotificationsPage() {
         </div>
       ) : (
         <div
-          className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+          className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in duration-200 fill-mode-backwards"
           style={{ animationDelay: '75ms' }}
         >
           <EmptyState
@@ -162,7 +162,7 @@ function NotificationRow({ notification, onMarkAsRead, style }: NotificationRowP
       className={cn(
         'group relative flex items-start gap-4 px-4 sm:px-5 py-4 transition-all duration-200',
         'hover:bg-muted/40',
-        'animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both',
+        'animate-in fade-in-0 fill-mode-both',
         isUnread && 'bg-primary/[0.02]'
       )}
       style={style}

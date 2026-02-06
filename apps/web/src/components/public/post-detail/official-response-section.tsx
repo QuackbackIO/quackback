@@ -38,7 +38,7 @@ export function OfficialResponseSection({
 }: OfficialResponseSectionProps) {
   return (
     <div
-      className="border-t border-border/30 p-6 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+      className="border-t border-border/30 p-6 animate-in fade-in duration-200 fill-mode-backwards"
       style={{ animationDelay: '100ms' }}
     >
       <OfficialResponse
@@ -59,7 +59,7 @@ interface PinnedCommentSectionProps {
 export function PinnedCommentSection({ comment, workspaceName }: PinnedCommentSectionProps) {
   return (
     <div
-      className="border-t border-border/30 p-6 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+      className="border-t border-border/30 p-6 animate-in fade-in duration-200 fill-mode-backwards"
       style={{ animationDelay: '100ms' }}
     >
       <PinnedComment comment={comment} workspaceName={workspaceName} />

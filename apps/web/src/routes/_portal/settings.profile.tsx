@@ -41,7 +41,7 @@ function ProfilePage() {
       />
 
       <div
-        className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+        className="animate-in fade-in duration-200 fill-mode-backwards"
         style={{ animationDelay: '75ms' }}
       >
         <ProfileForm

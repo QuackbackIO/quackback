@@ -29,7 +29,7 @@ function ChangelogEntryPage() {
 
   return (
     <div className="py-8">
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
+      <div className="animate-in fade-in duration-200 fill-mode-backwards">
         <ChangelogEntryDetail
           id={entry.id}
           title={entry.title}

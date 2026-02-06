@@ -37,7 +37,7 @@ function RoadmapPage() {
 
   return (
     <div className="py-8">
-      <div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards">
+      <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
         <h1 className="text-3xl font-bold mb-2">Roadmap</h1>
         <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
       </div>
