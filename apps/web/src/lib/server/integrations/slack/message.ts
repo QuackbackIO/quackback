@@ -4,7 +4,7 @@
  */
 
 import type { EventData } from '../../events/types'
-import { stripHtml, formatStatus, getStatusEmoji } from '../../events/hook-utils'
+import { stripHtml, truncate, formatStatus, getStatusEmoji } from '../../events/hook-utils'
 
 interface SlackMessage {
   text: string
@@ -44,15 +44,17 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
     case 'post.created': {
       const { post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
-      const content = stripHtml(post.content)
+      const content = truncate(stripHtml(post.content), 300)
       const author = post.authorName || post.authorEmail || 'Anonymous'
 
       return {
-        text: `New post from ${author}: ${post.title}`,
+        text: `New feedback from ${author}: ${post.title}`,
         blocks: [
           {
             type: 'context',
-            elements: [{ type: 'mrkdwn', text: `📬 New post from ${author}` }],
+            elements: [
+              { type: 'mrkdwn', text: `📬 New feedback from *${escapeSlackMrkdwn(author)}*` },
+            ],
           },
           {
             type: 'section',
@@ -66,7 +68,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
             elements: [
               {
                 type: 'mrkdwn',
-                text: `in <${rootUrl}/?board=${post.boardSlug}|${post.boardSlug}>`,
+                text: `in <${rootUrl}/?board=${post.boardSlug}|${escapeSlackMrkdwn(post.boardSlug)}>`,
               },
             ],
           },
@@ -81,11 +83,13 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       const actor = event.actor.email || 'System'
 
       return {
-        text: `Status updated by ${actor}: ${post.title}`,
+        text: `Status changed on "${post.title}": ${formatStatus(previousStatus)} → ${formatStatus(newStatus)}`,
         blocks: [
           {
             type: 'context',
-            elements: [{ type: 'mrkdwn', text: `${emoji} Status updated by ${actor}` }],
+            elements: [
+              { type: 'mrkdwn', text: `${emoji} Status changed by *${escapeSlackMrkdwn(actor)}*` },
+            ],
           },
           {
             type: 'section',
@@ -101,15 +105,17 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
     case 'comment.created': {
       const { comment, post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
-      const content = stripHtml(comment.content)
+      const content = truncate(stripHtml(comment.content), 300)
       const author = comment.authorName || comment.authorEmail || 'Anonymous'
 
       return {
-        text: `New comment from ${author}: ${post.title}`,
+        text: `New comment from ${author} on "${post.title}"`,
         blocks: [
           {
             type: 'context',
-            elements: [{ type: 'mrkdwn', text: `💬 New comment from ${author}` }],
+            elements: [
+              { type: 'mrkdwn', text: `💬 New comment from *${escapeSlackMrkdwn(author)}*` },
+            ],
           },
           {
             type: 'section',

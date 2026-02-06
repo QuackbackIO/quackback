@@ -35,17 +35,17 @@ const SLACK_EVENT_CONFIG = [
   {
     id: 'post.created' as const,
     label: 'New feedback submitted',
-    description: 'When a user creates a new post',
+    description: 'When a user submits new feedback',
   },
   {
     id: 'post.status_changed' as const,
-    label: 'Status changed',
-    description: 'When a post status is updated',
+    label: 'Feedback status changed',
+    description: 'When the status of a feedback post is updated',
   },
   {
     id: 'comment.created' as const,
-    label: 'New comment',
-    description: 'When a comment is added to a post',
+    label: 'New comment on feedback',
+    description: 'When someone comments on a feedback post',
   },
 ]
 
