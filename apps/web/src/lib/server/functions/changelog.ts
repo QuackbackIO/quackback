@@ -7,6 +7,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { BoardId, ChangelogId, PostId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth } from './auth-helpers'
 import {
   createChangelog,
@@ -72,7 +73,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
       {
         title: data.title,
         content: data.content,
-        contentJson: data.contentJson ?? null,
+        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : null,
         linkedPostIds: (data.linkedPostIds ?? []) as PostId[],
         publishState: data.publishState as PublishState,
       },
@@ -101,7 +102,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
     const entry = await updateChangelog(data.id as ChangelogId, {
       title: data.title,
       content: data.content,
-      contentJson: data.contentJson ?? undefined,
+      contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
       linkedPostIds: data.linkedPostIds as PostId[] | undefined,
       publishState: data.publishState as PublishState | undefined,
     })

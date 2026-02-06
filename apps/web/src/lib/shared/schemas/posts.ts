@@ -2,11 +2,68 @@ import { z } from 'zod'
 import { boardIdSchema, statusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 
 /**
- * TipTap JSON content schema (simplified validation)
+ * TipTap mark schema - validates mark types and their attributes
+ */
+const tiptapMarkSchema = z.object({
+  type: z.enum(['bold', 'italic', 'underline', 'strike', 'code', 'link']),
+  attrs: z
+    .object({
+      href: z.string().optional(),
+      target: z.string().optional(),
+      rel: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
+})
+
+/**
+ * TipTap node schema - validates node types and basic structure.
+ * Uses z.lazy for recursive content validation.
+ *
+ * Type annotation uses `any` to maintain backwards-compatible inference
+ * (TiptapContent.content stays as `any[]`). Runtime validation still
+ * enforces node type allowlists and structure. Deep attribute sanitization
+ * is handled by sanitizeTiptapContent() at the server function layer.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tiptapNodeSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    type: z.enum([
+      'doc',
+      'paragraph',
+      'heading',
+      'text',
+      'bulletList',
+      'orderedList',
+      'listItem',
+      'taskList',
+      'taskItem',
+      'blockquote',
+      'codeBlock',
+      'image',
+      'resizableImage',
+      'youtube',
+      'horizontalRule',
+      'hardBreak',
+      'table',
+      'tableRow',
+      'tableHeader',
+      'tableCell',
+    ]),
+    content: z.array(tiptapNodeSchema).optional(),
+    text: z.string().optional(),
+    marks: z.array(tiptapMarkSchema).optional(),
+    attrs: z.record(z.string(), z.unknown()).optional(),
+  })
+)
+
+/**
+ * TipTap JSON content schema - validates the top-level document structure
+ * and recursively validates all child nodes.
  */
 export const tiptapContentSchema = z.object({
   type: z.literal('doc'),
-  content: z.array(z.any()).optional(),
+  content: z.array(tiptapNodeSchema).optional(),
 })
 
 /**

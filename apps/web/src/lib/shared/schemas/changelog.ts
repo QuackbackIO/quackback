@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { tiptapContentSchema } from './posts'
 
 /**
  * Publish state schema
@@ -21,7 +22,7 @@ export const publishStateSchema = z.discriminatedUnion('type', [
 export const createChangelogSchema = z.object({
   title: z.string().min(1).max(200),
   content: z.string().min(1),
-  contentJson: z.any().optional(),
+  contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
 })
@@ -33,7 +34,7 @@ export const updateChangelogSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
-  contentJson: z.any().optional(),
+  contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
 })

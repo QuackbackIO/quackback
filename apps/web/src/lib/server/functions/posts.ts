@@ -12,7 +12,8 @@ import {
   type MemberId,
   type UserId,
 } from '@quackback/ids'
-import type { TiptapContent } from '@/lib/shared/schemas/posts'
+import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth } from './auth-helpers'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import {
@@ -80,10 +81,7 @@ function serializePostDates<
 // Schemas
 // ============================================
 
-const tiptapContentSchema = z.object({
-  type: z.literal('doc'),
-  content: z.array(z.any()).optional(),
-})
+// tiptapContentSchema imported from @/lib/shared/schemas/posts
 
 const listInboxPostsSchema = z.object({
   boardIds: z.array(z.string()).optional(),
@@ -271,7 +269,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
         {
           title: data.title,
           content: data.content,
-          contentJson: data.contentJson,
+          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
           boardId: data.boardId as BoardId,
           statusId: data.statusId as StatusId | undefined,
           tagIds: data.tagIds as TagId[] | undefined,
@@ -309,7 +307,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
         {
           title: data.title,
           content: data.content,
-          contentJson: data.contentJson,
+          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
           ownerMemberId: data.ownerId as MemberId | null | undefined,
           officialResponse: data.officialResponse,
         },
