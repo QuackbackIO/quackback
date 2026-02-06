@@ -4,21 +4,18 @@
  * This file contains exports that are safe to import in client code.
  * Server-only code (handler with crypto/dns) is in handler.ts.
  */
+import type { WebhookId } from '@quackback/ids'
+import { EVENT_TYPES, type EventType } from '../../types'
 
 // ============================================
 // Event Types
 // ============================================
 
 /**
- * Supported webhook event types.
+ * Supported webhook event types -- derived from the shared EVENT_TYPES source.
  */
-export const WEBHOOK_EVENTS = [
-  'post.created',
-  'post.status_changed',
-  'post.vote_threshold',
-  'comment.created',
-] as const
-export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number]
+export const WEBHOOK_EVENTS = EVENT_TYPES
+export type WebhookEventType = EventType
 
 /**
  * Human-readable labels and descriptions for webhook events.
@@ -34,11 +31,6 @@ export const WEBHOOK_EVENT_CONFIG = [
     id: 'post.status_changed',
     label: 'Post Status Changed',
     description: 'When a post status is updated',
-  },
-  {
-    id: 'post.vote_threshold',
-    label: 'Vote Milestone Reached',
-    description: 'At 5, 10, 25, 50, 100 votes',
   },
   {
     id: 'comment.created',
@@ -107,19 +99,15 @@ export function isValidWebhookUrl(urlString: string): boolean {
     }
 
     // Block private IP ranges
-    for (const pattern of PRIVATE_IP_PATTERNS) {
-      if (pattern.test(hostname)) {
-        return false
-      }
+    const isPrivate = (ip: string): boolean => PRIVATE_IP_PATTERNS.some((p) => p.test(ip))
+    if (isPrivate(hostname)) {
+      return false
     }
 
     // Block hostnames that look like private IPs in brackets (IPv6)
     if (hostname.startsWith('[') && hostname.endsWith(']')) {
-      const inner = hostname.slice(1, -1)
-      for (const pattern of PRIVATE_IP_PATTERNS) {
-        if (pattern.test(inner)) {
-          return false
-        }
+      if (isPrivate(hostname.slice(1, -1))) {
+        return false
       }
     }
 
@@ -132,8 +120,6 @@ export function isValidWebhookUrl(urlString: string): boolean {
 // ============================================
 // Types (for handler)
 // ============================================
-
-import type { WebhookId } from '@quackback/ids'
 
 export interface WebhookTarget {
   url: string

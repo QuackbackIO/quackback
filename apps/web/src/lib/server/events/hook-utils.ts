@@ -2,8 +2,6 @@
  * Shared utilities for hooks.
  */
 
-import { getBaseUrl } from '@/lib/server/config'
-
 /**
  * Strip HTML tags from text.
  */
@@ -26,23 +24,17 @@ export function truncate(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 3) + '...'
 }
 
-// Re-export getBaseUrl for backwards compatibility
-export { getBaseUrl }
-
 /**
  * Check if an error is retryable (network issues, rate limits, server errors).
  */
 export function isRetryableError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
 
-  // Check for HTTP status codes
   if ('status' in error) {
     const status = (error as { status?: number }).status
-    // 429 (rate limit), 500-599 (server errors)
     return status === 429 || (status !== undefined && status >= 500 && status < 600)
   }
 
-  // Check for network errors
   if ('code' in error) {
     const code = (error as { code?: string }).code
     return code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ENOTFOUND'

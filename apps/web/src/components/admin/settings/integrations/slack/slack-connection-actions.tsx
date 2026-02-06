@@ -3,7 +3,7 @@ import { useSearch } from '@tanstack/react-router'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { getSlackConnectUrl } from '@/lib/server/functions/integrations'
+import { getSlackConnectUrl } from '@/lib/server/integrations/slack/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
 
 interface SlackConnectionActionsProps {

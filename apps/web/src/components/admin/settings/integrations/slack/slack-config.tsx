@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
-import { fetchSlackChannelsFn, type SlackChannel } from '@/lib/server/functions/integrations'
+import { fetchSlackChannelsFn, type SlackChannel } from '@/lib/server/integrations/slack/functions'
 
 interface EventMapping {
   id: string
@@ -31,22 +31,21 @@ function ChannelIcon({ isPrivate }: { isPrivate: boolean }) {
   return <Icon className="h-3.5 w-3.5 text-muted-foreground" />
 }
 
-const EVENT_TYPES = [
+const SLACK_EVENT_CONFIG = [
   {
-    id: 'post.created',
+    id: 'post.created' as const,
     label: 'New feedback submitted',
     description: 'When a user creates a new post',
   },
   {
-    id: 'post.status_changed',
+    id: 'post.status_changed' as const,
     label: 'Status changed',
     description: 'When a post status is updated',
   },
-  { id: 'comment.created', label: 'New comment', description: 'When a comment is added to a post' },
   {
-    id: 'changelog.published',
-    label: 'Changelog published',
-    description: 'When a changelog entry is published',
+    id: 'comment.created' as const,
+    label: 'New comment',
+    description: 'When a comment is added to a post',
   },
 ]
 
@@ -64,7 +63,7 @@ export function SlackConfig({
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
-      EVENT_TYPES.map((event) => [
+      SLACK_EVENT_CONFIG.map((event) => [
         event.id,
         initialEventMappings.find((m) => m.eventType === event.id)?.enabled ?? false,
       ])
@@ -185,7 +184,7 @@ export function SlackConfig({
         <Label className="text-base font-medium">Events</Label>
         <p className="text-sm text-muted-foreground">Choose which events trigger notifications</p>
         <div className="space-y-3 pt-2">
-          {EVENT_TYPES.map((event) => (
+          {SLACK_EVENT_CONFIG.map((event) => (
             <div
               key={event.id}
               className="flex items-center justify-between rounded-lg border border-border/50 p-3"

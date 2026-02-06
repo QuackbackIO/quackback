@@ -160,7 +160,6 @@ export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 // Integration types
 export type Integration = InferSelectModel<typeof integrations>
 export type NewIntegration = InferInsertModel<typeof integrations>
-export type IntegrationType = 'slack' | 'discord' | 'linear' | 'jira' | 'github'
 export type IntegrationStatus = Integration['status']
 
 // Changelog types

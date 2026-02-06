@@ -1,48 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
-import { randomBytes } from 'crypto'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
-import { signOAuthState } from '@/lib/server/auth/oauth-state'
 import { db, integrations, integrationEventMappings, eq, sql } from '@/lib/server/db'
-import { listSlackChannels } from '@/lib/server/events/integrations/slack/oauth'
-import { decryptIntegrationToken } from '@/lib/server/domains/integrations/encryption'
-import { config } from '@/lib/server/config'
-import type { MemberId, IntegrationId } from '@quackback/ids'
-
-/**
- * Slack OAuth state payload.
- */
-export interface SlackOAuthState {
-  type: 'slack_oauth'
-  workspaceId: string
-  returnDomain: string
-  memberId: MemberId
-  nonce: string
-  ts: number
-}
-
-/**
- * Generate a signed OAuth connect URL for Slack.
- * Self-hosted: relative URL to same origin
- */
-export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<string> => {
-    const auth = await requireAuth({ roles: ['admin'] })
-
-    const returnDomain = new URL(config.baseUrl).host
-
-    const state = signOAuthState({
-      type: 'slack_oauth',
-      workspaceId: auth.settings.id,
-      returnDomain,
-      memberId: auth.member.id,
-      nonce: randomBytes(16).toString('base64url'),
-      ts: Date.now(),
-    } satisfies SlackOAuthState)
-
-    return `/oauth/slack/connect?state=${encodeURIComponent(state)}`
-  }
-)
+import type { IntegrationId } from '@quackback/ids'
 
 // ============================================
 // Schemas
@@ -151,53 +111,35 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
 
     const integrationId = data.id as IntegrationId
 
-    const result = await db
-      .delete(integrations)
-      .where(eq(integrations.id, integrationId))
-      .returning()
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.id, integrationId),
+    })
 
-    if (result.length === 0) {
+    if (!integration) {
       throw new Error('Integration not found')
     }
+
+    // Revoke tokens with the provider before deleting (dynamic import to avoid bundling @slack/web-api client-side)
+    if (integration.secrets) {
+      try {
+        const { getIntegration } = await import('@/lib/server/integrations')
+        const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+        const definition = getIntegration(integration.integrationType)
+        if (definition?.onDisconnect) {
+          const secrets = decryptSecrets(integration.secrets)
+          await definition.onDisconnect(secrets)
+        }
+      } catch (err) {
+        console.error(
+          `[fn:integrations] onDisconnect failed for ${integration.integrationType}:`,
+          err
+        )
+        // Continue with deletion even if revocation fails
+      }
+    }
+
+    await db.delete(integrations).where(eq(integrations.id, integrationId))
 
     console.log(`[fn:integrations] deleteIntegrationFn: deleted id=${data.id}`)
     return { id: data.id }
   })
-
-// ============================================
-// Queries
-// ============================================
-
-export interface SlackChannel {
-  id: string
-  name: string
-  isPrivate: boolean
-}
-
-/**
- * Fetch available Slack channels for the connected workspace
- */
-export const fetchSlackChannelsFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<SlackChannel[]> => {
-    console.log(`[fn:integrations] fetchSlackChannelsFn`)
-    await requireAuth({ roles: ['admin'] })
-
-    const integration = await db.query.integrations.findFirst({
-      where: eq(integrations.integrationType, 'slack'),
-    })
-
-    if (!integration || integration.status !== 'active') {
-      throw new Error('Slack not connected')
-    }
-
-    if (!integration.accessTokenEncrypted) {
-      throw new Error('Slack token missing')
-    }
-
-    const accessToken = decryptIntegrationToken(integration.accessTokenEncrypted)
-    const channels = await listSlackChannels(accessToken)
-
-    console.log(`[fn:integrations] fetchSlackChannelsFn: ${channels.length} channels`)
-    return channels
-  }
-)

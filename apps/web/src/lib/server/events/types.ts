@@ -3,9 +3,12 @@
  */
 
 /**
- * Supported event types.
+ * Supported event types — single source of truth.
+ * All UI components, webhook validators, and integration configs should reference this.
  */
-export type EventType = 'post.created' | 'post.status_changed' | 'comment.created'
+export const EVENT_TYPES = ['post.created', 'post.status_changed', 'comment.created'] as const
+
+export type EventType = (typeof EVENT_TYPES)[number]
 
 /**
  * Actor information for events - identifies who or what triggered the event.

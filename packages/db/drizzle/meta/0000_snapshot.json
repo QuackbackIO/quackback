@@ -2820,21 +2820,9 @@
           "notNull": true,
           "default": "'pending'"
         },
-        "access_token_encrypted": {
-          "name": "access_token_encrypted",
+        "secrets": {
+          "name": "secrets",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "refresh_token_encrypted": {
-          "name": "refresh_token_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "token_expires_at": {
-          "name": "token_expires_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

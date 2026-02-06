@@ -26,7 +26,7 @@ import {
   removePortalUser,
 } from '@/lib/server/domains/users/user.service'
 import { sendInvitationEmail } from '@quackback/email'
-import { resolvePortalUrl } from '@/lib/server/events/hook-context'
+import { getBaseUrl } from '@/lib/server/config'
 import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
 
 /**
@@ -274,13 +274,27 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const integrations = await db.query.integrations.findMany()
-    console.log(`[fn:admin] fetchIntegrationsList: count=${integrations.length}`)
-    return integrations
+    const results = await db.query.integrations.findMany()
+    console.log(`[fn:admin] fetchIntegrationsList: count=${results.length}`)
+    return results.map((i) => ({
+      id: i.id,
+      integrationType: i.integrationType,
+      status: i.status,
+      externalWorkspaceName: i.externalWorkspaceName,
+      connectedAt: i.connectedAt,
+    }))
   } catch (error) {
     console.error(`[fn:admin] ❌ fetchIntegrationsList failed:`, error)
     throw error
   }
+})
+
+/**
+ * Fetch integration catalog (static metadata for all registered integrations)
+ */
+export const fetchIntegrationCatalog = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getIntegrationCatalog } = await import('@/lib/server/integrations')
+  return getIntegrationCatalog()
 })
 
 /**
@@ -667,7 +681,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       })
 
       // Generate magic link for one-click authentication
-      const portalUrl = await resolvePortalUrl(auth.settings.slug)
+      const portalUrl = getBaseUrl()
       const callbackURL = `/accept-invitation/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(email, callbackURL, portalUrl)
 
@@ -738,7 +752,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       }
 
       // Generate new magic link for one-click authentication
-      const portalUrl = await resolvePortalUrl(auth.settings.slug)
+      const portalUrl = getBaseUrl()
       const callbackURL = `/accept-invitation/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(
         invitationRecord.email,

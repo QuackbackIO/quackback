@@ -1,8 +1,7 @@
 /**
  * Event system barrel exports.
  *
- * IMPORTANT: This barrel only exports types.
- * For dispatching events, import directly from './dispatch.js' in server-only code.
+ * For dispatching events, import directly from './dispatch' in server-only code.
  */
 
 export * from './types'
@@ -14,8 +13,6 @@ export type {
   HookTarget,
   TestResult,
   ProcessResult,
-  SlackTarget,
-  SlackConfig,
   EmailTarget,
   EmailConfig,
 } from './hook-types'

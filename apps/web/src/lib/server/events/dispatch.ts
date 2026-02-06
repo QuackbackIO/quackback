@@ -1,8 +1,8 @@
 /**
- * Event dispatching - fire-and-forget event dispatch with inline building.
+ * Event dispatching - async event dispatch with inline building.
  *
- * Events are dispatched using a fire-and-forget pattern - errors are logged
- * but don't block the request.
+ * Events are awaited to ensure hooks complete before the response is sent.
+ * Errors are caught and logged rather than propagated to the caller.
  */
 
 import { randomUUID } from 'crypto'
@@ -10,13 +10,7 @@ import { randomUUID } from 'crypto'
 import type { BoardId, CommentId, PostId } from '@quackback/ids'
 
 import { processEvent } from './process'
-import type {
-  EventActor,
-  EventData,
-  PostCreatedEvent,
-  PostStatusChangedEvent,
-  CommentCreatedEvent,
-} from './types.js'
+import type { EventActor, EventData } from './types.js'
 
 // Re-export EventActor for API routes that need to construct actor objects
 export type { EventActor } from './types.js'
@@ -54,9 +48,15 @@ export interface CommentPostInput {
 }
 
 /**
+ * Build common event envelope fields.
+ */
+function eventEnvelope(actor: EventActor) {
+  return { id: randomUUID(), timestamp: new Date().toISOString(), actor } as const
+}
+
+/**
  * Dispatch and process an event.
  * Must be awaited to ensure hooks run before the request completes.
- * (Cloudflare Workers terminate when the response is sent, so fire-and-forget doesn't work.)
  */
 async function dispatchEvent(event: EventData): Promise<void> {
   console.log(`[Event] Dispatching ${event.type} event ${event.id}`)
@@ -67,79 +67,38 @@ async function dispatchEvent(event: EventData): Promise<void> {
   }
 }
 
-/**
- * Dispatch a post.created event.
- */
 export async function dispatchPostCreated(
   actor: EventActor,
   post: PostCreatedInput
 ): Promise<void> {
-  const event: PostCreatedEvent = {
-    id: randomUUID(),
+  await dispatchEvent({
+    ...eventEnvelope(actor),
     type: 'post.created',
-    timestamp: new Date().toISOString(),
-    actor,
-    data: {
-      post: {
-        id: post.id,
-        title: post.title,
-        content: post.content,
-        boardId: post.boardId,
-        boardSlug: post.boardSlug,
-        authorEmail: post.authorEmail,
-        authorName: post.authorName,
-        voteCount: post.voteCount,
-      },
-    },
-  }
-  await dispatchEvent(event)
+    data: { post },
+  })
 }
 
-/**
- * Dispatch a post.status_changed event.
- */
 export async function dispatchPostStatusChanged(
   actor: EventActor,
   post: PostStatusChangedInput,
   previousStatus: string,
   newStatus: string
 ): Promise<void> {
-  const event: PostStatusChangedEvent = {
-    id: randomUUID(),
+  await dispatchEvent({
+    ...eventEnvelope(actor),
     type: 'post.status_changed',
-    timestamp: new Date().toISOString(),
-    actor,
-    data: {
-      post: { id: post.id, title: post.title, boardId: post.boardId, boardSlug: post.boardSlug },
-      previousStatus,
-      newStatus,
-    },
-  }
-  await dispatchEvent(event)
+    data: { post, previousStatus, newStatus },
+  })
 }
 
-/**
- * Dispatch a comment.created event.
- */
 export async function dispatchCommentCreated(
   actor: EventActor,
   comment: CommentCreatedInput,
   post: CommentPostInput
 ): Promise<void> {
-  const event: CommentCreatedEvent = {
-    id: randomUUID(),
+  await dispatchEvent({
+    ...eventEnvelope(actor),
     type: 'comment.created',
-    timestamp: new Date().toISOString(),
-    actor,
-    data: {
-      comment: {
-        id: comment.id,
-        content: comment.content,
-        authorEmail: comment.authorEmail,
-        authorName: comment.authorName,
-      },
-      post: { id: post.id, title: post.title, boardId: post.boardId, boardSlug: post.boardSlug },
-    },
-  }
-  await dispatchEvent(event)
+    data: { comment, post },
+  })
 }

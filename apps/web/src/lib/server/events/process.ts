@@ -29,8 +29,7 @@ export async function processEvent(event: EventData): Promise<ProcessResult> {
         return { success: false, error: `Unknown hook: ${type}` }
       }
 
-      const result = await hook.run(event, target, config)
-      return result
+      return hook.run(event, target, config)
     })
   )
 

@@ -1,11 +1,5 @@
-/**
- * Hooks barrel export
- *
- * This file exports all React hooks and re-exports from related modules.
- */
-
 // ============================================================================
-// Query Hooks (data fetching)
+// Query Hooks
 // ============================================================================
 
 // Inbox queries (admin)
@@ -103,31 +97,3 @@ export {
   // User mutations
   useRemovePortalUser,
 } from '@/lib/client/mutations'
-
-// ============================================================================
-// Event Hook System (re-exports for backwards compatibility)
-// The hook system is in @/lib/server/events/.
-// Prefer importing directly from '@/lib/server/events' in new code.
-// ============================================================================
-
-// Re-export registry functions
-export { getHook, registerHook } from '@/lib/server/events/registry'
-
-// Re-export types
-export type {
-  HookHandler,
-  HookResult,
-  HookTarget,
-  TestResult,
-  ProcessResult,
-  SlackTarget,
-  SlackConfig,
-  EmailTarget,
-  EmailConfig,
-} from '@/lib/server/events/hook-types'
-
-export type {
-  NotificationTarget,
-  NotificationConfig,
-} from '@/lib/server/events/handlers/notification'
-export type { WebhookTarget, WebhookConfig } from '@/lib/server/events/handlers/webhook'

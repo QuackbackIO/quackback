@@ -2,22 +2,36 @@
  * Slack integration database operations.
  */
 import { db, integrations } from '@/lib/server/db'
-import { encryptIntegrationToken } from './encryption'
+import { encryptSecrets } from '../encryption'
 import type { MemberId } from '@quackback/ids'
 
 interface SaveIntegrationParams {
   memberId: MemberId
   accessToken: string
-  teamId: string
-  teamName: string
+  externalWorkspaceId: string
+  externalWorkspaceName: string
+  refreshToken?: string
+  expiresIn?: number
 }
 
 /**
  * Save or update a Slack integration.
  */
 export async function saveIntegration(params: SaveIntegrationParams): Promise<void> {
-  const { memberId, accessToken, teamId, teamName } = params
-  const encryptedToken = encryptIntegrationToken(accessToken)
+  const {
+    memberId,
+    accessToken,
+    externalWorkspaceId,
+    externalWorkspaceName,
+    refreshToken,
+    expiresIn,
+  } = params
+
+  const secrets: Record<string, unknown> = { accessToken }
+  if (refreshToken) secrets.refreshToken = refreshToken
+  if (expiresIn) secrets.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
+
+  const encryptedSecrets = encryptSecrets(secrets)
   const now = new Date()
 
   await db
@@ -25,9 +39,9 @@ export async function saveIntegration(params: SaveIntegrationParams): Promise<vo
     .values({
       integrationType: 'slack',
       status: 'active',
-      accessTokenEncrypted: encryptedToken,
-      externalWorkspaceId: teamId,
-      externalWorkspaceName: teamName,
+      secrets: encryptedSecrets,
+      externalWorkspaceId,
+      externalWorkspaceName,
       connectedByMemberId: memberId,
       connectedAt: now,
       config: {},
@@ -36,9 +50,9 @@ export async function saveIntegration(params: SaveIntegrationParams): Promise<vo
       target: [integrations.integrationType],
       set: {
         status: 'active',
-        accessTokenEncrypted: encryptedToken,
-        externalWorkspaceId: teamId,
-        externalWorkspaceName: teamName,
+        secrets: encryptedSecrets,
+        externalWorkspaceId,
+        externalWorkspaceName,
         connectedByMemberId: memberId,
         connectedAt: now,
         lastError: null,

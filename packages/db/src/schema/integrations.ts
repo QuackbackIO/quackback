@@ -27,10 +27,9 @@ export const integrations = pgTable(
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
 
-    // OAuth tokens (encrypted with AES-256-GCM)
-    accessTokenEncrypted: text('access_token_encrypted'),
-    refreshTokenEncrypted: text('refresh_token_encrypted'),
-    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    // Encrypted secrets blob (JSON, AES-256-GCM)
+    // Contains integration-specific secrets (e.g., { accessToken: "xoxb-..." } for Slack)
+    secrets: text('secrets'),
 
     // Configuration (channel IDs, team IDs, etc.)
     config: jsonb('config').$type<IntegrationConfig>().notNull().default({}),

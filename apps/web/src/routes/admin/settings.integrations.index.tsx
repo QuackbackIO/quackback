@@ -8,24 +8,22 @@ import { IntegrationList } from '@/components/admin/settings/integrations/integr
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
   loader: async ({ context }) => {
-    // User, member, and settings are validated in parent /admin layout
     const { queryClient } = context
 
-    // Pre-fetch integrations data
-    await queryClient.ensureQueryData(adminQueries.integrations())
-
-    return {}
+    await Promise.all([
+      queryClient.ensureQueryData(adminQueries.integrationCatalog()),
+      queryClient.ensureQueryData(adminQueries.integrations()),
+    ])
   },
   component: IntegrationsPage,
 })
 
 function IntegrationsPage() {
-  // Read pre-fetched data from React Query cache
+  const catalogQuery = useSuspenseQuery(adminQueries.integrationCatalog())
   const integrationsQuery = useSuspenseQuery(adminQueries.integrations())
-  const rawIntegrations = integrationsQuery.data
 
   // Map to simplified status format for the catalog
-  const integrations = rawIntegrations.map((i) => ({
+  const integrations = integrationsQuery.data.map((i) => ({
     id: i.integrationType,
     status: i.status as 'active' | 'paused' | 'error',
     workspaceName: i.externalWorkspaceName || undefined,
@@ -42,8 +40,7 @@ function IntegrationsPage() {
         description="Connect external services to automate workflows"
       />
 
-      {/* Integration Catalog */}
-      <IntegrationList integrations={integrations} />
+      <IntegrationList catalog={catalogQuery.data} integrations={integrations} />
     </div>
   )
 }

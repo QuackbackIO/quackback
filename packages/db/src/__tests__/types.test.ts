@@ -20,7 +20,6 @@ import type {
   NewCommentReaction,
   Integration,
   NewIntegration,
-  IntegrationType,
   IntegrationStatus,
   ChangelogEntry,
   NewChangelogEntry,
@@ -193,12 +192,6 @@ describe('Type definitions', () => {
 
     it('NewIntegration has required fields', () => {
       expectTypeOf<NewIntegration>().toHaveProperty('integrationType')
-    })
-
-    it('IntegrationType is github | slack | discord', () => {
-      expectTypeOf<'github'>().toMatchTypeOf<IntegrationType>()
-      expectTypeOf<'slack'>().toMatchTypeOf<IntegrationType>()
-      expectTypeOf<'discord'>().toMatchTypeOf<IntegrationType>()
     })
 
     it('IntegrationStatus is a string', () => {

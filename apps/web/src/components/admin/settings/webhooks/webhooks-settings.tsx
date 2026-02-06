@@ -21,7 +21,6 @@ import type { Webhook } from '@/lib/server/domains/webhooks'
 const EVENT_LABELS: Record<string, string> = {
   'post.created': 'New Post',
   'post.status_changed': 'Status Changed',
-  'post.vote_threshold': 'Vote Milestone',
   'comment.created': 'New Comment',
 }
 

@@ -9,6 +9,7 @@ import {
   fetchTeamMembers,
   fetchOnboardingStatus,
   fetchIntegrationsList,
+  fetchIntegrationCatalog,
   fetchIntegrationByType,
   listPortalUsersFn,
 } from '@/lib/server/functions/admin'
@@ -182,6 +183,16 @@ export const adminQueries = {
         return statuses.filter((s) => s.showOnRoadmap)
       },
       staleTime: 5 * 60 * 1000, // 5min - reference data
+    }),
+
+  /**
+   * Integration catalog (static metadata for all registered integrations)
+   */
+  integrationCatalog: () =>
+    queryOptions({
+      queryKey: ['admin', 'integrationCatalog'],
+      queryFn: () => fetchIntegrationCatalog(),
+      staleTime: Infinity, // Static data, never changes at runtime
     }),
 
   /**

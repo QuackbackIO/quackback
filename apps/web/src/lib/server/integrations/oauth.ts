@@ -36,22 +36,18 @@ export function redirectResponse(url: string, cookies?: string[]): Response {
   return new Response(null, { status: 302, headers })
 }
 
-function buildCookie(name: string, value: string, isSecure: boolean, maxAge: number): string {
-  const secureFlag = isSecure ? 'Secure; ' : ''
-  return `${name}=${value}; HttpOnly; ${secureFlag}SameSite=Lax; Max-Age=${maxAge}; Path=/`
-}
-
-export function createStateCookie(
+export function createCookie(
   name: string,
   value: string,
   isSecure: boolean,
   maxAge: number
 ): string {
-  return buildCookie(name, value, isSecure, maxAge)
+  const secureFlag = isSecure ? 'Secure; ' : ''
+  return `${name}=${value}; HttpOnly; ${secureFlag}SameSite=Lax; Max-Age=${maxAge}; Path=/`
 }
 
 export function clearCookie(name: string, isSecure: boolean): string {
-  return buildCookie(name, '', isSecure, 0)
+  return createCookie(name, '', isSecure, 0)
 }
 
 /**

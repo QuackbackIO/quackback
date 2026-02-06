@@ -6,19 +6,15 @@
  */
 
 import { db } from '@/lib/server/db'
-import { getBaseUrl } from './hook-utils'
+import { getBaseUrl } from '@/lib/server/config'
 
 /**
  * Centralized hook context containing workspace data needed by all hooks.
  * Built once per event, passed to all hook target resolvers.
  */
 export interface HookContext {
-  /** Workspace settings ID (for token decryption) */
-  workspaceId: string
   /** Workspace display name */
   workspaceName: string
-  /** Workspace slug */
-  workspaceSlug: string
   /** Portal base URL for constructing post links */
   portalBaseUrl: string
 }
@@ -30,28 +26,16 @@ export interface HookContext {
  */
 export async function buildHookContext(): Promise<HookContext | null> {
   const settings = await db.query.settings.findFirst({
-    columns: { id: true, name: true, slug: true },
+    columns: { name: true },
   })
 
   if (!settings) {
-    console.error('[context] No workspace settings found')
+    console.error('[Targets] No workspace settings found')
     return null
   }
 
-  const portalBaseUrl = getBaseUrl()
-
   return {
-    workspaceId: settings.id,
     workspaceName: settings.name,
-    workspaceSlug: settings.slug,
-    portalBaseUrl,
+    portalBaseUrl: getBaseUrl(),
   }
-}
-
-/**
- * Resolve portal base URL for a workspace slug.
- * Uses BASE_URL environment variable.
- */
-export function resolvePortalUrl(_slug: string): string {
-  return getBaseUrl()
 }

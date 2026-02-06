@@ -4,10 +4,26 @@
  */
 
 import { WebClient } from '@slack/web-api'
-import type { HookHandler, HookResult, SlackTarget, SlackConfig } from '../hook-types'
-import type { EventData } from '../types'
-import { isRetryableError } from '../hook-utils'
-import { buildSlackMessage } from '../integrations/slack/message'
+import type { HookHandler, HookResult } from '../../events/hook-types'
+import type { EventData } from '../../events/types'
+import { isRetryableError } from '../../events/hook-utils'
+import { buildSlackMessage } from './message'
+
+/**
+ * Slack hook target.
+ */
+export interface SlackTarget {
+  channelId: string
+}
+
+/**
+ * Slack hook config.
+ */
+export interface SlackConfig {
+  accessToken: string
+  /** Portal base URL for constructing post links */
+  rootUrl: string
+}
 
 // OAuth errors that indicate token is invalid/expired (don't retry these)
 const AUTH_ERRORS = ['invalid_auth', 'token_revoked', 'token_expired', 'account_inactive']

@@ -157,12 +157,10 @@ export const webhookHook: HookHandler = {
         shouldRetry: response.status >= 500 || response.status === 429,
       }
     } catch (error) {
-      const errorMsg =
-        error instanceof Error && error.name === 'AbortError'
-          ? 'Request timeout'
-          : error instanceof Error
-            ? error.message
-            : 'Unknown error'
+      let errorMsg = 'Unknown error'
+      if (error instanceof Error) {
+        errorMsg = error.name === 'AbortError' ? 'Request timeout' : error.message
+      }
 
       console.error(`[Webhook] ❌ Failed: ${errorMsg}`)
       await updateWebhookFailure(webhookId, errorMsg)

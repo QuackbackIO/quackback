@@ -34,15 +34,30 @@ export function getSlackOAuthUrl(state: string, redirectUri: string): string {
 }
 
 /**
+ * Revoke a Slack OAuth token.
+ * Best-effort: logs but does not throw on failure.
+ */
+export async function revokeSlackToken(accessToken: string): Promise<void> {
+  try {
+    const client = new WebClient(accessToken)
+    await client.auth.revoke()
+    console.log('[Slack] Token revoked successfully')
+  } catch (error) {
+    console.error('[Slack] Failed to revoke token:', error)
+  }
+}
+
+/**
  * Exchange an OAuth code for access tokens.
+ * Returns the canonical shape expected by IntegrationOAuthConfig.exchangeCode.
  */
 export async function exchangeSlackCode(
   code: string,
   redirectUri: string
 ): Promise<{
   accessToken: string
-  teamId: string
-  teamName: string
+  externalWorkspaceId: string
+  externalWorkspaceName: string
 }> {
   const clientId = config.slackClientId
   const clientSecret = config.slackClientSecret
@@ -65,34 +80,7 @@ export async function exchangeSlackCode(
 
   return {
     accessToken: response.access_token!,
-    teamId: response.team!.id!,
-    teamName: response.team!.name!,
+    externalWorkspaceId: response.team!.id!,
+    externalWorkspaceName: response.team!.name!,
   }
-}
-
-/**
- * List channels accessible to the bot.
- */
-export async function listSlackChannels(
-  accessToken: string
-): Promise<Array<{ id: string; name: string; isPrivate: boolean }>> {
-  const client = new WebClient(accessToken)
-
-  const result = await client.conversations.list({
-    types: 'public_channel,private_channel',
-    exclude_archived: true,
-    limit: 200,
-  })
-
-  if (!result.ok) {
-    throw new Error(`Failed to list channels: ${result.error}`)
-  }
-
-  return (result.channels || []).map(
-    (channel: { id?: string; name?: string; is_private?: boolean }) => ({
-      id: channel.id!,
-      name: channel.name!,
-      isPrivate: channel.is_private || false,
-    })
-  )
 }

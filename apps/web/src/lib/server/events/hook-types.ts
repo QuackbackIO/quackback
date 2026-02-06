@@ -96,19 +96,6 @@ export interface ProcessResult {
 // ============================================================================
 
 /**
- * Slack hook target and config.
- */
-export interface SlackTarget {
-  channelId: string
-}
-
-export interface SlackConfig {
-  accessToken: string
-  /** Portal base URL for constructing post links */
-  rootUrl: string
-}
-
-/**
  * Email hook target and config.
  */
 export interface EmailTarget {
