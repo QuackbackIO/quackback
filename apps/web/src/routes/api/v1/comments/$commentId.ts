@@ -24,7 +24,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        */
       GET: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -62,7 +62,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        */
       PATCH: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
         const { memberId } = authResult
 
@@ -126,7 +126,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        */
       DELETE: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
         const { memberId } = authResult
 

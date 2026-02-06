@@ -6,14 +6,14 @@
  */
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { withApiKeyAuthTeam } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { db, member, eq } from '@/lib/server/db'
 import { createMcpServer } from './server'
 import type { McpAuthContext } from './types'
 
 /** Resolve auth context from API key → member → user */
 export async function resolveAuthContext(request: Request): Promise<McpAuthContext | Response> {
-  const authResult = await withApiKeyAuthTeam(request)
+  const authResult = await withApiKeyAuth(request, { role: 'team' })
   if (authResult instanceof Response) return authResult
 
   const memberRecord = await db.query.member.findFirst({

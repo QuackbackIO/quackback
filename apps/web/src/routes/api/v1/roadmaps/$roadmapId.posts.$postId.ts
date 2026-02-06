@@ -13,7 +13,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts/$postId'
        */
       DELETE: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {

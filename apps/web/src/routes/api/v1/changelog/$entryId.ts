@@ -26,7 +26,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        */
       GET: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -69,8 +69,8 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        * Update a changelog entry
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        // Authenticate (admin only)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -138,8 +138,8 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        * Delete a changelog entry
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        // Authenticate (admin only)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
 
         try {

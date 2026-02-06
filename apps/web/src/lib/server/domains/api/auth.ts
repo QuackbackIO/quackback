@@ -72,20 +72,24 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
   }
 }
 
+export type AuthLevel = 'team' | 'admin'
+
 /**
- * Middleware helper that returns an unauthorized response if API key is invalid.
+ * Require API key authentication with role-based authorization.
  * Includes rate limiting to prevent brute-force attacks.
  *
- * @example
- * export async function GET({ request }) {
- *   const authResult = await withApiKeyAuth(request)
- *   if (authResult instanceof Response) return authResult
+ * @param request - The incoming request
+ * @param options.role - Required role level: 'team' (admin or member) or 'admin' (admin only)
  *
- *   const { apiKey, memberId } = authResult
- *   // ... handle request
- * }
+ * @example
+ * const authResult = await withApiKeyAuth(request, { role: 'team' })
+ * if (authResult instanceof Response) return authResult
+ * const { apiKey, memberId } = authResult
  */
-export async function withApiKeyAuth(request: Request): Promise<ApiAuthContext | Response> {
+export async function withApiKeyAuth(
+  request: Request,
+  options: { role: AuthLevel }
+): Promise<ApiAuthContext | Response> {
   // Check rate limit before processing
   const clientIp = getClientIp(request)
   const rateLimit = checkRateLimit(clientIp)
@@ -102,33 +106,12 @@ export async function withApiKeyAuth(request: Request): Promise<ApiAuthContext |
     )
   }
 
-  return auth
-}
-
-/**
- * Require API key authentication with admin role.
- * Returns 403 Forbidden if the member is not an admin.
- */
-export async function withApiKeyAuthAdmin(request: Request): Promise<ApiAuthContext | Response> {
-  const auth = await withApiKeyAuth(request)
-  if (auth instanceof Response) return auth
-
-  if (auth.role !== 'admin') {
+  // Check role-based authorization
+  if (options.role === 'admin' && auth.role !== 'admin') {
     return forbiddenResponse('Admin access required for this operation')
   }
 
-  return auth
-}
-
-/**
- * Require API key authentication with admin or member role.
- * Returns 403 Forbidden if the member is a portal user.
- */
-export async function withApiKeyAuthTeam(request: Request): Promise<ApiAuthContext | Response> {
-  const auth = await withApiKeyAuth(request)
-  if (auth instanceof Response) return auth
-
-  if (auth.role === 'user') {
+  if (options.role === 'team' && auth.role === 'user') {
     return forbiddenResponse('Team member access required for this operation')
   }
 

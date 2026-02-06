@@ -32,7 +32,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        */
       GET: async ({ request }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -65,7 +65,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        */
       POST: async ({ request }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {

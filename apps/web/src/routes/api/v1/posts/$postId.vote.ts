@@ -13,7 +13,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
        */
       POST: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
         const { memberId } = authResult
 

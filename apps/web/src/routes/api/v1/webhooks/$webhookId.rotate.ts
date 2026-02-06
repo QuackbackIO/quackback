@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { withApiKeyAuthAdmin } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { WebhookId } from '@quackback/ids'
@@ -13,7 +13,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId/rotate')({
        */
       POST: async ({ request, params }) => {
         // Authenticate (admin only)
-        const authResult = await withApiKeyAuthAdmin(request)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
 
         try {
