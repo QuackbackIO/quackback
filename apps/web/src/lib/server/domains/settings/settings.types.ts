@@ -188,6 +188,33 @@ export interface BrandingConfig {
 }
 
 // =============================================================================
+// Developer Configuration (MCP server, API settings)
+// =============================================================================
+
+/**
+ * Developer configuration
+ * Controls developer-facing features like the MCP server
+ */
+export interface DeveloperConfig {
+  mcpEnabled: boolean
+}
+
+/**
+ * Default developer config — mcpEnabled: true for backward compatibility
+ * (existing deployments keep working without explicit opt-in)
+ */
+export const DEFAULT_DEVELOPER_CONFIG: DeveloperConfig = {
+  mcpEnabled: true,
+}
+
+/**
+ * Input for updating developer config (partial update)
+ */
+export interface UpdateDeveloperConfigInput {
+  mcpEnabled?: boolean
+}
+
+// =============================================================================
 // Update Input Types
 // =============================================================================
 

@@ -152,6 +152,11 @@ export const settings = pgTable('settings', {
    */
   customCss: text('custom_css'),
   /**
+   * Developer configuration (JSON)
+   * Structure: { mcpEnabled: boolean }
+   */
+  developerConfig: text('developer_config'),
+  /**
    * Header display mode - how the brand appears in portal navigation
    * - 'logo_and_name': Square logo + name (default)
    * - 'logo_only': Just the square logo

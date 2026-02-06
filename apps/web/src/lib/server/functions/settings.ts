@@ -14,6 +14,8 @@ import {
   getPublicAuthConfig,
   updateBrandingConfig,
   updatePortalConfig,
+  getDeveloperConfig,
+  updateDeveloperConfig,
   saveLogoKey,
   deleteLogoKey,
   saveHeaderLogoKey,
@@ -48,6 +50,11 @@ export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler
 
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   return getPublicAuthConfig()
+})
+
+export const fetchDeveloperConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return getDeveloperConfig()
 })
 
 function buildAvatarUrl(imageKey: string | null, fallbackUrl: string | null): string | null {
@@ -266,4 +273,19 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     return updateCustomCss(data.customCss)
+  })
+
+// ============================================
+// Developer Config Operations
+// ============================================
+
+const updateDeveloperConfigSchema = z.object({
+  mcpEnabled: z.boolean().optional(),
+})
+
+export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateDeveloperConfigSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+    return updateDeveloperConfig(data)
   })

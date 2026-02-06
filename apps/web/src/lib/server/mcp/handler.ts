@@ -7,6 +7,7 @@
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
 import { db, member, eq } from '@/lib/server/db'
 import { createMcpServer } from './server'
 import type { McpAuthContext } from './types'
@@ -39,6 +40,21 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
 /** Create a stateless transport + server, handle the request, clean up */
 export async function handleMcpRequest(request: Request): Promise<Response> {
+  const config = await getDeveloperConfig()
+  if (!config.mcpEnabled) {
+    return new Response(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32001,
+          message: 'MCP server is disabled. Enable it in Settings > Developers > MCP Server.',
+        },
+        id: null,
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
   const auth = await resolveAuthContext(request)
   if (auth instanceof Response) return auth
 

@@ -9,8 +9,14 @@ import type {
   BrandingConfig,
   PublicAuthConfig,
   PublicPortalConfig,
+  DeveloperConfig,
+  UpdateDeveloperConfigInput,
 } from './settings.types'
-import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './settings.types'
+import {
+  DEFAULT_AUTH_CONFIG,
+  DEFAULT_PORTAL_CONFIG,
+  DEFAULT_DEVELOPER_CONFIG,
+} from './settings.types'
 
 type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
 
@@ -122,6 +128,32 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     return updated
   } catch (error) {
     wrapDbError('update portal config', error)
+  }
+}
+
+export async function getDeveloperConfig(): Promise<DeveloperConfig> {
+  try {
+    const org = await requireSettings()
+    return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
+  } catch (error) {
+    wrapDbError('fetch developer config', error)
+  }
+}
+
+export async function updateDeveloperConfig(
+  input: UpdateDeveloperConfigInput
+): Promise<DeveloperConfig> {
+  try {
+    const org = await requireSettings()
+    const existing = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
+    const updated = deepMerge(existing, input as Partial<DeveloperConfig>)
+    await db
+      .update(settings)
+      .set({ developerConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    return updated
+  } catch (error) {
+    wrapDbError('update developer config', error)
   }
 }
 
@@ -406,6 +438,7 @@ export interface TenantSettings {
   authConfig: AuthConfig
   portalConfig: PortalConfig
   brandingConfig: BrandingConfig
+  developerConfig: DeveloperConfig
   /** Custom CSS for portal styling */
   customCss: string
   publicAuthConfig: PublicAuthConfig
@@ -422,6 +455,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const brandingConfig = parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
+    const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -439,6 +473,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       authConfig,
       portalConfig,
       brandingConfig,
+      developerConfig,
       customCss: org.customCss ?? '',
       publicAuthConfig: { oauth: authConfig.oauth, openSignup: authConfig.openSignup },
       publicPortalConfig: {

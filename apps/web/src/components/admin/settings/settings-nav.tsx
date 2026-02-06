@@ -11,6 +11,7 @@ import {
   ChevronDownIcon,
   KeyIcon,
   BoltIcon,
+  CommandLineIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
@@ -47,6 +48,7 @@ const navSections: NavSection[] = [
     items: [
       { label: 'API Keys', to: '/admin/settings/api-keys', icon: KeyIcon },
       { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
+      { label: 'MCP Server', to: '/admin/settings/mcp', icon: CommandLineIcon },
     ],
   },
 ]

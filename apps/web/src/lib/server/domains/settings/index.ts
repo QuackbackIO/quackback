@@ -23,10 +23,16 @@ export type {
   UpdatePortalConfigInput,
   PublicAuthConfig,
   PublicPortalConfig,
+  DeveloperConfig,
+  UpdateDeveloperConfigInput,
 } from './settings.types'
 
 // Default config values (no DB dependency)
-export { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from './settings.types'
+export {
+  DEFAULT_AUTH_CONFIG,
+  DEFAULT_PORTAL_CONFIG,
+  DEFAULT_DEVELOPER_CONFIG,
+} from './settings.types'
 
 // Consolidated tenant settings type
 export type { TenantSettings, SettingsBrandingData } from './settings.service'

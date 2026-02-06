@@ -8,6 +8,7 @@ import {
   fetchTeamMembersAndInvitations,
   fetchUserProfile,
   fetchCustomCssFn,
+  fetchDeveloperConfig,
 } from '@/lib/server/functions/settings'
 import {
   fetchSettingsLogoData,
@@ -65,6 +66,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'publicAuthConfig'],
       queryFn: fetchPublicAuthConfig,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  developerConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'developerConfig'],
+      queryFn: fetchDeveloperConfig,
       staleTime: STALE_TIME_LONG,
     }),
 
