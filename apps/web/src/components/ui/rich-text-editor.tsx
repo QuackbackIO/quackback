@@ -27,7 +27,7 @@ import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tipta
 import { common, createLowlight } from 'lowlight'
 import { useEffect, useCallback, useState, forwardRef, useImperativeHandle, useRef } from 'react'
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
-import DOMPurify from 'isomorphic-dompurify'
+import DOMPurify from 'dompurify'
 import { cn } from '@/lib/shared/utils'
 import {
   escapeHtmlAttr,
@@ -1851,10 +1851,13 @@ const DOMPURIFY_CONFIG = {
 }
 
 export function RichTextContent({ content, className }: RichTextContentProps) {
-  // For SSR: generate HTML directly from JSON content, sanitized with DOMPurify
+  // Generate HTML from JSON content, with DOMPurify defense-in-depth on client
   if (typeof content === 'object' && content.type === 'doc') {
     const rawHtml = generateContentHTML(content)
-    const html = DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG)
+    // DOMPurify requires a DOM — on the server, generateContentHTML already produces
+    // controlled HTML from validated JSON (content is sanitized at ingestion time)
+    const html =
+      typeof window !== 'undefined' ? DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG) : rawHtml
     return (
       <div
         className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}
