@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { ComingSoonIntegration } from '@/components/admin/settings/integrations/coming-soon-integration'
 
 export const Route = createFileRoute('/admin/settings/integrations/jira')({
   component: JiraIntegrationPage,
@@ -6,9 +7,10 @@ export const Route = createFileRoute('/admin/settings/integrations/jira')({
 
 function JiraIntegrationPage() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Jira Integration</h1>
-      <p className="text-muted-foreground mt-2">Coming soon...</p>
-    </div>
+    <ComingSoonIntegration
+      name="Jira"
+      description="Create and sync Jira issues from feedback posts."
+      iconBg="bg-[#0052CC]"
+    />
   )
 }

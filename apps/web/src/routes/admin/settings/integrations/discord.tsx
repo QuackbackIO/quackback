@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { ComingSoonIntegration } from '@/components/admin/settings/integrations/coming-soon-integration'
 
 export const Route = createFileRoute('/admin/settings/integrations/discord')({
   component: DiscordIntegrationPage,
@@ -6,9 +7,10 @@ export const Route = createFileRoute('/admin/settings/integrations/discord')({
 
 function DiscordIntegrationPage() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Discord Integration</h1>
-      <p className="text-muted-foreground mt-2">Coming soon...</p>
-    </div>
+    <ComingSoonIntegration
+      name="Discord"
+      description="Send notifications to your Discord server channels."
+      iconBg="bg-[#5865F2]"
+    />
   )
 }

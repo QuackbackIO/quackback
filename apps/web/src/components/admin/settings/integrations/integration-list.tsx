@@ -1,6 +1,8 @@
+import type { ComponentType } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ChevronRightIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
+import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 
 function SlackIcon({ className }: { className?: string }) {
   return (
@@ -10,42 +12,10 @@ function SlackIcon({ className }: { className?: string }) {
   )
 }
 
-// Integration definitions for the catalog
-const INTEGRATIONS = [
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Get notified in Slack when users submit feedback or when statuses change.',
-    icon: SlackIcon,
-    iconBg: 'bg-[#4A154B]',
-    to: '/admin/settings/integrations/slack',
-    available: true,
-  },
-  {
-    id: 'discord',
-    name: 'Discord',
-    description: 'Send notifications to your Discord server channels.',
-    iconBg: 'bg-[#5865F2]',
-    to: '/admin/settings/integrations/discord',
-    available: false,
-  },
-  {
-    id: 'linear',
-    name: 'Linear',
-    description: 'Sync feedback with Linear issues for seamless project management.',
-    iconBg: 'bg-[#5E6AD2]',
-    to: '/admin/settings/integrations/linear',
-    available: false,
-  },
-  {
-    id: 'jira',
-    name: 'Jira',
-    description: 'Create and sync Jira issues from feedback posts.',
-    iconBg: 'bg-[#0052CC]',
-    to: '/admin/settings/integrations/jira',
-    available: false,
-  },
-] as const
+// Icon components keyed by integration ID (React components can't be serialized through loader data)
+const ICON_MAP: Record<string, ComponentType<{ className?: string }>> = {
+  slack: SlackIcon,
+}
 
 interface IntegrationStatus {
   id: string
@@ -54,70 +24,74 @@ interface IntegrationStatus {
 }
 
 interface IntegrationListProps {
+  catalog: IntegrationCatalogEntry[]
   integrations: IntegrationStatus[]
 }
 
-export function IntegrationList({ integrations }: IntegrationListProps) {
+export function IntegrationList({ catalog, integrations }: IntegrationListProps) {
   const getIntegrationStatus = (integrationId: string) => {
     return integrations.find((i) => i.id === integrationId)
   }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {INTEGRATIONS.map((integration) => {
-        const status = getIntegrationStatus(integration.id)
+      {catalog.map((entry) => {
+        const status = getIntegrationStatus(entry.id)
         const isConnected = status?.status === 'active'
         const isPaused = status?.status === 'paused'
+        const Icon = ICON_MAP[entry.id]
 
-        if (!integration.available) {
-          // Coming soon card (still clickable to show detail page)
+        if (!entry.available) {
           return (
-            <Link
-              key={integration.id}
-              to={integration.to}
-              className="group rounded-xl border border-border/30 border-dashed bg-muted/20 p-5 opacity-70 transition-all hover:opacity-100 hover:border-border/50"
+            <div
+              key={entry.id}
+              className="rounded-xl border border-dashed border-border/30 bg-muted/10 p-5"
             >
               <div className="flex items-start gap-4">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${integration.iconBg}`}
-                >
-                  <span className="text-white font-semibold text-sm">
-                    {integration.name.charAt(0)}
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60">
+                  <span className="text-muted-foreground font-semibold text-sm">
+                    {entry.name.charAt(0)}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-foreground">{integration.name}</h3>
-                    <Badge variant="secondary" className="text-xs">
+                    <h3 className="font-medium text-muted-foreground">{entry.name}</h3>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+                    >
                       Coming soon
                     </Badge>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                    {integration.description}
+                  <p className="mt-1 text-sm text-muted-foreground/60 line-clamp-2">
+                    {entry.description}
                   </p>
                 </div>
-                <ChevronRightIcon className="h-5 w-5 text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors flex-shrink-0 mt-0.5" />
               </div>
-            </Link>
+            </div>
           )
         }
 
         // Available integration card
         return (
           <Link
-            key={integration.id}
-            to={integration.to}
+            key={entry.id}
+            to={entry.settingsPath}
             className="group rounded-xl border border-border/50 bg-card p-5 shadow-sm transition-all hover:border-border hover:shadow-md"
           >
             <div className="flex items-start gap-4">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-lg ${integration.iconBg}`}
+                className={`flex h-10 w-10 items-center justify-center rounded-lg ${entry.iconBg}`}
               >
-                {integration.icon && <integration.icon className="h-5 w-5 text-white" />}
+                {Icon ? (
+                  <Icon className="h-5 w-5 text-white" />
+                ) : (
+                  <span className="text-white font-semibold text-sm">{entry.name.charAt(0)}</span>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-medium text-foreground">{integration.name}</h3>
+                  <h3 className="font-medium text-foreground">{entry.name}</h3>
                   {isConnected && (
                     <Badge variant="outline" className="border-green-500/30 text-green-600 text-xs">
                       Connected
@@ -133,7 +107,7 @@ export function IntegrationList({ integrations }: IntegrationListProps) {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                  {integration.description}
+                  {entry.description}
                 </p>
                 {status?.workspaceName && (
                   <p className="mt-1.5 text-xs text-muted-foreground">

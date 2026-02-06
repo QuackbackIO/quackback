@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { ComingSoonIntegration } from '@/components/admin/settings/integrations/coming-soon-integration'
 
 export const Route = createFileRoute('/admin/settings/integrations/linear')({
   component: LinearIntegrationPage,
@@ -6,9 +7,10 @@ export const Route = createFileRoute('/admin/settings/integrations/linear')({
 
 function LinearIntegrationPage() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Linear Integration</h1>
-      <p className="text-muted-foreground mt-2">Coming soon...</p>
-    </div>
+    <ComingSoonIntegration
+      name="Linear"
+      description="Sync feedback with Linear issues for seamless project management."
+      iconBg="bg-[#5E6AD2]"
+    />
   )
 }
