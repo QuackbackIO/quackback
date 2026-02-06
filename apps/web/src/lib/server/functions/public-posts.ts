@@ -514,14 +514,11 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
-    const startTime = Date.now()
     console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
     try {
       // Early bailout: no session cookie = anonymous user (skip all DB queries)
       if (!hasSessionCookie()) {
-        console.log(
-          `[fn:public-posts] getVoteSidebarDataFn: no session cookie, returning defaults (${Date.now() - startTime}ms)`
-        )
+        console.log(`[fn:public-posts] getVoteSidebarDataFn: no session cookie, returning defaults`)
         return {
           isMember: false,
           hasVoted: false,
@@ -535,15 +532,11 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
 
       const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
-      console.log(
-        `[fn:public-posts] getVoteSidebarDataFn: auth resolved in ${Date.now() - startTime}ms`
-      )
+      console.log(`[fn:public-posts] getVoteSidebarDataFn: auth resolved`)
 
       // No authenticated user (invalid/expired session)
       if (!ctx?.user || !ctx?.member) {
-        console.log(
-          `[fn:public-posts] getVoteSidebarDataFn: no auth context (${Date.now() - startTime}ms)`
-        )
+        console.log(`[fn:public-posts] getVoteSidebarDataFn: no auth context`)
         return {
           isMember: false,
           hasVoted: false,
@@ -558,9 +551,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       // Authenticated user - fetch vote and subscription data in a single query
       const { hasVoted, subscription } = await getVoteAndSubscriptionStatus(postId, ctx.member.id)
 
-      console.log(
-        `[fn:public-posts] getVoteSidebarDataFn: isMember=true, hasVoted=${hasVoted}, total=${Date.now() - startTime}ms`
-      )
+      console.log(`[fn:public-posts] getVoteSidebarDataFn: isMember=true, hasVoted=${hasVoted}`)
       return {
         isMember: true,
         hasVoted,
@@ -571,12 +562,9 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         },
       }
     } catch (error) {
-      const elapsed = Date.now() - startTime
       const errorName = error instanceof Error ? error.name : 'Unknown'
       const errorMsg = error instanceof Error ? error.message : String(error)
-      console.error(
-        `[fn:public-posts] ❌ getVoteSidebarDataFn failed after ${elapsed}ms: ${errorName}: ${errorMsg}`
-      )
+      console.error(`[fn:public-posts] ❌ getVoteSidebarDataFn failed: ${errorName}: ${errorMsg}`)
       throw error
     }
   })

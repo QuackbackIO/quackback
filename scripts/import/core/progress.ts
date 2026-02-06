@@ -11,12 +11,9 @@ interface ImportStats {
 }
 
 export class Progress {
-  private startTime = 0
-
   constructor(private verbose: boolean) {}
 
   start(message: string): void {
-    this.startTime = Date.now()
     console.log(`\n🚀 ${message}`)
   }
 
@@ -34,7 +31,7 @@ export class Progress {
   }
 
   success(message: string): void {
-    console.log(`✅ ${message} (${formatDuration(Date.now() - this.startTime)})`)
+    console.log(`✅ ${message}`)
   }
 
   info(message: string): void {
@@ -61,7 +58,6 @@ export class Progress {
     this.logStats('Comments', result.comments)
     this.logStats('Votes', result.votes)
     this.logStats('Notes', result.notes)
-    console.log(`\n⏱️  Total time: ${formatDuration(result.duration)}`)
 
     const totalErrors =
       result.posts.errors + result.comments.errors + result.votes.errors + result.notes.errors
@@ -88,12 +84,4 @@ export class Progress {
     if (stats.imported > 0) return '✅'
     return '➖'
   }
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  const minutes = Math.floor(ms / 60000)
-  const seconds = Math.round((ms % 60000) / 1000)
-  return `${minutes}m ${seconds}s`
 }

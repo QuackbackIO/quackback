@@ -27,8 +27,6 @@ import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
-    const loaderStart = Date.now()
-    console.log(`[postDetail] ⏱️ loader START`)
     const { slug, postId: postIdParam } = params
     const { settings, queryClient } = context
 
@@ -52,7 +50,6 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
       queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
       queryClient.ensureQueryData(portalQueries.statuses()),
     ])
-    console.log(`[postDetail] ⏱️ loader TOTAL: ${Date.now() - loaderStart}ms`)
 
     if (!post || post.board.slug !== slug) {
       throw notFound()
