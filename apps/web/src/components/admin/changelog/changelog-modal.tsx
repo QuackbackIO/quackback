@@ -12,6 +12,7 @@ import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { updateChangelogSchema } from '@/lib/shared/schemas/changelog'
+import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { useUpdateChangelog } from '@/lib/client/mutations/changelog'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -104,7 +105,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         id: entryId,
         title: data.title,
         content: data.content,
-        contentJson,
+        contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
       },

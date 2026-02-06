@@ -6,6 +6,7 @@ import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createChangelogSchema } from '@/lib/shared/schemas/changelog'
+import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { useCreateChangelog } from '@/lib/client/mutations/changelog'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -58,7 +59,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
       {
         title: data.title,
         content: data.content,
-        contentJson,
+        contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
       },

@@ -27,7 +27,15 @@ import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tipta
 import { common, createLowlight } from 'lowlight'
 import { useEffect, useCallback, useState, forwardRef, useImperativeHandle, useRef } from 'react'
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
+import DOMPurify from 'isomorphic-dompurify'
 import { cn } from '@/lib/shared/utils'
+import {
+  escapeHtmlAttr,
+  sanitizeUrl,
+  sanitizeImageUrl,
+  safePositiveInt,
+  extractYoutubeId,
+} from '@/lib/shared/utils/sanitize'
 import {
   Bold,
   Italic,
@@ -1638,80 +1646,8 @@ interface RichTextContentProps {
 // HTML Sanitization Utilities (XSS Prevention)
 // ============================================================================
 
-/**
- * Escape HTML special characters in attribute values to prevent XSS
- */
-function escapeHtmlAttr(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-/**
- * Sanitize URLs for use in href attributes - only allow safe protocols
- */
-function sanitizeUrl(url: string): string {
-  if (!url || typeof url !== 'string') return ''
-
-  try {
-    // Handle relative URLs by using a base
-    const parsed = new URL(url, 'https://example.com')
-
-    // Only allow safe protocols
-    const safeProtocols = ['http:', 'https:', 'mailto:']
-    if (!safeProtocols.includes(parsed.protocol)) {
-      return ''
-    }
-
-    // Return the original URL if it was relative, otherwise the full href
-    return url.startsWith('/') ? url : parsed.href
-  } catch {
-    // Invalid URL - reject it
-    return ''
-  }
-}
-
-/**
- * Sanitize image URLs - allow http(s) and safe data URIs
- */
-function sanitizeImageUrl(url: string): string {
-  if (!url || typeof url !== 'string') return ''
-
-  // Allow data URIs only for images
-  if (url.startsWith('data:image/')) {
-    return url
-  }
-
-  try {
-    const parsed = new URL(url, 'https://example.com')
-
-    // Only allow http(s) for image sources
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return ''
-    }
-
-    return url.startsWith('/') ? url : parsed.href
-  } catch {
-    return ''
-  }
-}
-
-// Extract YouTube video ID from various URL formats
-function extractYoutubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-    /youtube\.com\/v\/([^&\n?#]+)/,
-    /youtube\.com\/shorts\/([^&\n?#]+)/,
-  ]
-  for (const pattern of patterns) {
-    const match = url.match(pattern)
-    if (match) return match[1]
-  }
-  return null
-}
+// Sanitization utilities (escapeHtmlAttr, sanitizeUrl, sanitizeImageUrl,
+// safePositiveInt, extractYoutubeId) are imported from @/lib/shared/utils/sanitize
 
 // Generate HTML from TipTap JSON content for SSR
 function generateContentHTML(content: JSONContent): string {
@@ -1729,7 +1665,8 @@ function generateContentHTML(content: JSONContent): string {
       }
 
       case 'heading': {
-        const level = node.attrs?.level ?? 1
+        const rawLevel = Number(node.attrs?.level)
+        const level = [1, 2, 3, 4, 5, 6].includes(rawLevel) ? rawLevel : 2
         const headingContent = node.content?.map(renderNode).join('') ?? ''
         return `<h${level}>${headingContent}</h${level}>`
       }
@@ -1810,7 +1747,7 @@ function generateContentHTML(content: JSONContent): string {
         return `<td class="border border-border p-2">${node.content?.map(renderNode).join('') ?? ''}</td>`
 
       case 'codeBlock': {
-        const language = node.attrs?.language ?? ''
+        const language = escapeHtmlAttr(String(node.attrs?.language ?? ''))
         const codeContent = node.content?.map(renderNode).join('') ?? ''
         return `<pre class="not-prose rounded-lg bg-muted p-4 overflow-x-auto"><code class="language-${language}">${codeContent}</code></pre>`
       }
@@ -1823,23 +1760,25 @@ function generateContentHTML(content: JSONContent): string {
         const alt = escapeHtmlAttr(rawAlt)
         // Only render image if src is valid after sanitization
         if (!src) return ''
-        const width = node.attrs?.width
-        const height = node.attrs?.height
+        const imgWidth = node.attrs?.width !== undefined ? safePositiveInt(node.attrs.width, 0) : 0
+        const imgHeight =
+          node.attrs?.height !== undefined ? safePositiveInt(node.attrs.height, 0) : 0
         const style =
-          width || height
-            ? `style="${width ? `width:${typeof width === 'number' ? width : parseInt(width, 10)}px;` : ''}${height ? `height:${typeof height === 'number' ? height : parseInt(height, 10)}px;` : ''}"`
+          imgWidth || imgHeight
+            ? `style="${imgWidth ? `width:${imgWidth}px;` : ''}${imgHeight ? `height:${imgHeight}px;` : ''}"`
             : ''
         return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" ${style} />`
       }
 
       case 'youtube': {
         const src = node.attrs?.src ?? ''
-        const width = node.attrs?.width ?? 640
-        const height = node.attrs?.height ?? 360
-        // Extract video ID and create embed URL
+        const width = safePositiveInt(node.attrs?.width, 640)
+        const height = safePositiveInt(node.attrs?.height, 360)
+        // Extract video ID (only allows alphanumeric, hyphens, underscores)
         const videoId = extractYoutubeId(src)
         if (videoId) {
-          return `<div class="relative aspect-video my-4 rounded-lg overflow-hidden"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}" width="${width}" height="${height}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="absolute inset-0 w-full h-full"></iframe></div>`
+          const safeVideoId = escapeHtmlAttr(videoId)
+          return `<div class="relative aspect-video my-4 rounded-lg overflow-hidden"><iframe src="https://www.youtube-nocookie.com/embed/${safeVideoId}" width="${width}" height="${height}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="absolute inset-0 w-full h-full"></iframe></div>`
         }
         return ''
       }
@@ -1856,10 +1795,66 @@ function generateContentHTML(content: JSONContent): string {
   return renderNode(content)
 }
 
+// DOMPurify config for sanitizing rendered TipTap HTML (defense-in-depth)
+const DOMPURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    'p',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'strong',
+    'em',
+    'u',
+    's',
+    'code',
+    'pre',
+    'a',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'hr',
+    'br',
+    'img',
+    'iframe',
+    'div',
+    'table',
+    'tr',
+    'th',
+    'td',
+    'input',
+    'span',
+  ],
+  ALLOWED_ATTR: [
+    'href',
+    'src',
+    'alt',
+    'class',
+    'style',
+    'target',
+    'rel',
+    'width',
+    'height',
+    'frameborder',
+    'allow',
+    'allowfullscreen',
+    'type',
+    'checked',
+    'disabled',
+  ],
+  ALLOW_DATA_ATTR: false,
+  ADD_TAGS: ['iframe'],
+  ADD_ATTR: ['allowfullscreen', 'frameborder', 'allow'],
+}
+
 export function RichTextContent({ content, className }: RichTextContentProps) {
-  // For SSR: generate HTML directly from JSON content
+  // For SSR: generate HTML directly from JSON content, sanitized with DOMPurify
   if (typeof content === 'object' && content.type === 'doc') {
-    const html = generateContentHTML(content)
+    const rawHtml = generateContentHTML(content)
+    const html = DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG)
     return (
       <div
         className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}

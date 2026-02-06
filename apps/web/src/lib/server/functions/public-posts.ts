@@ -13,6 +13,8 @@ import {
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
+import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
 import { getSettings } from './workspace'
 import {
@@ -40,10 +42,7 @@ import {
 // Schemas
 // ============================================
 
-const tiptapContentSchema = z.object({
-  type: z.literal('doc'),
-  content: z.array(z.any()).optional(),
-})
+// tiptapContentSchema imported from shared schemas
 
 const listPublicPostsSchema = z.object({
   boardSlug: z.string().optional(),
@@ -231,7 +230,12 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
         role: ctx.member.role,
       }
 
-      const result = await userEditPost(postId, { title, content, contentJson }, actor)
+      const sanitizedContentJson = contentJson ? sanitizeTiptapContent(contentJson) : undefined
+      const result = await userEditPost(
+        postId,
+        { title, content, contentJson: sanitizedContentJson },
+        actor
+      )
 
       console.log(`[fn:public-posts] userEditPostFn: edited id=${result.id}`)
       // Serialize Date fields
@@ -342,7 +346,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
           boardId,
           title,
           content,
-          contentJson,
+          contentJson: contentJson ? sanitizeTiptapContent(contentJson) : undefined,
           statusId: defaultStatus?.id,
         },
         author

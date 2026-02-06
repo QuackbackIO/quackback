@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { updateChangelogSchema } from '@/lib/shared/schemas/changelog'
+import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { useUpdateChangelog } from '@/lib/client/mutations/changelog'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -105,7 +106,7 @@ export function EditChangelogDialog({ id, open, onOpenChange }: EditChangelogDia
         id,
         title: data.title,
         content: data.content,
-        contentJson,
+        contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
       },
