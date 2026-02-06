@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { BackLink } from '@/components/ui/back-link'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
 import { SlackConnectionActions } from '@/components/admin/settings/integrations/slack/slack-connection-actions'
 import { SlackConfig } from '@/components/admin/settings/integrations/slack/slack-config'
-import { Badge } from '@/components/ui/badge'
+import { slackCatalog } from '@/lib/server/integrations/slack/catalog'
 
 function SlackIcon({ className }: { className?: string }) {
   return (
@@ -36,47 +36,18 @@ function SlackIntegrationPage() {
 
   return (
     <div className="space-y-6">
-      {/* Back Link */}
-      <BackLink to="/admin/settings/integrations">Integrations</BackLink>
-
-      {/* Page Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#4A154B]">
-            <SlackIcon className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-foreground">Slack</h1>
-              {isConnected && (
-                <Badge variant="outline" className="border-green-500/30 text-green-600">
-                  Connected
-                </Badge>
-              )}
-              {isPaused && (
-                <Badge variant="outline" className="border-yellow-500/30 text-yellow-600">
-                  Paused
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Get notified in Slack when users submit feedback or when statuses change.
-            </p>
-            {integration?.externalWorkspaceName && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Connected to{' '}
-                <span className="font-medium">{integration.externalWorkspaceName}</span>
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Connection Actions */}
-        <SlackConnectionActions
-          integrationId={integration?.id}
-          isConnected={isConnected || isPaused}
-        />
-      </div>
+      <IntegrationHeader
+        catalog={slackCatalog}
+        status={integration?.status as 'active' | 'paused' | 'pending' | null}
+        workspaceName={integration?.externalWorkspaceName}
+        icon={<SlackIcon className="h-6 w-6 text-white" />}
+        actions={
+          <SlackConnectionActions
+            integrationId={integration?.id}
+            isConnected={isConnected || isPaused}
+          />
+        }
+      />
 
       {/* Configuration Section */}
       {integration && (isConnected || isPaused) && (
@@ -96,8 +67,8 @@ function SlackIntegrationPage() {
           <SlackIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
           <h3 className="mt-4 font-medium text-foreground">Connect your Slack workspace</h3>
           <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Slack to receive notifications when users submit feedback, when post statuses
-            change, and when changelogs are published.
+            Connect Slack to receive notifications when users submit feedback, when statuses change,
+            and when comments are added.
           </p>
         </div>
       )}

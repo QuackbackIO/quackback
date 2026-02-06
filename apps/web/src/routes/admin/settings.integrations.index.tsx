@@ -26,7 +26,6 @@ function IntegrationsPage() {
   const integrations = integrationsQuery.data.map((i) => ({
     id: i.integrationType,
     status: i.status as 'active' | 'paused' | 'error',
-    workspaceName: i.externalWorkspaceName || undefined,
   }))
 
   return (
