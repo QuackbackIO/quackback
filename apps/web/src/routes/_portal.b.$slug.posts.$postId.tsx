@@ -20,6 +20,7 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
+import { SimilarPostsSection } from '@/components/public/post-detail/similar-posts-section'
 import { usePostPermissions } from '@/lib/client/hooks/use-portal-posts-query'
 import { usePostActions } from '@/lib/client/mutations'
 import { isValidTypeId, type PostId } from '@quackback/ids'
@@ -204,6 +205,8 @@ function PostDetailPage() {
           </Suspense>
         </div>
       </div>
+
+      <SimilarPostsSection postTitle={post.title} currentPostId={postId} className="mt-6" />
 
       <DeletePostDialog
         open={deleteDialogOpen}
