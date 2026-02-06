@@ -26,7 +26,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
        */
       GET: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -61,7 +61,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
        */
       PATCH: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -110,7 +110,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
        */
       DELETE: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {

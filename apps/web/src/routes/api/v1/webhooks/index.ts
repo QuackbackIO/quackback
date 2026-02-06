@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { withApiKeyAuthAdmin } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       GET: async ({ request }) => {
         // Authenticate
-        const authResult = await withApiKeyAuthAdmin(request)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -46,7 +46,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       POST: async ({ request }) => {
         // Authenticate
-        const authResult = await withApiKeyAuthAdmin(request)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
         const { memberId } = authResult
 

@@ -25,7 +25,7 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
        */
       GET: async ({ request, params }) => {
         // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
 
         try {
@@ -78,8 +78,8 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
        * Update a team member's role
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        // Authenticate (admin only)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
         const { memberId: actingMemberId } = authResult
 
@@ -142,8 +142,8 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
        * Remove a team member (converts them to a portal user)
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request)
+        // Authenticate (admin only)
+        const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
         const { memberId: actingMemberId } = authResult
 
