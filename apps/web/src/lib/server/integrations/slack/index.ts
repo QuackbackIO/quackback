@@ -2,17 +2,11 @@ import type { IntegrationDefinition } from '../types'
 import { slackHook } from './hook'
 import { saveIntegration } from './save'
 import { getSlackOAuthUrl, exchangeSlackCode, revokeSlackToken } from './oauth'
+import { slackCatalog } from './catalog'
 
 export const slackIntegration: IntegrationDefinition = {
   id: 'slack',
-  catalog: {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Get notified in Slack when users submit feedback or when statuses change.',
-    iconBg: 'bg-[#4A154B]',
-    settingsPath: '/admin/settings/integrations/slack',
-    available: true,
-  },
+  catalog: slackCatalog,
   oauth: {
     stateType: 'slack_oauth',
     errorParam: 'error',

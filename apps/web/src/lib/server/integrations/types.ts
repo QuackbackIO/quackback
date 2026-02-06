@@ -23,10 +23,48 @@ export interface IntegrationOAuthConfig {
   }>
 }
 
+/**
+ * Purpose-based integration categories.
+ * Grouped by what the user is trying to do, not by tool type.
+ */
+export const INTEGRATION_CATEGORIES = {
+  notifications: {
+    label: 'Notifications',
+    description: 'Get notified when things happen',
+  },
+  issue_tracking: {
+    label: 'Issue Tracking',
+    description: 'Push feedback into your workflow',
+  },
+  support_crm: {
+    label: 'Support & CRM',
+    description: 'Enrich feedback with customer data',
+  },
+  automation: {
+    label: 'Automation',
+    description: 'Connect to anything',
+  },
+} as const
+
+export type IntegrationCategory = keyof typeof INTEGRATION_CATEGORIES
+
+/**
+ * A specific thing an integration can do.
+ * Shown as bullet points on the integration detail page.
+ */
+export interface IntegrationCapability {
+  /** User-facing label, e.g. "Send channel notifications" */
+  label: string
+  /** Short description, e.g. "Posts a message to a Slack channel when events occur" */
+  description: string
+}
+
 export interface IntegrationCatalogEntry {
   id: string
   name: string
   description: string
+  category: IntegrationCategory
+  capabilities: IntegrationCapability[]
   iconBg: string
   settingsPath: string
   available: boolean
