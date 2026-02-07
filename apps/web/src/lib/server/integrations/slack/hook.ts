@@ -69,19 +69,12 @@ async function postMessage(
 
     // If not in channel, try to join (only works for public channels)
     if (errorCode === 'not_in_channel' || errorCode === 'channel_not_found') {
-      const isPrivateChannel = channelId.startsWith('G')
-
-      if (isPrivateChannel) {
-        console.error(`[Slack] Cannot auto-join private channel ${channelId}`)
-        throw new Error('Bot is not in this private channel. Please invite the bot first.')
-      }
-
-      console.log(`[Slack] Joining public channel ${channelId}`)
+      console.log(`[Slack] Attempting to join channel ${channelId}`)
       const joinResult = await client.conversations.join({ channel: channelId })
 
       if (!joinResult.ok) {
         console.error(`[Slack] Failed to join: ${joinResult.error}`)
-        throw new Error(`Failed to join channel: ${joinResult.error}`)
+        throw new Error(`Cannot post to this channel. Please invite the bot to the channel first.`)
       }
 
       console.log(`[Slack] Joined ${channelId}, retrying message`)

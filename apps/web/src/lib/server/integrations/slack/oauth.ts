@@ -4,7 +4,6 @@
  */
 
 import { WebClient } from '@slack/web-api'
-import { config } from '@/lib/server/config'
 
 const SLACK_SCOPES = [
   'channels:read',
@@ -17,10 +16,15 @@ const SLACK_SCOPES = [
 /**
  * Generate the Slack OAuth authorization URL.
  */
-export function getSlackOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.slackClientId
+export function getSlackOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('SLACK_CLIENT_ID environment variable not set')
+    throw new Error('Slack client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -53,17 +57,18 @@ export async function revokeSlackToken(accessToken: string): Promise<void> {
  */
 export async function exchangeSlackCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
-  externalWorkspaceId: string
-  externalWorkspaceName: string
+  config?: Record<string, unknown>
 }> {
-  const clientId = config.slackClientId
-  const clientSecret = config.slackClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('SLACK_CLIENT_ID and SLACK_CLIENT_SECRET environment variables must be set')
+    throw new Error('Slack credentials not configured')
   }
 
   const client = new WebClient()
@@ -80,7 +85,6 @@ export async function exchangeSlackCode(
 
   return {
     accessToken: response.access_token!,
-    externalWorkspaceId: response.team!.id!,
-    externalWorkspaceName: response.team!.name!,
+    config: { workspaceId: response.team!.id!, workspaceName: response.team!.name! },
   }
 }

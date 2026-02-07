@@ -1,25 +1,41 @@
 import type { IntegrationDefinition } from '../types'
+import { getZendeskOAuthUrl, exchangeZendeskCode, revokeZendeskToken } from './oauth'
+import { zendeskCatalog } from './catalog'
 
 export const zendeskIntegration: IntegrationDefinition = {
   id: 'zendesk',
-  catalog: {
-    id: 'zendesk',
-    name: 'Zendesk',
-    description: 'Link Zendesk tickets to feedback posts and surface customer context.',
-    category: 'support_crm',
-    capabilities: [
+  catalog: zendeskCatalog,
+  oauth: {
+    stateType: 'zendesk_oauth',
+    preAuthFields: [
       {
-        label: 'Capture feedback',
-        description: 'Turn Zendesk tickets into feedback posts directly from the agent interface',
-      },
-      {
-        label: 'Customer context',
-        description:
-          'Enrich feedback with Zendesk user data like organization, tags, and ticket history',
+        name: 'subdomain',
+        label: 'Zendesk Subdomain',
+        placeholder: 'your-company',
+        pattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$',
+        patternError: 'Subdomain must be lowercase alphanumeric with hyphens (e.g. your-company)',
+        required: true,
       },
     ],
-    iconBg: 'bg-[#03363D]',
-    settingsPath: '/admin/settings/integrations/zendesk',
-    available: false,
+    buildAuthUrl: getZendeskOAuthUrl,
+    exchangeCode: exchangeZendeskCode,
+  },
+  // No hook — Zendesk is inbound (enrichment), not outbound (notifications)
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developer.zendesk.com/',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developer.zendesk.com/',
+    },
+  ],
+  async onDisconnect(secrets, config) {
+    await revokeZendeskToken(secrets.accessToken as string, config.subdomain as string)
   },
 }

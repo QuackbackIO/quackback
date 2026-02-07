@@ -35,13 +35,8 @@ export interface BoardSettings {
 }
 
 // Integration config (stored in integrations.config JSONB column)
-export interface IntegrationConfig {
-  channelId?: string
-  channelName?: string
-  teamId?: string
-  webhookUrl?: string
-  [key: string]: string | boolean | number | undefined
-}
+// Each integration defines its own typed config at the integration layer.
+export type IntegrationConfig = Record<string, unknown>
 
 // Event mapping config (stored in event_mappings JSONB columns)
 export interface EventMappingActionConfig {

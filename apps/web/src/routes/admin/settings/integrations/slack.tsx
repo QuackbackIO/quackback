@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { SlackConnectionActions } from '@/components/admin/settings/integrations/slack/slack-connection-actions'
 import { SlackConfig } from '@/components/admin/settings/integrations/slack/slack-config'
+import { Button } from '@/components/ui/button'
 import { slackCatalog } from '@/lib/server/integrations/slack/catalog'
 
 function SlackIcon({ className }: { className?: string }) {
@@ -17,19 +20,17 @@ function SlackIcon({ className }: { className?: string }) {
 export const Route = createFileRoute('/admin/settings/integrations/slack')({
   loader: async ({ context }) => {
     const { queryClient } = context
-
-    // Pre-fetch Slack integration data
     await queryClient.ensureQueryData(adminQueries.integrationByType('slack'))
-
     return {}
   },
   component: SlackIntegrationPage,
 })
 
 function SlackIntegrationPage() {
-  // Read pre-fetched data from React Query cache
   const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('slack'))
-  const integration = integrationQuery.data
+  const { integration, platformCredentialFields, platformCredentialsConfigured } =
+    integrationQuery.data
+  const [credentialsOpen, setCredentialsOpen] = useState(false)
 
   const isConnected = integration?.status === 'active'
   const isPaused = integration?.status === 'paused'
@@ -39,13 +40,22 @@ function SlackIntegrationPage() {
       <IntegrationHeader
         catalog={slackCatalog}
         status={integration?.status as 'active' | 'paused' | 'pending' | null}
-        workspaceName={integration?.externalWorkspaceName}
+        workspaceName={integration?.workspaceName}
         icon={<SlackIcon className="h-6 w-6 text-white" />}
         actions={
-          <SlackConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-          />
+          <div className="flex items-center gap-2">
+            {platformCredentialFields.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                Configure credentials
+              </Button>
+            )}
+            {platformCredentialsConfigured && (
+              <SlackConnectionActions
+                integrationId={integration?.id}
+                isConnected={isConnected || isPaused}
+              />
+            )}
+          </div>
         }
       />
 
@@ -106,6 +116,16 @@ function SlackIntegrationPage() {
           </div>
         </div>
       </div>
+
+      {platformCredentialFields.length > 0 && (
+        <PlatformCredentialsDialog
+          integrationType="slack"
+          integrationName="Slack"
+          fields={platformCredentialFields}
+          open={credentialsOpen}
+          onOpenChange={setCredentialsOpen}
+        />
+      )}
     </div>
   )
 }

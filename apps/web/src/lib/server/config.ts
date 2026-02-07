@@ -86,10 +86,6 @@ const configSchema = z.object({
   s3ForcePathStyle: envBoolean,
   s3PublicUrl: z.string().optional(),
 
-  // Integrations (optional)
-  slackClientId: z.string().optional(),
-  slackClientSecret: z.string().optional(),
-
   // AI (optional)
   openaiApiKey: z.string().optional(),
   openaiBaseUrl: z.string().optional(),
@@ -137,10 +133,6 @@ function buildConfigFromEnv(): unknown {
     s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
     s3ForcePathStyle: process.env.S3_FORCE_PATH_STYLE,
     s3PublicUrl: process.env.S3_PUBLIC_URL,
-
-    // Integrations
-    slackClientId: process.env.SLACK_CLIENT_ID,
-    slackClientSecret: process.env.SLACK_CLIENT_SECRET,
 
     // AI
     openaiApiKey: process.env.OPENAI_API_KEY,
@@ -268,14 +260,6 @@ export const config = {
   },
   get s3PublicUrl() {
     return loadConfig().s3PublicUrl
-  },
-
-  // Integrations
-  get slackClientId() {
-    return loadConfig().slackClientId
-  },
-  get slackClientSecret() {
-    return loadConfig().slackClientSecret
   },
 
   // AI

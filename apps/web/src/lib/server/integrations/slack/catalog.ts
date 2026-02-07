@@ -21,4 +21,5 @@ export const slackCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#4A154B]',
   settingsPath: '/admin/settings/integrations/slack',
   available: true,
+  configurable: true,
 }

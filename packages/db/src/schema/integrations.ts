@@ -34,10 +34,6 @@ export const integrations = pgTable(
     // Configuration (channel IDs, team IDs, etc.)
     config: jsonb('config').$type<IntegrationConfig>().notNull().default({}),
 
-    // External workspace info (for Slack team, GitHub org, etc.)
-    externalWorkspaceId: varchar('external_workspace_id', { length: 255 }),
-    externalWorkspaceName: varchar('external_workspace_name', { length: 255 }),
-
     // Metadata
     connectedByMemberId: typeIdColumnNullable('member')('connected_by_member_id').references(
       () => member.id
@@ -57,6 +53,37 @@ export const integrations = pgTable(
     // CHECK constraint to ensure error count is never negative
     check('error_count_non_negative', sql`error_count >= 0`),
   ]
+)
+
+/**
+ * Platform-level credentials for integrations (OAuth app credentials).
+ * One row per provider. Secrets are AES-256-GCM encrypted.
+ * Presence of a row = configured; no row = not configured.
+ */
+export const integrationPlatformCredentials = pgTable(
+  'integration_platform_credentials',
+  {
+    id: typeIdWithDefault('platform_cred')('id').primaryKey(),
+    integrationType: varchar('integration_type', { length: 50 }).notNull(),
+    secrets: text('secrets').notNull(),
+    configuredByMemberId: typeIdColumnNullable('member')('configured_by_member_id').references(
+      () => member.id,
+      { onDelete: 'set null' }
+    ),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique('platform_cred_type_unique').on(table.integrationType)]
+)
+
+export const integrationPlatformCredentialsRelations = relations(
+  integrationPlatformCredentials,
+  ({ one }) => ({
+    configuredBy: one(member, {
+      fields: [integrationPlatformCredentials.configuredByMemberId],
+      references: [member.id],
+    }),
+  })
 )
 
 /**

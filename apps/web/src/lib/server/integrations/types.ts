@@ -1,25 +1,68 @@
 import type { HookHandler } from '../events/hook-types'
-import type { MemberId } from '@quackback/ids'
+
+/**
+ * A field collected from the user before starting the OAuth flow.
+ * Used for providers that need user-specific info in their OAuth URLs (e.g. Zendesk subdomain).
+ */
+export interface PreAuthField {
+  name: string
+  label: string
+  placeholder?: string
+  /** Regex pattern for validation (e.g. '^[a-z0-9-]+$') */
+  pattern?: string
+  /** Error message shown when pattern validation fails */
+  patternError?: string
+  required?: boolean
+}
+
+/**
+ * A platform-level credential field for an integration.
+ * These are OAuth app credentials (client ID, secret, bot tokens) that
+ * enable the integration, configured by admins through the UI.
+ */
+export interface PlatformCredentialField {
+  /** Property key in the credentials object (e.g. 'clientId', 'clientSecret') */
+  key: string
+  /** User-facing label (e.g. 'Client ID') */
+  label: string
+  /** Placeholder text for the input */
+  placeholder?: string
+  /** true → password input, masked on display */
+  sensitive: boolean
+  /** Help text shown below the field */
+  helpText?: string
+  /** Link to provider docs for setting up credentials */
+  helpUrl?: string
+}
 
 export interface IntegrationOAuthConfig {
   /** State type discriminator (e.g. 'slack_oauth') */
   stateType: string
   /** Provider's error query param name (default: 'error') */
   errorParam?: string
+  /** Fields collected before OAuth (e.g. subdomain for Zendesk). Rendered by the settings UI. */
+  preAuthFields?: PreAuthField[]
   /** Build the external authorization URL */
-  buildAuthUrl(state: string, redirectUri: string): string
+  buildAuthUrl(
+    state: string,
+    redirectUri: string,
+    fields?: Record<string, string>,
+    credentials?: Record<string, string>
+  ): string
   /** Exchange auth code for tokens */
   exchangeCode(
     code: string,
-    redirectUri: string
+    redirectUri: string,
+    fields?: Record<string, string>,
+    credentials?: Record<string, string>
   ): Promise<{
     accessToken: string
-    externalWorkspaceId: string
-    externalWorkspaceName: string
     /** Refresh token for providers with short-lived access tokens */
     refreshToken?: string
     /** Token lifetime in seconds (omit for non-expiring tokens like Slack) */
     expiresIn?: number
+    /** Integration-specific config merged into the config column (workspace info, site URLs, etc.) */
+    config?: Record<string, unknown>
   }>
 }
 
@@ -68,6 +111,10 @@ export interface IntegrationCatalogEntry {
   iconBg: string
   settingsPath: string
   available: boolean
+  /** true if the integration requires platform credentials to be configured */
+  configurable: boolean
+  /** Field definitions for platform credentials. Present in catalog API response, empty array if none needed. */
+  platformCredentialFields?: PlatformCredentialField[]
 }
 
 export interface IntegrationDefinition {
@@ -75,15 +122,12 @@ export interface IntegrationDefinition {
   catalog: IntegrationCatalogEntry
   oauth?: IntegrationOAuthConfig
   hook?: HookHandler
-  requiredEnvVars?: string[]
-  saveConnection?(params: {
-    memberId: MemberId
-    accessToken: string
-    externalWorkspaceId: string
-    externalWorkspaceName: string
-    refreshToken?: string
-    expiresIn?: number
-  }): Promise<void>
-  /** Called before an integration is deleted. Receives decrypted secrets to revoke tokens or clean up. */
-  onDisconnect?(secrets: Record<string, unknown>): Promise<void>
+  /** Platform-level credential fields required to enable this integration. Use `[]` if none needed. */
+  platformCredentials: PlatformCredentialField[]
+  /** Called before an integration is deleted. Receives decrypted secrets, config, and platform credentials to revoke tokens or clean up. */
+  onDisconnect?(
+    secrets: Record<string, unknown>,
+    config: Record<string, unknown>,
+    credentials?: Record<string, string>
+  ): Promise<void>
 }

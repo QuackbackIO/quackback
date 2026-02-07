@@ -1,28 +1,31 @@
 import type { IntegrationDefinition } from '../types'
+import { linearHook } from './hook'
+import { getLinearOAuthUrl, exchangeLinearCode, revokeLinearToken } from './oauth'
+import { linearCatalog } from './catalog'
 
 export const linearIntegration: IntegrationDefinition = {
   id: 'linear',
-  catalog: {
-    id: 'linear',
-    name: 'Linear',
-    description: 'Sync feedback with Linear issues for seamless project management.',
-    category: 'issue_tracking',
-    capabilities: [
-      {
-        label: 'Create issues',
-        description: 'Create a Linear issue from a feedback post with one click',
-      },
-      {
-        label: 'Link posts to issues',
-        description: 'Link existing Linear issues to feedback posts for traceability',
-      },
-      {
-        label: 'Sync statuses',
-        description: 'Keep feedback post status and Linear issue status in sync automatically',
-      },
-    ],
-    iconBg: 'bg-[#5E6AD2]',
-    settingsPath: '/admin/settings/integrations/linear',
-    available: false,
+  catalog: linearCatalog,
+  oauth: {
+    stateType: 'linear_oauth',
+    buildAuthUrl: getLinearOAuthUrl,
+    exchangeCode: exchangeLinearCode,
   },
+  hook: linearHook,
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://linear.app/settings/api',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://linear.app/settings/api',
+    },
+  ],
+  onDisconnect: (secrets, _config, credentials) =>
+    revokeLinearToken(secrets.accessToken as string, credentials),
 }

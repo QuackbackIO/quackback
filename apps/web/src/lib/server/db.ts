@@ -148,6 +148,8 @@ export {
   // Schema tables - integrations
   integrationEventMappings,
   integrationEventMappingsRelations,
+  integrationPlatformCredentials,
+  integrationPlatformCredentialsRelations,
   integrations,
   integrationsRelations,
   // Schema tables - changelog

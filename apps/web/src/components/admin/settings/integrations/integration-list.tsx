@@ -1,12 +1,17 @@
-import type { ComponentType } from 'react'
+import { lazy, useState, type ComponentType } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ChevronRightIcon } from '@heroicons/react/24/solid'
+import { ChevronRightIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import {
   INTEGRATION_CATEGORIES,
   type IntegrationCatalogEntry,
   type IntegrationCategory,
+  type PlatformCredentialField,
 } from '@/lib/server/integrations/types'
+
+const PlatformCredentialsDialog = lazy(() =>
+  import('./platform-credentials-dialog').then((m) => ({ default: m.PlatformCredentialsDialog }))
+)
 
 function SlackIcon({ className }: { className?: string }) {
   return (
@@ -39,7 +44,15 @@ interface IntegrationListProps {
   integrations: IntegrationStatus[]
 }
 
+interface SelectedIntegration {
+  type: string
+  name: string
+  fields: PlatformCredentialField[]
+}
+
 export function IntegrationList({ catalog, integrations }: IntegrationListProps) {
+  const [selectedIntegration, setSelectedIntegration] = useState<SelectedIntegration | null>(null)
+
   const getIntegrationStatus = (integrationId: string) => {
     return integrations.find((i) => i.id === integrationId)
   }
@@ -71,6 +84,73 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
                 const isPaused = status?.status === 'paused'
                 const Icon = ICON_MAP[entry.id]
 
+                // Not available + configurable = needs platform credentials
+                if (!entry.available && entry.configurable) {
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedIntegration({
+                          type: entry.id,
+                          name: entry.name,
+                          fields: entry.platformCredentialFields ?? [],
+                        })
+                      }
+                      className="group relative rounded-xl border border-dashed border-border/40 bg-muted/10 p-5 text-left transition-all hover:border-border/60"
+                    >
+                      {/* Hover overlay */}
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-background/80 opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <Cog6ToothIcon className="h-4 w-4" />
+                          Configure
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-4">
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${entry.iconBg} opacity-60`}
+                        >
+                          {Icon ? (
+                            <Icon className="h-5 w-5 text-white" />
+                          ) : (
+                            <span className="text-white font-semibold text-sm">
+                              {entry.name.charAt(0)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-muted-foreground">{entry.name}</h3>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+                            >
+                              Not configured
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground/60 line-clamp-2">
+                            {entry.description}
+                          </p>
+                          {entry.capabilities.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {entry.capabilities.map((cap) => (
+                                <span
+                                  key={cap.label}
+                                  className="inline-flex items-center rounded-md bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground/60"
+                                >
+                                  {cap.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                }
+
+                // Not available + not configurable = truly coming soon
                 if (!entry.available) {
                   return (
                     <div
@@ -178,6 +258,17 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
           </div>
         )
       })}
+      {selectedIntegration && (
+        <PlatformCredentialsDialog
+          integrationType={selectedIntegration.type}
+          integrationName={selectedIntegration.name}
+          fields={selectedIntegration.fields}
+          open
+          onOpenChange={(open) => {
+            if (!open) setSelectedIntegration(null)
+          }}
+        />
+      )}
     </div>
   )
 }

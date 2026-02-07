@@ -13,6 +13,7 @@ import {
   fetchIntegrationByType,
   listPortalUsersFn,
 } from '@/lib/server/functions/admin'
+import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
@@ -186,13 +187,23 @@ export const adminQueries = {
     }),
 
   /**
-   * Integration catalog (static metadata for all registered integrations)
+   * Integration catalog (includes dynamic availability based on platform credentials)
    */
   integrationCatalog: () =>
     queryOptions({
       queryKey: ['admin', 'integrationCatalog'],
       queryFn: () => fetchIntegrationCatalog(),
-      staleTime: Infinity, // Static data, never changes at runtime
+      staleTime: 5 * 60 * 1000, // 5min - availability changes when credentials are configured
+    }),
+
+  /**
+   * Masked platform credentials for an integration type
+   */
+  platformCredentials: (type: string) =>
+    queryOptions({
+      queryKey: ['admin', 'platformCredentials', type],
+      queryFn: () => fetchPlatformCredentialsMaskedFn({ data: { integrationType: type } }),
+      staleTime: 5 * 60 * 1000, // 5min - rarely changes during a session
     }),
 
   /**
@@ -206,7 +217,7 @@ export const adminQueries = {
     }),
 
   /**
-   * Get a single integration by type with event mappings
+   * Get a single integration by type with event mappings and platform credential info
    */
   integrationByType: (type: string) =>
     queryOptions({

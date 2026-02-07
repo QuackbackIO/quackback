@@ -1,26 +1,30 @@
 import type { IntegrationDefinition } from '../types'
+import { getHubSpotOAuthUrl, exchangeHubSpotCode, revokeHubSpotToken } from './oauth'
+import { hubspotCatalog } from './catalog'
 
 export const hubspotIntegration: IntegrationDefinition = {
   id: 'hubspot',
-  catalog: {
-    id: 'hubspot',
-    name: 'HubSpot',
-    description: 'Enrich feedback with HubSpot contact data and deal value.',
-    category: 'support_crm',
-    capabilities: [
-      {
-        label: 'Customer context',
-        description:
-          'Enrich feedback with HubSpot contact data like company, deal value, and lifecycle stage',
-      },
-      {
-        label: 'Revenue insights',
-        description:
-          'See the revenue impact of feature requests by linking feedback to deal pipeline data',
-      },
-    ],
-    iconBg: 'bg-[#FF7A59]',
-    settingsPath: '/admin/settings/integrations/hubspot',
-    available: false,
+  catalog: hubspotCatalog,
+  oauth: {
+    stateType: 'hubspot_oauth',
+    buildAuthUrl: getHubSpotOAuthUrl,
+    exchangeCode: exchangeHubSpotCode,
   },
+  // No hook — HubSpot is inbound (enrichment), not outbound (notifications)
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developers.hubspot.com/',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developers.hubspot.com/',
+    },
+  ],
+  onDisconnect: (secrets, _config, credentials) =>
+    revokeHubSpotToken(secrets.refreshToken as string, credentials),
 }

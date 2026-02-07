@@ -1,25 +1,35 @@
 import type { IntegrationDefinition } from '../types'
+import { discordHook } from './hook'
+import { getDiscordOAuthUrl, exchangeDiscordCode } from './oauth'
+import { discordCatalog } from './catalog'
 
 export const discordIntegration: IntegrationDefinition = {
   id: 'discord',
-  catalog: {
-    id: 'discord',
-    name: 'Discord',
-    description: 'Send notifications to your Discord server channels.',
-    category: 'notifications',
-    capabilities: [
-      {
-        label: 'Channel notifications',
-        description:
-          'Post messages to a Discord channel when feedback is submitted, statuses change, or comments are added',
-      },
-      {
-        label: 'Rich embeds',
-        description: 'Messages use Discord embeds with post details and direct links',
-      },
-    ],
-    iconBg: 'bg-[#5865F2]',
-    settingsPath: '/admin/settings/integrations/discord',
-    available: false,
+  catalog: discordCatalog,
+  oauth: {
+    stateType: 'discord_oauth',
+    buildAuthUrl: getDiscordOAuthUrl,
+    exchangeCode: exchangeDiscordCode,
   },
+  hook: discordHook,
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://discord.com/developers/applications',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://discord.com/developers/applications',
+    },
+    {
+      key: 'botToken',
+      label: 'Bot Token',
+      sensitive: true,
+      helpUrl: 'https://discord.com/developers/applications',
+    },
+  ],
 }
