@@ -51,3 +51,7 @@ export async function getIntegrationCatalog(): Promise<IntegrationCatalogEntry[]
 export function getIntegrationHook(type: string): HookHandler | undefined {
   return registry.get(type)?.hook
 }
+
+export function getIntegrationInbound(type: string) {
+  return registry.get(type)?.inbound
+}
