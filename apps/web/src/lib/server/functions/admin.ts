@@ -280,7 +280,7 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
       id: i.id,
       integrationType: i.integrationType,
       status: i.status,
-      externalWorkspaceName: i.externalWorkspaceName,
+      workspaceName: (i.config as Record<string, unknown>)?.workspaceName as string | undefined,
       connectedAt: i.connectedAt,
     }))
   } catch (error) {
@@ -325,8 +325,10 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       return {
         id: integration.id,
         status: integration.status,
-        externalWorkspaceName: integration.externalWorkspaceName,
-        config: integration.config as { channelId?: string },
+        workspaceName: (integration.config as Record<string, unknown>)?.workspaceName as
+          | string
+          | undefined,
+        config: integration.config as Record<string, string | number | boolean | null>,
         eventMappings: integration.eventMappings.map((m) => ({
           id: m.id,
           eventType: m.eventType,

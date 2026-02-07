@@ -11,11 +11,7 @@ import type { IntegrationId } from '@quackback/ids'
 const updateIntegrationSchema = z.object({
   id: z.string(),
   enabled: z.boolean().optional(),
-  config: z
-    .object({
-      channelId: z.string().optional(),
-    })
-    .optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
   eventMappings: z
     .array(
       z.object({
@@ -127,7 +123,10 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
         const definition = getIntegration(integration.integrationType)
         if (definition?.onDisconnect) {
           const secrets = decryptSecrets(integration.secrets)
-          await definition.onDisconnect(secrets)
+          await definition.onDisconnect(
+            secrets,
+            (integration.config ?? {}) as Record<string, unknown>
+          )
         }
       } catch (err) {
         console.error(
