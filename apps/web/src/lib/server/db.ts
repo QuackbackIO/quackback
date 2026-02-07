@@ -152,6 +152,9 @@ export {
   integrationPlatformCredentialsRelations,
   integrations,
   integrationsRelations,
+  // Schema tables - external links
+  postExternalLinks,
+  postExternalLinksRelations,
   // Schema tables - changelog
   changelogEntries,
   changelogEntriesRelations,
