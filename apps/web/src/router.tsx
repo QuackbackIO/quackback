@@ -19,8 +19,8 @@ export function getRouter() {
     routeTree,
     defaultPreload: false,
     scrollRestoration: true,
-    // Show pending state immediately (default is 1000ms delay)
-    defaultPendingMs: 0,
+    defaultPendingMs: 1000,
+    defaultPendingMinMs: 0,
     context: {
       queryClient,
     },

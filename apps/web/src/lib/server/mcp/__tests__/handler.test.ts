@@ -39,6 +39,11 @@ vi.mock('@/lib/server/domains/api/rate-limit', () => ({
   getClientIp: vi.fn(() => '127.0.0.1'),
 }))
 
+// Mock settings service so getDeveloperConfig doesn't hit the real DB
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getDeveloperConfig: vi.fn().mockResolvedValue({ mcpEnabled: true }),
+}))
+
 // Mock all domain services called by tools/resources
 vi.mock('@/lib/server/domains/posts/post.query', () => ({
   listInboxPosts: vi.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),

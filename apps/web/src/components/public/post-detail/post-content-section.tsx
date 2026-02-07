@@ -14,7 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { EditPostInput } from '@/lib/client/mutations'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
+import { SimilarPostsSection } from './similar-posts-section'
 import { PostActionsMenu } from './post-actions-menu'
+import type { PostId } from '@quackback/ids'
 
 export function PostContentSectionSkeleton(): React.ReactElement {
   return (
@@ -180,23 +182,25 @@ export function PostContentSection({
   }
 
   return (
-    <div className="flex-1 p-6 animate-in fade-in duration-300 fill-mode-backwards">
+    <div className="flex-1 p-6">
       <div className="flex items-start justify-between gap-2 mb-3">
         {currentStatus ? (
           <StatusBadge name={currentStatus.name} color={currentStatus.color} />
         ) : (
           <div />
         )}
-        {showActionsMenu && (
-          <PostActionsMenu
-            canEdit={canEdit ?? false}
-            canDelete={canDelete ?? false}
-            editReason={editReason}
-            deleteReason={deleteReason}
-            onEdit={onEditStart}
-            onDelete={onDelete}
-          />
-        )}
+        <div className="size-8 shrink-0">
+          {showActionsMenu && (
+            <PostActionsMenu
+              canEdit={canEdit ?? false}
+              canDelete={canDelete ?? false}
+              editReason={editReason}
+              deleteReason={deleteReason}
+              onEdit={onEditStart}
+              onDelete={onDelete}
+            />
+          )}
+        </div>
       </div>
 
       <h1 className="text-xl sm:text-2xl font-semibold text-foreground mb-4">{post.title}</h1>
@@ -206,6 +210,10 @@ export function PostContentSection({
         contentJson={post.contentJson}
         className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/90"
       />
+
+      {!isEditing && (
+        <SimilarPostsSection postTitle={post.title} currentPostId={post.id as PostId} />
+      )}
     </div>
   )
 }

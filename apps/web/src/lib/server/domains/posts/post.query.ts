@@ -179,9 +179,16 @@ export async function getCommentsWithReplies(
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
-  // Get all comments with reactions and author info
+  // Collect post IDs: this post + any posts merged into it
+  const mergedPosts = await db.query.posts.findMany({
+    where: and(eq(posts.canonicalPostId, postId), isNull(posts.deletedAt)),
+    columns: { id: true },
+  })
+  const postIds = [postId, ...mergedPosts.map((p) => p.id)] as PostId[]
+
+  // Get all comments with reactions and author info (including from merged posts)
   const allComments = await db.query.comments.findMany({
-    where: eq(comments.postId, postId),
+    where: postIds.length === 1 ? eq(comments.postId, postId) : inArray(comments.postId, postIds),
     with: {
       reactions: true,
       author: {
@@ -233,6 +240,9 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Exclude soft-deleted posts
   conditions.push(isNull(posts.deletedAt))
+
+  // Exclude merged/duplicate posts from inbox listing
+  conditions.push(isNull(posts.canonicalPostId))
 
   // Board filter
   if (boardIds?.length) {

@@ -672,6 +672,7 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
         .where(
           and(
             isNull(posts.deletedAt),
+            isNull(posts.canonicalPostId),
             sql`${posts.searchVector} @@ plainto_tsquery('english', ${searchQuery})`
           )
         )
@@ -702,6 +703,7 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
             .where(
               and(
                 isNull(posts.deletedAt),
+                isNull(posts.canonicalPostId),
                 sql`${posts.embedding} IS NOT NULL`,
                 sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= 0.35`
               )

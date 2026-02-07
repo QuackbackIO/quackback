@@ -63,6 +63,8 @@ interface CommentsSectionProps {
   isPinPending?: boolean
   /** Override user for admin context */
   adminUser?: { name: string | null; email: string }
+  /** Disable new comment submission (e.g. for merged posts) */
+  disableCommenting?: boolean
 }
 
 export function CommentsSection({
@@ -74,6 +76,7 @@ export function CommentsSection({
   onUnpinComment,
   isPinPending = false,
   adminUser,
+  disableCommenting = false,
 }: CommentsSectionProps) {
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
@@ -96,7 +99,7 @@ export function CommentsSection({
       <AuthCommentsSection
         postId={postId}
         comments={comments}
-        allowCommenting={adminUser ? true : data?.canComment}
+        allowCommenting={disableCommenting ? false : adminUser ? true : data?.canComment}
         user={adminUser ?? data?.user}
         pinnedCommentId={pinnedCommentId}
         canPinComments={canPinComments}

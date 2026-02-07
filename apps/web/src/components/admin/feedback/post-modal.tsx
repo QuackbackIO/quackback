@@ -6,7 +6,7 @@ import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
+import { ChevronLeftIcon, ChevronRightIcon, DocumentDuplicateIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
@@ -23,6 +23,7 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { PinnedCommentSection } from '@/components/public/post-detail/official-response-section'
+import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
   useUpdatePost,
@@ -99,6 +100,7 @@ function PostModalContent({
   // UI state
   const [isUpdating, setIsUpdating] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
+  const [showMergeDialog, setShowMergeDialog] = useState(false)
 
   // Navigation context
   const navigationContext = useNavigationContext(post.id)
@@ -123,6 +125,7 @@ function PostModalContent({
   useEffect(() => {
     setTitle(post.title)
     setContentJson((post.contentJson as JSONContent) ?? null)
+    setShowMergeDialog(false)
   }, [post.id, post.title, post.contentJson])
 
   // Keyboard navigation
@@ -227,6 +230,18 @@ function PostModalContent({
         onClose={onClose}
         viewUrl={`/b/${post.board.slug}/posts/${post.id}`}
       >
+        {!post.canonicalPostId && !post.mergeInfo && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowMergeDialog(true)}
+            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+          >
+            <DocumentDuplicateIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Mark as duplicate</span>
+          </Button>
+        )}
         {navigationContext.total > 0 && (
           <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
             <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
@@ -264,6 +279,11 @@ function PostModalContent({
 
       {/* Main content area - scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Merge info banner (if this post has been merged into another) */}
+        {post.mergeInfo && (
+          <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
+        )}
+
         {/* 2-column layout for editor and metadata */}
         <div className="flex">
           {/* Left: Content editor */}
@@ -328,6 +348,16 @@ function PostModalContent({
             />
           </Suspense>
         </div>
+
+        {/* Merge actions section */}
+        <MergeActions
+          postId={postId}
+          postTitle={post.title}
+          canonicalPostId={post.canonicalPostId as PostId | undefined}
+          mergedPosts={post.mergedPosts}
+          showDialog={showMergeDialog}
+          onShowDialogChange={setShowMergeDialog}
+        />
 
         {/* Pinned comment section */}
         {post.pinnedComment && (

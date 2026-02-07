@@ -305,3 +305,60 @@ export interface ChangeStatusResult extends Post {
   previousStatus: string
   newStatus: string
 }
+
+// ============================================
+// Merge/Deduplication Types
+// ============================================
+
+/**
+ * Input for merging a duplicate post into a canonical post
+ */
+export interface MergePostInput {
+  /** The post to mark as a duplicate */
+  duplicatePostId: PostId
+  /** The canonical post to merge into */
+  canonicalPostId: PostId
+}
+
+/**
+ * Result of a merge operation
+ */
+export interface MergePostResult {
+  /** The updated canonical post with recalculated vote count */
+  canonicalPost: { id: PostId; voteCount: number }
+  /** The duplicate post that was merged */
+  duplicatePost: { id: PostId }
+}
+
+/**
+ * Result of an unmerge operation
+ */
+export interface UnmergePostResult {
+  /** The post that was unmerged (restored to independent state) */
+  post: { id: PostId }
+  /** The canonical post with recalculated vote count */
+  canonicalPost: { id: PostId; voteCount: number }
+}
+
+/**
+ * Summary of a merged (duplicate) post shown on the canonical post detail
+ */
+export interface MergedPostSummary {
+  id: PostId
+  title: string
+  voteCount: number
+  authorName: string | null
+  createdAt: Date
+  mergedAt: Date
+}
+
+/**
+ * Merge info for a post that has been merged into another
+ */
+export interface PostMergeInfo {
+  /** The canonical post this was merged into */
+  canonicalPostId: PostId
+  canonicalPostTitle: string
+  canonicalPostBoardSlug: string
+  mergedAt: Date
+}
