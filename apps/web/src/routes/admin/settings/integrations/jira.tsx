@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { JiraConnectionActions } from '@/components/admin/settings/integrations/jira/jira-connection-actions'
 import { JiraConfig } from '@/components/admin/settings/integrations/jira/jira-config'
+import { Button } from '@/components/ui/button'
 import { jiraCatalog } from '@/lib/server/integrations/jira/catalog'
 
 function JiraIcon({ className }: { className?: string }) {
@@ -46,7 +49,9 @@ export const Route = createFileRoute('/admin/settings/integrations/jira')({
 
 function JiraIntegrationPage() {
   const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('jira'))
-  const integration = integrationQuery.data
+  const { integration, platformCredentialFields, platformCredentialsConfigured } =
+    integrationQuery.data
+  const [credentialsOpen, setCredentialsOpen] = useState(false)
 
   const isConnected = integration?.status === 'active'
   const isPaused = integration?.status === 'paused'
@@ -59,10 +64,19 @@ function JiraIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<JiraIcon className="h-6 w-6" />}
         actions={
-          <JiraConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-          />
+          <div className="flex items-center gap-2">
+            {platformCredentialFields.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                Configure credentials
+              </Button>
+            )}
+            {platformCredentialsConfigured && (
+              <JiraConnectionActions
+                integrationId={integration?.id}
+                isConnected={isConnected || isPaused}
+              />
+            )}
+          </div>
         }
       />
 
@@ -116,6 +130,16 @@ function JiraIntegrationPage() {
           </div>
         </div>
       </div>
+
+      {platformCredentialFields.length > 0 && (
+        <PlatformCredentialsDialog
+          integrationType="jira"
+          integrationName="Jira"
+          fields={platformCredentialFields}
+          open={credentialsOpen}
+          onOpenChange={setCredentialsOpen}
+        />
+      )}
     </div>
   )
 }

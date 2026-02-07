@@ -45,7 +45,12 @@ export function IntegrationHeader({
                   Paused
                 </Badge>
               )}
-              {!status && !catalog.available && (
+              {!status && !catalog.available && catalog.configurable && (
+                <Badge variant="outline" className="text-muted-foreground/60 border-border/40">
+                  Not configured
+                </Badge>
+              )}
+              {!status && !catalog.available && !catalog.configurable && (
                 <Badge variant="outline" className="text-muted-foreground/60 border-border/40">
                   Coming soon
                 </Badge>

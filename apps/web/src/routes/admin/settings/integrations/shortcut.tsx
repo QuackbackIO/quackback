@@ -25,7 +25,7 @@ export const Route = createFileRoute('/admin/settings/integrations/shortcut')({
 
 function ShortcutIntegrationPage() {
   const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('shortcut'))
-  const integration = integrationQuery.data
+  const { integration } = integrationQuery.data
 
   const isConnected = integration?.status === 'active'
   const isPaused = integration?.status === 'paused'

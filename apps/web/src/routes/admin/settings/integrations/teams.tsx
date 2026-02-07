@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { TeamsConnectionActions } from '@/components/admin/settings/integrations/teams/teams-connection-actions'
 import { TeamsConfig } from '@/components/admin/settings/integrations/teams/teams-config'
+import { Button } from '@/components/ui/button'
 import { teamsCatalog } from '@/lib/server/integrations/teams/catalog'
 
 function TeamsIcon({ className }: { className?: string }) {
@@ -26,7 +29,9 @@ export const Route = createFileRoute('/admin/settings/integrations/teams')({
 
 function TeamsIntegrationPage() {
   const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('teams'))
-  const integration = integrationQuery.data
+  const { integration, platformCredentialFields, platformCredentialsConfigured } =
+    integrationQuery.data
+  const [credentialsOpen, setCredentialsOpen] = useState(false)
 
   const isConnected = integration?.status === 'active'
   const isPaused = integration?.status === 'paused'
@@ -39,10 +44,19 @@ function TeamsIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<TeamsIcon className="h-6 w-6 text-white" />}
         actions={
-          <TeamsConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-          />
+          <div className="flex items-center gap-2">
+            {platformCredentialFields.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                Configure credentials
+              </Button>
+            )}
+            {platformCredentialsConfigured && (
+              <TeamsConnectionActions
+                integrationId={integration?.id}
+                isConnected={isConnected || isPaused}
+              />
+            )}
+          </div>
         }
       />
 
@@ -97,6 +111,16 @@ function TeamsIntegrationPage() {
           </div>
         </div>
       </div>
+
+      {platformCredentialFields.length > 0 && (
+        <PlatformCredentialsDialog
+          integrationType="teams"
+          integrationName="Microsoft Teams"
+          fields={platformCredentialFields}
+          open={credentialsOpen}
+          onOpenChange={setCredentialsOpen}
+        />
+      )}
     </div>
   )
 }

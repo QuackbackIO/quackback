@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { ZendeskConnectionActions } from '@/components/admin/settings/integrations/zendesk/zendesk-connection-actions'
+import { Button } from '@/components/ui/button'
 import { zendeskCatalog } from '@/lib/server/integrations/zendesk/catalog'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 
@@ -25,7 +28,9 @@ export const Route = createFileRoute('/admin/settings/integrations/zendesk')({
 
 function ZendeskIntegrationPage() {
   const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('zendesk'))
-  const integration = integrationQuery.data
+  const { integration, platformCredentialFields, platformCredentialsConfigured } =
+    integrationQuery.data
+  const [credentialsOpen, setCredentialsOpen] = useState(false)
 
   const isConnected = integration?.status === 'active'
   const isPaused = integration?.status === 'paused'
@@ -38,10 +43,19 @@ function ZendeskIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<ZendeskIcon className="h-6 w-6 text-white" />}
         actions={
-          <ZendeskConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-          />
+          <div className="flex items-center gap-2">
+            {platformCredentialFields.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                Configure credentials
+              </Button>
+            )}
+            {platformCredentialsConfigured && (
+              <ZendeskConnectionActions
+                integrationId={integration?.id}
+                isConnected={isConnected || isPaused}
+              />
+            )}
+          </div>
         }
       />
 
@@ -95,6 +109,16 @@ function ZendeskIntegrationPage() {
           </div>
         </div>
       </div>
+
+      {platformCredentialFields.length > 0 && (
+        <PlatformCredentialsDialog
+          integrationType="zendesk"
+          integrationName="Zendesk"
+          fields={platformCredentialFields}
+          open={credentialsOpen}
+          onOpenChange={setCredentialsOpen}
+        />
+      )}
     </div>
   )
 }

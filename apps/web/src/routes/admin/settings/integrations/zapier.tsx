@@ -26,7 +26,7 @@ export const Route = createFileRoute('/admin/settings/integrations/zapier')({
 
 function ZapierIntegrationPage() {
   const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('zapier'))
-  const integration = integrationQuery.data
+  const { integration } = integrationQuery.data
 
   const isConnected = integration?.status === 'active'
   const isPaused = integration?.status === 'paused'
