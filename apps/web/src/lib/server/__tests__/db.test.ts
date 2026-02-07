@@ -13,6 +13,7 @@ function setupMinimalConfig() {
   process.env.DATABASE_URL = 'postgres://localhost/quackback'
   process.env.BASE_URL = 'http://localhost:3000'
   process.env.SECRET_KEY = 'test-secret-key-that-is-at-least-32-characters-long'
+  process.env.REDIS_URL = 'redis://localhost:6379'
 }
 
 // Hoist the mock factory so it's available before module imports
@@ -77,6 +78,7 @@ describe('db module', () => {
       // Set up config without DATABASE_URL
       process.env.BASE_URL = 'http://localhost:3000'
       process.env.SECRET_KEY = 'test-secret-key-that-is-at-least-32-characters-long'
+      process.env.REDIS_URL = 'redis://localhost:6379'
       delete (process.env as Record<string, string | undefined>).DATABASE_URL
 
       const { db } = await import('../db')

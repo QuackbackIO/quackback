@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, afterAll } from 'vitest'
-import { Queue } from 'bullmq'
+import { createConnection } from 'node:net'
 import type { PostCreatedEvent } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -72,19 +72,25 @@ import { processEvent, closeQueue } from '../process'
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379'
 
 async function isRedisAvailable(): Promise<boolean> {
-  let q: Queue | undefined
-  try {
-    q = new Queue('{__health-check__}', {
-      connection: { url: REDIS_URL, maxRetriesPerRequest: null as null },
+  // Use raw TCP check to avoid ioredis retry noise flooding stderr in CI
+  const url = new URL(REDIS_URL)
+  const host = url.hostname || 'localhost'
+  const port = parseInt(url.port || '6379', 10)
+
+  return new Promise<boolean>((resolve) => {
+    const socket = createConnection({ host, port }, () => {
+      socket.destroy()
+      resolve(true)
     })
-    await q.getJobCounts()
-    return true
-  } catch (err) {
-    console.error('[Integration] Redis check failed:', err)
-    return false
-  } finally {
-    await q?.close().catch(() => {})
-  }
+    socket.on('error', () => {
+      socket.destroy()
+      resolve(false)
+    })
+    socket.setTimeout(2000, () => {
+      socket.destroy()
+      resolve(false)
+    })
+  })
 }
 
 function makeEvent(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
