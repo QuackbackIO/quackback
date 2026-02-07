@@ -3,19 +3,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { SlackConnectionActions } from '@/components/admin/settings/integrations/slack/slack-connection-actions'
 import { SlackConfig } from '@/components/admin/settings/integrations/slack/slack-config'
 import { Button } from '@/components/ui/button'
+import { SlackIcon } from '@/components/icons/integration-icons'
 import { slackCatalog } from '@/lib/server/integrations/slack/catalog'
-
-function SlackIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/slack')({
   loader: async ({ context }) => {
@@ -43,23 +37,19 @@ function SlackIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<SlackIcon className="h-6 w-6 text-white" />}
         actions={
-          <div className="flex items-center gap-2">
-            {platformCredentialFields.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                Configure credentials
-              </Button>
-            )}
-            {platformCredentialsConfigured && (
-              <SlackConnectionActions
-                integrationId={integration?.id}
-                isConnected={isConnected || isPaused}
-              />
-            )}
-          </div>
+          isConnected || isPaused ? (
+            <div className="flex items-center gap-2">
+              {platformCredentialFields.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                  Configure credentials
+                </Button>
+              )}
+              <SlackConnectionActions integrationId={integration?.id} isConnected={true} />
+            </div>
+          ) : undefined
         }
       />
 
-      {/* Configuration Section */}
       {integration && (isConnected || isPaused) && (
         <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
           <SlackConfig
@@ -71,51 +61,37 @@ function SlackIntegrationPage() {
         </div>
       )}
 
-      {/* Not Connected State */}
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <SlackIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your Slack workspace</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Slack to receive notifications when users submit feedback, when statuses change,
-            and when comments are added.
-          </p>
-        </div>
-      )}
-
-      {/* Setup Instructions */}
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">Setup Instructions</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<SlackIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect your Slack workspace"
+          description="Connect Slack to receive notifications when users submit feedback, when statuses change, and when comments are added."
+          steps={[
+            <p key="1">
               Click <span className="font-medium text-foreground">Connect</span> to authorize
               Quackback to post messages to your Slack workspace.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>
+            </p>,
+            <p key="2">
               Select which channel notifications should be posted to. The bot must be added to
               private channels before they appear in the list.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+            </p>,
+            <p key="3">
               Choose which events trigger notifications. You can enable or disable individual event
               types at any time.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={
+            <div className="flex flex-col items-end gap-2">
+              {platformCredentialFields.length > 0 && !platformCredentialsConfigured && (
+                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
+              )}
+              {platformCredentialsConfigured && (
+                <SlackConnectionActions integrationId={undefined} isConnected={false} />
+              )}
+            </div>
+          }
+        />
+      )}
 
       {platformCredentialFields.length > 0 && (
         <PlatformCredentialsDialog

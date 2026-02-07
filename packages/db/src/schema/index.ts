@@ -12,6 +12,7 @@ export * from './notifications'
 export * from './sentiment'
 export * from './api-keys'
 export * from './webhooks'
+export * from './external-links'
 
 // Note: Billing tables are NOT in the tenant database.
 // Billing is managed in the catalog database (website codebase).

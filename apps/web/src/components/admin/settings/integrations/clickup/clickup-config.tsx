@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { fetchExternalStatusesFn } from '@/lib/server/functions/external-statuses'
+import {
+  StatusSyncConfig,
+  type ExternalStatus,
+} from '@/components/admin/settings/integrations/status-sync-config'
 import {
   fetchClickUpSpacesFn,
   fetchClickUpListsFn,
@@ -28,7 +33,7 @@ interface EventMapping {
 
 interface ClickUpConfigProps {
   integrationId: string
-  initialConfig: { channelId?: string; teamId?: string }
+  initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
 }
@@ -57,13 +62,14 @@ export function ClickUpConfig({
   const [spaces, setSpaces] = useState<ClickUpSpace[]>([])
   const [loadingSpaces, setLoadingSpaces] = useState(false)
   const [spaceError, setSpaceError] = useState<string | null>(null)
-  const [selectedSpace, setSelectedSpace] = useState(initialConfig.teamId || '')
+  const [selectedSpace, setSelectedSpace] = useState((initialConfig.teamId as string) || '')
 
   const [lists, setLists] = useState<ClickUpList[]>([])
   const [loadingLists, setLoadingLists] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
-  const [selectedList, setSelectedList] = useState(initialConfig.channelId || '')
+  const [selectedList, setSelectedList] = useState((initialConfig.channelId as string) || '')
 
+  const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -102,6 +108,9 @@ export function ClickUpConfig({
 
   useEffect(() => {
     fetchSpaces()
+    fetchExternalStatusesFn({ data: { integrationType: 'clickup' } })
+      .then(setExternalStatuses)
+      .catch(() => {})
   }, [fetchSpaces])
 
   useEffect(() => {
@@ -283,6 +292,14 @@ export function ClickUpConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="clickup"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+      />
     </div>
   )
 }

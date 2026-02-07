@@ -3,21 +3,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { LinearConnectionActions } from '@/components/admin/settings/integrations/linear/linear-connection-actions'
 import { LinearConfig } from '@/components/admin/settings/integrations/linear/linear-config'
 import { Button } from '@/components/ui/button'
+import { LinearIcon } from '@/components/icons/integration-icons'
 import { linearCatalog } from '@/lib/server/integrations/linear/catalog'
-
-function LinearIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3.357 3.357a1.25 1.25 0 0 1 1.768 0L20.643 18.875a1.25 1.25 0 0 1-1.768 1.768L3.357 5.125a1.25 1.25 0 0 1 0-1.768Z" />
-      <path d="M7.5 3a1.25 1.25 0 0 1 1.25 1.25v4a1.25 1.25 0 0 1-2.5 0v-4A1.25 1.25 0 0 1 7.5 3Z" />
-      <path d="M21 16.5a1.25 1.25 0 0 1-1.25 1.25h-4a1.25 1.25 0 0 1 0-2.5h4A1.25 1.25 0 0 1 21 16.5Z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/linear')({
   loader: async ({ context }) => {
@@ -45,19 +37,16 @@ function LinearIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<LinearIcon className="h-6 w-6 text-white" />}
         actions={
-          <div className="flex items-center gap-2">
-            {platformCredentialFields.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                Configure credentials
-              </Button>
-            )}
-            {platformCredentialsConfigured && (
-              <LinearConnectionActions
-                integrationId={integration?.id}
-                isConnected={isConnected || isPaused}
-              />
-            )}
-          </div>
+          isConnected || isPaused ? (
+            <div className="flex items-center gap-2">
+              {platformCredentialFields.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                  Configure credentials
+                </Button>
+              )}
+              <LinearConnectionActions integrationId={integration?.id} isConnected={true} />
+            </div>
+          ) : undefined
         }
       />
 
@@ -73,44 +62,32 @@ function LinearIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <LinearIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your Linear workspace</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Linear to automatically create issues from user feedback and keep statuses in
-            sync across both platforms.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">Setup Instructions</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<LinearIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect your Linear workspace"
+          description="Connect Linear to automatically create issues from user feedback and keep statuses in sync across both platforms."
+          steps={[
+            <p key="1">
               Click <span className="font-medium text-foreground">Connect</span> to authorize
               Quackback to create issues in your Linear workspace.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>Select which team new feedback issues should be created in.</p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+            </p>,
+            <p key="2">Select which team new feedback issues should be created in.</p>,
+            <p key="3">
               Choose which events trigger issue creation. You can change these settings at any time.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={
+            <div className="flex flex-col items-end gap-2">
+              {platformCredentialFields.length > 0 && !platformCredentialsConfigured && (
+                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
+              )}
+              {platformCredentialsConfigured && (
+                <LinearConnectionActions integrationId={undefined} isConnected={false} />
+              )}
+            </div>
+          }
+        />
+      )}
 
       {platformCredentialFields.length > 0 && (
         <PlatformCredentialsDialog

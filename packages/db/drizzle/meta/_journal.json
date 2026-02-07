@@ -36,6 +36,13 @@
       "when": 1770462701552,
       "tag": "0004_naive_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770484601016,
+      "tag": "0005_legal_gravity",
+      "breakpoints": true
     }
   ]
 }

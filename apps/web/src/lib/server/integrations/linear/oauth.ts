@@ -23,7 +23,7 @@ export function getLinearOAuthUrl(
     response_type: 'code',
     redirect_uri: redirectUri,
     state,
-    scope: 'read,write,issues:create',
+    scope: 'read,write,issues:create,admin',
     prompt: 'consent',
   })
 
