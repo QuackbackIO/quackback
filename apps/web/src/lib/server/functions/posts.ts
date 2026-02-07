@@ -24,6 +24,7 @@ import {
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public'
+import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
 
 // ============================================
 // Helpers
@@ -239,11 +240,31 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
           }
         : null
 
+      // Fetch merge info: merged posts (if canonical) or merge info (if duplicate)
+      const [mergedPosts, mergeInfo] = await Promise.all([
+        getMergedPosts(postId).then((posts) =>
+          posts.map((p) => ({
+            ...p,
+            createdAt: toIsoString(p.createdAt),
+            mergedAt: toIsoString(p.mergedAt),
+          }))
+        ),
+        result.canonicalPostId
+          ? getPostMergeInfo(postId).then((info) =>
+              info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
+            )
+          : Promise.resolve(null),
+      ])
+
       return {
         ...serializePostDates(result),
         hasVoted: voted,
         comments: comments.map(serializeComment),
         pinnedComment: serializedPinnedComment,
+        canonicalPostId: result.canonicalPostId,
+        mergedAt: toIsoStringOrNull(result.mergedAt),
+        mergedPosts: mergedPosts.length > 0 ? mergedPosts : undefined,
+        mergeInfo,
       }
     } catch (error) {
       console.error(`[fn:posts] ❌ fetchPostWithDetails failed:`, error)

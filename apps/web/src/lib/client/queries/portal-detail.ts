@@ -62,6 +62,15 @@ export interface PublicPostDetailView {
   } | null
   pinnedComment: PinnedCommentView | null
   pinnedCommentId: CommentId | null
+  /** Merge/deduplication: info about canonical post if this is a merged duplicate */
+  mergeInfo?: {
+    canonicalPostId: string
+    canonicalPostTitle: string
+    canonicalPostBoardSlug: string
+    mergedAt: Date | string
+  } | null
+  /** Number of posts merged into this one (if canonical) */
+  mergedPostCount?: number
 }
 
 /**

@@ -69,6 +69,28 @@ export interface PostDetails {
   deletedAt?: Date | null
   /** Name of the member who deleted the post */
   deletedByMemberName?: string | null
+  /** Merge/deduplication: ID of the canonical post this was merged into */
+  canonicalPostId?: PostId | null
+  /** Merge/deduplication: when this post was merged */
+  mergedAt?: Date | string | null
+  /** Merge/deduplication: posts merged into this one (if canonical) */
+  mergedPosts?: MergedPostItem[]
+  /** Merge/deduplication: info about the canonical post (if this is a duplicate) */
+  mergeInfo?: {
+    canonicalPostId: PostId
+    canonicalPostTitle: string
+    canonicalPostBoardSlug: string
+    mergedAt: Date | string
+  } | null
+}
+
+export interface MergedPostItem {
+  id: PostId
+  title: string
+  voteCount: number
+  authorName: string | null
+  createdAt: Date | string
+  mergedAt: Date | string
 }
 
 export interface CurrentUser {

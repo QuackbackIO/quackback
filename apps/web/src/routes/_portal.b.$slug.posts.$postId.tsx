@@ -23,6 +23,7 @@ import { DeletePostDialog } from '@/components/public/post-detail/delete-post-di
 import { SimilarPostsSection } from '@/components/public/post-detail/similar-posts-section'
 import { usePostPermissions } from '@/lib/client/hooks/use-portal-posts-query'
 import { usePostActions } from '@/lib/client/mutations'
+import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
 import { isValidTypeId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
@@ -153,6 +154,15 @@ function PostDetailPage() {
         {board.name}
       </BackLink>
 
+      {/* Merge banner for duplicate posts */}
+      {post.mergeInfo && (
+        <PortalMergeBanner
+          canonicalPostTitle={post.mergeInfo.canonicalPostTitle}
+          canonicalPostBoardSlug={post.mergeInfo.canonicalPostBoardSlug}
+          canonicalPostId={post.mergeInfo.canonicalPostId}
+        />
+      )}
+
       <div
         className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
         style={{ animationDelay: '50ms' }}
@@ -205,6 +215,19 @@ function PostDetailPage() {
           </Suspense>
         </div>
       </div>
+
+      {/* Show merged post count on canonical posts */}
+      {post.mergedPostCount && post.mergedPostCount > 0 && (
+        <div
+          className="mt-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+          style={{ animationDelay: '150ms' }}
+        >
+          <p className="text-sm text-muted-foreground">
+            Includes {post.mergedPostCount} merged feedback{' '}
+            {post.mergedPostCount === 1 ? 'item' : 'items'}
+          </p>
+        </div>
+      )}
 
       <SimilarPostsSection postTitle={post.title} currentPostId={postId} className="mt-6" />
 

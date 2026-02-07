@@ -20,4 +20,5 @@ export type {
   CommentWithReplies,
   PostDetails,
   CurrentUser,
+  MergedPostItem,
 } from './inbox'

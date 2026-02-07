@@ -5,6 +5,7 @@ import {
   inArray,
   desc,
   sql,
+  isNull,
   posts,
   boards,
   postTags,
@@ -105,7 +106,7 @@ interface PostListParams {
 
 function buildPostFilterConditions(params: PostListParams) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
-  const conditions = [eq(boards.isPublic, true)]
+  const conditions = [eq(boards.isPublic, true), isNull(posts.canonicalPostId)]
 
   if (boardSlug) {
     conditions.push(eq(boards.slug, boardSlug))
@@ -523,7 +524,13 @@ export async function getPublicRoadmapPosts(statusIds: StatusId[]): Promise<Road
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(and(eq(boards.isPublic, true), inArray(posts.statusId, statusIds)))
+    .where(
+      and(
+        eq(boards.isPublic, true),
+        inArray(posts.statusId, statusIds),
+        isNull(posts.canonicalPostId)
+      )
+    )
     .orderBy(desc(posts.voteCount))
 
   return result.map((row) => ({
@@ -559,7 +566,9 @@ export async function getPublicRoadmapPostsPaginated(params: {
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(and(eq(boards.isPublic, true), eq(posts.statusId, statusId)))
+    .where(
+      and(eq(boards.isPublic, true), eq(posts.statusId, statusId), isNull(posts.canonicalPostId))
+    )
     .orderBy(desc(posts.voteCount))
     .limit(limit + 1)
     .offset(offset)

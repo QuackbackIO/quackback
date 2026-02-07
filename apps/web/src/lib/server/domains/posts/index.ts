@@ -31,4 +31,9 @@ export type {
   PostForExport,
   CreatePostResult,
   ChangeStatusResult,
+  MergePostInput,
+  MergePostResult,
+  UnmergePostResult,
+  MergedPostSummary,
+  PostMergeInfo,
 } from './post.types'

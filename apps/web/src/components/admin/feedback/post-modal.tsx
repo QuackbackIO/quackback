@@ -23,6 +23,7 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { PinnedCommentSection } from '@/components/public/post-detail/official-response-section'
+import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
   useUpdatePost,
@@ -264,6 +265,11 @@ function PostModalContent({
 
       {/* Main content area - scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Merge info banner (if this post has been merged into another) */}
+        {post.mergeInfo && (
+          <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
+        )}
+
         {/* 2-column layout for editor and metadata */}
         <div className="flex">
           {/* Left: Content editor */}
@@ -328,6 +334,14 @@ function PostModalContent({
             />
           </Suspense>
         </div>
+
+        {/* Merge actions section */}
+        <MergeActions
+          postId={postId}
+          postTitle={post.title}
+          canonicalPostId={post.canonicalPostId as PostId | undefined}
+          mergedPosts={post.mergedPosts}
+        />
 
         {/* Pinned comment section */}
         {post.pinnedComment && (

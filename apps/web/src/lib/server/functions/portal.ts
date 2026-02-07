@@ -21,6 +21,7 @@ import {
   listPublicPostsWithVotesAndAvatars,
   getVotedPostIdsByUserId,
 } from '@/lib/server/domains/posts/post.public'
+import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
 import { listPublicTags } from '@/lib/server/domains/tags/tag.service'
 import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscription.service'
@@ -165,6 +166,15 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       }
     }
 
+    // Fetch merge info for this post
+    const postId = data.postId as PostId
+    const [mergeInfo, mergedPostsList] = await Promise.all([
+      getPostMergeInfo(postId).then((info) =>
+        info ? { ...info, mergedAt: toISOString(info.mergedAt) } : null
+      ),
+      getMergedPosts(postId),
+    ])
+
     return {
       ...result,
       contentJson: result.contentJson ?? {},
@@ -176,6 +186,8 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
             respondedAt: toISOString(result.officialResponse.respondedAt),
           }
         : null,
+      mergeInfo,
+      mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
     }
   })
 

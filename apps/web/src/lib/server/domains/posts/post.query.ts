@@ -234,6 +234,9 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   // Exclude soft-deleted posts
   conditions.push(isNull(posts.deletedAt))
 
+  // Exclude merged/duplicate posts from inbox listing
+  conditions.push(isNull(posts.canonicalPostId))
+
   // Board filter
   if (boardIds?.length) {
     conditions.push(inArray(posts.boardId, boardIds))

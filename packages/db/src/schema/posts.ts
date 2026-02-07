@@ -84,6 +84,13 @@ export const posts = pgTable(
     })
       .default('published')
       .notNull(),
+    // Merge/deduplication: points to the canonical post this was merged into
+    canonicalPostId: typeIdColumnNullable('post')('canonical_post_id'),
+    mergedAt: timestamp('merged_at', { withTimezone: true }),
+    mergedByMemberId: typeIdColumnNullable('member')('merged_by_member_id').references(
+      () => member.id,
+      { onDelete: 'set null' }
+    ),
     // Full-text search vector (generated column, auto-computed from title and content)
     // Title has weight 'A' (highest), content has weight 'B'
     searchVector: tsvector('search_vector').generatedAlwaysAs(
@@ -123,6 +130,8 @@ export const posts = pgTable(
     index('posts_moderation_state_idx').on(table.moderationState),
     // Index for pinned comment lookups
     index('posts_pinned_comment_id_idx').on(table.pinnedCommentId),
+    // Index for finding merged/duplicate posts by canonical post
+    index('posts_canonical_post_id_idx').on(table.canonicalPostId),
     // CHECK constraints to ensure counts are never negative
     check('vote_count_non_negative', sql`vote_count >= 0`),
     check('comment_count_non_negative', sql`comment_count >= 0`),
@@ -332,6 +341,20 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   pinnedComment: one(comments, {
     fields: [posts.pinnedCommentId],
     references: [comments.id],
+  }),
+  // Merge/deduplication: the canonical post this was merged into
+  canonicalPost: one(posts, {
+    fields: [posts.canonicalPostId],
+    references: [posts.id],
+    relationName: 'mergedPosts',
+  }),
+  // Merge/deduplication: posts that have been merged into this one
+  mergedPosts: many(posts, { relationName: 'mergedPosts' }),
+  // Merge actor
+  mergedBy: one(member, {
+    fields: [posts.mergedByMemberId],
+    references: [member.id],
+    relationName: 'postMergedBy',
   }),
   votes: many(votes),
   comments: many(comments),
