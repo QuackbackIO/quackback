@@ -22,6 +22,13 @@
       "when": 1770416044188,
       "tag": "0002_quiet_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770457345878,
+      "tag": "0003_amusing_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

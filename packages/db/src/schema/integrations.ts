@@ -34,10 +34,6 @@ export const integrations = pgTable(
     // Configuration (channel IDs, team IDs, etc.)
     config: jsonb('config').$type<IntegrationConfig>().notNull().default({}),
 
-    // External workspace info (for Slack team, GitHub org, etc.)
-    externalWorkspaceId: varchar('external_workspace_id', { length: 255 }),
-    externalWorkspaceName: varchar('external_workspace_name', { length: 255 }),
-
     // Metadata
     connectedByMemberId: typeIdColumnNullable('member')('connected_by_member_id').references(
       () => member.id
