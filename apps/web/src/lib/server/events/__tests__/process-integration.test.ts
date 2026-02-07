@@ -51,6 +51,9 @@ vi.mock('@/lib/server/db', () => ({
   sql: vi.fn(),
 }))
 
+// Passthrough mock — ensures Vitest resolves hook-utils through its mock
+// system, which is required for consistent module graph resolution when
+// other imports from process.ts are mocked.
 vi.mock('../hook-utils', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return { ...actual }

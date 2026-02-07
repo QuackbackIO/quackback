@@ -21,6 +21,3 @@ export type { WebhookTarget, WebhookConfig } from './handlers/webhook'
 
 // Export registry functions
 export { getHook, registerHook } from './registry'
-
-// Export queue lifecycle
-export { closeQueue } from './process'

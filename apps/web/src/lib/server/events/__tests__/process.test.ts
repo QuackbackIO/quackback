@@ -59,11 +59,6 @@ vi.mock('../registry', () => ({
   getHook: (...args: unknown[]) => mockGetHook(...args),
 }))
 
-vi.mock('../hook-utils', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return { ...actual }
-})
-
 // db mock: inline to avoid hoisting issues. Access via import for assertions.
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -283,11 +278,24 @@ describe('Event Processing (BullMQ)', () => {
       expect(db.update).not.toHaveBeenCalled()
     })
 
-    it('updates webhook failure count on permanent failure', async () => {
+    it('updates webhook failure count on permanent failure (retries exhausted)', async () => {
       await ensureInitialized()
       const job = makeJob({ attemptsMade: 3, opts: { attempts: 3 } })
 
       capturedFailedHandler!(job, new Error('permanent'))
+
+      await new Promise((r) => setTimeout(r, 10))
+      expect(db.update).toHaveBeenCalled()
+    })
+
+    it('updates webhook failure count on UnrecoverableError (even if attemptsMade < attempts)', async () => {
+      await ensureInitialized()
+      // UnrecoverableError skips retries, so attemptsMade is only 1
+      const job = makeJob({ attemptsMade: 1, opts: { attempts: 3 } })
+      const error = new Error('SSRF blocked')
+      error.name = 'UnrecoverableError'
+
+      capturedFailedHandler!(job, error)
 
       await new Promise((r) => setTimeout(r, 10))
       expect(db.update).toHaveBeenCalled()

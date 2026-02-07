@@ -94,7 +94,10 @@ async function initializeQueue() {
 
   worker.on('failed', (job, error) => {
     if (!job) return
-    const isPermanent = job.attemptsMade >= (job.opts.attempts ?? 1)
+    // UnrecoverableError skips retries entirely (attemptsMade stays at 1),
+    // so we must also check the error name to detect permanent failure.
+    const isPermanent =
+      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
     const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
     console.error(
       `[Event] ${job.data.hookType} ${prefix} for event ${job.data.event.id}: ${error.message}`
@@ -157,7 +160,8 @@ export async function processEvent(event: EventData): Promise<void> {
 
 /**
  * Gracefully shut down the queue and worker.
- * Called on SIGTERM and in test cleanup.
+ * Called in test cleanup. In production, BullMQ's stalled job checker
+ * recovers any in-flight jobs on next startup if the process exits uncleanly.
  */
 export async function closeQueue(): Promise<void> {
   if (!initPromise) return
@@ -175,20 +179,3 @@ export async function closeQueue(): Promise<void> {
     console.error('[Event] Queue close error:', e)
   }
 }
-
-// Graceful shutdown — BullMQ leaves jobs in limbo on unclean exit.
-// Sets exitCode instead of calling process.exit() to let the framework
-// finish its own cleanup (e.g. TanStack Start shutdown hooks).
-function handleShutdown(signal: string) {
-  console.log(`[Event] ${signal} received, closing queue...`)
-  const timeout = setTimeout(() => {
-    console.error('[Event] Shutdown timed out after 10s, forcing exit')
-    process.exitCode = 1
-  }, 10_000)
-  closeQueue()
-    .catch((err) => console.error('[Event] Shutdown error:', err))
-    .finally(() => clearTimeout(timeout))
-}
-
-process.on('SIGTERM', () => handleShutdown('SIGTERM'))
-process.on('SIGINT', () => handleShutdown('SIGINT'))
