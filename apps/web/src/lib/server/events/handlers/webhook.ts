@@ -2,11 +2,8 @@
  * Webhook hook handler.
  * Delivers events to external HTTP endpoints with HMAC signing.
  *
- * Design: Single attempt with non-blocking delivery. If the first attempt fails,
- * we record the failure but don't block the caller. This ensures post creation
- * and other user actions are not delayed by slow/failing webhook endpoints.
- *
- * Future: Add background job queue for retries (Redis/BullMQ).
+ * Retries and failure counting are handled by BullMQ in process.ts.
+ * This handler only resets failureCount on success.
  */
 
 import crypto from 'crypto'
@@ -15,12 +12,12 @@ import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
 import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
+import { isRetryableError } from '../hook-utils'
 
 export type { WebhookTarget, WebhookConfig }
 
 const TIMEOUT_MS = 5_000 // 5s timeout for single attempt
 const USER_AGENT = 'Quackback-Webhook/1.0 (+https://quackback.io)'
-const MAX_FAILURES = 50
 
 /**
  * Private IP ranges that should be blocked (SSRF protection).
@@ -99,7 +96,6 @@ export const webhookHook: HookHandler = {
     const ipCheck = await resolveAndValidateIP(parsedUrl.hostname)
     if (!ipCheck.valid) {
       console.error(`[Webhook] ❌ SSRF blocked: ${ipCheck.error}`)
-      await updateWebhookFailure(webhookId, `SSRF blocked: ${ipCheck.error}`)
       return { success: false, error: ipCheck.error, shouldRetry: false }
     }
 
@@ -124,9 +120,6 @@ export const webhookHook: HookHandler = {
       'X-Quackback-Event': event.type,
     }
 
-    // Single attempt - non-blocking delivery
-    // If this fails, we record the failure but don't block the caller with retries
-    // TODO: Add background retry queue for failed deliveries
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -150,12 +143,8 @@ export const webhookHook: HookHandler = {
       // Non-2xx response
       const error = `HTTP ${response.status}`
       console.log(`[Webhook] ❌ Failed: ${error}`)
-      await updateWebhookFailure(webhookId, error)
-      return {
-        success: false,
-        error,
-        shouldRetry: response.status >= 500 || response.status === 429,
-      }
+      const retryable = response.status >= 500 || response.status === 429
+      return { success: false, error, shouldRetry: retryable }
     } catch (error) {
       let errorMsg = 'Unknown error'
       if (error instanceof Error) {
@@ -163,8 +152,8 @@ export const webhookHook: HookHandler = {
       }
 
       console.error(`[Webhook] ❌ Failed: ${errorMsg}`)
-      await updateWebhookFailure(webhookId, errorMsg)
-      return { success: false, error: errorMsg, shouldRetry: true }
+      const retryable = isRetryableError(error)
+      return { success: false, error: errorMsg, shouldRetry: retryable }
     }
   },
 }
@@ -185,31 +174,5 @@ async function updateWebhookSuccess(webhookId: WebhookId): Promise<void> {
       .where(eq(webhooks.id, webhookId))
   } catch (error) {
     console.error('[Webhook] Failed to update success status:', error)
-  }
-}
-
-/**
- * Update webhook on failed delivery. Auto-disable after MAX_FAILURES.
- */
-async function updateWebhookFailure(
-  webhookId: WebhookId,
-  error: string | undefined
-): Promise<void> {
-  try {
-    const { db, webhooks, eq, sql } = await import('@/lib/server/db')
-
-    // Increment failure count and potentially disable
-    await db
-      .update(webhooks)
-      .set({
-        failureCount: sql`${webhooks.failureCount} + 1`,
-        lastTriggeredAt: new Date(),
-        lastError: error ?? 'Unknown error',
-        // Auto-disable after MAX_FAILURES consecutive failures
-        status: sql`CASE WHEN ${webhooks.failureCount} + 1 >= ${MAX_FAILURES} THEN 'disabled' ELSE ${webhooks.status} END`,
-      })
-      .where(eq(webhooks.id, webhookId))
-  } catch (err) {
-    console.error('[Webhook] Failed to update failure status:', err)
   }
 }

@@ -1,7 +1,8 @@
 /**
- * Event dispatching - async event dispatch with inline building.
+ * Event dispatching - async event dispatch.
  *
- * Events are awaited to ensure hooks complete before the response is sent.
+ * processEvent() resolves targets and enqueues hooks (fast, ~10-50ms).
+ * Hook execution runs in the background via BullMQ.
  * Errors are caught and logged rather than propagated to the caller.
  */
 
@@ -56,7 +57,8 @@ function eventEnvelope(actor: EventActor) {
 
 /**
  * Dispatch and process an event.
- * Must be awaited to ensure hooks run before the request completes.
+ * Awaiting ensures targets are resolved and jobs enqueued.
+ * Hook execution runs in the background via BullMQ.
  */
 async function dispatchEvent(event: EventData): Promise<void> {
   console.log(`[Event] Dispatching ${event.type} event ${event.id}`)

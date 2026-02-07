@@ -62,6 +62,9 @@ const configSchema = z.object({
   // Auth
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
 
+  // Redis (BullMQ background jobs)
+  redisUrl: z.string().min(1),
+
   // Email (all optional)
   emailFrom: z.string().optional(),
   emailSmtpHost: z.string().optional(),
@@ -109,6 +112,9 @@ function buildConfigFromEnv(): unknown {
 
     // Auth
     secretKey: process.env.SECRET_KEY,
+
+    // Redis
+    redisUrl: process.env.REDIS_URL,
 
     // Email
     emailFrom: process.env.EMAIL_FROM,
@@ -200,6 +206,11 @@ export const config = {
   },
   get secretKey() {
     return loadConfig().secretKey
+  },
+
+  // Redis
+  get redisUrl() {
+    return loadConfig().redisUrl
   },
 
   // Email

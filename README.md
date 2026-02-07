@@ -59,6 +59,7 @@ Feedback tools should be simple. Quackback focuses on the essentials: voting, ro
 
 - **Framework:** TanStack Start + TanStack Router
 - **Database:** PostgreSQL + Drizzle ORM
+- **Queue:** BullMQ + Dragonfly (Redis-compatible)
 - **Auth:** Better Auth
 - **Styling:** Tailwind CSS v4 + shadcn/ui
 - **Validation:** Zod
@@ -83,7 +84,7 @@ docker build -t quackback .
 docker run -p 3000:3000 --env-file .env quackback
 ```
 
-You'll need to provide your own PostgreSQL database. Set `DATABASE_URL` in your `.env` file.
+You'll need to provide your own PostgreSQL database and Redis-compatible store (for background jobs). Set `DATABASE_URL` and `REDIS_URL` in your `.env` file.
 
 ### Local Development
 
@@ -93,7 +94,7 @@ Prerequisites: [Bun](https://bun.sh/) v1.3.4+ and [Docker](https://docker.com/)
 git clone https://github.com/QuackbackIO/quackback.git
 cd quackback
 bun run setup          # Install deps, create .env
-docker-compose up -d   # Start local PostgreSQL
+docker-compose up -d   # Start PostgreSQL, MinIO, and Dragonfly
 bun run db:migrate     # Run migrations
 bun run db:seed        # (Optional) Seed demo data
 bun run dev            # Start dev server

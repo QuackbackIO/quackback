@@ -12,7 +12,6 @@ export type {
   HookResult,
   HookTarget,
   TestResult,
-  ProcessResult,
   EmailTarget,
   EmailConfig,
 } from './hook-types'

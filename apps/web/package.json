@@ -74,6 +74,7 @@
     "@tiptap/suggestion": "3.17.1",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.4.17",
+    "bullmq": "^5.67.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
