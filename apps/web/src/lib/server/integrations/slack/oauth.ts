@@ -56,8 +56,7 @@ export async function exchangeSlackCode(
   redirectUri: string
 ): Promise<{
   accessToken: string
-  externalWorkspaceId: string
-  externalWorkspaceName: string
+  config?: Record<string, unknown>
 }> {
   const clientId = config.slackClientId
   const clientSecret = config.slackClientSecret
@@ -80,7 +79,6 @@ export async function exchangeSlackCode(
 
   return {
     accessToken: response.access_token!,
-    externalWorkspaceId: response.team!.id!,
-    externalWorkspaceName: response.team!.name!,
+    config: { workspaceId: response.team!.id!, workspaceName: response.team!.name! },
   }
 }

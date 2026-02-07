@@ -89,6 +89,28 @@ const configSchema = z.object({
   // Integrations (optional)
   slackClientId: z.string().optional(),
   slackClientSecret: z.string().optional(),
+  discordClientId: z.string().optional(),
+  discordClientSecret: z.string().optional(),
+  discordBotToken: z.string().optional(),
+  linearClientId: z.string().optional(),
+  linearClientSecret: z.string().optional(),
+  jiraClientId: z.string().optional(),
+  jiraClientSecret: z.string().optional(),
+  githubIntegrationClientId: z.string().optional(),
+  githubIntegrationClientSecret: z.string().optional(),
+  asanaClientId: z.string().optional(),
+  asanaClientSecret: z.string().optional(),
+  clickupClientId: z.string().optional(),
+  clickupClientSecret: z.string().optional(),
+  shortcutApiToken: z.string().optional(),
+  intercomClientId: z.string().optional(),
+  intercomClientSecret: z.string().optional(),
+  zendeskClientId: z.string().optional(),
+  zendeskClientSecret: z.string().optional(),
+  hubspotClientId: z.string().optional(),
+  hubspotClientSecret: z.string().optional(),
+  teamsClientId: z.string().optional(),
+  teamsClientSecret: z.string().optional(),
 
   // AI (optional)
   openaiApiKey: z.string().optional(),
@@ -141,6 +163,28 @@ function buildConfigFromEnv(): unknown {
     // Integrations
     slackClientId: process.env.SLACK_CLIENT_ID,
     slackClientSecret: process.env.SLACK_CLIENT_SECRET,
+    discordClientId: process.env.DISCORD_CLIENT_ID,
+    discordClientSecret: process.env.DISCORD_CLIENT_SECRET,
+    discordBotToken: process.env.DISCORD_BOT_TOKEN,
+    linearClientId: process.env.LINEAR_CLIENT_ID,
+    linearClientSecret: process.env.LINEAR_CLIENT_SECRET,
+    jiraClientId: process.env.JIRA_CLIENT_ID,
+    jiraClientSecret: process.env.JIRA_CLIENT_SECRET,
+    githubIntegrationClientId: process.env.GITHUB_INTEGRATION_CLIENT_ID,
+    githubIntegrationClientSecret: process.env.GITHUB_INTEGRATION_CLIENT_SECRET,
+    asanaClientId: process.env.ASANA_CLIENT_ID,
+    asanaClientSecret: process.env.ASANA_CLIENT_SECRET,
+    clickupClientId: process.env.CLICKUP_CLIENT_ID,
+    clickupClientSecret: process.env.CLICKUP_CLIENT_SECRET,
+    shortcutApiToken: process.env.SHORTCUT_API_TOKEN,
+    intercomClientId: process.env.INTERCOM_CLIENT_ID,
+    intercomClientSecret: process.env.INTERCOM_CLIENT_SECRET,
+    zendeskClientId: process.env.ZENDESK_CLIENT_ID,
+    zendeskClientSecret: process.env.ZENDESK_CLIENT_SECRET,
+    hubspotClientId: process.env.HUBSPOT_CLIENT_ID,
+    hubspotClientSecret: process.env.HUBSPOT_CLIENT_SECRET,
+    teamsClientId: process.env.TEAMS_CLIENT_ID,
+    teamsClientSecret: process.env.TEAMS_CLIENT_SECRET,
 
     // AI
     openaiApiKey: process.env.OPENAI_API_KEY,
@@ -276,6 +320,72 @@ export const config = {
   },
   get slackClientSecret() {
     return loadConfig().slackClientSecret
+  },
+  get discordClientId() {
+    return loadConfig().discordClientId
+  },
+  get discordClientSecret() {
+    return loadConfig().discordClientSecret
+  },
+  get discordBotToken() {
+    return loadConfig().discordBotToken
+  },
+  get linearClientId() {
+    return loadConfig().linearClientId
+  },
+  get linearClientSecret() {
+    return loadConfig().linearClientSecret
+  },
+  get jiraClientId() {
+    return loadConfig().jiraClientId
+  },
+  get jiraClientSecret() {
+    return loadConfig().jiraClientSecret
+  },
+  get githubIntegrationClientId() {
+    return loadConfig().githubIntegrationClientId
+  },
+  get githubIntegrationClientSecret() {
+    return loadConfig().githubIntegrationClientSecret
+  },
+  get asanaClientId() {
+    return loadConfig().asanaClientId
+  },
+  get asanaClientSecret() {
+    return loadConfig().asanaClientSecret
+  },
+  get clickupClientId() {
+    return loadConfig().clickupClientId
+  },
+  get clickupClientSecret() {
+    return loadConfig().clickupClientSecret
+  },
+  get shortcutApiToken() {
+    return loadConfig().shortcutApiToken
+  },
+  get intercomClientId() {
+    return loadConfig().intercomClientId
+  },
+  get intercomClientSecret() {
+    return loadConfig().intercomClientSecret
+  },
+  get zendeskClientId() {
+    return loadConfig().zendeskClientId
+  },
+  get zendeskClientSecret() {
+    return loadConfig().zendeskClientSecret
+  },
+  get hubspotClientId() {
+    return loadConfig().hubspotClientId
+  },
+  get hubspotClientSecret() {
+    return loadConfig().hubspotClientSecret
+  },
+  get teamsClientId() {
+    return loadConfig().teamsClientId
+  },
+  get teamsClientSecret() {
+    return loadConfig().teamsClientSecret
   },
 
   // AI
