@@ -21,7 +21,9 @@ interface HookJobData {
   config: Record<string, unknown>
 }
 
-const QUEUE_NAME = 'event-hooks'
+// Hashtag pins all keys to a single Dragonfly thread for Lua script compat.
+// See: https://www.dragonflydb.io/docs/integrations/bullmq
+const QUEUE_NAME = '{event-hooks}'
 
 // Webhook handlers do DNS + HTTP with a 5s timeout. 5 concurrent workers
 // keeps outbound connections reasonable on modest hardware while still
