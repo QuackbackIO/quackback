@@ -45,6 +45,9 @@ export { usePostActions, type EditPostInput } from './portal-post-actions'
 // Integration mutations
 export { useUpdateIntegration, useDeleteIntegration } from './integrations'
 
+// Platform credential mutations
+export { useSavePlatformCredentials, useDeletePlatformCredentials } from './platform-credentials'
+
 // Roadmap posts mutations
 export { useAddPostToRoadmap, useRemovePostFromRoadmap } from './roadmap-posts'
 

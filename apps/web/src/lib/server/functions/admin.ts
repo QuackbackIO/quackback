@@ -294,7 +294,7 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
  */
 export const fetchIntegrationCatalog = createServerFn({ method: 'GET' }).handler(async () => {
   const { getIntegrationCatalog } = await import('@/lib/server/integrations')
-  return getIntegrationCatalog()
+  return await getIntegrationCatalog()
 })
 
 /**
@@ -308,6 +308,14 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       await requireAuth({ roles: ['admin'] })
 
       const { integrations } = await import('@/lib/server/db')
+      const { getIntegration } = await import('@/lib/server/integrations')
+      const { hasPlatformCredentials } =
+        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+
+      const definition = getIntegration(data.type)
+      const platformCredentialFields = definition?.platformCredentials ?? []
+      const platformCredentialsConfigured =
+        platformCredentialFields.length === 0 || (await hasPlatformCredentials(data.type))
 
       const integration = await db.query.integrations.findFirst({
         where: eq(integrations.integrationType, data.type),
@@ -318,22 +326,30 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
 
       if (!integration) {
         console.log(`[fn:admin] fetchIntegrationByType: not found`)
-        return null
+        return {
+          integration: null,
+          platformCredentialFields,
+          platformCredentialsConfigured,
+        }
       }
 
       console.log(`[fn:admin] fetchIntegrationByType: found id=${integration.id}`)
       return {
-        id: integration.id,
-        status: integration.status,
-        workspaceName: (integration.config as Record<string, unknown>)?.workspaceName as
-          | string
-          | undefined,
-        config: integration.config as Record<string, string | number | boolean | null>,
-        eventMappings: integration.eventMappings.map((m) => ({
-          id: m.id,
-          eventType: m.eventType,
-          enabled: m.enabled,
-        })),
+        integration: {
+          id: integration.id,
+          status: integration.status,
+          workspaceName: (integration.config as Record<string, unknown>)?.workspaceName as
+            | string
+            | undefined,
+          config: integration.config as Record<string, string | number | boolean | null>,
+          eventMappings: integration.eventMappings.map((m) => ({
+            id: m.id,
+            eventType: m.eventType,
+            enabled: m.enabled,
+          })),
+        },
+        platformCredentialFields,
+        platformCredentialsConfigured,
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ fetchIntegrationByType failed:`, error)
