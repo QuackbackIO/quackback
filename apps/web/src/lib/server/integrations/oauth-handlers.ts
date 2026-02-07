@@ -32,6 +32,8 @@ interface OAuthState {
   memberId: MemberId
   nonce: string
   ts: number
+  /** Pre-auth fields collected before OAuth (e.g. Zendesk subdomain) */
+  preAuthFields?: Record<string, string>
 }
 
 function buildSettingsUrl(
@@ -65,7 +67,7 @@ export async function handleOAuthConnect(
     return Response.json({ error: 'state is required' }, { status: 400 })
   }
 
-  const stateData = verifyOAuthState<{ type: string; ts: number }>(state)
+  const stateData = verifyOAuthState<OAuthState>(state)
   if (!stateData || stateData.type !== definition.oauth.stateType) {
     return Response.json({ error: 'Invalid state' }, { status: 400 })
   }
@@ -75,7 +77,7 @@ export async function handleOAuthConnect(
   }
 
   const callbackUri = buildCallbackUri(integrationType, request)
-  const authUrl = definition.oauth.buildAuthUrl(state, callbackUri)
+  const authUrl = definition.oauth.buildAuthUrl(state, callbackUri, stateData.preAuthFields)
   const isSecure = isSecureRequest(request)
   const cookieName = getStateCookieName(integrationType, request)
   const maxAgeSeconds = STATE_EXPIRY_MS / 1000
@@ -155,12 +157,15 @@ export async function handleOAuthCallback(
   let accessToken: string | undefined
   try {
     const callbackUri = buildCallbackUri(integrationType, request)
-    const exchangeResult = await definition.oauth.exchangeCode(code, callbackUri)
+    const exchangeResult = await definition.oauth.exchangeCode(
+      code,
+      callbackUri,
+      stateData.preAuthFields
+    )
     accessToken = exchangeResult.accessToken
 
-    if (definition.saveConnection) {
-      await definition.saveConnection({ memberId, ...exchangeResult })
-    }
+    const { saveIntegration } = await import('./save')
+    await saveIntegration(integrationType, { memberId, ...exchangeResult })
 
     const successUrl = buildSettingsUrl(tenantUrl, settingsPath, integrationType, 'connected')
     return redirectResponse(successUrl, [clearCookie(cookieName, isSecureRequest(request))])
@@ -170,7 +175,7 @@ export async function handleOAuthCallback(
     // If we got a token but failed to save, attempt to revoke it
     if (accessToken && definition.onDisconnect) {
       try {
-        await definition.onDisconnect({ accessToken } as Record<string, unknown>)
+        await definition.onDisconnect({ accessToken } as Record<string, unknown>, {})
       } catch (revokeErr) {
         console.error(
           `[${integrationType}] Token revocation after save failure also failed:`,

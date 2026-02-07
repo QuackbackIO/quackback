@@ -1,60 +1,59 @@
 /**
- * Slack integration database operations.
+ * Shared integration save logic.
+ * Replaces the per-integration save.ts files with a single function.
  */
 import { db, integrations } from '@/lib/server/db'
-import { encryptSecrets } from '../encryption'
+import { encryptSecrets } from './encryption'
 import type { MemberId } from '@quackback/ids'
 
-interface SaveIntegrationParams {
+export interface SaveIntegrationParams {
   memberId: MemberId
   accessToken: string
-  externalWorkspaceId: string
-  externalWorkspaceName: string
   refreshToken?: string
   expiresIn?: number
+  config?: Record<string, unknown>
 }
 
 /**
- * Save or update a Slack integration.
+ * Save or update an integration connection.
+ * Encrypts secrets, computes token expiry, and upserts the integration row.
  */
-export async function saveIntegration(params: SaveIntegrationParams): Promise<void> {
-  const {
-    memberId,
-    accessToken,
-    externalWorkspaceId,
-    externalWorkspaceName,
-    refreshToken,
-    expiresIn,
-  } = params
+export async function saveIntegration(
+  integrationType: string,
+  params: SaveIntegrationParams
+): Promise<void> {
+  const { memberId, accessToken, refreshToken, expiresIn, config: oauthConfig } = params
 
   const secrets: Record<string, unknown> = { accessToken }
   if (refreshToken) secrets.refreshToken = refreshToken
-  if (expiresIn) secrets.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
 
   const encryptedSecrets = encryptSecrets(secrets)
   const now = new Date()
+  const tokenExpiresAt = expiresIn ? new Date(now.getTime() + expiresIn * 1000) : undefined
+
+  const config = {
+    ...oauthConfig,
+    ...(tokenExpiresAt ? { tokenExpiresAt: tokenExpiresAt.toISOString() } : {}),
+  }
 
   await db
     .insert(integrations)
     .values({
-      integrationType: 'slack',
+      integrationType,
       status: 'active',
       secrets: encryptedSecrets,
-      externalWorkspaceId,
-      externalWorkspaceName,
       connectedByMemberId: memberId,
       connectedAt: now,
-      config: {},
+      config,
     })
     .onConflictDoUpdate({
       target: [integrations.integrationType],
       set: {
         status: 'active',
         secrets: encryptedSecrets,
-        externalWorkspaceId,
-        externalWorkspaceName,
         connectedByMemberId: memberId,
         connectedAt: now,
+        config,
         lastError: null,
         lastErrorAt: null,
         errorCount: 0,

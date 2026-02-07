@@ -1,25 +1,19 @@
 import type { IntegrationDefinition } from '../types'
+import { teamsHook } from './hook'
+import { getTeamsOAuthUrl, exchangeTeamsCode } from './oauth'
+import { teamsCatalog } from './catalog'
 
 export const teamsIntegration: IntegrationDefinition = {
   id: 'teams',
-  catalog: {
-    id: 'teams',
-    name: 'Microsoft Teams',
-    description: 'Post feedback notifications to Microsoft Teams channels.',
-    category: 'notifications',
-    capabilities: [
-      {
-        label: 'Channel notifications',
-        description:
-          'Post adaptive cards to a Teams channel when feedback is submitted, statuses change, or comments are added',
-      },
-      {
-        label: 'Actionable cards',
-        description: 'Cards include post details and a link to view feedback in the portal',
-      },
-    ],
-    iconBg: 'bg-[#6264A7]',
-    settingsPath: '/admin/settings/integrations/teams',
-    available: false,
+  catalog: teamsCatalog,
+  oauth: {
+    stateType: 'teams_oauth',
+    buildAuthUrl: getTeamsOAuthUrl,
+    exchangeCode: exchangeTeamsCode,
+  },
+  hook: teamsHook,
+  requiredEnvVars: ['TEAMS_CLIENT_ID', 'TEAMS_CLIENT_SECRET'],
+  async onDisconnect() {
+    console.log('[Teams] Integration disconnected (no token revocation available)')
   },
 }
