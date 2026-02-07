@@ -7,17 +7,8 @@ import { PlatformCredentialsDialog } from '@/components/admin/settings/integrati
 import { AsanaConnectionActions } from '@/components/admin/settings/integrations/asana/asana-connection-actions'
 import { AsanaConfig } from '@/components/admin/settings/integrations/asana/asana-config'
 import { Button } from '@/components/ui/button'
+import { AsanaIcon } from '@/components/icons/integration-icons'
 import { asanaCatalog } from '@/lib/server/integrations/asana/catalog'
-
-function AsanaIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="12" cy="6.5" r="3.5" />
-      <circle cx="6" cy="16" r="3.5" />
-      <circle cx="18" cy="16" r="3.5" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/asana')({
   loader: async ({ context }) => {

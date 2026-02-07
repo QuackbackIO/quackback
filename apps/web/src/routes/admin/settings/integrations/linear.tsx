@@ -7,17 +7,8 @@ import { PlatformCredentialsDialog } from '@/components/admin/settings/integrati
 import { LinearConnectionActions } from '@/components/admin/settings/integrations/linear/linear-connection-actions'
 import { LinearConfig } from '@/components/admin/settings/integrations/linear/linear-config'
 import { Button } from '@/components/ui/button'
+import { LinearIcon } from '@/components/icons/integration-icons'
 import { linearCatalog } from '@/lib/server/integrations/linear/catalog'
-
-function LinearIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3.357 3.357a1.25 1.25 0 0 1 1.768 0L20.643 18.875a1.25 1.25 0 0 1-1.768 1.768L3.357 5.125a1.25 1.25 0 0 1 0-1.768Z" />
-      <path d="M7.5 3a1.25 1.25 0 0 1 1.25 1.25v4a1.25 1.25 0 0 1-2.5 0v-4A1.25 1.25 0 0 1 7.5 3Z" />
-      <path d="M21 16.5a1.25 1.25 0 0 1-1.25 1.25h-4a1.25 1.25 0 0 1 0-2.5h4A1.25 1.25 0 0 1 21 16.5Z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/linear')({
   loader: async ({ context }) => {

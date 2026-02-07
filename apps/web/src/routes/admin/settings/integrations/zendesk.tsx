@@ -6,16 +6,9 @@ import { IntegrationHeader } from '@/components/admin/settings/integrations/inte
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { ZendeskConnectionActions } from '@/components/admin/settings/integrations/zendesk/zendesk-connection-actions'
 import { Button } from '@/components/ui/button'
+import { ZendeskIcon } from '@/components/icons/integration-icons'
 import { zendeskCatalog } from '@/lib/server/integrations/zendesk/catalog'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
-
-function ZendeskIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M11.086 0v17.023L0 20.345V0h11.086zm0 6.955C11.086 3.113 8.638.665 4.796.665v6.29h6.29zM12.914 24V6.977L24 3.655V24H12.914zm0-6.955c0 3.842 2.448 6.29 6.29 6.29v-6.29h-6.29z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/zendesk')({
   loader: async ({ context }) => {

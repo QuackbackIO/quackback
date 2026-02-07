@@ -4,16 +4,8 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
 import { ZapierConnectionActions } from '@/components/admin/settings/integrations/zapier/zapier-connection-actions'
 import { ZapierConfig } from '@/components/admin/settings/integrations/zapier/zapier-config'
+import { ZapierIcon } from '@/components/icons/integration-icons'
 import { zapierCatalog } from '@/lib/server/integrations/zapier/catalog'
-
-function ZapierIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M15.535 8.465l-1.406 1.406a5.02 5.02 0 010 4.258l1.406 1.406a7.007 7.007 0 000-7.07zm-2.12 2.12a3.01 3.01 0 010 2.83L12 12l1.415-1.415zM12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 110-16 8 8 0 010 16z" />
-      <path d="M14.828 5.757l-1.414 1.414 1.06 1.06a7.12 7.12 0 010 7.538l-1.06 1.06 1.414 1.414 1.06-1.06a9.15 9.15 0 000-9.366l-1.06-1.06zM9.172 5.757L8.11 6.818a9.15 9.15 0 000 9.364l1.06 1.06 1.415-1.413-1.06-1.06a7.12 7.12 0 010-7.54l1.06-1.058L9.17 5.757z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/zapier')({
   loader: async ({ context }) => {

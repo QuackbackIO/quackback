@@ -6,16 +6,9 @@ import { IntegrationHeader } from '@/components/admin/settings/integrations/inte
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { IntercomConnectionActions } from '@/components/admin/settings/integrations/intercom/intercom-connection-actions'
 import { Button } from '@/components/ui/button'
+import { IntercomIcon } from '@/components/icons/integration-icons'
 import { intercomCatalog } from '@/lib/server/integrations/intercom/catalog'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
-
-function IntercomIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1 17.5c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-4c0-.276.224-.5.5-.5s.5.224.5.5v4zm-3 0c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-3c0-.276.224-.5.5-.5s.5.224.5.5v3zm6 0c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-4c0-.276.224-.5.5-.5s.5.224.5.5v4zm3 0c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-3c0-.276.224-.5.5-.5s.5.224.5.5v3zm3-1c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-2c0-.276.224-.5.5-.5s.5.224.5.5v2zm-15 0c0 .276-.224.5-.5.5S4 16.776 4 16.5v-2c0-.276.224-.5.5-.5s.5.224.5.5v2zm14 3.5c-.157 0-.312-.073-.412-.21C18.137 19.142 15.354 18 12 18s-6.137 1.142-6.588 1.79a.501.501 0 01-.824-.58C5.16 18.38 8.24 17 12 17s6.84 1.38 7.412 2.21a.5.5 0 01-.412.79z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/intercom')({
   loader: async ({ context }) => {

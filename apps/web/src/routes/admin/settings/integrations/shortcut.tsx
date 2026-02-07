@@ -4,15 +4,8 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
 import { ShortcutConnectionActions } from '@/components/admin/settings/integrations/shortcut/shortcut-connection-actions'
 import { ShortcutConfig } from '@/components/admin/settings/integrations/shortcut/shortcut-config'
+import { ShortcutIcon } from '@/components/icons/integration-icons'
 import { shortcutCatalog } from '@/lib/server/integrations/shortcut/catalog'
-
-function ShortcutIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M6.5 3C4.567 3 3 4.567 3 6.5v11C3 19.433 4.567 21 6.5 21h11c1.933 0 3.5-1.567 3.5-3.5v-11C21 4.567 19.433 3 17.5 3h-11zm3.25 4.5a1 1 0 0 1 .832.445l1.418 2.127 1.418-2.127a1 1 0 0 1 1.664 0l2.5 3.75a1 1 0 0 1-.832 1.555H13.5l1.918 2.877a1 1 0 0 1-1.664 1.11L12 14.862l-1.754 2.376a1 1 0 1 1-1.664-1.11L10.5 13.25H7.25a1 1 0 0 1-.832-1.555l2.5-3.75a1 1 0 0 1 .832-.445z" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/shortcut')({
   loader: async ({ context }) => {

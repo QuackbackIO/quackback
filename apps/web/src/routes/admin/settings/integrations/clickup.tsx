@@ -7,31 +7,8 @@ import { PlatformCredentialsDialog } from '@/components/admin/settings/integrati
 import { ClickUpConnectionActions } from '@/components/admin/settings/integrations/clickup/clickup-connection-actions'
 import { ClickUpConfig } from '@/components/admin/settings/integrations/clickup/clickup-config'
 import { Button } from '@/components/ui/button'
+import { ClickUpIcon } from '@/components/icons/integration-icons'
 import { clickupCatalog } from '@/lib/server/integrations/clickup/catalog'
-
-function ClickUpIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none">
-      <defs>
-        <linearGradient id="clickup-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#8930FD" />
-          <stop offset="50%" stopColor="#49CCF9" />
-          <stop offset="100%" stopColor="#49CCF9" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M4 16.5L7.5 13.8C8.9 15.6 10.4 16.5 12 16.5C13.6 16.5 15.1 15.6 16.5 13.8L20 16.5C18 19.2 15.3 20.7 12 20.7C8.7 20.7 6 19.2 4 16.5Z"
-        fill="url(#clickup-grad)"
-      />
-      <path
-        d="M4 12.3L7.5 9.6C8.9 11.4 10.4 12.3 12 12.3C13.6 12.3 15.1 11.4 16.5 9.6L20 12.3C18 15 15.3 16.5 12 16.5C8.7 16.5 6 15 4 12.3Z"
-        fill="url(#clickup-grad)"
-        opacity="0.4"
-      />
-      <path d="M12 3.3L5 9.5L7.4 12.3L12 8.3L16.6 12.3L19 9.5L12 3.3Z" fill="url(#clickup-grad)" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/clickup')({
   loader: async ({ context }) => {
