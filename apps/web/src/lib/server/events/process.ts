@@ -43,10 +43,14 @@ let initPromise: Promise<{
 /**
  * Lazily initialize BullMQ queue and worker.
  * Uses a Promise to guard against concurrent first-call race conditions.
+ * Resets on failure so transient errors don't permanently break the queue.
  */
 function ensureQueue(): Promise<Queue<HookJobData>> {
   if (!initPromise) {
-    initPromise = initializeQueue()
+    initPromise = initializeQueue().catch((err) => {
+      initPromise = null
+      throw err
+    })
   }
   return initPromise.then(({ queue }) => queue)
 }
@@ -98,7 +102,7 @@ async function initializeQueue() {
     // Avoids inflating failureCount during retries (which would hit
     // auto-disable threshold after ~17 flaky events instead of 50).
     if (isPermanent && job.data.hookType === 'webhook') {
-      updateWebhookFailureCount(job.data).catch((err) =>
+      updateWebhookFailureCount(job.data, error.message).catch((err) =>
         console.error('[Event] Failed to update webhook failure count:', err)
       )
     }
@@ -111,7 +115,7 @@ async function initializeQueue() {
  * Increment webhook failureCount and auto-disable after MAX_FAILURES.
  * Called only on permanent failure (all retries exhausted).
  */
-async function updateWebhookFailureCount(data: HookJobData): Promise<void> {
+async function updateWebhookFailureCount(data: HookJobData, errorMessage: string): Promise<void> {
   const webhookId = (data.config as { webhookId?: WebhookId }).webhookId
   if (!webhookId) return
 
@@ -122,6 +126,8 @@ async function updateWebhookFailureCount(data: HookJobData): Promise<void> {
     .update(webhooks)
     .set({
       failureCount: sql`${webhooks.failureCount} + 1`,
+      lastTriggeredAt: new Date(),
+      lastError: errorMessage,
       status: sql`CASE WHEN ${webhooks.failureCount} + 1 >= ${MAX_FAILURES} THEN 'disabled' ELSE ${webhooks.status} END`,
     })
     .where(eq(webhooks.id, webhookId))
@@ -139,14 +145,12 @@ export async function processEvent(event: EventData): Promise<void> {
 
   const queue = await ensureQueue()
 
-  for (const { type, target, config: hookConfig } of targets) {
-    await queue.add(`${event.type}:${type}`, {
-      hookType: type,
-      event,
-      target,
-      config: hookConfig,
-    })
-  }
+  await queue.addBulk(
+    targets.map(({ type, target, config: hookConfig }) => ({
+      name: `${event.type}:${type}`,
+      data: { hookType: type, event, target, config: hookConfig },
+    }))
+  )
 }
 
 /**
@@ -171,11 +175,18 @@ export async function closeQueue(): Promise<void> {
 }
 
 // Graceful shutdown — BullMQ leaves jobs in limbo on unclean exit.
-process.on('SIGTERM', () => {
-  console.log('[Event] SIGTERM received, closing queue...')
-  closeQueue().then(() => process.exit(0))
-})
-process.on('SIGINT', () => {
-  console.log('[Event] SIGINT received, closing queue...')
-  closeQueue().then(() => process.exit(0))
-})
+// Sets exitCode instead of calling process.exit() to let the framework
+// finish its own cleanup (e.g. TanStack Start shutdown hooks).
+function handleShutdown(signal: string) {
+  console.log(`[Event] ${signal} received, closing queue...`)
+  const timeout = setTimeout(() => {
+    console.error('[Event] Shutdown timed out after 10s, forcing exit')
+    process.exitCode = 1
+  }, 10_000)
+  closeQueue()
+    .catch((err) => console.error('[Event] Shutdown error:', err))
+    .finally(() => clearTimeout(timeout))
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'))
+process.on('SIGINT', () => handleShutdown('SIGINT'))

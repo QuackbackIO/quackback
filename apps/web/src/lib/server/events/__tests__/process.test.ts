@@ -10,7 +10,7 @@ import type { PostCreatedEvent } from '../types'
 
 // --- Mocks ---
 
-const mockQueueAdd = vi.fn().mockResolvedValue(undefined)
+const mockQueueAddBulk = vi.fn().mockResolvedValue(undefined)
 const mockQueueClose = vi.fn().mockResolvedValue(undefined)
 const mockWorkerClose = vi.fn().mockResolvedValue(undefined)
 
@@ -20,7 +20,7 @@ let capturedFailedHandler: ((job: unknown, error: Error) => void) | null = null
 
 vi.mock('bullmq', () => {
   class MockQueue {
-    add = mockQueueAdd
+    addBulk = mockQueueAddBulk
     close = mockQueueClose
     constructor() {}
   }
@@ -73,7 +73,13 @@ vi.mock('@/lib/server/db', () => ({
       })),
     })),
   },
-  webhooks: { id: 'id', failureCount: 'failureCount', status: 'status' },
+  webhooks: {
+    id: 'id',
+    failureCount: 'failureCount',
+    status: 'status',
+    lastTriggeredAt: 'lastTriggeredAt',
+    lastError: 'lastError',
+  },
   eq: vi.fn(),
   sql: vi.fn(),
 }))
@@ -133,10 +139,10 @@ describe('Event Processing (BullMQ)', () => {
 
       await processEvent(makeEvent())
 
-      expect(mockQueueAdd).not.toHaveBeenCalled()
+      expect(mockQueueAddBulk).not.toHaveBeenCalled()
     })
 
-    it('enqueues a job for each target', async () => {
+    it('enqueues all targets in a single addBulk call', async () => {
       const event = makeEvent()
       mockGetHookTargets.mockResolvedValue([
         { type: 'slack', target: { channelId: 'C1' }, config: { accessToken: 'tok' } },
@@ -145,19 +151,27 @@ describe('Event Processing (BullMQ)', () => {
 
       await processEvent(event)
 
-      expect(mockQueueAdd).toHaveBeenCalledTimes(2)
-      expect(mockQueueAdd).toHaveBeenCalledWith('post.created:slack', {
-        hookType: 'slack',
-        event,
-        target: { channelId: 'C1' },
-        config: { accessToken: 'tok' },
-      })
-      expect(mockQueueAdd).toHaveBeenCalledWith('post.created:webhook', {
-        hookType: 'webhook',
-        event,
-        target: { url: 'https://a.com' },
-        config: { secret: 's' },
-      })
+      expect(mockQueueAddBulk).toHaveBeenCalledTimes(1)
+      expect(mockQueueAddBulk).toHaveBeenCalledWith([
+        {
+          name: 'post.created:slack',
+          data: {
+            hookType: 'slack',
+            event,
+            target: { channelId: 'C1' },
+            config: { accessToken: 'tok' },
+          },
+        },
+        {
+          name: 'post.created:webhook',
+          data: {
+            hookType: 'webhook',
+            event,
+            target: { url: 'https://a.com' },
+            config: { secret: 's' },
+          },
+        },
+      ])
     })
   })
 

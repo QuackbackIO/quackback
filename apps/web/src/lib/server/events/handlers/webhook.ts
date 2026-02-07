@@ -2,9 +2,8 @@
  * Webhook hook handler.
  * Delivers events to external HTTP endpoints with HMAC signing.
  *
- * Retries are handled by BullMQ in process.ts. This handler only records
- * non-retryable failures (SSRF, 4xx). Retryable failure counting happens
- * in the BullMQ worker.on('failed') callback on permanent failure only.
+ * Retries and failure counting are handled by BullMQ in process.ts.
+ * This handler only resets failureCount on success.
  */
 
 import crypto from 'crypto'
@@ -19,7 +18,6 @@ export type { WebhookTarget, WebhookConfig }
 
 const TIMEOUT_MS = 5_000 // 5s timeout for single attempt
 const USER_AGENT = 'Quackback-Webhook/1.0 (+https://quackback.io)'
-const MAX_FAILURES = 50
 
 /**
  * Private IP ranges that should be blocked (SSRF protection).
@@ -98,7 +96,6 @@ export const webhookHook: HookHandler = {
     const ipCheck = await resolveAndValidateIP(parsedUrl.hostname)
     if (!ipCheck.valid) {
       console.error(`[Webhook] ❌ SSRF blocked: ${ipCheck.error}`)
-      await updateWebhookFailure(webhookId, `SSRF blocked: ${ipCheck.error}`)
       return { success: false, error: ipCheck.error, shouldRetry: false }
     }
 
@@ -147,7 +144,6 @@ export const webhookHook: HookHandler = {
       const error = `HTTP ${response.status}`
       console.log(`[Webhook] ❌ Failed: ${error}`)
       const retryable = response.status >= 500 || response.status === 429
-      if (!retryable) await updateWebhookFailure(webhookId, error)
       return { success: false, error, shouldRetry: retryable }
     } catch (error) {
       let errorMsg = 'Unknown error'
@@ -157,7 +153,6 @@ export const webhookHook: HookHandler = {
 
       console.error(`[Webhook] ❌ Failed: ${errorMsg}`)
       const retryable = isRetryableError(error)
-      if (!retryable) await updateWebhookFailure(webhookId, errorMsg)
       return { success: false, error: errorMsg, shouldRetry: retryable }
     }
   },
@@ -179,31 +174,5 @@ async function updateWebhookSuccess(webhookId: WebhookId): Promise<void> {
       .where(eq(webhooks.id, webhookId))
   } catch (error) {
     console.error('[Webhook] Failed to update success status:', error)
-  }
-}
-
-/**
- * Update webhook on failed delivery. Auto-disable after MAX_FAILURES.
- */
-async function updateWebhookFailure(
-  webhookId: WebhookId,
-  error: string | undefined
-): Promise<void> {
-  try {
-    const { db, webhooks, eq, sql } = await import('@/lib/server/db')
-
-    // Increment failure count and potentially disable
-    await db
-      .update(webhooks)
-      .set({
-        failureCount: sql`${webhooks.failureCount} + 1`,
-        lastTriggeredAt: new Date(),
-        lastError: error ?? 'Unknown error',
-        // Auto-disable after MAX_FAILURES consecutive failures
-        status: sql`CASE WHEN ${webhooks.failureCount} + 1 >= ${MAX_FAILURES} THEN 'disabled' ELSE ${webhooks.status} END`,
-      })
-      .where(eq(webhooks.id, webhookId))
-  } catch (err) {
-    console.error('[Webhook] Failed to update failure status:', err)
   }
 }
