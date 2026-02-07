@@ -11,7 +11,7 @@ import type { EventData } from '../types'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
 import type { MemberId, PostId, CommentId } from '@quackback/ids'
-import { truncate } from '../hook-utils'
+import { truncate, isRetryableError } from '../hook-utils'
 
 /**
  * Target for notification hooks - contains all member IDs to notify
@@ -69,7 +69,7 @@ export const notificationHook: HookHandler = {
       return {
         success: false,
         error: errorMsg,
-        shouldRetry: error instanceof Error && /database|connection/i.test(error.message),
+        shouldRetry: isRetryableError(error),
       }
     }
   },

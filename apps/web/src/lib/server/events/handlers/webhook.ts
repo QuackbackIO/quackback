@@ -2,11 +2,9 @@
  * Webhook hook handler.
  * Delivers events to external HTTP endpoints with HMAC signing.
  *
- * Design: Single attempt with non-blocking delivery. If the first attempt fails,
- * we record the failure but don't block the caller. This ensures post creation
- * and other user actions are not delayed by slow/failing webhook endpoints.
- *
- * Future: Add background job queue for retries (Redis/BullMQ).
+ * Retries are handled by BullMQ in process.ts. This handler only records
+ * non-retryable failures (SSRF, 4xx). Retryable failure counting happens
+ * in the BullMQ worker.on('failed') callback on permanent failure only.
  */
 
 import crypto from 'crypto'
@@ -15,6 +13,7 @@ import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
 import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
+import { isRetryableError } from '../hook-utils'
 
 export type { WebhookTarget, WebhookConfig }
 
@@ -124,9 +123,6 @@ export const webhookHook: HookHandler = {
       'X-Quackback-Event': event.type,
     }
 
-    // Single attempt - non-blocking delivery
-    // If this fails, we record the failure but don't block the caller with retries
-    // TODO: Add background retry queue for failed deliveries
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -150,12 +146,9 @@ export const webhookHook: HookHandler = {
       // Non-2xx response
       const error = `HTTP ${response.status}`
       console.log(`[Webhook] ❌ Failed: ${error}`)
-      await updateWebhookFailure(webhookId, error)
-      return {
-        success: false,
-        error,
-        shouldRetry: response.status >= 500 || response.status === 429,
-      }
+      const retryable = response.status >= 500 || response.status === 429
+      if (!retryable) await updateWebhookFailure(webhookId, error)
+      return { success: false, error, shouldRetry: retryable }
     } catch (error) {
       let errorMsg = 'Unknown error'
       if (error instanceof Error) {
@@ -163,8 +156,9 @@ export const webhookHook: HookHandler = {
       }
 
       console.error(`[Webhook] ❌ Failed: ${errorMsg}`)
-      await updateWebhookFailure(webhookId, errorMsg)
-      return { success: false, error: errorMsg, shouldRetry: true }
+      const retryable = isRetryableError(error)
+      if (!retryable) await updateWebhookFailure(webhookId, errorMsg)
+      return { success: false, error: errorMsg, shouldRetry: retryable }
     }
   },
 }

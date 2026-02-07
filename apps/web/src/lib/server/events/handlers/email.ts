@@ -6,6 +6,7 @@
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
 import type { EventData } from '../types'
+import { isRetryableError } from '../hook-utils'
 export const emailHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
     const { email, unsubscribeUrl } = target as EmailTarget
@@ -47,7 +48,7 @@ export const emailHook: HookHandler = {
       return {
         success: false,
         error: errorMsg,
-        shouldRetry: true,
+        shouldRetry: isRetryableError(error),
       }
     }
   },

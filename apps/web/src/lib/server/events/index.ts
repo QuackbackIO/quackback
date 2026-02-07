@@ -12,7 +12,6 @@ export type {
   HookResult,
   HookTarget,
   TestResult,
-  ProcessResult,
   EmailTarget,
   EmailConfig,
 } from './hook-types'
@@ -22,3 +21,6 @@ export type { WebhookTarget, WebhookConfig } from './handlers/webhook'
 
 // Export registry functions
 export { getHook, registerHook } from './registry'
+
+// Export queue lifecycle
+export { closeQueue } from './process'

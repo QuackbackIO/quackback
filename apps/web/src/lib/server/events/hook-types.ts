@@ -79,18 +79,6 @@ export interface HookTarget {
   config: Record<string, unknown>
 }
 
-/**
- * Result of processing an event through all hooks.
- */
-export interface ProcessResult {
-  /** Number of hooks that ran successfully */
-  succeeded: number
-  /** Number of hooks that failed */
-  failed: number
-  /** Error messages from failed hooks */
-  errors: string[]
-}
-
 // ============================================================================
 // Hook-specific target/config types
 // ============================================================================
