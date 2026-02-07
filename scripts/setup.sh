@@ -62,9 +62,9 @@ if docker ps --format '{{.Names}}' | grep -v quackback-db | xargs -I {} docker p
   echo -e "${GREEN}Cleared port 5432${NC}"
 fi
 
-# Start PostgreSQL and MinIO (minio-init handles bucket creation automatically)
-echo "Starting PostgreSQL and MinIO..."
-docker compose up -d postgres minio minio-init
+# Start PostgreSQL, MinIO, and Dragonfly (minio-init handles bucket creation automatically)
+echo "Starting PostgreSQL, MinIO, and Dragonfly..."
+docker compose up -d postgres minio minio-init dragonfly
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
@@ -80,6 +80,13 @@ until curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; do
   sleep 1
 done
 echo -e "${GREEN}MinIO is ready (bucket 'quackback' configured automatically)${NC}"
+
+# Wait for Dragonfly to be ready
+echo "Waiting for Dragonfly to be ready..."
+until docker compose exec -T dragonfly redis-cli ping > /dev/null 2>&1; do
+  sleep 1
+done
+echo -e "${GREEN}Dragonfly is ready${NC}"
 echo ""
 
 # Install dependencies
