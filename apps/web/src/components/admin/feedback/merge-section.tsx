@@ -1,12 +1,32 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ArrowRightIcon } from '@heroicons/react/16/solid'
+import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { useMergePost, useUnmergePost } from '@/lib/client/mutations/post-merge'
-import { findSimilarPostsFn } from '@/lib/server/functions/public-posts'
+import { findSimilarPostsFn, type SimilarPost } from '@/lib/server/functions/public-posts'
 import { getMergedPostsFn } from '@/lib/server/functions/post-merge'
 import type { PostId } from '@quackback/ids'
 import type { MergedPostItem } from '@/lib/shared/types/inbox'
@@ -23,6 +43,8 @@ interface MergedPostsListProps {
 export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: MergedPostsListProps) {
   const queryClient = useQueryClient()
   const unmerge = useUnmergePost()
+  const [confirmUnmergeId, setConfirmUnmergeId] = useState<PostId | null>(null)
+  const confirmTarget = initialMergedPosts?.find((p) => p.id === confirmUnmergeId)
 
   const { data: mergedPosts } = useQuery({
     queryKey: ['merged-posts', postId],
@@ -36,13 +58,16 @@ export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: Mer
 
   if (!mergedPosts || mergedPosts.length === 0) return null
 
-  const handleUnmerge = async (duplicatePostId: PostId) => {
+  const handleUnmerge = async () => {
+    if (!confirmUnmergeId) return
     try {
-      await unmerge.mutateAsync(duplicatePostId)
+      await unmerge.mutateAsync(confirmUnmergeId)
       queryClient.invalidateQueries({ queryKey: ['merged-posts', postId] })
       toast.success('Post unmerged successfully')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to unmerge post')
+    } finally {
+      setConfirmUnmergeId(null)
     }
   }
 
@@ -67,7 +92,7 @@ export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: Mer
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleUnmerge(merged.id)}
+              onClick={() => setConfirmUnmergeId(merged.id)}
               disabled={unmerge.isPending}
               className="text-xs shrink-0"
             >
@@ -76,6 +101,33 @@ export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: Mer
           </div>
         ))}
       </div>
+
+      <AlertDialog
+        open={!!confirmUnmergeId}
+        onOpenChange={(open) => !open && setConfirmUnmergeId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unmerge this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmTarget ? (
+                <>
+                  <span className="font-medium text-foreground">{confirmTarget.title}</span> will be
+                  restored as independent feedback. Its votes will no longer count toward this post.
+                </>
+              ) : (
+                'This post will be restored as independent feedback.'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unmerge.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnmerge} disabled={unmerge.isPending}>
+              {unmerge.isPending ? 'Unmerging...' : 'Unmerge'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -87,104 +139,168 @@ export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: Mer
 interface MergeIntoDialogProps {
   postId: PostId
   postTitle: string
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
-export function MergeIntoDialog({ postId, onClose }: MergeIntoDialogProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: MergeIntoDialogProps) {
+  const [searchQuery, setSearchQuery] = useState(postTitle)
+  const [confirmTarget, setConfirmTarget] = useState<SimilarPost | null>(null)
+  const [mergingId, setMergingId] = useState<string | null>(null)
   const merge = useMergePost()
   const queryClient = useQueryClient()
+
+  // Reset search when dialog opens with current post title
+  useEffect(() => {
+    if (open) {
+      setSearchQuery(postTitle)
+      setConfirmTarget(null)
+    }
+  }, [open, postTitle])
 
   const { data: suggestions, isLoading } = useQuery({
     queryKey: ['merge-suggestions', searchQuery],
     queryFn: async () => {
-      const result = await findSimilarPostsFn({ data: { title: searchQuery, limit: 5 } })
-      // Filter out the current post from suggestions
+      const result = await findSimilarPostsFn({ data: { title: searchQuery, limit: 8 } })
       return result.filter((p) => p.id !== postId)
     },
-    enabled: searchQuery.length >= 3,
+    enabled: open && searchQuery.length >= 3,
     staleTime: 30_000,
   })
 
-  const handleMerge = async (canonicalPostId: string) => {
+  const handleMerge = async () => {
+    if (!confirmTarget) return
+    setMergingId(confirmTarget.id)
     try {
       await merge.mutateAsync({
         duplicatePostId: postId,
-        canonicalPostId: canonicalPostId as PostId,
+        canonicalPostId: confirmTarget.id as PostId,
       })
       queryClient.invalidateQueries({ queryKey: ['merged-posts'] })
       toast.success('Post merged successfully')
-      onClose()
+      onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to merge post')
+    } finally {
+      setMergingId(null)
+      setConfirmTarget(null)
     }
   }
 
   return (
-    <div className="border-t border-border/40 px-6 py-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-foreground">Mark as Duplicate</h3>
-        <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">
-          Cancel
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground mb-3">
-        Search for the canonical feedback item to merge this post into.
-      </p>
-      <Input
-        type="text"
-        placeholder="Search for similar feedback..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="mb-3"
-        autoFocus
-      />
-      {isLoading && searchQuery.length >= 3 && (
-        <p className="text-xs text-muted-foreground py-2">Searching...</p>
-      )}
-      {suggestions && suggestions.length > 0 && (
-        <div className="space-y-1.5 max-h-48 overflow-y-auto">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion.id}
-              type="button"
-              onClick={() => handleMerge(suggestion.id)}
-              disabled={merge.isPending}
-              className="w-full text-left p-2.5 rounded-md hover:bg-muted/50 transition-colors border border-transparent hover:border-border/40"
-            >
-              <p className="text-sm font-medium text-foreground truncate">{suggestion.title}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-muted-foreground">
-                  {suggestion.voteCount} vote{suggestion.voteCount !== 1 ? 's' : ''}
-                </span>
-                {suggestion.status && (
-                  <span
-                    className="inline-flex items-center gap-1 text-xs"
-                    style={{ color: suggestion.status.color }}
+    <>
+      <Dialog open={open && !confirmTarget} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-base">Mark as Duplicate</DialogTitle>
+            <DialogDescription>
+              Select the original post to merge this feedback into.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-5 pb-3">
+            <Input
+              type="text"
+              placeholder="Search for similar feedback..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="min-h-[200px] max-h-[400px] overflow-y-auto border-t border-border/40">
+            {isLoading && searchQuery.length >= 3 && (
+              <p className="text-sm text-muted-foreground py-6 text-center">Searching...</p>
+            )}
+
+            {suggestions && suggestions.length > 0 && (
+              <div className="divide-y divide-border/30">
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    type="button"
+                    onClick={() => setConfirmTarget(suggestion)}
+                    disabled={merge.isPending}
+                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
                   >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ backgroundColor: suggestion.status.color }}
-                    />
-                    {suggestion.status.name}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground/60">
-                  {suggestion.matchStrength === 'strong'
-                    ? 'Strong match'
-                    : suggestion.matchStrength === 'good'
-                      ? 'Good match'
-                      : 'Possible match'}
-                </span>
+                    {/* Vote count column - matches PostCard style */}
+                    <div className="flex flex-col items-center justify-center shrink-0 w-11 py-1.5 rounded-lg border text-muted-foreground bg-muted/40 border-border/50">
+                      <ChevronUpIcon className="h-4 w-4" />
+                      <span className="text-sm font-semibold tabular-nums text-foreground">
+                        {suggestion.voteCount}
+                      </span>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        {suggestion.status && (
+                          <StatusBadge
+                            name={suggestion.status.name}
+                            color={suggestion.status.color}
+                          />
+                        )}
+                        <h3 className="font-medium text-sm text-foreground line-clamp-1 flex-1">
+                          {suggestion.title}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="text-muted-foreground/60">
+                          {suggestion.matchStrength === 'strong'
+                            ? 'Strong match'
+                            : suggestion.matchStrength === 'good'
+                              ? 'Good match'
+                              : 'Possible match'}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-            </button>
-          ))}
-        </div>
-      )}
-      {suggestions && suggestions.length === 0 && searchQuery.length >= 3 && !isLoading && (
-        <p className="text-xs text-muted-foreground py-2">No similar feedback found.</p>
-      )}
-    </div>
+            )}
+
+            {suggestions && suggestions.length === 0 && searchQuery.length >= 3 && !isLoading && (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No similar feedback found.
+              </p>
+            )}
+
+            {searchQuery.length < 3 && !isLoading && (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Type at least 3 characters to search.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merge confirmation dialog */}
+      <AlertDialog open={!!confirmTarget} onOpenChange={(o) => !o && setConfirmTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Merge this feedback?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>This will mark the current post as a duplicate. Votes will be combined.</p>
+                <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3 text-sm">
+                  <span className="truncate font-medium text-foreground">{postTitle}</span>
+                  <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium text-foreground">
+                    {confirmTarget?.title}
+                  </span>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={merge.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleMerge} disabled={merge.isPending}>
+              {mergingId ? 'Merging...' : 'Merge'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -228,6 +344,9 @@ interface MergeActionsProps {
   postTitle: string
   canonicalPostId?: PostId | null
   mergedPosts?: MergedPostItem[]
+  /** Controlled dialog state (optional — falls back to internal state) */
+  showDialog?: boolean
+  onShowDialogChange?: (show: boolean) => void
 }
 
 export function MergeActions({
@@ -235,11 +354,12 @@ export function MergeActions({
   postTitle,
   canonicalPostId,
   mergedPosts,
+  showDialog,
+  onShowDialogChange,
 }: MergeActionsProps) {
-  const [showMergeDialog, setShowMergeDialog] = useState(false)
-
-  // If this post is merged into another, show the banner
-  // Note: mergeInfo is handled separately in the post modal
+  const [internalShowDialog, setInternalShowDialog] = useState(false)
+  const isDialogOpen = showDialog ?? internalShowDialog
+  const setDialogOpen = onShowDialogChange ?? setInternalShowDialog
 
   // If this post is a canonical post with merged posts, show the list
   const hasMergedPosts = mergedPosts && mergedPosts.length > 0
@@ -249,26 +369,12 @@ export function MergeActions({
       {hasMergedPosts && <MergedPostsList postId={postId} mergedPosts={mergedPosts} />}
 
       {!canonicalPostId && (
-        <>
-          {showMergeDialog ? (
-            <MergeIntoDialog
-              postId={postId}
-              postTitle={postTitle}
-              onClose={() => setShowMergeDialog(false)}
-            />
-          ) : (
-            <div className="border-t border-border/40 px-6 py-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowMergeDialog(true)}
-                className="text-xs"
-              >
-                Mark as Duplicate
-              </Button>
-            </div>
-          )}
-        </>
+        <MergeIntoDialog
+          postId={postId}
+          postTitle={postTitle}
+          open={isDialogOpen}
+          onOpenChange={setDialogOpen}
+        />
       )}
     </>
   )

@@ -20,10 +20,11 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
-import { SimilarPostsSection } from '@/components/public/post-detail/similar-posts-section'
-import { usePostPermissions } from '@/lib/client/hooks/use-portal-posts-query'
+import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
+import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
 import { usePostActions } from '@/lib/client/mutations'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
+import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
 import { isValidTypeId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
@@ -45,6 +46,11 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId))
     queryClient.prefetchQuery(portalDetailQueries.commentsSectionData(postId))
     queryClient.prefetchQuery(portalDetailQueries.votedPosts())
+    queryClient.prefetchQuery({
+      queryKey: postPermissionsKeys.detail(postId),
+      queryFn: () => getPostPermissionsFn({ data: { postId } }),
+      staleTime: 30_000,
+    })
 
     // Await only critical data needed for initial render
     // Note: Post detail already includes board data (JOINed), so no separate board query needed
@@ -56,6 +62,9 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     if (!post || post.board.slug !== slug) {
       throw notFound()
     }
+
+    // Prefetch similar posts now that we have the title (non-blocking)
+    queryClient.prefetchQuery(similarPostsQuery(post.title))
 
     return { settings, postId, slug }
   },
@@ -146,11 +155,7 @@ function PostDetailPage() {
     <div className="py-6">
       <UnsubscribeBanner postId={post.id as PostId} />
 
-      <BackLink
-        to="/"
-        search={{ board: slug }}
-        className="mb-6 animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-      >
+      <BackLink to="/" search={{ board: slug }} className="mb-6">
         {board.name}
       </BackLink>
 
@@ -163,13 +168,10 @@ function PostDetailPage() {
         />
       )}
 
-      <div
-        className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
-        style={{ animationDelay: '50ms' }}
-      >
+      <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
         <div className="flex">
           <Suspense fallback={<VoteSidebarSkeleton />}>
-            <VoteSidebar postId={postId} voteCount={post.voteCount} />
+            <VoteSidebar postId={postId} voteCount={post.voteCount} disabled={!!post.mergeInfo} />
           </Suspense>
 
           <PostContentSection
@@ -211,25 +213,11 @@ function PostDetailPage() {
               postId={postId}
               comments={post.comments}
               pinnedCommentId={post.pinnedCommentId}
+              disableCommenting={!!post.mergeInfo}
             />
           </Suspense>
         </div>
       </div>
-
-      {/* Show merged post count on canonical posts */}
-      {post.mergedPostCount && post.mergedPostCount > 0 && (
-        <div
-          className="mt-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
-          style={{ animationDelay: '150ms' }}
-        >
-          <p className="text-sm text-muted-foreground">
-            Includes {post.mergedPostCount} merged feedback{' '}
-            {post.mergedPostCount === 1 ? 'item' : 'items'}
-          </p>
-        </div>
-      )}
-
-      <SimilarPostsSection postTitle={post.title} currentPostId={postId} className="mt-6" />
 
       <DeletePostDialog
         open={deleteDialogOpen}

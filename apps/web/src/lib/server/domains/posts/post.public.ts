@@ -388,7 +388,12 @@ export async function getPublicPostDetail(
       INNER JOIN ${memberTable} m ON c.member_id = m.id
       INNER JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
-      WHERE c.post_id = ${postUuid}::uuid
+      WHERE c.post_id IN (
+        SELECT ${postUuid}::uuid
+        UNION ALL
+        SELECT p.id FROM ${posts} p
+        WHERE p.canonical_post_id = ${postUuid}::uuid AND p.deleted_at IS NULL
+      )
       GROUP BY c.id, u.name, u.image_key, u.image
       ORDER BY c.created_at ASC
     `),

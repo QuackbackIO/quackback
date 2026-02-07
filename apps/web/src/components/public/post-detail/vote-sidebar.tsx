@@ -18,15 +18,17 @@ export function VoteSidebarSkeleton(): React.ReactElement {
 interface VoteSidebarProps {
   postId: PostId
   voteCount: number
+  /** Disable voting (e.g. for merged posts) */
+  disabled?: boolean
 }
 
-export function VoteSidebar({ postId, voteCount }: VoteSidebarProps): React.ReactElement {
+export function VoteSidebar({ postId, voteCount, disabled }: VoteSidebarProps): React.ReactElement {
   const { data: sidebarData } = useSuspenseQuery(portalDetailQueries.voteSidebarData(postId))
   const isMember = sidebarData?.isMember ?? false
 
   return (
     <div className={`${SIDEBAR_CLASS} animate-in fade-in duration-200 fill-mode-backwards`}>
-      <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} />
+      <AuthVoteButton postId={postId} voteCount={voteCount} disabled={disabled || !isMember} />
     </div>
   )
 }

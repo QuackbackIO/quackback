@@ -23,7 +23,7 @@ import {
   member as memberTable,
   user as userTable,
 } from '@/lib/server/db'
-import { type PostId, type MemberId } from '@quackback/ids'
+import { type PostId, type MemberId, toUuid } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type {
   MergePostResult,
@@ -238,12 +238,14 @@ export async function getPostMergeInfo(postId: PostId): Promise<PostMergeInfo | 
  */
 async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<number> {
   // Count unique member votes across canonical + all merged duplicates
+  // Note: must convert TypeID to raw UUID for use in raw SQL
+  const canonicalUuid = toUuid(canonicalPostId)
   const result = await db.execute<{ unique_voters: number }>(sql`
     WITH related_post_ids AS (
-      SELECT ${canonicalPostId}::text::uuid AS post_id
+      SELECT ${canonicalUuid}::uuid AS post_id
       UNION ALL
       SELECT id FROM ${posts}
-      WHERE canonical_post_id = ${canonicalPostId}
+      WHERE canonical_post_id = ${canonicalUuid}::uuid
         AND deleted_at IS NULL
     )
     SELECT COUNT(DISTINCT v.member_id)::int AS unique_voters
