@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { linearHook } from './hook'
+import { linearInboundHandler } from './inbound'
 import { getLinearOAuthUrl, exchangeLinearCode, revokeLinearToken } from './oauth'
 import { linearCatalog } from './catalog'
 
@@ -12,6 +13,7 @@ export const linearIntegration: IntegrationDefinition = {
     exchangeCode: exchangeLinearCode,
   },
   hook: linearHook,
+  inbound: linearInboundHandler,
   platformCredentials: [
     {
       key: 'clientId',

@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { asanaHook } from './hook'
+import { asanaInboundHandler } from './inbound'
 import { getAsanaOAuthUrl, exchangeAsanaCode, revokeAsanaToken } from './oauth'
 import { asanaCatalog } from './catalog'
 
@@ -12,6 +13,7 @@ export const asanaIntegration: IntegrationDefinition = {
     exchangeCode: exchangeAsanaCode,
   },
   hook: asanaHook,
+  inbound: asanaInboundHandler,
   platformCredentials: [
     {
       key: 'clientId',

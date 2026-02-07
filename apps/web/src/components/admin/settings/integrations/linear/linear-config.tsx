@@ -14,6 +14,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import { fetchLinearTeamsFn, type LinearTeam } from '@/lib/server/integrations/linear/functions'
+import { fetchExternalStatusesFn } from '@/lib/server/functions/external-statuses'
+import {
+  StatusSyncConfig,
+  type ExternalStatus,
+} from '@/components/admin/settings/integrations/status-sync-config'
 
 interface EventMapping {
   id: string
@@ -23,7 +28,7 @@ interface EventMapping {
 
 interface LinearConfigProps {
   integrationId: string
-  initialConfig: { channelId?: string }
+  initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
 }
@@ -51,7 +56,8 @@ export function LinearConfig({
   const [teams, setTeams] = useState<LinearTeam[]>([])
   const [loadingTeams, setLoadingTeams] = useState(false)
   const [teamError, setTeamError] = useState<string | null>(null)
-  const [selectedTeam, setSelectedTeam] = useState(initialConfig.channelId || '')
+  const [selectedTeam, setSelectedTeam] = useState((initialConfig.channelId as string) || '')
+  const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -75,9 +81,19 @@ export function LinearConfig({
     }
   }, [])
 
+  const fetchStatuses = useCallback(async () => {
+    try {
+      const statuses = await fetchExternalStatusesFn({ data: { integrationType: 'linear' } })
+      setExternalStatuses(statuses)
+    } catch {
+      // Non-critical — status mapping just won't show options
+    }
+  }, [])
+
   useEffect(() => {
     fetchTeams()
-  }, [fetchTeams])
+    fetchStatuses()
+  }, [fetchTeams, fetchStatuses])
 
   const handleEnabledChange = (checked: boolean) => {
     setIntegrationEnabled(checked)
@@ -208,6 +224,14 @@ export function LinearConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="linear"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+      />
     </div>
   )
 }

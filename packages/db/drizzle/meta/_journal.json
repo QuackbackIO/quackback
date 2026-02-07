@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "7",
+      "when": 1770484601016,
+      "tag": "0005_legal_gravity",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
       "when": 1770482976323,
-      "tag": "0005_ambiguous_black_bird",
+      "tag": "0006_ambiguous_black_bird",
       "breakpoints": true
     }
   ]

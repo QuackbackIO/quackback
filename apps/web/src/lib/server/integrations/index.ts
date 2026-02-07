@@ -13,6 +13,7 @@ import { asanaIntegration } from './asana'
 import { clickupIntegration } from './clickup'
 import { shortcutIntegration } from './shortcut'
 import { zapierIntegration } from './zapier'
+import { azureDevOpsIntegration } from './azure-devops'
 
 const registry = new Map<string, IntegrationDefinition>([
   [slackIntegration.id, slackIntegration],
@@ -28,6 +29,7 @@ const registry = new Map<string, IntegrationDefinition>([
   [clickupIntegration.id, clickupIntegration],
   [shortcutIntegration.id, shortcutIntegration],
   [zapierIntegration.id, zapierIntegration],
+  [azureDevOpsIntegration.id, azureDevOpsIntegration],
 ])
 
 export function getIntegration(type: string): IntegrationDefinition | undefined {
@@ -48,4 +50,8 @@ export async function getIntegrationCatalog(): Promise<IntegrationCatalogEntry[]
 
 export function getIntegrationHook(type: string): HookHandler | undefined {
   return registry.get(type)?.hook
+}
+
+export function getIntegrationInbound(type: string) {
+  return registry.get(type)?.inbound
 }

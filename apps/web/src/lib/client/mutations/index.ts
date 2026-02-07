@@ -45,6 +45,9 @@ export { usePostActions, type EditPostInput } from './portal-post-actions'
 // Integration mutations
 export { useUpdateIntegration, useDeleteIntegration } from './integrations'
 
+// Status sync mutations
+export { useEnableStatusSync, useDisableStatusSync, useUpdateStatusMappings } from './status-sync'
+
 // Platform credential mutations
 export { useSavePlatformCredentials, useDeletePlatformCredentials } from './platform-credentials'
 

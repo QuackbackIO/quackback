@@ -1,4 +1,5 @@
 import type { HookHandler } from '../events/hook-types'
+import type { InboundWebhookHandler } from './inbound-types'
 
 /**
  * A field collected from the user before starting the OAuth flow.
@@ -122,6 +123,8 @@ export interface IntegrationDefinition {
   catalog: IntegrationCatalogEntry
   oauth?: IntegrationOAuthConfig
   hook?: HookHandler
+  /** Inbound webhook handler for receiving status changes from the external platform */
+  inbound?: InboundWebhookHandler
   /** Platform-level credential fields required to enable this integration. Use `[]` if none needed. */
   platformCredentials: PlatformCredentialField[]
   /** Called before an integration is deleted. Receives decrypted secrets, config, and platform credentials to revoke tokens or clean up. */

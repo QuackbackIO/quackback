@@ -50,8 +50,39 @@ export function ZapierConnectionActions({
 
   const disconnecting = deleteMutation.isPending
 
+  if (isConnected) {
+    return (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={disconnecting}
+          onClick={() => setDisconnectDialogOpen(true)}
+        >
+          {disconnecting ? (
+            <>
+              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+              Disconnecting...
+            </>
+          ) : (
+            'Disconnect'
+          )}
+        </Button>
+        <ConfirmDialog
+          open={disconnectDialogOpen}
+          onOpenChange={setDisconnectDialogOpen}
+          title="Disconnect Zapier?"
+          description="This will remove the Zapier integration and stop all webhook notifications. You can reconnect at any time."
+          confirmLabel="Disconnect"
+          isPending={disconnecting}
+          onConfirm={handleDisconnect}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col items-end gap-3">
+    <>
       {showSuccess && (
         <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
           <CheckCircleIcon className="h-4 w-4" />
@@ -66,7 +97,7 @@ export function ZapierConnectionActions({
         </div>
       )}
 
-      <div className="flex w-full max-w-md flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <Label htmlFor="webhook-url" className="text-sm">
           Webhook URL
         </Label>
@@ -92,35 +123,6 @@ export function ZapierConnectionActions({
           </Button>
         </div>
       </div>
-
-      {isConnected && (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={disconnecting}
-            onClick={() => setDisconnectDialogOpen(true)}
-          >
-            {disconnecting ? (
-              <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Disconnecting...
-              </>
-            ) : (
-              'Disconnect'
-            )}
-          </Button>
-          <ConfirmDialog
-            open={disconnectDialogOpen}
-            onOpenChange={setDisconnectDialogOpen}
-            title="Disconnect Zapier?"
-            description="This will remove the Zapier integration and stop all webhook notifications. You can reconnect at any time."
-            confirmLabel="Disconnect"
-            isPending={disconnecting}
-            onConfirm={handleDisconnect}
-          />
-        </div>
-      )}
-    </div>
+    </>
   )
 }

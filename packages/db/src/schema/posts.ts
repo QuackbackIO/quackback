@@ -14,6 +14,7 @@ import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
+import { postExternalLinks } from './external-links'
 import { member } from './auth'
 import type { TiptapContent } from '../types'
 
@@ -361,6 +362,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   tags: many(postTags),
   roadmaps: many(postRoadmaps),
   notes: many(postNotes),
+  externalLinks: many(postExternalLinks),
 }))
 
 export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({

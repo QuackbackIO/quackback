@@ -3,35 +3,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { ClickUpConnectionActions } from '@/components/admin/settings/integrations/clickup/clickup-connection-actions'
 import { ClickUpConfig } from '@/components/admin/settings/integrations/clickup/clickup-config'
 import { Button } from '@/components/ui/button'
+import { ClickUpIcon } from '@/components/icons/integration-icons'
 import { clickupCatalog } from '@/lib/server/integrations/clickup/catalog'
-
-function ClickUpIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none">
-      <defs>
-        <linearGradient id="clickup-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#8930FD" />
-          <stop offset="50%" stopColor="#49CCF9" />
-          <stop offset="100%" stopColor="#49CCF9" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M4 16.5L7.5 13.8C8.9 15.6 10.4 16.5 12 16.5C13.6 16.5 15.1 15.6 16.5 13.8L20 16.5C18 19.2 15.3 20.7 12 20.7C8.7 20.7 6 19.2 4 16.5Z"
-        fill="url(#clickup-grad)"
-      />
-      <path
-        d="M4 12.3L7.5 9.6C8.9 11.4 10.4 12.3 12 12.3C13.6 12.3 15.1 11.4 16.5 9.6L20 12.3C18 15 15.3 16.5 12 16.5C8.7 16.5 6 15 4 12.3Z"
-        fill="url(#clickup-grad)"
-        opacity="0.4"
-      />
-      <path d="M12 3.3L5 9.5L7.4 12.3L12 8.3L16.6 12.3L19 9.5L12 3.3Z" fill="url(#clickup-grad)" />
-    </svg>
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/integrations/clickup')({
   loader: async ({ context }) => {
@@ -59,19 +37,16 @@ function ClickUpIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<ClickUpIcon className="h-6 w-6" />}
         actions={
-          <div className="flex items-center gap-2">
-            {platformCredentialFields.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                Configure credentials
-              </Button>
-            )}
-            {platformCredentialsConfigured && (
-              <ClickUpConnectionActions
-                integrationId={integration?.id}
-                isConnected={isConnected || isPaused}
-              />
-            )}
-          </div>
+          isConnected || isPaused ? (
+            <div className="flex items-center gap-2">
+              {platformCredentialFields.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                  Configure credentials
+                </Button>
+              )}
+              <ClickUpConnectionActions integrationId={integration?.id} isConnected={true} />
+            </div>
+          ) : undefined
         }
       />
 
@@ -87,44 +62,32 @@ function ClickUpIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <ClickUpIcon className="mx-auto h-10 w-10" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your ClickUp workspace</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect ClickUp to turn feedback into tasks and track progress directly from your
-            workspace.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">Setup Instructions</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<ClickUpIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect your ClickUp workspace"
+          description="Connect ClickUp to turn feedback into tasks and track progress directly from your workspace."
+          steps={[
+            <p key="1">
               Click <span className="font-medium text-foreground">Connect</span> to authorize
               Quackback to create tasks in your ClickUp workspace.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>Select a space and list where new feedback tasks should be created.</p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+            </p>,
+            <p key="2">Select a space and list where new feedback tasks should be created.</p>,
+            <p key="3">
               Choose which events trigger task creation. You can change these settings at any time.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={
+            <div className="flex flex-col items-end gap-2">
+              {platformCredentialFields.length > 0 && !platformCredentialsConfigured && (
+                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
+              )}
+              {platformCredentialsConfigured && (
+                <ClickUpConnectionActions integrationId={undefined} isConnected={false} />
+              )}
+            </div>
+          }
+        />
+      )}
 
       {platformCredentialFields.length > 0 && (
         <PlatformCredentialsDialog

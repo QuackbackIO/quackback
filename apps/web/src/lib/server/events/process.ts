@@ -82,7 +82,14 @@ async function initializeQueue() {
         throw new UnrecoverableError(error instanceof Error ? error.message : 'Unknown error')
       }
 
-      if (result.success) return
+      if (result.success) {
+        if (result.externalId) {
+          persistExternalLink(job.data, result).catch((err) =>
+            console.error('[Event] Failed to persist external link:', err)
+          )
+        }
+        return
+      }
 
       if (result.shouldRetry) {
         throw new Error(result.error ?? 'Hook failed (retryable)')
@@ -136,6 +143,36 @@ async function updateWebhookFailureCount(data: HookJobData, errorMessage: string
       status: sql`CASE WHEN ${webhooks.failureCount} + 1 >= ${MAX_FAILURES} THEN 'disabled' ELSE ${webhooks.status} END`,
     })
     .where(eq(webhooks.id, webhookId))
+}
+
+/**
+ * Persist an external link when an outbound hook successfully creates an external issue.
+ * Non-fatal — errors are logged but don't fail the hook job.
+ */
+async function persistExternalLink(data: HookJobData, result: HookResult): Promise<void> {
+  // Extract postId from event data
+  const postId = (data.event.data as { post?: { id?: string } }).post?.id
+  if (!postId) return
+
+  const { db, integrations, postExternalLinks, eq } = await import('@/lib/server/db')
+
+  // Look up the integration by type
+  const integration = await db.query.integrations.findFirst({
+    where: eq(integrations.integrationType, data.hookType),
+    columns: { id: true },
+  })
+  if (!integration) return
+
+  await db
+    .insert(postExternalLinks)
+    .values({
+      postId: postId as import('@quackback/ids').PostId,
+      integrationId: integration.id as import('@quackback/ids').IntegrationId,
+      integrationType: data.hookType,
+      externalId: result.externalId!,
+      externalUrl: result.externalUrl ?? null,
+    })
+    .onConflictDoNothing()
 }
 
 /**

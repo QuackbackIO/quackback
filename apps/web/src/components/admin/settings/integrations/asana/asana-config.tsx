@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { fetchExternalStatusesFn } from '@/lib/server/functions/external-statuses'
+import {
+  StatusSyncConfig,
+  type ExternalStatus,
+} from '@/components/admin/settings/integrations/status-sync-config'
 import { fetchAsanaProjectsFn, type AsanaProject } from '@/lib/server/integrations/asana/functions'
 
 interface EventMapping {
@@ -23,7 +28,7 @@ interface EventMapping {
 
 interface AsanaConfigProps {
   integrationId: string
-  initialConfig: { channelId?: string }
+  initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
 }
@@ -51,7 +56,8 @@ export function AsanaConfig({
   const [projects, setProjects] = useState<AsanaProject[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
-  const [selectedProject, setSelectedProject] = useState(initialConfig.channelId || '')
+  const [selectedProject, setSelectedProject] = useState((initialConfig.channelId as string) || '')
+  const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -77,6 +83,9 @@ export function AsanaConfig({
 
   useEffect(() => {
     fetchProjects()
+    fetchExternalStatusesFn({ data: { integrationType: 'asana' } })
+      .then(setExternalStatuses)
+      .catch(() => {})
   }, [fetchProjects])
 
   const handleEnabledChange = (checked: boolean) => {
@@ -204,6 +213,14 @@ export function AsanaConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="asana"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+      />
     </div>
   )
 }

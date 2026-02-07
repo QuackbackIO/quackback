@@ -14,6 +14,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { member } from './auth'
+import { postExternalLinks } from './external-links'
 import type { IntegrationConfig, EventMappingActionConfig, EventMappingFilters } from '../types'
 
 /**
@@ -121,6 +122,7 @@ export const integrationsRelations = relations(integrations, ({ one, many }) => 
     references: [member.id],
   }),
   eventMappings: many(integrationEventMappings),
+  externalLinks: many(postExternalLinks),
 }))
 
 export const integrationEventMappingsRelations = relations(integrationEventMappings, ({ one }) => ({

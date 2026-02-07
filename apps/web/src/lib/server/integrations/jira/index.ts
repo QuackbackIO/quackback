@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { jiraHook } from './hook'
+import { jiraInboundHandler } from './inbound'
 import { getJiraOAuthUrl, exchangeJiraCode } from './oauth'
 import { jiraCatalog } from './catalog'
 
@@ -12,6 +13,7 @@ export const jiraIntegration: IntegrationDefinition = {
     exchangeCode: exchangeJiraCode,
   },
   hook: jiraHook,
+  inbound: jiraInboundHandler,
   platformCredentials: [
     {
       key: 'clientId',
