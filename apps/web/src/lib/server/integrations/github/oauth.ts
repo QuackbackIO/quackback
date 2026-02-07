@@ -2,17 +2,20 @@
  * GitHub OAuth utilities.
  */
 
-import { config } from '@/lib/server/config'
-
 const GITHUB_API = 'https://api.github.com'
 
 /**
  * Generate the GitHub OAuth authorization URL.
  */
-export function getGitHubOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.githubIntegrationClientId
+export function getGitHubOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('GITHUB_INTEGRATION_CLIENT_ID environment variable not set')
+    throw new Error('GitHub client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -30,16 +33,18 @@ export function getGitHubOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeGitHubCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   config?: Record<string, unknown>
 }> {
-  const clientId = config.githubIntegrationClientId
-  const clientSecret = config.githubIntegrationClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('GITHUB_INTEGRATION_CLIENT_ID and GITHUB_INTEGRATION_CLIENT_SECRET must be set')
+    throw new Error('GitHub credentials not configured')
   }
 
   const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
@@ -107,19 +112,22 @@ export async function exchangeGitHubCode(
 /**
  * Revoke a GitHub OAuth token.
  */
-export async function revokeGitHubToken(accessToken: string): Promise<void> {
+export async function revokeGitHubToken(
+  accessToken: string,
+  credentials?: Record<string, string>
+): Promise<void> {
   try {
-    const clientId = config.githubIntegrationClientId
-    const clientSecret = config.githubIntegrationClientSecret
+    const clientId = credentials?.clientId
+    const clientSecret = credentials?.clientSecret
 
     if (!clientId || !clientSecret) return
 
-    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
 
     await fetch(`${GITHUB_API}/applications/${clientId}/token`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Basic ${credentials}`,
+        Authorization: `Basic ${basicAuth}`,
         Accept: 'application/vnd.github+json',
         'Content-Type': 'application/json',
         'User-Agent': 'quackback',

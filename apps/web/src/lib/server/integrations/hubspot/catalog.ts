@@ -20,4 +20,5 @@ export const hubspotCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#FF7A59]',
   settingsPath: '/admin/settings/integrations/hubspot',
   available: true,
+  configurable: true,
 }

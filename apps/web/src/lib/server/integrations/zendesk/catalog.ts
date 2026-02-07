@@ -19,4 +19,5 @@ export const zendeskCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#03363D]',
   settingsPath: '/admin/settings/integrations/zendesk',
   available: true,
+  configurable: true,
 }

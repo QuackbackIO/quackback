@@ -20,4 +20,5 @@ export const zapierCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#FF4A00]',
   settingsPath: '/admin/settings/integrations/zapier',
   available: true,
+  configurable: false,
 }

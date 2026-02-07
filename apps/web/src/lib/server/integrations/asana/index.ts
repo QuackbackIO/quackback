@@ -12,6 +12,20 @@ export const asanaIntegration: IntegrationDefinition = {
     exchangeCode: exchangeAsanaCode,
   },
   hook: asanaHook,
-  requiredEnvVars: ['ASANA_CLIENT_ID', 'ASANA_CLIENT_SECRET'],
-  onDisconnect: (secrets) => revokeAsanaToken(secrets.refreshToken as string),
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developers.asana.com/docs/oauth',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developers.asana.com/docs/oauth',
+    },
+  ],
+  onDisconnect: (secrets, _config, credentials) =>
+    revokeAsanaToken(secrets.refreshToken as string, credentials),
 }

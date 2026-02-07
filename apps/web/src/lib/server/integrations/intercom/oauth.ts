@@ -2,17 +2,20 @@
  * Intercom OAuth utilities.
  */
 
-import { config } from '@/lib/server/config'
-
 const INTERCOM_API = 'https://api.intercom.io'
 
 /**
  * Generate the Intercom OAuth authorization URL.
  */
-export function getIntercomOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.intercomClientId
+export function getIntercomOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('INTERCOM_CLIENT_ID environment variable not set')
+    throw new Error('Intercom client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -29,16 +32,18 @@ export function getIntercomOAuthUrl(state: string, redirectUri: string): string 
  */
 export async function exchangeIntercomCode(
   code: string,
-  _redirectUri: string
+  _redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   config?: Record<string, unknown>
 }> {
-  const clientId = config.intercomClientId
-  const clientSecret = config.intercomClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('INTERCOM_CLIENT_ID and INTERCOM_CLIENT_SECRET must be set')
+    throw new Error('Intercom credentials not configured')
   }
 
   const tokenResponse = await fetch('https://api.intercom.io/auth/eagle/token', {

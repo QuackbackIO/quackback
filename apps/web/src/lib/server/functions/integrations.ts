@@ -120,12 +120,17 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
       try {
         const { getIntegration } = await import('@/lib/server/integrations')
         const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+        const { getPlatformCredentials } =
+          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
         const definition = getIntegration(integration.integrationType)
         if (definition?.onDisconnect) {
           const secrets = decryptSecrets(integration.secrets)
+          const credentials =
+            (await getPlatformCredentials(integration.integrationType)) ?? undefined
           await definition.onDisconnect(
             secrets,
-            (integration.config ?? {}) as Record<string, unknown>
+            (integration.config ?? {}) as Record<string, unknown>,
+            credentials
           )
         }
       } catch (err) {

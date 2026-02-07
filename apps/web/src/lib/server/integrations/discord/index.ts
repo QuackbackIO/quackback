@@ -12,5 +12,24 @@ export const discordIntegration: IntegrationDefinition = {
     exchangeCode: exchangeDiscordCode,
   },
   hook: discordHook,
-  requiredEnvVars: ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_BOT_TOKEN'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://discord.com/developers/applications',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://discord.com/developers/applications',
+    },
+    {
+      key: 'botToken',
+      label: 'Bot Token',
+      sensitive: true,
+      helpUrl: 'https://discord.com/developers/applications',
+    },
+  ],
 }

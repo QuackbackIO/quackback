@@ -2,8 +2,6 @@
  * HubSpot OAuth utilities.
  */
 
-import { config } from '@/lib/server/config'
-
 const HUBSPOT_API = 'https://api.hubapi.com'
 
 const HUBSPOT_SCOPES = [
@@ -16,10 +14,15 @@ const HUBSPOT_SCOPES = [
 /**
  * Generate the HubSpot OAuth authorization URL.
  */
-export function getHubSpotOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.hubspotClientId
+export function getHubSpotOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('HUBSPOT_CLIENT_ID environment variable not set')
+    throw new Error('HubSpot client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -37,18 +40,20 @@ export function getHubSpotOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeHubSpotCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   refreshToken?: string
   expiresIn?: number
   config?: Record<string, unknown>
 }> {
-  const clientId = config.hubspotClientId
-  const clientSecret = config.hubspotClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET must be set')
+    throw new Error('HubSpot credentials not configured')
   }
 
   const tokenResponse = await fetch(`${HUBSPOT_API}/oauth/v1/token`, {
@@ -106,16 +111,19 @@ export async function exchangeHubSpotCode(
 /**
  * Refresh a HubSpot access token.
  */
-export async function refreshHubSpotToken(refreshToken: string): Promise<{
+export async function refreshHubSpotToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+): Promise<{
   accessToken: string
   refreshToken: string
   expiresIn: number
 }> {
-  const clientId = config.hubspotClientId
-  const clientSecret = config.hubspotClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET must be set')
+    throw new Error('HubSpot credentials not configured')
   }
 
   const response = await fetch(`${HUBSPOT_API}/oauth/v1/token`, {
@@ -149,9 +157,12 @@ export async function refreshHubSpotToken(refreshToken: string): Promise<{
 /**
  * Revoke a HubSpot refresh token.
  */
-export async function revokeHubSpotToken(refreshToken: string): Promise<void> {
+export async function revokeHubSpotToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+): Promise<void> {
   try {
-    const clientId = config.hubspotClientId
+    const clientId = credentials?.clientId
     if (!clientId) return
 
     await fetch(`${HUBSPOT_API}/oauth/v1/refresh-tokens/${refreshToken}`, {

@@ -12,6 +12,20 @@ export const githubIntegration: IntegrationDefinition = {
     exchangeCode: exchangeGitHubCode,
   },
   hook: githubHook,
-  requiredEnvVars: ['GITHUB_INTEGRATION_CLIENT_ID', 'GITHUB_INTEGRATION_CLIENT_SECRET'],
-  onDisconnect: (secrets) => revokeGitHubToken(secrets.accessToken as string),
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://github.com/settings/developers',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://github.com/settings/developers',
+    },
+  ],
+  onDisconnect: (secrets, _config, credentials) =>
+    revokeGitHubToken(secrets.accessToken as string, credentials),
 }

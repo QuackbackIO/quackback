@@ -5,18 +5,21 @@
  * See: https://developers.asana.com/docs/oauth
  */
 
-import { config } from '@/lib/server/config'
-
 const ASANA_TOKEN_URL = 'https://app.asana.com/-/oauth_token'
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
 /**
  * Generate the Asana OAuth authorization URL.
  */
-export function getAsanaOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.asanaClientId
+export function getAsanaOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('ASANA_CLIENT_ID environment variable not set')
+    throw new Error('Asana client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -34,18 +37,20 @@ export function getAsanaOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeAsanaCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   refreshToken: string
   expiresIn: number
   config?: Record<string, unknown>
 }> {
-  const clientId = config.asanaClientId
-  const clientSecret = config.asanaClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('ASANA_CLIENT_ID and ASANA_CLIENT_SECRET must be set')
+    throw new Error('Asana credentials not configured')
   }
 
   const tokenResponse = await fetch(ASANA_TOKEN_URL, {
@@ -104,13 +109,14 @@ export async function exchangeAsanaCode(
  * Refresh an Asana access token using a refresh token.
  */
 export async function refreshAsanaToken(
-  refreshToken: string
+  refreshToken: string,
+  credentials?: Record<string, string>
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  const clientId = config.asanaClientId
-  const clientSecret = config.asanaClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('ASANA_CLIENT_ID and ASANA_CLIENT_SECRET must be set')
+    throw new Error('Asana credentials not configured')
   }
 
   const response = await fetch(ASANA_TOKEN_URL, {
@@ -143,10 +149,13 @@ export async function refreshAsanaToken(
 /**
  * Revoke an Asana OAuth token via POST /oauth_revoke.
  */
-export async function revokeAsanaToken(refreshToken: string): Promise<void> {
+export async function revokeAsanaToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+): Promise<void> {
   try {
-    const clientId = config.asanaClientId
-    const clientSecret = config.asanaClientSecret
+    const clientId = credentials?.clientId
+    const clientSecret = credentials?.clientSecret
 
     if (!clientId || !clientSecret) return
 

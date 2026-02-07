@@ -76,8 +76,28 @@ export async function handleOAuthConnect(
     return Response.json({ error: 'State expired' }, { status: 400 })
   }
 
+  // Fetch platform credentials from DB
+  let credentials: Record<string, string> | undefined
+  if (definition.platformCredentials.length > 0) {
+    const { getPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const creds = await getPlatformCredentials(integrationType)
+    if (!creds) {
+      return Response.json(
+        { error: `Platform credentials not configured for ${integrationType}` },
+        { status: 400 }
+      )
+    }
+    credentials = creds
+  }
+
   const callbackUri = buildCallbackUri(integrationType, request)
-  const authUrl = definition.oauth.buildAuthUrl(state, callbackUri, stateData.preAuthFields)
+  const authUrl = definition.oauth.buildAuthUrl(
+    state,
+    callbackUri,
+    stateData.preAuthFields,
+    credentials
+  )
   const isSecure = isSecureRequest(request)
   const cookieName = getStateCookieName(integrationType, request)
   const maxAgeSeconds = STATE_EXPIRY_MS / 1000
@@ -154,13 +174,26 @@ export async function handleOAuthCallback(
     return redirectResponse(errorUrl(tenantUrl, 'auth_required'))
   }
 
+  // Fetch platform credentials from DB for exchange
+  let credentials: Record<string, string> | undefined
+  if (definition.platformCredentials.length > 0) {
+    const { getPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const creds = await getPlatformCredentials(integrationType)
+    if (!creds) {
+      return redirectResponse(errorUrl(tenantUrl, 'credentials_not_configured'))
+    }
+    credentials = creds
+  }
+
   let accessToken: string | undefined
   try {
     const callbackUri = buildCallbackUri(integrationType, request)
     const exchangeResult = await definition.oauth.exchangeCode(
       code,
       callbackUri,
-      stateData.preAuthFields
+      stateData.preAuthFields,
+      credentials
     )
     accessToken = exchangeResult.accessToken
 

@@ -12,7 +12,20 @@ export const jiraIntegration: IntegrationDefinition = {
     exchangeCode: exchangeJiraCode,
   },
   hook: jiraHook,
-  requiredEnvVars: ['JIRA_CLIENT_ID', 'JIRA_CLIENT_SECRET'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developer.atlassian.com/console/myapps/',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developer.atlassian.com/console/myapps/',
+    },
+  ],
   async onDisconnect() {
     console.log('[Jira] Integration disconnected (no token revocation available)')
   },

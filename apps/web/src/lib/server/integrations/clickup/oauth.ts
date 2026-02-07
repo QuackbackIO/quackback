@@ -2,17 +2,20 @@
  * ClickUp OAuth utilities.
  */
 
-import { config } from '@/lib/server/config'
-
 const CLICKUP_API = 'https://api.clickup.com/api/v2'
 
 /**
  * Generate the ClickUp OAuth authorization URL.
  */
-export function getClickUpOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.clickupClientId
+export function getClickUpOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('CLICKUP_CLIENT_ID environment variable not set')
+    throw new Error('ClickUp client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -31,16 +34,18 @@ export function getClickUpOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeClickUpCode(
   code: string,
-  _redirectUri: string
+  _redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   config?: Record<string, unknown>
 }> {
-  const clientId = config.clickupClientId
-  const clientSecret = config.clickupClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('CLICKUP_CLIENT_ID and CLICKUP_CLIENT_SECRET must be set')
+    throw new Error('ClickUp credentials not configured')
   }
 
   const tokenResponse = await fetch(`${CLICKUP_API}/oauth/token`, {

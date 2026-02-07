@@ -12,7 +12,20 @@ export const teamsIntegration: IntegrationDefinition = {
     exchangeCode: exchangeTeamsCode,
   },
   hook: teamsHook,
-  requiredEnvVars: ['TEAMS_CLIENT_ID', 'TEAMS_CLIENT_SECRET'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps',
+    },
+  ],
   async onDisconnect() {
     console.log('[Teams] Integration disconnected (no token revocation available)')
   },

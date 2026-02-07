@@ -19,4 +19,5 @@ export const teamsCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#6264A7]',
   settingsPath: '/admin/settings/integrations/teams',
   available: true,
+  configurable: true,
 }

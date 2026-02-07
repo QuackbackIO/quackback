@@ -34,8 +34,16 @@ export function getIntegration(type: string): IntegrationDefinition | undefined 
   return registry.get(type)
 }
 
-export function getIntegrationCatalog(): IntegrationCatalogEntry[] {
-  return Array.from(registry.values()).map((i) => i.catalog)
+export async function getIntegrationCatalog(): Promise<IntegrationCatalogEntry[]> {
+  const { getConfiguredIntegrationTypes } =
+    await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+  const configuredTypes = await getConfiguredIntegrationTypes()
+  return Array.from(registry.values()).map((i) => ({
+    ...i.catalog,
+    available: i.platformCredentials.length === 0 || configuredTypes.has(i.id),
+    configurable: i.platformCredentials.length > 0,
+    platformCredentialFields: i.platformCredentials,
+  }))
 }
 
 export function getIntegrationHook(type: string): HookHandler | undefined {

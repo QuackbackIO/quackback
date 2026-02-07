@@ -4,19 +4,18 @@
  * The subdomain is collected via preAuthFields before the OAuth flow starts.
  */
 
-import { config } from '@/lib/server/config'
-
 /**
  * Generate the Zendesk OAuth authorization URL.
  */
 export function getZendeskOAuthUrl(
   state: string,
   redirectUri: string,
-  fields?: Record<string, string>
+  fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): string {
-  const clientId = config.zendeskClientId
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('ZENDESK_CLIENT_ID environment variable not set')
+    throw new Error('Zendesk client ID not configured')
   }
 
   const subdomain = fields?.subdomain
@@ -41,16 +40,17 @@ export function getZendeskOAuthUrl(
 export async function exchangeZendeskCode(
   code: string,
   redirectUri: string,
-  fields?: Record<string, string>
+  fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   config?: Record<string, unknown>
 }> {
-  const clientId = config.zendeskClientId
-  const clientSecret = config.zendeskClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('ZENDESK_CLIENT_ID and ZENDESK_CLIENT_SECRET must be set')
+    throw new Error('Zendesk credentials not configured')
   }
 
   const subdomain = fields?.subdomain

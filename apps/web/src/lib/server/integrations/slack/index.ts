@@ -12,6 +12,19 @@ export const slackIntegration: IntegrationDefinition = {
     exchangeCode: exchangeSlackCode,
   },
   hook: slackHook,
-  requiredEnvVars: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://api.slack.com/apps',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://api.slack.com/apps',
+    },
+  ],
   onDisconnect: (secrets) => revokeSlackToken(secrets.accessToken as string),
 }

@@ -3,8 +3,6 @@
  * Uses Azure AD OAuth2 with Microsoft Graph API.
  */
 
-import { config } from '@/lib/server/config'
-
 const GRAPH_API = 'https://graph.microsoft.com/v1.0'
 
 const TEAMS_SCOPES = [
@@ -17,10 +15,15 @@ const TEAMS_SCOPES = [
 /**
  * Generate the Microsoft Teams OAuth authorization URL.
  */
-export function getTeamsOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.teamsClientId
+export function getTeamsOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('TEAMS_CLIENT_ID environment variable not set')
+    throw new Error('Teams client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -40,18 +43,20 @@ export function getTeamsOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeTeamsCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   refreshToken?: string
   expiresIn?: number
   config?: Record<string, unknown>
 }> {
-  const clientId = config.teamsClientId
-  const clientSecret = config.teamsClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('TEAMS_CLIENT_ID and TEAMS_CLIENT_SECRET must be set')
+    throw new Error('Teams credentials not configured')
   }
 
   const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
@@ -107,16 +112,19 @@ export async function exchangeTeamsCode(
 /**
  * Refresh a Teams access token.
  */
-export async function refreshTeamsToken(refreshToken: string): Promise<{
+export async function refreshTeamsToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+): Promise<{
   accessToken: string
   refreshToken: string
   expiresIn: number
 }> {
-  const clientId = config.teamsClientId
-  const clientSecret = config.teamsClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('TEAMS_CLIENT_ID and TEAMS_CLIENT_SECRET must be set')
+    throw new Error('Teams credentials not configured')
   }
 
   const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {

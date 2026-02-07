@@ -20,4 +20,5 @@ export const discordCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#5865F2]',
   settingsPath: '/admin/settings/integrations/discord',
   available: true,
+  configurable: true,
 }

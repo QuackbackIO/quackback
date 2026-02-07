@@ -19,4 +19,5 @@ export const intercomCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#1F8DED]',
   settingsPath: '/admin/settings/integrations/intercom',
   available: true,
+  configurable: true,
 }

@@ -22,4 +22,5 @@ export const shortcutCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#58B1E4]',
   settingsPath: '/admin/settings/integrations/shortcut',
   available: true,
+  configurable: false,
 }

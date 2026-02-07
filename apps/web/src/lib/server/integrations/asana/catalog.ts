@@ -22,4 +22,5 @@ export const asanaCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#F06A6A]',
   settingsPath: '/admin/settings/integrations/asana',
   available: true,
+  configurable: true,
 }

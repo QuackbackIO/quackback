@@ -22,4 +22,5 @@ export const githubCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#24292F]',
   settingsPath: '/admin/settings/integrations/github',
   available: true,
+  configurable: true,
 }

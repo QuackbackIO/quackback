@@ -7,5 +7,5 @@ export const zapierIntegration: IntegrationDefinition = {
   catalog: zapierCatalog,
   // No OAuth — Zapier uses webhook URLs pasted by the user
   hook: zapierHook,
-  requiredEnvVars: [],
+  platformCredentials: [],
 }

@@ -6,5 +6,5 @@ export const shortcutIntegration: IntegrationDefinition = {
   id: 'shortcut',
   catalog: shortcutCatalog,
   hook: shortcutHook,
-  requiredEnvVars: [],
+  platformCredentials: [],
 }

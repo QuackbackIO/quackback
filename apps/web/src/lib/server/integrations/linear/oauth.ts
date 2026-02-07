@@ -2,17 +2,20 @@
  * Linear OAuth utilities.
  */
 
-import { config } from '@/lib/server/config'
-
 const LINEAR_API = 'https://api.linear.app'
 
 /**
  * Generate the Linear OAuth authorization URL.
  */
-export function getLinearOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.linearClientId
+export function getLinearOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('LINEAR_CLIENT_ID environment variable not set')
+    throw new Error('Linear client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -32,18 +35,20 @@ export function getLinearOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeLinearCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   refreshToken?: string
   expiresIn?: number
   config?: Record<string, unknown>
 }> {
-  const clientId = config.linearClientId
-  const clientSecret = config.linearClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET must be set')
+    throw new Error('Linear credentials not configured')
   }
 
   const tokenResponse = await fetch(`${LINEAR_API}/oauth/token`, {
@@ -103,15 +108,18 @@ export async function exchangeLinearCode(
 /**
  * Refresh a Linear access token.
  */
-export async function refreshLinearToken(refreshToken: string): Promise<{
+export async function refreshLinearToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+): Promise<{
   accessToken: string
   expiresIn: number
 }> {
-  const clientId = config.linearClientId
-  const clientSecret = config.linearClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET must be set')
+    throw new Error('Linear credentials not configured')
   }
 
   const response = await fetch(`${LINEAR_API}/oauth/token`, {
@@ -143,10 +151,13 @@ export async function refreshLinearToken(refreshToken: string): Promise<{
 /**
  * Revoke a Linear OAuth token.
  */
-export async function revokeLinearToken(accessToken: string): Promise<void> {
+export async function revokeLinearToken(
+  accessToken: string,
+  credentials?: Record<string, string>
+): Promise<void> {
   try {
-    const clientId = config.linearClientId
-    const clientSecret = config.linearClientSecret
+    const clientId = credentials?.clientId
+    const clientSecret = credentials?.clientSecret
 
     if (!clientId || !clientSecret) return
 

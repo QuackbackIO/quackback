@@ -22,4 +22,5 @@ export const clickupCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#7B68EE]',
   settingsPath: '/admin/settings/integrations/clickup',
   available: true,
+  configurable: true,
 }

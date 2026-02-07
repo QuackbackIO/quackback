@@ -3,8 +3,6 @@
  * Handles OAuth2 bot authorization flow for adding the bot to a guild.
  */
 
-import { config } from '@/lib/server/config'
-
 const DISCORD_API = 'https://discord.com/api/v10'
 
 /** Bot permission: Send Messages (2048) + Embed Links (16384) */
@@ -14,10 +12,15 @@ const BOT_PERMISSIONS = '18432'
  * Generate the Discord OAuth authorization URL.
  * Uses the bot scope to add the bot to a guild.
  */
-export function getDiscordOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.discordClientId
+export function getDiscordOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('DISCORD_CLIENT_ID environment variable not set')
+    throw new Error('Discord client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -37,20 +40,22 @@ export function getDiscordOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeDiscordCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   config?: Record<string, unknown>
 }> {
-  const clientId = config.discordClientId
-  const clientSecret = config.discordClientSecret
-  const botToken = config.discordBotToken
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
+  const botToken = credentials?.botToken
 
   if (!clientId || !clientSecret) {
-    throw new Error('DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET must be set')
+    throw new Error('Discord credentials not configured')
   }
   if (!botToken) {
-    throw new Error('DISCORD_BOT_TOKEN must be set')
+    throw new Error('Discord bot token not configured')
   }
 
   const response = await fetch(`${DISCORD_API}/oauth2/token`, {

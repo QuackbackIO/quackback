@@ -23,4 +23,5 @@ export const jiraCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#0052CC]',
   settingsPath: '/admin/settings/integrations/jira',
   available: true,
+  configurable: true,
 }

@@ -2,15 +2,18 @@
  * Jira (Atlassian) OAuth 2.0 (3LO) utilities.
  */
 
-import { config } from '@/lib/server/config'
-
 /**
  * Generate the Atlassian OAuth authorization URL.
  */
-export function getJiraOAuthUrl(state: string, redirectUri: string): string {
-  const clientId = config.jiraClientId
+export function getJiraOAuthUrl(
+  state: string,
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
+): string {
+  const clientId = credentials?.clientId
   if (!clientId) {
-    throw new Error('JIRA_CLIENT_ID environment variable not set')
+    throw new Error('Jira client ID not configured')
   }
 
   const params = new URLSearchParams({
@@ -31,18 +34,20 @@ export function getJiraOAuthUrl(state: string, redirectUri: string): string {
  */
 export async function exchangeJiraCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  _fields?: Record<string, string>,
+  credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
   refreshToken?: string
   expiresIn?: number
   config?: Record<string, unknown>
 }> {
-  const clientId = config.jiraClientId
-  const clientSecret = config.jiraClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('JIRA_CLIENT_ID and JIRA_CLIENT_SECRET must be set')
+    throw new Error('Jira credentials not configured')
   }
 
   // Exchange code for tokens
@@ -106,16 +111,19 @@ export async function exchangeJiraCode(
 /**
  * Refresh a Jira access token.
  */
-export async function refreshJiraToken(refreshToken: string): Promise<{
+export async function refreshJiraToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+): Promise<{
   accessToken: string
   refreshToken: string
   expiresIn: number
 }> {
-  const clientId = config.jiraClientId
-  const clientSecret = config.jiraClientSecret
+  const clientId = credentials?.clientId
+  const clientSecret = credentials?.clientSecret
 
   if (!clientId || !clientSecret) {
-    throw new Error('JIRA_CLIENT_ID and JIRA_CLIENT_SECRET must be set')
+    throw new Error('Jira credentials not configured')
   }
 
   const response = await fetch('https://auth.atlassian.com/oauth/token', {

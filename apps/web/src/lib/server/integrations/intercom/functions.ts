@@ -22,6 +22,13 @@ export const getIntercomConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { config } = await import('@/lib/server/config')
 
     const auth = await requireAuth({ roles: ['admin'] })
+    const { hasPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    if (!(await hasPlatformCredentials('intercom'))) {
+      throw new Error(
+        'Intercom platform credentials not configured. Configure them in integration settings first.'
+      )
+    }
     const returnDomain = new URL(config.baseUrl).host
 
     const state = signOAuthState({

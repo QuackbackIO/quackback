@@ -12,7 +12,20 @@ export const clickupIntegration: IntegrationDefinition = {
     exchangeCode: exchangeClickUpCode,
   },
   hook: clickupHook,
-  requiredEnvVars: ['CLICKUP_CLIENT_ID', 'CLICKUP_CLIENT_SECRET'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://clickup.com/integrations',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://clickup.com/integrations',
+    },
+  ],
   async onDisconnect() {
     console.log('[ClickUp] Integration disconnected (no token revocation available)')
   },

@@ -11,7 +11,20 @@ export const intercomIntegration: IntegrationDefinition = {
     exchangeCode: exchangeIntercomCode,
   },
   // No hook — Intercom is inbound (enrichment), not outbound (notifications)
-  requiredEnvVars: ['INTERCOM_CLIENT_ID', 'INTERCOM_CLIENT_SECRET'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developers.intercom.com/',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developers.intercom.com/',
+    },
+  ],
   async onDisconnect() {
     console.log('[Intercom] Integration disconnected (no token revocation available)')
   },

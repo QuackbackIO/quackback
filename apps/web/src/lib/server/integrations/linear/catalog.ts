@@ -22,4 +22,5 @@ export const linearCatalog: IntegrationCatalogEntry = {
   iconBg: 'bg-[#5E6AD2]',
   settingsPath: '/admin/settings/integrations/linear',
   available: true,
+  configurable: true,
 }

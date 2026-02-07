@@ -11,6 +11,20 @@ export const hubspotIntegration: IntegrationDefinition = {
     exchangeCode: exchangeHubSpotCode,
   },
   // No hook — HubSpot is inbound (enrichment), not outbound (notifications)
-  requiredEnvVars: ['HUBSPOT_CLIENT_ID', 'HUBSPOT_CLIENT_SECRET'],
-  onDisconnect: (secrets) => revokeHubSpotToken(secrets.refreshToken as string),
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developers.hubspot.com/',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developers.hubspot.com/',
+    },
+  ],
+  onDisconnect: (secrets, _config, credentials) =>
+    revokeHubSpotToken(secrets.refreshToken as string, credentials),
 }

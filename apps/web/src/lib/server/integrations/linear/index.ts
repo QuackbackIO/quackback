@@ -12,6 +12,20 @@ export const linearIntegration: IntegrationDefinition = {
     exchangeCode: exchangeLinearCode,
   },
   hook: linearHook,
-  requiredEnvVars: ['LINEAR_CLIENT_ID', 'LINEAR_CLIENT_SECRET'],
-  onDisconnect: (secrets) => revokeLinearToken(secrets.accessToken as string),
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://linear.app/settings/api',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://linear.app/settings/api',
+    },
+  ],
+  onDisconnect: (secrets, _config, credentials) =>
+    revokeLinearToken(secrets.accessToken as string, credentials),
 }

@@ -21,7 +21,20 @@ export const zendeskIntegration: IntegrationDefinition = {
     exchangeCode: exchangeZendeskCode,
   },
   // No hook — Zendesk is inbound (enrichment), not outbound (notifications)
-  requiredEnvVars: ['ZENDESK_CLIENT_ID', 'ZENDESK_CLIENT_SECRET'],
+  platformCredentials: [
+    {
+      key: 'clientId',
+      label: 'Client ID',
+      sensitive: false,
+      helpUrl: 'https://developer.zendesk.com/',
+    },
+    {
+      key: 'clientSecret',
+      label: 'Client Secret',
+      sensitive: true,
+      helpUrl: 'https://developer.zendesk.com/',
+    },
+  ],
   async onDisconnect(secrets, config) {
     await revokeZendeskToken(secrets.accessToken as string, config.subdomain as string)
   },
