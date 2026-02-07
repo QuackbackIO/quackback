@@ -39,7 +39,7 @@ function SlackIntegrationPage() {
       <IntegrationHeader
         catalog={slackCatalog}
         status={integration?.status as 'active' | 'paused' | 'pending' | null}
-        workspaceName={integration?.externalWorkspaceName}
+        workspaceName={integration?.workspaceName}
         icon={<SlackIcon className="h-6 w-6 text-white" />}
         actions={
           <SlackConnectionActions

@@ -2,50 +2,45 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
-import { JiraConnectionActions } from '@/components/admin/settings/integrations/jira/jira-connection-actions'
-import { JiraConfig } from '@/components/admin/settings/integrations/jira/jira-config'
-import { jiraCatalog } from '@/lib/server/integrations/jira/catalog'
+import { ClickUpConnectionActions } from '@/components/admin/settings/integrations/clickup/clickup-connection-actions'
+import { ClickUpConfig } from '@/components/admin/settings/integrations/clickup/clickup-config'
+import { clickupCatalog } from '@/lib/server/integrations/clickup/catalog'
 
-function JiraIcon({ className }: { className?: string }) {
+function ClickUpIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none">
       <defs>
-        <linearGradient id="jira-grad-1" x1="98%" y1="0%" x2="58%" y2="42%">
-          <stop offset="18%" stopColor="#0052CC" />
-          <stop offset="100%" stopColor="#2684FF" />
-        </linearGradient>
-        <linearGradient id="jira-grad-2" x1="2%" y1="100%" x2="42%" y2="58%">
-          <stop offset="18%" stopColor="#0052CC" />
-          <stop offset="100%" stopColor="#2684FF" />
+        <linearGradient id="clickup-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#8930FD" />
+          <stop offset="50%" stopColor="#49CCF9" />
+          <stop offset="100%" stopColor="#49CCF9" />
         </linearGradient>
       </defs>
       <path
-        d="M11.53 2C11.53 4.4 13.5 6.35 15.88 6.35H17.66V8.05C17.66 10.45 19.6 12.4 22 12.4V2.84C22 2.38 21.62 2 21.16 2H11.53Z"
-        fill="url(#jira-grad-1)"
+        d="M4 16.5L7.5 13.8C8.9 15.6 10.4 16.5 12 16.5C13.6 16.5 15.1 15.6 16.5 13.8L20 16.5C18 19.2 15.3 20.7 12 20.7C8.7 20.7 6 19.2 4 16.5Z"
+        fill="url(#clickup-grad)"
       />
       <path
-        d="M6.77 6.8C6.77 9.2 8.72 11.15 11.1 11.15H12.88V12.86C12.88 15.26 14.83 17.2 17.21 17.2V7.64C17.21 7.18 16.83 6.8 16.37 6.8H6.77Z"
-        fill="url(#jira-grad-2)"
+        d="M4 12.3L7.5 9.6C8.9 11.4 10.4 12.3 12 12.3C13.6 12.3 15.1 11.4 16.5 9.6L20 12.3C18 15 15.3 16.5 12 16.5C8.7 16.5 6 15 4 12.3Z"
+        fill="url(#clickup-grad)"
+        opacity="0.4"
       />
-      <path
-        d="M2 11.6C2 14 3.95 15.95 6.33 15.95H8.12V17.66C8.12 20.06 10.07 22 12.45 22V12.44C12.45 11.98 12.07 11.6 11.61 11.6H2Z"
-        fill="#2684FF"
-      />
+      <path d="M12 3.3L5 9.5L7.4 12.3L12 8.3L16.6 12.3L19 9.5L12 3.3Z" fill="url(#clickup-grad)" />
     </svg>
   )
 }
 
-export const Route = createFileRoute('/admin/settings/integrations/jira')({
+export const Route = createFileRoute('/admin/settings/integrations/clickup')({
   loader: async ({ context }) => {
     const { queryClient } = context
-    await queryClient.ensureQueryData(adminQueries.integrationByType('jira'))
+    await queryClient.ensureQueryData(adminQueries.integrationByType('clickup'))
     return {}
   },
-  component: JiraIntegrationPage,
+  component: ClickUpIntegrationPage,
 })
 
-function JiraIntegrationPage() {
-  const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('jira'))
+function ClickUpIntegrationPage() {
+  const integrationQuery = useSuspenseQuery(adminQueries.integrationByType('clickup'))
   const integration = integrationQuery.data
 
   const isConnected = integration?.status === 'active'
@@ -54,12 +49,12 @@ function JiraIntegrationPage() {
   return (
     <div className="space-y-6">
       <IntegrationHeader
-        catalog={jiraCatalog}
+        catalog={clickupCatalog}
         status={integration?.status as 'active' | 'paused' | 'pending' | null}
         workspaceName={integration?.workspaceName}
-        icon={<JiraIcon className="h-6 w-6" />}
+        icon={<ClickUpIcon className="h-6 w-6" />}
         actions={
-          <JiraConnectionActions
+          <ClickUpConnectionActions
             integrationId={integration?.id}
             isConnected={isConnected || isPaused}
           />
@@ -68,7 +63,7 @@ function JiraIntegrationPage() {
 
       {integration && (isConnected || isPaused) && (
         <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-          <JiraConfig
+          <ClickUpConfig
             integrationId={integration.id}
             initialConfig={integration.config}
             initialEventMappings={integration.eventMappings}
@@ -79,11 +74,11 @@ function JiraIntegrationPage() {
 
       {!integration && (
         <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <JiraIcon className="mx-auto h-10 w-10" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your Jira instance</h3>
+          <ClickUpIcon className="mx-auto h-10 w-10" />
+          <h3 className="mt-4 font-medium text-foreground">Connect your ClickUp workspace</h3>
           <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Jira to automatically create and sync issues from feedback posts, keeping your
-            team's workflow in sync.
+            Connect ClickUp to turn feedback into tasks and track progress directly from your
+            workspace.
           </p>
         </div>
       )}
@@ -97,21 +92,21 @@ function JiraIntegrationPage() {
             </span>
             <p>
               Click <span className="font-medium text-foreground">Connect</span> to authorize
-              Quackback to create issues in your Jira instance.
+              Quackback to create tasks in your ClickUp workspace.
             </p>
           </div>
           <div className="flex gap-3">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
               2
             </span>
-            <p>Select which project and issue type to use for new feedback issues.</p>
+            <p>Select a space and list where new feedback tasks should be created.</p>
           </div>
           <div className="flex gap-3">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
               3
             </span>
             <p>
-              Choose which events trigger issue creation. You can change these settings at any time.
+              Choose which events trigger task creation. You can change these settings at any time.
             </p>
           </div>
         </div>
