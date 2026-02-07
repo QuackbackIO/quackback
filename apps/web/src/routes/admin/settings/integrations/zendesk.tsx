@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { ZendeskConnectionActions } from '@/components/admin/settings/integrations/zendesk/zendesk-connection-actions'
 import { Button } from '@/components/ui/button'
@@ -36,19 +37,16 @@ function ZendeskIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<ZendeskIcon className="h-6 w-6 text-white" />}
         actions={
-          <div className="flex items-center gap-2">
-            {platformCredentialFields.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                Configure credentials
-              </Button>
-            )}
-            {platformCredentialsConfigured && (
-              <ZendeskConnectionActions
-                integrationId={integration?.id}
-                isConnected={isConnected || isPaused}
-              />
-            )}
-          </div>
+          isConnected || isPaused ? (
+            <div className="flex items-center gap-2">
+              {platformCredentialFields.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                  Configure credentials
+                </Button>
+              )}
+              <ZendeskConnectionActions integrationId={integration?.id} isConnected={true} />
+            </div>
+          ) : undefined
         }
       />
 
@@ -65,43 +63,33 @@ function ZendeskIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <ZendeskIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your Zendesk account</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Zendesk to enrich feedback with support context like organization, tags, and
-            ticket history.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">How it works</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<ZendeskIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect your Zendesk account"
+          description="Connect Zendesk to enrich feedback with support context like organization, tags, and ticket history."
+          steps={[
+            <p key="1">
               Connect your Zendesk account to authorize read-only access to user and ticket data.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>
+            </p>,
+            <p key="2">
               When feedback is submitted by a known email, Quackback looks up their Zendesk profile.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>Support context (organization, ticket history) appears alongside their feedback.</p>
-          </div>
-        </div>
-      </div>
+            </p>,
+            <p key="3">
+              Support context (organization, ticket history) appears alongside their feedback.
+            </p>,
+          ]}
+          connectionForm={
+            <div className="flex flex-col items-end gap-2">
+              {platformCredentialFields.length > 0 && !platformCredentialsConfigured && (
+                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
+              )}
+              {platformCredentialsConfigured && (
+                <ZendeskConnectionActions integrationId={undefined} isConnected={false} />
+              )}
+            </div>
+          }
+        />
+      )}
 
       {platformCredentialFields.length > 0 && (
         <PlatformCredentialsDialog

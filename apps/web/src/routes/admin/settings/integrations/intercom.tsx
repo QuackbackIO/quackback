@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
 import { IntercomConnectionActions } from '@/components/admin/settings/integrations/intercom/intercom-connection-actions'
 import { Button } from '@/components/ui/button'
@@ -36,19 +37,16 @@ function IntercomIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<IntercomIcon className="h-6 w-6 text-white" />}
         actions={
-          <div className="flex items-center gap-2">
-            {platformCredentialFields.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                Configure credentials
-              </Button>
-            )}
-            {platformCredentialsConfigured && (
-              <IntercomConnectionActions
-                integrationId={integration?.id}
-                isConnected={isConnected || isPaused}
-              />
-            )}
-          </div>
+          isConnected || isPaused ? (
+            <div className="flex items-center gap-2">
+              {platformCredentialFields.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                  Configure credentials
+                </Button>
+              )}
+              <IntercomConnectionActions integrationId={integration?.id} isConnected={true} />
+            </div>
+          ) : undefined
         }
       />
 
@@ -65,45 +63,35 @@ function IntercomIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <IntercomIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your Intercom account</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Intercom to enrich feedback with customer context like company, plan, and
-            conversation history.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">How it works</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>Connect your Intercom account to authorize read-only access to contact data.</p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<IntercomIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect your Intercom account"
+          description="Connect Intercom to enrich feedback with customer context like company, plan, and conversation history."
+          steps={[
+            <p key="1">
+              Connect your Intercom account to authorize read-only access to contact data.
+            </p>,
+            <p key="2">
               When feedback is submitted by a known email, Quackback automatically looks up their
               Intercom profile.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+            </p>,
+            <p key="3">
               Customer context (company, plan, tags) appears alongside their feedback to help you
               prioritize.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={
+            <div className="flex flex-col items-end gap-2">
+              {platformCredentialFields.length > 0 && !platformCredentialsConfigured && (
+                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
+              )}
+              {platformCredentialsConfigured && (
+                <IntercomConnectionActions integrationId={undefined} isConnected={false} />
+              )}
+            </div>
+          }
+        />
+      )}
 
       {platformCredentialFields.length > 0 && (
         <PlatformCredentialsDialog

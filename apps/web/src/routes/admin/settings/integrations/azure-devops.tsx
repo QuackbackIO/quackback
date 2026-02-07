@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { AzureDevOpsConnectionActions } from '@/components/admin/settings/integrations/azure-devops/azure-devops-connection-actions'
 import { AzureDevOpsConfig } from '@/components/admin/settings/integrations/azure-devops/azure-devops-config'
 import { AzureDevOpsIcon } from '@/components/icons/integration-icons'
@@ -33,10 +34,9 @@ function AzureDevOpsIntegrationPage() {
         }
         icon={<AzureDevOpsIcon className="h-6 w-6" />}
         actions={
-          <AzureDevOpsConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-          />
+          isConnected || isPaused ? (
+            <AzureDevOpsConnectionActions integrationId={integration?.id} isConnected={true} />
+          ) : undefined
         }
       />
 
@@ -52,24 +52,12 @@ function AzureDevOpsIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <AzureDevOpsIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect Azure DevOps</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Azure DevOps to automatically create work items from feedback posts, keeping
-            your team's workflow in sync.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">Setup Instructions</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<AzureDevOpsIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect Azure DevOps"
+          description="Connect Azure DevOps to automatically create work items from feedback posts, keeping your team's workflow in sync."
+          steps={[
+            <p key="1">
               Create a{' '}
               <a
                 href="https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate"
@@ -81,29 +69,22 @@ function AzureDevOpsIntegrationPage() {
               </a>{' '}
               in Azure DevOps with{' '}
               <span className="font-medium text-foreground">Work Items (Read & Write)</span> scope.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>
-              Enter your organization URL and PAT above, then click{' '}
+            </p>,
+            <p key="2">
+              Enter your organization URL and PAT below, then click{' '}
               <span className="font-medium text-foreground">Connect</span>. Quackback will verify
               access to your organization.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+            </p>,
+            <p key="3">
               Select which project and work item type to use, then enable the events that should
               trigger work item creation.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={
+            <AzureDevOpsConnectionActions integrationId={undefined} isConnected={false} />
+          }
+        />
+      )}
     </div>
   )
 }

@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import { fetchGitHubReposFn, type GitHubRepo } from '@/lib/server/integrations/github/functions'
+import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
 
 interface EventMapping {
   id: string
@@ -23,7 +24,7 @@ interface EventMapping {
 
 interface GitHubConfigProps {
   integrationId: string
-  initialConfig: { channelId?: string }
+  initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
 }
@@ -51,7 +52,7 @@ export function GitHubConfig({
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [repoError, setRepoError] = useState<string | null>(null)
-  const [selectedRepo, setSelectedRepo] = useState(initialConfig.channelId || '')
+  const [selectedRepo, setSelectedRepo] = useState((initialConfig.channelId as string) || '')
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -206,6 +207,17 @@ export function GitHubConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="github"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={[
+          { id: 'Open', name: 'Open' },
+          { id: 'Closed', name: 'Closed' },
+        ]}
+      />
     </div>
   )
 }

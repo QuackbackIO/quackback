@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { ZapierConnectionActions } from '@/components/admin/settings/integrations/zapier/zapier-connection-actions'
 import { ZapierConfig } from '@/components/admin/settings/integrations/zapier/zapier-config'
 import { ZapierIcon } from '@/components/icons/integration-icons'
@@ -31,11 +32,9 @@ function ZapierIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<ZapierIcon className="h-6 w-6 text-white" />}
         actions={
-          <ZapierConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-            webhookUrl={integration?.config?.webhookUrl as string | undefined}
-          />
+          isConnected || isPaused ? (
+            <ZapierConnectionActions integrationId={integration?.id} isConnected={true} />
+          ) : undefined
         }
       />
 
@@ -50,50 +49,29 @@ function ZapierIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <ZapierIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect Zapier</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Zapier to trigger automated workflows when users submit feedback, when statuses
-            change, and when comments are added.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">Setup Instructions</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<ZapierIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect Zapier"
+          description="Connect Zapier to trigger automated workflows when users submit feedback, when statuses change, and when comments are added."
+          steps={[
+            <p key="1">
               Create a new Zap in Zapier and add a{' '}
               <span className="font-medium text-foreground">Webhooks by Zapier</span> trigger with{' '}
               <span className="font-medium text-foreground">Catch Hook</span>.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>
-              Copy the webhook URL from Zapier and paste it above, then click{' '}
+            </p>,
+            <p key="2">
+              Copy the webhook URL from Zapier and paste it below, then click{' '}
               <span className="font-medium text-foreground">Save</span>. Quackback will send a test
               payload.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+            </p>,
+            <p key="3">
               Choose which events should trigger your Zap, then continue building your workflow in
               Zapier.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={<ZapierConnectionActions integrationId={undefined} isConnected={false} />}
+        />
+      )}
     </div>
   )
 }

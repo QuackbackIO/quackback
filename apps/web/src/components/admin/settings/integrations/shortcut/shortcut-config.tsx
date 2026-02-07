@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { fetchExternalStatusesFn } from '@/lib/server/functions/external-statuses'
+import {
+  StatusSyncConfig,
+  type ExternalStatus,
+} from '@/components/admin/settings/integrations/status-sync-config'
 import {
   fetchShortcutProjectsFn,
   type ShortcutProject,
@@ -26,7 +31,7 @@ interface EventMapping {
 
 interface ShortcutConfigProps {
   integrationId: string
-  initialConfig: { channelId?: string }
+  initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
 }
@@ -54,7 +59,8 @@ export function ShortcutConfig({
   const [projects, setProjects] = useState<ShortcutProject[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
-  const [selectedProject, setSelectedProject] = useState(initialConfig.channelId || '')
+  const [selectedProject, setSelectedProject] = useState((initialConfig.channelId as string) || '')
+  const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -80,6 +86,9 @@ export function ShortcutConfig({
 
   useEffect(() => {
     fetchProjects()
+    fetchExternalStatusesFn({ data: { integrationType: 'shortcut' } })
+      .then(setExternalStatuses)
+      .catch(() => {})
   }, [fetchProjects])
 
   const handleEnabledChange = (checked: boolean) => {
@@ -209,6 +218,15 @@ export function ShortcutConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="shortcut"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+        isManual={true}
+      />
     </div>
   )
 }

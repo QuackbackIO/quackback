@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
+import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
 import { ShortcutConnectionActions } from '@/components/admin/settings/integrations/shortcut/shortcut-connection-actions'
 import { ShortcutConfig } from '@/components/admin/settings/integrations/shortcut/shortcut-config'
 import { ShortcutIcon } from '@/components/icons/integration-icons'
@@ -31,10 +32,9 @@ function ShortcutIntegrationPage() {
         workspaceName={integration?.workspaceName}
         icon={<ShortcutIcon className="h-6 w-6 text-white" />}
         actions={
-          <ShortcutConnectionActions
-            integrationId={integration?.id}
-            isConnected={isConnected || isPaused}
-          />
+          isConnected || isPaused ? (
+            <ShortcutConnectionActions integrationId={integration?.id} isConnected={true} />
+          ) : undefined
         }
       />
 
@@ -50,41 +50,24 @@ function ShortcutIntegrationPage() {
       )}
 
       {!integration && (
-        <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-          <ShortcutIcon className="mx-auto h-10 w-10 text-muted-foreground/50" />
-          <h3 className="mt-4 font-medium text-foreground">Connect your Shortcut workspace</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Connect Shortcut to automatically create stories from feedback and keep statuses in sync
-            across both platforms.
-          </p>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium text-foreground">Setup Instructions</h2>
-        <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              1
-            </span>
-            <p>Generate an API token from your Shortcut account settings and paste it above.</p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              2
-            </span>
-            <p>Select which project new feedback stories should be created in.</p>
-          </div>
-          <div className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              3
-            </span>
-            <p>
+        <IntegrationSetupCard
+          icon={<ShortcutIcon className="h-6 w-6 text-muted-foreground" />}
+          title="Connect your Shortcut workspace"
+          description="Connect Shortcut to automatically create stories from feedback and keep statuses in sync across both platforms."
+          steps={[
+            <p key="1">
+              Generate an API token from your Shortcut account settings and paste it below.
+            </p>,
+            <p key="2">Select which project new feedback stories should be created in.</p>,
+            <p key="3">
               Choose which events trigger story creation. You can change these settings at any time.
-            </p>
-          </div>
-        </div>
-      </div>
+            </p>,
+          ]}
+          connectionForm={
+            <ShortcutConnectionActions integrationId={undefined} isConnected={false} />
+          }
+        />
+      )}
     </div>
   )
 }

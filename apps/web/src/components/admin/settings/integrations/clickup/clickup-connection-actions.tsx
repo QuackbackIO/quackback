@@ -55,7 +55,7 @@ export function ClickUpConnectionActions({
   const disconnecting = deleteMutation.isPending
 
   return (
-    <div className="flex flex-col items-end gap-2">
+    <>
       {showSuccess && (
         <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
           <CheckCircleIcon className="h-4 w-4" />
@@ -106,6 +106,6 @@ export function ClickUpConnectionActions({
           </>
         )}
       </div>
-    </div>
+    </>
   )
 }

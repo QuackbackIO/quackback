@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { fetchExternalStatusesFn } from '@/lib/server/functions/external-statuses'
+import {
+  StatusSyncConfig,
+  type ExternalStatus,
+} from '@/components/admin/settings/integrations/status-sync-config'
 import {
   fetchAzureDevOpsProjectsFn,
   fetchAzureDevOpsWorkItemTypesFn,
@@ -30,7 +35,7 @@ interface EventMapping {
 
 interface AzureDevOpsConfigProps {
   integrationId: string
-  initialConfig: { channelId?: string }
+  initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
 }
@@ -60,7 +65,7 @@ export function AzureDevOpsConfig({
   const updateMutation = useUpdateIntegration()
 
   const { projectName: initialProjectName, workItemType: initialWorkItemType } = parseChannelId(
-    initialConfig.channelId
+    (initialConfig.channelId as string) || ''
   )
 
   const [projects, setProjects] = useState<AzureDevOpsProject[]>([])
@@ -73,6 +78,7 @@ export function AzureDevOpsConfig({
   const [workItemTypeError, setWorkItemTypeError] = useState<string | null>(null)
   const [selectedWorkItemType, setSelectedWorkItemType] = useState(initialWorkItemType)
 
+  const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -111,6 +117,9 @@ export function AzureDevOpsConfig({
 
   useEffect(() => {
     fetchProjects()
+    fetchExternalStatusesFn({ data: { integrationType: 'azure_devops' } })
+      .then(setExternalStatuses)
+      .catch(() => {})
   }, [fetchProjects])
 
   useEffect(() => {
@@ -293,6 +302,15 @@ export function AzureDevOpsConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="azure_devops"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+        isManual={true}
+      />
     </div>
   )
 }
