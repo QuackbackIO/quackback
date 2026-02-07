@@ -29,6 +29,7 @@ export const ID_PREFIXES = {
 
   // Integrations
   integration: 'integration',
+  platform_cred: 'platform_cred',
   event_mapping: 'event_mapping',
   linked_entity: 'linked_entity',
   sync_log: 'sync_log',

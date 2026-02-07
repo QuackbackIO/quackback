@@ -52,6 +52,9 @@ export type ChangelogId = TypeId<'changelog'>
 /** Integration ID - e.g., integration_01h455vb4pex5vsknk084sn02q */
 export type IntegrationId = TypeId<'integration'>
 
+/** Platform credential ID - e.g., platform_cred_01h455vb4pex5vsknk084sn02q */
+export type PlatformCredentialId = TypeId<'platform_cred'>
+
 /** Event mapping ID - e.g., event_mapping_01h455vb4pex5vsknk084sn02q */
 export type EventMappingId = TypeId<'event_mapping'>
 
@@ -163,6 +166,7 @@ export interface EntityIdMap {
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId
+  platform_cred: PlatformCredentialId
   event_mapping: EventMappingId
   linked_entity: LinkedEntityId
   sync_log: SyncLogId

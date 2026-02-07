@@ -56,6 +56,37 @@ export const integrations = pgTable(
 )
 
 /**
+ * Platform-level credentials for integrations (OAuth app credentials).
+ * One row per provider. Secrets are AES-256-GCM encrypted.
+ * Presence of a row = configured; no row = not configured.
+ */
+export const integrationPlatformCredentials = pgTable(
+  'integration_platform_credentials',
+  {
+    id: typeIdWithDefault('platform_cred')('id').primaryKey(),
+    integrationType: varchar('integration_type', { length: 50 }).notNull(),
+    secrets: text('secrets').notNull(),
+    configuredByMemberId: typeIdColumnNullable('member')('configured_by_member_id').references(
+      () => member.id,
+      { onDelete: 'set null' }
+    ),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique('platform_cred_type_unique').on(table.integrationType)]
+)
+
+export const integrationPlatformCredentialsRelations = relations(
+  integrationPlatformCredentials,
+  ({ one }) => ({
+    configuredBy: one(member, {
+      fields: [integrationPlatformCredentials.configuredByMemberId],
+      references: [member.id],
+    }),
+  })
+)
+
+/**
  * Event-to-action mappings for integrations.
  * Defines what actions trigger when specific domain events occur.
  */

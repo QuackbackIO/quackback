@@ -78,6 +78,7 @@ export type {
   RoadmapId,
   ChangelogId,
   IntegrationId,
+  PlatformCredentialId,
   EventMappingId,
   LinkedEntityId,
   SyncLogId,

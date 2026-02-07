@@ -29,6 +29,13 @@
       "when": 1770457345878,
       "tag": "0003_amusing_thunderbolt_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770462701552,
+      "tag": "0004_naive_paladin",
+      "breakpoints": true
     }
   ]
 }
