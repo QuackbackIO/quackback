@@ -5,8 +5,8 @@
  */
 
 import { db, posts, boards, postStatuses, eq } from '@/lib/server/db'
-import { type PostId, type StatusId, type UserId } from '@quackback/ids'
-import { dispatchPostStatusChanged } from '@/lib/server/events/dispatch'
+import { type PostId, type StatusId, type UserId, type PrincipalId } from '@quackback/ids'
+import { dispatchPostStatusChanged, buildEventActor } from '@/lib/server/events/dispatch'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { ChangeStatusResult } from './post.types'
 
@@ -29,7 +29,12 @@ import type { ChangeStatusResult } from './post.types'
 export async function changeStatus(
   postId: PostId,
   statusId: StatusId,
-  actor: { userId: UserId; email: string }
+  actor: {
+    principalId: PrincipalId
+    userId?: UserId
+    email?: string
+    displayName?: string
+  }
 ): Promise<ChangeStatusResult> {
   // Get existing post
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -68,7 +73,7 @@ export async function changeStatus(
 
   // Dispatch post.status_changed event for webhooks, Slack, etc.
   await dispatchPostStatusChanged(
-    { type: 'user', userId: actor.userId, email: actor.email },
+    buildEventActor(actor),
     {
       id: updatedPost.id,
       title: updatedPost.title,

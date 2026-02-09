@@ -33,7 +33,7 @@ import {
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
-import { dispatchCommentCreated } from '@/lib/server/events/dispatch'
+import { dispatchCommentCreated, buildEventActor } from '@/lib/server/events/dispatch'
 import type {
   CreateCommentInput,
   CreateCommentResult,
@@ -43,31 +43,11 @@ import type {
   CommentPermissionCheckResult,
 } from './comment.types'
 import { buildCommentTree, aggregateReactions } from '@/lib/shared'
+import { getExecuteRows } from '@/lib/server/utils'
 
 // ============================================================================
 // Helper Functions (Internal)
 // ============================================================================
-
-/**
- * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
- */
-function getExecuteRows<T>(result: unknown): T[] {
-  // Check if result has rows property (neon-http format)
-  if (
-    result &&
-    typeof result === 'object' &&
-    'rows' in result &&
-    Array.isArray((result as { rows: unknown }).rows)
-  ) {
-    return (result as { rows: T[] }).rows
-  }
-  // Otherwise assume it's already an array (postgres-js format)
-  if (Array.isArray(result)) {
-    return result as T[]
-  }
-  return []
-}
 
 /**
  * Check if a comment has any reply from a team member
@@ -112,9 +92,10 @@ export async function createComment(
   input: CreateCommentInput,
   author: {
     principalId: PrincipalId
-    userId: UserId
-    name: string
-    email: string
+    userId?: UserId
+    name?: string
+    email?: string
+    displayName?: string
     role: 'admin' | 'member' | 'user'
   }
 ): Promise<CreateCommentResult> {
@@ -175,12 +156,13 @@ export async function createComment(
   }
 
   // Dispatch comment.created event for webhooks, Slack, etc.
+  const actorName = author.displayName ?? author.name
   await dispatchCommentCreated(
-    { type: 'user', userId: author.userId, email: author.email },
+    buildEventActor(author),
     {
       id: comment.id,
       content: comment.content,
-      authorName: author.name,
+      authorName: actorName,
       authorEmail: author.email,
     },
     {
@@ -325,9 +307,10 @@ export async function getCommentById(
     where: eq(comments.id, id),
     with: {
       author: {
+        columns: { displayName: true },
         with: {
           user: {
-            columns: { name: true, email: true },
+            columns: { email: true },
           },
         },
       },
@@ -350,7 +333,7 @@ export async function getCommentById(
 
   return {
     ...comment,
-    authorName: comment.author?.user?.name ?? null,
+    authorName: comment.author?.displayName ?? null,
     authorEmail: comment.author?.user?.email ?? null,
   }
 }
@@ -387,7 +370,7 @@ export async function getCommentsByPost(
     with: {
       reactions: true,
       author: {
-        with: { user: true },
+        columns: { displayName: true },
       },
     },
     orderBy: asc(comments.createdAt),
@@ -399,7 +382,7 @@ export async function getCommentsByPost(
     postId: comment.postId,
     parentId: comment.parentId,
     principalId: comment.principalId,
-    authorName: comment.author?.user?.name ?? null,
+    authorName: comment.author?.displayName ?? null,
     content: comment.content,
     isTeamMember: comment.isTeamMember,
     createdAt: comment.createdAt,

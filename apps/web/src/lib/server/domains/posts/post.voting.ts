@@ -6,6 +6,7 @@
 
 import { db, posts, votes, postSubscriptions, boards, sql } from '@/lib/server/db'
 import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'
 
@@ -111,23 +112,4 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   const voteCount = row.vote_count ?? 0
 
   return { voted, voteCount }
-}
-
-/**
- * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
- */
-function getExecuteRows<T>(result: unknown): T[] {
-  if (
-    result &&
-    typeof result === 'object' &&
-    'rows' in result &&
-    Array.isArray((result as { rows: unknown }).rows)
-  ) {
-    return (result as { rows: T[] }).rows
-  }
-  if (Array.isArray(result)) {
-    return result as T[]
-  }
-  return []
 }

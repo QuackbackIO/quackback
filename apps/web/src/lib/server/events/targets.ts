@@ -3,7 +3,7 @@
  * Queries database to determine all targets for an event.
  */
 
-import type { PostId, UserId, WebhookId } from '@quackback/ids'
+import type { PostId, PrincipalId, UserId, WebhookId } from '@quackback/ids'
 import {
   db,
   integrations,
@@ -252,7 +252,7 @@ function extractPostId(event: EventData): PostId | null {
  * Check if subscriber is the actor (don't notify yourself).
  */
 function isActorSubscriber(subscriber: Subscriber, actor: EventActor): boolean {
-  if (actor.type === 'system') return false
+  if (actor.type === 'service') return false
   return subscriber.userId === actor.userId || subscriber.email === actor.email
 }
 
@@ -279,12 +279,20 @@ function shouldSendEmail(
  * Check if actor is a team member (non-user role).
  */
 async function isActorTeamMember(actor: EventActor): Promise<boolean> {
+  // Service principals: resolve by principalId directly
+  if (actor.principalId) {
+    const record = await db.query.principal.findFirst({
+      where: eq(principal.id, actor.principalId as PrincipalId),
+      columns: { role: true },
+    })
+    return record?.role !== 'user'
+  }
   if (!actor.userId) return false
-  const commenterMember = await db.query.principal.findFirst({
+  const record = await db.query.principal.findFirst({
     where: eq(principal.userId, actor.userId as UserId),
     columns: { role: true },
   })
-  return commenterMember?.role !== 'user'
+  return record?.role !== 'user'
 }
 
 /**

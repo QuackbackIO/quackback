@@ -16,6 +16,7 @@ import {
   type Post,
 } from '@/lib/server/db'
 import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback/ids'
+import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult, UserEditPostInput } from './post.types'
@@ -577,25 +578,6 @@ async function getCommentStatsForPermissions(
     totalCount: Number(row?.total_count ?? 0),
     hasOtherComments: Number(row?.other_count ?? 0) > 0,
   }
-}
-
-/**
- * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
- */
-function getExecuteRows<T>(result: unknown): T[] {
-  if (
-    result &&
-    typeof result === 'object' &&
-    'rows' in result &&
-    Array.isArray((result as { rows: unknown }).rows)
-  ) {
-    return (result as { rows: T[] }).rows
-  }
-  if (Array.isArray(result)) {
-    return result as T[]
-  }
-  return []
 }
 
 /**

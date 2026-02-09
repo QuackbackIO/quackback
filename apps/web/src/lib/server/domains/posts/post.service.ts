@@ -14,7 +14,7 @@
 
 import { db, boards, eq, postStatuses, posts, postTags, type Post } from '@/lib/server/db'
 import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
-import { dispatchPostCreated } from '@/lib/server/events/dispatch'
+import { dispatchPostCreated, buildEventActor } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
@@ -35,7 +35,13 @@ import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.
  */
 export async function createPost(
   input: CreatePostInput,
-  author: { principalId: PrincipalId; userId: UserId; name: string; email: string }
+  author: {
+    principalId: PrincipalId
+    userId?: UserId
+    name?: string
+    email?: string
+    displayName?: string
+  }
 ): Promise<CreatePostResult> {
   // Basic validation (also done at action layer, but enforced here for direct service calls)
   const title = input.title?.trim()
@@ -110,19 +116,17 @@ export async function createPost(
   await subscribeToPost(author.principalId, post.id, 'author')
 
   // Dispatch post.created event for webhooks, Slack, AI processing, etc.
-  await dispatchPostCreated(
-    { type: 'user', userId: author.userId, email: author.email },
-    {
-      id: post.id,
-      title: post.title,
-      content: post.content,
-      boardId: post.boardId,
-      boardSlug: board.slug,
-      authorEmail: author.email,
-      authorName: author.name,
-      voteCount: post.voteCount,
-    }
-  )
+  const actorName = author.displayName ?? author.name
+  await dispatchPostCreated(buildEventActor(author), {
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    boardId: post.boardId,
+    boardSlug: board.slug,
+    authorEmail: author.email,
+    authorName: actorName,
+    voteCount: post.voteCount,
+  })
 
   return { ...post, boardSlug: board.slug }
 }

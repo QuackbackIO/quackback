@@ -8,13 +8,34 @@
 
 import { randomUUID } from 'crypto'
 
-import type { BoardId, CommentId, PostId } from '@quackback/ids'
+import type { BoardId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
 
 import { processEvent } from './process'
 import type { EventActor, EventData } from './types.js'
 
 // Re-export EventActor for API routes that need to construct actor objects
 export type { EventActor } from './types.js'
+
+/**
+ * Build an EventActor from a principal with optional user details.
+ * Constructs a 'user' actor when userId is present, otherwise a 'service' actor.
+ */
+export function buildEventActor(actor: {
+  principalId: PrincipalId
+  userId?: UserId
+  email?: string
+  displayName?: string
+}): EventActor {
+  if (actor.userId) {
+    return {
+      type: 'user',
+      principalId: actor.principalId,
+      userId: actor.userId,
+      email: actor.email,
+    }
+  }
+  return { type: 'service', principalId: actor.principalId, displayName: actor.displayName }
+}
 
 export interface PostCreatedInput {
   id: PostId
