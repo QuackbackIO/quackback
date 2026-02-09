@@ -8,6 +8,7 @@
 import { verifyApiKey, type ApiKey } from '@/lib/server/domains/api-keys'
 import { unauthorizedResponse, forbiddenResponse, rateLimitedResponse } from './responses'
 import { checkRateLimit, getClientIp } from './rate-limit'
+import { db, principal, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 
 export type MemberRole = 'admin' | 'member' | 'user'
@@ -55,19 +56,18 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
     return null
   }
 
-  // Fetch principal role for authorization checks
-  const { db, principal, eq } = await import('@/lib/server/db')
-  const memberRecord = await db.query.principal.findFirst({
-    where: eq(principal.id, apiKey.createdById),
+  // Use the API key's service principal for role and identity
+  const principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.id, apiKey.principalId),
     columns: { role: true },
   })
 
-  // Default to most restrictive role if member not found
-  const role = (memberRecord?.role as MemberRole) ?? 'user'
+  // Default to most restrictive role if principal not found
+  const role = (principalRecord?.role as MemberRole) ?? 'user'
 
   return {
     apiKey,
-    principalId: apiKey.createdById,
+    principalId: apiKey.principalId,
     role,
   }
 }

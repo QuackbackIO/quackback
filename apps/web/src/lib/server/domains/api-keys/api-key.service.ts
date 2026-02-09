@@ -5,10 +5,11 @@
  * for public API authentication.
  */
 
-import { db, apiKeys, eq, and, isNull } from '@/lib/server/db'
+import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
 import type { PrincipalId, TypeId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
+import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
 
 /** API key prefix */
 const API_KEY_PREFIX = 'qb_'
@@ -22,7 +23,8 @@ export interface ApiKey {
   id: ApiKeyId
   name: string
   keyPrefix: string
-  createdById: PrincipalId
+  createdById: PrincipalId | null
+  principalId: PrincipalId
   lastUsedAt: Date | null
   expiresAt: Date | null
   createdAt: Date
@@ -47,6 +49,7 @@ function toApiKey(row: ApiKey & Record<string, unknown>): ApiKey {
     name: row.name,
     keyPrefix: row.keyPrefix,
     createdById: row.createdById,
+    principalId: row.principalId,
     lastUsedAt: row.lastUsedAt,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
@@ -103,6 +106,20 @@ export async function createApiKey(
   const keyHash = hashApiKey(plainTextKey)
   const keyPrefix = getKeyPrefix(plainTextKey)
 
+  // Look up creator's role for the service principal
+  const creator = await db.query.principal.findFirst({
+    where: eq(principal.id, createdById),
+    columns: { role: true },
+  })
+  const role = (creator?.role === 'admin' ? 'admin' : 'member') as 'admin' | 'member'
+
+  // Create service principal for this API key
+  const servicePrincipal = await createServicePrincipal({
+    role,
+    displayName: input.name.trim(),
+    serviceMetadata: { kind: 'api_key', apiKeyId: '' }, // Will be updated below
+  })
+
   // Store the key
   const [apiKey] = await db
     .insert(apiKeys)
@@ -111,9 +128,16 @@ export async function createApiKey(
       keyHash,
       keyPrefix,
       createdById,
+      principalId: servicePrincipal.id,
       expiresAt: input.expiresAt ?? null,
     })
     .returning()
+
+  // Update service principal with the actual apiKeyId
+  await db
+    .update(principal)
+    .set({ serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } })
+    .where(eq(principal.id, servicePrincipal.id))
 
   return { apiKey: toApiKey(apiKey), plainTextKey }
 }
@@ -206,6 +230,12 @@ export async function revokeApiKey(id: ApiKeyId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
   }
+
+  // Downgrade the service principal so it no longer counts as admin/member
+  const revokedKey = result[0]
+  if (revokedKey.principalId) {
+    await db.update(principal).set({ role: 'user' }).where(eq(principal.id, revokedKey.principalId))
+  }
 }
 
 /**
@@ -255,6 +285,12 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
   if (!updated) {
     throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found')
   }
+
+  // Sync name to the service principal
+  await db
+    .update(principal)
+    .set({ displayName: name.trim() })
+    .where(eq(principal.id, updated.principalId))
 
   return toApiKey(updated)
 }

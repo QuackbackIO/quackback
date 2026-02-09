@@ -2,9 +2,10 @@
  * Shared integration save logic.
  * Replaces the per-integration save.ts files with a single function.
  */
-import { db, integrations } from '@/lib/server/db'
+import { db, integrations, eq } from '@/lib/server/db'
 import { encryptSecrets } from './encryption'
 import type { PrincipalId } from '@quackback/ids'
+import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
 
 export interface SaveIntegrationParams {
   principalId: PrincipalId
@@ -36,6 +37,24 @@ export async function saveIntegration(
     ...(tokenExpiresAt ? { tokenExpiresAt: tokenExpiresAt.toISOString() } : {}),
   }
 
+  // Check if integration already exists (for reconnect — keep existing service principal)
+  const existing = await db.query.integrations.findFirst({
+    where: eq(integrations.integrationType, integrationType),
+    columns: { principalId: true },
+  })
+
+  // Create service principal if this is a new integration or missing one
+  let integrationPrincipalId = existing?.principalId ?? null
+  if (!integrationPrincipalId) {
+    const displayName = `${integrationType.charAt(0).toUpperCase()}${integrationType.slice(1)} Integration`
+    const servicePrincipal = await createServicePrincipal({
+      role: 'member',
+      displayName,
+      serviceMetadata: { kind: 'integration', integrationType },
+    })
+    integrationPrincipalId = servicePrincipal.id
+  }
+
   await db
     .insert(integrations)
     .values({
@@ -43,6 +62,7 @@ export async function saveIntegration(
       status: 'active',
       secrets: encryptedSecrets,
       connectedByPrincipalId: principalId,
+      principalId: integrationPrincipalId,
       connectedAt: now,
       config,
     })
@@ -52,6 +72,7 @@ export async function saveIntegration(
         status: 'active',
         secrets: encryptedSecrets,
         connectedByPrincipalId: principalId,
+        principalId: integrationPrincipalId,
         connectedAt: now,
         config,
         lastError: null,

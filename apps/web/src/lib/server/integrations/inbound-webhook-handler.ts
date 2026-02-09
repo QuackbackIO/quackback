@@ -12,7 +12,7 @@ import { db, integrations, postExternalLinks, eq, and } from '@/lib/server/db'
 import { getIntegration } from './index'
 import { resolveStatusMapping, type StatusMappings } from './status-mapping'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
-import type { PostId, StatusId } from '@quackback/ids'
+import type { PostId, StatusId, PrincipalId } from '@quackback/ids'
 
 /**
  * Handle an inbound webhook from an external platform.
@@ -86,11 +86,18 @@ export async function handleInboundWebhook(
     return new Response('OK', { status: 200 })
   }
 
-  // Update the post status using a system actor
+  // Update the post status using the integration's service principal
   try {
+    if (!integration.principalId) {
+      console.error(
+        `[Inbound] Integration ${integrationType} has no service principal, skipping status update`
+      )
+      return new Response('OK', { status: 200 })
+    }
+
     await changeStatus(link.postId as PostId, statusId as StatusId, {
-      userId: 'system' as import('@quackback/ids').UserId,
-      email: `${integrationType}-sync@system`,
+      principalId: integration.principalId as PrincipalId,
+      displayName: `${integrationType} Integration`,
     })
     console.log(
       `[Inbound] Updated post ${link.postId} status to ${statusId} via ${integrationType}`
