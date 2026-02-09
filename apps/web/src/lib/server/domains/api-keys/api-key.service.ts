@@ -8,7 +8,7 @@
 import { db, apiKeys, eq, and, isNull } from '@/lib/server/db'
 import type { PrincipalId, TypeId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
 /** API key prefix */
 const API_KEY_PREFIX = 'qb_'
@@ -38,6 +38,20 @@ export interface CreateApiKeyResult {
   apiKey: ApiKey
   /** The full API key - only returned on creation, never stored */
   plainTextKey: string
+}
+
+/** Map a database row to the public ApiKey shape (strips keyHash). */
+function toApiKey(row: ApiKey & Record<string, unknown>): ApiKey {
+  return {
+    id: row.id,
+    name: row.name,
+    keyPrefix: row.keyPrefix,
+    createdById: row.createdById,
+    lastUsedAt: row.lastUsedAt,
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    revokedAt: row.revokedAt,
+  }
 }
 
 /**
@@ -101,25 +115,14 @@ export async function createApiKey(
     })
     .returning()
 
-  return {
-    apiKey: {
-      id: apiKey.id,
-      name: apiKey.name,
-      keyPrefix: apiKey.keyPrefix,
-      createdById: apiKey.createdById,
-      lastUsedAt: apiKey.lastUsedAt,
-      expiresAt: apiKey.expiresAt,
-      createdAt: apiKey.createdAt,
-      revokedAt: apiKey.revokedAt,
-    },
-    plainTextKey,
-  }
+  return { apiKey: toApiKey(apiKey), plainTextKey }
 }
 
 /**
  * Verify an API key and return the key record if valid
  *
- * Returns null if the key is invalid, expired, or revoked
+ * Uses prefix-based DB lookup + timing-safe hash comparison to prevent
+ * timing oracle attacks. Returns null if the key is invalid, expired, or revoked.
  */
 export async function verifyApiKey(key: string): Promise<ApiKey | null> {
   // Basic format validation
@@ -127,14 +130,19 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
     return null
   }
 
+  const keyPrefix = getKeyPrefix(key)
   const keyHash = hashApiKey(key)
 
-  // Find the key by hash
+  // Look up by prefix (non-secret) instead of hash to avoid DB-level timing leak
   const apiKey = await db.query.apiKeys.findFirst({
-    where: and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)),
+    where: and(eq(apiKeys.keyPrefix, keyPrefix), isNull(apiKeys.revokedAt)),
   })
 
-  if (!apiKey) {
+  // Always perform timing-safe comparison even if no key found (constant-time path)
+  const storedHash = apiKey?.keyHash ?? '0'.repeat(64)
+  const hashesMatch = timingSafeEqual(Buffer.from(keyHash, 'hex'), Buffer.from(storedHash, 'hex'))
+
+  if (!apiKey || !hashesMatch) {
     return null
   }
 
@@ -152,16 +160,7 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
       // Ignore errors updating last used timestamp
     })
 
-  return {
-    id: apiKey.id,
-    name: apiKey.name,
-    keyPrefix: apiKey.keyPrefix,
-    createdById: apiKey.createdById,
-    lastUsedAt: apiKey.lastUsedAt,
-    expiresAt: apiKey.expiresAt,
-    createdAt: apiKey.createdAt,
-    revokedAt: apiKey.revokedAt,
-  }
+  return toApiKey(apiKey)
 }
 
 /**
@@ -191,19 +190,7 @@ export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
     throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
   }
 
-  return {
-    apiKey: {
-      id: updatedKey.id,
-      name: updatedKey.name,
-      keyPrefix: updatedKey.keyPrefix,
-      createdById: updatedKey.createdById,
-      lastUsedAt: updatedKey.lastUsedAt,
-      expiresAt: updatedKey.expiresAt,
-      createdAt: updatedKey.createdAt,
-      revokedAt: updatedKey.revokedAt,
-    },
-    plainTextKey,
-  }
+  return { apiKey: toApiKey(updatedKey), plainTextKey }
 }
 
 /**
@@ -230,16 +217,7 @@ export async function listApiKeys(): Promise<ApiKey[]> {
     orderBy: (apiKeys, { desc }) => [desc(apiKeys.createdAt)],
   })
 
-  return keys.map((k) => ({
-    id: k.id,
-    name: k.name,
-    keyPrefix: k.keyPrefix,
-    createdById: k.createdById,
-    lastUsedAt: k.lastUsedAt,
-    expiresAt: k.expiresAt,
-    createdAt: k.createdAt,
-    revokedAt: k.revokedAt,
-  }))
+  return keys.map(toApiKey)
 }
 
 /**
@@ -254,16 +232,7 @@ export async function getApiKeyById(id: ApiKeyId): Promise<ApiKey> {
     throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found')
   }
 
-  return {
-    id: apiKey.id,
-    name: apiKey.name,
-    keyPrefix: apiKey.keyPrefix,
-    createdById: apiKey.createdById,
-    lastUsedAt: apiKey.lastUsedAt,
-    expiresAt: apiKey.expiresAt,
-    createdAt: apiKey.createdAt,
-    revokedAt: apiKey.revokedAt,
-  }
+  return toApiKey(apiKey)
 }
 
 /**
@@ -287,14 +256,5 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
     throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found')
   }
 
-  return {
-    id: updated.id,
-    name: updated.name,
-    keyPrefix: updated.keyPrefix,
-    createdById: updated.createdById,
-    lastUsedAt: updated.lastUsedAt,
-    expiresAt: updated.expiresAt,
-    createdAt: updated.createdAt,
-    revokedAt: updated.revokedAt,
-  }
+  return toApiKey(updated)
 }

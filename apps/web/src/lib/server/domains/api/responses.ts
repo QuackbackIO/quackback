@@ -2,7 +2,30 @@
  * Standard API Response Helpers
  *
  * Provides consistent response formatting for the public REST API.
+ * All responses include security headers (X-Content-Type-Options, Cache-Control).
  */
+
+/** Security headers applied to all API responses. */
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Cache-Control': 'no-store, private',
+}
+
+/** Create a JSON Response with security headers. */
+function jsonResponse(
+  body: unknown,
+  init?: { status?: number; headers?: Record<string, string> }
+): Response {
+  return new Response(JSON.stringify(body), {
+    status: init?.status ?? 200,
+    headers: {
+      'Content-Type': 'application/json',
+      ...SECURITY_HEADERS,
+      ...init?.headers,
+    },
+  })
+}
 
 export interface PaginationMeta {
   cursor: string | null
@@ -41,7 +64,7 @@ export function successResponse<T>(
     body.meta = { pagination: options.pagination }
   }
 
-  return Response.json(body, { status: options?.status ?? 200 })
+  return jsonResponse(body, { status: options?.status ?? 200 })
 }
 
 /**
@@ -55,7 +78,10 @@ export function createdResponse<T>(data: T): Response {
  * Create a successful response with no content
  */
 export function noContentResponse(): Response {
-  return new Response(null, { status: 204 })
+  return new Response(null, {
+    status: 204,
+    headers: SECURITY_HEADERS,
+  })
 }
 
 /**
@@ -75,7 +101,7 @@ export function errorResponse(
     },
   }
 
-  return Response.json(body, { status })
+  return jsonResponse(body, { status })
 }
 
 // Common error responses
@@ -112,15 +138,10 @@ export function internalErrorResponse(message = 'Internal server error'): Respon
 }
 
 export function rateLimitedResponse(retryAfter: number): Response {
-  const response = errorResponse('RATE_LIMITED', 'Too many requests. Please try again later.', 429)
-  // Clone to add header
-  return new Response(response.body, {
-    status: 429,
-    headers: {
-      'Content-Type': 'application/json',
-      'Retry-After': String(retryAfter),
-    },
-  })
+  return jsonResponse(
+    { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' } },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+  )
 }
 
 // Map error codes to resource names for not found responses

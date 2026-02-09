@@ -189,10 +189,9 @@ export async function updatePost(
       updateData.officialResponsePrincipalId = null
       updateData.officialResponseAt = null
     } else {
-      // Set or update official response with member-scoped identity
-      const responsePrincipalId = input.officialResponsePrincipalId || responder?.principalId
+      // Set or update official response — always use the authenticated responder
       updateData.officialResponse = input.officialResponse
-      updateData.officialResponsePrincipalId = responsePrincipalId
+      updateData.officialResponsePrincipalId = responder?.principalId ?? null
       updateData.officialResponseAt = new Date()
     }
   }

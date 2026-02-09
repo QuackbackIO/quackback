@@ -29,7 +29,6 @@ export interface UpdatePostInput {
   tagIds?: TagId[]
   ownerPrincipalId?: PrincipalId | null
   officialResponse?: string | null
-  officialResponsePrincipalId?: PrincipalId | null
 }
 
 /**
