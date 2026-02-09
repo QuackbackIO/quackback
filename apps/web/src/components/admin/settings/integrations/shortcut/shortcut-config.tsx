@@ -56,10 +56,10 @@ export function ShortcutConfig({
   enabled,
 }: ShortcutConfigProps) {
   const updateMutation = useUpdateIntegration()
-  const [projects, setProjects] = useState<ShortcutProject[]>([])
-  const [loadingProjects, setLoadingProjects] = useState(false)
-  const [projectError, setProjectError] = useState<string | null>(null)
-  const [selectedProject, setSelectedProject] = useState((initialConfig.channelId as string) || '')
+  const [teams, setTeams] = useState<ShortcutProject[]>([])
+  const [loadingTeams, setLoadingTeams] = useState(false)
+  const [teamError, setTeamError] = useState<string | null>(null)
+  const [selectedTeam, setSelectedTeam] = useState((initialConfig.channelId as string) || '')
   const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
@@ -71,34 +71,34 @@ export function ShortcutConfig({
     )
   )
 
-  const fetchProjects = useCallback(async () => {
-    setLoadingProjects(true)
-    setProjectError(null)
+  const fetchTeams = useCallback(async () => {
+    setLoadingTeams(true)
+    setTeamError(null)
     try {
       const result = await fetchShortcutProjectsFn()
-      setProjects(result)
+      setTeams(result)
     } catch {
-      setProjectError('Failed to load projects. Please try again.')
+      setTeamError('Failed to load teams. Please try again.')
     } finally {
-      setLoadingProjects(false)
+      setLoadingTeams(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchProjects()
+    fetchTeams()
     fetchExternalStatusesFn({ data: { integrationType: 'shortcut' } })
       .then(setExternalStatuses)
       .catch(() => {})
-  }, [fetchProjects])
+  }, [fetchTeams])
 
   const handleEnabledChange = (checked: boolean) => {
     setIntegrationEnabled(checked)
     updateMutation.mutate({ id: integrationId, enabled: checked })
   }
 
-  const handleProjectChange = (projectId: string) => {
-    setSelectedProject(projectId)
-    updateMutation.mutate({ id: integrationId, config: { channelId: projectId } })
+  const handleTeamChange = (teamId: string) => {
+    setSelectedTeam(teamId)
+    updateMutation.mutate({ id: integrationId, config: { channelId: teamId } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
@@ -136,42 +136,42 @@ export function ShortcutConfig({
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="project-select">Project</Label>
+          <Label htmlFor="team-select">Team</Label>
           <Button
             variant="ghost"
             size="sm"
-            onClick={fetchProjects}
-            disabled={loadingProjects}
+            onClick={fetchTeams}
+            disabled={loadingTeams}
             className="h-8 gap-1.5 text-xs"
           >
-            <ArrowPathIcon className={`h-3.5 w-3.5 ${loadingProjects ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon className={`h-3.5 w-3.5 ${loadingTeams ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
-        {projectError ? (
-          <p className="text-sm text-destructive">{projectError}</p>
+        {teamError ? (
+          <p className="text-sm text-destructive">{teamError}</p>
         ) : (
           <Select
-            value={selectedProject}
-            onValueChange={handleProjectChange}
-            disabled={loadingProjects || saving || !integrationEnabled}
+            value={selectedTeam}
+            onValueChange={handleTeamChange}
+            disabled={loadingTeams || saving || !integrationEnabled}
           >
-            <SelectTrigger id="project-select" className="w-full">
-              {loadingProjects ? (
+            <SelectTrigger id="team-select" className="w-full">
+              {loadingTeams ? (
                 <div className="flex items-center gap-2">
                   <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                  <span>Loading projects...</span>
+                  <span>Loading teams...</span>
                 </div>
               ) : (
-                <SelectValue placeholder="Select a project" />
+                <SelectValue placeholder="Select a team" />
               )}
             </SelectTrigger>
             <SelectContent>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
+              {teams.map((team) => (
+                <SelectItem key={team.id} value={team.id}>
                   <div className="flex items-center gap-2">
                     <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{project.name}</span>
+                    <span>{team.name}</span>
                   </div>
                 </SelectItem>
               ))}
@@ -179,7 +179,7 @@ export function ShortcutConfig({
           </Select>
         )}
         <p className="text-xs text-muted-foreground">
-          New feedback stories will be created in this project.
+          New feedback stories will be created in this team.
         </p>
       </div>
 

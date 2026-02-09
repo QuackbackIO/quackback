@@ -1,16 +1,20 @@
 /**
- * Shortcut project listing via REST API.
+ * Shortcut group (team) listing via REST API.
+ *
+ * Shortcut deprecated Projects in favor of Groups (Teams).
+ * New workspaces may have no projects, so we use /groups.
+ * See: https://developer.shortcut.com/api/rest/v3#Groups
  */
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 
 /**
- * List Shortcut projects accessible to the authenticated user.
+ * List Shortcut groups (teams) accessible to the authenticated user.
  */
 export async function listShortcutProjects(
   apiToken: string
 ): Promise<Array<{ id: string; name: string }>> {
-  const response = await fetch(`${SHORTCUT_API}/projects`, {
+  const response = await fetch(`${SHORTCUT_API}/groups`, {
     method: 'GET',
     headers: {
       'Shortcut-Token': apiToken,
@@ -19,13 +23,13 @@ export async function listShortcutProjects(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Shortcut projects: HTTP ${response.status}`)
+    throw new Error(`Failed to list Shortcut groups: HTTP ${response.status}`)
   }
 
-  const data = (await response.json()) as Array<{ id: number; name: string }>
+  const data = (await response.json()) as Array<{ id: string; name: string }>
 
-  return data.map((project) => ({
-    id: String(project.id),
-    name: project.name,
+  return data.map((group) => ({
+    id: group.id,
+    name: group.name,
   }))
 }

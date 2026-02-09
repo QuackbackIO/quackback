@@ -11,7 +11,7 @@ import { buildShortcutStoryBody } from './message'
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 
 export interface ShortcutTarget {
-  channelId: string // projectId is stored as channelId for consistency
+  channelId: string // group (team) ID stored as channelId for consistency
 }
 
 export interface ShortcutConfig {
@@ -26,7 +26,7 @@ interface ShortcutStoryResponse {
 
 export const shortcutHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { channelId: projectId } = target as ShortcutTarget
+    const { channelId: groupId } = target as ShortcutTarget
     const { accessToken, rootUrl } = config as ShortcutConfig
 
     // Only create stories for new feedback
@@ -34,7 +34,7 @@ export const shortcutHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Shortcut] Creating story for ${event.type} → project ${projectId}`)
+    console.log(`[Shortcut] Creating story for ${event.type} → team ${groupId}`)
 
     const { title, description } = buildShortcutStoryBody(event, rootUrl)
 
@@ -48,7 +48,7 @@ export const shortcutHook: HookHandler = {
         body: JSON.stringify({
           name: title,
           description,
-          project_id: Number(projectId),
+          group_id: groupId,
           story_type: 'feature',
         }),
       })

@@ -8,7 +8,7 @@ export const shortcutCatalog: IntegrationCatalogEntry = {
   capabilities: [
     {
       label: 'Create stories',
-      description: 'Create a Shortcut story from a feedback post in a chosen project',
+      description: 'Create a Shortcut story from a feedback post in a chosen team',
     },
     {
       label: 'Link posts to stories',
