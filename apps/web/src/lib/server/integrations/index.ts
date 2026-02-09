@@ -14,6 +14,15 @@ import { clickupIntegration } from './clickup'
 import { shortcutIntegration } from './shortcut'
 import { zapierIntegration } from './zapier'
 import { azureDevOpsIntegration } from './azure-devops'
+import { notionIntegration } from './notion'
+import { trelloIntegration } from './trello'
+import { gitlabIntegration } from './gitlab'
+import { stripeIntegration } from './stripe'
+import { mondayIntegration } from './monday'
+import { freshdeskIntegration } from './freshdesk'
+import { salesforceIntegration } from './salesforce'
+import { n8nIntegration } from './n8n'
+import { makeIntegration } from './make'
 
 const registry = new Map<string, IntegrationDefinition>([
   [slackIntegration.id, slackIntegration],
@@ -30,6 +39,15 @@ const registry = new Map<string, IntegrationDefinition>([
   [shortcutIntegration.id, shortcutIntegration],
   [zapierIntegration.id, zapierIntegration],
   [azureDevOpsIntegration.id, azureDevOpsIntegration],
+  [notionIntegration.id, notionIntegration],
+  [trelloIntegration.id, trelloIntegration],
+  [gitlabIntegration.id, gitlabIntegration],
+  [stripeIntegration.id, stripeIntegration],
+  [mondayIntegration.id, mondayIntegration],
+  [freshdeskIntegration.id, freshdeskIntegration],
+  [salesforceIntegration.id, salesforceIntegration],
+  [n8nIntegration.id, n8nIntegration],
+  [makeIntegration.id, makeIntegration],
 ])
 
 export function getIntegration(type: string): IntegrationDefinition | undefined {
