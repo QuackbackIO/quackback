@@ -18,7 +18,6 @@ import {
   roadmaps,
   postSubscriptions,
   principal as principalTable,
-  user as userTable,
 } from '@/lib/server/db'
 import {
   toUuid,
@@ -39,18 +38,18 @@ import type {
 } from './post.types'
 
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { getExecuteRows } from '@/lib/server/utils'
 
-interface AvatarData {
-  imageKey: string | null
-  image: string | null
-}
-
-function computeAvatarUrl(data: AvatarData): string | null {
-  if (data.imageKey) {
-    const s3Url = getPublicUrlOrNull(data.imageKey)
+/** Resolve avatar URL from principal's avatar fields */
+function resolveAvatarUrl(principal: {
+  avatarKey?: string | null
+  avatarUrl?: string | null
+}): string | null {
+  if (principal.avatarKey) {
+    const s3Url = getPublicUrlOrNull(principal.avatarKey)
     if (s3Url) return s3Url
   }
-  return data.image ?? null
+  return principal.avatarUrl ?? null
 }
 
 function parseJson<T>(value: string | T): T {
@@ -178,18 +177,16 @@ export async function listPublicPostsWithVotesAndAvatars(
       )`.as('tags_json'),
       hasVoted: voteExistsSubquery,
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${principalTable} m
-        INNER JOIN ${userTable} u ON m.user_id = u.id
+        SELECT m.display_name FROM ${principalTable} m
         WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
       avatarData: sql<string | null>`(
         SELECT CASE
-          WHEN u.image_key IS NOT NULL
-          THEN json_build_object('key', u.image_key)
-          ELSE json_build_object('url', u.image)
+          WHEN m.avatar_key IS NOT NULL
+          THEN json_build_object('key', m.avatar_key)
+          ELSE json_build_object('url', m.avatar_url)
         END
         FROM ${principalTable} m
-        INNER JOIN ${userTable} u ON m.user_id = u.id
         WHERE m.id = ${posts.principalId}
       )`.as('avatar_data'),
     })
@@ -251,8 +248,7 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
         '[]'
       )`.as('tags_json'),
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${principalTable} m
-        INNER JOIN ${userTable} u ON m.user_id = u.id
+        SELECT m.display_name FROM ${principalTable} m
         WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
     })
@@ -325,23 +321,20 @@ export async function getPublicPostDetail(
           '[]'
         )`.as('roadmaps_json'),
         authorName: sql<string | null>`(
-          SELECT u.name FROM ${principalTable} m
-          INNER JOIN ${userTable} u ON m.user_id = u.id
+          SELECT m.display_name FROM ${principalTable} m
           WHERE m.id = ${posts.principalId}
         )`.as('author_name'),
         authorAvatarData: sql<string | null>`(
           SELECT CASE
-            WHEN u.image_key IS NOT NULL
-            THEN json_build_object('key', u.image_key)
-            ELSE json_build_object('url', u.image)
+            WHEN m.avatar_key IS NOT NULL
+            THEN json_build_object('key', m.avatar_key)
+            ELSE json_build_object('url', m.avatar_url)
           END
           FROM ${principalTable} m
-          INNER JOIN ${userTable} u ON m.user_id = u.id
           WHERE m.id = ${posts.principalId}
         )`.as('author_avatar_data'),
         officialResponseAuthorName: sql<string | null>`(
-          SELECT u.name FROM ${principalTable} m
-          INNER JOIN ${userTable} u ON m.user_id = u.id
+          SELECT m.display_name FROM ${principalTable} m
           WHERE m.id = ${posts.officialResponsePrincipalId}
         )`.as('official_response_author_name'),
       })
@@ -363,8 +356,8 @@ export async function getPublicPostDetail(
       is_team_member: boolean
       created_at: Date | string
       deleted_at: Date | string | null
-      image_key: string | null
-      image: string | null
+      avatar_key: string | null
+      avatar_url: string | null
       reactions_json: string
     }>(sql`
       SELECT
@@ -372,13 +365,13 @@ export async function getPublicPostDetail(
         c.post_id,
         c.parent_id,
         c.principal_id,
-        u.name as author_name,
+        m.display_name as author_name,
         c.content,
         c.is_team_member,
         c.created_at,
         c.deleted_at,
-        u.image_key,
-        u.image,
+        m.avatar_key,
+        m.avatar_url,
         COALESCE(
           json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
           FILTER (WHERE cr.id IS NOT NULL),
@@ -386,7 +379,6 @@ export async function getPublicPostDetail(
         ) as reactions_json
       FROM ${comments} c
       INNER JOIN ${principalTable} m ON c.principal_id = m.id
-      INNER JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
       WHERE c.post_id IN (
         SELECT ${postUuid}::uuid
@@ -394,7 +386,7 @@ export async function getPublicPostDetail(
         SELECT p.id FROM ${posts} p
         WHERE p.canonical_post_id = ${postUuid}::uuid AND p.deleted_at IS NULL
       )
-      GROUP BY c.id, u.name, u.image_key, u.image
+      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url
       ORDER BY c.created_at ASC
     `),
   ])
@@ -423,8 +415,8 @@ export async function getPublicPostDetail(
     is_team_member: boolean
     created_at: Date | string
     deleted_at: Date | string | null
-    image_key: string | null
-    image: string | null
+    avatar_key: string | null
+    avatar_url: string | null
     reactions_json: string
   }>(commentsWithReactions)
 
@@ -442,9 +434,9 @@ export async function getPublicPostDetail(
     content: comment.content,
     isTeamMember: comment.is_team_member,
     createdAt: ensureDate(comment.created_at),
-    avatarUrl: computeAvatarUrl({
-      imageKey: comment.image_key,
-      image: comment.image,
+    avatarUrl: resolveAvatarUrl({
+      avatarKey: comment.avatar_key,
+      avatarUrl: comment.avatar_url,
     }),
     reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
   }))
@@ -475,9 +467,9 @@ export async function getPublicPostDetail(
         content: pinnedCommentData.content,
         authorName: pinnedCommentData.author_name,
         principalId: pinnedCommentData.principal_id as PrincipalId,
-        avatarUrl: computeAvatarUrl({
-          imageKey: pinnedCommentData.image_key,
-          image: pinnedCommentData.image,
+        avatarUrl: resolveAvatarUrl({
+          avatarKey: pinnedCommentData.avatar_key,
+          avatarUrl: pinnedCommentData.avatar_url,
         }),
         createdAt: ensureDate(pinnedCommentData.created_at),
         isTeamMember: pinnedCommentData.is_team_member,
@@ -605,25 +597,6 @@ export async function hasUserVoted(postId: PostId, principalId: PrincipalId): Pr
     where: and(eq(votes.postId, postId), eq(votes.principalId, principalId)),
   })
   return !!vote
-}
-
-/**
- * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
- */
-function getExecuteRows<T>(result: unknown): T[] {
-  if (
-    result &&
-    typeof result === 'object' &&
-    'rows' in result &&
-    Array.isArray((result as { rows: unknown }).rows)
-  ) {
-    return (result as { rows: T[] }).rows
-  }
-  if (Array.isArray(result)) {
-    return result as T[]
-  }
-  return []
 }
 
 /**

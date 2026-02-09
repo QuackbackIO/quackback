@@ -21,9 +21,9 @@ import {
   isNull,
   sql,
   principal as principalTable,
-  user as userTable,
 } from '@/lib/server/db'
 import { type PostId, type PrincipalId, toUuid } from '@quackback/ids'
+import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type {
   MergePostResult,
@@ -170,8 +170,7 @@ export async function getMergedPosts(canonicalPostId: PostId): Promise<MergedPos
       createdAt: posts.createdAt,
       mergedAt: posts.mergedAt,
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${principalTable} m
-        INNER JOIN ${userTable} u ON m.user_id = u.id
+        SELECT m.display_name FROM ${principalTable} m
         WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
     })
@@ -260,23 +259,4 @@ async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<n
   await db.update(posts).set({ voteCount: newCount }).where(eq(posts.id, canonicalPostId))
 
   return newCount
-}
-
-/**
- * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
- */
-function getExecuteRows<T>(result: unknown): T[] {
-  if (
-    result &&
-    typeof result === 'object' &&
-    'rows' in result &&
-    Array.isArray((result as { rows: unknown }).rows)
-  ) {
-    return (result as { rows: T[] }).rows
-  }
-  if (Array.isArray(result)) {
-    return result as T[]
-  }
-  return []
 }

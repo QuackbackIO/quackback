@@ -235,20 +235,19 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
     const principalIds = (data as PrincipalId[]).filter((id): id is PrincipalId => id !== null)
     if (principalIds.length === 0) return {}
 
-    const members = await db
+    const principals = await db
       .select({
-        principalId: principalTable.id,
-        imageKey: userTable.imageKey,
-        image: userTable.image,
+        id: principalTable.id,
+        avatarKey: principalTable.avatarKey,
+        avatarUrl: principalTable.avatarUrl,
       })
       .from(principalTable)
-      .innerJoin(userTable, eq(principalTable.userId, userTable.id))
       .where(inArray(principalTable.id, principalIds))
 
     const avatarMap = new Map<PrincipalId, string | null>()
-    for (const m of members) {
-      const s3Url = m.imageKey ? getPublicUrlOrNull(m.imageKey) : null
-      avatarMap.set(m.principalId, s3Url ?? m.image)
+    for (const p of principals) {
+      const s3Url = p.avatarKey ? getPublicUrlOrNull(p.avatarKey) : null
+      avatarMap.set(p.id, s3Url ?? p.avatarUrl)
     }
     for (const id of principalIds) {
       if (!avatarMap.has(id)) avatarMap.set(id, null)

@@ -378,6 +378,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await changeStatus(data.id as PostId, data.statusId as StatusId, {
+        principalId: auth.principal.id,
         userId: auth.user.id as UserId,
         email: auth.user.email,
       })

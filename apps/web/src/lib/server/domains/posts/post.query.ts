@@ -13,6 +13,7 @@ import {
   postRoadmaps,
   tags,
   comments,
+  principal,
   eq,
   and,
   inArray,
@@ -46,9 +47,10 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     where: eq(posts.id, postId),
     with: {
       author: {
+        columns: { displayName: true },
         with: {
           user: {
-            columns: { name: true, email: true },
+            columns: { email: true },
           },
         },
       },
@@ -88,32 +90,27 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       where: eq(comments.id, post.pinnedCommentId),
       with: {
         author: {
-          with: {
-            user: {
-              columns: { name: true, image: true, imageKey: true },
-            },
-          },
+          columns: { displayName: true, avatarUrl: true, avatarKey: true },
         },
       },
     })
 
     if (pinnedCommentData && !pinnedCommentData.deletedAt) {
-      // Compute avatar URL
+      // Compute avatar URL from principal fields
       let avatarUrl: string | null = null
-      if (pinnedCommentData.author?.user) {
-        const user = pinnedCommentData.author.user
-        if (user.imageKey) {
-          avatarUrl = getPublicUrlOrNull(user.imageKey)
+      if (pinnedCommentData.author) {
+        if (pinnedCommentData.author.avatarKey) {
+          avatarUrl = getPublicUrlOrNull(pinnedCommentData.author.avatarKey)
         }
-        if (!avatarUrl && user.image) {
-          avatarUrl = user.image
+        if (!avatarUrl && pinnedCommentData.author.avatarUrl) {
+          avatarUrl = pinnedCommentData.author.avatarUrl
         }
       }
 
       pinnedComment = {
         id: pinnedCommentData.id,
         content: pinnedCommentData.content,
-        authorName: pinnedCommentData.author?.user?.name ?? null,
+        authorName: pinnedCommentData.author?.displayName ?? null,
         principalId: pinnedCommentData.principalId,
         avatarUrl,
         createdAt: pinnedCommentData.createdAt,
@@ -125,14 +122,11 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
   // Resolve official response author name if needed
   let officialResponseAuthorName: string | null = null
   if (post.officialResponsePrincipalId) {
-    // Import principal table for the query
-    const { principal: principalTable } = await import('@/lib/server/db')
-    const responderMember = await db.query.principal.findFirst({
-      where: eq(principalTable.id, post.officialResponsePrincipalId),
-      columns: {},
-      with: { user: { columns: { name: true } } },
+    const responderPrincipal = await db.query.principal.findFirst({
+      where: eq(principal.id, post.officialResponsePrincipalId),
+      columns: { displayName: true },
     })
-    officialResponseAuthorName = responderMember?.user?.name ?? null
+    officialResponseAuthorName = responderPrincipal?.displayName ?? null
   }
 
   const postWithDetails: PostWithDetails = {
@@ -149,7 +143,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     })),
     roadmapIds: roadmapsResult.map((r) => r.roadmapId),
     pinnedComment,
-    authorName: post.author?.user?.name ?? null,
+    authorName: post.author?.displayName ?? null,
     authorEmail: post.author?.user?.email ?? null,
     officialResponseAuthorName,
   }
@@ -192,21 +186,17 @@ export async function getCommentsWithReplies(
     with: {
       reactions: true,
       author: {
-        with: {
-          user: {
-            columns: { name: true },
-          },
-        },
+        columns: { displayName: true },
       },
     },
     orderBy: asc(comments.createdAt),
   })
 
   // Build nested tree using the utility function
-  // Map to include authorName from the member->user relation
+  // Map to include authorName from the principal's displayName
   const commentsWithAuthor = allComments.map((c) => ({
     ...c,
-    authorName: c.author?.user?.name ?? null,
+    authorName: c.author?.displayName ?? null,
   }))
   const commentTree = buildCommentTree(commentsWithAuthor, principalId)
 
@@ -324,11 +314,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
           },
         },
         author: {
-          with: {
-            user: {
-              columns: { name: true },
-            },
-          },
+          columns: { displayName: true },
         },
       },
     }),
@@ -345,7 +331,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     board: post.board,
     tags: post.tags.map((pt) => pt.tag),
     commentCount: post.commentCount,
-    authorName: post.author?.user?.name ?? null,
+    authorName: post.author?.displayName ?? null,
   }))
 
   const total = Number(countResult[0].count)
@@ -402,9 +388,10 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
         },
       },
       author: {
+        columns: { displayName: true },
         with: {
           user: {
-            columns: { name: true, email: true },
+            columns: { email: true },
           },
         },
       },
@@ -430,7 +417,7 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
     content: post.content,
     statusId: post.statusId,
     voteCount: post.voteCount,
-    authorName: post.author?.user?.name ?? null,
+    authorName: post.author?.displayName ?? null,
     authorEmail: post.author?.user?.email ?? null,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,

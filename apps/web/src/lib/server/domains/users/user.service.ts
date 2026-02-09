@@ -233,8 +233,7 @@ export async function getPortalUserDetail(
           voteCount: posts.voteCount,
           createdAt: posts.createdAt,
           authorName: sql<string | null>`(
-            SELECT u.name FROM ${principal} m
-            INNER JOIN ${user} u ON m.user_id = u.id
+            SELECT m.display_name FROM ${principal} m
             WHERE m.id = ${posts.principalId}
           )`.as('author_name'),
           boardSlug: boards.slug,
@@ -294,8 +293,7 @@ export async function getPortalUserDetail(
               voteCount: posts.voteCount,
               createdAt: posts.createdAt,
               authorName: sql<string | null>`(
-                SELECT u.name FROM ${principal} m
-                INNER JOIN ${user} u ON m.user_id = u.id
+                SELECT m.display_name FROM ${principal} m
                 WHERE m.id = ${posts.principalId}
               )`.as('author_name'),
               boardSlug: boards.slug,

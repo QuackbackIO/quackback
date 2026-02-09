@@ -386,9 +386,9 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
       })
 
       if (!principalRecord) {
-        // Check if any admin exists
+        // Check if any human admin exists (exclude service principals)
         const existingAdmin = await db.query.principal.findFirst({
-          where: eq(principal.role, 'admin'),
+          where: and(eq(principal.role, 'admin'), eq(principal.type, 'user')),
         })
 
         if (existingAdmin) {
