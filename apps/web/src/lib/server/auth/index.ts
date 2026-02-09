@@ -173,6 +173,9 @@ async function createAuth() {
                 id: generateId('principal'),
                 userId,
                 role: 'user', // Always 'user' - team access via invitations only
+                displayName: user.name,
+                avatarUrl: user.image ?? null,
+                avatarKey: (user as Record<string, unknown>).imageKey as string | null,
                 createdAt: new Date(),
               })
               console.log(`[auth] Created principal record: userId=${user.id}, role=user`)

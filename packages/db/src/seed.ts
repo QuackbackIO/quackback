@@ -334,6 +334,7 @@ async function seed() {
       id: demoPrincipalId,
       userId: demoUserId,
       role: 'admin',
+      displayName: DEMO_USER.name,
       createdAt: new Date(),
     })
     principals.push({ id: demoPrincipalId, name: DEMO_USER.name })
@@ -357,6 +358,7 @@ async function seed() {
         id: principalId,
         userId: userId,
         role: i < 3 ? 'admin' : 'user', // First 3 are admins
+        displayName: name,
         createdAt: randomDate(90),
       })
       principals.push({ id: principalId, name })

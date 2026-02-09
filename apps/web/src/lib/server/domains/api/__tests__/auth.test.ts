@@ -8,8 +8,10 @@ vi.mock('@/lib/server/domains/api-keys', () => ({
   verifyApiKey: vi.fn(),
 }))
 
-// Mock the database — findFirst is a plain vi.fn() so we can mock any return value
-const mockFindFirst = vi.fn().mockResolvedValue({ role: 'admin' })
+// Mock the database — use vi.hoisted() so mockFindFirst is available when vi.mock factory runs
+const { mockFindFirst } = vi.hoisted(() => ({
+  mockFindFirst: vi.fn().mockResolvedValue({ role: 'admin' }),
+}))
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
@@ -27,6 +29,7 @@ describe('API Auth', () => {
     id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
     name: 'Test Key',
     keyPrefix: 'qb_test',
+    principalId: 'principal_01h455vb4pex5vsknk084sn02s' as PrincipalId,
     createdById: 'member_01h455vb4pex5vsknk084sn02r' as PrincipalId,
     createdAt: new Date(),
     lastUsedAt: null,
@@ -89,7 +92,7 @@ describe('API Auth', () => {
       const result = await requireApiKey(request)
       expect(result).toEqual({
         apiKey: mockApiKey,
-        principalId: mockApiKey.createdById,
+        principalId: mockApiKey.principalId,
         role: 'admin',
       })
     })
@@ -158,7 +161,7 @@ describe('API Auth', () => {
       expect(result instanceof Response).toBe(false)
       expect(result).toEqual({
         apiKey: mockApiKey,
-        principalId: mockApiKey.createdById,
+        principalId: mockApiKey.principalId,
         role: 'admin',
       })
     })

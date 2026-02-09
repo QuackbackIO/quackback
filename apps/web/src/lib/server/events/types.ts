@@ -14,10 +14,13 @@ export type EventType = (typeof EVENT_TYPES)[number]
  * Actor information for events - identifies who or what triggered the event.
  */
 export interface EventActor {
-  type: 'user' | 'system'
+  type: 'user' | 'service'
+  principalId?: string
   userId?: string
   email?: string
-  /** Service name if triggered by system (e.g., 'import-processor') */
+  /** Display name of the actor (user name or service principal name) */
+  displayName?: string
+  /** Service name if triggered by service principal (e.g., 'linear-integration') */
   service?: string
 }
 

@@ -16,7 +16,6 @@ import {
   changelogEntryPosts,
   posts,
   principal,
-  user,
   postStatuses,
   eq,
   and,
@@ -29,7 +28,6 @@ import {
   sql,
 } from '@/lib/server/db'
 import type { BoardId, ChangelogId, PrincipalId, PostId, StatusId } from '@quackback/ids'
-// Note: BoardId is only used for searchShippedPosts filtering, not for changelog entries
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type {
   CreateChangelogInput,
@@ -204,25 +202,18 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     throw new NotFoundError('CHANGELOG_NOT_FOUND', `Changelog entry with ID ${id} not found`)
   }
 
-  // Get author info (principal -> user for name/avatar)
+  // Get author info from principal's display fields
   let author: ChangelogAuthor | null = null
   if (entry.principalId) {
-    const memberWithUser = await db.query.principal.findFirst({
+    const authorPrincipal = await db.query.principal.findFirst({
       where: eq(principal.id, entry.principalId),
-      with: {
-        user: {
-          columns: {
-            name: true,
-            image: true,
-          },
-        },
-      },
+      columns: { id: true, displayName: true, avatarUrl: true },
     })
-    if (memberWithUser?.user) {
+    if (authorPrincipal?.displayName) {
       author = {
-        id: memberWithUser.id,
-        name: memberWithUser.user.name,
-        avatarUrl: memberWithUser.user.image,
+        id: authorPrincipal.id,
+        name: authorPrincipal.displayName,
+        avatarUrl: authorPrincipal.avatarUrl,
       }
     }
   }
@@ -331,23 +322,16 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   const authorMap = new Map<PrincipalId, ChangelogAuthor>()
 
   if (principalIds.length > 0) {
-    const membersWithUsers = await db.query.principal.findMany({
+    const principals = await db.query.principal.findMany({
       where: inArray(principal.id, principalIds),
-      with: {
-        user: {
-          columns: {
-            name: true,
-            image: true,
-          },
-        },
-      },
+      columns: { id: true, displayName: true, avatarUrl: true },
     })
-    for (const m of membersWithUsers) {
-      if (m.user) {
-        authorMap.set(m.id, {
-          id: m.id,
-          name: m.user.name,
-          avatarUrl: m.user.image,
+    for (const p of principals) {
+      if (p.displayName) {
+        authorMap.set(p.id, {
+          id: p.id,
+          name: p.displayName,
+          avatarUrl: p.avatarUrl,
         })
       }
     }
@@ -734,8 +718,7 @@ export async function searchShippedPosts(params: {
       voteCount: posts.voteCount,
       boardSlug: boards.slug,
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${principal} m
-        INNER JOIN ${user} u ON m.user_id = u.id
+        SELECT m.display_name FROM ${principal} m
         WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
       createdAt: posts.createdAt,

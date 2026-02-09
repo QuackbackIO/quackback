@@ -39,6 +39,10 @@ export const integrations = pgTable(
     connectedByPrincipalId: typeIdColumnNullable('principal')(
       'connected_by_principal_id'
     ).references(() => principal.id),
+    /** Service principal representing this integration's identity */
+    principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
+      onDelete: 'set null',
+    }),
     connectedAt: timestamp('connected_at', { withTimezone: true }),
     lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
     lastError: text('last_error'),
@@ -119,6 +123,12 @@ export const integrationsRelations = relations(integrations, ({ one, many }) => 
   connectedBy: one(principal, {
     fields: [integrations.connectedByPrincipalId],
     references: [principal.id],
+    relationName: 'integrationConnector',
+  }),
+  principal: one(principal, {
+    fields: [integrations.principalId],
+    references: [principal.id],
+    relationName: 'integrationPrincipal',
   }),
   eventMappings: many(integrationEventMappings),
   externalLinks: many(postExternalLinks),

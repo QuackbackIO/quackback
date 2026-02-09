@@ -6,6 +6,7 @@ import { USE_CASE_TYPES } from '@quackback/db/types'
 import type { SetupState, UseCaseType } from '@quackback/db/types'
 import { getSession } from './auth'
 import { getSettings } from './workspace'
+import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import {
   db,
   settings,
@@ -162,6 +163,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             updatedAt: new Date(),
           })
           .where(eq(user.id, session.user.id as UserId))
+        await syncPrincipalProfile(session.user.id as UserId, { displayName: userName.trim() })
       }
 
       let finalSettings = existingSettings
@@ -321,6 +323,7 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
           updatedAt: new Date(),
         })
         .where(eq(user.id, session.user.id as UserId))
+      await syncPrincipalProfile(session.user.id as UserId, { displayName: data.name.trim() })
 
       console.log(`[fn:onboarding] saveUserNameFn: saved name for user ${session.user.id}`)
     } catch (error) {

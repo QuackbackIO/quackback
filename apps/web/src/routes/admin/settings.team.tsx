@@ -60,11 +60,11 @@ function TeamPage() {
             (m: {
               id: PrincipalId
               role: string
-              userId: UserId
+              userId: UserId | null
               userName: string
               userEmail: string
             }) => {
-              const avatarUrl = avatarMap[m.userId as UserId]
+              const avatarUrl = m.userId ? avatarMap[m.userId] : null
               const isCurrentUser = m.id === currentMember.id
               const showActions = isCurrentUserAdmin && !isCurrentUser
 

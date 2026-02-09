@@ -151,6 +151,8 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
         id: newPrincipalId,
         userId,
         role: 'user',
+        displayName: session.user.name,
+        avatarUrl: session.user.image ?? null,
         createdAt: new Date(),
       })
       .returning()

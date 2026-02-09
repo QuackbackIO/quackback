@@ -5,6 +5,7 @@ import { getSession } from './auth'
 import { requireAuth } from './auth-helpers'
 import { getCurrentUserRole } from './workspace'
 import { db, user, principal, eq } from '@/lib/server/db'
+import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -52,6 +53,16 @@ export interface NotificationPreferences {
 }
 
 // ============================================
+// Helpers
+// ============================================
+
+/** Get the principalId for the current authenticated user. Throws if not found. */
+async function requirePrincipalId(): Promise<PrincipalId> {
+  const ctx = await requireAuth()
+  return ctx.principal.id
+}
+
+// ============================================
 // Server Functions
 // ============================================
 
@@ -90,11 +101,12 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
       })
 
       const principalRole = principalRecord?.role
-      const userType: 'team' | 'portal' | undefined = principalRole
-        ? principalRole === 'user'
-          ? 'portal'
-          : 'team'
-        : undefined
+      let userType: 'team' | 'portal' | undefined
+      if (principalRole === 'user') {
+        userType = 'portal'
+      } else if (principalRole) {
+        userType = 'team'
+      }
 
       console.log(`[fn:user] getProfileFn: id=${userRecord.id}, userType=${userType}`)
       return {
@@ -134,6 +146,7 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
         .where(eq(user.id, session.user.id))
         .returning()
 
+      await syncPrincipalProfile(updated.id as UserId, { displayName: name.trim() })
       console.log(`[fn:user] updateProfileNameFn: updated id=${updated.id}`)
       return {
         ...updated,
@@ -182,6 +195,7 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
         .where(eq(user.id, session.user.id))
         .returning()
 
+      await syncPrincipalProfile(updated.id as UserId, { avatarKey: null })
       console.log(`[fn:user] removeAvatarFn: removed for id=${updated.id}`)
       return {
         ...updated,
@@ -224,17 +238,8 @@ export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).ha
   async (): Promise<NotificationPreferences> => {
     console.log(`[fn:user] getNotificationPreferencesFn`)
     try {
-      const ctx = await requireAuth()
-
-      const principalRecord = await db.query.principal.findFirst({
-        where: eq(principal.userId, ctx.user.id as UserId),
-      })
-
-      if (!principalRecord) {
-        throw new Error('You must be a member')
-      }
-
-      const preferences = await getNotificationPreferences(principalRecord.id as PrincipalId)
+      const principalId = await requirePrincipalId()
+      const preferences = await getNotificationPreferences(principalId)
       console.log(`[fn:user] getNotificationPreferencesFn: fetched`)
       return preferences
     } catch (error) {
@@ -257,16 +262,8 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }): Promise<NotificationPreferences> => {
       console.log(`[fn:user] updateNotificationPreferencesFn`)
       try {
-        const ctx = await requireAuth()
+        const principalId = await requirePrincipalId()
         const { emailStatusChange, emailNewComment, emailMuted } = data
-
-        const principalRecord = await db.query.principal.findFirst({
-          where: eq(principal.userId, ctx.user.id as UserId),
-        })
-
-        if (!principalRecord) {
-          throw new Error('You must be a member')
-        }
 
         const updates: {
           emailStatusChange?: boolean
@@ -288,10 +285,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
           throw new Error('No fields to update')
         }
 
-        const preferences = await updateNotificationPreferences(
-          principalRecord.id as PrincipalId,
-          updates
-        )
+        const preferences = await updateNotificationPreferences(principalId, updates)
         console.log(`[fn:user] updateNotificationPreferencesFn: updated`)
         return preferences
       } catch (error) {

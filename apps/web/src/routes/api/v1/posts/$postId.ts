@@ -121,14 +121,13 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           bodyValidationError = validateTypeIdArray(parsed.data.tagIds, 'tag', 'tag IDs')
           if (bodyValidationError) return bodyValidationError
 
-          // Import service and get member details
+          // Import service and get principal details
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
-          // Get member info for responder details
           const principalRecord = await db.query.principal.findFirst({
             where: eq(principal.id, principalId),
-            with: { user: true },
+            columns: { id: true, displayName: true },
           })
 
           const result = await updatePost(
@@ -141,7 +140,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
               ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
               officialResponse: parsed.data.officialResponse,
             },
-            principalRecord?.user ? { principalId, name: principalRecord.user.name } : undefined
+            principalRecord?.displayName
+              ? { principalId, name: principalRecord.displayName }
+              : undefined
           )
 
           return successResponse({
@@ -171,7 +172,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
+        const { principalId, role } = authResult
 
         try {
           const { postId } = params
@@ -180,19 +181,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           const validationError = validateTypeId(postId, 'post', 'post ID')
           if (validationError) return validationError
 
-          // Import service and get member details
           const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
-          const { db, principal, eq } = await import('@/lib/server/db')
 
-          // Get member info for role
-          const principalRecord = await db.query.principal.findFirst({
-            where: eq(principal.id, principalId),
-          })
-
-          await softDeletePost(postId as PostId, {
-            principalId,
-            role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
-          })
+          await softDeletePost(postId as PostId, { principalId, role })
 
           return noContentResponse()
         } catch (error) {

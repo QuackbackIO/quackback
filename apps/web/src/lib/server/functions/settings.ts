@@ -57,11 +57,11 @@ export const fetchDeveloperConfig = createServerFn({ method: 'GET' }).handler(as
   return getDeveloperConfig()
 })
 
-function buildAvatarUrl(imageKey: string | null, fallbackUrl: string | null): string | null {
-  if (imageKey) {
-    return getPublicUrlOrNull(imageKey)
+function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null }): string | null {
+  if (p.avatarKey) {
+    return getPublicUrlOrNull(p.avatarKey)
   }
-  return fallbackUrl
+  return p.avatarUrl
 }
 
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
@@ -73,6 +73,8 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         id: principal.id,
         role: principal.role,
         userId: principal.userId,
+        avatarKey: principal.avatarKey,
+        avatarUrl: principal.avatarUrl,
         userName: user.name,
         userEmail: user.email,
       })
@@ -85,22 +87,12 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       orderBy: (inv, { desc }) => [desc(inv.createdAt)],
     })
 
-    const userIds = members.map((m) => m.userId)
+    // Build avatar map from principal fields (keyed by userId for the frontend)
     const avatarMap: Record<string, string | null> = {}
 
-    if (userIds.length > 0) {
-      const users = await db.query.user.findMany({
-        where: (u, { inArray }) => inArray(u.id, userIds),
-        columns: { id: true, imageKey: true, image: true },
-      })
-
-      for (const u of users) {
-        avatarMap[u.id] = buildAvatarUrl(u.imageKey, u.image)
-      }
-      for (const userId of userIds) {
-        if (!(userId in avatarMap)) {
-          avatarMap[userId] = null
-        }
+    for (const m of members) {
+      if (m.userId) {
+        avatarMap[m.userId] = buildAvatarUrl(m)
       }
     }
 
@@ -138,7 +130,10 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
 
     const hasCustomAvatar = !!userRecord?.imageKey
     const oauthAvatarUrl = userRecord?.image ?? null
-    const avatarUrl = buildAvatarUrl(userRecord?.imageKey ?? null, oauthAvatarUrl)
+    const avatarUrl = buildAvatarUrl({
+      avatarKey: userRecord?.imageKey ?? null,
+      avatarUrl: oauthAvatarUrl,
+    })
 
     return { avatarUrl, oauthAvatarUrl, hasCustomAvatar }
   })

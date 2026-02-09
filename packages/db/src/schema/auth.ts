@@ -8,7 +8,10 @@
  */
 import { relations } from 'drizzle-orm'
 import { pgTable, text, timestamp, boolean, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
+import { sql } from 'drizzle-orm'
+import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
+import { apiKeys } from './api-keys'
+import { integrations } from './integrations'
 
 /**
  * User table - User identities for the application
@@ -210,23 +213,30 @@ export const principal = pgTable(
   'principal',
   {
     id: typeIdWithDefault('principal')('id').primaryKey(),
-    userId: typeIdColumn('user')('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    // Nullable: null for service principals (API keys, integrations)
+    userId: typeIdColumnNullable('user')('user_id').references(() => user.id, {
+      onDelete: 'cascade',
+    }),
     // Unified roles: 'admin' | 'member' | 'user'
     // 'user' role = portal users (public portal access only, no admin dashboard)
     role: text('role').default('member').notNull(),
     // Principal type: 'user' (human) or 'service' (integration/API key)
     type: text('type').default('user').notNull(),
-    // Display name for service principals (humans use user.name)
+    // Display name — always populated (humans synced from user.name, service principals set on creation)
     displayName: text('display_name'),
+    // Avatar URL — OAuth/external avatar URLs (humans synced from user.image)
+    avatarUrl: text('avatar_url'),
+    // Avatar storage key — S3 key for uploaded avatars (humans synced from user.imageKey)
+    avatarKey: text('avatar_key'),
     // Metadata for service principals (discriminated union by kind)
     serviceMetadata: jsonb('service_metadata').$type<ServiceMetadata | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   },
   (table) => [
-    // Ensure one principal record per user (also serves as lookup index)
-    uniqueIndex('principal_user_idx').on(table.userId),
+    // Ensure one principal record per human user (partial index excludes service principals)
+    uniqueIndex('principal_user_idx')
+      .on(table.userId)
+      .where(sql`user_id IS NOT NULL`),
     // Index for user listings filtered by role
     index('principal_role_idx').on(table.role),
     // Index for filtering by principal type
@@ -389,11 +399,15 @@ export const accountRelations = relations(account, ({ one }) => ({
 // Settings is a singleton table in single-tenant mode, no relations needed
 export const settingsRelations = relations(settings, () => ({}))
 
-export const principalRelations = relations(principal, ({ one }) => ({
+export const principalRelations = relations(principal, ({ one, many }) => ({
   user: one(user, {
     fields: [principal.userId],
     references: [user.id],
   }),
+  createdApiKeys: many(apiKeys, { relationName: 'apiKeyCreator' }),
+  apiKey: many(apiKeys, { relationName: 'apiKeyPrincipal' }),
+  connectedIntegrations: many(integrations, { relationName: 'integrationConnector' }),
+  integration: many(integrations, { relationName: 'integrationPrincipal' }),
 }))
 
 export const invitationRelations = relations(invitation, ({ one }) => ({

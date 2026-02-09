@@ -209,7 +209,7 @@ export async function getSubscribersForEvent(
 
   return rows.map((row) => ({
     principalId: row.principalId,
-    userId: row.userId,
+    userId: row.userId!, // INNER JOIN on user guarantees non-null
     email: row.email,
     name: row.name,
     reason: row.reason as SubscriptionReason,

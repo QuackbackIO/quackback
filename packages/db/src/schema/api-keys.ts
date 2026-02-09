@@ -6,7 +6,7 @@
  */
 import { pgTable, timestamp, varchar, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
-import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 
 /**
@@ -25,8 +25,12 @@ export const apiKeys = pgTable(
     keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
     /** First 12 characters of the key for identification (e.g., "qb_a1b2c3d4") */
     keyPrefix: varchar('key_prefix', { length: 12 }).notNull(),
-    /** Principal who created this key */
-    createdById: typeIdColumn('principal')('created_by_id')
+    /** Principal who created this key (nullable — key survives if creator leaves) */
+    createdById: typeIdColumnNullable('principal')('created_by_id').references(() => principal.id, {
+      onDelete: 'set null',
+    }),
+    /** Service principal representing this API key's identity */
+    principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'cascade' }),
     /** Last time the key was used for authentication */
@@ -41,6 +45,8 @@ export const apiKeys = pgTable(
   (table) => [
     // Index for listing keys by creator
     index('api_keys_created_by_id_idx').on(table.createdById),
+    // Index for looking up the key's service principal
+    index('api_keys_principal_id_idx').on(table.principalId),
     // Index for filtering active/revoked keys
     index('api_keys_revoked_at_idx').on(table.revokedAt),
   ]
@@ -50,5 +56,11 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   createdBy: one(principal, {
     fields: [apiKeys.createdById],
     references: [principal.id],
+    relationName: 'apiKeyCreator',
+  }),
+  principal: one(principal, {
+    fields: [apiKeys.principalId],
+    references: [principal.id],
+    relationName: 'apiKeyPrincipal',
   }),
 }))

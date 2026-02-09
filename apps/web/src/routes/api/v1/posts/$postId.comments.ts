@@ -8,7 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { validateTypeId, validateOptionalTypeId } from '@/lib/server/domains/api/validation'
-import type { PostId, CommentId, UserId } from '@quackback/ids'
+import type { PostId, CommentId } from '@quackback/ids'
 
 // Input validation schema
 const createCommentSchema = z.object({
@@ -95,18 +95,18 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
           )
           if (bodyValidationError) return bodyValidationError
 
-          // Import service and get member details
+          // Import service and get principal details
           const { createComment } = await import('@/lib/server/domains/comments/comment.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
-          // Get member info for author details
           const principalRecord = await db.query.principal.findFirst({
             where: eq(principal.id, principalId),
-            with: { user: true },
+            columns: { id: true, displayName: true, role: true, type: true },
+            with: { user: { columns: { id: true, name: true, email: true } } },
           })
 
-          if (!principalRecord?.user) {
-            return badRequestResponse('Member not found')
+          if (!principalRecord) {
+            return badRequestResponse('Principal not found')
           }
 
           const result = await createComment(
@@ -117,9 +117,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             },
             {
               principalId,
-              userId: principalRecord.user.id as UserId,
-              name: principalRecord.user.name,
-              email: principalRecord.user.email,
+              userId: principalRecord.user?.id,
+              displayName: principalRecord.displayName ?? undefined,
+              name: principalRecord.user?.name,
+              email: principalRecord.user?.email,
               role: principalRecord.role as 'admin' | 'member' | 'user',
             }
           )
@@ -129,7 +130,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             postId: result.comment.postId,
             parentId: result.comment.parentId,
             content: result.comment.content,
-            authorName: principalRecord.user.name,
+            authorName: principalRecord.displayName ?? principalRecord.user?.name ?? null,
             principalId: result.comment.principalId,
             isTeamMember: result.comment.isTeamMember,
             createdAt: result.comment.createdAt.toISOString(),

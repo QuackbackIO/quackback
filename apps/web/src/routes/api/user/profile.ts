@@ -1,4 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { db, user, eq } from '@/lib/server/db'
+import type { UserId } from '@quackback/ids'
+import { getSession } from '@/lib/server/functions/auth'
+import { deleteObject } from '@/lib/server/storage/s3'
+import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 
 export const Route = createFileRoute('/api/user/profile')({
   server: {
@@ -8,9 +13,6 @@ export const Route = createFileRoute('/api/user/profile')({
        * Get current user's profile information.
        */
       GET: async () => {
-        const { db, user, eq } = await import('@/lib/server/db')
-        const { getSession } = await import('@/lib/server/functions/auth')
-
         console.log(`[api] GET /user/profile`)
 
         try {
@@ -50,9 +52,6 @@ export const Route = createFileRoute('/api/user/profile')({
        * Update current user's profile (name only - avatar uploads use presigned URLs).
        */
       PATCH: async ({ request }) => {
-        const { db, user, eq } = await import('@/lib/server/db')
-        const { getSession } = await import('@/lib/server/functions/auth')
-
         console.log(`[api] PATCH /user/profile`)
 
         try {
@@ -93,6 +92,11 @@ export const Route = createFileRoute('/api/user/profile')({
             .where(eq(user.id, session.user.id))
             .returning()
 
+          // Sync display name to principal record
+          if (updates.name) {
+            await syncPrincipalProfile(updated.id as UserId, { displayName: updates.name })
+          }
+
           console.log(`[api] ✅ Profile updated: user=${session.user.id}`)
           return Response.json({
             success: true,
@@ -112,10 +116,6 @@ export const Route = createFileRoute('/api/user/profile')({
        * Remove custom avatar.
        */
       DELETE: async () => {
-        const { db, user, eq } = await import('@/lib/server/db')
-        const { getSession } = await import('@/lib/server/functions/auth')
-        const { deleteObject } = await import('@/lib/server/storage/s3')
-
         console.log(`[api] DELETE /user/profile (avatar)`)
 
         try {
@@ -147,6 +147,9 @@ export const Route = createFileRoute('/api/user/profile')({
             })
             .where(eq(user.id, session.user.id))
             .returning()
+
+          // Sync avatar removal to principal record
+          await syncPrincipalProfile(updated.id as UserId, { avatarKey: null })
 
           console.log(`[api] ✅ Avatar removed: user=${session.user.id}`)
           return Response.json({

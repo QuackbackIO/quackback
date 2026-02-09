@@ -10,9 +10,12 @@ export type McpScope = 'read:feedback' | 'write:feedback' | 'write:changelog'
  */
 export interface McpAuthContext {
   principalId: PrincipalId
-  userId: UserId
+  /** Null for service principals (API keys) */
+  userId?: UserId
+  /** Display name — always available (user.name for humans, displayName for service) */
   name: string
-  email: string
+  /** Null for service principals */
+  email?: string
   role: 'admin' | 'member' | 'user'
   authMethod: 'oauth' | 'api-key'
   /** Granted scopes. OAuth tokens have limited scopes; API keys get all. */

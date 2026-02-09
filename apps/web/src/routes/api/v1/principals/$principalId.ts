@@ -16,6 +16,34 @@ const updateMemberSchema = z.object({
   role: z.enum(['admin', 'member']),
 })
 
+/** Fetch a team member with user details, or return a notFoundResponse. */
+async function fetchTeamMemberWithUser(principalId: PrincipalId) {
+  const { getMemberById } = await import('@/lib/server/domains/principals/principal.service')
+  const { db, eq, user } = await import('@/lib/server/db')
+
+  const member = await getMemberById(principalId)
+  if (!member) return notFoundResponse('Member not found')
+  if (member.role !== 'admin' && member.role !== 'member') {
+    return notFoundResponse('Team member not found')
+  }
+  if (!member.userId) return notFoundResponse('User not found')
+
+  const userDetails = await db.query.user.findFirst({
+    where: eq(user.id, member.userId),
+  })
+  if (!userDetails) return notFoundResponse('User not found')
+
+  return {
+    id: member.id,
+    userId: member.userId,
+    role: member.role,
+    name: userDetails.name,
+    email: userDetails.email,
+    image: userDetails.image,
+    createdAt: member.createdAt.toISOString(),
+  }
+}
+
 export const Route = createFileRoute('/api/v1/principals/$principalId')({
   server: {
     handlers: {
@@ -35,40 +63,10 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           const validationError = validateTypeId(principalId, 'principal', 'principal ID')
           if (validationError) return validationError
 
-          // Import service functions
-          const { getMemberById } =
-            await import('@/lib/server/domains/principals/principal.service')
-          const { db, eq, user } = await import('@/lib/server/db')
+          const result = await fetchTeamMemberWithUser(principalId as PrincipalId)
+          if (result instanceof Response) return result
 
-          const foundMember = await getMemberById(principalId as PrincipalId)
-
-          if (!foundMember) {
-            return notFoundResponse('Member not found')
-          }
-
-          // Only return team members (admin or member role)
-          if (foundMember.role !== 'admin' && foundMember.role !== 'member') {
-            return notFoundResponse('Team member not found')
-          }
-
-          // Get user details
-          const userDetails = await db.query.user.findFirst({
-            where: eq(user.id, foundMember.userId),
-          })
-
-          if (!userDetails) {
-            return notFoundResponse('User not found')
-          }
-
-          return successResponse({
-            id: foundMember.id,
-            userId: foundMember.userId,
-            role: foundMember.role,
-            name: userDetails.name,
-            email: userDetails.email,
-            image: userDetails.image,
-            createdAt: foundMember.createdAt.toISOString(),
-          })
+          return successResponse(result)
         } catch (error) {
           return handleDomainError(error)
         }
@@ -101,38 +99,15 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
             })
           }
 
-          // Import service functions
-          const { updateMemberRole, getMemberById } =
+          const { updateMemberRole } =
             await import('@/lib/server/domains/principals/principal.service')
-          const { db, eq, user } = await import('@/lib/server/db')
 
           await updateMemberRole(principalId as PrincipalId, parsed.data.role, actingPrincipalId)
 
-          // Fetch updated member
-          const updatedMember = await getMemberById(principalId as PrincipalId)
+          const result = await fetchTeamMemberWithUser(principalId as PrincipalId)
+          if (result instanceof Response) return result
 
-          if (!updatedMember) {
-            return notFoundResponse('Member not found')
-          }
-
-          // Get user details
-          const userDetails = await db.query.user.findFirst({
-            where: eq(user.id, updatedMember.userId),
-          })
-
-          if (!userDetails) {
-            return notFoundResponse('User not found')
-          }
-
-          return successResponse({
-            id: updatedMember.id,
-            userId: updatedMember.userId,
-            role: updatedMember.role,
-            name: userDetails.name,
-            email: userDetails.email,
-            image: userDetails.image,
-            createdAt: updatedMember.createdAt.toISOString(),
-          })
+          return successResponse(result)
         } catch (error) {
           return handleDomainError(error)
         }
