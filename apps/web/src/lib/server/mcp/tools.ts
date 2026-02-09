@@ -409,6 +409,7 @@ Examples:
             userId: auth.userId,
             name: auth.name,
             email: auth.email,
+            displayName: auth.name,
             role: auth.role,
           }
         )
@@ -454,6 +455,7 @@ Examples:
             userId: auth.userId,
             name: auth.name,
             email: auth.email,
+            displayName: auth.name,
           }
         )
 

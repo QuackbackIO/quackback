@@ -89,7 +89,7 @@ async function resolveOAuthContext(token: string): Promise<McpAuthContext | null
     return {
       principalId: principalRecord.id,
       userId: principalRecord.user.id,
-      name: principalRecord.user.name,
+      name: principalRecord.displayName ?? principalRecord.user.name,
       email: principalRecord.user.email,
       role: principalRecord.role as 'admin' | 'member' | 'user',
       authMethod: 'oauth',
@@ -123,18 +123,30 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       with: { user: true },
     })
 
-    if (!principalRecord?.user) {
-      return new Response(JSON.stringify({ error: 'Member not found' }), {
+    if (!principalRecord) {
+      return new Response(JSON.stringify({ error: 'Principal not found' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
+    // Service principals (API keys) use displayName; human principals use user.name
+    if (principalRecord.type === 'service') {
+      return {
+        principalId: authResult.principalId,
+        name: principalRecord.displayName ?? authResult.apiKey.name,
+        role: authResult.role as 'admin' | 'member' | 'user',
+        authMethod: 'api-key',
+        scopes: ALL_SCOPES,
+      }
+    }
+
+    // Human principal (legacy path, shouldn't happen with new keys)
     return {
       principalId: authResult.principalId,
-      userId: principalRecord.user.id,
-      name: principalRecord.user.name,
-      email: principalRecord.user.email,
+      userId: principalRecord.user?.id,
+      name: principalRecord.displayName ?? principalRecord.user?.name ?? 'Unknown',
+      email: principalRecord.user?.email,
       role: authResult.role as 'admin' | 'member' | 'user',
       authMethod: 'api-key',
       scopes: ALL_SCOPES,
