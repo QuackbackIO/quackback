@@ -67,6 +67,8 @@ const ONBOARDING_EXEMPT_PATHS = [
   '/admin/signup',
   '/api/',
   '/accept-invitation/',
+  '/oauth/',
+  '/.well-known/',
 ]
 
 function isOnboardingExempt(pathname: string): boolean {

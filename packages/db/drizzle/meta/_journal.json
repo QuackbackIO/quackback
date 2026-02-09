@@ -8,6 +8,13 @@
       "when": 1770636770602,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770642015175,
+      "tag": "0001_loud_justice",
+      "breakpoints": true
     }
   ]
 }

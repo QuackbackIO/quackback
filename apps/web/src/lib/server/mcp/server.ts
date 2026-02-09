@@ -5,7 +5,7 @@
  * Resources are inlined here (5 one-liner service calls).
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { registerTools } from './tools'
 import type { McpAuthContext } from './types'
 
@@ -16,114 +16,110 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
   })
 
   registerTools(server, auth)
-  registerResources(server)
+  registerResources(server, auth)
 
   return server
 }
 
-function registerResources(server: McpServer) {
-  server.resource('boards', 'quackback://boards', { description: 'List all boards' }, async () => {
-    const { listBoards } = await import('@/lib/server/domains/boards/board.service')
-    const boards = await listBoards()
-    return {
-      contents: [
-        {
-          uri: 'quackback://boards',
-          mimeType: 'application/json',
-          text: JSON.stringify(
-            boards.map((b) => ({ id: b.id, name: b.name, slug: b.slug })),
-            null,
-            2
-          ),
-        },
-      ],
+/** Wrap a resource callback with a read:feedback scope check. */
+function scopeGated(auth: McpAuthContext, fn: ReadResourceCallback): ReadResourceCallback {
+  return async (uri, extra) => {
+    if (!auth.scopes.includes('read:feedback')) {
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: 'text/plain',
+            text: 'Error: Insufficient scope. Required: read:feedback',
+          },
+        ],
+      }
     }
-  })
+    return fn(uri, extra)
+  }
+}
+
+/** Build a JSON resource result for a quackback:// URI. */
+function jsonResource(name: string, data: unknown): Awaited<ReturnType<ReadResourceCallback>> {
+  return {
+    contents: [
+      {
+        uri: `quackback://${name}`,
+        mimeType: 'application/json',
+        text: JSON.stringify(data, null, 2),
+      },
+    ],
+  }
+}
+
+function registerResources(server: McpServer, auth: McpAuthContext) {
+  server.resource(
+    'boards',
+    'quackback://boards',
+    { description: 'List all boards' },
+    scopeGated(auth, async () => {
+      const { listBoards } = await import('@/lib/server/domains/boards/board.service')
+      const boards = await listBoards()
+      return jsonResource(
+        'boards',
+        boards.map((b) => ({ id: b.id, name: b.name, slug: b.slug }))
+      )
+    })
+  )
 
   server.resource(
     'statuses',
     'quackback://statuses',
     { description: 'List all statuses' },
-    async () => {
+    scopeGated(auth, async () => {
       const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
       const statuses = await listStatuses()
-      return {
-        contents: [
-          {
-            uri: 'quackback://statuses',
-            mimeType: 'application/json',
-            text: JSON.stringify(
-              statuses.map((s) => ({ id: s.id, name: s.name, slug: s.slug, color: s.color })),
-              null,
-              2
-            ),
-          },
-        ],
-      }
-    }
+      return jsonResource(
+        'statuses',
+        statuses.map((s) => ({ id: s.id, name: s.name, slug: s.slug, color: s.color }))
+      )
+    })
   )
 
-  server.resource('tags', 'quackback://tags', { description: 'List all tags' }, async () => {
-    const { listTags } = await import('@/lib/server/domains/tags/tag.service')
-    const tags = await listTags()
-    return {
-      contents: [
-        {
-          uri: 'quackback://tags',
-          mimeType: 'application/json',
-          text: JSON.stringify(
-            tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
-            null,
-            2
-          ),
-        },
-      ],
-    }
-  })
+  server.resource(
+    'tags',
+    'quackback://tags',
+    { description: 'List all tags' },
+    scopeGated(auth, async () => {
+      const { listTags } = await import('@/lib/server/domains/tags/tag.service')
+      const tags = await listTags()
+      return jsonResource(
+        'tags',
+        tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))
+      )
+    })
+  )
 
   server.resource(
     'roadmaps',
     'quackback://roadmaps',
     { description: 'List all roadmaps' },
-    async () => {
+    scopeGated(auth, async () => {
       const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
       const roadmaps = await listRoadmaps()
-      return {
-        contents: [
-          {
-            uri: 'quackback://roadmaps',
-            mimeType: 'application/json',
-            text: JSON.stringify(
-              roadmaps.map((r) => ({ id: r.id, name: r.name, slug: r.slug })),
-              null,
-              2
-            ),
-          },
-        ],
-      }
-    }
+      return jsonResource(
+        'roadmaps',
+        roadmaps.map((r) => ({ id: r.id, name: r.name, slug: r.slug }))
+      )
+    })
   )
 
   server.resource(
     'members',
     'quackback://members',
     { description: 'List all team members (emails stripped)' },
-    async () => {
+    scopeGated(auth, async () => {
       const { listTeamMembers } = await import('@/lib/server/domains/principals/principal.service')
       const members = await listTeamMembers()
-      return {
-        contents: [
-          {
-            uri: 'quackback://members',
-            mimeType: 'application/json',
-            text: JSON.stringify(
-              members.map((m) => ({ id: m.id, name: m.name, role: m.role })),
-              null,
-              2
-            ),
-          },
-        ],
-      }
-    }
+      return jsonResource(
+        'members',
+        members.map((m) => ({ id: m.id, name: m.name, role: m.role }))
+      )
+    })
   )
 }

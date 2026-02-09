@@ -197,6 +197,8 @@ export interface BrandingConfig {
  */
 export interface DeveloperConfig {
   mcpEnabled: boolean
+  /** Whether portal users (role: 'user') can access MCP */
+  mcpPortalAccessEnabled: boolean
 }
 
 /**
@@ -205,6 +207,7 @@ export interface DeveloperConfig {
  */
 export const DEFAULT_DEVELOPER_CONFIG: DeveloperConfig = {
   mcpEnabled: true,
+  mcpPortalAccessEnabled: false,
 }
 
 /**
@@ -212,6 +215,7 @@ export const DEFAULT_DEVELOPER_CONFIG: DeveloperConfig = {
  */
 export interface UpdateDeveloperConfigInput {
   mcpEnabled?: boolean
+  mcpPortalAccessEnabled?: boolean
 }
 
 // =============================================================================

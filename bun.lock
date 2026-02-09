@@ -44,6 +44,7 @@
       "dependencies": {
         "@aws-sdk/client-s3": "^3.980.0",
         "@aws-sdk/s3-request-presigner": "^3.980.0",
+        "@better-auth/oauth-provider": "^1.4.18",
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
@@ -370,6 +371,8 @@
     "@babel/types": ["@babel/types@7.28.6", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-0ZrskXVEHSWIqZM/sQZ4EV3jZJXRkio/WCxaqKZP1g//CEWEPSfeZFcms4XeKBCHU0ZKnIkdJeU/kF+eRp5lBg=="],
 
     "@better-auth/core": ["@better-auth/core@1.4.17", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "zod": "^4.3.5" }, "peerDependencies": { "@better-auth/utils": "0.3.0", "@better-fetch/fetch": "1.1.21", "better-call": "1.1.8", "jose": "^6.1.0", "kysely": "^0.28.5", "nanostores": "^1.0.1" } }, "sha512-WSaEQDdUO6B1CzAmissN6j0lx9fM9lcslEYzlApB5UzFaBeAOHNUONTdglSyUs6/idiZBoRvt0t/qMXCgIU8ug=="],
+
+    "@better-auth/oauth-provider": ["@better-auth/oauth-provider@1.4.18", "", { "dependencies": { "jose": "^6.1.0", "zod": "^4.3.5" }, "peerDependencies": { "@better-auth/core": "1.4.18", "@better-auth/utils": "0.3.0", "@better-fetch/fetch": "1.1.21", "better-auth": "1.4.18", "better-call": "1.1.8" } }, "sha512-9Hexp9tVDEY3T7p+2Vj0JBX+IvinXt0MFCWTjJYrsuzhJyXCO8EoECP3Dq6Ja8Yp39ttmLH5friEykakpkwcMQ=="],
 
     "@better-auth/telemetry": ["@better-auth/telemetry@1.4.17", "", { "dependencies": { "@better-auth/utils": "0.3.0", "@better-fetch/fetch": "1.1.21" }, "peerDependencies": { "@better-auth/core": "1.4.17" } }, "sha512-R1BC4e/bNjQbXu7lG6ubpgmsPj7IMqky5DvMlzAtnAJWJhh99pMh/n6w5gOHa0cqDZgEAuj75IPTxv+q3YiInA=="],
 
@@ -2918,6 +2921,8 @@
     "@aws-crypto/util/@smithy/util-utf8": ["@smithy/util-utf8@2.3.0", "", { "dependencies": { "@smithy/util-buffer-from": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A=="],
 
     "@better-auth/core/zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
+
+    "@better-auth/oauth-provider/zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
 
     "@codemirror/autocomplete/@codemirror/view": ["@codemirror/view@6.39.12", "", { "dependencies": { "@codemirror/state": "^6.5.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-f+/VsHVn/kOA9lltk/GFzuYwVVAKmOnNjxbrhkk3tPHntFqjWeI2TbIXx006YkBkqC10wZ4NsnWXCQiFPeAISQ=="],
 

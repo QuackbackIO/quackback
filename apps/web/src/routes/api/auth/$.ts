@@ -1,5 +1,31 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+/**
+ * Simple rate limiter for OAuth client registration.
+ * Limits to 10 registrations per IP per hour to prevent spam/abuse.
+ */
+const registrationAttempts = new Map<string, { count: number; windowStart: number }>()
+const REG_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const REG_MAX = 10
+
+function isRegistrationRateLimited(request: Request): boolean {
+  const ip =
+    request.headers.get('cf-connecting-ip') ??
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown'
+  const now = Date.now()
+  const entry = registrationAttempts.get(ip)
+
+  if (!entry || now - entry.windowStart > REG_WINDOW_MS) {
+    registrationAttempts.set(ip, { count: 1, windowStart: now })
+    return false
+  }
+
+  entry.count++
+  return entry.count > REG_MAX
+}
+
 export const Route = createFileRoute('/api/auth/$')({
   server: {
     handlers: {
@@ -8,44 +34,6 @@ export const Route = createFileRoute('/api/auth/$')({
        * Better-auth catch-all route handler
        */
       GET: async ({ request }) => {
-        const url = new URL(request.url)
-        const path = url.pathname.replace('/api/auth', '')
-        console.log(`[auth] GET ${path}`)
-
-        // Debug: Log magic link verification requests
-        if (path.includes('magic-link/verify')) {
-          const token = url.searchParams.get('token')
-          console.log(`[auth] Magic link verification request:`)
-          console.log(`[auth]   host: ${url.host}`)
-          console.log(`[auth]   token length: ${token?.length}`)
-          console.log(`[auth]   callbackURL: ${url.searchParams.get('callbackURL')}`)
-
-          // Check if verification record exists before Better Auth processes
-          try {
-            const { db, verification, eq } = await import('@/lib/server/db')
-            const records = await db.query.verification.findMany({
-              orderBy: (v, { desc }) => [desc(v.createdAt)],
-              limit: 5,
-            })
-            console.log(`[auth]   Recent verification records in DB: ${records.length}`)
-            for (const r of records) {
-              console.log(
-                `[auth]     - id=${r.id}, identifier=${r.identifier}, value_len=${r.value?.length}`
-              )
-            }
-            // Try to find by token value
-            if (token) {
-              const byToken = await db.query.verification.findFirst({
-                where: eq(verification.value, token),
-              })
-              console.log(`[auth]   Token found in DB: ${!!byToken}`)
-            }
-          } catch (e) {
-            console.error(`[auth]   Debug query failed:`, e)
-          }
-        }
-
-        // Dynamic import to prevent client bundling of auth config
         const { auth } = await import('@/lib/server/auth/index')
         return await auth.handler(request)
       },
@@ -55,10 +43,17 @@ export const Route = createFileRoute('/api/auth/$')({
        * Better-auth catch-all route handler
        */
       POST: async ({ request }) => {
+        // Rate-limit OAuth dynamic client registration to prevent spam/phishing
         const url = new URL(request.url)
-        console.log(`[auth] POST ${url.pathname.replace('/api/auth', '')}`)
+        if (url.pathname.endsWith('/oauth2/register')) {
+          if (isRegistrationRateLimited(request)) {
+            return Response.json(
+              { error: 'Too many client registrations. Try again later.' },
+              { status: 429 }
+            )
+          }
+        }
 
-        // Dynamic import to prevent client bundling of auth config
         const { auth } = await import('@/lib/server/auth/index')
         return await auth.handler(request)
       },
