@@ -98,22 +98,6 @@ bun run dev      # http://localhost:3000
 
 Log in with `demo@example.com` (OTP code appears in the console).
 
-## Roadmap
-
-- [x] Public feedback boards with voting
-- [x] Admin inbox with filtering and bulk actions
-- [x] Nested comments with reactions
-- [x] Official team responses
-- [x] Roadmap view
-- [x] Changelog
-- [x] Slack integration
-- [x] 14 integration connectors
-- [x] Inbound webhooks with two-way status sync
-- [x] Feedback deduplication
-- [x] API keys and outbound webhooks
-- [x] MCP server for AI agents
-- [x] Email notifications
-
 ## Contributing
 
 We'd love your help making Quackback better. See the [Contributing Guide](CONTRIBUTING.md) to get started.
