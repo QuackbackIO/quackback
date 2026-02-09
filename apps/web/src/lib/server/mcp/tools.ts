@@ -1,10 +1,11 @@
 /**
  * MCP Tools for Quackback
  *
- * 6 tools calling domain services directly (no HTTP self-loop):
+ * 7 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts and changelogs
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, owner, official response
+ * - vote_post: Toggle vote on a post
  * - add_comment: Post a comment on a post
  * - create_post: Submit new feedback
  * - create_changelog: Create a changelog entry
@@ -13,9 +14,13 @@
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
-import { listInboxPosts } from '@/lib/server/domains/posts/post.query'
-import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
+import {
+  listInboxPosts,
+  getPostWithDetails,
+  getCommentsWithReplies,
+} from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
+import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import { createComment } from '@/lib/server/domains/comments/comment.service'
 import {
   createChangelog,
@@ -23,7 +28,7 @@ import {
   getChangelogById,
 } from '@/lib/server/domains/changelog/changelog.service'
 import { getTypeIdPrefix } from '@quackback/ids'
-import type { McpAuthContext } from './types'
+import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
   BoardId,
@@ -37,6 +42,13 @@ import type {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** Wrap a data object as a successful MCP tool result. */
+function jsonResult(data: unknown): CallToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+  }
+}
 
 /** Convert a domain error to an MCP tool error result. */
 function errorResult(err: unknown): CallToolResult {
@@ -60,6 +72,29 @@ function decodeSearchCursor(cursor?: string): { entity: string; value: number | 
     return { entity: decoded.entity ?? '', value: decoded.value ?? 0 }
   } catch {
     return { entity: '', value: 0 }
+  }
+}
+
+/** Return an error if the token is missing a required scope. */
+function requireScope(auth: McpAuthContext, scope: McpScope): CallToolResult | null {
+  if (auth.scopes.includes(scope)) return null
+  return {
+    isError: true,
+    content: [{ type: 'text', text: `Error: Insufficient scope. Required: ${scope}` }],
+  }
+}
+
+/** Return an error if the user doesn't have an admin or member role. */
+function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
+  if (auth.role === 'admin' || auth.role === 'member') return null
+  return {
+    isError: true,
+    content: [
+      {
+        type: 'text',
+        text: 'Error: This operation requires a team member (admin or member) role.',
+      },
+    ],
   }
 }
 
@@ -123,9 +158,10 @@ const triagePostSchema = {
     .describe('Assign to member TypeID, or null to unassign'),
   officialResponse: z
     .string()
+    .max(5000)
     .nullable()
     .optional()
-    .describe('Set official response text, or null to clear'),
+    .describe('Set official response text (max 5,000 chars), or null to clear'),
 }
 
 const addCommentSchema = {
@@ -142,10 +178,20 @@ const createPostSchema = {
   tagIds: z.array(z.string()).optional().describe('Tag TypeIDs to apply'),
 }
 
+const votePostSchema = {
+  postId: z.string().describe('Post TypeID to vote on'),
+}
+
 const createChangelogSchema = {
   title: z.string().max(200).describe('Changelog entry title'),
-  content: z.string().describe('Changelog content (markdown supported)'),
-  publishedAt: z.string().optional().describe('ISO 8601 publish date (omit to save as draft)'),
+  content: z
+    .string()
+    .max(50000)
+    .describe('Changelog content (markdown supported, max 50,000 chars)'),
+  publish: z
+    .boolean()
+    .default(false)
+    .describe('Set to true to publish immediately. Defaults to draft.'),
 }
 
 // ============================================================================
@@ -187,10 +233,12 @@ type CreatePostArgs = {
   tagIds?: string[]
 }
 
+type VotePostArgs = { postId: string }
+
 type CreateChangelogArgs = {
   title: string
   content: string
-  publishedAt?: string
+  publish: boolean
 }
 
 // ============================================================================
@@ -212,6 +260,8 @@ Examples:
     searchSchema,
     READ_ONLY,
     async (args: SearchArgs): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:feedback')
+      if (denied) return denied
       try {
         if (args.entity === 'changelogs') {
           return await searchChangelogs(args)
@@ -234,6 +284,8 @@ Examples:
     getDetailsSchema,
     READ_ONLY,
     async (args: GetDetailsArgs): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:feedback')
+      if (denied) return denied
       try {
         let prefix: string
         try {
@@ -274,6 +326,10 @@ Examples:
     triagePostSchema,
     WRITE,
     async (args: TriagePostArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
       try {
         const result = await updatePost(
           args.postId as PostId,
@@ -286,26 +342,42 @@ Examples:
           { principalId: auth.principalId, name: auth.name }
         )
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  id: result.id,
-                  title: result.title,
-                  statusId: result.statusId,
-                  ownerPrincipalId: result.ownerPrincipalId,
-                  officialResponse: result.officialResponse,
-                  officialResponseAt: result.officialResponseAt,
-                  updatedAt: result.updatedAt,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        }
+        return jsonResult({
+          id: result.id,
+          title: result.title,
+          statusId: result.statusId,
+          ownerPrincipalId: result.ownerPrincipalId,
+          officialResponse: result.officialResponse,
+          officialResponseAt: result.officialResponseAt,
+          updatedAt: result.updatedAt,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // vote_post
+  server.tool(
+    'vote_post',
+    `Toggle vote on a feedback post. If not yet voted, adds a vote. If already voted, removes the vote.
+
+Examples:
+- Vote on a post: vote_post({ postId: "post_01abc..." })
+- Unvote (call again): vote_post({ postId: "post_01abc..." })`,
+    votePostSchema,
+    WRITE,
+    async (args: VotePostArgs): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:feedback')
+      if (denied) return denied
+      try {
+        const result = await voteOnPost(args.postId as PostId, auth.principalId)
+
+        return jsonResult({
+          postId: args.postId,
+          voted: result.voted,
+          voteCount: result.voteCount,
+        })
       } catch (err) {
         return errorResult(err)
       }
@@ -323,6 +395,8 @@ Examples:
     addCommentSchema,
     WRITE,
     async (args: AddCommentArgs): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:feedback')
+      if (denied) return denied
       try {
         const result = await createComment(
           {
@@ -339,14 +413,14 @@ Examples:
           }
         )
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result.comment, null, 2),
-            },
-          ],
-        }
+        return jsonResult({
+          id: result.comment.id,
+          postId: result.comment.postId,
+          content: result.comment.content,
+          parentId: result.comment.parentId,
+          isTeamMember: result.comment.isTeamMember,
+          createdAt: result.comment.createdAt,
+        })
       } catch (err) {
         return errorResult(err)
       }
@@ -364,6 +438,8 @@ Examples:
     createPostSchema,
     WRITE,
     async (args: CreatePostArgs): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:feedback')
+      if (denied) return denied
       try {
         const result = await createPost(
           {
@@ -381,24 +457,13 @@ Examples:
           }
         )
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  id: result.id,
-                  title: result.title,
-                  boardId: result.boardId,
-                  statusId: result.statusId,
-                  createdAt: result.createdAt,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        }
+        return jsonResult({
+          id: result.id,
+          title: result.title,
+          boardId: result.boardId,
+          statusId: result.statusId,
+          createdAt: result.createdAt,
+        })
       } catch (err) {
         return errorResult(err)
       }
@@ -408,46 +473,35 @@ Examples:
   // create_changelog
   server.tool(
     'create_changelog',
-    `Create a changelog entry. Omit publishedAt to save as draft.
+    `Create a changelog entry. Saves as draft by default; set publish: true to publish immediately.
 
 Examples:
 - Draft: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode..." })
-- Published: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode...", publishedAt: "2026-02-05T00:00:00Z" })`,
+- Published: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode...", publish: true })`,
     createChangelogSchema,
     WRITE,
     async (args: CreateChangelogArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:changelog')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
       try {
-        const publishState = args.publishedAt
-          ? { type: 'published' as const }
-          : { type: 'draft' as const }
-
         const result = await createChangelog(
           {
             title: args.title,
             content: args.content,
-            publishState,
+            publishState: { type: args.publish ? 'published' : 'draft' },
           },
           { principalId: auth.principalId, name: auth.name }
         )
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  id: result.id,
-                  title: result.title,
-                  status: result.status,
-                  publishedAt: result.publishedAt,
-                  createdAt: result.createdAt,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        }
+        return jsonResult({
+          id: result.id,
+          title: result.title,
+          status: result.status,
+          publishedAt: result.publishedAt,
+          createdAt: result.createdAt,
+        })
       } catch (err) {
         return errorResult(err)
       }
@@ -484,36 +538,25 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
   const nextOffset = offset + result.items.length
   const nextCursor = result.hasMore ? encodeSearchCursor('posts', nextOffset) : null
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            posts: result.items.map((p) => ({
-              id: p.id,
-              title: p.title,
-              content: p.content,
-              voteCount: p.voteCount,
-              commentCount: p.commentCount,
-              boardId: p.boardId,
-              boardName: p.board?.name,
-              statusId: p.statusId,
-              authorName: p.authorName,
-              ownerPrincipalId: p.ownerPrincipalId,
-              tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
-              createdAt: p.createdAt,
-            })),
-            nextCursor,
-            hasMore: result.hasMore,
-            total: result.total,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  }
+  return jsonResult({
+    posts: result.items.map((p) => ({
+      id: p.id,
+      title: p.title,
+      content: p.content,
+      voteCount: p.voteCount,
+      commentCount: p.commentCount,
+      boardId: p.boardId,
+      boardName: p.board?.name,
+      statusId: p.statusId,
+      authorName: p.authorName,
+      ownerPrincipalId: p.ownerPrincipalId,
+      tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
+      createdAt: p.createdAt,
+    })),
+    nextCursor,
+    hasMore: result.hasMore,
+    total: result.total,
+  })
 }
 
 async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
@@ -527,9 +570,8 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
   const cursorValue = typeof decoded.value === 'string' ? decoded.value : undefined
 
   // Map status param — changelogs support draft/published/scheduled/all
-  const status = (['draft', 'published', 'scheduled', 'all'] as const).includes(
-    args.status as 'draft' | 'published' | 'scheduled' | 'all'
-  )
+  const validStatuses = new Set(['draft', 'published', 'scheduled', 'all'])
+  const status = validStatuses.has(args.status ?? '')
     ? (args.status as 'draft' | 'published' | 'scheduled' | 'all')
     : undefined
 
@@ -544,35 +586,24 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
   const nextCursor =
     result.hasMore && lastItem ? encodeSearchCursor('changelogs', lastItem.id) : null
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            changelogs: result.items.map((c) => ({
-              id: c.id,
-              title: c.title,
-              content: c.content,
-              status: c.status,
-              authorName: c.author?.name ?? null,
-              linkedPosts: c.linkedPosts.map((p) => ({
-                id: p.id,
-                title: p.title,
-                voteCount: p.voteCount,
-              })),
-              publishedAt: c.publishedAt,
-              createdAt: c.createdAt,
-            })),
-            nextCursor,
-            hasMore: result.hasMore,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  }
+  return jsonResult({
+    changelogs: result.items.map((c) => ({
+      id: c.id,
+      title: c.title,
+      content: c.content,
+      status: c.status,
+      authorName: c.author?.name ?? null,
+      linkedPosts: c.linkedPosts.map((p) => ({
+        id: p.id,
+        title: p.title,
+        voteCount: p.voteCount,
+      })),
+      publishedAt: c.publishedAt,
+      createdAt: c.createdAt,
+    })),
+    nextCursor,
+    hasMore: result.hasMore,
+  })
 }
 
 // ============================================================================
@@ -585,77 +616,54 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
     getCommentsWithReplies(postId),
   ])
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            id: post.id,
-            title: post.title,
-            content: post.content,
-            voteCount: post.voteCount,
-            commentCount: post.commentCount,
-            boardId: post.boardId,
-            boardName: post.board?.name,
-            boardSlug: post.board?.slug,
-            statusId: post.statusId,
-            authorName: post.authorName,
-            authorEmail: post.authorEmail,
-            ownerPrincipalId: post.ownerPrincipalId,
-            officialResponse: post.officialResponse,
-            officialResponseAuthorName: post.officialResponseAuthorName,
-            officialResponseAt: post.officialResponseAt,
-            tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })),
-            roadmapIds: post.roadmapIds,
-            pinnedComment: post.pinnedComment
-              ? {
-                  id: post.pinnedComment.id,
-                  content: post.pinnedComment.content,
-                  authorName: post.pinnedComment.authorName,
-                  createdAt: post.pinnedComment.createdAt,
-                }
-              : null,
-            createdAt: post.createdAt,
-            updatedAt: post.updatedAt,
-            comments,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  }
+  return jsonResult({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    voteCount: post.voteCount,
+    commentCount: post.commentCount,
+    boardId: post.boardId,
+    boardName: post.board?.name,
+    boardSlug: post.board?.slug,
+    statusId: post.statusId,
+    authorName: post.authorName,
+    ownerPrincipalId: post.ownerPrincipalId,
+    officialResponse: post.officialResponse,
+    officialResponseAuthorName: post.officialResponseAuthorName,
+    officialResponseAt: post.officialResponseAt,
+    tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    roadmapIds: post.roadmapIds,
+    pinnedComment: post.pinnedComment
+      ? {
+          id: post.pinnedComment.id,
+          content: post.pinnedComment.content,
+          authorName: post.pinnedComment.authorName,
+          createdAt: post.pinnedComment.createdAt,
+        }
+      : null,
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    comments,
+  })
 }
 
 async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolResult> {
   const entry = await getChangelogById(changelogId)
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            id: entry.id,
-            title: entry.title,
-            content: entry.content,
-            status: entry.status,
-            authorName: entry.author?.name ?? null,
-            linkedPosts: entry.linkedPosts.map((p) => ({
-              id: p.id,
-              title: p.title,
-              voteCount: p.voteCount,
-              status: p.status,
-            })),
-            publishedAt: entry.publishedAt,
-            createdAt: entry.createdAt,
-            updatedAt: entry.updatedAt,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  }
+  return jsonResult({
+    id: entry.id,
+    title: entry.title,
+    content: entry.content,
+    status: entry.status,
+    authorName: entry.author?.name ?? null,
+    linkedPosts: entry.linkedPosts.map((p) => ({
+      id: p.id,
+      title: p.title,
+      voteCount: p.voteCount,
+      status: p.status,
+    })),
+    publishedAt: entry.publishedAt,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  })
 }

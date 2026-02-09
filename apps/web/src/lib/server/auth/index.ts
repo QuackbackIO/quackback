@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { emailOTP, oneTimeToken, magicLink } from 'better-auth/plugins'
+import { emailOTP, oneTimeToken, magicLink, jwt } from 'better-auth/plugins'
+import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
@@ -46,6 +47,11 @@ async function createAuth() {
     settings: settingsTable,
     principal: principalTable,
     invitation: invitationTable,
+    jwks: jwksTable,
+    oauthClient: oauthClientTable,
+    oauthAccessToken: oauthAccessTokenTable,
+    oauthRefreshToken: oauthRefreshTokenTable,
+    oauthConsent: oauthConsentTable,
     eq,
   } = await import('@/lib/server/db')
   const { sendSigninCodeEmail } = await import('@quackback/email')
@@ -74,6 +80,10 @@ async function createAuth() {
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: config.secretKey,
 
+    // Disable the JWT plugin's /token endpoint — conflicts with OAuth's /oauth2/token
+    // Does NOT affect emailOTP, magicLink, or session management
+    disabledPaths: ['/token'],
+
     database: drizzleAdapter(db, {
       provider: 'pg',
       // Pass our custom schema so Better-auth uses our TypeID column types
@@ -87,6 +97,12 @@ async function createAuth() {
         workspace: settingsTable,
         member: principalTable,
         invitation: invitationTable,
+        // OAuth 2.1 Provider + JWT plugin tables
+        jwks: jwksTable,
+        oauthClient: oauthClientTable,
+        oauthAccessToken: oauthAccessTokenTable,
+        oauthRefreshToken: oauthRefreshTokenTable,
+        oauthConsent: oauthConsentTable,
       },
     }),
 
@@ -114,6 +130,7 @@ async function createAuth() {
     socialProviders,
 
     session: {
+      storeSessionInDatabase: true,
       expiresIn: 60 * 60 * 24 * 7, // 7 days
       updateAge: 60 * 60 * 24, // Update session every 24 hours
     },
@@ -168,15 +185,8 @@ async function createAuth() {
     plugins: [
       // Email OTP plugin for passwordless authentication (used by portal users)
       emailOTP({
-        async sendVerificationOTP({ email, otp, type }) {
-          console.log(`[auth] sendVerificationOTP called for ${email}, type: ${type}`)
-          try {
-            await sendSigninCodeEmail({ to: email, code: otp })
-            console.log(`[auth] OTP email sent successfully to ${email}`)
-          } catch (error) {
-            console.error(`[auth] Failed to send OTP email to ${email}:`, error)
-            throw error
-          }
+        async sendVerificationOTP({ email, otp }) {
+          await sendSigninCodeEmail({ to: email, code: otp })
         },
         otpLength: 6,
         expiresIn: 600, // 10 minutes
@@ -186,14 +196,9 @@ async function createAuth() {
       // When invitations are sent, the sendMagicLink callback stores the token
       // which is then retrieved by sendInvitationFn to build the URL with correct workspace domain
       magicLink({
-        async sendMagicLink({ email, token, url }) {
-          console.log(`[auth] sendMagicLink callback:`)
-          console.log(`[auth]   email: ${email}`)
-          console.log(`[auth]   token length: ${token?.length}`)
-          console.log(`[auth]   url (from Better Auth): ${url}`)
+        async sendMagicLink({ email, token }) {
           // Store only the token - we'll construct the URL with the workspace domain
           storeMagicLinkToken(email, token)
-          console.log(`[auth]   token stored in pending map`)
         },
         expiresIn: 60 * 60 * 24 * 7, // 7 days - match invitation expiry
         disableSignUp: false, // Allow new users to sign up via invitation
@@ -202,6 +207,55 @@ async function createAuth() {
       // One-time token plugin for cross-domain session transfer (used by /get-started)
       oneTimeToken({
         expiresIn: 60, // 1 minute - tokens are used immediately after generation
+      }),
+
+      // JWT plugin — signs access tokens, exposes /api/auth/jwks for verification
+      jwt(),
+
+      // OAuth 2.1 Provider — turns Better Auth into an authorization server for MCP
+      oauthProvider({
+        // Redirect unauthenticated OAuth users to portal login
+        loginPage: '/auth/login',
+
+        // Consent page — always shown for non-trusted clients
+        consentPage: '/oauth/consent',
+
+        // Allow Claude Code (and other MCP clients) to self-register
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+
+        // Quackback-specific scopes
+        scopes: [
+          'openid',
+          'profile',
+          'email',
+          'offline_access',
+          'read:feedback',
+          'write:feedback',
+          'write:changelog',
+        ],
+
+        // Default scopes for dynamically registered clients
+        clientRegistrationDefaultScopes: ['openid', 'profile', 'read:feedback'],
+
+        // Additional scopes allowed for dynamically registered clients
+        clientRegistrationAllowedScopes: ['offline_access', 'write:feedback', 'write:changelog'],
+
+        // MCP endpoint is a valid token audience
+        validAudiences: [`${baseURL}/api/mcp`],
+
+        // Embed principal info in the JWT so MCP handler can avoid extra DB lookups
+        customAccessTokenClaims: async ({ user }) => {
+          if (!user?.id) return {}
+          const p = await db.query.principal.findFirst({
+            where: eq(principalTable.userId, user.id as ReturnType<typeof generateId<'user'>>),
+            columns: { id: true, role: true },
+          })
+          return {
+            principalId: p?.id,
+            role: p?.role ?? 'user',
+          }
+        },
       }),
 
       // TanStack Start cookie management plugin (must be last)
