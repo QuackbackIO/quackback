@@ -14,7 +14,7 @@ import {
   validateOptionalTypeId,
   validateTypeIdArray,
 } from '@/lib/server/domains/api/validation'
-import type { BoardId, StatusId, TagId, UserId } from '@quackback/ids'
+import type { BoardId, StatusId, TagId } from '@quackback/ids'
 
 // Input validation schemas
 const createPostSchema = z.object({
@@ -145,18 +145,18 @@ export const Route = createFileRoute('/api/v1/posts/')({
           validationError = validateTypeIdArray(parsed.data.tagIds, 'tag', 'tag IDs')
           if (validationError) return validationError
 
-          // Import service and get member details
+          // Import service and get principal details
           const { createPost } = await import('@/lib/server/domains/posts/post.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
-          // Get member info for author details
           const principalRecord = await db.query.principal.findFirst({
             where: eq(principal.id, principalId),
-            with: { user: true },
+            columns: { id: true, displayName: true, type: true },
+            with: { user: { columns: { id: true, name: true, email: true } } },
           })
 
-          if (!principalRecord?.user) {
-            return badRequestResponse('Member not found')
+          if (!principalRecord) {
+            return badRequestResponse('Principal not found')
           }
 
           const result = await createPost(
@@ -169,9 +169,10 @@ export const Route = createFileRoute('/api/v1/posts/')({
             },
             {
               principalId,
-              userId: principalRecord.user.id as UserId,
-              name: principalRecord.user.name,
-              email: principalRecord.user.email,
+              userId: principalRecord.user?.id,
+              displayName: principalRecord.displayName ?? undefined,
+              name: principalRecord.user?.name,
+              email: principalRecord.user?.email,
             }
           )
 
@@ -184,7 +185,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
             voteCount: result.voteCount,
             boardId: result.boardId,
             statusId: result.statusId,
-            authorName: principalRecord.user.name,
+            authorName: principalRecord.displayName ?? principalRecord.user?.name ?? null,
             createdAt: result.createdAt.toISOString(),
             updatedAt: result.updatedAt.toISOString(),
           })
