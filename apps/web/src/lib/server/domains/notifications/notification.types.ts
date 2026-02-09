@@ -4,7 +4,7 @@
  * Type definitions for in-app notifications
  */
 
-import type { NotificationId, PostId, CommentId, MemberId } from '@quackback/ids'
+import type { NotificationId, PostId, CommentId, PrincipalId } from '@quackback/ids'
 
 /**
  * Notification event types that can trigger in-app notifications
@@ -15,7 +15,7 @@ export type NotificationType = 'post_status_changed' | 'comment_created' | 'post
  * Input for creating a single notification
  */
 export interface CreateNotificationInput {
-  memberId: MemberId
+  principalId: PrincipalId
   type: NotificationType
   title: string
   body?: string
@@ -29,7 +29,7 @@ export interface CreateNotificationInput {
  */
 export interface Notification {
   id: NotificationId
-  memberId: MemberId
+  principalId: PrincipalId
   type: NotificationType
   title: string
   body: string | null

@@ -4,10 +4,10 @@
  */
 import { db, integrations } from '@/lib/server/db'
 import { encryptSecrets } from './encryption'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export interface SaveIntegrationParams {
-  memberId: MemberId
+  principalId: PrincipalId
   accessToken: string
   refreshToken?: string
   expiresIn?: number
@@ -22,7 +22,7 @@ export async function saveIntegration(
   integrationType: string,
   params: SaveIntegrationParams
 ): Promise<void> {
-  const { memberId, accessToken, refreshToken, expiresIn, config: oauthConfig } = params
+  const { principalId, accessToken, refreshToken, expiresIn, config: oauthConfig } = params
 
   const secrets: Record<string, unknown> = { accessToken }
   if (refreshToken) secrets.refreshToken = refreshToken
@@ -42,7 +42,7 @@ export async function saveIntegration(
       integrationType,
       status: 'active',
       secrets: encryptedSecrets,
-      connectedByMemberId: memberId,
+      connectedByPrincipalId: principalId,
       connectedAt: now,
       config,
     })
@@ -51,7 +51,7 @@ export async function saveIntegration(
       set: {
         status: 'active',
         secrets: encryptedSecrets,
-        connectedByMemberId: memberId,
+        connectedByPrincipalId: principalId,
         connectedAt: now,
         config,
         lastError: null,

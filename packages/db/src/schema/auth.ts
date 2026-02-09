@@ -7,7 +7,7 @@
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
 import { relations } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 
 /**
@@ -185,33 +185,52 @@ export const settings = pgTable('settings', {
 })
 
 /**
- * Member table - Unified membership for all user types
+ * Metadata for service principals (discriminated union by kind)
+ */
+export type ServiceMetadata =
+  | { kind: 'integration'; integrationType: string; integrationId?: string }
+  | { kind: 'api_key'; apiKeyId: string }
+
+/**
+ * Principal table - Unified identity for all actor types
  *
- * All users have a member record with a role:
+ * All actors have a principal record with a role:
  * - 'admin': Full administrative access, can manage settings and team
  * - 'member': Team member access, can manage feedback
  * - 'user': Portal user access only, can vote/comment on public portal
  *
+ * Principal types:
+ * - 'user': Human user with a userId pointing to the user table
+ * - 'service': Integration or API key actor (userId is null)
+ *
  * The role determines access level: admin/member can access /admin dashboard,
  * while 'user' role can only interact with the public portal.
  */
-export const member = pgTable(
-  'member',
+export const principal = pgTable(
+  'principal',
   {
-    id: typeIdWithDefault('member')('id').primaryKey(),
+    id: typeIdWithDefault('principal')('id').primaryKey(),
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     // Unified roles: 'admin' | 'member' | 'user'
     // 'user' role = portal users (public portal access only, no admin dashboard)
     role: text('role').default('member').notNull(),
+    // Principal type: 'user' (human) or 'service' (integration/API key)
+    type: text('type').default('user').notNull(),
+    // Display name for service principals (humans use user.name)
+    displayName: text('display_name'),
+    // Metadata for service principals (discriminated union by kind)
+    serviceMetadata: jsonb('service_metadata').$type<ServiceMetadata | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   },
   (table) => [
-    // Ensure one member record per user (also serves as lookup index)
-    uniqueIndex('member_user_idx').on(table.userId),
+    // Ensure one principal record per user (also serves as lookup index)
+    uniqueIndex('principal_user_idx').on(table.userId),
     // Index for user listings filtered by role
-    index('member_role_idx').on(table.role),
+    index('principal_role_idx').on(table.role),
+    // Index for filtering by principal type
+    index('principal_type_idx').on(table.type),
   ]
 )
 
@@ -241,7 +260,7 @@ export const invitation = pgTable(
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
-  members: many(member),
+  principals: many(principal),
   invitations: many(invitation),
 }))
 
@@ -262,9 +281,9 @@ export const accountRelations = relations(account, ({ one }) => ({
 // Settings is a singleton table in single-tenant mode, no relations needed
 export const settingsRelations = relations(settings, () => ({}))
 
-export const memberRelations = relations(member, ({ one }) => ({
+export const principalRelations = relations(principal, ({ one }) => ({
   user: one(user, {
-    fields: [member.userId],
+    fields: [principal.userId],
     references: [user.id],
   }),
 }))

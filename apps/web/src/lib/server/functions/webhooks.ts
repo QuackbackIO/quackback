@@ -90,7 +90,7 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
           events: data.events,
           boardIds: data.boardIds,
         },
-        auth.member.id
+        auth.principal.id
       )
 
       console.log(`[fn:webhooks] createWebhookFn: id=${result.webhook.id}`)

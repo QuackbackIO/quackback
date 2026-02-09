@@ -58,7 +58,11 @@ function ensureQueue(): Promise<Queue<HookJobData>> {
 }
 
 async function initializeQueue() {
-  const connOpts = { url: config.redisUrl, maxRetriesPerRequest: null as null }
+  const connOpts = {
+    url: config.redisUrl,
+    maxRetriesPerRequest: null as null,
+    connectTimeout: 5_000,
+  }
 
   // Separate connections: BullMQ Workers use blocking commands (BLMOVE)
   // that conflict with Queue commands on a shared connection.
@@ -98,6 +102,21 @@ async function initializeQueue() {
     },
     { connection: connOpts, concurrency: CONCURRENCY }
   )
+
+  // Verify Redis is reachable before returning. Without this, a missing
+  // Redis hangs every request that dispatches events (post/comment creation).
+  try {
+    await Promise.race([
+      queue.waitUntilReady(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), 5_000)
+      ),
+    ])
+  } catch (error) {
+    await queue.close().catch(() => {})
+    await worker.close().catch(() => {})
+    throw error
+  }
 
   worker.on('failed', (job, error) => {
     if (!job) return

@@ -6,11 +6,11 @@
  * leaking into the client bundle via TanStack Router's routeTree.
  */
 
-import type { MemberId, UserId } from '@quackback/ids'
+import type { PrincipalId, UserId } from '@quackback/ids'
 import { getIntegration } from '.'
 import { verifyOAuthState } from '@/lib/server/auth/oauth-state'
 import { auth } from '@/lib/server/auth'
-import { db, member, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 import {
   STATE_EXPIRY_MS,
   isSecureRequest,
@@ -29,7 +29,7 @@ interface OAuthState {
   type: string
   workspaceId: string
   returnDomain: string
-  memberId: MemberId
+  principalId: PrincipalId
   nonce: string
   ts: number
   /** Pre-auth fields collected before OAuth (e.g. Zendesk subdomain) */
@@ -137,7 +137,7 @@ export async function handleOAuthCallback(
     return redirectResponse(errorUrl(FALLBACK_URL, 'state_expired'))
   }
 
-  const { returnDomain, memberId } = stateData
+  const { returnDomain, principalId } = stateData
   const tenantUrl = `https://${returnDomain}`
 
   if (!isValidTenantDomain(returnDomain)) {
@@ -164,10 +164,10 @@ export async function handleOAuthCallback(
     if (!session?.user) {
       return redirectResponse(errorUrl(tenantUrl, 'auth_required'))
     }
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id as UserId),
+    const principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.userId, session.user.id as UserId),
     })
-    if (!memberRecord || (memberRecord.id as MemberId) !== memberId) {
+    if (!principalRecord || (principalRecord.id as PrincipalId) !== principalId) {
       return redirectResponse(errorUrl(tenantUrl, 'session_mismatch'))
     }
   } catch {
@@ -198,7 +198,7 @@ export async function handleOAuthCallback(
     accessToken = exchangeResult.accessToken
 
     const { saveIntegration } = await import('./save')
-    await saveIntegration(integrationType, { memberId, ...exchangeResult })
+    await saveIntegration(integrationType, { principalId, ...exchangeResult })
 
     const successUrl = buildSettingsUrl(tenantUrl, settingsPath, integrationType, 'connected')
     return redirectResponse(successUrl, [clearCookie(cookieName, isSecureRequest(request))])

@@ -26,7 +26,7 @@ interface OptimisticComment {
   id: CommentId
   content: string
   authorName: string | null
-  memberId: string | null
+  principalId: string | null
   createdAt: string
   parentId: string | null
   isTeamMember: boolean
@@ -40,12 +40,12 @@ interface CreateCommentInput {
   postId: string
   authorName?: string | null
   authorEmail?: string | null
-  memberId?: string | null
+  principalId?: string | null
 }
 
 interface UseCreateCommentOptions {
   postId: PostId
-  author?: { name: string | null; email: string; memberId?: string }
+  author?: { name: string | null; email: string; principalId?: string }
   onSuccess?: (comment: unknown) => void
   onError?: (error: Error) => void
 }
@@ -161,14 +161,14 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
       const previousPost = queryClient.getQueryData(queryKey)
 
       const authorName = input.authorName ?? author?.name ?? author?.email ?? null
-      const memberId = input.memberId ?? author?.memberId ?? null
+      const principalId = input.principalId ?? author?.principalId ?? null
 
       if (previousPost && (authorName || author)) {
         const optimisticComment: OptimisticComment = {
           id: `comment_optimistic_${Date.now()}` as CommentId,
           content: input.content,
           authorName,
-          memberId,
+          principalId,
           createdAt: new Date().toISOString(),
           parentId: input.parentId || null,
           isTeamMember: false,

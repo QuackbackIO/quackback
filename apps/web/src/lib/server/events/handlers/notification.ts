@@ -10,14 +10,14 @@ import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
-import type { MemberId, PostId, CommentId } from '@quackback/ids'
+import type { PrincipalId, PostId, CommentId } from '@quackback/ids'
 import { truncate, isRetryableError } from '../hook-utils'
 
 /**
  * Target for notification hooks - contains all member IDs to notify
  */
 export interface NotificationTarget {
-  memberIds: MemberId[]
+  principalIds: PrincipalId[]
 }
 
 /**
@@ -38,19 +38,19 @@ export interface NotificationConfig {
 
 export const notificationHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { memberIds } = target as NotificationTarget
+    const { principalIds } = target as NotificationTarget
     const cfg = config as NotificationConfig
 
-    if (!memberIds || memberIds.length === 0) {
+    if (!principalIds || principalIds.length === 0) {
       return { success: true }
     }
 
     console.log(
-      `[Notification] Creating ${event.type} notifications for ${memberIds.length} members`
+      `[Notification] Creating ${event.type} notifications for ${principalIds.length} members`
     )
 
     try {
-      const notifications = buildNotifications(event, memberIds, cfg)
+      const notifications = buildNotifications(event, principalIds, cfg)
 
       if (notifications.length === 0) {
         return { success: true }
@@ -80,15 +80,15 @@ export const notificationHook: HookHandler = {
  */
 function buildNotifications(
   event: EventData,
-  memberIds: MemberId[],
+  principalIds: PrincipalId[],
   config: NotificationConfig
 ): CreateNotificationInput[] {
   const { postId, postTitle, boardSlug, postUrl } = config
 
   if (event.type === 'post.status_changed') {
     const { previousStatus, newStatus } = config
-    return memberIds.map((memberId) => ({
-      memberId,
+    return principalIds.map((principalId) => ({
+      principalId,
       type: 'post_status_changed' as NotificationType,
       title: `Status changed to ${newStatus}`,
       body: `"${postTitle}" moved from ${previousStatus} to ${newStatus}`,
@@ -103,8 +103,8 @@ function buildNotifications(
     // commentPreview is already HTML-stripped and truncated (200 chars) in targets.ts
     const body = truncate(commentPreview ?? '', 150)
 
-    return memberIds.map((memberId) => ({
-      memberId,
+    return principalIds.map((principalId) => ({
+      principalId,
       type: 'comment_created' as NotificationType,
       title,
       body,

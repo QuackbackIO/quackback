@@ -22,7 +22,7 @@ import {
   isNull,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
-import type { PostId, BoardId, MemberId } from '@quackback/ids'
+import type { PostId, BoardId, PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, type CommentTreeNode } from '@/lib/shared'
 import type {
@@ -114,7 +114,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
         id: pinnedCommentData.id,
         content: pinnedCommentData.content,
         authorName: pinnedCommentData.author?.user?.name ?? null,
-        memberId: pinnedCommentData.memberId,
+        principalId: pinnedCommentData.principalId,
         avatarUrl,
         createdAt: pinnedCommentData.createdAt,
         isTeamMember: pinnedCommentData.isTeamMember,
@@ -124,11 +124,11 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
 
   // Resolve official response author name if needed
   let officialResponseAuthorName: string | null = null
-  if (post.officialResponseMemberId) {
-    // Import member table for the query
-    const { member: memberTable } = await import('@/lib/server/db')
-    const responderMember = await db.query.member.findFirst({
-      where: eq(memberTable.id, post.officialResponseMemberId),
+  if (post.officialResponsePrincipalId) {
+    // Import principal table for the query
+    const { principal: principalTable } = await import('@/lib/server/db')
+    const responderMember = await db.query.principal.findFirst({
+      where: eq(principalTable.id, post.officialResponsePrincipalId),
       columns: {},
       with: { user: { columns: { name: true } } },
     })
@@ -161,12 +161,12 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
  * Get comments with nested replies and reactions for a post
  *
  * @param postId - Post ID to fetch comments for
- * @param memberId - Member ID to check for reactions (optional)
+ * @param principalId - Principal ID to check for reactions (optional)
  * @returns Result containing nested comment tree or an error
  */
 export async function getCommentsWithReplies(
   postId: PostId,
-  memberId?: MemberId
+  principalId?: PrincipalId
 ): Promise<CommentTreeNode[]> {
   // Verify post exists and belongs to organization
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -208,7 +208,7 @@ export async function getCommentsWithReplies(
     ...c,
     authorName: c.author?.user?.name ?? null,
   }))
-  const commentTree = buildCommentTree(commentsWithAuthor, memberId)
+  const commentTree = buildCommentTree(commentsWithAuthor, principalId)
 
   return commentTree
 }
@@ -263,9 +263,9 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Owner filter
   if (ownerId === null) {
-    conditions.push(sql`${posts.ownerMemberId} IS NULL`)
+    conditions.push(sql`${posts.ownerPrincipalId} IS NULL`)
   } else if (ownerId) {
-    conditions.push(eq(posts.ownerMemberId, ownerId as MemberId))
+    conditions.push(eq(posts.ownerPrincipalId, ownerId as PrincipalId))
   }
 
   // Search filter

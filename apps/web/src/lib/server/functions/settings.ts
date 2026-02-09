@@ -29,7 +29,7 @@ import {
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { requireAuth } from './auth-helpers'
 import { getSession } from './auth'
-import { db, member, user, invitation, eq, ne } from '@/lib/server/db'
+import { db, principal, user, invitation, eq, ne } from '@/lib/server/db'
 
 // ============================================
 // Read Operations
@@ -70,15 +70,15 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 
     const members = await db
       .select({
-        id: member.id,
-        role: member.role,
-        userId: member.userId,
+        id: principal.id,
+        role: principal.role,
+        userId: principal.userId,
         userName: user.name,
         userEmail: user.email,
       })
-      .from(member)
-      .innerJoin(user, eq(member.userId, user.id))
-      .where(ne(member.role, 'user'))
+      .from(principal)
+      .innerJoin(user, eq(principal.userId, user.id))
+      .where(ne(principal.role, 'user'))
 
     const pendingInvitations = await db.query.invitation.findMany({
       where: eq(invitation.status, 'pending'),

@@ -28,7 +28,7 @@ import {
   toUuid,
   type CommentId,
   type PostId,
-  type MemberId,
+  type PrincipalId,
   type UserId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
@@ -105,13 +105,13 @@ async function hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
  * Dispatches a comment.created event for webhooks, Slack, etc.
  *
  * @param input - Comment creation data
- * @param author - Author information with memberId, userId, name, email, and role
+ * @param author - Author information with principalId, userId, name, email, and role
  * @returns Result containing the created comment or an error
  */
 export async function createComment(
   input: CreateCommentInput,
   author: {
-    memberId: MemberId
+    principalId: PrincipalId
     userId: UserId
     name: string
     email: string
@@ -164,14 +164,14 @@ export async function createComment(
       postId: input.postId,
       content: input.content.trim(),
       parentId: input.parentId || null,
-      memberId: author.memberId,
+      principalId: author.principalId,
       isTeamMember,
     })
     .returning()
 
   // Auto-subscribe commenter to the post
-  if (author.memberId) {
-    await subscribeToPost(author.memberId, input.postId, 'comment')
+  if (author.principalId) {
+    await subscribeToPost(author.principalId, input.postId, 'comment')
   }
 
   // Dispatch comment.created event for webhooks, Slack, etc.
@@ -204,13 +204,13 @@ export async function createComment(
  *
  * @param id - Comment ID to update
  * @param input - Update data
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns Result containing the updated comment or an error
  */
 export async function updateComment(
   id: CommentId,
   input: UpdateCommentInput,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<Comment> {
   // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
@@ -229,7 +229,7 @@ export async function updateComment(
   }
 
   // Authorization check - user must be comment author or team member
-  const isAuthor = existingComment.memberId === actor.memberId
+  const isAuthor = existingComment.principalId === actor.principalId
   const isTeamMember = ['admin', 'member'].includes(actor.role)
 
   if (!isAuthor && !isTeamMember) {
@@ -274,12 +274,12 @@ export async function updateComment(
  * Note: Deleting a comment will cascade delete all replies due to database constraints
  *
  * @param id - Comment ID to delete
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns Result indicating success or an error
  */
 export async function deleteComment(
   id: CommentId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
   // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
@@ -298,7 +298,7 @@ export async function deleteComment(
   }
 
   // Authorization check - user must be comment author or team member
-  const isAuthor = existingComment.memberId === actor.memberId
+  const isAuthor = existingComment.principalId === actor.principalId
   const isTeamMember = ['admin', 'member'].includes(actor.role)
 
   if (!isAuthor && !isTeamMember) {
@@ -362,12 +362,12 @@ export async function getCommentById(
  * Includes reaction counts and whether the current user has reacted.
  *
  * @param postId - Post ID to fetch comments for
- * @param memberId - Member ID for tracking reactions (optional)
+ * @param principalId - Principal ID for tracking reactions (optional)
  * @returns Result containing threaded comments or an error
  */
 export async function getCommentsByPost(
   postId: PostId,
-  memberId?: MemberId
+  principalId?: PrincipalId
 ): Promise<CommentThread[]> {
   // Verify post exists
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -398,19 +398,19 @@ export async function getCommentsByPost(
     id: comment.id,
     postId: comment.postId,
     parentId: comment.parentId,
-    memberId: comment.memberId,
+    principalId: comment.principalId,
     authorName: comment.author?.user?.name ?? null,
     content: comment.content,
     isTeamMember: comment.isTeamMember,
     createdAt: comment.createdAt,
     reactions: comment.reactions.map((r) => ({
       emoji: r.emoji,
-      memberId: r.memberId,
+      principalId: r.principalId,
     })),
   }))
 
   // Build comment tree with reaction aggregation
-  const commentTree = buildCommentTree(formattedComments, memberId)
+  const commentTree = buildCommentTree(formattedComments, principalId)
 
   return commentTree as CommentThread[]
 }
@@ -427,13 +427,13 @@ export async function getCommentsByPost(
  *
  * @param commentId - Comment ID to react to
  * @param emoji - Emoji to add
- * @param memberId - Member ID (required - auth only)
+ * @param principalId - Principal ID (required - auth only)
  * @returns Result containing reaction status or an error
  */
 export async function addReaction(
   commentId: CommentId,
   emoji: string,
-  memberId: MemberId
+  principalId: PrincipalId
 ): Promise<ReactionResult> {
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
@@ -456,7 +456,7 @@ export async function addReaction(
     .insert(commentReactions)
     .values({
       commentId,
-      memberId,
+      principalId,
       emoji,
     })
     .onConflictDoNothing()
@@ -472,9 +472,9 @@ export async function addReaction(
   const aggregatedReactions = aggregateReactions(
     reactions.map((r) => ({
       emoji: r.emoji,
-      memberId: r.memberId,
+      principalId: r.principalId,
     })),
-    memberId
+    principalId
   )
 
   return { added, reactions: aggregatedReactions }
@@ -487,13 +487,13 @@ export async function addReaction(
  *
  * @param commentId - Comment ID to remove reaction from
  * @param emoji - Emoji to remove
- * @param memberId - Member ID (required - auth only)
+ * @param principalId - Principal ID (required - auth only)
  * @returns Result containing reaction status or an error
  */
 export async function removeReaction(
   commentId: CommentId,
   emoji: string,
-  memberId: MemberId
+  principalId: PrincipalId
 ): Promise<ReactionResult> {
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
@@ -517,7 +517,7 @@ export async function removeReaction(
     .where(
       and(
         eq(commentReactions.commentId, commentId),
-        eq(commentReactions.memberId, memberId),
+        eq(commentReactions.principalId, principalId),
         eq(commentReactions.emoji, emoji)
       )
     )
@@ -530,9 +530,9 @@ export async function removeReaction(
   const aggregatedReactions = aggregateReactions(
     reactions.map((r) => ({
       emoji: r.emoji,
-      memberId: r.memberId,
+      principalId: r.principalId,
     })),
-    memberId
+    principalId
   )
 
   return { added: false, reactions: aggregatedReactions }
@@ -545,13 +545,13 @@ export async function removeReaction(
  *
  * @param commentId - Comment ID to react to
  * @param emoji - Emoji to toggle
- * @param memberId - Member ID for tracking reactions (required - auth only)
+ * @param principalId - Principal ID for tracking reactions (required - auth only)
  * @returns Result containing reaction status or an error
  */
 export async function toggleReaction(
   commentId: CommentId,
   emoji: string,
-  memberId: MemberId
+  principalId: PrincipalId
 ): Promise<ReactionResult> {
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
@@ -570,7 +570,7 @@ export async function toggleReaction(
   }
 
   const commentUuid = toUuid(commentId)
-  const memberUuid = toUuid(memberId)
+  const principalUuid = toUuid(principalId)
   const reactionId = toUuid(createId('reaction'))
 
   // Atomic toggle: delete if exists, insert if not
@@ -579,7 +579,7 @@ export async function toggleReaction(
     WITH existing AS (
       SELECT id FROM comment_reactions
       WHERE comment_id = ${commentUuid}
-        AND member_id = ${memberUuid}
+        AND principal_id = ${principalUuid}
         AND emoji = ${emoji}
     ),
     deleted AS (
@@ -588,10 +588,10 @@ export async function toggleReaction(
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO comment_reactions (id, comment_id, member_id, emoji, created_at)
-      SELECT ${reactionId}::uuid, ${commentUuid}, ${memberUuid}, ${emoji}, NOW()
+      INSERT INTO comment_reactions (id, comment_id, principal_id, emoji, created_at)
+      SELECT ${reactionId}::uuid, ${commentUuid}, ${principalUuid}, ${emoji}, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
-      ON CONFLICT (comment_id, member_id, emoji) DO NOTHING
+      ON CONFLICT (comment_id, principal_id, emoji) DO NOTHING
       RETURNING id
     )
     SELECT
@@ -610,9 +610,9 @@ export async function toggleReaction(
   const aggregatedReactions = aggregateReactions(
     reactions.map((r) => ({
       emoji: r.emoji,
-      memberId: r.memberId,
+      principalId: r.principalId,
     })),
-    memberId
+    principalId
   )
 
   return { added, reactions: aggregatedReactions }
@@ -627,12 +627,12 @@ export async function toggleReaction(
  * User can edit if: they are the author AND no team member has replied
  *
  * @param commentId - Comment ID to check
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns Result containing permission check result
  */
 export async function canEditComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<CommentPermissionCheckResult> {
   // Get the comment
   const comment = await db.query.comments.findFirst({
@@ -654,7 +654,7 @@ export async function canEditComment(
   }
 
   // Must be the author
-  if (comment.memberId !== actor.memberId) {
+  if (comment.principalId !== actor.principalId) {
     return { allowed: false, reason: 'You can only edit your own comments' }
   }
 
@@ -675,12 +675,12 @@ export async function canEditComment(
  * User can delete if: they are the author AND no team member has replied
  *
  * @param commentId - Comment ID to check
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns Result containing permission check result
  */
 export async function canDeleteComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<CommentPermissionCheckResult> {
   // Get the comment
   const comment = await db.query.comments.findFirst({
@@ -702,7 +702,7 @@ export async function canDeleteComment(
   }
 
   // Must be the author
-  if (comment.memberId !== actor.memberId) {
+  if (comment.principalId !== actor.principalId) {
     return { allowed: false, reason: 'You can only delete your own comments' }
   }
 
@@ -724,13 +724,13 @@ export async function canDeleteComment(
  *
  * @param commentId - Comment ID to edit
  * @param content - New content
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns Result containing updated comment or error
  */
 export async function userEditComment(
   commentId: CommentId,
   content: string,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<Comment> {
   // Check permission first
   const permResult = await canEditComment(commentId, actor)
@@ -755,10 +755,10 @@ export async function userEditComment(
   }
 
   // Record edit history (always record for comments)
-  if (actor.memberId) {
+  if (actor.principalId) {
     await db.insert(commentEditHistory).values({
       commentId: commentId,
-      editorMemberId: actor.memberId,
+      editorPrincipalId: actor.principalId,
       previousContent: existingComment.content,
     })
   }
@@ -784,12 +784,12 @@ export async function userEditComment(
  * Sets deletedAt timestamp, shows placeholder text in threads
  *
  * @param commentId - Comment ID to delete
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns Result indicating success or error
  */
 export async function softDeleteComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
   // Check permission first
   const permResult = await canDeleteComment(commentId, actor)
@@ -876,12 +876,12 @@ export async function canPinComment(commentId: CommentId): Promise<{
  * - The actor has permission (admin or member role)
  *
  * @param commentId - Comment ID to pin
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  * @returns The updated post ID
  */
 export async function pinComment(
   commentId: CommentId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<{ postId: PostId }> {
   // Only team members can pin comments
   if (!['admin', 'member'].includes(actor.role)) {
@@ -918,11 +918,11 @@ export async function pinComment(
  * Unpin the currently pinned comment from a post
  *
  * @param postId - Post ID to unpin the comment from
- * @param actor - Actor information with memberId and role
+ * @param actor - Actor information with principalId and role
  */
 export async function unpinComment(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
   // Only team members can unpin comments
   if (!['admin', 'member'].includes(actor.role)) {

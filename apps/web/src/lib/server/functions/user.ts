@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type UserId, type MemberId } from '@quackback/ids'
+import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from './auth'
 import { requireAuth } from './auth-helpers'
 import { getCurrentUserRole } from './workspace'
-import { db, user, member, eq } from '@/lib/server/db'
+import { db, user, principal, eq } from '@/lib/server/db'
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -83,15 +83,15 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
         throw new Error('User not found')
       }
 
-      // Get member record to determine userType
-      const memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, session.user.id as UserId),
+      // Get principal record to determine userType
+      const principalRecord = await db.query.principal.findFirst({
+        where: eq(principal.userId, session.user.id as UserId),
         columns: { role: true },
       })
 
-      const memberRole = memberRecord?.role
-      const userType: 'team' | 'portal' | undefined = memberRole
-        ? memberRole === 'user'
+      const principalRole = principalRecord?.role
+      const userType: 'team' | 'portal' | undefined = principalRole
+        ? principalRole === 'user'
           ? 'portal'
           : 'team'
         : undefined
@@ -226,15 +226,15 @@ export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).ha
     try {
       const ctx = await requireAuth()
 
-      const memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, ctx.user.id as UserId),
+      const principalRecord = await db.query.principal.findFirst({
+        where: eq(principal.userId, ctx.user.id as UserId),
       })
 
-      if (!memberRecord) {
+      if (!principalRecord) {
         throw new Error('You must be a member')
       }
 
-      const preferences = await getNotificationPreferences(memberRecord.id as MemberId)
+      const preferences = await getNotificationPreferences(principalRecord.id as PrincipalId)
       console.log(`[fn:user] getNotificationPreferencesFn: fetched`)
       return preferences
     } catch (error) {
@@ -260,11 +260,11 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
         const ctx = await requireAuth()
         const { emailStatusChange, emailNewComment, emailMuted } = data
 
-        const memberRecord = await db.query.member.findFirst({
-          where: eq(member.userId, ctx.user.id as UserId),
+        const principalRecord = await db.query.principal.findFirst({
+          where: eq(principal.userId, ctx.user.id as UserId),
         })
 
-        if (!memberRecord) {
+        if (!principalRecord) {
           throw new Error('You must be a member')
         }
 
@@ -289,7 +289,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
         }
 
         const preferences = await updateNotificationPreferences(
-          memberRecord.id as MemberId,
+          principalRecord.id as PrincipalId,
           updates
         )
         console.log(`[fn:user] updateNotificationPreferencesFn: updated`)

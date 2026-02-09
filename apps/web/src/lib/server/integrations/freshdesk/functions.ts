@@ -39,7 +39,7 @@ export const saveFreshdeskKeyFn = createServerFn({ method: 'POST' })
     const helpdesk = (await response.json()) as { name?: string }
 
     await saveIntegration('freshdesk', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.apiKey,
       config: {
         subdomain: data.subdomain,

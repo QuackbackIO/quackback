@@ -5,14 +5,14 @@ import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useCreateComment } from '@/lib/client/mutations'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
-import type { CommentId, PostId, MemberId } from '@quackback/ids'
+import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
 
 interface AuthCommentsSectionProps {
   postId: PostId
   comments: PublicCommentView[]
   /** Server-determined: user is authenticated member who can comment */
   allowCommenting?: boolean
-  user?: { name: string | null; email: string; memberId?: MemberId }
+  user?: { name: string | null; email: string; principalId?: PrincipalId }
   /** ID of the pinned comment (for showing pinned indicator) */
   pinnedCommentId?: string | null
   // Admin mode props
@@ -70,7 +70,7 @@ export function AuthCommentsSection({
 
   // User info from session, falling back to server-provided user
   const userData = user
-    ? { name: user.name ?? null, email: user.email ?? '', memberId: serverUser?.memberId }
+    ? { name: user.name ?? null, email: user.email ?? '', principalId: serverUser?.principalId }
     : serverUser
 
   // Use mutation hook with optimistic updates

@@ -46,7 +46,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             content: comment.content,
             authorName: comment.authorName,
             authorEmail: comment.authorEmail,
-            memberId: comment.memberId,
+            principalId: comment.principalId,
             isTeamMember: comment.isTeamMember,
             createdAt: comment.createdAt.toISOString(),
             deletedAt: comment.deletedAt?.toISOString() ?? null,
@@ -64,7 +64,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           const { commentId } = params
@@ -85,23 +85,23 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
 
           // Import service and get member details
           const { updateComment } = await import('@/lib/server/domains/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/server/db')
+          const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for role and author name
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.id, memberId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, principalId),
             with: { user: { columns: { name: true } } },
           })
 
           const result = await updateComment(
             commentId as CommentId,
             { content: parsed.data.content },
-            { memberId, role: (memberRecord?.role as 'admin' | 'member' | 'user') ?? 'user' }
+            { principalId, role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user' }
           )
 
           // Resolve author name from the comment's member->user relation
-          const commentMember = await db.query.member.findFirst({
-            where: eq(member.id, result.memberId),
+          const commentMember = await db.query.principal.findFirst({
+            where: eq(principal.id, result.principalId),
             with: { user: { columns: { name: true } } },
           })
 
@@ -111,7 +111,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             parentId: result.parentId,
             content: result.content,
             authorName: commentMember?.user?.name ?? null,
-            memberId: result.memberId,
+            principalId: result.principalId,
             isTeamMember: result.isTeamMember,
             createdAt: result.createdAt.toISOString(),
           })
@@ -128,7 +128,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           const { commentId } = params
@@ -139,16 +139,16 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
 
           // Import service and get member details
           const { deleteComment } = await import('@/lib/server/domains/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/server/db')
+          const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for role
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.id, memberId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, principalId),
           })
 
           await deleteComment(commentId as CommentId, {
-            memberId,
-            role: (memberRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+            principalId,
+            role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
           })
 
           return noContentResponse()

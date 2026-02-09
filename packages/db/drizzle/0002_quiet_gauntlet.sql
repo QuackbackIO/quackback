@@ -1,1 +1,0 @@
-ALTER TABLE "settings" ADD COLUMN "developer_config" text;

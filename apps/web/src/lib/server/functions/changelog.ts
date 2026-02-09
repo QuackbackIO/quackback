@@ -78,7 +78,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
         publishState: data.publishState as PublishState,
       },
       {
-        memberId: auth.member.id,
+        principalId: auth.principal.id,
         name: authorName,
       }
     )

@@ -57,8 +57,8 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
     statusId: post.statusId,
     voteCount: post.voteCount,
     authorName: post.authorName,
-    memberId: post.memberId as `member_${string}` | null,
-    authorAvatarUrl: (post.memberId && post.avatarUrls?.[post.memberId]) || null,
+    principalId: post.principalId as `principal_${string}` | null,
+    authorAvatarUrl: (post.principalId && post.avatarUrls?.[post.principalId]) || null,
     createdAt: post.createdAt,
     board: post.board,
     tags: post.tags,
@@ -67,21 +67,21 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
       id: c.id as CommentId,
       content: c.content,
       authorName: c.authorName,
-      memberId: c.memberId,
+      principalId: c.principalId,
       createdAt: c.createdAt,
       parentId: c.parentId as CommentId | null,
       isTeamMember: c.isTeamMember,
-      avatarUrl: (c.memberId && post.avatarUrls?.[c.memberId]) || null,
+      avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
       reactions: c.reactions,
       replies: c.replies.map((r) => ({
         id: r.id as CommentId,
         content: r.content,
         authorName: r.authorName,
-        memberId: r.memberId,
+        principalId: r.principalId,
         createdAt: r.createdAt,
         parentId: r.parentId as CommentId | null,
         isTeamMember: r.isTeamMember,
-        avatarUrl: (r.memberId && post.avatarUrls?.[r.memberId]) || null,
+        avatarUrl: (r.principalId && post.avatarUrls?.[r.principalId]) || null,
         reactions: r.reactions,
         replies: [],
       })),
@@ -185,7 +185,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
           <PostContentSection
             post={portalPost}
             currentStatus={currentStatus}
-            authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
+            authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
           />
 
           {/* Metadata sidebar */}
@@ -196,7 +196,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
               status={currentStatus}
               board={post.board}
               authorName={post.authorName}
-              authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
+              authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
               createdAt={new Date(post.createdAt)}
               tags={post.tags}
               roadmaps={postRoadmaps}

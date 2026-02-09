@@ -6,7 +6,7 @@ import { useUsersFilters } from '@/components/admin/users/use-users-filters'
 import { usePortalUsers, useUserDetail, flattenUsers } from '@/lib/client/hooks/use-users-queries'
 import { useRemovePortalUser } from '@/lib/client/mutations'
 import type { PortalUserListResultView } from '@/lib/server/domains/users'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 interface UsersContainerProps {
   initialUsers: PortalUserListResultView
@@ -34,7 +34,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
 
   // Server state - Selected user detail
   const { data: selectedUser, isLoading: isLoadingUser } = useUserDetail({
-    memberId: selectedUserId as MemberId | null,
+    principalId: selectedUserId as PrincipalId | null,
   })
 
   // Mutations
@@ -49,7 +49,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
 
   const handleRemoveUser = () => {
     if (!selectedUserId) return
-    removePortalUser.mutate(selectedUserId as MemberId, {
+    removePortalUser.mutate(selectedUserId as PrincipalId, {
       onSuccess: () => {
         setSelectedUserId(null)
       },

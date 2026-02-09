@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
-import { type BoardId, type TagId, type MemberId } from '@quackback/ids'
+import { type BoardId, type TagId, type PrincipalId } from '@quackback/ids'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
@@ -22,14 +22,14 @@ export const Route = createFileRoute('/admin/feedback/')({
   }),
   errorComponent: FeedbackErrorComponent,
   loader: async ({ deps, context }) => {
-    // Protected route - user and member are guaranteed by parent's beforeLoad auth check
+    // Protected route - user and principal are guaranteed by parent's beforeLoad auth check
     const {
       user: currentUser,
-      member,
+      principal,
       queryClient,
     } = context as {
       user: NonNullable<typeof context.user>
-      member: NonNullable<typeof context.member>
+      principal: NonNullable<typeof context.principal>
       queryClient: typeof context.queryClient
     }
 
@@ -46,7 +46,8 @@ export const Route = createFileRoute('/admin/feedback/')({
           boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
           statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
           tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
-          ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
+          ownerId:
+            ownerFilterId === 'unassigned' ? null : (ownerFilterId as PrincipalId | undefined),
           search: deps.search,
           dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
           dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
@@ -65,7 +66,7 @@ export const Route = createFileRoute('/admin/feedback/')({
       currentUser: {
         name: currentUser.name,
         email: currentUser.email,
-        memberId: member.id,
+        principalId: principal.id,
       },
     }
   },
@@ -106,7 +107,7 @@ function FeedbackIndexPage() {
       boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
       statusSlugs: statusFilterSlugs.length > 0 ? statusFilterSlugs : undefined,
       tagIds: tagFilterIds.length > 0 ? tagFilterIds : undefined,
-      ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as MemberId | undefined),
+      ownerId: ownerFilterId === 'unassigned' ? null : (ownerFilterId as PrincipalId | undefined),
       search: search.search,
       dateFrom: search.dateFrom ? new Date(search.dateFrom) : undefined,
       dateTo: search.dateTo ? new Date(search.dateTo) : undefined,

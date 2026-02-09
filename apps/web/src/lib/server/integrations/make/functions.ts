@@ -32,7 +32,7 @@ export const saveMakeWebhookFn = createServerFn({ method: 'POST' })
     }
 
     await saveIntegration('make', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.webhookUrl,
       config: { webhookUrl: data.webhookUrl, workspaceName: 'Make' },
     })

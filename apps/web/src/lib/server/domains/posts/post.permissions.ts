@@ -15,7 +15,7 @@ import {
   isNull,
   type Post,
 } from '@/lib/server/db'
-import { toUuid, type PostId, type MemberId, type StatusId } from '@quackback/ids'
+import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult, UserEditPostInput } from './post.types'
@@ -28,13 +28,13 @@ import type { PermissionCheckResult, UserEditPostInput } from './post.types'
  * Check if a user can edit a post
  *
  * @param postId - Post ID to check
- * @param actor - Actor information (memberId, role)
+ * @param actor - Actor information (principalId, role)
  * @param portalConfig - Optional portal config (will fetch if not provided)
  * @returns Permission check result
  */
 export async function canEditPost(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   // Get the post
@@ -57,7 +57,7 @@ export async function canEditPost(
   }
 
   // Must be the author
-  if (post.memberId !== actor.memberId) {
+  if (post.principalId !== actor.principalId) {
     return { allowed: false, reason: 'You can only edit your own posts' }
   }
 
@@ -76,7 +76,7 @@ export async function canEditPost(
       return { allowed: false, reason: 'Cannot edit posts that have received votes' }
     }
 
-    const hasOtherComments = await hasCommentsFromOthers(postId, actor.memberId)
+    const hasOtherComments = await hasCommentsFromOthers(postId, actor.principalId)
     if (hasOtherComments) {
       return {
         allowed: false,
@@ -92,13 +92,13 @@ export async function canEditPost(
  * Check if a user can delete a post
  *
  * @param postId - Post ID to check
- * @param actor - Actor information (memberId, role)
+ * @param actor - Actor information (principalId, role)
  * @param portalConfig - Optional portal config (will fetch if not provided)
  * @returns Permission check result
  */
 export async function canDeletePost(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   // Get the post
@@ -121,7 +121,7 @@ export async function canDeletePost(
   }
 
   // Must be the author
-  if (post.memberId !== actor.memberId) {
+  if (post.principalId !== actor.principalId) {
     return { allowed: false, reason: 'You can only delete your own posts' }
   }
 
@@ -159,12 +159,12 @@ export async function canDeletePost(
  * because it queries the post, portal config, and status only once.
  *
  * @param postId - Post ID to check
- * @param actor - Actor information (memberId, role)
+ * @param actor - Actor information (principalId, role)
  * @returns Both edit and delete permission results
  */
 export async function getPostPermissions(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<{
   canEdit: PermissionCheckResult
   canDelete: PermissionCheckResult
@@ -196,7 +196,7 @@ export async function getPostPermissions(
   }
 
   // For regular users, must be the author
-  if (post.memberId !== actor.memberId) {
+  if (post.principalId !== actor.principalId) {
     return {
       canEdit: { allowed: false, reason: 'You can only edit your own posts' },
       canDelete: { allowed: false, reason: 'You can only delete your own posts' },
@@ -244,7 +244,7 @@ export async function getPostPermissions(
     // Single query to get both total count and other-user comment count
     const { totalCount, hasOtherComments } = await getCommentStatsForPermissions(
       postId,
-      actor.memberId
+      actor.principalId
     )
 
     if (needsEditCommentCheck && hasOtherComments) {
@@ -272,13 +272,13 @@ export async function getPostPermissions(
  *
  * @param postId - Post ID to edit
  * @param input - Edit data (title, content, contentJson)
- * @param actor - Actor information (memberId, role)
+ * @param actor - Actor information (principalId, role)
  * @returns Updated post
  */
 export async function userEditPost(
   postId: PostId,
   input: UserEditPostInput,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<Post> {
   // Validate input first (no DB needed)
   if (!input.title?.trim()) {
@@ -312,7 +312,7 @@ export async function userEditPost(
   // Team members (admin, member) can always edit - skip further checks
   if (!['admin', 'member'].includes(actor.role)) {
     // Must be the author
-    if (existingPost.memberId !== actor.memberId) {
+    if (existingPost.principalId !== actor.principalId) {
       throw new ForbiddenError('EDIT_NOT_ALLOWED', 'You can only edit your own posts')
     }
 
@@ -330,7 +330,7 @@ export async function userEditPost(
         throw new ForbiddenError('EDIT_NOT_ALLOWED', 'Cannot edit posts that have received votes')
       }
       // Check for comments from others
-      const hasOtherComments = await hasCommentsFromOthers(postId, actor.memberId)
+      const hasOtherComments = await hasCommentsFromOthers(postId, actor.principalId)
       if (hasOtherComments) {
         throw new ForbiddenError(
           'EDIT_NOT_ALLOWED',
@@ -344,7 +344,7 @@ export async function userEditPost(
   if (config.features.showPublicEditHistory) {
     await db.insert(postEditHistory).values({
       postId: postId,
-      editorMemberId: actor.memberId,
+      editorPrincipalId: actor.principalId,
       previousTitle: existingPost.title,
       previousContent: existingPost.content,
       previousContentJson: existingPost.contentJson,
@@ -375,11 +375,11 @@ export async function userEditPost(
  * Sets deletedAt timestamp, hiding from public views
  *
  * @param postId - Post ID to delete
- * @param actor - Actor information (memberId, role)
+ * @param actor - Actor information (principalId, role)
  */
 export async function softDeletePost(
   postId: PostId,
-  actor: { memberId: MemberId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
   // Fetch post with status + portal config in parallel (eliminates duplicate fetches)
   const [existingPost, config] = await Promise.all([
@@ -402,7 +402,7 @@ export async function softDeletePost(
   // Team members (admin, member) can always delete - skip further checks
   if (!['admin', 'member'].includes(actor.role)) {
     // Must be the author
-    if (existingPost.memberId !== actor.memberId) {
+    if (existingPost.principalId !== actor.principalId) {
       throw new ForbiddenError('DELETE_NOT_ALLOWED', 'You can only delete your own posts')
     }
 
@@ -430,12 +430,12 @@ export async function softDeletePost(
     }
   }
 
-  // Set deletedAt and deletedByMemberId
+  // Set deletedAt and deletedByPrincipalId
   const [updatedPost] = await db
     .update(posts)
     .set({
       deletedAt: new Date(),
-      deletedByMemberId: actor.memberId,
+      deletedByPrincipalId: actor.principalId,
     })
     .where(eq(posts.id, postId))
     .returning()
@@ -464,12 +464,12 @@ export async function restorePost(postId: PostId): Promise<Post> {
     throw new ValidationError('VALIDATION_ERROR', 'Post is not deleted')
   }
 
-  // Clear deletedAt and deletedByMemberId
+  // Clear deletedAt and deletedByPrincipalId
   const [restoredPost] = await db
     .update(posts)
     .set({
       deletedAt: null,
-      deletedByMemberId: null,
+      deletedByPrincipalId: null,
     })
     .where(eq(posts.id, postId))
     .returning()
@@ -520,15 +520,15 @@ async function isDefaultStatus(statusId: StatusId | null): Promise<boolean> {
  */
 async function hasCommentsFromOthers(
   postId: PostId,
-  authorMemberId: MemberId | null | undefined
+  authorPrincipalId: PrincipalId | null | undefined
 ): Promise<boolean> {
-  if (!authorMemberId) return false // Anonymous author can't have "other" comments
+  if (!authorPrincipalId) return false // Anonymous author can't have "other" comments
 
   // Find any comment not from the author and not deleted (LIMIT 1 is faster than COUNT)
   const otherComment = await db.query.comments.findFirst({
     where: and(
       eq(comments.postId, postId),
-      sql`${comments.memberId} != ${authorMemberId}`,
+      sql`${comments.principalId} != ${authorPrincipalId}`,
       isNull(comments.deletedAt)
     ),
   })
@@ -555,16 +555,16 @@ async function getCommentCount(postId: PostId): Promise<number> {
  */
 async function getCommentStatsForPermissions(
   postId: PostId,
-  authorMemberId: MemberId | null | undefined
+  authorPrincipalId: PrincipalId | null | undefined
 ): Promise<{ totalCount: number; hasOtherComments: boolean }> {
   // Use conditional aggregation to get both values in one query
   const postUuid = toUuid(postId)
-  const memberUuid = authorMemberId ? toUuid(authorMemberId) : null
+  const principalUuid = authorPrincipalId ? toUuid(authorPrincipalId) : null
 
   const result = await db.execute(sql`
     SELECT
       COUNT(*) as total_count,
-      COUNT(*) FILTER (WHERE ${comments.memberId} IS NOT NULL AND ${comments.memberId} != ${memberUuid}::uuid) as other_count
+      COUNT(*) FILTER (WHERE ${comments.principalId} IS NOT NULL AND ${comments.principalId} != ${principalUuid}::uuid) as other_count
     FROM ${comments}
     WHERE ${comments.postId} = ${postUuid}::uuid
       AND ${comments.deletedAt} IS NULL

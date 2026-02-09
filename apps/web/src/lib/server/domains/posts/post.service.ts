@@ -13,7 +13,7 @@
  */
 
 import { db, boards, eq, postStatuses, posts, postTags, type Post } from '@/lib/server/db'
-import { type PostId, type MemberId, type UserId } from '@quackback/ids'
+import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { dispatchPostCreated } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
@@ -30,12 +30,12 @@ import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.
  * Dispatches a post.created event for webhooks, Slack, etc.
  *
  * @param input - Post creation data
- * @param author - Author information (memberId, userId, name, email)
+ * @param author - Author information (principalId, userId, name, email)
  * @returns Result containing the created post or an error
  */
 export async function createPost(
   input: CreatePostInput,
-  author: { memberId: MemberId; userId: UserId; name: string; email: string }
+  author: { principalId: PrincipalId; userId: UserId; name: string; email: string }
 ): Promise<CreatePostResult> {
   // Basic validation (also done at action layer, but enforced here for direct service calls)
   const title = input.title?.trim()
@@ -95,7 +95,7 @@ export async function createPost(
       content,
       contentJson: input.contentJson,
       statusId,
-      memberId: author.memberId,
+      principalId: author.principalId,
     })
     .returning()
 
@@ -107,7 +107,7 @@ export async function createPost(
   }
 
   // Auto-subscribe the author to their own post
-  await subscribeToPost(author.memberId, post.id, 'author')
+  await subscribeToPost(author.principalId, post.id, 'author')
 
   // Dispatch post.created event for webhooks, Slack, AI processing, etc.
   await dispatchPostCreated(
@@ -138,13 +138,13 @@ export async function createPost(
  *
  * @param id - Post ID to update
  * @param input - Update data
- * @param responder - Optional responder info for official response (memberId, name)
+ * @param responder - Optional responder info for official response (principalId, name)
  * @returns Result containing the updated post or an error
  */
 export async function updatePost(
   id: PostId,
   input: UpdatePostInput,
-  responder?: { memberId: MemberId; name: string }
+  responder?: { principalId: PrincipalId; name: string }
 ): Promise<Post> {
   // Get existing post
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, id) })
@@ -179,20 +179,20 @@ export async function updatePost(
   if (input.content !== undefined) updateData.content = input.content.trim()
   if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
   if (input.statusId !== undefined) updateData.statusId = input.statusId
-  if (input.ownerMemberId !== undefined) updateData.ownerMemberId = input.ownerMemberId
+  if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
 
   // Handle official response update
   if (input.officialResponse !== undefined) {
     if (input.officialResponse === null || input.officialResponse === '') {
       // Clear the official response
       updateData.officialResponse = null
-      updateData.officialResponseMemberId = null
+      updateData.officialResponsePrincipalId = null
       updateData.officialResponseAt = null
     } else {
       // Set or update official response with member-scoped identity
-      const responseMemberId = input.officialResponseMemberId || responder?.memberId
+      const responsePrincipalId = input.officialResponsePrincipalId || responder?.principalId
       updateData.officialResponse = input.officialResponse
-      updateData.officialResponseMemberId = responseMemberId
+      updateData.officialResponsePrincipalId = responsePrincipalId
       updateData.officialResponseAt = new Date()
     }
   }

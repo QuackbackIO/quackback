@@ -1,44 +1,44 @@
 /**
- * MemberService - Business logic for members
+ * PrincipalService - Business logic for principals
  *
- * Provides member lookup operations.
+ * Provides principal lookup operations.
  */
 
-import { db, eq, sql, member, user, type Member } from '@/lib/server/db'
-import type { MemberId, UserId } from '@quackback/ids'
+import { db, eq, sql, principal, user, type Principal } from '@/lib/server/db'
+import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
-import type { TeamMember } from './member.types'
+import type { TeamMember } from './principal.types'
 
 // Re-export types for backwards compatibility
-export type { TeamMember } from './member.types'
+export type { TeamMember } from './principal.types'
 
 /**
- * Find a member by user ID
+ * Find a principal by user ID
  */
-export async function getMemberByUser(userId: UserId): Promise<Member | null> {
+export async function getMemberByUser(userId: UserId): Promise<Principal | null> {
   try {
-    const foundMember = await db.query.member.findFirst({
-      where: eq(member.userId, userId),
+    const foundMember = await db.query.principal.findFirst({
+      where: eq(principal.userId, userId),
     })
     return foundMember ?? null
   } catch (error) {
-    console.error('Error looking up member:', error)
-    throw new InternalError('DATABASE_ERROR', 'Failed to lookup member', error)
+    console.error('Error looking up principal:', error)
+    throw new InternalError('DATABASE_ERROR', 'Failed to lookup principal', error)
   }
 }
 
 /**
- * Find a member by ID
+ * Find a principal by ID
  */
-export async function getMemberById(memberId: MemberId): Promise<Member | null> {
+export async function getMemberById(principalId: PrincipalId): Promise<Principal | null> {
   try {
-    const foundMember = await db.query.member.findFirst({
-      where: eq(member.id, memberId),
+    const foundMember = await db.query.principal.findFirst({
+      where: eq(principal.id, principalId),
     })
     return foundMember ?? null
   } catch (error) {
-    console.error('Error looking up member:', error)
-    throw new InternalError('DATABASE_ERROR', 'Failed to lookup member', error)
+    console.error('Error looking up principal:', error)
+    throw new InternalError('DATABASE_ERROR', 'Failed to lookup principal', error)
   }
 }
 
@@ -49,16 +49,16 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
   try {
     const teamMembers = await db
       .select({
-        id: member.id,
+        id: principal.id,
         userId: user.id,
         name: user.name,
         email: user.email,
         image: user.image,
-        role: member.role,
-        createdAt: member.createdAt,
+        role: principal.role,
+        createdAt: principal.createdAt,
       })
-      .from(member)
-      .innerJoin(user, eq(member.userId, user.id))
+      .from(principal)
+      .innerJoin(user, eq(principal.userId, user.id))
 
     return teamMembers
   } catch (error) {
@@ -68,16 +68,16 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 }
 
 /**
- * Count all members (no auth required)
+ * Count all principals (no auth required)
  */
 export async function countMembers(): Promise<number> {
   try {
-    const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(member)
+    const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(principal)
 
     return Number(result[0]?.count ?? 0)
   } catch (error) {
-    console.error('Error counting members:', error)
-    throw new InternalError('DATABASE_ERROR', 'Failed to count members', error)
+    console.error('Error counting principals:', error)
+    throw new InternalError('DATABASE_ERROR', 'Failed to count principals', error)
   }
 }
 
@@ -85,22 +85,22 @@ export async function countMembers(): Promise<number> {
  * Update a team member's role
  * @throws ForbiddenError if trying to modify own role
  * @throws ForbiddenError if this would leave no admins
- * @throws NotFoundError if member not found or not a team member
+ * @throws NotFoundError if principal not found or not a team member
  */
 export async function updateMemberRole(
-  memberId: MemberId,
+  principalId: PrincipalId,
   newRole: 'admin' | 'member',
-  actingMemberId: MemberId
+  actingPrincipalId: PrincipalId
 ): Promise<void> {
   // Cannot modify own role
-  if (memberId === actingMemberId) {
+  if (principalId === actingPrincipalId) {
     throw new ForbiddenError('CANNOT_MODIFY_SELF', 'You cannot change your own role')
   }
 
   try {
-    // Find the target member
-    const targetMember = await db.query.member.findFirst({
-      where: eq(member.id, memberId),
+    // Find the target principal
+    const targetMember = await db.query.principal.findFirst({
+      where: eq(principal.id, principalId),
     })
 
     if (!targetMember) {
@@ -116,8 +116,8 @@ export async function updateMemberRole(
     if (targetMember.role === 'admin' && newRole === 'member') {
       const adminCount = await db
         .select({ count: sql<number>`count(*)`.as('count') })
-        .from(member)
-        .where(eq(member.role, 'admin'))
+        .from(principal)
+        .where(eq(principal.role, 'admin'))
 
       if (Number(adminCount[0]?.count ?? 0) <= 1) {
         throw new ForbiddenError('LAST_ADMIN', 'Cannot demote the last admin')
@@ -125,13 +125,13 @@ export async function updateMemberRole(
     }
 
     // Update the role
-    await db.update(member).set({ role: newRole }).where(eq(member.id, memberId))
+    await db.update(principal).set({ role: newRole }).where(eq(principal.id, principalId))
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
       throw error
     }
-    console.error('Error updating member role:', error)
-    throw new InternalError('DATABASE_ERROR', 'Failed to update member role', error)
+    console.error('Error updating principal role:', error)
+    throw new InternalError('DATABASE_ERROR', 'Failed to update principal role', error)
   }
 }
 
@@ -139,21 +139,21 @@ export async function updateMemberRole(
  * Remove a team member (converts them to a portal user)
  * @throws ForbiddenError if trying to remove self
  * @throws ForbiddenError if this would leave no admins
- * @throws NotFoundError if member not found or not a team member
+ * @throws NotFoundError if principal not found or not a team member
  */
 export async function removeTeamMember(
-  memberId: MemberId,
-  actingMemberId: MemberId
+  principalId: PrincipalId,
+  actingPrincipalId: PrincipalId
 ): Promise<void> {
   // Cannot remove self
-  if (memberId === actingMemberId) {
+  if (principalId === actingPrincipalId) {
     throw new ForbiddenError('CANNOT_REMOVE_SELF', 'You cannot remove yourself from the team')
   }
 
   try {
-    // Find the target member
-    const targetMember = await db.query.member.findFirst({
-      where: eq(member.id, memberId),
+    // Find the target principal
+    const targetMember = await db.query.principal.findFirst({
+      where: eq(principal.id, principalId),
     })
 
     if (!targetMember) {
@@ -169,8 +169,8 @@ export async function removeTeamMember(
     if (targetMember.role === 'admin') {
       const adminCount = await db
         .select({ count: sql<number>`count(*)`.as('count') })
-        .from(member)
-        .where(eq(member.role, 'admin'))
+        .from(principal)
+        .where(eq(principal.role, 'admin'))
 
       if (Number(adminCount[0]?.count ?? 0) <= 1) {
         throw new ForbiddenError('LAST_ADMIN', 'Cannot remove the last admin')
@@ -178,7 +178,7 @@ export async function removeTeamMember(
     }
 
     // Convert to portal user by setting role to 'user'
-    await db.update(member).set({ role: 'user' }).where(eq(member.id, memberId))
+    await db.update(principal).set({ role: 'user' }).where(eq(principal.id, principalId))
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
       throw error

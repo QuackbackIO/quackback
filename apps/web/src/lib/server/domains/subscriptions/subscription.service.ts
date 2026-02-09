@@ -25,11 +25,11 @@ import {
   notificationPreferences,
   unsubscribeTokens,
   posts,
-  member,
+  principal,
   user,
   type Transaction,
 } from '@/lib/server/db'
-import type { MemberId, PostId } from '@quackback/ids'
+import type { PrincipalId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
 import type {
   SubscriptionReason,
@@ -58,13 +58,13 @@ interface SubscribeOptions {
 /**
  * Subscribe a member to a post (idempotent - won't duplicate)
  *
- * @param memberId - The member ID to subscribe
+ * @param principalId - The principal ID to subscribe
  * @param postId - The post ID to subscribe to
  * @param reason - Why the subscription was created
  * @param options - Optional existing database transaction and notification level
  */
 export async function subscribeToPost(
-  memberId: MemberId,
+  principalId: PrincipalId,
   postId: PostId,
   reason: SubscriptionReason,
   options?: SubscribeOptions
@@ -79,7 +79,7 @@ export async function subscribeToPost(
     .insert(postSubscriptions)
     .values({
       postId,
-      memberId,
+      principalId,
       reason,
       notifyComments,
       notifyStatusChanges,
@@ -90,22 +90,24 @@ export async function subscribeToPost(
 /**
  * Unsubscribe a member from a post
  */
-export async function unsubscribeFromPost(memberId: MemberId, postId: PostId): Promise<void> {
+export async function unsubscribeFromPost(principalId: PrincipalId, postId: PostId): Promise<void> {
   await db
     .delete(postSubscriptions)
-    .where(and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)))
+    .where(
+      and(eq(postSubscriptions.principalId, principalId), eq(postSubscriptions.postId, postId))
+    )
 }
 
 /**
  * Update subscription notification level
  */
 export async function updateSubscriptionLevel(
-  memberId: MemberId,
+  principalId: PrincipalId,
   postId: PostId,
   level: SubscriptionLevel
 ): Promise<void> {
   if (level === 'none') {
-    await unsubscribeFromPost(memberId, postId)
+    await unsubscribeFromPost(principalId, postId)
     return
   }
 
@@ -119,14 +121,16 @@ export async function updateSubscriptionLevel(
       notifyStatusChanges,
       updatedAt: new Date(),
     })
-    .where(and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)))
+    .where(
+      and(eq(postSubscriptions.principalId, principalId), eq(postSubscriptions.postId, postId))
+    )
 }
 
 /**
  * Get subscription status for a member on a post
  */
 export async function getSubscriptionStatus(
-  memberId: MemberId,
+  principalId: PrincipalId,
   postId: PostId
 ): Promise<{
   subscribed: boolean
@@ -136,7 +140,10 @@ export async function getSubscriptionStatus(
   level: SubscriptionLevel
 }> {
   const subscription = await db.query.postSubscriptions.findFirst({
-    where: and(eq(postSubscriptions.memberId, memberId), eq(postSubscriptions.postId, postId)),
+    where: and(
+      eq(postSubscriptions.principalId, principalId),
+      eq(postSubscriptions.postId, postId)
+    ),
   })
 
   if (!subscription) {
@@ -187,21 +194,21 @@ export async function getSubscribersForEvent(
 
   const rows = await db
     .select({
-      memberId: postSubscriptions.memberId,
+      principalId: postSubscriptions.principalId,
       reason: postSubscriptions.reason,
       notifyComments: postSubscriptions.notifyComments,
       notifyStatusChanges: postSubscriptions.notifyStatusChanges,
-      userId: member.userId,
+      userId: principal.userId,
       email: user.email,
       name: user.name,
     })
     .from(postSubscriptions)
-    .innerJoin(member, eq(postSubscriptions.memberId, member.id))
-    .innerJoin(user, eq(member.userId, user.id))
+    .innerJoin(principal, eq(postSubscriptions.principalId, principal.id))
+    .innerJoin(user, eq(principal.userId, user.id))
     .where(and(eq(postSubscriptions.postId, postId), eq(notifyColumn, true)))
 
   return rows.map((row) => ({
-    memberId: row.memberId,
+    principalId: row.principalId,
     userId: row.userId,
     email: row.email,
     name: row.name,
@@ -214,7 +221,7 @@ export async function getSubscribersForEvent(
 /**
  * Get all subscriptions for a member
  */
-export async function getMemberSubscriptions(memberId: MemberId): Promise<Subscription[]> {
+export async function getMemberSubscriptions(principalId: PrincipalId): Promise<Subscription[]> {
   const rows = await db
     .select({
       id: postSubscriptions.id,
@@ -227,7 +234,7 @@ export async function getMemberSubscriptions(memberId: MemberId): Promise<Subscr
     })
     .from(postSubscriptions)
     .innerJoin(posts, eq(postSubscriptions.postId, posts.id))
-    .where(eq(postSubscriptions.memberId, memberId))
+    .where(eq(postSubscriptions.principalId, principalId))
 
   return rows.map((row) => ({
     id: row.id,
@@ -244,10 +251,10 @@ export async function getMemberSubscriptions(memberId: MemberId): Promise<Subscr
  * Get notification preferences for a member (creates defaults if not exists)
  */
 export async function getNotificationPreferences(
-  memberId: MemberId
+  principalId: PrincipalId
 ): Promise<NotificationPreferencesData> {
   const prefs = await db.query.notificationPreferences.findFirst({
-    where: eq(notificationPreferences.memberId, memberId),
+    where: eq(notificationPreferences.principalId, principalId),
   })
 
   if (prefs) {
@@ -277,24 +284,24 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
  * Returns a Map with defaults filled in for members without preferences.
  */
 export async function batchGetNotificationPreferences(
-  memberIds: MemberId[]
-): Promise<Map<MemberId, NotificationPreferencesData>> {
-  if (memberIds.length === 0) return new Map()
+  principalIds: PrincipalId[]
+): Promise<Map<PrincipalId, NotificationPreferencesData>> {
+  if (principalIds.length === 0) return new Map()
 
   const rows = await db
     .select({
-      memberId: notificationPreferences.memberId,
+      principalId: notificationPreferences.principalId,
       emailStatusChange: notificationPreferences.emailStatusChange,
       emailNewComment: notificationPreferences.emailNewComment,
       emailMuted: notificationPreferences.emailMuted,
     })
     .from(notificationPreferences)
-    .where(inArray(notificationPreferences.memberId, memberIds))
+    .where(inArray(notificationPreferences.principalId, principalIds))
 
   // Build map with found preferences, then fill defaults
-  const map = new Map<MemberId, NotificationPreferencesData>(
+  const map = new Map<PrincipalId, NotificationPreferencesData>(
     rows.map((row) => [
-      row.memberId,
+      row.principalId,
       {
         emailStatusChange: row.emailStatusChange,
         emailNewComment: row.emailNewComment,
@@ -303,7 +310,7 @@ export async function batchGetNotificationPreferences(
     ])
   )
 
-  for (const id of memberIds) {
+  for (const id of principalIds) {
     if (!map.has(id)) {
       map.set(id, DEFAULT_NOTIFICATION_PREFS)
     }
@@ -316,11 +323,11 @@ export async function batchGetNotificationPreferences(
  * Update notification preferences for a member (upsert)
  */
 export async function updateNotificationPreferences(
-  memberId: MemberId,
+  principalId: PrincipalId,
   preferences: Partial<NotificationPreferencesData>
 ): Promise<NotificationPreferencesData> {
   const existing = await db.query.notificationPreferences.findFirst({
-    where: eq(notificationPreferences.memberId, memberId),
+    where: eq(notificationPreferences.principalId, principalId),
   })
 
   if (existing) {
@@ -330,7 +337,7 @@ export async function updateNotificationPreferences(
         ...preferences,
         updatedAt: new Date(),
       })
-      .where(eq(notificationPreferences.memberId, memberId))
+      .where(eq(notificationPreferences.principalId, principalId))
       .returning()
 
     return {
@@ -342,7 +349,7 @@ export async function updateNotificationPreferences(
     const [created] = await db
       .insert(notificationPreferences)
       .values({
-        memberId,
+        principalId,
         emailStatusChange: preferences.emailStatusChange ?? true,
         emailNewComment: preferences.emailNewComment ?? true,
         emailMuted: preferences.emailMuted ?? false,
@@ -361,7 +368,7 @@ export async function updateNotificationPreferences(
  * Generate an unsubscribe token for email links
  */
 export async function generateUnsubscribeToken(
-  memberId: MemberId,
+  principalId: PrincipalId,
   postId: PostId | null,
   action: 'unsubscribe_post' | 'unsubscribe_all'
 ): Promise<string> {
@@ -370,7 +377,7 @@ export async function generateUnsubscribeToken(
 
   await db.insert(unsubscribeTokens).values({
     token,
-    memberId,
+    principalId,
     postId,
     action,
     expiresAt,
@@ -382,19 +389,19 @@ export async function generateUnsubscribeToken(
 export type UnsubscribeAction = 'unsubscribe_post' | 'unsubscribe_all'
 
 /**
- * Batch generate unsubscribe tokens for multiple members.
- * Returns a Map of memberId -> token.
+ * Batch generate unsubscribe tokens for multiple principals.
+ * Returns a Map of principalId -> token.
  */
 export async function batchGenerateUnsubscribeTokens(
-  entries: Array<{ memberId: MemberId; postId: PostId; action: UnsubscribeAction }>
-): Promise<Map<MemberId, string>> {
+  entries: Array<{ principalId: PrincipalId; postId: PostId; action: UnsubscribeAction }>
+): Promise<Map<PrincipalId, string>> {
   if (entries.length === 0) return new Map()
 
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
   const tokens = entries.map((e) => ({
     token: randomUUID(),
-    memberId: e.memberId,
+    principalId: e.principalId,
     postId: e.postId,
     action: e.action,
     expiresAt,
@@ -402,7 +409,7 @@ export async function batchGenerateUnsubscribeTokens(
 
   await db.insert(unsubscribeTokens).values(tokens)
 
-  return new Map(tokens.map((t) => [t.memberId, t.token]))
+  return new Map(tokens.map((t) => [t.principalId, t.token]))
 }
 
 /**
@@ -411,7 +418,7 @@ export async function batchGenerateUnsubscribeTokens(
  */
 export async function processUnsubscribeToken(token: string): Promise<{
   action: string
-  memberId: MemberId
+  principalId: PrincipalId
   postId: PostId | null
   post?: { title: string; boardSlug: string }
 } | null> {
@@ -437,12 +444,12 @@ export async function processUnsubscribeToken(token: string): Promise<{
     .set({ usedAt: new Date() })
     .where(eq(unsubscribeTokens.id, tokenRecord.id))
 
-  // Get member's organization for workspace context
-  const memberRecord = await db.query.member.findFirst({
-    where: eq(member.id, tokenRecord.memberId),
+  // Get principal's organization for workspace context
+  const principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.id, tokenRecord.principalId),
   })
 
-  if (!memberRecord) {
+  if (!principalRecord) {
     return null
   }
 
@@ -463,17 +470,17 @@ export async function processUnsubscribeToken(token: string): Promise<{
   switch (tokenRecord.action) {
     case 'unsubscribe_post':
       if (tokenRecord.postId) {
-        await unsubscribeFromPost(tokenRecord.memberId, tokenRecord.postId)
+        await unsubscribeFromPost(tokenRecord.principalId, tokenRecord.postId)
       }
       break
     case 'unsubscribe_all':
-      await updateNotificationPreferences(tokenRecord.memberId, { emailMuted: true })
+      await updateNotificationPreferences(tokenRecord.principalId, { emailMuted: true })
       break
   }
 
   return {
     action: tokenRecord.action,
-    memberId: tokenRecord.memberId,
+    principalId: tokenRecord.principalId,
     postId: tokenRecord.postId,
     post: postDetails,
   }

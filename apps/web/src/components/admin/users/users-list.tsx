@@ -125,7 +125,7 @@ export function UsersList({
       }
 
       const currentIndex = selectedUserId
-        ? users.findIndex((u) => u.memberId === selectedUserId)
+        ? users.findIndex((u) => u.principalId === selectedUserId)
         : -1
 
       switch (e.key) {
@@ -134,7 +134,7 @@ export function UsersList({
           e.preventDefault()
           if (users.length > 0) {
             const nextIndex = Math.min(currentIndex + 1, users.length - 1)
-            onSelectUser(users[nextIndex]?.memberId ?? null)
+            onSelectUser(users[nextIndex]?.principalId ?? null)
           }
           break
         case 'k':
@@ -142,7 +142,7 @@ export function UsersList({
           e.preventDefault()
           if (users.length > 0 && currentIndex > 0) {
             const prevIndex = Math.max(currentIndex - 1, 0)
-            onSelectUser(users[prevIndex]?.memberId ?? null)
+            onSelectUser(users[prevIndex]?.principalId ?? null)
           }
           break
         case 'Escape':
@@ -229,10 +229,10 @@ export function UsersList({
       <div className="divide-y divide-border/50">
         {users.map((user) => (
           <UserCard
-            key={user.memberId}
+            key={user.principalId}
             user={user}
-            isSelected={user.memberId === selectedUserId}
-            onClick={() => onSelectUser(user.memberId)}
+            isSelected={user.principalId === selectedUserId}
+            onClick={() => onSelectUser(user.principalId)}
           />
         ))}
 

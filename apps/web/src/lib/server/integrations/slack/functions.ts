@@ -6,7 +6,7 @@
  * inside handlers to avoid bundling Node.js-only code into the client.
  */
 import { createServerFn } from '@tanstack/react-start'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 /**
  * Slack OAuth state payload.
@@ -15,7 +15,7 @@ export interface SlackOAuthState {
   type: 'slack_oauth'
   workspaceId: string
   returnDomain: string
-  memberId: MemberId
+  principalId: PrincipalId
   nonce: string
   ts: number
 }
@@ -51,7 +51,7 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
       type: 'slack_oauth',
       workspaceId: auth.settings.id,
       returnDomain,
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       nonce: randomBytes(16).toString('base64url'),
       ts: Date.now(),
     } satisfies SlackOAuthState)

@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, StatusId, CommentId, MemberId } from '@quackback/ids'
+import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
 import {
   fetchPublicBoardBySlug,
   fetchPublicPostDetail,
@@ -15,7 +15,7 @@ export interface PublicCommentView {
   id: CommentId
   content: string
   authorName: string | null
-  memberId: string | null
+  principalId: string | null
   createdAt: Date | string
   parentId: CommentId | null
   isTeamMember: boolean
@@ -31,7 +31,7 @@ export interface PinnedCommentView {
   id: CommentId
   content: string
   authorName: string | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   avatarUrl: string | null
   createdAt: Date | string
   isTeamMember: boolean
@@ -48,7 +48,7 @@ export interface PublicPostDetailView {
   statusId: StatusId | null
   voteCount: number
   authorName: string | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   authorAvatarUrl: string | null
   createdAt: Date | string
   board: { id: string; name: string; slug: string }

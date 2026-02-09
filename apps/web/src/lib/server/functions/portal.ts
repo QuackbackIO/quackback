@@ -2,14 +2,14 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import {
   type PostId,
-  type MemberId,
+  type PrincipalId,
   type RoadmapId,
   type StatusId,
   type UserId,
 } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
 import { getOptionalAuth, hasSessionCookie } from './auth-helpers'
-import { db, member as memberTable, user as userTable, eq, inArray } from '@/lib/server/db'
+import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import {
   listPublicBoardsWithStats,
@@ -46,13 +46,13 @@ const fetchPortalDataSchema = z.object({
   userId: z.string().optional(),
 })
 
-export const getMemberIdForUser = createServerFn({ method: 'GET' })
+export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ userId: z.string() }))
-  .handler(async ({ data }): Promise<MemberId | null> => {
-    const member = await db.query.member.findFirst({
-      where: eq(memberTable.userId, data.userId as UserId),
+  .handler(async ({ data }): Promise<PrincipalId | null> => {
+    const record = await db.query.principal.findFirst({
+      where: eq(principalTable.userId, data.userId as UserId),
     })
-    return member?.id ?? null
+    return record?.id ?? null
   })
 
 export const fetchPortalData = createServerFn({ method: 'GET' })
@@ -62,10 +62,10 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     // Member lookup and votes run independently alongside posts/boards/statuses/tags
     const [memberResult, boardsRaw, postsResult, statuses, tags, allVotedPosts] = await Promise.all(
       [
-        // Member lookup (needed for memberId in response)
+        // Principal lookup (needed for principalId in response)
         data.userId
-          ? db.query.member.findFirst({
-              where: eq(memberTable.userId, data.userId as UserId),
+          ? db.query.principal.findFirst({
+              where: eq(principalTable.userId, data.userId as UserId),
               columns: { id: true },
             })
           : Promise.resolve(null),
@@ -86,7 +86,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           : Promise.resolve(new Set<PostId>()),
       ]
     )
-    const memberId = memberResult?.id ?? null
+    const principalId = memberResult?.id ?? null
 
     const avatarMap: Record<string, string | null> = {}
     // Return ALL voted post IDs (not just page 1) so infinite scroll pages show correct vote state
@@ -94,8 +94,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
 
     const posts = {
       items: postsResult.items.map((post) => {
-        if (post.memberId && post.avatarUrl !== undefined) {
-          avatarMap[post.memberId] = post.avatarUrl
+        if (post.principalId && post.avatarUrl !== undefined) {
+          avatarMap[post.principalId] = post.avatarUrl
         }
         return {
           id: post.id,
@@ -104,7 +104,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           statusId: post.statusId,
           voteCount: post.voteCount,
           authorName: post.authorName,
-          memberId: post.memberId,
+          principalId: post.principalId,
           createdAt: post.createdAt.toISOString(),
           commentCount: post.commentCount,
           tags: post.tags,
@@ -122,7 +122,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
       tags,
       votedPostIds,
       avatars: avatarMap,
-      memberId,
+      principalId,
     }
   })
 
@@ -143,8 +143,8 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     // Only fetch auth if user has a session cookie (for highlighting own comments)
-    const memberId = hasSessionCookie() ? (await getOptionalAuth())?.member?.id : undefined
-    const result = await getPublicPostDetail(data.postId as PostId, memberId)
+    const principalId = hasSessionCookie() ? (await getOptionalAuth())?.principal?.id : undefined
+    const result = await getPublicPostDetail(data.postId as PostId, principalId)
 
     if (!result) return null
 
@@ -232,25 +232,25 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .inputValidator(z.array(z.string()))
   .handler(async ({ data }) => {
-    const memberIds = (data as MemberId[]).filter((id): id is MemberId => id !== null)
-    if (memberIds.length === 0) return {}
+    const principalIds = (data as PrincipalId[]).filter((id): id is PrincipalId => id !== null)
+    if (principalIds.length === 0) return {}
 
     const members = await db
       .select({
-        memberId: memberTable.id,
+        principalId: principalTable.id,
         imageKey: userTable.imageKey,
         image: userTable.image,
       })
-      .from(memberTable)
-      .innerJoin(userTable, eq(memberTable.userId, userTable.id))
-      .where(inArray(memberTable.id, memberIds))
+      .from(principalTable)
+      .innerJoin(userTable, eq(principalTable.userId, userTable.id))
+      .where(inArray(principalTable.id, principalIds))
 
-    const avatarMap = new Map<MemberId, string | null>()
+    const avatarMap = new Map<PrincipalId, string | null>()
     for (const m of members) {
       const s3Url = m.imageKey ? getPublicUrlOrNull(m.imageKey) : null
-      avatarMap.set(m.memberId, s3Url ?? m.image)
+      avatarMap.set(m.principalId, s3Url ?? m.image)
     }
-    for (const id of memberIds) {
+    for (const id of principalIds) {
       if (!avatarMap.has(id)) avatarMap.set(id, null)
     }
 
@@ -258,8 +258,10 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
   })
 
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ memberId: z.string(), postId: z.string() }))
-  .handler(({ data }) => getSubscriptionStatus(data.memberId as MemberId, data.postId as PostId))
+  .inputValidator(z.object({ principalId: z.string(), postId: z.string() }))
+  .handler(({ data }) =>
+    getSubscriptionStatus(data.principalId as PrincipalId, data.postId as PostId)
+  )
 
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
   const roadmaps = await listPublicRoadmaps()
@@ -319,13 +321,13 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' }).handle
   }
 
   const ctx = await getOptionalAuth()
-  const isMember = !!(ctx?.user && ctx?.member)
+  const isMember = !!(ctx?.user && ctx?.principal)
 
   return {
     isMember,
     canComment: isMember,
     user: isMember
-      ? { name: ctx.user.name, email: ctx.user.email, memberId: ctx.member.id }
+      ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
       : undefined,
   }
 })

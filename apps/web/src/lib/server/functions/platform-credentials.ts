@@ -60,7 +60,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
     await savePlatformCredentials({
       integrationType: data.integrationType,
       credentials: cleaned,
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
     })
 
     return { success: true }

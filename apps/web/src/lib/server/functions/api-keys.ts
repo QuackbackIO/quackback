@@ -112,7 +112,7 @@ export const createApiKeyFn = createServerFn({ method: 'POST' })
           name: data.name,
           expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
         },
-        auth.member.id
+        auth.principal.id
       )
       console.log(`[fn:api-keys] createApiKeyFn: id=${result.apiKey.id}`)
       return result

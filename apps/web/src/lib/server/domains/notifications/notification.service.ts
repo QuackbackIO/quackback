@@ -20,7 +20,7 @@ import {
   boards,
   type Transaction,
 } from '@/lib/server/db'
-import type { NotificationId, MemberId } from '@quackback/ids'
+import type { NotificationId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import type {
@@ -48,7 +48,7 @@ export async function createNotificationsBatch(
     .values(
       inputs.map((input) => ({
         id: createId('notification'),
-        memberId: input.memberId,
+        principalId: input.principalId,
         type: input.type,
         title: input.title,
         body: input.body ?? null,
@@ -77,14 +77,14 @@ export async function createNotification(
  * Get notifications for a member with pagination
  */
 export async function getNotificationsForMember(
-  memberId: MemberId,
+  principalId: PrincipalId,
   options: GetNotificationsOptions = {}
 ): Promise<NotificationListResult> {
   const { limit = 20, offset = 0, unreadOnly = false } = options
 
   // Build where clause
   const baseWhere = and(
-    eq(inAppNotifications.memberId, memberId),
+    eq(inAppNotifications.principalId, principalId),
     isNull(inAppNotifications.archivedAt)
   )
 
@@ -94,7 +94,7 @@ export async function getNotificationsForMember(
   const rows = await db
     .select({
       id: inAppNotifications.id,
-      memberId: inAppNotifications.memberId,
+      principalId: inAppNotifications.principalId,
       type: inAppNotifications.type,
       title: inAppNotifications.title,
       body: inAppNotifications.body,
@@ -131,7 +131,7 @@ export async function getNotificationsForMember(
 
   const notifications: NotificationWithPost[] = rows.map((row) => ({
     id: row.id,
-    memberId: row.memberId,
+    principalId: row.principalId,
     type: row.type as NotificationType,
     title: row.title,
     body: row.body,
@@ -161,13 +161,13 @@ export async function getNotificationsForMember(
 /**
  * Get unread notification count for a member (optimized for badge display)
  */
-export async function getUnreadCount(memberId: MemberId): Promise<number> {
+export async function getUnreadCount(principalId: PrincipalId): Promise<number> {
   const result = await db
     .select({ count: sql<number>`count(*)::int`.as('count') })
     .from(inAppNotifications)
     .where(
       and(
-        eq(inAppNotifications.memberId, memberId),
+        eq(inAppNotifications.principalId, principalId),
         isNull(inAppNotifications.archivedAt),
         isNull(inAppNotifications.readAt)
       )
@@ -180,7 +180,7 @@ export async function getUnreadCount(memberId: MemberId): Promise<number> {
  * Mark a single notification as read
  */
 export async function markAsRead(
-  memberId: MemberId,
+  principalId: PrincipalId,
   notificationId: NotificationId
 ): Promise<void> {
   // Verify ownership and update in single query
@@ -188,7 +188,10 @@ export async function markAsRead(
     .update(inAppNotifications)
     .set({ readAt: new Date() })
     .where(
-      and(eq(inAppNotifications.id, notificationId), eq(inAppNotifications.memberId, memberId))
+      and(
+        eq(inAppNotifications.id, notificationId),
+        eq(inAppNotifications.principalId, principalId)
+      )
     )
     .returning()
 
@@ -200,13 +203,13 @@ export async function markAsRead(
 /**
  * Mark all notifications as read for a member
  */
-export async function markAllAsRead(memberId: MemberId): Promise<void> {
+export async function markAllAsRead(principalId: PrincipalId): Promise<void> {
   await db
     .update(inAppNotifications)
     .set({ readAt: new Date() })
     .where(
       and(
-        eq(inAppNotifications.memberId, memberId),
+        eq(inAppNotifications.principalId, principalId),
         isNull(inAppNotifications.archivedAt),
         isNull(inAppNotifications.readAt)
       )
@@ -217,13 +220,13 @@ export async function markAllAsRead(memberId: MemberId): Promise<void> {
  * Archive (soft delete) a notification
  */
 export async function archiveNotification(
-  memberId: MemberId,
+  principalId: PrincipalId,
   notificationId: NotificationId
 ): Promise<void> {
   const existing = await db.query.inAppNotifications.findFirst({
     where: and(
       eq(inAppNotifications.id, notificationId),
-      eq(inAppNotifications.memberId, memberId)
+      eq(inAppNotifications.principalId, principalId)
     ),
   })
 
@@ -240,9 +243,11 @@ export async function archiveNotification(
 /**
  * Archive all notifications for a member
  */
-export async function archiveAllNotifications(memberId: MemberId): Promise<void> {
+export async function archiveAllNotifications(principalId: PrincipalId): Promise<void> {
   await db
     .update(inAppNotifications)
     .set({ archivedAt: new Date() })
-    .where(and(eq(inAppNotifications.memberId, memberId), isNull(inAppNotifications.archivedAt)))
+    .where(
+      and(eq(inAppNotifications.principalId, principalId), isNull(inAppNotifications.archivedAt))
+    )
 }

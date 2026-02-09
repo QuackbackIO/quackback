@@ -13,7 +13,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { member } from './auth'
+import { principal } from './auth'
 import { postExternalLinks } from './external-links'
 import type { IntegrationConfig, EventMappingActionConfig, EventMappingFilters } from '../types'
 
@@ -36,9 +36,9 @@ export const integrations = pgTable(
     config: jsonb('config').$type<IntegrationConfig>().notNull().default({}),
 
     // Metadata
-    connectedByMemberId: typeIdColumnNullable('member')('connected_by_member_id').references(
-      () => member.id
-    ),
+    connectedByPrincipalId: typeIdColumnNullable('principal')(
+      'connected_by_principal_id'
+    ).references(() => principal.id),
     connectedAt: timestamp('connected_at', { withTimezone: true }),
     lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
     lastError: text('last_error'),
@@ -67,10 +67,9 @@ export const integrationPlatformCredentials = pgTable(
     id: typeIdWithDefault('platform_cred')('id').primaryKey(),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     secrets: text('secrets').notNull(),
-    configuredByMemberId: typeIdColumnNullable('member')('configured_by_member_id').references(
-      () => member.id,
-      { onDelete: 'set null' }
-    ),
+    configuredByPrincipalId: typeIdColumnNullable('principal')(
+      'configured_by_principal_id'
+    ).references(() => principal.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -80,9 +79,9 @@ export const integrationPlatformCredentials = pgTable(
 export const integrationPlatformCredentialsRelations = relations(
   integrationPlatformCredentials,
   ({ one }) => ({
-    configuredBy: one(member, {
-      fields: [integrationPlatformCredentials.configuredByMemberId],
-      references: [member.id],
+    configuredBy: one(principal, {
+      fields: [integrationPlatformCredentials.configuredByPrincipalId],
+      references: [principal.id],
     }),
   })
 )
@@ -117,9 +116,9 @@ export const integrationEventMappings = pgTable(
 
 // Relations
 export const integrationsRelations = relations(integrations, ({ one, many }) => ({
-  connectedBy: one(member, {
-    fields: [integrations.connectedByMemberId],
-    references: [member.id],
+  connectedBy: one(principal, {
+    fields: [integrations.connectedByPrincipalId],
+    references: [principal.id],
   }),
   eventMappings: many(integrationEventMappings),
   externalLinks: many(postExternalLinks),

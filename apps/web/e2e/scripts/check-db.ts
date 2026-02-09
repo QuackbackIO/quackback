@@ -18,8 +18,9 @@ async function main() {
   const allUsers = await sql`SELECT id, name, email FROM "user" LIMIT 10`
   console.log('All users:', JSON.stringify(allUsers, null, 2))
 
-  const members = await sql`SELECT m.*, u.email FROM member m JOIN "user" u ON m.user_id = u.id`
-  console.log('Members:', JSON.stringify(members, null, 2))
+  const principals =
+    await sql`SELECT p.*, u.email FROM principal p JOIN "user" u ON p.user_id = u.id`
+  console.log('Principals:', JSON.stringify(principals, null, 2))
 
   await sql.end()
 }

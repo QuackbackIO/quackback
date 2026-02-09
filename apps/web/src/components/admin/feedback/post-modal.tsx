@@ -63,11 +63,11 @@ function toPortalComments(post: PostDetails): PublicCommentView[] {
     id: c.id as CommentId,
     content: c.content,
     authorName: c.authorName,
-    memberId: c.memberId,
+    principalId: c.principalId,
     createdAt: c.createdAt,
     parentId: c.parentId as CommentId | null,
     isTeamMember: c.isTeamMember,
-    avatarUrl: (c.memberId && post.avatarUrls?.[c.memberId]) || null,
+    avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
     reactions: c.reactions,
     replies: c.replies.map(mapComment),
   })
@@ -331,7 +331,7 @@ function PostModalContent({
               status={currentStatus}
               board={post.board}
               authorName={post.authorName}
-              authorAvatarUrl={(post.memberId && post.avatarUrls?.[post.memberId]) || null}
+              authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
               createdAt={new Date(post.createdAt)}
               tags={post.tags}
               roadmaps={postRoadmaps}

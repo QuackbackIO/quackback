@@ -6,7 +6,7 @@
  */
 
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 import type { PortalUserListResultView, PortalUserListItemView } from '@/lib/server/domains/users'
 import { deletePortalUserFn } from '@/lib/server/functions/admin'
 import { usersKeys } from '@/lib/client/hooks/use-users-queries'
@@ -23,8 +23,8 @@ export function useRemovePortalUser() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (memberId: MemberId) => deletePortalUserFn({ data: { memberId } }),
-    onMutate: async (memberId) => {
+    mutationFn: (principalId: PrincipalId) => deletePortalUserFn({ data: { principalId } }),
+    onMutate: async (principalId) => {
       await queryClient.cancelQueries({ queryKey: usersKeys.lists() })
 
       const previousLists = queryClient.getQueriesData<InfiniteData<PortalUserListResultView>>({
@@ -41,7 +41,7 @@ export function useRemovePortalUser() {
             pages: old.pages.map((page) => ({
               ...page,
               items: page.items.filter(
-                (user: PortalUserListItemView) => user.memberId !== memberId
+                (user: PortalUserListItemView) => user.principalId !== principalId
               ),
               total: page.total - 1,
             })),
@@ -51,7 +51,7 @@ export function useRemovePortalUser() {
 
       return { previousLists }
     },
-    onError: (_err, _memberId, context) => {
+    onError: (_err, _principalId, context) => {
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
           if (data) {

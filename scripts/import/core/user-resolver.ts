@@ -1,14 +1,14 @@
 /**
  * User resolution utilities
  *
- * Resolves email addresses to existing member IDs,
- * with optional creation of new user+member records.
+ * Resolves email addresses to existing principal IDs,
+ * with optional creation of new user+principal records.
  */
 
-import type { MemberId, UserId } from '@quackback/ids'
+import type { PrincipalId, UserId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import type { Database } from '@quackback/db'
-import { user, member, eq } from '@quackback/db'
+import { user, principal, eq } from '@quackback/db'
 
 export interface UserResolverOptions {
   /** Create new users for unknown emails */
@@ -16,7 +16,7 @@ export interface UserResolverOptions {
 }
 
 interface PendingUser {
-  memberId: MemberId
+  principalId: PrincipalId
   userId: UserId
   email: string
   name?: string
@@ -25,13 +25,13 @@ interface PendingUser {
 /**
  * User resolver with caching
  *
- * Looks up users by email and returns their member ID.
- * The member table links to user via userId, so we need to:
+ * Looks up users by email and returns their principal ID.
+ * The principal table links to user via userId, so we need to:
  * 1. Find the user by email
- * 2. Find the member by userId
+ * 2. Find the principal by userId
  */
 export class UserResolver {
-  private cache = new Map<string, MemberId | null>()
+  private cache = new Map<string, PrincipalId | null>()
   private pendingCreates: PendingUser[] = []
 
   constructor(
@@ -40,10 +40,10 @@ export class UserResolver {
   ) {}
 
   /**
-   * Resolve an email to a member ID.
+   * Resolve an email to a principal ID.
    * Returns null if user doesn't exist and createUsers is false.
    */
-  async resolve(email: string, name?: string): Promise<MemberId | null> {
+  async resolve(email: string, name?: string): Promise<PrincipalId | null> {
     if (!email) return null
 
     const normalizedEmail = email.toLowerCase().trim()
@@ -52,18 +52,18 @@ export class UserResolver {
       return this.cache.get(normalizedEmail) ?? null
     }
 
-    // Look up user by email, then get their member record
+    // Look up user by email, then get their principal record
     const existing = await this.db
-      .select({ memberId: member.id })
+      .select({ principalId: principal.id })
       .from(user)
-      .innerJoin(member, eq(member.userId, user.id))
+      .innerJoin(principal, eq(principal.userId, user.id))
       .where(eq(user.email, normalizedEmail))
       .limit(1)
 
     if (existing.length > 0) {
-      const memberId = existing[0].memberId as MemberId
-      this.cache.set(normalizedEmail, memberId)
-      return memberId
+      const principalId = existing[0].principalId as PrincipalId
+      this.cache.set(normalizedEmail, principalId)
+      return principalId
     }
 
     if (!this.options.createUsers) {
@@ -71,17 +71,17 @@ export class UserResolver {
       return null
     }
 
-    // Queue for creation - need both user and member
+    // Queue for creation - need both user and principal
     const userId = createId('user')
-    const memberId = createId('member')
-    this.pendingCreates.push({ memberId: memberId, userId, email: normalizedEmail, name })
-    this.cache.set(normalizedEmail, memberId)
-    return memberId
+    const principalId = createId('principal')
+    this.pendingCreates.push({ principalId: principalId, userId, email: normalizedEmail, name })
+    this.cache.set(normalizedEmail, principalId)
+    return principalId
   }
 
   /**
    * Flush pending user creations to database.
-   * Creates both user and member records.
+   * Creates both user and principal records.
    */
   async flushPendingCreates(): Promise<number> {
     if (this.pendingCreates.length === 0) return 0
@@ -105,10 +105,10 @@ export class UserResolver {
         }))
       )
 
-      // Then create member records linking to users
-      await this.db.insert(member).values(
+      // Then create principal records linking to users
+      await this.db.insert(principal).values(
         chunk.map((u) => ({
-          id: u.memberId,
+          id: u.principalId,
           userId: u.userId,
           role: 'user' as const, // Portal users get 'user' role
           createdAt: new Date(),

@@ -6,7 +6,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type PostId, type MemberId } from '@quackback/ids'
+import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   mergePost,
@@ -74,7 +74,7 @@ export const mergePostFn = createServerFn({ method: 'POST' })
       const result = await mergePost(
         data.duplicatePostId as PostId,
         data.canonicalPostId as PostId,
-        auth.member.id as MemberId
+        auth.principal.id as PrincipalId
       )
 
       console.log(
@@ -98,7 +98,7 @@ export const unmergePostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await unmergePost(data.postId as PostId, auth.member.id as MemberId)
+      const result = await unmergePost(data.postId as PostId, auth.principal.id as PrincipalId)
 
       console.log(`[fn:post-merge] unmergePostFn: unmerged ${data.postId}`)
       return result

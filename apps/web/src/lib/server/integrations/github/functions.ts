@@ -2,13 +2,13 @@
  * GitHub-specific server functions.
  */
 import { createServerFn } from '@tanstack/react-start'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export interface GitHubOAuthState {
   type: 'github_oauth'
   workspaceId: string
   returnDomain: string
-  memberId: MemberId
+  principalId: PrincipalId
   nonce: string
   ts: number
 }
@@ -40,7 +40,7 @@ export const getGitHubConnectUrl = createServerFn({ method: 'GET' }).handler(
       type: 'github_oauth',
       workspaceId: auth.settings.id,
       returnDomain,
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       nonce: randomBytes(16).toString('base64url'),
       ts: Date.now(),
     } satisfies GitHubOAuthState)

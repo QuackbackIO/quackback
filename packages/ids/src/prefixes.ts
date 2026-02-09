@@ -49,7 +49,7 @@ export const ID_PREFIXES = {
 
   workspace: 'workspace',
   user: 'user',
-  member: 'member',
+  principal: 'principal',
   session: 'session',
   account: 'account',
   invite: 'invite',

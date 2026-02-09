@@ -5,7 +5,7 @@
  */
 
 import { db, posts, votes, postSubscriptions, boards, sql } from '@/lib/server/db'
-import { createId, toUuid, type PostId, type MemberId } from '@quackback/ids'
+import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'
 
@@ -16,15 +16,15 @@ import type { VoteResult } from './post.types'
  * If the user hasn't voted, adds a vote.
  *
  * Uses atomic SQL to prevent race conditions and ensure vote count integrity.
- * Only authenticated users can vote (member_id is required).
+ * Only authenticated users can vote (principal_id is required).
  *
  * @param postId - Post ID to vote on
- * @param memberId - Member ID of the voter (required)
+ * @param principalId - Principal ID of the voter (required)
  * @returns Result containing vote status and new count, or an error
  */
-export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<VoteResult> {
+export async function voteOnPost(postId: PostId, principalId: PrincipalId): Promise<VoteResult> {
   const postUuid = toUuid(postId)
-  const memberUuid = toUuid(memberId)
+  const principalUuid = toUuid(principalId)
   const voteId = toUuid(createId('vote'))
   const subscriptionId = toUuid(createId('post_subscription'))
 
@@ -46,7 +46,7 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
     ),
     existing AS (
       SELECT id FROM ${votes}
-      WHERE post_id = ${postUuid}::uuid AND member_id = ${memberUuid}::uuid
+      WHERE post_id = ${postUuid}::uuid AND principal_id = ${principalUuid}::uuid
     ),
     deleted AS (
       DELETE FROM ${votes}
@@ -54,12 +54,12 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO ${votes} (id, post_id, member_id, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${memberUuid}::uuid, NOW()
+      INSERT INTO ${votes} (id, post_id, principal_id, updated_at)
+      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
-      ON CONFLICT (post_id, member_id) DO NOTHING
+      ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING id
     ),
     updated_post AS (
@@ -75,10 +75,10 @@ export async function voteOnPost(postId: PostId, memberId: MemberId): Promise<Vo
       RETURNING vote_count
     ),
     subscribed AS (
-      INSERT INTO ${postSubscriptions} (id, post_id, member_id, reason, notify_comments, notify_status_changes)
-      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${memberUuid}::uuid, 'vote', true, true
+      INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
+      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
-      ON CONFLICT (post_id, member_id) DO NOTHING
+      ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
     )
     SELECT

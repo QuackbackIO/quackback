@@ -48,7 +48,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           // Parse and validate body
@@ -74,7 +74,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
               events: parsed.data.events,
               boardIds: parsed.data.boardIds,
             },
-            memberId
+            principalId
           )
 
           // Return with secret (only shown once)

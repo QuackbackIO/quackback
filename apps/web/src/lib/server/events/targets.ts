@@ -11,7 +11,7 @@ import {
   eq,
   and,
   isNull,
-  member,
+  principal,
   webhooks,
 } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
@@ -27,6 +27,7 @@ import type { HookTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { buildHookContext, type HookContext } from './hook-context'
 import type { EventData, EventActor } from './types'
+import { isAIEnabled } from '@/lib/server/domains/ai/config'
 
 /**
  * Map system event types to notification event types
@@ -71,8 +72,8 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       targets.push(...subscriberTargets)
     }
 
-    // AI targets (sentiment, embeddings) - always run for post.created
-    if (AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
+    // AI targets (sentiment, embeddings) - only when AI is configured
+    if (isAIEnabled() && AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
       targets.push({
         type: 'ai',
         target: { type: 'ai' },
@@ -205,12 +206,12 @@ async function buildEmailTargets(
   if (!eventConfig) return []
 
   // Batch get notification preferences (single query instead of N queries)
-  const memberIds = subscribers.map((s) => s.memberId)
-  const prefsMap = await batchGetNotificationPreferences(memberIds)
+  const principalIds = subscribers.map((s) => s.principalId)
+  const prefsMap = await batchGetNotificationPreferences(principalIds)
 
   // Filter by global email preferences
   const eligibleSubscribers = subscribers.filter((subscriber) => {
-    const prefs = prefsMap.get(subscriber.memberId)
+    const prefs = prefsMap.get(subscriber.principalId)
     return prefs && shouldSendEmail(event.type, prefs)
   })
   if (eligibleSubscribers.length === 0) return []
@@ -218,7 +219,7 @@ async function buildEmailTargets(
   // Batch generate unsubscribe tokens (single insert instead of N inserts)
   const tokenMap = await batchGenerateUnsubscribeTokens(
     eligibleSubscribers.map((s) => ({
-      memberId: s.memberId,
+      principalId: s.principalId,
       postId,
       action: 'unsubscribe_post' as const,
     }))
@@ -228,7 +229,7 @@ async function buildEmailTargets(
     type: 'email',
     target: {
       email: subscriber.email,
-      unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.memberId)}`,
+      unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
     },
     config: {
       workspaceName: context.workspaceName,
@@ -279,8 +280,8 @@ function shouldSendEmail(
  */
 async function isActorTeamMember(actor: EventActor): Promise<boolean> {
   if (!actor.userId) return false
-  const commenterMember = await db.query.member.findFirst({
-    where: eq(member.userId, actor.userId as UserId),
+  const commenterMember = await db.query.principal.findFirst({
+    where: eq(principal.userId, actor.userId as UserId),
     columns: { role: true },
   })
   return commenterMember?.role !== 'user'
@@ -345,7 +346,7 @@ async function buildNotificationTarget(
   return {
     type: 'notification',
     target: {
-      memberIds: subscribers.map((s) => s.memberId),
+      principalIds: subscribers.map((s) => s.principalId),
     },
     config,
   }

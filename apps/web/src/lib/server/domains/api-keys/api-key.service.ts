@@ -6,7 +6,7 @@
  */
 
 import { db, apiKeys, eq, and, isNull } from '@/lib/server/db'
-import type { MemberId, TypeId } from '@quackback/ids'
+import type { PrincipalId, TypeId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { createHash, randomBytes } from 'crypto'
 
@@ -22,7 +22,7 @@ export interface ApiKey {
   id: ApiKeyId
   name: string
   keyPrefix: string
-  createdById: MemberId
+  createdById: PrincipalId
   lastUsedAt: Date | null
   expiresAt: Date | null
   createdAt: Date
@@ -74,7 +74,7 @@ function getKeyPrefix(key: string): string {
  */
 export async function createApiKey(
   input: CreateApiKeyInput,
-  createdById: MemberId
+  createdById: PrincipalId
 ): Promise<CreateApiKeyResult> {
   // Validate input
   if (!input.name?.trim()) {

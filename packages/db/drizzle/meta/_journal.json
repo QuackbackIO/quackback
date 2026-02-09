@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1770059748915,
+      "when": 1770636770602,
       "tag": "0000_initial",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1770199095150,
-      "tag": "0001_green_deathstrike",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1770416044188,
-      "tag": "0002_quiet_gauntlet",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1770457345878,
-      "tag": "0003_amusing_thunderbolt_ross",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1770462701552,
-      "tag": "0004_naive_paladin",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1770484601016,
-      "tag": "0005_legal_gravity",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1770484701016,
-      "tag": "0006_ambiguous_black_bird",
       "breakpoints": true
     }
   ]

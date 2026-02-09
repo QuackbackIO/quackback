@@ -12,7 +12,7 @@ import type {
   PortalUserListItemView,
   PortalUserDetail,
 } from '@/lib/server/domains/users'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 import { listPortalUsersFn, getPortalUserFn } from '@/lib/server/functions/admin'
 
 // ============================================================================
@@ -24,7 +24,7 @@ export const usersKeys = {
   lists: () => [...usersKeys.all, 'list'] as const,
   list: (filters: UsersFilters) => [...usersKeys.lists(), filters] as const,
   details: () => [...usersKeys.all, 'detail'] as const,
-  detail: (memberId: MemberId) => [...usersKeys.details(), memberId] as const,
+  detail: (principalId: PrincipalId) => [...usersKeys.details(), principalId] as const,
 }
 
 // ============================================================================
@@ -48,8 +48,8 @@ async function fetchPortalUsers(
   })) as PortalUserListResultView
 }
 
-async function fetchUserDetail(memberId: MemberId): Promise<PortalUserDetail> {
-  return (await getPortalUserFn({ data: { memberId } })) as unknown as PortalUserDetail
+async function fetchUserDetail(principalId: PrincipalId): Promise<PortalUserDetail> {
+  return (await getPortalUserFn({ data: { principalId } })) as unknown as PortalUserDetail
 }
 
 // ============================================================================
@@ -83,15 +83,15 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
 }
 
 interface UseUserDetailOptions {
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   enabled?: boolean
 }
 
-export function useUserDetail({ memberId, enabled = true }: UseUserDetailOptions) {
+export function useUserDetail({ principalId, enabled = true }: UseUserDetailOptions) {
   return useQuery({
-    queryKey: usersKeys.detail(memberId!),
-    queryFn: () => fetchUserDetail(memberId!),
-    enabled: enabled && !!memberId,
+    queryKey: usersKeys.detail(principalId!),
+    queryFn: () => fetchUserDetail(principalId!),
+    enabled: enabled && !!principalId,
     staleTime: 30 * 1000,
   })
 }

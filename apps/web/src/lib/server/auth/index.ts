@@ -44,7 +44,7 @@ async function createAuth() {
     verification: verificationTable,
     oneTimeToken: oneTimeTokenTable,
     settings: settingsTable,
-    member: memberTable,
+    principal: principalTable,
     invitation: invitationTable,
     eq,
   } = await import('@/lib/server/db')
@@ -85,7 +85,7 @@ async function createAuth() {
         oneTimeToken: oneTimeTokenTable,
         // Better-Auth expects 'workspace' name for organization-like table
         workspace: settingsTable,
-        member: memberTable,
+        member: principalTable,
         invitation: invitationTable,
       },
     }),
@@ -147,18 +147,18 @@ async function createAuth() {
             const userId = user.id as ReturnType<typeof generateId<'user'>>
 
             // Check if member already exists (in case of race conditions)
-            const existingMember = await db.query.member.findFirst({
-              where: eq(memberTable.userId, userId),
+            const existingPrincipal = await db.query.principal.findFirst({
+              where: eq(principalTable.userId, userId),
             })
 
-            if (!existingMember) {
-              await db.insert(memberTable).values({
-                id: generateId('member'),
+            if (!existingPrincipal) {
+              await db.insert(principalTable).values({
+                id: generateId('principal'),
                 userId,
                 role: 'user', // Always 'user' - team access via invitations only
                 createdAt: new Date(),
               })
-              console.log(`[auth] Created member record: userId=${user.id}, role=user`)
+              console.log(`[auth] Created principal record: userId=${user.id}, role=user`)
             }
           },
         },

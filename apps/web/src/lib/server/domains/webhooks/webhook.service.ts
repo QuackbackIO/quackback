@@ -6,7 +6,7 @@
 
 import crypto from 'crypto'
 import { db, webhooks, eq, and, isNull, sql } from '@/lib/server/db'
-import { createId, type MemberId, type WebhookId } from '@quackback/ids'
+import { createId, type PrincipalId, type WebhookId } from '@quackback/ids'
 import { encryptWebhookSecret } from './encryption'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isValidWebhookUrl } from '@/lib/server/events/integrations/webhook/constants'
@@ -25,7 +25,7 @@ export interface Webhook {
   lastTriggeredAt: Date | null
   createdAt: Date
   updatedAt: Date
-  createdById: MemberId
+  createdById: PrincipalId
 }
 
 export interface CreateWebhookInput {
@@ -59,7 +59,7 @@ function generateSecret(): string {
  */
 export async function createWebhook(
   input: CreateWebhookInput,
-  createdById: MemberId
+  createdById: PrincipalId
 ): Promise<CreateWebhookResult> {
   // Validate URL
   if (!input.url?.trim()) {

@@ -39,8 +39,8 @@ export const Route = createFileRoute('/api/import/')({
           }
 
           // Check role - only admin can import
-          if (!canAccess(validation.member.role as Role, ['admin'])) {
-            console.warn(`[import] ⚠️ Access denied: role=${validation.member.role}`)
+          if (!canAccess(validation.principal.role as Role, ['admin'])) {
+            console.warn(`[import] ⚠️ Access denied: role=${validation.principal.role}`)
             return Response.json({ error: 'Only admins can import data' }, { status: 403 })
           }
 
@@ -142,7 +142,7 @@ export const Route = createFileRoute('/api/import/')({
             boardId: targetBoardId!,
             csvContent,
             totalRows,
-            initiatedByMemberId: validation.member.id,
+            initiatedByPrincipalId: validation.principal.id,
           }
 
           // Process import inline (synchronous)

@@ -52,8 +52,8 @@ export const Route = createFileRoute('/api/export')({
           }
 
           // Check role - only admin can export
-          if (!canAccess(validation.member.role as Role, ['admin'])) {
-            console.warn(`[export] ⚠️ Access denied: role=${validation.member.role}`)
+          if (!canAccess(validation.principal.role as Role, ['admin'])) {
+            console.warn(`[export] ⚠️ Access denied: role=${validation.principal.role}`)
             return Response.json({ error: 'Only admins can export data' }, { status: 403 })
           }
 

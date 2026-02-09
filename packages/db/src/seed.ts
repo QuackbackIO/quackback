@@ -15,14 +15,14 @@ import type {
   TagId,
   BoardId,
   StatusId,
-  MemberId,
+  PrincipalId,
   PostId,
   RoadmapId,
   UserId,
   WorkspaceId,
   ChangelogId,
 } from '@quackback/ids'
-import { user, settings, member } from './schema/auth'
+import { user, settings, principal } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
@@ -307,21 +307,21 @@ async function seed() {
     console.log('Created default statuses')
   }
 
-  // Get or create users and members
-  const existingMembers = await db
-    .select({ id: member.id, name: user.name })
-    .from(member)
-    .innerJoin(user, eq(member.userId, user.id))
+  // Get or create users and principals
+  const existingPrincipals = await db
+    .select({ id: principal.id, name: user.name })
+    .from(principal)
+    .innerJoin(user, eq(principal.userId, user.id))
 
-  const members: Array<{ id: MemberId; name: string }> = existingMembers.map((m) => ({
-    id: m.id as MemberId,
+  const principals: Array<{ id: PrincipalId; name: string }> = existingPrincipals.map((m) => ({
+    id: m.id as PrincipalId,
     name: m.name,
   }))
 
-  if (members.length === 0) {
+  if (principals.length === 0) {
     // Create demo user (owner)
     const demoUserId: UserId = generateId('user')
-    const demoMemberId: MemberId = generateId('member')
+    const demoPrincipalId: PrincipalId = generateId('principal')
     await db.insert(user).values({
       id: demoUserId,
       name: DEMO_USER.name,
@@ -330,18 +330,18 @@ async function seed() {
       createdAt: new Date(),
       updatedAt: new Date(),
     })
-    await db.insert(member).values({
-      id: demoMemberId,
+    await db.insert(principal).values({
+      id: demoPrincipalId,
       userId: demoUserId,
       role: 'admin',
       createdAt: new Date(),
     })
-    members.push({ id: demoMemberId, name: DEMO_USER.name })
+    principals.push({ id: demoPrincipalId, name: DEMO_USER.name })
 
     // Create sample users
     for (let i = 0; i < CONFIG.users; i++) {
       const userId: UserId = generateId('user')
-      const memberId: MemberId = generateId('member')
+      const principalId: PrincipalId = generateId('principal')
       const name = `${pick(firstNames)} ${pick(lastNames)}`
       const email = `user${i + 1}@example.com`
 
@@ -353,17 +353,17 @@ async function seed() {
         createdAt: randomDate(90),
         updatedAt: new Date(),
       })
-      await db.insert(member).values({
-        id: memberId,
+      await db.insert(principal).values({
+        id: principalId,
         userId: userId,
         role: i < 3 ? 'admin' : 'user', // First 3 are admins
         createdAt: randomDate(90),
       })
-      members.push({ id: memberId, name })
+      principals.push({ id: principalId, name })
     }
-    console.log(`Created ${members.length} users`)
+    console.log(`Created ${principals.length} users`)
   } else {
-    console.log(`Using ${members.length} existing users`)
+    console.log(`Using ${principals.length} existing users`)
   }
 
   // Create or get tags
@@ -450,7 +450,7 @@ async function seed() {
   for (let i = 0; i < CONFIG.posts; i++) {
     const postId = generateId('post')
     const boardId = pick(boardIds)
-    const author = pick(members)
+    const author = pick(principals)
     const statusSlug = weightedStatus()
     const statusId = statusMap.get(statusSlug) ?? null
     const voteCount = generateVoteCount()
@@ -465,7 +465,7 @@ async function seed() {
       title,
       content,
       contentJson: textToTipTapJson(content),
-      memberId: author.id,
+      principalId: author.id,
       statusId,
       voteCount,
       createdAt: randomDate(180),
@@ -530,16 +530,16 @@ async function seed() {
   }
   console.log(`Assigned ${postRoadmapInserts.length} posts to roadmaps`)
 
-  // Create votes (sample, not all) - votes require memberId
+  // Create votes (sample, not all) - votes require principalId
   console.log('Creating votes...')
   const voteInserts: (typeof votes.$inferInsert)[] = []
   for (const post of postRecords) {
-    const numVotes = Math.min(post.voteCount, members.length) // Cap at number of members
-    const shuffledMembers = [...members].sort(() => Math.random() - 0.5)
+    const numVotes = Math.min(post.voteCount, principals.length) // Cap at number of principals
+    const shuffledPrincipals = [...principals].sort(() => Math.random() - 0.5)
     for (let v = 0; v < numVotes; v++) {
       voteInserts.push({
         postId: post.id,
-        memberId: shuffledMembers[v % shuffledMembers.length].id,
+        principalId: shuffledPrincipals[v % shuffledPrincipals.length].id,
         createdAt: randomDate(60),
       })
     }
@@ -548,7 +548,7 @@ async function seed() {
     await db
       .insert(votes)
       .values(voteInserts.slice(i, i + BATCH_SIZE))
-      .onConflictDoNothing() // Skip duplicate votes (same member + post)
+      .onConflictDoNothing() // Skip duplicate votes (same principal + post)
   }
   console.log(`Created ${voteInserts.length} votes`)
 
@@ -558,10 +558,10 @@ async function seed() {
   for (const post of postRecords) {
     const numComments = Math.floor(Math.random() * 5) // 0-4 comments per post
     for (let c = 0; c < numComments; c++) {
-      const author = pick(members)
+      const author = pick(principals)
       commentInserts.push({
         postId: post.id,
-        memberId: author.id,
+        principalId: author.id,
         content: pick(commentContents),
         isTeamMember: Math.random() < 0.2,
         createdAt: randomDate(60),
@@ -582,11 +582,11 @@ async function seed() {
 
   const changelogInserts: (typeof changelogEntries.$inferInsert)[] = []
   const changelogPostInserts: (typeof changelogEntryPosts.$inferInsert)[] = []
-  const adminMembers = members.slice(0, 4) // First 4 members are admins
+  const adminPrincipals = principals.slice(0, 4) // First 4 principals are admins
 
   for (const preset of changelogPresets) {
     const changelogId: ChangelogId = generateId('changelog')
-    const author = pick(adminMembers)
+    const author = pick(adminPrincipals)
 
     let publishedAt: Date | null = null
     if (preset.status === 'published') {
@@ -603,7 +603,7 @@ async function seed() {
       title: preset.title,
       content: preset.content,
       contentJson: textToTipTapJson(preset.content),
-      memberId: author.id,
+      principalId: author.id,
       publishedAt,
       createdAt: publishedAt ?? new Date(),
       updatedAt: new Date(),

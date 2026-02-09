@@ -11,7 +11,7 @@ import {
   boardIdSchema,
   createId,
   type BoardId,
-  type MemberId,
+  type PrincipalId,
   type PostId,
   type TagId,
   type StatusId,
@@ -73,7 +73,7 @@ interface ProcessedRow {
   voteCount: number
   createdAt: Date
   tagNames: string[]
-  memberId: MemberId
+  principalId: PrincipalId
 }
 
 /**
@@ -135,7 +135,7 @@ export async function processBatch(
   defaultBoardId: BoardId,
   startIndex: number,
   userResolver: ImportUserResolver,
-  fallbackMemberId: MemberId
+  fallbackPrincipalId: PrincipalId
 ): Promise<BatchResult> {
   const result: BatchResult = {
     imported: 0,
@@ -220,11 +220,11 @@ export async function processBatch(
       }
     }
 
-    // Resolve author email to a memberId (creates user+member if needed)
-    const memberId = await userResolver.resolve(
+    // Resolve author email to a principalId (creates user+principal if needed)
+    const principalId = await userResolver.resolve(
       row.author_email || null,
       row.author_name || null,
-      fallbackMemberId
+      fallbackPrincipalId
     )
 
     validRows.push({
@@ -239,7 +239,7 @@ export async function processBatch(
         voteCount: row.vote_count,
         createdAt: row.created_at,
         tagNames,
-        memberId,
+        principalId,
       },
       index: rowIndex,
     })
@@ -274,7 +274,7 @@ export async function processBatch(
     title: row.title,
     content: row.content,
     statusId: row.statusId,
-    memberId: row.memberId,
+    principalId: row.principalId,
     voteCount: row.voteCount,
     createdAt: row.createdAt,
     updatedAt: row.createdAt,
@@ -340,7 +340,7 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
   const rows = parseCSV(data.csvContent)
   let result: ImportResult = { imported: 0, skipped: 0, errors: [], createdTags: [] }
 
-  // Single UserResolver instance shared across all batches (caches email->memberId lookups)
+  // Single UserResolver instance shared across all batches (caches email->principalId lookups)
   const userResolver = new ImportUserResolver()
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -350,7 +350,7 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
       data.boardId,
       i,
       userResolver,
-      data.initiatedByMemberId
+      data.initiatedByPrincipalId
     )
     result = mergeResults(result, batchResult)
   }

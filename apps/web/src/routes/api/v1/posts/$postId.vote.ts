@@ -15,7 +15,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           const { postId } = params
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
           // Import service function
           const { voteOnPost } = await import('@/lib/server/domains/posts/post.voting')
 
-          const result = await voteOnPost(postId as PostId, memberId)
+          const result = await voteOnPost(postId as PostId, principalId)
 
           return successResponse({
             voted: result.voted,

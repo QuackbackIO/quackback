@@ -2,11 +2,11 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 
-export const Route = createFileRoute('/api/v1/members/')({
+export const Route = createFileRoute('/api/v1/principals/')({
   server: {
     handlers: {
       /**
-       * GET /api/v1/members
+       * GET /api/v1/principals
        * List all team members (admin and member roles)
        */
       GET: async ({ request }) => {
@@ -16,7 +16,8 @@ export const Route = createFileRoute('/api/v1/members/')({
 
         try {
           // Import service function
-          const { listTeamMembers } = await import('@/lib/server/domains/members/member.service')
+          const { listTeamMembers } =
+            await import('@/lib/server/domains/principals/principal.service')
 
           const members = await listTeamMembers()
 

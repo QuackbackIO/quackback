@@ -28,7 +28,7 @@ export type CreateCommentMutation = UseMutationResult<
     postId: string
     authorName?: string | null
     authorEmail?: string | null
-    memberId?: string | null
+    principalId?: string | null
   }
 >
 
@@ -37,7 +37,7 @@ interface CommentFormProps {
   parentId?: CommentId
   onSuccess?: () => void
   onCancel?: () => void
-  user?: { name: string | null; email: string; memberId?: string }
+  user?: { name: string | null; email: string; principalId?: string }
   /** React Query mutation for creating comments with optimistic updates */
   createComment?: CreateCommentMutation
 }
@@ -57,9 +57,9 @@ export function CommentForm({
   const authPopover = useAuthPopoverSafe()
 
   // Get user from session
-  // Note: memberId is only available from the server-provided `user` prop, not from client session
+  // Note: principalId is only available from the server-provided `user` prop, not from client session
   const effectiveUser = session?.user
-    ? { name: session.user.name, email: session.user.email, memberId: user?.memberId }
+    ? { name: session.user.name, email: session.user.email, principalId: user?.principalId }
     : user
 
   // Listen for auth success to refetch session (no page reload)
@@ -94,7 +94,7 @@ export function CommentForm({
         postId,
         authorName: effectiveUser?.name || null,
         authorEmail: effectiveUser?.email || null,
-        memberId: effectiveUser?.memberId || null,
+        principalId: effectiveUser?.principalId || null,
       },
       {
         onSuccess: () => {

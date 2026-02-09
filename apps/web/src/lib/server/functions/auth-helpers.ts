@@ -4,13 +4,13 @@
  * These provide role-based authentication checks for use in server function handlers.
  */
 
-import type { UserId, MemberId, WorkspaceId } from '@quackback/ids'
+import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
-import { db, member, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
@@ -54,8 +54,8 @@ export interface AuthContext {
     name: string
     image: string | null
   }
-  member: {
-    id: MemberId
+  principal: {
+    id: PrincipalId
     role: Role
   }
 }
@@ -86,17 +86,17 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
     throw new Error('Workspace not configured')
   }
 
-  const memberRecord = await db.query.member.findFirst({
-    where: eq(member.userId, userId),
+  const principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.userId, userId),
   })
 
-  if (!memberRecord) {
+  if (!principalRecord) {
     throw new Error('Access denied: Not a team member')
   }
 
-  if (options?.roles && !options.roles.includes(memberRecord.role as Role)) {
+  if (options?.roles && !options.roles.includes(principalRecord.role as Role)) {
     throw new Error(
-      `Access denied: Requires [${options.roles.join(', ')}], got ${memberRecord.role}`
+      `Access denied: Requires [${options.roles.join(', ')}], got ${principalRecord.role}`
     )
   }
 
@@ -112,9 +112,9 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       name: session.user.name,
       image: session.user.image ?? null,
     },
-    member: {
-      id: memberRecord.id as MemberId,
-      role: memberRecord.role as Role,
+    principal: {
+      id: principalRecord.id as PrincipalId,
+      role: principalRecord.role as Role,
     },
   }
 }
@@ -138,23 +138,23 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     return null
   }
 
-  let memberRecord = await db.query.member.findFirst({
-    where: eq(member.userId, userId),
+  let principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.userId, userId),
   })
 
-  // Auto-create member record for authenticated users without one
-  if (!memberRecord) {
-    const newMemberId = generateId('member')
+  // Auto-create principal record for authenticated users without one
+  if (!principalRecord) {
+    const newPrincipalId = generateId('principal')
     const [created] = await db
-      .insert(member)
+      .insert(principal)
       .values({
-        id: newMemberId,
+        id: newPrincipalId,
         userId,
         role: 'user',
         createdAt: new Date(),
       })
       .returning()
-    memberRecord = created
+    principalRecord = created
   }
 
   return {
@@ -169,9 +169,9 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       name: session.user.name,
       image: session.user.image ?? null,
     },
-    member: {
-      id: memberRecord.id as MemberId,
-      role: memberRecord.role as Role,
+    principal: {
+      id: principalRecord.id as PrincipalId,
+      role: principalRecord.role as Role,
     },
   }
 }

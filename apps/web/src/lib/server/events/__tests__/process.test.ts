@@ -22,6 +22,7 @@ vi.mock('bullmq', () => {
   class MockQueue {
     addBulk = mockQueueAddBulk
     close = mockQueueClose
+    waitUntilReady = vi.fn().mockResolvedValue(undefined)
     constructor() {}
   }
   class MockWorker {

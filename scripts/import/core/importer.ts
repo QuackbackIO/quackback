@@ -425,13 +425,13 @@ export class Importer {
           }
         }
 
-        // Resolve member
-        const memberId = post.authorEmail
+        // Resolve principal
+        const principalId = post.authorEmail
           ? await this.userResolver.resolve(post.authorEmail, post.authorName)
           : null
 
         // Resolve official response author
-        const responseMemberId = post.responseBy
+        const responsePrincipalId = post.responseBy
           ? await this.userResolver.resolve(post.responseBy)
           : null
 
@@ -454,14 +454,14 @@ export class Importer {
           boardId,
           title: post.title,
           content: post.body,
-          memberId,
+          principalId,
           authorName: post.authorName,
           authorEmail: post.authorEmail,
           statusId,
           voteCount: post.voteCount ?? 0,
           moderationState: post.moderation ?? 'published',
           officialResponse: post.response,
-          officialResponseMemberId: responseMemberId,
+          officialResponsePrincipalId: responsePrincipalId,
           officialResponseAt: responseAt,
           createdAt,
           updatedAt: new Date(),
@@ -563,14 +563,14 @@ export class Importer {
       }
 
       try {
-        const memberId = comment.authorEmail
+        const principalId = comment.authorEmail
           ? await this.userResolver.resolve(comment.authorEmail, comment.authorName)
           : null
 
         commentInserts.push({
           id: generateId('comment'),
           postId,
-          memberId,
+          principalId,
           authorName: comment.authorName,
           authorEmail: comment.authorEmail,
           content: comment.body,
@@ -626,12 +626,12 @@ export class Importer {
       seenVotes.add(voteKey)
 
       try {
-        const memberId = await this.userResolver.resolve(vote.voterEmail)
+        const principalId = await this.userResolver.resolve(vote.voterEmail)
 
         voteInserts.push({
           postId,
           userIdentifier: `email:${vote.voterEmail.toLowerCase()}`,
-          memberId,
+          principalId,
           createdAt: vote.createdAt ? new Date(vote.createdAt) : new Date(),
           updatedAt: new Date(),
         })
@@ -679,14 +679,14 @@ export class Importer {
       }
 
       try {
-        const memberId = note.authorEmail
+        const principalId = note.authorEmail
           ? await this.userResolver.resolve(note.authorEmail, note.authorName)
           : null
 
         noteInserts.push({
           id: generateId('note'),
           postId,
-          memberId,
+          principalId,
           authorName: note.authorName,
           authorEmail: note.authorEmail,
           content: note.body,

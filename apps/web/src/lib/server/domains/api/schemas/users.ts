@@ -8,7 +8,7 @@ import { TimestampSchema, UnauthorizedErrorSchema, NotFoundErrorSchema } from '.
 
 // Portal User list item schema
 const PortalUserListItemSchema = z.object({
-  memberId: TypeIdSchema.meta({ description: 'Member ID' }),
+  principalId: TypeIdSchema.meta({ description: 'Principal ID' }),
   userId: z.string().meta({ description: 'User ID' }),
   name: z.string().nullable().meta({ example: 'Jane Doe' }),
   email: z.string().meta({ example: 'jane@example.com' }),
@@ -124,19 +124,19 @@ registerPath('/users', {
   },
 })
 
-// Register GET /users/{memberId}
-registerPath('/users/{memberId}', {
+// Register GET /users/{principalId}
+registerPath('/users/{principalId}', {
   get: {
     tags: ['Members'],
     summary: 'Get a portal user',
     description: 'Get detailed information about a portal user, including their activity',
     parameters: [
       {
-        name: 'memberId',
+        name: 'principalId',
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Member ID',
+        description: 'Principal ID',
       },
     ],
     responses: {
@@ -160,19 +160,19 @@ registerPath('/users/{memberId}', {
   },
 })
 
-// Register DELETE /users/{memberId}
-registerPath('/users/{memberId}', {
+// Register DELETE /users/{principalId}
+registerPath('/users/{principalId}', {
   delete: {
     tags: ['Members'],
     summary: 'Remove a portal user',
     description: 'Remove a portal user from the workspace',
     parameters: [
       {
-        name: 'memberId',
+        name: 'principalId',
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Member ID',
+        description: 'Principal ID',
       },
     ],
     responses: {

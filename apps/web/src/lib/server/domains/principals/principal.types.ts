@@ -1,17 +1,17 @@
 /**
- * Member domain types
+ * Principal domain types
  *
  * These types are safe to import from client-side code as they have
  * no database dependencies.
  */
 
-import type { MemberId, UserId } from '@quackback/ids'
+import type { PrincipalId, UserId } from '@quackback/ids'
 
 /**
  * Team member info with user details
  */
 export interface TeamMember {
-  id: MemberId
+  id: PrincipalId
   userId: UserId
   name: string | null
   email: string

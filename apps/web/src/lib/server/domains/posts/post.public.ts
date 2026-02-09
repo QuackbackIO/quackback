@@ -17,7 +17,7 @@ import {
   postRoadmaps,
   roadmaps,
   postSubscriptions,
-  member as memberTable,
+  principal as principalTable,
   user as userTable,
 } from '@/lib/server/db'
 import {
@@ -26,7 +26,7 @@ import {
   type StatusId,
   type TagId,
   type CommentId,
-  type MemberId,
+  type PrincipalId,
 } from '@quackback/ids'
 import { buildCommentTree } from '@/lib/shared'
 import type {
@@ -85,7 +85,7 @@ export interface PostWithVotesAndAvatars {
   voteCount: number
   commentCount: number
   authorName: string | null
-  memberId: string
+  principalId: string
   createdAt: Date
   tags: Array<{ id: TagId; name: string; color: string }>
   board: { id: string; name: string; slug: string }
@@ -138,21 +138,21 @@ function buildPostFilterConditions(params: PostListParams) {
 }
 
 export async function listPublicPostsWithVotesAndAvatars(
-  params: PostListParams & { memberId?: MemberId }
+  params: PostListParams & { principalId?: PrincipalId }
 ): Promise<{ items: PostWithVotesAndAvatars[]; hasMore: boolean }> {
-  const { sort = 'top', page = 1, limit = 20, memberId } = params
+  const { sort = 'top', page = 1, limit = 20, principalId } = params
   const offset = (page - 1) * limit
   const conditions = buildPostFilterConditions(params)
   const orderBy = getPostSortOrder(sort)
 
-  // Only authenticated users can vote, so we only check member_id
+  // Only authenticated users can vote, so we only check principal_id
   // Anonymous users see vote counts but hasVoted is always false
-  const memberUuid = memberId ? toUuid(memberId) : null
-  const voteExistsSubquery = memberUuid
+  const principalUuid = principalId ? toUuid(principalId) : null
+  const voteExistsSubquery = principalUuid
     ? sql<boolean>`EXISTS(
         SELECT 1 FROM ${votes}
         WHERE ${votes.postId} = ${posts.id}
-        AND ${votes.memberId} = ${memberUuid}::uuid
+        AND ${votes.principalId} = ${principalUuid}::uuid
       )`.as('has_voted')
     : sql<boolean>`false`.as('has_voted')
 
@@ -164,7 +164,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       statusId: posts.statusId,
       voteCount: posts.voteCount,
       commentCount: posts.commentCount,
-      memberId: posts.memberId,
+      principalId: posts.principalId,
       createdAt: posts.createdAt,
       boardId: boards.id,
       boardName: boards.name,
@@ -178,9 +178,9 @@ export async function listPublicPostsWithVotesAndAvatars(
       )`.as('tags_json'),
       hasVoted: voteExistsSubquery,
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${memberTable} m
+        SELECT u.name FROM ${principalTable} m
         INNER JOIN ${userTable} u ON m.user_id = u.id
-        WHERE m.id = ${posts.memberId}
+        WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
       avatarData: sql<string | null>`(
         SELECT CASE
@@ -188,9 +188,9 @@ export async function listPublicPostsWithVotesAndAvatars(
           THEN json_build_object('key', u.image_key)
           ELSE json_build_object('url', u.image)
         END
-        FROM ${memberTable} m
+        FROM ${principalTable} m
         INNER JOIN ${userTable} u ON m.user_id = u.id
-        WHERE m.id = ${posts.memberId}
+        WHERE m.id = ${posts.principalId}
       )`.as('avatar_data'),
     })
     .from(posts)
@@ -212,7 +212,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       voteCount: post.voteCount,
       commentCount: post.commentCount,
       authorName: post.authorName,
-      memberId: post.memberId,
+      principalId: post.principalId,
       createdAt: post.createdAt,
       tags: parseJson<Array<{ id: TagId; name: string; color: string }>>(post.tagsJson),
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
@@ -238,7 +238,7 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
       statusId: posts.statusId,
       voteCount: posts.voteCount,
       commentCount: posts.commentCount,
-      memberId: posts.memberId,
+      principalId: posts.principalId,
       createdAt: posts.createdAt,
       boardId: boards.id,
       boardName: boards.name,
@@ -251,9 +251,9 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
         '[]'
       )`.as('tags_json'),
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${memberTable} m
+        SELECT u.name FROM ${principalTable} m
         INNER JOIN ${userTable} u ON m.user_id = u.id
-        WHERE m.id = ${posts.memberId}
+        WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
     })
     .from(posts)
@@ -273,7 +273,7 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
     statusId: post.statusId,
     voteCount: post.voteCount,
     authorName: post.authorName,
-    memberId: post.memberId,
+    principalId: post.principalId,
     createdAt: post.createdAt,
     commentCount: post.commentCount,
     tags: parseJson<Array<{ id: TagId; name: string; color: string }>>(post.tagsJson),
@@ -285,7 +285,7 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
 
 export async function getPublicPostDetail(
   postId: PostId,
-  memberId?: MemberId
+  principalId?: PrincipalId
 ): Promise<PublicPostDetail | null> {
   const postUuid = toUuid(postId)
 
@@ -300,11 +300,11 @@ export async function getPublicPostDetail(
         contentJson: posts.contentJson,
         statusId: posts.statusId,
         voteCount: posts.voteCount,
-        memberId: posts.memberId,
+        principalId: posts.principalId,
         createdAt: posts.createdAt,
         pinnedCommentId: posts.pinnedCommentId,
         officialResponse: posts.officialResponse,
-        officialResponseMemberId: posts.officialResponseMemberId,
+        officialResponsePrincipalId: posts.officialResponsePrincipalId,
         officialResponseAt: posts.officialResponseAt,
         boardId: boards.id,
         boardName: boards.name,
@@ -325,9 +325,9 @@ export async function getPublicPostDetail(
           '[]'
         )`.as('roadmaps_json'),
         authorName: sql<string | null>`(
-          SELECT u.name FROM ${memberTable} m
+          SELECT u.name FROM ${principalTable} m
           INNER JOIN ${userTable} u ON m.user_id = u.id
-          WHERE m.id = ${posts.memberId}
+          WHERE m.id = ${posts.principalId}
         )`.as('author_name'),
         authorAvatarData: sql<string | null>`(
           SELECT CASE
@@ -335,14 +335,14 @@ export async function getPublicPostDetail(
             THEN json_build_object('key', u.image_key)
             ELSE json_build_object('url', u.image)
           END
-          FROM ${memberTable} m
+          FROM ${principalTable} m
           INNER JOIN ${userTable} u ON m.user_id = u.id
-          WHERE m.id = ${posts.memberId}
+          WHERE m.id = ${posts.principalId}
         )`.as('author_avatar_data'),
         officialResponseAuthorName: sql<string | null>`(
-          SELECT u.name FROM ${memberTable} m
+          SELECT u.name FROM ${principalTable} m
           INNER JOIN ${userTable} u ON m.user_id = u.id
-          WHERE m.id = ${posts.officialResponseMemberId}
+          WHERE m.id = ${posts.officialResponsePrincipalId}
         )`.as('official_response_author_name'),
       })
       .from(posts)
@@ -357,7 +357,7 @@ export async function getPublicPostDetail(
       id: string
       post_id: string
       parent_id: string | null
-      member_id: string
+      principal_id: string
       author_name: string | null
       content: string
       is_team_member: boolean
@@ -371,7 +371,7 @@ export async function getPublicPostDetail(
         c.id,
         c.post_id,
         c.parent_id,
-        c.member_id,
+        c.principal_id,
         u.name as author_name,
         c.content,
         c.is_team_member,
@@ -380,12 +380,12 @@ export async function getPublicPostDetail(
         u.image_key,
         u.image,
         COALESCE(
-          json_agg(json_build_object('emoji', cr.emoji, 'memberId', cr.member_id))
+          json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
           FILTER (WHERE cr.id IS NOT NULL),
           '[]'
         ) as reactions_json
       FROM ${comments} c
-      INNER JOIN ${memberTable} m ON c.member_id = m.id
+      INNER JOIN ${principalTable} m ON c.principal_id = m.id
       INNER JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
       WHERE c.post_id IN (
@@ -417,7 +417,7 @@ export async function getPublicPostDetail(
     id: string
     post_id: string
     parent_id: string | null
-    member_id: string
+    principal_id: string
     author_name: string | null
     content: string
     is_team_member: boolean
@@ -437,7 +437,7 @@ export async function getPublicPostDetail(
     id: comment.id,
     postId: comment.post_id,
     parentId: comment.parent_id,
-    memberId: comment.member_id,
+    principalId: comment.principal_id,
     authorName: comment.author_name,
     content: comment.content,
     isTeamMember: comment.is_team_member,
@@ -446,16 +446,16 @@ export async function getPublicPostDetail(
       imageKey: comment.image_key,
       image: comment.image,
     }),
-    reactions: parseJson<Array<{ emoji: string; memberId: string }>>(comment.reactions_json),
+    reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
   }))
 
-  const commentTree = buildCommentTree(commentsResult, memberId)
+  const commentTree = buildCommentTree(commentsResult, principalId)
 
   const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => ({
     id: node.id as CommentId,
     content: node.content,
     authorName: node.authorName,
-    memberId: node.memberId,
+    principalId: node.principalId,
     createdAt: node.createdAt,
     parentId: node.parentId as CommentId | null,
     isTeamMember: node.isTeamMember,
@@ -474,7 +474,7 @@ export async function getPublicPostDetail(
         id: pinnedCommentData.id as CommentId,
         content: pinnedCommentData.content,
         authorName: pinnedCommentData.author_name,
-        memberId: pinnedCommentData.member_id as MemberId,
+        principalId: pinnedCommentData.principal_id as PrincipalId,
         avatarUrl: computeAvatarUrl({
           imageKey: pinnedCommentData.image_key,
           image: pinnedCommentData.image,
@@ -493,7 +493,7 @@ export async function getPublicPostDetail(
     statusId: postResult.statusId,
     voteCount: postResult.voteCount,
     authorName: postResult.authorName,
-    memberId: postResult.memberId,
+    principalId: postResult.principalId,
     authorAvatarUrl,
     createdAt: postResult.createdAt,
     board: { id: postResult.boardId, name: postResult.boardName, slug: postResult.boardSlug },
@@ -600,9 +600,9 @@ export async function getPublicRoadmapPostsPaginated(params: {
   }
 }
 
-export async function hasUserVoted(postId: PostId, memberId: MemberId): Promise<boolean> {
+export async function hasUserVoted(postId: PostId, principalId: PrincipalId): Promise<boolean> {
   const vote = await db.query.votes.findFirst({
-    where: and(eq(votes.postId, postId), eq(votes.memberId, memberId)),
+    where: and(eq(votes.postId, postId), eq(votes.principalId, principalId)),
   })
   return !!vote
 }
@@ -635,7 +635,7 @@ function getExecuteRows<T>(result: unknown): T[] {
  */
 export async function getVoteAndSubscriptionStatus(
   postId: PostId,
-  memberId: MemberId
+  principalId: PrincipalId
 ): Promise<{
   hasVoted: boolean
   subscription: {
@@ -646,7 +646,7 @@ export async function getVoteAndSubscriptionStatus(
 }> {
   // Convert TypeIDs to UUIDs for raw SQL
   const postUuid = toUuid(postId)
-  const memberUuid = toUuid(memberId)
+  const principalUuid = toUuid(principalId)
 
   // Single query that always returns exactly 1 row using a subquery approach
   // This avoids the need for a fallback query when no subscription exists
@@ -655,7 +655,7 @@ export async function getVoteAndSubscriptionStatus(
       EXISTS(
         SELECT 1 FROM ${votes}
         WHERE ${votes.postId} = ${postUuid}::uuid
-        AND ${votes.memberId} = ${memberUuid}::uuid
+        AND ${votes.principalId} = ${principalUuid}::uuid
       ) as has_voted,
       ps.post_id IS NOT NULL as subscribed,
       ps.notify_comments,
@@ -664,7 +664,7 @@ export async function getVoteAndSubscriptionStatus(
     FROM (SELECT 1) AS dummy
     LEFT JOIN ${postSubscriptions} ps
       ON ps.post_id = ${postUuid}::uuid
-      AND ps.member_id = ${memberUuid}::uuid
+      AND ps.principal_id = ${principalUuid}::uuid
   `)
 
   type ResultRow = {
@@ -699,7 +699,7 @@ export async function getVoteAndSubscriptionStatus(
 
 export async function getUserVotedPostIds(
   postIds: PostId[],
-  memberId: MemberId
+  principalId: PrincipalId
 ): Promise<Set<PostId>> {
   if (postIds.length === 0) {
     return new Set()
@@ -707,15 +707,15 @@ export async function getUserVotedPostIds(
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
-    .where(and(inArray(votes.postId, postIds), eq(votes.memberId, memberId)))
+    .where(and(inArray(votes.postId, postIds), eq(votes.principalId, principalId)))
   return new Set(result.map((r) => r.postId))
 }
 
-export async function getAllUserVotedPostIds(memberId: MemberId): Promise<Set<PostId>> {
+export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<Set<PostId>> {
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
-    .where(eq(votes.memberId, memberId))
+    .where(eq(votes.principalId, principalId))
   return new Set(result.map((r) => r.postId))
 }
 
@@ -725,8 +725,8 @@ export async function getVotedPostIdsByUserId(
   const result = await db
     .select({ postId: votes.postId })
     .from(votes)
-    .innerJoin(memberTable, eq(votes.memberId, memberTable.id))
-    .where(eq(memberTable.userId, userId))
+    .innerJoin(principalTable, eq(votes.principalId, principalTable.id))
+    .where(eq(principalTable.userId, userId))
   return new Set(result.map((r) => r.postId))
 }
 

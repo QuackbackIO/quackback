@@ -8,19 +8,19 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { TeamHeader } from '@/components/admin/settings/team/team-header'
 import { PendingInvitations } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
-import type { UserId, MemberId } from '@quackback/ids'
+import type { UserId, PrincipalId } from '@quackback/ids'
 
 export const Route = createFileRoute('/admin/settings/team')({
   loader: async ({ context }) => {
     // User, member, and settings are validated in parent /admin layout
-    const { settings, queryClient, member } = context
+    const { settings, queryClient, principal } = context
 
     // Pre-fetch team data using React Query
     await queryClient.ensureQueryData(settingsQueries.teamMembersAndInvitations())
 
     return {
       settings,
-      currentMember: member as { id: MemberId; role: 'admin' | 'member'; userId: UserId },
+      currentMember: principal as { id: PrincipalId; role: 'admin' | 'member'; userId: UserId },
     }
   },
   component: TeamPage,
@@ -58,9 +58,9 @@ function TeamPage() {
         <ul className="divide-y divide-border/50">
           {members.map(
             (m: {
-              id: string
+              id: PrincipalId
               role: string
-              userId: string
+              userId: UserId
               userName: string
               userEmail: string
             }) => {
@@ -95,7 +95,7 @@ function TeamPage() {
                     </Badge>
                     {showActions && (
                       <MemberActions
-                        memberId={m.id}
+                        principalId={m.id}
                         memberName={m.userName || m.userEmail}
                         memberRole={m.role as 'admin' | 'member'}
                         isLastAdmin={isLastAdmin && m.role === 'admin'}

@@ -9,7 +9,7 @@ import { createCommentFn, toggleReactionFn } from '@/lib/server/functions/commen
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostDetails, CommentReaction, CommentWithReplies } from '@/lib/shared/types'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
-import type { CommentId, MemberId, PostId } from '@quackback/ids'
+import type { CommentId, PrincipalId, PostId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -31,7 +31,7 @@ interface AddCommentInput {
   parentId?: string | null
   authorName?: string | null
   authorEmail?: string | null
-  memberId?: string | null
+  principalId?: string | null
 }
 
 // ============================================================================
@@ -232,7 +232,7 @@ export function useAddComment() {
           parentId: (parentId || undefined) as CommentId | undefined,
         },
       }),
-    onMutate: async ({ postId, content, parentId, authorName, memberId }) => {
+    onMutate: async ({ postId, content, parentId, authorName, principalId }) => {
       const typedPostId = postId as PostId
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(typedPostId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
@@ -247,9 +247,9 @@ export function useAddComment() {
         postId: typedPostId,
         content,
         authorName: authorName || null,
-        memberId: memberId as MemberId,
+        principalId: principalId as PrincipalId,
         parentId: (parentId || null) as CommentId | null,
-        isTeamMember: !!memberId,
+        isTeamMember: !!principalId,
         createdAt: new Date(),
         replies: [],
         reactions: [],

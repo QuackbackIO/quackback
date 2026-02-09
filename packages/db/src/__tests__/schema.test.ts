@@ -5,7 +5,7 @@ import { REACTION_EMOJIS } from '../types'
 import { boards, roadmaps, tags } from '../schema/boards'
 import { integrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'
-import { user, session, settings, member, invitation } from '../schema/auth'
+import { user, session, settings, principal, invitation } from '../schema/auth'
 
 describe('Schema definitions', () => {
   describe('boards schema', () => {
@@ -74,9 +74,9 @@ describe('Schema definitions', () => {
       expect(columns).toContain('boardId')
       expect(columns).toContain('title')
       expect(columns).toContain('content')
-      expect(columns).toContain('memberId')
+      expect(columns).toContain('principalId')
       expect(columns).toContain('statusId')
-      expect(columns).toContain('ownerMemberId')
+      expect(columns).toContain('ownerPrincipalId')
       expect(columns).toContain('voteCount')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
@@ -84,7 +84,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      // 20 business columns + 1 searchVector (generated) + 1 commentCount (denormalized) + 3 embedding columns + 3 merge columns (canonicalPostId, mergedAt, mergedByMemberId) - 2 = 26
+      // 20 business columns + 1 searchVector (generated) + 1 commentCount (denormalized) + 3 embedding columns + 3 merge columns (canonicalPostId, mergedAt, mergedByPrincipalId) - 2 = 26
       expect(columns.length).toBe(26)
     })
   })
@@ -125,7 +125,7 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(votes))
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
-      expect(columns).toContain('memberId')
+      expect(columns).toContain('principalId')
       expect(columns).toContain('createdAt')
     })
   })
@@ -140,7 +140,7 @@ describe('Schema definitions', () => {
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
       expect(columns).toContain('parentId')
-      expect(columns).toContain('memberId')
+      expect(columns).toContain('principalId')
       expect(columns).toContain('content')
       expect(columns).toContain('createdAt')
     })
@@ -160,7 +160,7 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(commentReactions))
       expect(columns).toContain('id')
       expect(columns).toContain('commentId')
-      expect(columns).toContain('memberId')
+      expect(columns).toContain('principalId')
       expect(columns).toContain('emoji')
       expect(columns).toContain('createdAt')
     })
@@ -274,13 +274,13 @@ describe('Auth schema definitions', () => {
     })
   })
 
-  describe('member schema', () => {
+  describe('principal schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(member)).toBe('member')
+      expect(getTableName(principal)).toBe('principal')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(member))
+      const columns = Object.keys(getTableColumns(principal))
       expect(columns).toContain('id')
       expect(columns).toContain('userId')
       expect(columns).toContain('role')
@@ -288,7 +288,7 @@ describe('Auth schema definitions', () => {
     })
 
     it('has role column', () => {
-      const columns = Object.keys(getTableColumns(member))
+      const columns = Object.keys(getTableColumns(principal))
       expect(columns).toContain('role')
     })
   })

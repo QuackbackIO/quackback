@@ -2,7 +2,7 @@
  * Input/Output types for CommentService operations
  */
 
-import type { PostId, CommentId, BoardId, MemberId } from '@quackback/ids'
+import type { PostId, CommentId, BoardId, PrincipalId } from '@quackback/ids'
 
 /**
  * Input for creating a new comment
@@ -29,7 +29,7 @@ export interface CreateCommentResult {
     postId: PostId
     content: string
     parentId: CommentId | null
-    memberId: MemberId
+    principalId: PrincipalId
     isTeamMember: boolean
     createdAt: Date
   }
@@ -56,7 +56,7 @@ export interface CommentThread {
   id: CommentId
   postId: PostId
   parentId: CommentId | null
-  memberId: MemberId
+  principalId: PrincipalId
   authorName: string | null
   content: string
   isTeamMember: boolean
@@ -85,7 +85,7 @@ export interface CommentContext {
     postId: PostId
     content: string
     parentId: CommentId | null
-    memberId: MemberId
+    principalId: PrincipalId
     createdAt: Date
   }
   post: {

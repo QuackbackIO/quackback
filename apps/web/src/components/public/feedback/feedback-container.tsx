@@ -267,7 +267,9 @@ export function FeedbackContainer({
                         voteCount={post.voteCount}
                         commentCount={post.commentCount}
                         authorName={post.authorName}
-                        authorAvatarUrl={post.memberId ? initialAvatarUrls[post.memberId] : null}
+                        authorAvatarUrl={
+                          post.principalId ? initialAvatarUrls[post.principalId] : null
+                        }
                         createdAt={post.createdAt}
                         boardSlug={post.board?.slug || ''}
                         boardName={post.board?.name}

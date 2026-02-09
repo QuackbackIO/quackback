@@ -6,7 +6,7 @@
  * tokens stored in the integrations table.
  */
 
-import { generateId, type MemberId } from '@quackback/ids'
+import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
 import {
   encryptPlatformCredentials,
@@ -16,7 +16,7 @@ import {
 interface SavePlatformCredentialsInput {
   integrationType: string
   credentials: Record<string, string>
-  memberId: MemberId
+  principalId: PrincipalId
 }
 
 /**
@@ -26,7 +26,7 @@ interface SavePlatformCredentialsInput {
 export async function savePlatformCredentials({
   integrationType,
   credentials,
-  memberId,
+  principalId,
 }: SavePlatformCredentialsInput): Promise<void> {
   const encrypted = encryptPlatformCredentials(credentials)
   const now = new Date()
@@ -37,7 +37,7 @@ export async function savePlatformCredentials({
       id: generateId('platform_cred'),
       integrationType,
       secrets: encrypted,
-      configuredByMemberId: memberId,
+      configuredByPrincipalId: principalId,
       createdAt: now,
       updatedAt: now,
     })
@@ -45,7 +45,7 @@ export async function savePlatformCredentials({
       target: [integrationPlatformCredentials.integrationType],
       set: {
         secrets: encrypted,
-        configuredByMemberId: memberId,
+        configuredByPrincipalId: principalId,
         updatedAt: now,
       },
     })

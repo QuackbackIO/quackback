@@ -26,7 +26,7 @@ export const notificationsKeys = {
 
 export interface SerializedNotification {
   id: NotificationId
-  memberId: string
+  principalId: string
   type: 'post_status_changed' | 'comment_created' | 'post_mentioned'
   title: string
   body: string | null

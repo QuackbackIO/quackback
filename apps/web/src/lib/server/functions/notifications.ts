@@ -40,7 +40,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-    const result = await getNotificationsForMember(auth.member.id, {
+    const result = await getNotificationsForMember(auth.principal.id, {
       limit: data.limit,
       offset: data.offset,
       unreadOnly: data.unreadOnly,
@@ -50,7 +50,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
     return {
       notifications: result.notifications.map((n) => ({
         id: n.id,
-        memberId: n.memberId,
+        principalId: n.principalId,
         type: n.type,
         title: n.title,
         body: n.body,
@@ -72,7 +72,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
  */
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-  const count = await getUnreadCount(auth.member.id)
+  const count = await getUnreadCount(auth.principal.id)
   return { count }
 })
 
@@ -87,7 +87,7 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
   .inputValidator(notificationIdSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-    await markAsRead(auth.member.id, data.notificationId as NotificationId)
+    await markAsRead(auth.principal.id, data.notificationId as NotificationId)
     return { success: true }
   })
 
@@ -96,7 +96,7 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
  */
 export const markAllNotificationsAsReadFn = createServerFn({ method: 'POST' }).handler(async () => {
   const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-  await markAllAsRead(auth.member.id)
+  await markAllAsRead(auth.principal.id)
   return { success: true }
 })
 
@@ -107,6 +107,6 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
   .inputValidator(notificationIdSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-    await archiveNotification(auth.member.id, data.notificationId as NotificationId)
+    await archiveNotification(auth.principal.id, data.notificationId as NotificationId)
     return { success: true }
   })

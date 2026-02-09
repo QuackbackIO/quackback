@@ -29,7 +29,7 @@ import type {
   BoardId,
   TagId,
   StatusId,
-  MemberId,
+  PrincipalId,
   CommentId,
   ChangelogId,
 } from '@quackback/ids'
@@ -116,7 +116,7 @@ const triagePostSchema = {
   postId: z.string().describe('Post TypeID to update'),
   statusId: z.string().optional().describe('New status TypeID'),
   tagIds: z.array(z.string()).optional().describe('Replace all tags with these TypeIDs'),
-  ownerMemberId: z
+  ownerPrincipalId: z
     .string()
     .nullable()
     .optional()
@@ -169,7 +169,7 @@ type TriagePostArgs = {
   postId: string
   statusId?: string
   tagIds?: string[]
-  ownerMemberId?: string | null
+  ownerPrincipalId?: string | null
   officialResponse?: string | null
 }
 
@@ -269,7 +269,7 @@ Examples:
 
 Examples:
 - Change status: triage_post({ postId: "post_01abc...", statusId: "status_01xyz..." })
-- Assign owner and set response: triage_post({ postId: "post_01abc...", ownerMemberId: "member_01xyz...", officialResponse: "We're working on this!" })
+- Assign owner and set response: triage_post({ postId: "post_01abc...", ownerPrincipalId: "principal_01xyz...", officialResponse: "We're working on this!" })
 - Replace tags: triage_post({ postId: "post_01abc...", tagIds: ["tag_01a...", "tag_01b..."] })`,
     triagePostSchema,
     WRITE,
@@ -280,10 +280,10 @@ Examples:
           {
             statusId: args.statusId as StatusId | undefined,
             tagIds: args.tagIds as TagId[] | undefined,
-            ownerMemberId: args.ownerMemberId as MemberId | null | undefined,
+            ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
             officialResponse: args.officialResponse,
           },
-          { memberId: auth.memberId, name: auth.name }
+          { principalId: auth.principalId, name: auth.name }
         )
 
         return {
@@ -295,7 +295,7 @@ Examples:
                   id: result.id,
                   title: result.title,
                   statusId: result.statusId,
-                  ownerMemberId: result.ownerMemberId,
+                  ownerPrincipalId: result.ownerPrincipalId,
                   officialResponse: result.officialResponse,
                   officialResponseAt: result.officialResponseAt,
                   updatedAt: result.updatedAt,
@@ -331,7 +331,7 @@ Examples:
             parentId: args.parentId as CommentId | undefined,
           },
           {
-            memberId: auth.memberId,
+            principalId: auth.principalId,
             userId: auth.userId,
             name: auth.name,
             email: auth.email,
@@ -374,7 +374,7 @@ Examples:
             tagIds: args.tagIds as TagId[] | undefined,
           },
           {
-            memberId: auth.memberId,
+            principalId: auth.principalId,
             userId: auth.userId,
             name: auth.name,
             email: auth.email,
@@ -427,7 +427,7 @@ Examples:
             content: args.content,
             publishState,
           },
-          { memberId: auth.memberId, name: auth.name }
+          { principalId: auth.principalId, name: auth.name }
         )
 
         return {
@@ -500,7 +500,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
               boardName: p.board?.name,
               statusId: p.statusId,
               authorName: p.authorName,
-              ownerMemberId: p.ownerMemberId,
+              ownerPrincipalId: p.ownerPrincipalId,
               tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
               createdAt: p.createdAt,
             })),
@@ -602,7 +602,7 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
             statusId: post.statusId,
             authorName: post.authorName,
             authorEmail: post.authorEmail,
-            ownerMemberId: post.ownerMemberId,
+            ownerPrincipalId: post.ownerPrincipalId,
             officialResponse: post.officialResponse,
             officialResponseAuthorName: post.officialResponseAuthorName,
             officialResponseAt: post.officialResponseAt,

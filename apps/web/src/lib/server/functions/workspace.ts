@@ -3,7 +3,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
-import { db, member, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 import { getSession } from './auth'
 
 /**
@@ -32,16 +32,16 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
         return null
       }
 
-      const memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, session.user.id),
+      const principalRecord = await db.query.principal.findFirst({
+        where: eq(principal.userId, session.user.id),
       })
 
-      if (!memberRecord) {
-        console.log(`[fn:workspace] getCurrentUserRole: no member`)
+      if (!principalRecord) {
+        console.log(`[fn:workspace] getCurrentUserRole: no principal`)
         return null
       }
-      console.log(`[fn:workspace] getCurrentUserRole: role=${memberRecord.role}`)
-      return memberRecord.role as 'admin' | 'member' | 'user'
+      console.log(`[fn:workspace] getCurrentUserRole: role=${principalRecord.role}`)
+      return principalRecord.role as 'admin' | 'member' | 'user'
     } catch (error) {
       console.error(`[fn:workspace] ❌ getCurrentUserRole failed:`, error)
       throw error
@@ -59,14 +59,14 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
       return { success: false as const, error: 'Unauthorized', status: 401 as const }
     }
 
-    const [memberRecord, appSettings] = await Promise.all([
-      db.query.member.findFirst({
-        where: eq(member.userId, session.user.id),
+    const [principalRecord, appSettings] = await Promise.all([
+      db.query.principal.findFirst({
+        where: eq(principal.userId, session.user.id),
       }),
       db.query.settings.findFirst(),
     ])
 
-    if (!memberRecord) {
+    if (!principalRecord) {
       return { success: false as const, error: 'Forbidden', status: 403 as const }
     }
 
@@ -77,7 +77,7 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
     return {
       success: true as const,
       settings: appSettings,
-      member: memberRecord,
+      principal: principalRecord,
       user: session.user,
     }
   } catch (error) {

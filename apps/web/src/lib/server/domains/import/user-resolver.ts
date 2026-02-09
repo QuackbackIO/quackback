@@ -9,11 +9,11 @@
  */
 
 import { db, eq } from '@/lib/server/db'
-import { user, member } from '@quackback/db'
-import { createId, type MemberId, type UserId } from '@quackback/ids'
+import { user, principal } from '@quackback/db'
+import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 
 interface PendingUser {
-  memberId: MemberId
+  principalId: PrincipalId
   userId: UserId
   email: string
   name: string
@@ -27,52 +27,52 @@ interface PendingUser {
  * - Case-insensitive email matching
  */
 export class ImportUserResolver {
-  private cache = new Map<string, MemberId>()
+  private cache = new Map<string, PrincipalId>()
   private pendingCreates: PendingUser[] = []
 
   /**
    * Resolve an email to a member ID.
    *
-   * If the email has an existing user+member, returns the memberId.
-   * If not, queues a new user+member for creation and returns the pre-generated memberId.
-   * If email is null/empty, returns the fallbackMemberId.
+   * If the email has an existing user+member, returns the principalId.
+   * If not, queues a new user+member for creation and returns a pre-generated principalId.
+   * If email is null/empty, returns the fallbackPrincipalId.
    */
   async resolve(
     email: string | null | undefined,
     name: string | null | undefined,
-    fallbackMemberId: MemberId
-  ): Promise<MemberId> {
-    if (!email) return fallbackMemberId
+    fallbackPrincipalId: PrincipalId
+  ): Promise<PrincipalId> {
+    if (!email) return fallbackPrincipalId
 
     const normalizedEmail = email.toLowerCase().trim()
-    if (!normalizedEmail) return fallbackMemberId
+    if (!normalizedEmail) return fallbackPrincipalId
 
     if (this.cache.has(normalizedEmail)) {
       return this.cache.get(normalizedEmail)!
     }
 
-    // Look up existing member by email
+    // Look up existing principal by email
     const existing = await db
-      .select({ memberId: member.id })
+      .select({ principalId: principal.id })
       .from(user)
-      .innerJoin(member, eq(member.userId, user.id))
+      .innerJoin(principal, eq(principal.userId, user.id))
       .where(eq(user.email, normalizedEmail))
       .limit(1)
 
     if (existing.length > 0) {
-      const memberId = existing[0].memberId as MemberId
-      this.cache.set(normalizedEmail, memberId)
-      return memberId
+      const principalId = existing[0].principalId as PrincipalId
+      this.cache.set(normalizedEmail, principalId)
+      return principalId
     }
 
     // Queue for creation
     const userId = createId('user')
-    const memberId = createId('member')
+    const principalId = createId('principal')
     const displayName = name?.trim() || normalizedEmail.split('@')[0]
 
-    this.pendingCreates.push({ memberId, userId, email: normalizedEmail, name: displayName })
-    this.cache.set(normalizedEmail, memberId)
-    return memberId
+    this.pendingCreates.push({ principalId, userId, email: normalizedEmail, name: displayName })
+    this.cache.set(normalizedEmail, principalId)
+    return principalId
   }
 
   /**
@@ -101,10 +101,10 @@ export class ImportUserResolver {
         }))
       )
 
-      // Create member records
-      await db.insert(member).values(
+      // Create principal records
+      await db.insert(principal).values(
         chunk.map((u) => ({
-          id: u.memberId,
+          id: u.principalId,
           userId: u.userId,
           role: 'user' as const,
           createdAt: new Date(),
