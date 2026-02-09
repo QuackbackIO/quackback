@@ -19,7 +19,7 @@ export function getJiraOAuthUrl(
   const params = new URLSearchParams({
     audience: 'api.atlassian.com',
     client_id: clientId,
-    scope: 'read:jira-work write:jira-work offline_access',
+    scope: 'read:jira-work write:jira-work manage:jira-webhook offline_access',
     redirect_uri: redirectUri,
     state,
     response_type: 'code',

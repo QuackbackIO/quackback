@@ -11,11 +11,16 @@ import type { InboundWebhookHandler, InboundWebhookResult } from '../inbound-typ
 
 export const jiraInboundHandler: InboundWebhookHandler = {
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
-    const signature = request.headers.get('X-Hub-Signature')
-    if (!signature) {
+    const rawSignature = request.headers.get('X-Hub-Signature')
+    if (!rawSignature) {
       // Jira Cloud webhooks may not always have HMAC — but if we configured a secret, require it
       return new Response('Missing signature', { status: 401 })
     }
+
+    // Jira sends the signature as "sha256=<hex>" — strip the prefix for comparison
+    const signature = rawSignature.startsWith('sha256=')
+      ? rawSignature.slice('sha256='.length)
+      : rawSignature
 
     const expected = createHmac('sha256', secret).update(body).digest('hex')
     const valid =

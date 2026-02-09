@@ -113,6 +113,7 @@ export async function refreshLinearToken(
   credentials?: Record<string, string>
 ): Promise<{
   accessToken: string
+  refreshToken?: string
   expiresIn: number
 }> {
   const clientId = credentials?.clientId
@@ -139,11 +140,13 @@ export async function refreshLinearToken(
 
   const data = (await response.json()) as {
     access_token: string
+    refresh_token?: string
     expires_in: number
   }
 
   return {
     accessToken: data.access_token,
+    refreshToken: data.refresh_token,
     expiresIn: data.expires_in,
   }
 }

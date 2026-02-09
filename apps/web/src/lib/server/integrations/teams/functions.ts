@@ -76,7 +76,10 @@ async function getTeamsAccessToken(integration: { secrets: unknown; config: unkn
     if (Date.now() >= expiresAt - bufferMs) {
       console.log('[Teams] Access token expired, refreshing...')
       const { refreshTeamsToken } = await import('./oauth')
-      const refreshed = await refreshTeamsToken(secrets.refreshToken)
+      const { getPlatformCredentials } =
+        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+      const credentials = await getPlatformCredentials('teams')
+      const refreshed = await refreshTeamsToken(secrets.refreshToken, credentials ?? undefined)
 
       const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
       await db

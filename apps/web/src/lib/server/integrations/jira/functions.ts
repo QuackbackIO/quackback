@@ -79,7 +79,10 @@ async function getJiraAccessToken(integration: { secrets: unknown; config: unkno
     if (Date.now() >= expiresAt - bufferMs) {
       console.log('[Jira] Access token expired, refreshing...')
       const { refreshJiraToken } = await import('./oauth')
-      const refreshed = await refreshJiraToken(secrets.refreshToken)
+      const { getPlatformCredentials } =
+        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+      const credentials = await getPlatformCredentials('jira')
+      const refreshed = await refreshJiraToken(secrets.refreshToken, credentials ?? undefined)
 
       const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
       await db

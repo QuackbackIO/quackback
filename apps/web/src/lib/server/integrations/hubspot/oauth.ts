@@ -8,7 +8,6 @@ const HUBSPOT_SCOPES = [
   'crm.objects.contacts.read',
   'crm.objects.companies.read',
   'crm.objects.deals.read',
-  'oauth',
 ].join(' ')
 
 /**

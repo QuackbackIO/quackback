@@ -27,7 +27,7 @@ export async function searchContact(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      'Intercom-Version': '2.11',
+      'Intercom-Version': '2.14',
     },
     body: JSON.stringify({
       query: {

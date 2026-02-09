@@ -78,7 +78,10 @@ export const searchHubSpotContactFn = createServerFn({ method: 'POST' })
       if (cfg.tokenExpiresAt && new Date(cfg.tokenExpiresAt) < new Date()) {
         const { refreshHubSpotToken } = await import('./oauth')
         const { encryptSecrets } = await import('../encryption')
-        const refreshed = await refreshHubSpotToken(secrets.refreshToken)
+        const { getPlatformCredentials } =
+          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+        const credentials = await getPlatformCredentials('hubspot')
+        const refreshed = await refreshHubSpotToken(secrets.refreshToken, credentials ?? undefined)
         accessToken = refreshed.accessToken
 
         // Persist refreshed tokens

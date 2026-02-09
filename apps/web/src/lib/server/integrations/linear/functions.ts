@@ -84,7 +84,10 @@ export const fetchLinearTeamsFn = createServerFn({ method: 'GET' }).handler(
       if (Date.now() >= expiresAt - bufferMs) {
         console.log('[Linear] Access token expired, refreshing...')
         const { refreshLinearToken } = await import('./oauth')
-        const refreshed = await refreshLinearToken(secrets.refreshToken)
+        const { getPlatformCredentials } =
+          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+        const credentials = await getPlatformCredentials('linear')
+        const refreshed = await refreshLinearToken(secrets.refreshToken, credentials ?? undefined)
         accessToken = refreshed.accessToken
 
         const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
@@ -93,7 +96,7 @@ export const fetchLinearTeamsFn = createServerFn({ method: 'GET' }).handler(
           .set({
             secrets: encryptSecrets({
               accessToken: refreshed.accessToken,
-              refreshToken: secrets.refreshToken,
+              refreshToken: refreshed.refreshToken ?? secrets.refreshToken,
             }),
             config: { ...cfg, tokenExpiresAt: newExpiry },
             updatedAt: new Date(),

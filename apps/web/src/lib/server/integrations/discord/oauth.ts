@@ -5,8 +5,8 @@
 
 const DISCORD_API = 'https://discord.com/api/v10'
 
-/** Bot permission: Send Messages (2048) + Embed Links (16384) */
-const BOT_PERMISSIONS = '18432'
+/** Bot permission: View Channel (1024) + Send Messages (2048) + Embed Links (16384) */
+const BOT_PERMISSIONS = '19456'
 
 /**
  * Generate the Discord OAuth authorization URL.

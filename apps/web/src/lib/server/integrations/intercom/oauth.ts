@@ -68,7 +68,7 @@ export async function exchangeIntercomCode(
     headers: {
       Authorization: `Bearer ${data.token}`,
       Accept: 'application/json',
-      'Intercom-Version': '2.11',
+      'Intercom-Version': '2.14',
     },
   })
 

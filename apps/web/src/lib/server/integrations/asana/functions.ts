@@ -87,7 +87,10 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
       const bufferMs = 5 * 60 * 1000
       if (Date.now() >= expiresAt - bufferMs) {
         console.log('[Asana] Access token expired, refreshing...')
-        const refreshed = await refreshAsanaToken(secrets.refreshToken)
+        const { getPlatformCredentials } =
+          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+        const credentials = await getPlatformCredentials('asana')
+        const refreshed = await refreshAsanaToken(secrets.refreshToken, credentials ?? undefined)
         accessToken = refreshed.accessToken
 
         const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
