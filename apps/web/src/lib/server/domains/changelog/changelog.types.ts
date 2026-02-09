@@ -3,7 +3,7 @@
  */
 
 import type { TiptapContent } from '@quackback/db/types'
-import type { ChangelogId, MemberId, PostId } from '@quackback/ids'
+import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 
 // ============================================================================
 // Input Types
@@ -67,7 +67,7 @@ export interface ChangelogEntryWithDetails {
   title: string
   content: string
   contentJson: TiptapContent | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   publishedAt: Date | null
   createdAt: Date
   updatedAt: Date
@@ -83,7 +83,7 @@ export interface ChangelogEntryWithDetails {
  * Changelog author information
  */
 export interface ChangelogAuthor {
-  id: MemberId
+  id: PrincipalId
   name: string
   avatarUrl: string | null
 }

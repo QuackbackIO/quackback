@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
-import type { InviteId, MemberId, UserId } from '@quackback/ids'
+import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
-import { db, invitation, member, eq } from '@/lib/server/db'
+import { db, invitation, principal, eq } from '@/lib/server/db'
 import { getSession } from './auth'
 
 /**
@@ -33,12 +33,12 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       }
 
       // Parallelize invitation and member queries - they're independent
-      const [inv, existingMember] = await Promise.all([
+      const [inv, existingPrincipal] = await Promise.all([
         db.query.invitation.findFirst({
           where: eq(invitation.id, invitationId as InviteId),
         }),
-        db.query.member.findFirst({
-          where: eq(member.userId, userId),
+        db.query.principal.findFirst({
+          where: eq(principal.userId, userId),
         }),
       ])
 
@@ -67,22 +67,22 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
       const role = inv.role || 'member'
 
-      if (existingMember) {
-        // Update existing member's role if the invitation grants a higher role
+      if (existingPrincipal) {
+        // Update existing principal's role if the invitation grants a higher role
         const roleHierarchy = ['user', 'member', 'admin']
-        const existingRoleIndex = roleHierarchy.indexOf(existingMember.role)
+        const existingRoleIndex = roleHierarchy.indexOf(existingPrincipal.role)
         const newRoleIndex = roleHierarchy.indexOf(role)
 
         if (newRoleIndex > existingRoleIndex) {
           await db
-            .update(member)
+            .update(principal)
             .set({ role })
-            .where(eq(member.id, existingMember.id as MemberId))
+            .where(eq(principal.id, existingPrincipal.id as PrincipalId))
         }
       } else {
-        // Create new member record
-        await db.insert(member).values({
-          id: generateId('member'),
+        // Create new principal record
+        await db.insert(principal).values({
+          id: generateId('principal'),
           userId,
           role,
           createdAt: new Date(),

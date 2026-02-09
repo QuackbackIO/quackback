@@ -109,7 +109,7 @@ function registerResources(server: McpServer) {
     'quackback://members',
     { description: 'List all team members (emails stripped)' },
     async () => {
-      const { listTeamMembers } = await import('@/lib/server/domains/members/member.service')
+      const { listTeamMembers } = await import('@/lib/server/domains/principals/principal.service')
       const members = await listTeamMembers()
       return {
         contents: [

@@ -9,7 +9,7 @@ import { getSettings } from './workspace'
 import {
   db,
   settings,
-  member,
+  principal,
   user,
   postStatuses,
   boards,
@@ -83,26 +83,26 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       // Settings exist: require existing admin role
       if (!existingSettings) {
         // Fresh install - ensure user has admin member record
-        const memberRecord = await db.query.member.findFirst({
-          where: eq(member.userId, session.user.id as UserId),
+        const principalRecord = await db.query.principal.findFirst({
+          where: eq(principal.userId, session.user.id as UserId),
         })
 
-        if (!memberRecord) {
+        if (!principalRecord) {
           // Create admin member for first user
           console.log(`[fn:onboarding] setupWorkspaceFn: creating admin member for first user`)
-          await db.insert(member).values({
-            id: generateId('member'),
+          await db.insert(principal).values({
+            id: generateId('principal'),
             userId: session.user.id as UserId,
             role: 'admin',
             createdAt: new Date(),
           })
-        } else if (memberRecord.role !== 'admin') {
+        } else if (principalRecord.role !== 'admin') {
           // User exists but not admin - upgrade to admin (fresh install, they're first)
           console.log(`[fn:onboarding] setupWorkspaceFn: upgrading user to admin`)
           await db
-            .update(member)
+            .update(principal)
             .set({ role: 'admin' })
-            .where(eq(member.userId, session.user.id as UserId))
+            .where(eq(principal.userId, session.user.id as UserId))
         }
       } else {
         // Settings exist - check setup state
@@ -112,33 +112,33 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
 
         // If workspace step is already complete, require admin role
         // If workspace step is NOT complete (mid-onboarding), ensure user becomes admin
-        const memberRecord = await db.query.member.findFirst({
-          where: eq(member.userId, session.user.id as UserId),
+        const principalRecord = await db.query.principal.findFirst({
+          where: eq(principal.userId, session.user.id as UserId),
         })
 
         if (currentSetupState?.steps?.workspace) {
           // Workspace already set up - require existing admin
-          if (!memberRecord || memberRecord.role !== 'admin') {
+          if (!principalRecord || principalRecord.role !== 'admin') {
             throw new Error('Only admin can complete setup')
           }
         } else {
           // Mid-onboarding - ensure user is admin
-          if (!memberRecord) {
+          if (!principalRecord) {
             console.log(
               `[fn:onboarding] setupWorkspaceFn: creating admin member for onboarding user`
             )
-            await db.insert(member).values({
-              id: generateId('member'),
+            await db.insert(principal).values({
+              id: generateId('principal'),
               userId: session.user.id as UserId,
               role: 'admin',
               createdAt: new Date(),
             })
-          } else if (memberRecord.role !== 'admin') {
+          } else if (principalRecord.role !== 'admin') {
             console.log(`[fn:onboarding] setupWorkspaceFn: upgrading user to admin`)
             await db
-              .update(member)
+              .update(principal)
               .set({ role: 'admin' })
-              .where(eq(member.userId, session.user.id as UserId))
+              .where(eq(principal.userId, session.user.id as UserId))
           }
         }
       }
@@ -364,13 +364,13 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
 
         // Ensure user has admin member record (for cases where settings exist but member doesn't)
         if (!setupState.steps.workspace) {
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.userId, session.user.id as UserId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.userId, session.user.id as UserId),
           })
 
-          if (!memberRecord) {
-            await db.insert(member).values({
-              id: generateId('member'),
+          if (!principalRecord) {
+            await db.insert(principal).values({
+              id: generateId('principal'),
               userId: session.user.id as UserId,
               role: 'admin',
               createdAt: new Date(),
@@ -403,13 +403,13 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
         })
 
         // Ensure user has admin member record for fresh install
-        const memberRecord = await db.query.member.findFirst({
-          where: eq(member.userId, session.user.id as UserId),
+        const principalRecord = await db.query.principal.findFirst({
+          where: eq(principal.userId, session.user.id as UserId),
         })
 
-        if (!memberRecord) {
-          await db.insert(member).values({
-            id: generateId('member'),
+        if (!principalRecord) {
+          await db.insert(principal).values({
+            id: generateId('principal'),
             userId: session.user.id as UserId,
             role: 'admin',
             createdAt: new Date(),

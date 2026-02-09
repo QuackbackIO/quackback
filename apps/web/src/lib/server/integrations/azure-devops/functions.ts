@@ -44,7 +44,7 @@ export const connectAzureDevOpsFn = createServerFn({ method: 'POST' })
     await listProjects(data.pat, organizationName)
 
     await saveIntegration('azure_devops', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.pat,
       config: {
         organizationUrl: data.organizationUrl,

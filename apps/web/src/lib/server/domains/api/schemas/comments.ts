@@ -35,7 +35,9 @@ const CommentListItemSchema: z.ZodType = z.lazy(() =>
     parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
     content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
     authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
-    memberId: TypeIdSchema.nullable().meta({ description: 'Member ID of the comment author' }),
+    principalId: TypeIdSchema.nullable().meta({
+      description: 'Principal ID of the comment author',
+    }),
     isTeamMember: z
       .boolean()
       .meta({ description: 'Whether the author is a team member', example: false }),
@@ -53,7 +55,7 @@ const CommentDetailSchema = z.object({
   content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
   authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
   authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
-  memberId: TypeIdSchema.nullable().meta({ description: 'Member ID of the comment author' }),
+  principalId: TypeIdSchema.nullable().meta({ description: 'Principal ID of the comment author' }),
   isTeamMember: z
     .boolean()
     .meta({ description: 'Whether the author is a team member', example: false }),
@@ -70,7 +72,7 @@ const CommentResponseSchema = z.object({
   parentId: TypeIdSchema.nullable(),
   content: z.string(),
   authorName: z.string().nullable(),
-  memberId: TypeIdSchema.nullable(),
+  principalId: TypeIdSchema.nullable(),
   isTeamMember: z.boolean(),
   createdAt: TimestampSchema,
 })

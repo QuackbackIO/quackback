@@ -21,10 +21,10 @@ export const Route = createFileRoute('/admin/feedback')({
   loader: async ({ context }) => {
     const { queryClient } = context
 
-    // Get user and member from parent's beforeLoad context
-    const { user, member } = context as {
+    // Get user and principal from parent's beforeLoad context
+    const { user, principal } = context as {
       user: NonNullable<typeof context.user>
-      member: NonNullable<typeof context.member>
+      principal: NonNullable<typeof context.principal>
       queryClient: typeof context.queryClient
     }
 
@@ -35,7 +35,7 @@ export const Route = createFileRoute('/admin/feedback')({
       currentUser: {
         name: user.name,
         email: user.email,
-        memberId: member.id,
+        principalId: principal.id,
       },
     }
   },

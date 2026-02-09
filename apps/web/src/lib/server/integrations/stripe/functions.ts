@@ -28,7 +28,7 @@ export const saveStripeKeyFn = createServerFn({ method: 'POST' })
     }
 
     await saveIntegration('stripe', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.apiKey,
       config: { workspaceName: 'Stripe' },
     })

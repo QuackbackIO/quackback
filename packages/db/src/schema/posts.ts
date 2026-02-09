@@ -15,7 +15,7 @@ import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackbac
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
-import { member } from './auth'
+import { principal } from './auth'
 import type { TiptapContent } from '../types'
 
 // Custom tsvector type for full-text search
@@ -44,27 +44,30 @@ export const posts = pgTable(
     content: text('content').notNull(),
     // Rich content stored as TipTap JSON (optional, for rich text support)
     contentJson: jsonb('content_json').$type<TiptapContent>(),
-    // Member-scoped identity - every post has an author
-    memberId: typeIdColumn('member')('member_id')
+    // Principal-scoped identity - every post has an author
+    principalId: typeIdColumn('principal')('principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'restrict' }),
+      .references(() => principal.id, { onDelete: 'restrict' }),
     // Status reference to post_statuses table
     statusId: typeIdColumn('status')('status_id').references(() => postStatuses.id, {
       onDelete: 'set null',
     }),
-    // Owner is also member-scoped (team member assigned to this post)
-    ownerMemberId: typeIdColumnNullable('member')('owner_member_id').references(() => member.id, {
-      onDelete: 'set null',
-    }),
+    // Owner is also principal-scoped (team member assigned to this post)
+    ownerPrincipalId: typeIdColumnNullable('principal')('owner_principal_id').references(
+      () => principal.id,
+      {
+        onDelete: 'set null',
+      }
+    ),
     voteCount: integer('vote_count').default(0).notNull(),
     // Denormalized comment count for performance
     // Automatically maintained by database trigger (see 0006_add_comment_count_trigger.sql)
     commentCount: integer('comment_count').default(0).notNull(),
-    // Official team response (member-scoped)
+    // Official team response (principal-scoped)
     officialResponse: text('official_response'),
-    officialResponseMemberId: typeIdColumnNullable('member')(
-      'official_response_member_id'
-    ).references(() => member.id, {
+    officialResponsePrincipalId: typeIdColumnNullable('principal')(
+      'official_response_principal_id'
+    ).references(() => principal.id, {
       onDelete: 'set null',
     }),
     officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
@@ -75,8 +78,8 @@ export const posts = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
-    deletedByMemberId: typeIdColumnNullable('member')('deleted_by_member_id').references(
-      () => member.id,
+    deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id').references(
+      () => principal.id,
       { onDelete: 'set null' }
     ),
     // Moderation state for imported/pending content
@@ -88,8 +91,8 @@ export const posts = pgTable(
     // Merge/deduplication: points to the canonical post this was merged into
     canonicalPostId: typeIdColumnNullable('post')('canonical_post_id'),
     mergedAt: timestamp('merged_at', { withTimezone: true }),
-    mergedByMemberId: typeIdColumnNullable('member')('merged_by_member_id').references(
-      () => member.id,
+    mergedByPrincipalId: typeIdColumnNullable('principal')('merged_by_principal_id').references(
+      () => principal.id,
       { onDelete: 'set null' }
     ),
     // Full-text search vector (generated column, auto-computed from title and content)
@@ -106,8 +109,8 @@ export const posts = pgTable(
   (table) => [
     index('posts_board_id_idx').on(table.boardId),
     index('posts_status_id_idx').on(table.statusId),
-    index('posts_member_id_idx').on(table.memberId),
-    index('posts_owner_member_id_idx').on(table.ownerMemberId),
+    index('posts_principal_id_idx').on(table.principalId),
+    index('posts_owner_principal_id_idx').on(table.ownerPrincipalId),
     index('posts_created_at_idx').on(table.createdAt),
     index('posts_vote_count_idx').on(table.voteCount),
     // Composite indexes for post listings sorted by "top" and "new"
@@ -116,7 +119,7 @@ export const posts = pgTable(
     // Composite index for admin inbox filtering by status
     index('posts_board_status_idx').on(table.boardId, table.statusId),
     // Composite index for user activity pages (posts by author)
-    index('posts_member_created_at_idx').on(table.memberId, table.createdAt),
+    index('posts_principal_created_at_idx').on(table.principalId, table.createdAt),
     // Partial index for roadmap posts (only posts with status)
     index('posts_with_status_idx')
       .on(table.statusId, table.voteCount)
@@ -182,19 +185,19 @@ export const votes = pgTable(
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    // member_id is required - only authenticated users can vote
-    memberId: typeIdColumn('member')('member_id')
+    // principal_id is required - only authenticated users can vote
+    principalId: typeIdColumn('principal')('principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'cascade' }),
+      .references(() => principal.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('votes_post_id_idx').on(table.postId),
-    // Unique constraint: one vote per member per post
-    uniqueIndex('votes_member_post_idx').on(table.postId, table.memberId),
-    index('votes_member_id_idx').on(table.memberId),
-    index('votes_member_created_at_idx').on(table.memberId, table.createdAt),
+    // Unique constraint: one vote per principal per post
+    uniqueIndex('votes_principal_post_idx').on(table.postId, table.principalId),
+    index('votes_principal_id_idx').on(table.principalId),
+    index('votes_principal_created_at_idx').on(table.principalId, table.createdAt),
   ]
 )
 
@@ -206,9 +209,9 @@ export const comments = pgTable(
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     parentId: typeIdColumn('comment')('parent_id'),
-    memberId: typeIdColumn('member')('member_id')
+    principalId: typeIdColumn('principal')('principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'restrict' }),
+      .references(() => principal.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
     isTeamMember: boolean('is_team_member').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -218,7 +221,7 @@ export const comments = pgTable(
   (table) => [
     index('comments_post_id_idx').on(table.postId),
     index('comments_parent_id_idx').on(table.parentId),
-    index('comments_member_id_idx').on(table.memberId),
+    index('comments_principal_id_idx').on(table.principalId),
     index('comments_created_at_idx').on(table.createdAt),
     // Composite index for comment listings
     index('comments_post_created_at_idx').on(table.postId, table.createdAt),
@@ -232,17 +235,17 @@ export const commentReactions = pgTable(
     commentId: typeIdColumn('comment')('comment_id')
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
-    // member_id is required - only authenticated users can react
-    memberId: typeIdColumn('member')('member_id')
+    // principal_id is required - only authenticated users can react
+    principalId: typeIdColumn('principal')('principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'cascade' }),
+      .references(() => principal.id, { onDelete: 'cascade' }),
     emoji: text('emoji').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('comment_reactions_comment_id_idx').on(table.commentId),
-    index('comment_reactions_member_id_idx').on(table.memberId),
-    uniqueIndex('comment_reactions_unique_idx').on(table.commentId, table.memberId, table.emoji),
+    index('comment_reactions_principal_id_idx').on(table.principalId),
+    uniqueIndex('comment_reactions_unique_idx').on(table.commentId, table.principalId, table.emoji),
   ]
 )
 
@@ -254,9 +257,9 @@ export const postEditHistory = pgTable(
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    editorMemberId: typeIdColumn('member')('editor_member_id')
+    editorPrincipalId: typeIdColumn('principal')('editor_principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'set null' }),
+      .references(() => principal.id, { onDelete: 'set null' }),
     previousTitle: text('previous_title').notNull(),
     previousContent: text('previous_content').notNull(),
     previousContentJson: jsonb('previous_content_json').$type<TiptapContent>(),
@@ -275,9 +278,9 @@ export const commentEditHistory = pgTable(
     commentId: typeIdColumn('comment')('comment_id')
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
-    editorMemberId: typeIdColumn('member')('editor_member_id')
+    editorPrincipalId: typeIdColumn('principal')('editor_principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'set null' }),
+      .references(() => principal.id, { onDelete: 'set null' }),
     previousContent: text('previous_content').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -295,16 +298,16 @@ export const postNotes = pgTable(
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    // Member who created the note (staff only)
-    memberId: typeIdColumn('member')('member_id')
+    // Principal who created the note (staff only)
+    principalId: typeIdColumn('principal')('principal_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'restrict' }),
+      .references(() => principal.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('post_notes_post_id_idx').on(table.postId),
-    index('post_notes_member_id_idx').on(table.memberId),
+    index('post_notes_principal_id_idx').on(table.principalId),
     index('post_notes_created_at_idx').on(table.createdAt),
   ]
 )
@@ -320,22 +323,22 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.statusId],
     references: [postStatuses.id],
   }),
-  // Member-scoped author (Hub-and-Spoke identity)
-  author: one(member, {
-    fields: [posts.memberId],
-    references: [member.id],
+  // Principal-scoped author (Hub-and-Spoke identity)
+  author: one(principal, {
+    fields: [posts.principalId],
+    references: [principal.id],
     relationName: 'postAuthor',
   }),
-  // Member-scoped owner (team member assigned)
-  owner: one(member, {
-    fields: [posts.ownerMemberId],
-    references: [member.id],
+  // Principal-scoped owner (team member assigned)
+  owner: one(principal, {
+    fields: [posts.ownerPrincipalId],
+    references: [principal.id],
     relationName: 'postOwner',
   }),
-  // Member-scoped official response author
-  officialResponseAuthor: one(member, {
-    fields: [posts.officialResponseMemberId],
-    references: [member.id],
+  // Principal-scoped official response author
+  officialResponseAuthor: one(principal, {
+    fields: [posts.officialResponsePrincipalId],
+    references: [principal.id],
     relationName: 'postOfficialResponseAuthor',
   }),
   // Pinned comment as official response
@@ -352,9 +355,9 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   // Merge/deduplication: posts that have been merged into this one
   mergedPosts: many(posts, { relationName: 'mergedPosts' }),
   // Merge actor
-  mergedBy: one(member, {
-    fields: [posts.mergedByMemberId],
-    references: [member.id],
+  mergedBy: one(principal, {
+    fields: [posts.mergedByPrincipalId],
+    references: [principal.id],
     relationName: 'postMergedBy',
   }),
   votes: many(votes),
@@ -388,10 +391,10 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
     fields: [comments.postId],
     references: [posts.id],
   }),
-  // Member-scoped author (Hub-and-Spoke identity)
-  author: one(member, {
-    fields: [comments.memberId],
-    references: [member.id],
+  // Principal-scoped author (Hub-and-Spoke identity)
+  author: one(principal, {
+    fields: [comments.principalId],
+    references: [principal.id],
     relationName: 'commentAuthor',
   }),
   parent: one(comments, {
@@ -432,9 +435,9 @@ export const postEditHistoryRelations = relations(postEditHistory, ({ one }) => 
     fields: [postEditHistory.postId],
     references: [posts.id],
   }),
-  editor: one(member, {
-    fields: [postEditHistory.editorMemberId],
-    references: [member.id],
+  editor: one(principal, {
+    fields: [postEditHistory.editorPrincipalId],
+    references: [principal.id],
     relationName: 'postEditHistoryEditor',
   }),
 }))
@@ -444,9 +447,9 @@ export const commentEditHistoryRelations = relations(commentEditHistory, ({ one 
     fields: [commentEditHistory.commentId],
     references: [comments.id],
   }),
-  editor: one(member, {
-    fields: [commentEditHistory.editorMemberId],
-    references: [member.id],
+  editor: one(principal, {
+    fields: [commentEditHistory.editorPrincipalId],
+    references: [principal.id],
     relationName: 'commentEditHistoryEditor',
   }),
 }))
@@ -457,9 +460,9 @@ export const postNotesRelations = relations(postNotes, ({ one }) => ({
     fields: [postNotes.postId],
     references: [posts.id],
   }),
-  author: one(member, {
-    fields: [postNotes.memberId],
-    references: [member.id],
+  author: one(principal, {
+    fields: [postNotes.principalId],
+    references: [principal.id],
     relationName: 'noteAuthor',
   }),
 }))

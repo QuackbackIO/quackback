@@ -79,11 +79,11 @@ export const createCommentFn = createServerFn({ method: 'POST' })
           parentId: data.parentId as CommentId | undefined,
         },
         {
-          memberId: auth.member.id,
+          principalId: auth.principal.id,
           userId: auth.user.id as UserId,
           name: auth.user.name,
           email: auth.user.email,
-          role: auth.member.role,
+          role: auth.principal.role,
         }
       )
 
@@ -110,8 +110,8 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
           content: data.content,
         },
         {
-          memberId: auth.member.id,
-          role: auth.member.role,
+          principalId: auth.principal.id,
+          role: auth.principal.role,
         }
       )
       console.log(`[fn:comments] updateCommentFn: updated id=${data.id}`)
@@ -130,8 +130,8 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       await deleteComment(data.id as CommentId, {
-        memberId: auth.member.id,
-        role: auth.member.role,
+        principalId: auth.principal.id,
+        role: auth.principal.role,
       })
       console.log(`[fn:comments] deleteCommentFn: deleted id=${data.id}`)
       return { id: data.id }
@@ -147,7 +147,11 @@ export const toggleReactionFn = createServerFn({ method: 'POST' })
     console.log(`[fn:comments] toggleReactionFn: commentId=${data.commentId}, emoji=${data.emoji}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      const result = await toggleReaction(data.commentId as CommentId, data.emoji, auth.member.id)
+      const result = await toggleReaction(
+        data.commentId as CommentId,
+        data.emoji,
+        auth.principal.id
+      )
       console.log(`[fn:comments] toggleReactionFn: toggled`)
       return result
     } catch (error) {
@@ -169,12 +173,12 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
       }
 
       const ctx = await getOptionalAuth()
-      if (!ctx?.member) {
+      if (!ctx?.principal) {
         console.log(`[fn:comments] getCommentPermissionsFn: no auth context`)
         return { canEdit: false, canDelete: false }
       }
 
-      const actor = { memberId: ctx.member.id, role: ctx.member.role }
+      const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
       const [editResult, deleteResult] = await Promise.all([
         canEditComment(data.commentId as CommentId, actor),
         canDeleteComment(data.commentId as CommentId, actor),
@@ -199,7 +203,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
     console.log(`[fn:comments] userEditCommentFn: commentId=${data.commentId}`)
     try {
       const ctx = await requireAuth()
-      const actor = { memberId: ctx.member.id, role: ctx.member.role }
+      const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
 
       const result = await userEditComment(data.commentId as CommentId, data.content, actor)
       console.log(`[fn:comments] userEditCommentFn: edited id=${data.commentId}`)
@@ -216,7 +220,7 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     console.log(`[fn:comments] userDeleteCommentFn: commentId=${data.commentId}`)
     try {
       const ctx = await requireAuth()
-      const actor = { memberId: ctx.member.id, role: ctx.member.role }
+      const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
 
       await softDeleteComment(data.commentId as CommentId, actor)
       console.log(`[fn:comments] userDeleteCommentFn: deleted id=${data.commentId}`)
@@ -252,8 +256,8 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await pinComment(data.commentId as CommentId, {
-        memberId: auth.member.id,
-        role: auth.member.role,
+        principalId: auth.principal.id,
+        role: auth.principal.role,
       })
       console.log(
         `[fn:comments] pinCommentFn: pinned comment ${data.commentId} on post ${result.postId}`
@@ -273,8 +277,8 @@ export const unpinCommentFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await unpinComment(data.postId as PostId, {
-        memberId: auth.member.id,
-        role: auth.member.role,
+        principalId: auth.principal.id,
+        role: auth.principal.role,
       })
       console.log(`[fn:comments] unpinCommentFn: unpinned comment from post ${data.postId}`)
       return { postId: data.postId }
@@ -297,7 +301,7 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
 
       const ctx = await getOptionalAuth()
       // Must be a team member to pin
-      if (!ctx?.member || !['admin', 'member'].includes(ctx.member.role)) {
+      if (!ctx?.principal || !['admin', 'member'].includes(ctx.principal.role)) {
         return { canPin: false, reason: 'Only team members can pin comments' }
       }
 

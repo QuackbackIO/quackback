@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { MemberId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
+import type { PrincipalId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
@@ -20,7 +20,7 @@ export const portalQueries = {
   /**
    * Combined portal data fetch - all data in a single server call.
    * This is the optimized entry point for the portal page.
-   * Vote status is only shown for authenticated users (via userId -> memberId).
+   * Vote status is only shown for authenticated users (via userId -> principalId).
    */
   portalData: (params: {
     boardSlug?: string
@@ -41,7 +41,7 @@ export const portalQueries = {
               ...p,
               content: p.content ?? '', // Ensure content is never null
               createdAt: new Date(p.createdAt),
-              memberId: p.memberId as MemberId | null, // Server returns string, cast to branded type
+              principalId: p.principalId as PrincipalId | null, // Server returns string, cast to branded type
               board: p.board ? { ...p.board, id: p.board.id as BoardId } : undefined,
             })),
           },
@@ -88,10 +88,10 @@ export const portalQueries = {
   /**
    * Get bulk avatar data for post authors
    */
-  avatars: (memberIds: MemberId[]) =>
+  avatars: (principalIds: PrincipalId[]) =>
     queryOptions({
-      queryKey: ['portal', 'avatars', memberIds],
-      queryFn: () => fetchAvatars({ data: memberIds }),
+      queryKey: ['portal', 'avatars', principalIds],
+      queryFn: () => fetchAvatars({ data: principalIds }),
       // Avatars don't change often
       staleTime: 5 * 60 * 1000, // 5 minutes
     }),

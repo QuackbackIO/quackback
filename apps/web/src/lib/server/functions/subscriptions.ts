@@ -47,7 +47,7 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-      const result = await getSubscriptionStatus(auth.member.id, data.postId as PostId)
+      const result = await getSubscriptionStatus(auth.principal.id, data.postId as PostId)
       console.log(`[fn:subscriptions] fetchSubscriptionStatus: level=${result.level}`)
       return result
     } catch (error) {
@@ -64,7 +64,7 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-      await subscribeToPost(auth.member.id, data.postId as PostId, data.reason || 'manual', {
+      await subscribeToPost(auth.principal.id, data.postId as PostId, data.reason || 'manual', {
         level: data.level as SubscriptionLevel,
       })
       console.log(`[fn:subscriptions] subscribeToPostFn: subscribed`)
@@ -82,7 +82,7 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
-      await unsubscribeFromPost(auth.member.id, data.postId as PostId)
+      await unsubscribeFromPost(auth.principal.id, data.postId as PostId)
       console.log(`[fn:subscriptions] unsubscribeFromPostFn: unsubscribed`)
       return { postId: data.postId }
     } catch (error) {
@@ -101,7 +101,7 @@ export const updateSubscriptionLevelFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
       await updateSubscriptionLevel(
-        auth.member.id,
+        auth.principal.id,
         data.postId as PostId,
         data.level as SubscriptionLevel
       )

@@ -9,7 +9,7 @@ import {
   type BoardId,
   type StatusId,
   type TagId,
-  type MemberId,
+  type PrincipalId,
   type UserId,
 } from '@quackback/ids'
 import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
@@ -171,7 +171,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         statusIds: data.statusIds as StatusId[] | undefined,
         statusSlugs: data.statusSlugs,
         tagIds: data.tagIds as TagId[] | undefined,
-        ownerId: data.ownerId as MemberId | null | undefined,
+        ownerId: data.ownerId as PrincipalId | null | undefined,
         search: data.search,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
@@ -214,8 +214,8 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
       const [result, comments, voted] = await Promise.all([
         getPostWithDetails(postId),
-        getCommentsWithReplies(postId, auth.member.id),
-        hasUserVoted(postId, auth.member.id),
+        getCommentsWithReplies(postId, auth.principal.id),
+        hasUserVoted(postId, auth.principal.id),
       ])
       console.log(
         `[fn:posts] fetchPostWithDetails: found=${!!result}, comments=${comments.length}, hasVoted=${voted}`
@@ -296,7 +296,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
           tagIds: data.tagIds as TagId[] | undefined,
         },
         {
-          memberId: auth.member.id,
+          principalId: auth.principal.id,
           userId: auth.user.id as UserId,
           name: auth.user.name,
           email: auth.user.email,
@@ -329,11 +329,11 @@ export const updatePostFn = createServerFn({ method: 'POST' })
           title: data.title,
           content: data.content,
           contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-          ownerMemberId: data.ownerId as MemberId | null | undefined,
+          ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
           officialResponse: data.officialResponse,
         },
         {
-          memberId: auth.member.id,
+          principalId: auth.principal.id,
           name: auth.user.name,
         }
       )
@@ -356,8 +356,8 @@ export const deletePostFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await softDeletePost(data.id as PostId, {
-        memberId: auth.member.id,
-        role: auth.member.role,
+        principalId: auth.principal.id,
+        role: auth.principal.role,
       })
       console.log(`[fn:posts] deletePostFn: deleted id=${data.id}`)
       return { id: data.id }
@@ -427,7 +427,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
           tagIds: data.tagIds as TagId[],
         },
         {
-          memberId: auth.member.id,
+          principalId: auth.principal.id,
           name: auth.user.name,
         }
       )

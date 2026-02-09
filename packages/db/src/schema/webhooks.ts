@@ -7,7 +7,7 @@
 import { pgTable, text, timestamp, integer, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
-import { member } from './auth'
+import { principal } from './auth'
 
 /**
  * Webhooks table
@@ -19,10 +19,10 @@ export const webhooks = pgTable(
   'webhooks',
   {
     id: typeIdWithDefault('webhook')('id').primaryKey(),
-    /** Member who created this webhook */
-    createdById: typeIdColumn('member')('created_by_id')
+    /** Principal who created this webhook */
+    createdById: typeIdColumn('principal')('created_by_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'cascade' }),
+      .references(() => principal.id, { onDelete: 'cascade' }),
     /** HTTPS endpoint URL to receive webhook payloads */
     url: text('url').notNull(),
     /** Encrypted secret for HMAC-SHA256 signing (AES-256-GCM encrypted) */
@@ -59,8 +59,8 @@ export const webhooks = pgTable(
 )
 
 export const webhooksRelations = relations(webhooks, ({ one }) => ({
-  createdBy: one(member, {
+  createdBy: one(principal, {
     fields: [webhooks.createdById],
-    references: [member.id],
+    references: [principal.id],
   }),
 }))

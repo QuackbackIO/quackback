@@ -12,7 +12,7 @@ import { useUpdatePostStatus } from '@/lib/client/mutations/posts'
 import type { PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
-import type { TeamMember } from '@/lib/server/domains/members'
+import type { TeamMember } from '@/lib/server/domains/principals'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
 interface InboxContainerProps {

@@ -6,7 +6,7 @@
  */
 
 import type { Board, Tag } from '@/lib/shared/db-types'
-import type { PostId, StatusId, CommentId, MemberId } from '@quackback/ids'
+import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
 export interface OfficialResponse {
@@ -19,7 +19,7 @@ export interface PinnedComment {
   id: CommentId
   content: string
   authorName: string | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   avatarUrl: string | null
   createdAt: Date
   isTeamMember: boolean
@@ -46,9 +46,9 @@ export interface PostDetails {
   statusId: StatusId | null
   voteCount: number
   hasVoted: boolean
-  // Member-scoped identity (Hub-and-Spoke model)
-  memberId: string
-  ownerMemberId: string | null
+  // Principal-scoped identity (Hub-and-Spoke model)
+  principalId: string
+  ownerPrincipalId: string | null
   // Author info resolved from member->user relation
   authorName: string | null
   authorEmail: string | null
@@ -61,7 +61,7 @@ export interface PostDetails {
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
   pinnedCommentId: CommentId | null
-  /** Map of memberId to avatar URL (base64 or external URL) */
+  /** Map of principalId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
   /** IDs of roadmaps this post belongs to */
   roadmapIds?: string[]
@@ -96,5 +96,5 @@ export interface MergedPostItem {
 export interface CurrentUser {
   name: string
   email: string
-  memberId: string
+  principalId: string
 }

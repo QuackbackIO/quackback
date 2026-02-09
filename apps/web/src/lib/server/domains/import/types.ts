@@ -1,4 +1,4 @@
-import type { BoardId, MemberId } from '@quackback/ids'
+import type { BoardId, PrincipalId } from '@quackback/ids'
 
 /**
  * CSV import input
@@ -11,7 +11,7 @@ export interface ImportInput {
   /** Total number of rows in the CSV (excluding header) */
   totalRows: number
   /** Member ID of the user who initiated the import */
-  initiatedByMemberId: MemberId
+  initiatedByPrincipalId: PrincipalId
 }
 
 /**

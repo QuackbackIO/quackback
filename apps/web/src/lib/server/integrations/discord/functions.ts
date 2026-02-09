@@ -5,13 +5,13 @@
  * inside handlers to avoid bundling Node.js-only code into the client.
  */
 import { createServerFn } from '@tanstack/react-start'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export interface DiscordOAuthState {
   type: 'discord_oauth'
   workspaceId: string
   returnDomain: string
-  memberId: MemberId
+  principalId: PrincipalId
   nonce: string
   ts: number
 }
@@ -51,7 +51,7 @@ export const getDiscordConnectUrl = createServerFn({ method: 'GET' }).handler(
       type: 'discord_oauth',
       workspaceId: auth.settings.id,
       returnDomain,
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       nonce: randomBytes(16).toString('base64url'),
       ts: Date.now(),
     } satisfies DiscordOAuthState)

@@ -2,13 +2,13 @@
  * Asana-specific server functions.
  */
 import { createServerFn } from '@tanstack/react-start'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export interface AsanaOAuthState {
   type: 'asana_oauth'
   workspaceId: string
   returnDomain: string
-  memberId: MemberId
+  principalId: PrincipalId
   nonce: string
   ts: number
 }
@@ -45,7 +45,7 @@ export const getAsanaConnectUrl = createServerFn({ method: 'GET' }).handler(
       type: 'asana_oauth',
       workspaceId: auth.settings.id,
       returnDomain,
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       nonce: randomBytes(16).toString('base64url'),
       ts: Date.now(),
     } satisfies AsanaOAuthState)

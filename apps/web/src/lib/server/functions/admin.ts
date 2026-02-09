@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { generateId, type InviteId, type UserId, type MemberId } from '@quackback/ids'
+import { generateId, type InviteId, type UserId, type PrincipalId } from '@quackback/ids'
 import type { InboxPostListParams } from '@/lib/server/domains/posts/post.types'
 import {
   isOnboardingComplete as checkComplete,
@@ -10,7 +10,7 @@ import {
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, invitation, member, user, eq, and } from '@/lib/server/db'
+import { db, invitation, principal, user, eq, and } from '@/lib/server/db'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.query'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
@@ -19,7 +19,7 @@ import {
   listTeamMembers,
   updateMemberRole,
   removeTeamMember,
-} from '@/lib/server/domains/members/member.service'
+} from '@/lib/server/domains/principals/principal.service'
 import {
   listPortalUsers,
   getPortalUserDetail,
@@ -60,7 +60,7 @@ const listPortalUsersSchema = z.object({
 })
 
 const portalUserByIdSchema = z.object({
-  memberId: z.string(),
+  principalId: z.string(),
 })
 
 /**
@@ -167,12 +167,12 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
 })
 
 // Schema for team member operations
-const memberIdSchema = z.object({
-  memberId: z.string(),
+const principalIdSchema = z.object({
+  principalId: z.string(),
 })
 
-const updateMemberRoleSchema = z.object({
-  memberId: z.string(),
+const updatePrincipalRoleSchema = z.object({
+  principalId: z.string(),
   role: z.enum(['admin', 'member']),
 })
 
@@ -180,16 +180,16 @@ const updateMemberRoleSchema = z.object({
  * Update a team member's role (admin only)
  */
 export const updateMemberRoleFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateMemberRoleSchema)
+  .inputValidator(updatePrincipalRoleSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:admin] updateMemberRoleFn: memberId=${data.memberId}, role=${data.role}`)
+    console.log(`[fn:admin] updateMemberRoleFn: principalId=${data.principalId}, role=${data.role}`)
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
-      await updateMemberRole(data.memberId as MemberId, data.role, auth.member.id)
+      await updateMemberRole(data.principalId as PrincipalId, data.role, auth.principal.id)
 
       console.log(`[fn:admin] updateMemberRoleFn: success`)
-      return { memberId: data.memberId, role: data.role }
+      return { principalId: data.principalId, role: data.role }
     } catch (error) {
       console.error(`[fn:admin] ❌ updateMemberRoleFn failed:`, error)
       throw error
@@ -200,16 +200,16 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
  * Remove a team member (converts to portal user, admin only)
  */
 export const removeTeamMemberFn = createServerFn({ method: 'POST' })
-  .inputValidator(memberIdSchema)
+  .inputValidator(principalIdSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:admin] removeTeamMemberFn: memberId=${data.memberId}`)
+    console.log(`[fn:admin] removeTeamMemberFn: principalId=${data.principalId}`)
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
-      await removeTeamMember(data.memberId as MemberId, auth.member.id)
+      await removeTeamMember(data.principalId as PrincipalId, auth.principal.id)
 
       console.log(`[fn:admin] removeTeamMemberFn: success`)
-      return { memberId: data.memberId }
+      return { principalId: data.principalId }
     } catch (error) {
       console.error(`[fn:admin] ❌ removeTeamMemberFn failed:`, error)
       throw error
@@ -228,7 +228,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       db.query.boards.findMany({
         columns: { id: true },
       }),
-      db.select({ id: member.id }).from(member),
+      db.select({ id: principal.id }).from(principal),
     ])
 
     console.log(
@@ -373,29 +373,29 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
       if (!userId) {
         console.log(`[fn:admin] checkOnboardingState: no userId`)
         return {
-          memberRecord: null,
+          principalRecord: null,
           hasSettings: false,
           setupState: null,
           isOnboardingComplete: false,
         }
       }
 
-      // Check if user has a member record
-      let memberRecord = await db.query.member.findFirst({
-        where: eq(member.userId, userId as UserId),
+      // Check if user has a principal record
+      let principalRecord = await db.query.principal.findFirst({
+        where: eq(principal.userId, userId as UserId),
       })
 
-      if (!memberRecord) {
+      if (!principalRecord) {
         // Check if any admin exists
-        const existingAdmin = await db.query.member.findFirst({
-          where: eq(member.role, 'admin'),
+        const existingAdmin = await db.query.principal.findFirst({
+          where: eq(principal.role, 'admin'),
         })
 
         if (existingAdmin) {
           // Not first user - they need an invitation
           console.log(`[fn:admin] checkOnboardingState: needsInvitation=true`)
           return {
-            memberRecord: null,
+            principalRecord: null,
             needsInvitation: true,
             hasSettings: false,
             setupState: null,
@@ -403,19 +403,19 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
           }
         }
 
-        // First user - create admin member record
-        const [newMember] = await db
-          .insert(member)
+        // First user - create admin principal record
+        const [newPrincipal] = await db
+          .insert(principal)
           .values({
-            id: generateId('member'),
+            id: generateId('principal'),
             userId: userId as UserId,
             role: 'admin',
             createdAt: new Date(),
           })
           .returning()
 
-        memberRecord = newMember
-        console.log(`[fn:admin] checkOnboardingState: created admin member`)
+        principalRecord = newPrincipal
+        console.log(`[fn:admin] checkOnboardingState: created admin principal`)
       }
 
       // Get settings to check setup state
@@ -431,11 +431,11 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
         `[fn:admin] checkOnboardingState: setupState=${JSON.stringify(setupState)}, isComplete=${isOnboardingComplete}`
       )
       return {
-        memberRecord: memberRecord
+        principalRecord: principalRecord
           ? {
-              id: memberRecord.id,
-              userId: memberRecord.userId,
-              role: memberRecord.role,
+              id: principalRecord.id,
+              userId: principalRecord.userId,
+              role: principalRecord.role,
             }
           : null,
         needsInvitation: false,
@@ -494,11 +494,11 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
 export const getPortalUserFn = createServerFn({ method: 'GET' })
   .inputValidator(portalUserByIdSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:admin] getPortalUserFn: memberId=${data.memberId}`)
+    console.log(`[fn:admin] getPortalUserFn: principalId=${data.principalId}`)
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await getPortalUserDetail(data.memberId as MemberId)
+      const result = await getPortalUserDetail(data.principalId as PrincipalId)
 
       // Serialize Date fields for client
       if (!result) {
@@ -529,14 +529,14 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 export const deletePortalUserFn = createServerFn({ method: 'POST' })
   .inputValidator(portalUserByIdSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:admin] deletePortalUserFn: memberId=${data.memberId}`)
+    console.log(`[fn:admin] deletePortalUserFn: principalId=${data.principalId}`)
     try {
       await requireAuth({ roles: ['admin'] })
 
-      await removePortalUser(data.memberId as MemberId)
+      await removePortalUser(data.principalId as PrincipalId)
 
       console.log(`[fn:admin] deletePortalUserFn: deleted`)
-      return { memberId: data.memberId }
+      return { principalId: data.principalId }
     } catch (error) {
       console.error(`[fn:admin] ❌ deletePortalUserFn failed:`, error)
       throw error
@@ -672,11 +672,11 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
 
       if (existingUser) {
         // Check if they already have a team member role (admin or member)
-        const existingMember = await db.query.member.findFirst({
-          where: eq(member.userId, existingUser.id),
+        const existingPrincipal = await db.query.principal.findFirst({
+          where: eq(principal.userId, existingUser.id),
         })
 
-        if (existingMember && existingMember.role !== 'user') {
+        if (existingPrincipal && existingPrincipal.role !== 'user') {
           throw new Error('A team member with this email already exists')
         }
         // Portal users (role='user' or no member record) can be invited to become team members

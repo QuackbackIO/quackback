@@ -98,7 +98,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
               boardName: post.board?.name,
               statusId: post.statusId,
               authorName: post.authorName ?? null,
-              ownerId: post.ownerMemberId,
+              ownerId: post.ownerPrincipalId,
               tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
               createdAt: post.createdAt.toISOString(),
               updatedAt: post.updatedAt.toISOString(),
@@ -124,7 +124,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           // Parse and validate body
@@ -147,15 +147,15 @@ export const Route = createFileRoute('/api/v1/posts/')({
 
           // Import service and get member details
           const { createPost } = await import('@/lib/server/domains/posts/post.service')
-          const { db, member, eq } = await import('@/lib/server/db')
+          const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for author details
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.id, memberId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, principalId),
             with: { user: true },
           })
 
-          if (!memberRecord?.user) {
+          if (!principalRecord?.user) {
             return badRequestResponse('Member not found')
           }
 
@@ -168,10 +168,10 @@ export const Route = createFileRoute('/api/v1/posts/')({
               tagIds: parsed.data.tagIds as TagId[] | undefined,
             },
             {
-              memberId,
-              userId: memberRecord.user.id as UserId,
-              name: memberRecord.user.name,
-              email: memberRecord.user.email,
+              principalId,
+              userId: principalRecord.user.id as UserId,
+              name: principalRecord.user.name,
+              email: principalRecord.user.email,
             }
           )
 
@@ -184,7 +184,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
             voteCount: result.voteCount,
             boardId: result.boardId,
             statusId: result.statusId,
-            authorName: memberRecord.user.name,
+            authorName: principalRecord.user.name,
             createdAt: result.createdAt.toISOString(),
             updatedAt: result.updatedAt.toISOString(),
           })

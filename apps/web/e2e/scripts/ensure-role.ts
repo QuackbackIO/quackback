@@ -1,7 +1,7 @@
 /**
  * CLI script to ensure a user has a specific role for E2E tests
  *
- * This is a test utility that creates or updates the member record
+ * This is a test utility that creates or updates the principal record
  * to ensure the test user can access admin functionality.
  *
  * Usage: bun ensure-role.ts <email> [role]
@@ -37,24 +37,24 @@ async function ensureRole(): Promise<void> {
 
   const userId = users[0].id
 
-  // Check if member record exists
-  const members = await sql`
-    SELECT id, role FROM member WHERE user_id = ${userId}
+  // Check if principal record exists
+  const principals = await sql`
+    SELECT id, role FROM principal WHERE user_id = ${userId}
   `
 
-  if (members.length === 0) {
-    // Create member record with specified role
+  if (principals.length === 0) {
+    // Create principal record with specified role
     // The database stores TypeIDs as regular UUIDs
-    const memberId = randomUUID()
+    const principalId = randomUUID()
     await sql`
-      INSERT INTO member (id, user_id, role, created_at)
-      VALUES (${memberId}, ${userId}, ${role}, NOW())
+      INSERT INTO principal (id, user_id, role, created_at)
+      VALUES (${principalId}, ${userId}, ${role}, NOW())
     `
-    console.log(`Created member record for ${email} with role: ${role}`)
-  } else if (members[0].role !== role) {
-    // Update existing member role
+    console.log(`Created principal record for ${email} with role: ${role}`)
+  } else if (principals[0].role !== role) {
+    // Update existing principal role
     await sql`
-      UPDATE member SET role = ${role} WHERE user_id = ${userId}
+      UPDATE principal SET role = ${role} WHERE user_id = ${userId}
     `
     console.log(`Updated ${email} role to: ${role}`)
   } else {

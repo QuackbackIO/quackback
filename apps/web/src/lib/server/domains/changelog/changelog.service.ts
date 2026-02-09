@@ -15,7 +15,7 @@ import {
   changelogEntries,
   changelogEntryPosts,
   posts,
-  member,
+  principal,
   user,
   postStatuses,
   eq,
@@ -28,7 +28,7 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { BoardId, ChangelogId, MemberId, PostId, StatusId } from '@quackback/ids'
+import type { BoardId, ChangelogId, PrincipalId, PostId, StatusId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering, not for changelog entries
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type {
@@ -57,7 +57,7 @@ import type {
  */
 export async function createChangelog(
   input: CreateChangelogInput,
-  author: { memberId: MemberId; name: string }
+  author: { principalId: PrincipalId; name: string }
 ): Promise<ChangelogEntryWithDetails> {
   // Validate input
   const title = input.title?.trim()
@@ -83,7 +83,7 @@ export async function createChangelog(
       title,
       content,
       contentJson: input.contentJson ?? null,
-      memberId: author.memberId,
+      principalId: author.principalId,
       publishedAt,
     })
     .returning()
@@ -204,11 +204,11 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     throw new NotFoundError('CHANGELOG_NOT_FOUND', `Changelog entry with ID ${id} not found`)
   }
 
-  // Get author info (member -> user for name/avatar)
+  // Get author info (principal -> user for name/avatar)
   let author: ChangelogAuthor | null = null
-  if (entry.memberId) {
-    const memberWithUser = await db.query.member.findFirst({
-      where: eq(member.id, entry.memberId),
+  if (entry.principalId) {
+    const memberWithUser = await db.query.principal.findFirst({
+      where: eq(principal.id, entry.principalId),
       with: {
         user: {
           columns: {
@@ -269,7 +269,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     title: entry.title,
     content: entry.content,
     contentJson: entry.contentJson,
-    memberId: entry.memberId,
+    principalId: entry.principalId,
     publishedAt: entry.publishedAt,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
@@ -324,13 +324,15 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   const hasMore = entries.length > limit
   const items = hasMore ? entries.slice(0, limit) : entries
 
-  // Get member IDs for author lookup
-  const memberIds = items.map((e) => e.memberId).filter((id): id is MemberId => id !== null)
-  const authorMap = new Map<MemberId, ChangelogAuthor>()
+  // Get principal IDs for author lookup
+  const principalIds = items
+    .map((e) => e.principalId)
+    .filter((id): id is PrincipalId => id !== null)
+  const authorMap = new Map<PrincipalId, ChangelogAuthor>()
 
-  if (memberIds.length > 0) {
-    const membersWithUsers = await db.query.member.findMany({
-      where: inArray(member.id, memberIds),
+  if (principalIds.length > 0) {
+    const membersWithUsers = await db.query.principal.findMany({
+      where: inArray(principal.id, principalIds),
       with: {
         user: {
           columns: {
@@ -401,11 +403,11 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       title: entry.title,
       content: entry.content,
       contentJson: entry.contentJson,
-      memberId: entry.memberId,
+      principalId: entry.principalId,
       publishedAt: entry.publishedAt,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
-      author: entry.memberId ? (authorMap.get(entry.memberId) ?? null) : null,
+      author: entry.principalId ? (authorMap.get(entry.principalId) ?? null) : null,
       linkedPosts: entryLinkedPosts.map((lp) => ({
         id: lp.post.id,
         title: lp.post.title,
@@ -732,9 +734,9 @@ export async function searchShippedPosts(params: {
       voteCount: posts.voteCount,
       boardSlug: boards.slug,
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${member} m
+        SELECT u.name FROM ${principal} m
         INNER JOIN ${user} u ON m.user_id = u.id
-        WHERE m.id = ${posts.memberId}
+        WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
       createdAt: posts.createdAt,
     })

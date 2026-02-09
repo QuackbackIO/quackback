@@ -9,7 +9,7 @@ import {
   type BoardId,
   type StatusId,
   type TagId,
-  type MemberId,
+  type PrincipalId,
   type RoadmapId,
   type UserId,
 } from '@quackback/ids'
@@ -32,7 +32,7 @@ import {
 } from '@/lib/server/domains/posts/post.permissions'
 import { getPublicBoardById } from '@/lib/server/domains/boards/board.public'
 import { getDefaultStatus } from '@/lib/server/domains/statuses/status.service'
-import { getMemberByUser } from '@/lib/server/domains/members/member.service'
+import { getMemberByUser } from '@/lib/server/domains/principals/principal.service'
 import {
   listPublicRoadmaps,
   getPublicRoadmapPosts,
@@ -181,15 +181,15 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
         const postId = data.postId as PostId
 
         // If no user/member, return no permissions
-        if (!ctx?.user || !ctx?.member) {
+        if (!ctx?.user || !ctx?.principal) {
           console.log(`[fn:public-posts] getPostPermissionsFn: no auth context`)
           return { canEdit: false, canDelete: false }
         }
 
         // Build actor info for permission checks
         const actor = {
-          memberId: ctx.member.id,
-          role: ctx.member.role,
+          principalId: ctx.principal.id,
+          role: ctx.principal.role,
         }
 
         // Combined permission check - queries post, config, and status only once
@@ -226,8 +226,8 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
 
       // Build actor info for permission check
       const actor = {
-        memberId: ctx.member.id,
-        role: ctx.member.role,
+        principalId: ctx.principal.id,
+        role: ctx.principal.role,
       }
 
       const sanitizedContentJson = contentJson ? sanitizeTiptapContent(contentJson) : undefined
@@ -265,8 +265,8 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
 
       // Build actor info for permission check
       const actor = {
-        memberId: ctx.member.id,
-        role: ctx.member.role,
+        principalId: ctx.principal.id,
+        role: ctx.principal.role,
       }
 
       await softDeletePost(postId, actor)
@@ -289,7 +289,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
       console.log(`[fn:public-posts] toggleVoteFn: postId=${data.postId}`)
       try {
         const ctx = await requireAuth()
-        const result = await voteOnPost(data.postId as PostId, ctx.member.id)
+        const result = await voteOnPost(data.postId as PostId, ctx.principal.id)
         console.log(
           `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}`
         )
@@ -313,8 +313,8 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       const { boardId: boardIdRaw, title, content, contentJson } = data
       const boardId = boardIdRaw as BoardId
 
-      // Run all independent lookups in parallel (board, member, defaultStatus, settings)
-      const [board, memberRecord, defaultStatus, settings] = await Promise.all([
+      // Run all independent lookups in parallel (board, principal, defaultStatus, settings)
+      const [board, principalRecord, defaultStatus, settings] = await Promise.all([
         getPublicBoardById(boardId),
         getMemberByUser(ctx.user.id as UserId),
         getDefaultStatus(),
@@ -325,7 +325,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       if (!board || !board.isPublic) {
         throw new Error('Board not found')
       }
-      if (!memberRecord) {
+      if (!principalRecord) {
         throw new Error('You must be a member to submit feedback.')
       }
       if (!settings) {
@@ -334,7 +334,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
 
       // Build author info
       const author = {
-        memberId: memberRecord.id as MemberId,
+        principalId: principalRecord.id as PrincipalId,
         userId: ctx.user.id as UserId,
         name: ctx.user.name || ctx.user.email,
         email: ctx.user.email,
@@ -388,12 +388,12 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
       const ctx = await getOptionalAuth()
 
       // Optional auth - return empty if not authenticated
-      if (!ctx?.user || !ctx?.member) {
+      if (!ctx?.user || !ctx?.principal) {
         console.log(`[fn:public-posts] getVotedPostsFn: no auth`)
         return { votedPostIds: [] }
       }
 
-      const result = await getAllUserVotedPostIds(ctx.member.id)
+      const result = await getAllUserVotedPostIds(ctx.principal.id)
 
       console.log(`[fn:public-posts] getVotedPostsFn: count=${result.size}`)
       return { votedPostIds: Array.from(result) }
@@ -535,7 +535,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       console.log(`[fn:public-posts] getVoteSidebarDataFn: auth resolved`)
 
       // No authenticated user (invalid/expired session)
-      if (!ctx?.user || !ctx?.member) {
+      if (!ctx?.user || !ctx?.principal) {
         console.log(`[fn:public-posts] getVoteSidebarDataFn: no auth context`)
         return {
           isMember: false,
@@ -549,7 +549,10 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       }
 
       // Authenticated user - fetch vote and subscription data in a single query
-      const { hasVoted, subscription } = await getVoteAndSubscriptionStatus(postId, ctx.member.id)
+      const { hasVoted, subscription } = await getVoteAndSubscriptionStatus(
+        postId,
+        ctx.principal.id
+      )
 
       console.log(`[fn:public-posts] getVoteSidebarDataFn: isMember=true, hasVoted=${hasVoted}`)
       return {

@@ -3,13 +3,13 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export interface JiraOAuthState {
   type: 'jira_oauth'
   workspaceId: string
   returnDomain: string
-  memberId: MemberId
+  principalId: PrincipalId
   nonce: string
   ts: number
 }
@@ -54,7 +54,7 @@ export const getJiraConnectUrl = createServerFn({ method: 'GET' }).handler(
       type: 'jira_oauth',
       workspaceId: auth.settings.id,
       returnDomain,
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       nonce: randomBytes(16).toString('base64url'),
       ts: Date.now(),
     } satisfies JiraOAuthState)

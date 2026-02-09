@@ -47,7 +47,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             parentId: c.parentId,
             content: c.content,
             authorName: c.authorName,
-            memberId: c.memberId,
+            principalId: c.principalId,
             isTeamMember: c.isTeamMember,
             createdAt: c.createdAt.toISOString(),
             reactions: c.reactions,
@@ -68,7 +68,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           const { postId } = params
@@ -97,15 +97,15 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
 
           // Import service and get member details
           const { createComment } = await import('@/lib/server/domains/comments/comment.service')
-          const { db, member, eq } = await import('@/lib/server/db')
+          const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for author details
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.id, memberId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, principalId),
             with: { user: true },
           })
 
-          if (!memberRecord?.user) {
+          if (!principalRecord?.user) {
             return badRequestResponse('Member not found')
           }
 
@@ -116,11 +116,11 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
               parentId: parsed.data.parentId as CommentId | undefined,
             },
             {
-              memberId,
-              userId: memberRecord.user.id as UserId,
-              name: memberRecord.user.name,
-              email: memberRecord.user.email,
-              role: memberRecord.role as 'admin' | 'member' | 'user',
+              principalId,
+              userId: principalRecord.user.id as UserId,
+              name: principalRecord.user.name,
+              email: principalRecord.user.email,
+              role: principalRecord.role as 'admin' | 'member' | 'user',
             }
           )
 
@@ -129,8 +129,8 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             postId: result.comment.postId,
             parentId: result.comment.parentId,
             content: result.comment.content,
-            authorName: memberRecord.user.name,
-            memberId: result.comment.memberId,
+            authorName: principalRecord.user.name,
+            principalId: result.comment.principalId,
             isTeamMember: result.comment.isTeamMember,
             createdAt: result.comment.createdAt.toISOString(),
           })

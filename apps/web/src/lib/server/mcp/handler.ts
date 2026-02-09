@@ -8,7 +8,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
-import { db, member, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 import { createMcpServer } from './server'
 import type { McpAuthContext } from './types'
 
@@ -17,12 +17,12 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
   const authResult = await withApiKeyAuth(request, { role: 'team' })
   if (authResult instanceof Response) return authResult
 
-  const memberRecord = await db.query.member.findFirst({
-    where: eq(member.id, authResult.memberId),
+  const principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.id, authResult.principalId),
     with: { user: true },
   })
 
-  if (!memberRecord?.user) {
+  if (!principalRecord?.user) {
     return new Response(JSON.stringify({ error: 'Member not found' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -30,10 +30,10 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
   }
 
   return {
-    memberId: authResult.memberId,
-    userId: memberRecord.user.id,
-    name: memberRecord.user.name,
-    email: memberRecord.user.email,
+    principalId: authResult.principalId,
+    userId: principalRecord.user.id,
+    name: principalRecord.user.name,
+    email: principalRecord.user.email,
     role: authResult.role as 'admin' | 'member',
   }
 }

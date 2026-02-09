@@ -32,7 +32,7 @@ export const saveN8nWebhookFn = createServerFn({ method: 'POST' })
     }
 
     await saveIntegration('n8n', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.webhookUrl,
       config: { webhookUrl: data.webhookUrl, workspaceName: 'n8n' },
     })

@@ -4,7 +4,7 @@
  * Types for portal user management operations.
  */
 
-import type { MemberId, StatusId } from '@quackback/ids'
+import type { PrincipalId, StatusId } from '@quackback/ids'
 
 /**
  * Portal user list item with activity counts
@@ -13,7 +13,7 @@ import type { MemberId, StatusId } from '@quackback/ids'
  * They can vote/comment on portal but don't have admin access.
  */
 export interface PortalUserListItem {
-  memberId: MemberId
+  principalId: PrincipalId
   userId: string
   name: string | null
   email: string
@@ -29,7 +29,7 @@ export interface PortalUserListItem {
  * Portal user list item for client components (Date fields may be strings after serialization)
  */
 export interface PortalUserListItemView {
-  memberId: MemberId
+  principalId: PrincipalId
   userId: string
   name: string | null
   email: string

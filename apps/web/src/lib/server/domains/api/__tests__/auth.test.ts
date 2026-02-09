@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireApiKey, withApiKeyAuth, type AuthLevel } from '../auth'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
-import type { MemberId, ApiKeyId } from '@quackback/ids'
+import type { PrincipalId, ApiKeyId } from '@quackback/ids'
 
 // Mock the verifyApiKey function
 vi.mock('@/lib/server/domains/api-keys', () => ({
@@ -13,12 +13,12 @@ const mockFindFirst = vi.fn().mockResolvedValue({ role: 'admin' })
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
-      member: {
+      principal: {
         findFirst: mockFindFirst,
       },
     },
   },
-  member: { id: 'id' },
+  principal: { id: 'id' },
   eq: vi.fn(),
 }))
 
@@ -27,7 +27,7 @@ describe('API Auth', () => {
     id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
     name: 'Test Key',
     keyPrefix: 'qb_test',
-    createdById: 'member_01h455vb4pex5vsknk084sn02r' as MemberId,
+    createdById: 'member_01h455vb4pex5vsknk084sn02r' as PrincipalId,
     createdAt: new Date(),
     lastUsedAt: null,
     expiresAt: null,
@@ -89,7 +89,7 @@ describe('API Auth', () => {
       const result = await requireApiKey(request)
       expect(result).toEqual({
         apiKey: mockApiKey,
-        memberId: mockApiKey.createdById,
+        principalId: mockApiKey.createdById,
         role: 'admin',
       })
     })
@@ -158,7 +158,7 @@ describe('API Auth', () => {
       expect(result instanceof Response).toBe(false)
       expect(result).toEqual({
         apiKey: mockApiKey,
-        memberId: mockApiKey.createdById,
+        principalId: mockApiKey.createdById,
         role: 'admin',
       })
     })

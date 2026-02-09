@@ -16,7 +16,7 @@ import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/shared/db-types'
-import type { MemberId, PostId, StatusId, TagId } from '@quackback/ids'
+import type { PrincipalId, PostId, StatusId, TagId } from '@quackback/ids'
 import type { CreatePostInput } from '@/lib/server/domains/posts'
 
 // ============================================================================
@@ -132,7 +132,7 @@ export function useUpdatePostOwner() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ postId, ownerId }: { postId: PostId; ownerId: MemberId | null }) =>
+    mutationFn: ({ postId, ownerId }: { postId: PostId; ownerId: PrincipalId | null }) =>
       updatePostFn({ data: { id: postId, ownerId } }),
     onMutate: async ({ postId, ownerId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
@@ -146,10 +146,10 @@ export function useUpdatePostOwner() {
       if (previousDetail) {
         queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
           ...previousDetail,
-          ownerMemberId: ownerId,
+          ownerPrincipalId: ownerId,
         })
       }
-      updatePostInLists(queryClient, postId, (post) => ({ ...post, ownerMemberId: ownerId }))
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, ownerPrincipalId: ownerId }))
 
       return { previousDetail, previousLists }
     },

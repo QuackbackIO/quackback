@@ -20,14 +20,14 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { updateMemberRoleFn, removeTeamMemberFn } from '@/lib/server/functions/admin'
 
 interface MemberActionsProps {
-  memberId: string
+  principalId: string
   memberName: string
   memberRole: 'admin' | 'member'
   isLastAdmin: boolean
 }
 
 export function MemberActions({
-  memberId,
+  principalId,
   memberName,
   memberRole,
   isLastAdmin,
@@ -44,7 +44,7 @@ export function MemberActions({
   const handleRoleChange = async () => {
     setIsLoading(true)
     try {
-      await updateMemberRoleFn({ data: { memberId, role: newRole } })
+      await updateMemberRoleFn({ data: { principalId, role: newRole } })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
       console.error('Failed to update role:', error)
@@ -58,7 +58,7 @@ export function MemberActions({
   const handleRemove = async () => {
     setIsLoading(true)
     try {
-      await removeTeamMemberFn({ data: { memberId } })
+      await removeTeamMemberFn({ data: { principalId } })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
       console.error('Failed to remove member:', error)

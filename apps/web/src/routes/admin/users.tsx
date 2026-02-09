@@ -27,9 +27,9 @@ export const Route = createFileRoute('/admin/users')({
   }),
   errorComponent: UsersErrorComponent,
   loader: async ({ deps, context }) => {
-    // Protected route - member is guaranteed by parent's beforeLoad auth check
-    const { member, queryClient } = context as {
-      member: NonNullable<typeof context.member>
+    // Protected route - principal is guaranteed by parent's beforeLoad auth check
+    const { principal, queryClient } = context as {
+      principal: NonNullable<typeof context.principal>
       queryClient: typeof context.queryClient
     }
 
@@ -50,7 +50,7 @@ export const Route = createFileRoute('/admin/users')({
     )
 
     return {
-      currentMemberRole: member.role,
+      currentMemberRole: principal.role,
     }
   },
   component: UsersPage,

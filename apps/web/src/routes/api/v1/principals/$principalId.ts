@@ -9,18 +9,18 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { validateTypeId } from '@/lib/server/domains/api/validation'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 // Input validation schema for updating member role
 const updateMemberSchema = z.object({
   role: z.enum(['admin', 'member']),
 })
 
-export const Route = createFileRoute('/api/v1/members/$memberId')({
+export const Route = createFileRoute('/api/v1/principals/$principalId')({
   server: {
     handlers: {
       /**
-       * GET /api/v1/members/:memberId
+       * GET /api/v1/principals/:principalId
        * Get a single team member by ID
        */
       GET: async ({ request, params }) => {
@@ -29,17 +29,18 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
         if (authResult instanceof Response) return authResult
 
         try {
-          const { memberId } = params
+          const { principalId } = params
 
           // Validate TypeID format
-          const validationError = validateTypeId(memberId, 'member', 'member ID')
+          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
           if (validationError) return validationError
 
           // Import service functions
-          const { getMemberById } = await import('@/lib/server/domains/members/member.service')
+          const { getMemberById } =
+            await import('@/lib/server/domains/principals/principal.service')
           const { db, eq, user } = await import('@/lib/server/db')
 
-          const foundMember = await getMemberById(memberId as MemberId)
+          const foundMember = await getMemberById(principalId as PrincipalId)
 
           if (!foundMember) {
             return notFoundResponse('Member not found')
@@ -74,20 +75,20 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
       },
 
       /**
-       * PATCH /api/v1/members/:memberId
+       * PATCH /api/v1/principals/:principalId
        * Update a team member's role
        */
       PATCH: async ({ request, params }) => {
         // Authenticate (admin only)
         const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
-        const { memberId: actingMemberId } = authResult
+        const { principalId: actingPrincipalId } = authResult
 
         try {
-          const { memberId } = params
+          const { principalId } = params
 
           // Validate TypeID format
-          const validationError = validateTypeId(memberId, 'member', 'member ID')
+          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
           if (validationError) return validationError
 
           // Parse and validate body
@@ -102,13 +103,13 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
 
           // Import service functions
           const { updateMemberRole, getMemberById } =
-            await import('@/lib/server/domains/members/member.service')
+            await import('@/lib/server/domains/principals/principal.service')
           const { db, eq, user } = await import('@/lib/server/db')
 
-          await updateMemberRole(memberId as MemberId, parsed.data.role, actingMemberId)
+          await updateMemberRole(principalId as PrincipalId, parsed.data.role, actingPrincipalId)
 
           // Fetch updated member
-          const updatedMember = await getMemberById(memberId as MemberId)
+          const updatedMember = await getMemberById(principalId as PrincipalId)
 
           if (!updatedMember) {
             return notFoundResponse('Member not found')
@@ -138,26 +139,27 @@ export const Route = createFileRoute('/api/v1/members/$memberId')({
       },
 
       /**
-       * DELETE /api/v1/members/:memberId
+       * DELETE /api/v1/principals/:principalId
        * Remove a team member (converts them to a portal user)
        */
       DELETE: async ({ request, params }) => {
         // Authenticate (admin only)
         const authResult = await withApiKeyAuth(request, { role: 'admin' })
         if (authResult instanceof Response) return authResult
-        const { memberId: actingMemberId } = authResult
+        const { principalId: actingPrincipalId } = authResult
 
         try {
-          const { memberId } = params
+          const { principalId } = params
 
           // Validate TypeID format
-          const validationError = validateTypeId(memberId, 'member', 'member ID')
+          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
           if (validationError) return validationError
 
           // Import service function
-          const { removeTeamMember } = await import('@/lib/server/domains/members/member.service')
+          const { removeTeamMember } =
+            await import('@/lib/server/domains/principals/principal.service')
 
-          await removeTeamMember(memberId as MemberId, actingMemberId)
+          await removeTeamMember(principalId as PrincipalId, actingPrincipalId)
 
           return noContentResponse()
         } catch (error) {

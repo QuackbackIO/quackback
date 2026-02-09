@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
-import type { MemberId, ApiKeyId, UserId } from '@quackback/ids'
+import type { PrincipalId, ApiKeyId, UserId } from '@quackback/ids'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -13,10 +13,10 @@ const mockFindFirst = vi.fn()
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
-      member: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+      principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
     },
   },
-  member: { id: 'id' },
+  principal: { id: 'id' },
   eq: vi.fn((_a: unknown, _b: unknown) => 'eq-condition'),
 }))
 
@@ -58,7 +58,7 @@ vi.mock('@/lib/server/domains/posts/post.query', () => ({
     statusId: 'status_test',
     authorName: 'Jane',
     authorEmail: 'jane@example.com',
-    ownerMemberId: null,
+    ownerPrincipalId: null,
     officialResponse: null,
     officialResponseAuthorName: null,
     officialResponseAt: null,
@@ -83,7 +83,7 @@ vi.mock('@/lib/server/domains/posts/post.service', () => ({
     id: 'post_test',
     title: 'Test Post',
     statusId: 'status_updated',
-    ownerMemberId: null,
+    ownerPrincipalId: null,
     officialResponse: null,
     officialResponseAt: null,
     updatedAt: new Date('2026-01-01'),
@@ -97,7 +97,7 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
       postId: 'post_test',
       content: 'Great feedback!',
       parentId: null,
-      memberId: 'member_test',
+      principalId: 'principal_test',
       isTeamMember: true,
       createdAt: new Date('2026-01-01'),
     },
@@ -170,7 +170,7 @@ vi.mock('@/lib/server/domains/members/member.service', () => ({
 
 // ── Test Constants ─────────────────────────────────────────────────────────────
 
-const MOCK_MEMBER_ID = 'member_01h455vb4pex5vsknk084sn02r' as MemberId
+const MOCK_MEMBER_ID = 'principal_01h455vb4pex5vsknk084sn02r' as PrincipalId
 const MOCK_USER_ID = 'user_01h455vb4pex5vsknk084sn02s' as UserId
 
 const MOCK_API_KEY: ApiKey = {

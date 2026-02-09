@@ -20,10 +20,10 @@ import {
   and,
   isNull,
   sql,
-  member as memberTable,
+  principal as principalTable,
   user as userTable,
 } from '@/lib/server/db'
-import { type PostId, type MemberId, toUuid } from '@quackback/ids'
+import { type PostId, type PrincipalId, toUuid } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type {
   MergePostResult,
@@ -39,17 +39,17 @@ import type {
  * - Prevents circular merges and self-merges
  * - Prevents merging a post that is already merged elsewhere
  * - Prevents merging into a post that is itself merged
- * - Sets canonicalPostId, mergedAt, mergedByMemberId on the duplicate
+ * - Sets canonicalPostId, mergedAt, mergedByPrincipalId on the duplicate
  * - Recalculates the canonical post's voteCount to reflect unique voters
  *
  * @param duplicatePostId - The post to mark as a duplicate
  * @param canonicalPostId - The canonical post to merge into
- * @param actorMemberId - The admin performing the merge
+ * @param actorPrincipalId - The admin performing the merge
  */
 export async function mergePost(
   duplicatePostId: PostId,
   canonicalPostId: PostId,
-  actorMemberId: MemberId
+  actorPrincipalId: PrincipalId
 ): Promise<MergePostResult> {
   // Prevent self-merge
   if (duplicatePostId === canonicalPostId) {
@@ -95,7 +95,7 @@ export async function mergePost(
     .set({
       canonicalPostId: canonicalPostId,
       mergedAt: new Date(),
-      mergedByMemberId: actorMemberId,
+      mergedByPrincipalId: actorPrincipalId,
     })
     .where(eq(posts.id, duplicatePostId))
 
@@ -112,15 +112,15 @@ export async function mergePost(
  * Unmerge a previously merged post, restoring it to independent state.
  *
  * - Validates the post exists and is currently merged
- * - Clears canonicalPostId, mergedAt, mergedByMemberId
+ * - Clears canonicalPostId, mergedAt, mergedByPrincipalId
  * - Recalculates the canonical post's voteCount
  *
  * @param postId - The merged post to restore
- * @param actorMemberId - The admin performing the unmerge
+ * @param actorPrincipalId - The admin performing the unmerge
  */
 export async function unmergePost(
   postId: PostId,
-  _actorMemberId: MemberId
+  _actorPrincipalId: PrincipalId
 ): Promise<UnmergePostResult> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
@@ -142,7 +142,7 @@ export async function unmergePost(
     .set({
       canonicalPostId: null,
       mergedAt: null,
-      mergedByMemberId: null,
+      mergedByPrincipalId: null,
     })
     .where(eq(posts.id, postId))
 
@@ -170,9 +170,9 @@ export async function getMergedPosts(canonicalPostId: PostId): Promise<MergedPos
       createdAt: posts.createdAt,
       mergedAt: posts.mergedAt,
       authorName: sql<string | null>`(
-        SELECT u.name FROM ${memberTable} m
+        SELECT u.name FROM ${principalTable} m
         INNER JOIN ${userTable} u ON m.user_id = u.id
-        WHERE m.id = ${posts.memberId}
+        WHERE m.id = ${posts.principalId}
       )`.as('author_name'),
     })
     .from(posts)
@@ -248,7 +248,7 @@ async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<n
       WHERE canonical_post_id = ${canonicalUuid}::uuid
         AND deleted_at IS NULL
     )
-    SELECT COUNT(DISTINCT v.member_id)::int AS unique_voters
+    SELECT COUNT(DISTINCT v.principal_id)::int AS unique_voters
     FROM ${votes} v
     WHERE v.post_id IN (SELECT post_id FROM related_post_ids)
   `)

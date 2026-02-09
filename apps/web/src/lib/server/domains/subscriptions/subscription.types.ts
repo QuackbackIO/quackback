@@ -5,12 +5,12 @@
  * no database dependencies.
  */
 
-import type { MemberId, PostId, PostSubscriptionId } from '@quackback/ids'
+import type { PrincipalId, PostId, PostSubscriptionId } from '@quackback/ids'
 
 export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual'
 
 export interface Subscriber {
-  memberId: MemberId
+  principalId: PrincipalId
   userId: string
   email: string
   name: string | null

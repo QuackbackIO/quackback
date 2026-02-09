@@ -40,7 +40,7 @@ export const saveShortcutTokenFn = createServerFn({ method: 'POST' })
     const workspaceSlug = memberInfo.workspace2?.url_slug || ''
 
     await saveIntegration('shortcut', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.apiToken,
       config: { workspaceSlug, workspaceName },
     })

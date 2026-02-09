@@ -102,8 +102,8 @@ export type WorkspaceId = TypeId<'workspace'>
 /** User ID - e.g., user_01h455vb4pex5vsknk084sn02q */
 export type UserId = TypeId<'user'>
 
-/** Member ID - e.g., member_01h455vb4pex5vsknk084sn02q */
-export type MemberId = TypeId<'member'>
+/** Principal ID - e.g., principal_01h455vb4pex5vsknk084sn02q */
+export type PrincipalId = TypeId<'principal'>
 
 /** Session ID - e.g., session_01h455vb4pex5vsknk084sn02q */
 export type SessionId = TypeId<'session'>
@@ -176,7 +176,7 @@ export interface EntityIdMap {
   notification: NotificationId
   workspace: WorkspaceId
   user: UserId
-  member: MemberId
+  principal: PrincipalId
   session: SessionId
   account: AccountId
   invite: InviteId

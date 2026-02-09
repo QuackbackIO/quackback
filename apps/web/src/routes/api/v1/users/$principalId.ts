@@ -7,14 +7,14 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { validateTypeId } from '@/lib/server/domains/api/validation'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
-export const Route = createFileRoute('/api/v1/users/$memberId')({
+export const Route = createFileRoute('/api/v1/users/$principalId')({
   server: {
     handlers: {
       /**
-       * GET /api/v1/users/:memberId
-       * Get a single portal user by member ID
+       * GET /api/v1/users/:principalId
+       * Get a single portal user by principal ID
        */
       GET: async ({ request, params }) => {
         // Authenticate
@@ -22,23 +22,23 @@ export const Route = createFileRoute('/api/v1/users/$memberId')({
         if (authResult instanceof Response) return authResult
 
         try {
-          const { memberId } = params
+          const { principalId } = params
 
           // Validate TypeID format
-          const validationError = validateTypeId(memberId, 'member', 'member ID')
+          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
           if (validationError) return validationError
 
           // Import service function
           const { getPortalUserDetail } = await import('@/lib/server/domains/users/user.service')
 
-          const user = await getPortalUserDetail(memberId as MemberId)
+          const user = await getPortalUserDetail(principalId as PrincipalId)
 
           if (!user) {
             return notFoundResponse('Portal user not found')
           }
 
           return successResponse({
-            memberId: user.memberId,
+            principalId: user.principalId,
             userId: user.userId,
             name: user.name,
             email: user.email,
@@ -72,7 +72,7 @@ export const Route = createFileRoute('/api/v1/users/$memberId')({
       },
 
       /**
-       * DELETE /api/v1/users/:memberId
+       * DELETE /api/v1/users/:principalId
        * Remove a portal user
        */
       DELETE: async ({ request, params }) => {
@@ -81,16 +81,16 @@ export const Route = createFileRoute('/api/v1/users/$memberId')({
         if (authResult instanceof Response) return authResult
 
         try {
-          const { memberId } = params
+          const { principalId } = params
 
           // Validate TypeID format
-          const validationError = validateTypeId(memberId, 'member', 'member ID')
+          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
           if (validationError) return validationError
 
           // Import service function
           const { removePortalUser } = await import('@/lib/server/domains/users/user.service')
 
-          await removePortalUser(memberId as MemberId)
+          await removePortalUser(principalId as PrincipalId)
 
           return noContentResponse()
         } catch (error) {

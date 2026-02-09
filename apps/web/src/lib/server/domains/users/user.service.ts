@@ -1,11 +1,11 @@
 /**
  * UserService - Business logic for portal user management
  *
- * Provides operations for listing and managing portal users (role='user' in member table).
+ * Provides operations for listing and managing portal users (role='user' in principal table).
  * Portal users are authenticated users who can vote/comment on the public portal
  * but don't have admin access (unlike admin/member roles).
  *
- * All users (team + portal) are unified in the member table with roles:
+ * All users (team + portal) are unified in the principal table with roles:
  * - admin/member: Team members with admin dashboard access
  * - user: Portal users with public portal access only
  */
@@ -20,7 +20,7 @@ import {
   desc,
   asc,
   sql,
-  member,
+  principal,
   user,
   posts,
   comments,
@@ -28,7 +28,7 @@ import {
   postStatuses,
   boards,
 } from '@/lib/server/db'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type {
   PortalUserListParams,
@@ -42,9 +42,9 @@ import type {
 /**
  * List portal users for an organization with activity counts
  *
- * Queries member table for role='user'.
+ * Queries principal table for role='user'.
  * Activity counts are computed via efficient LEFT JOINs with pre-aggregated subqueries,
- * using the indexed member_id columns on posts, comments, and votes tables.
+ * using the indexed principal_id columns on posts, comments, and votes tables.
  */
 export async function listPortalUsers(
   params: PortalUserListParams = {}
@@ -53,41 +53,41 @@ export async function listPortalUsers(
     const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20 } = params
 
     // Pre-aggregate activity counts in subqueries (executed once, not per-row)
-    // These use the indexed member_id columns for efficient lookups
+    // These use the indexed principal_id columns for efficient lookups
     // Note: We join with boards to filter by workspace
     // Each count column has a unique name to avoid ambiguity in the final SELECT
     const postCounts = db
       .select({
-        memberId: posts.memberId,
+        principalId: posts.principalId,
         postCount: sql<number>`count(*)::int`.as('post_count'),
       })
       .from(posts)
-      .groupBy(posts.memberId)
+      .groupBy(posts.principalId)
       .as('post_counts')
 
     // Comments are linked to posts, which are linked to boards
     const commentCounts = db
       .select({
-        memberId: comments.memberId,
+        principalId: comments.principalId,
         commentCount: sql<number>`count(*)::int`.as('comment_count'),
       })
       .from(comments)
-      .groupBy(comments.memberId)
+      .groupBy(comments.principalId)
       .as('comment_counts')
 
     // Votes are linked to posts, which are linked to boards
-    // Use votes.member_id (indexed) instead of string concatenation on user_identifier
+    // Use votes.principal_id (indexed) instead of string concatenation on user_identifier
     const voteCounts = db
       .select({
-        memberId: votes.memberId,
+        principalId: votes.principalId,
         voteCount: sql<number>`count(*)::int`.as('vote_count'),
       })
       .from(votes)
-      .groupBy(votes.memberId)
+      .groupBy(votes.principalId)
       .as('vote_counts')
 
     // Build conditions array - filter for role='user' (portal users only)
-    const conditions = [eq(member.role, 'user')]
+    const conditions = [eq(principal.role, 'user')]
 
     // Search filter (name or email)
     if (search) {
@@ -99,12 +99,12 @@ export async function listPortalUsers(
       conditions.push(eq(user.emailVerified, verified))
     }
 
-    // Date range filters (on member.createdAt = join date)
+    // Date range filters (on principal.createdAt = join date)
     if (dateFrom) {
-      conditions.push(sql`${member.createdAt} >= ${dateFrom}`)
+      conditions.push(sql`${principal.createdAt} >= ${dateFrom}`)
     }
     if (dateTo) {
-      conditions.push(sql`${member.createdAt} <= ${dateTo}`)
+      conditions.push(sql`${principal.createdAt} <= ${dateTo}`)
     }
 
     const whereClause = and(...conditions)
@@ -113,7 +113,7 @@ export async function listPortalUsers(
     let orderBy
     switch (sort) {
       case 'oldest':
-        orderBy = asc(member.createdAt)
+        orderBy = asc(principal.createdAt)
         break
       case 'most_active':
         // Sort by total activity using the pre-joined counts
@@ -126,37 +126,37 @@ export async function listPortalUsers(
         break
       case 'newest':
       default:
-        orderBy = desc(member.createdAt)
+        orderBy = desc(principal.createdAt)
     }
 
     // Main query with LEFT JOINs to pre-aggregated counts
     const [usersResult, countResult] = await Promise.all([
       db
         .select({
-          memberId: member.id,
+          principalId: principal.id,
           userId: user.id,
           name: user.name,
           email: user.email,
           image: user.image,
           emailVerified: user.emailVerified,
-          joinedAt: member.createdAt,
+          joinedAt: principal.createdAt,
           postCount: sql<number>`COALESCE(${postCounts.postCount}, 0)`,
           commentCount: sql<number>`COALESCE(${commentCounts.commentCount}, 0)`,
           voteCount: sql<number>`COALESCE(${voteCounts.voteCount}, 0)`,
         })
-        .from(member)
-        .innerJoin(user, eq(member.userId, user.id))
-        .leftJoin(postCounts, eq(postCounts.memberId, member.id))
-        .leftJoin(commentCounts, eq(commentCounts.memberId, member.id))
-        .leftJoin(voteCounts, eq(voteCounts.memberId, member.id))
+        .from(principal)
+        .innerJoin(user, eq(principal.userId, user.id))
+        .leftJoin(postCounts, eq(postCounts.principalId, principal.id))
+        .leftJoin(commentCounts, eq(commentCounts.principalId, principal.id))
+        .leftJoin(voteCounts, eq(voteCounts.principalId, principal.id))
         .where(whereClause)
         .orderBy(orderBy)
         .limit(limit)
         .offset((page - 1) * limit),
       db
         .select({ count: sql<number>`count(*)::int` })
-        .from(member)
-        .innerJoin(user, eq(member.userId, user.id))
+        .from(principal)
+        .innerJoin(user, eq(principal.userId, user.id))
         .where(whereClause),
     ])
 
@@ -164,7 +164,7 @@ export async function listPortalUsers(
     const total = Number(countResult[0]?.count ?? 0)
 
     const items: PortalUserListItem[] = rawUsers.map((row) => ({
-      memberId: row.memberId,
+      principalId: row.principalId,
       userId: row.userId,
       name: row.name,
       email: row.email,
@@ -192,36 +192,38 @@ export async function listPortalUsers(
  *
  * Returns user info and all posts they've engaged with (authored, commented on, or voted on).
  */
-export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUserDetail | null> {
+export async function getPortalUserDetail(
+  principalId: PrincipalId
+): Promise<PortalUserDetail | null> {
   try {
-    // Get member with user details (filter for role='user')
-    const memberResult = await db
+    // Get principal with user details (filter for role='user')
+    const principalResult = await db
       .select({
-        memberId: member.id,
+        principalId: principal.id,
         userId: user.id,
         name: user.name,
         email: user.email,
         image: user.image,
         emailVerified: user.emailVerified,
-        joinedAt: member.createdAt,
+        joinedAt: principal.createdAt,
         createdAt: user.createdAt,
       })
-      .from(member)
-      .innerJoin(user, eq(member.userId, user.id))
-      .where(and(eq(member.id, memberId), eq(member.role, 'user')))
+      .from(principal)
+      .innerJoin(user, eq(principal.userId, user.id))
+      .where(and(eq(principal.id, principalId), eq(principal.role, 'user')))
       .limit(1)
 
-    if (memberResult.length === 0) {
+    if (principalResult.length === 0) {
       return null
     }
 
-    const memberData = memberResult[0]
-    // memberData.memberId is already in MemberId format from the query
-    const memberIdForQuery = memberData.memberId
+    const principalData = principalResult[0]
+    // principalData.principalId is already in PrincipalId format from the query
+    const principalIdForQuery = principalData.principalId
 
     // Run independent queries in parallel for better performance
     const [authoredPosts, commentedPostIds, votedPostIds] = await Promise.all([
-      // Get posts authored by this user (via memberId)
+      // Get posts authored by this user (via principalId)
       db
         .select({
           id: posts.id,
@@ -231,9 +233,9 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
           voteCount: posts.voteCount,
           createdAt: posts.createdAt,
           authorName: sql<string | null>`(
-            SELECT u.name FROM ${member} m
+            SELECT u.name FROM ${principal} m
             INNER JOIN ${user} u ON m.user_id = u.id
-            WHERE m.id = ${posts.memberId}
+            WHERE m.id = ${posts.principalId}
           )`.as('author_name'),
           boardSlug: boards.slug,
           boardName: boards.name,
@@ -243,29 +245,29 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
         .from(posts)
         .innerJoin(boards, eq(posts.boardId, boards.id))
         .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-        .where(eq(posts.memberId, memberIdForQuery))
+        .where(eq(posts.principalId, principalIdForQuery))
         .orderBy(desc(posts.createdAt))
         .limit(100),
 
-      // Get post IDs the user has commented on (via memberId)
+      // Get post IDs the user has commented on (via principalId)
       db
         .select({
           postId: comments.postId,
           latestCommentAt: sql<Date>`max(${comments.createdAt})`.as('latest_comment_at'),
         })
         .from(comments)
-        .where(eq(comments.memberId, memberIdForQuery))
+        .where(eq(comments.principalId, principalIdForQuery))
         .groupBy(comments.postId)
         .limit(100),
 
-      // Get post IDs the user has voted on (via indexed memberId column)
+      // Get post IDs the user has voted on (via indexed principalId column)
       db
         .select({
           postId: votes.postId,
           votedAt: votes.createdAt,
         })
         .from(votes)
-        .where(eq(votes.memberId, memberIdForQuery))
+        .where(eq(votes.principalId, principalIdForQuery))
         .orderBy(desc(votes.createdAt))
         .limit(100),
     ])
@@ -292,9 +294,9 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
               voteCount: posts.voteCount,
               createdAt: posts.createdAt,
               authorName: sql<string | null>`(
-                SELECT u.name FROM ${member} m
+                SELECT u.name FROM ${principal} m
                 INNER JOIN ${user} u ON m.user_id = u.id
-                WHERE m.id = ${posts.memberId}
+                WHERE m.id = ${posts.principalId}
               )`.as('author_name'),
               boardSlug: boards.slug,
               boardName: boards.name,
@@ -424,14 +426,14 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
     const voteCount = engagementData.votedPostIds.length
 
     return {
-      memberId: memberData.memberId,
-      userId: memberData.userId,
-      name: memberData.name,
-      email: memberData.email,
-      image: memberData.image,
-      emailVerified: memberData.emailVerified,
-      joinedAt: memberData.joinedAt,
-      createdAt: memberData.createdAt,
+      principalId: principalData.principalId,
+      userId: principalData.userId,
+      name: principalData.name,
+      email: principalData.email,
+      image: principalData.image,
+      emailVerified: principalData.emailVerified,
+      joinedAt: principalData.joinedAt,
+      createdAt: principalData.createdAt,
       postCount,
       commentCount,
       voteCount,
@@ -446,25 +448,25 @@ export async function getPortalUserDetail(memberId: MemberId): Promise<PortalUse
 /**
  * Remove a portal user from an organization
  *
- * Deletes the member record with role='user'.
+ * Deletes the principal record with role='user'.
  * Since users are org-scoped, this also deletes the user record (CASCADE).
  */
-export async function removePortalUser(memberId: MemberId): Promise<void> {
+export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
-    // Verify member exists and has role='user'
-    const existingMember = await db.query.member.findFirst({
-      where: and(eq(member.id, memberId), eq(member.role, 'user')),
+    // Verify principal exists and has role='user'
+    const existingPrincipal = await db.query.principal.findFirst({
+      where: and(eq(principal.id, principalId), eq(principal.role, 'user')),
     })
 
-    if (!existingMember) {
+    if (!existingPrincipal) {
       throw new NotFoundError(
         'MEMBER_NOT_FOUND',
-        `Portal user with member ID ${memberId} not found`
+        `Portal user with principal ID ${principalId} not found`
       )
     }
 
-    // Delete member record (user record will be deleted via CASCADE since user is org-scoped)
-    await db.delete(member).where(eq(member.id, memberId))
+    // Delete principal record (user record will be deleted via CASCADE since user is org-scoped)
+    await db.delete(principal).where(eq(principal.id, principalId))
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     console.error('Error removing portal user:', error)

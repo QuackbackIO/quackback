@@ -21,7 +21,7 @@ export interface CommentWithReactions {
   id: string
   postId: string
   parentId: string | null
-  memberId: string
+  principalId: string
   authorName: string | null
   content: string
   isTeamMember: boolean
@@ -29,7 +29,7 @@ export interface CommentWithReactions {
   avatarUrl?: string | null
   reactions: Array<{
     emoji: string
-    memberId: string
+    principalId: string
   }>
 }
 
@@ -40,7 +40,7 @@ export interface CommentTreeNode {
   id: string
   postId: string
   parentId: string | null
-  memberId: string
+  principalId: string
   authorName: string | null
   content: string
   isTeamMember: boolean
@@ -54,19 +54,19 @@ export interface CommentTreeNode {
  * Aggregate reactions by emoji, tracking whether the current user has reacted.
  *
  * @param reactions - Array of reaction records
- * @param memberId - Optional member ID to check for current user's reactions
+ * @param principalId - Optional principal ID to check for current user's reactions
  * @returns Array of aggregated reaction counts
  */
 export function aggregateReactions(
-  reactions: Array<{ emoji: string; memberId: string }>,
-  memberId?: string
+  reactions: Array<{ emoji: string; principalId: string }>,
+  principalId?: string
 ): CommentReactionCount[] {
   const reactionCounts = new Map<string, { count: number; hasReacted: boolean }>()
 
   for (const reaction of reactions) {
     const existing = reactionCounts.get(reaction.emoji) || { count: 0, hasReacted: false }
     existing.count++
-    if (memberId && reaction.memberId === memberId) {
+    if (principalId && reaction.principalId === principalId) {
       existing.hasReacted = true
     }
     reactionCounts.set(reaction.emoji, existing)
@@ -84,12 +84,12 @@ export function aggregateReactions(
  * Uses two-pass algorithm for O(n) complexity.
  *
  * @param comments - Flat array of comments with reactions
- * @param memberId - Optional member ID for reaction status
+ * @param principalId - Optional principal ID for reaction status
  * @returns Array of root comments with nested replies
  */
 export function buildCommentTree<T extends CommentWithReactions>(
   comments: T[],
-  memberId?: string
+  principalId?: string
 ): CommentTreeNode[] {
   const commentMap = new Map<string, CommentTreeNode>()
   const rootComments: CommentTreeNode[] = []
@@ -100,14 +100,14 @@ export function buildCommentTree<T extends CommentWithReactions>(
       id: comment.id,
       postId: comment.postId,
       parentId: comment.parentId,
-      memberId: comment.memberId,
+      principalId: comment.principalId,
       authorName: comment.authorName,
       content: comment.content,
       isTeamMember: comment.isTeamMember,
       createdAt: comment.createdAt,
       avatarUrl: comment.avatarUrl,
       replies: [],
-      reactions: aggregateReactions(comment.reactions, memberId),
+      reactions: aggregateReactions(comment.reactions, principalId),
     }
     commentMap.set(comment.id, node)
   }

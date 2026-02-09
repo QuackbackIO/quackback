@@ -12,7 +12,7 @@ import type {
 } from './schema/posts'
 import type { integrations } from './schema/integrations'
 import type { changelogEntries, changelogEntryPosts } from './schema/changelog'
-import type { member } from './schema/auth'
+import type { principal } from './schema/auth'
 
 // Note: Billing types (Subscription, Invoice) are no longer in the tenant database.
 // Billing is managed in the catalog database. See apps/web/src/lib/catalog/schema.ts
@@ -163,9 +163,9 @@ export type NewChangelogEntry = InferInsertModel<typeof changelogEntries>
 export type ChangelogEntryPost = InferSelectModel<typeof changelogEntryPosts>
 export type NewChangelogEntryPost = InferInsertModel<typeof changelogEntryPosts>
 
-// Member types
-export type Member = InferSelectModel<typeof member>
-export type NewMember = InferInsertModel<typeof member>
+// Principal types
+export type Principal = InferSelectModel<typeof principal>
+export type NewPrincipal = InferInsertModel<typeof principal>
 
 // Note: Subscription and Invoice types have been moved to the catalog database.
 // For subscription types, see apps/web/src/lib/subscription.ts (WorkspaceSubscription)

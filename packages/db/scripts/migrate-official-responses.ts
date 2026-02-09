@@ -58,10 +58,10 @@ async function migrateOfficialResponses() {
           continue
         }
 
-        // Determine the author member
-        const memberId = post.officialResponseMemberId
-        if (!memberId) {
-          console.warn(`  Post ${post.id}: No officialResponseMemberId, skipping`)
+        // Determine the author principal
+        const principalId = post.officialResponsePrincipalId
+        if (!principalId) {
+          console.warn(`  Post ${post.id}: No officialResponsePrincipalId, skipping`)
           skipped++
           continue
         }
@@ -73,7 +73,7 @@ async function migrateOfficialResponses() {
         await db.insert(schema.comments).values({
           id: commentId,
           postId: post.id,
-          memberId,
+          principalId,
           content: post.officialResponse,
           isTeamMember: true,
           parentId: null,

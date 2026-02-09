@@ -8,15 +8,15 @@
 import { verifyApiKey, type ApiKey } from '@/lib/server/domains/api-keys'
 import { unauthorizedResponse, forbiddenResponse, rateLimitedResponse } from './responses'
 import { checkRateLimit, getClientIp } from './rate-limit'
-import type { MemberId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export type MemberRole = 'admin' | 'member' | 'user'
 
 export interface ApiAuthContext {
   /** The validated API key */
   apiKey: ApiKey
-  /** The member ID of the key creator (for audit logging) */
-  memberId: MemberId
+  /** The principal ID of the key creator (for audit logging) */
+  principalId: PrincipalId
   /** The role of the member who created the key */
   role: MemberRole
 }
@@ -55,10 +55,10 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
     return null
   }
 
-  // Fetch member role for authorization checks
-  const { db, member, eq } = await import('@/lib/server/db')
-  const memberRecord = await db.query.member.findFirst({
-    where: eq(member.id, apiKey.createdById),
+  // Fetch principal role for authorization checks
+  const { db, principal, eq } = await import('@/lib/server/db')
+  const memberRecord = await db.query.principal.findFirst({
+    where: eq(principal.id, apiKey.createdById),
     columns: { role: true },
   })
 
@@ -67,7 +67,7 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
 
   return {
     apiKey,
-    memberId: apiKey.createdById,
+    principalId: apiKey.createdById,
     role,
   }
 }
@@ -84,7 +84,7 @@ export type AuthLevel = 'team' | 'admin'
  * @example
  * const authResult = await withApiKeyAuth(request, { role: 'team' })
  * if (authResult instanceof Response) return authResult
- * const { apiKey, memberId } = authResult
+ * const { apiKey, principalId } = authResult
  */
 export async function withApiKeyAuth(
   request: Request,

@@ -32,7 +32,7 @@ export const saveZapierWebhookFn = createServerFn({ method: 'POST' })
     }
 
     await saveIntegration('zapier', {
-      memberId: auth.member.id,
+      principalId: auth.principal.id,
       accessToken: data.webhookUrl,
       config: { webhookUrl: data.webhookUrl, workspaceName: 'Zapier' },
     })

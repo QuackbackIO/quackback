@@ -12,7 +12,7 @@ import {
   validateOptionalTypeId,
   validateTypeIdArray,
 } from '@/lib/server/domains/api/validation'
-import type { PostId, StatusId, TagId, MemberId } from '@quackback/ids'
+import type { PostId, StatusId, TagId, PrincipalId } from '@quackback/ids'
 
 // Input validation schema
 const updatePostSchema = z.object({
@@ -20,7 +20,7 @@ const updatePostSchema = z.object({
   content: z.string().max(10000).optional(),
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional(),
-  ownerMemberId: z.string().nullable().optional(),
+  ownerPrincipalId: z.string().nullable().optional(),
   officialResponse: z.string().nullable().optional(),
 })
 
@@ -61,7 +61,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             statusId: post.statusId,
             authorName: post.authorName ?? null,
             authorEmail: post.authorEmail ?? null,
-            ownerMemberId: post.ownerMemberId,
+            ownerPrincipalId: post.ownerPrincipalId,
             officialResponse: post.officialResponse,
             officialResponseAuthorName: post.officialResponseAuthorName ?? null,
             officialResponseAt: post.officialResponseAt?.toISOString() ?? null,
@@ -92,7 +92,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           const { postId } = params
@@ -123,11 +123,11 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
 
           // Import service and get member details
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
-          const { db, member, eq } = await import('@/lib/server/db')
+          const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for responder details
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.id, memberId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, principalId),
             with: { user: true },
           })
 
@@ -138,10 +138,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
               content: parsed.data.content,
               statusId: parsed.data.statusId as StatusId | undefined,
               tagIds: parsed.data.tagIds as TagId[] | undefined,
-              ownerMemberId: parsed.data.ownerMemberId as MemberId | null | undefined,
+              ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
               officialResponse: parsed.data.officialResponse,
             },
-            memberRecord?.user ? { memberId, name: memberRecord.user.name } : undefined
+            principalRecord?.user ? { principalId, name: principalRecord.user.name } : undefined
           )
 
           return successResponse({
@@ -152,7 +152,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             voteCount: result.voteCount,
             boardId: result.boardId,
             statusId: result.statusId,
-            ownerMemberId: result.ownerMemberId,
+            ownerPrincipalId: result.ownerPrincipalId,
             officialResponse: result.officialResponse,
             officialResponseAt: result.officialResponseAt?.toISOString() ?? null,
             createdAt: result.createdAt.toISOString(),
@@ -171,7 +171,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { memberId } = authResult
+        const { principalId } = authResult
 
         try {
           const { postId } = params
@@ -182,16 +182,16 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
 
           // Import service and get member details
           const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
-          const { db, member, eq } = await import('@/lib/server/db')
+          const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for role
-          const memberRecord = await db.query.member.findFirst({
-            where: eq(member.id, memberId),
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, principalId),
           })
 
           await softDeletePost(postId as PostId, {
-            memberId,
-            role: (memberRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+            principalId,
+            role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
           })
 
           return noContentResponse()

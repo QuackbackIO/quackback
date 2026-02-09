@@ -9,7 +9,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { getSession } from './auth'
-import { db, member, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 
 const requireWorkspaceRoleSchema = z.object({
   allowedRoles: z.array(z.string()),
@@ -43,20 +43,20 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
 
     // Note: Onboarding check is handled in __root.tsx beforeLoad
 
-    const memberRecord = await db.query.member.findFirst({
-      where: eq(member.userId, session.user.id),
+    const principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.userId, session.user.id),
     })
-    if (!memberRecord) {
+    if (!principalRecord) {
       throw redirect({ to: '/' })
     }
 
-    if (!data.allowedRoles.includes(memberRecord.role)) {
+    if (!data.allowedRoles.includes(principalRecord.role)) {
       throw redirect({ to: '/admin/login', search: { error: 'not_team_member' } })
     }
 
     return {
       settings: appSettings,
-      member: memberRecord,
+      principal: principalRecord,
       user: session.user,
     }
   })

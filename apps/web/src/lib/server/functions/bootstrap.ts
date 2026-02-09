@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
 import { auth } from '@/lib/server/auth/index'
-import { db, member, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 import type { Session } from './auth'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
@@ -57,9 +57,9 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
 
     // Get user role
     const userRole = session
-      ? await db.query.member
+      ? await db.query.principal
           .findFirst({
-            where: eq(member.userId, session.user.id as UserId),
+            where: eq(principal.userId, session.user.id as UserId),
             columns: { role: true },
           })
           .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)

@@ -7,7 +7,7 @@
 import { pgTable, timestamp, varchar, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
-import { member } from './auth'
+import { principal } from './auth'
 
 /**
  * API Keys table
@@ -25,10 +25,10 @@ export const apiKeys = pgTable(
     keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
     /** First 12 characters of the key for identification (e.g., "qb_a1b2c3d4") */
     keyPrefix: varchar('key_prefix', { length: 12 }).notNull(),
-    /** Member who created this key */
-    createdById: typeIdColumn('member')('created_by_id')
+    /** Principal who created this key */
+    createdById: typeIdColumn('principal')('created_by_id')
       .notNull()
-      .references(() => member.id, { onDelete: 'cascade' }),
+      .references(() => principal.id, { onDelete: 'cascade' }),
     /** Last time the key was used for authentication */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     /** Optional expiration date */
@@ -47,8 +47,8 @@ export const apiKeys = pgTable(
 )
 
 export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
-  createdBy: one(member, {
+  createdBy: one(principal, {
     fields: [apiKeys.createdById],
-    references: [member.id],
+    references: [principal.id],
   }),
 }))

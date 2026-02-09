@@ -3,7 +3,7 @@
  */
 
 import type { Post, Board, Tag, TiptapContent } from '@quackback/db/types'
-import type { PostId, BoardId, TagId, StatusId, MemberId, CommentId } from '@quackback/ids'
+import type { PostId, BoardId, TagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
 import type { CommentReactionCount } from '@/lib/shared'
 
 /**
@@ -27,9 +27,9 @@ export interface UpdatePostInput {
   contentJson?: TiptapContent | null
   statusId?: StatusId
   tagIds?: TagId[]
-  ownerMemberId?: MemberId | null
+  ownerPrincipalId?: PrincipalId | null
   officialResponse?: string | null
-  officialResponseMemberId?: MemberId | null
+  officialResponsePrincipalId?: PrincipalId | null
 }
 
 /**
@@ -86,7 +86,7 @@ export interface PublicPostListItem {
   statusId: StatusId | null
   voteCount: number
   authorName: string | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   createdAt: Date
   commentCount: number
   tags: Array<{ id: TagId; name: string; color: string }>
@@ -199,7 +199,7 @@ export interface PinnedComment {
   id: CommentId
   content: string
   authorName: string | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   avatarUrl: string | null
   createdAt: Date
   isTeamMember: boolean
@@ -212,7 +212,7 @@ export interface PublicComment {
   id: CommentId
   content: string
   authorName: string | null
-  memberId: string | null
+  principalId: string | null
   createdAt: Date
   parentId: CommentId | null
   isTeamMember: boolean
@@ -232,7 +232,7 @@ export interface PublicPostDetail {
   statusId: StatusId | null
   voteCount: number
   authorName: string | null
-  memberId: MemberId | null
+  principalId: PrincipalId | null
   authorAvatarUrl: string | null
   createdAt: Date
   board: { id: string; name: string; slug: string }
@@ -282,7 +282,7 @@ export interface AdminEditPostInput {
 export interface PostEditHistoryEntry {
   id: string
   postId: PostId
-  editorMemberId: MemberId
+  editorPrincipalId: PrincipalId
   editorName?: string | null
   previousTitle: string
   previousContent: string

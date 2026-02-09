@@ -143,7 +143,7 @@ async function getEmailTargets(event: EventData): Promise<HookTarget[]> {
   const subscribers = await getActiveSubscribers(postId)
 
   // Batch load preferences (avoid N+1)
-  const prefs = await batchLoadPreferences(subscribers.map(s => s.memberId))
+  const prefs = await batchLoadPreferences(subscribers.map(s => s.principalId))
 
   return subscribers
     .filter(s => !isActor(s, event.actor) && shouldNotify(s, prefs, event.type))

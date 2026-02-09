@@ -17,7 +17,7 @@ import {
   TrashIcon,
   LinkIcon,
 } from '@heroicons/react/24/outline'
-import type { ChangelogId, MemberId, PostId } from '@quackback/ids'
+import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { cn } from '@/lib/shared/utils'
 
 interface ChangelogListItemProps {
@@ -28,7 +28,7 @@ interface ChangelogListItemProps {
   publishedAt: string | null
   createdAt: string
   author: {
-    id: MemberId
+    id: PrincipalId
     name: string
     avatarUrl: string | null
   } | null

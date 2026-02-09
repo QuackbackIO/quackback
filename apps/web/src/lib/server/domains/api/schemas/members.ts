@@ -76,19 +76,19 @@ registerPath('/members', {
   },
 })
 
-// Register GET /members/{memberId}
-registerPath('/members/{memberId}', {
+// Register GET /members/{principalId}
+registerPath('/members/{principalId}', {
   get: {
     tags: ['Members'],
     summary: 'Get a team member',
     description: 'Get a single team member by ID',
     parameters: [
       {
-        name: 'memberId',
+        name: 'principalId',
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Member ID',
+        description: 'Principal ID',
       },
     ],
     responses: {
@@ -112,19 +112,19 @@ registerPath('/members/{memberId}', {
   },
 })
 
-// Register PATCH /members/{memberId}
-registerPath('/members/{memberId}', {
+// Register PATCH /members/{principalId}
+registerPath('/members/{principalId}', {
   patch: {
     tags: ['Members'],
     summary: 'Update a team member',
     description: "Update a team member's role. Cannot modify your own role.",
     parameters: [
       {
-        name: 'memberId',
+        name: 'principalId',
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Member ID',
+        description: 'Principal ID',
       },
     ],
     requestBody: {
@@ -164,8 +164,8 @@ registerPath('/members/{memberId}', {
   },
 })
 
-// Register DELETE /members/{memberId}
-registerPath('/members/{memberId}', {
+// Register DELETE /members/{principalId}
+registerPath('/members/{principalId}', {
   delete: {
     tags: ['Members'],
     summary: 'Remove a team member',
@@ -173,11 +173,11 @@ registerPath('/members/{memberId}', {
       'Remove a team member from the workspace (converts them to a portal user). Cannot remove yourself or the last admin.',
     parameters: [
       {
-        name: 'memberId',
+        name: 'principalId',
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Member ID',
+        description: 'Principal ID',
       },
     ],
     responses: {

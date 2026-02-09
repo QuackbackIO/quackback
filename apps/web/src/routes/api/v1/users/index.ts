@@ -56,7 +56,7 @@ export const Route = createFileRoute('/api/v1/users/')({
 
           return successResponse(
             result.items.map((user) => ({
-              memberId: user.memberId,
+              principalId: user.principalId,
               userId: user.userId,
               name: user.name,
               email: user.email,

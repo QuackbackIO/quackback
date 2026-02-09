@@ -221,7 +221,7 @@ export function useCreatePublicPost() {
             statusId: newPost.statusId as StatusId | null,
             voteCount: newPost.voteCount,
             authorName: null, // Will be filled by server on refetch
-            memberId: null,
+            principalId: null,
             createdAt: new Date(newPost.createdAt),
             commentCount: 0,
             tags: [],
