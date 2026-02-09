@@ -178,10 +178,6 @@ vi.mock('@/lib/server/domains/roadmaps/roadmap.service', () => ({
     .mockResolvedValue([{ id: 'roadmap_test', name: 'Q1 2026', slug: 'q1-2026' }]),
 }))
 
-vi.mock('@/lib/server/domains/members/member.service', () => ({
-  listTeamMembers: vi.fn().mockResolvedValue([{ id: 'member_test', name: 'Jane', role: 'admin' }]),
-}))
-
 vi.mock('@/lib/server/domains/principals/principal.service', () => ({
   listTeamMembers: vi
     .fn()
@@ -197,6 +193,7 @@ const MOCK_API_KEY: ApiKey = {
   id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
   name: 'Test Key',
   keyPrefix: 'qb_test',
+  principalId: MOCK_MEMBER_ID,
   createdById: MOCK_MEMBER_ID,
   createdAt: new Date(),
   lastUsedAt: null,
@@ -347,7 +344,7 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(401)
       const body = (await response.json()) as { error: string }
-      expect(body.error).toBe('Member not found')
+      expect(body.error).toBe('Principal not found')
     })
 
     it('should succeed with valid API key and team member', async () => {
