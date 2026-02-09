@@ -27,6 +27,7 @@ import type { HookTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { buildHookContext, type HookContext } from './hook-context'
 import type { EventData, EventActor } from './types'
+import { isAIEnabled } from '@/lib/server/domains/ai/config'
 
 /**
  * Map system event types to notification event types
@@ -71,8 +72,8 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       targets.push(...subscriberTargets)
     }
 
-    // AI targets (sentiment, embeddings) - always run for post.created
-    if (AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
+    // AI targets (sentiment, embeddings) - only when AI is configured
+    if (isAIEnabled() && AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
       targets.push({
         type: 'ai',
         target: { type: 'ai' },
