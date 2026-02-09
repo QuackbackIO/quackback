@@ -605,43 +605,19 @@ async function generateInvitationMagicLink(
     throw new Error(`Magic link generation failed: ${errorText}`)
   }
 
-  console.log(`[fn:admin] generateInvitationMagicLink: handler succeeded`)
-
   // Retrieve the token that was stored by our callback
   const token = getMagicLinkToken(email)
   if (!token) {
-    console.error(`[fn:admin] generateInvitationMagicLink: token not found in pending map`)
-    throw new Error(`Magic link token not found for ${email}`)
-  }
-
-  console.log(`[fn:admin] generateInvitationMagicLink: token retrieved, length=${token.length}`)
-
-  // Debug: Check if verification record was created in the database
-  const { verification } = await import('@/lib/server/db')
-  const verificationRecord = await db.query.verification.findFirst({
-    where: eq(verification.identifier, email.toLowerCase()),
-    orderBy: (v, { desc }) => [desc(v.createdAt)],
-  })
-  if (verificationRecord) {
-    console.log(`[fn:admin] generateInvitationMagicLink: verification record found in DB:`)
-    console.log(`[fn:admin]   id: ${verificationRecord.id}`)
-    console.log(`[fn:admin]   identifier: ${verificationRecord.identifier}`)
-    console.log(`[fn:admin]   value length: ${verificationRecord.value?.length}`)
-    console.log(`[fn:admin]   expiresAt: ${verificationRecord.expiresAt}`)
-    console.log(`[fn:admin]   token matches: ${verificationRecord.value === token}`)
-  } else {
-    console.error(
-      `[fn:admin] generateInvitationMagicLink: NO verification record found in DB for ${email}!`
-    )
+    throw new Error('Magic link token not found — sendMagicLink callback may not have fired')
   }
 
   // Construct the magic link URL with the workspace domain
-  // Use absolute callback URLs to ensure redirects stay on the workspace domain
   const absoluteCallbackURL = `${portalUrl}${callbackPath}`
-  const magicLinkUrl = `${portalUrl}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}&callbackURL=${encodeURIComponent(absoluteCallbackURL)}&errorCallbackURL=${encodeURIComponent(absoluteCallbackURL)}`
-
-  console.log(`[fn:admin] generateInvitationMagicLink: URL constructed with absolute callbacks`)
-  return magicLinkUrl
+  const verifyUrl = new URL('/api/auth/magic-link/verify', portalUrl)
+  verifyUrl.searchParams.set('token', token)
+  verifyUrl.searchParams.set('callbackURL', absoluteCallbackURL)
+  verifyUrl.searchParams.set('errorCallbackURL', absoluteCallbackURL)
+  return verifyUrl.toString()
 }
 
 /**

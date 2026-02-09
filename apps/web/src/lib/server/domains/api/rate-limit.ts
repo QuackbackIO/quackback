@@ -3,6 +3,10 @@
  *
  * Uses a sliding window algorithm to track request counts per IP.
  * Designed to prevent brute-force attacks on API key authentication.
+ *
+ * SECURITY NOTE: This trusts proxy headers (cf-connecting-ip, x-forwarded-for).
+ * The application MUST be deployed behind a trusted reverse proxy (Cloudflare, nginx)
+ * that sets these headers. Direct exposure to the internet allows header spoofing.
  */
 
 interface RateLimitEntry {
@@ -15,6 +19,7 @@ const rateLimitStore = new Map<string, RateLimitEntry>()
 // Configuration
 const WINDOW_MS = 60_000 // 1 minute
 const MAX_REQUESTS = 100 // 100 requests per minute per IP
+const MAX_STORE_SIZE = 50_000 // Cap store size to prevent memory exhaustion
 const CLEANUP_INTERVAL_MS = 60_000 // Cleanup every minute
 
 // Cleanup old entries periodically
@@ -52,6 +57,10 @@ export function checkRateLimit(ip: string): {
 
   // New IP or window expired - reset
   if (!entry || now - entry.windowStart > WINDOW_MS) {
+    // Cap store size to prevent memory exhaustion from spoofed IPs
+    if (rateLimitStore.size >= MAX_STORE_SIZE && !entry) {
+      return { allowed: false, remaining: 0, retryAfter: 60 }
+    }
     rateLimitStore.set(ip, { count: 1, windowStart: now })
     return { allowed: true, remaining: MAX_REQUESTS - 1 }
   }
