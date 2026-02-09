@@ -20,6 +20,7 @@ export function useInboxFilters() {
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
       minVotes: search.minVotes ? parseInt(search.minVotes, 10) : undefined,
+      responded: search.responded,
       sort: search.sort,
     }),
     [search]
@@ -40,6 +41,7 @@ export function useInboxFilters() {
           ...('dateFrom' in updates && { dateFrom: updates.dateFrom }),
           ...('dateTo' in updates && { dateTo: updates.dateTo }),
           ...('minVotes' in updates && { minVotes: updates.minVotes?.toString() }),
+          ...('responded' in updates && { responded: updates.responded }),
           ...('sort' in updates && { sort: updates.sort }),
         },
         replace: true,
@@ -67,7 +69,8 @@ export function useInboxFilters() {
       filters.owner ||
       filters.dateFrom ||
       filters.dateTo ||
-      filters.minVotes
+      filters.minVotes ||
+      (filters.responded && filters.responded !== 'all')
     )
   }, [filters])
 

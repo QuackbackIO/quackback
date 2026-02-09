@@ -18,6 +18,7 @@ export interface InboxFilters {
   dateFrom?: string
   dateTo?: string
   minVotes?: number
+  responded?: 'all' | 'responded' | 'unresponded'
   sort?: 'newest' | 'oldest' | 'votes'
 }
 

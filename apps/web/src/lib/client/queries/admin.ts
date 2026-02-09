@@ -33,6 +33,7 @@ export interface InboxPostListParams {
   dateFrom?: Date
   dateTo?: Date
   minVotes?: number
+  responded?: 'all' | 'responded' | 'unresponded'
   sort?: 'newest' | 'oldest' | 'votes'
   page?: number
   limit?: number

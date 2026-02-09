@@ -21,6 +21,7 @@ import {
   asc,
   sql,
   isNull,
+  isNotNull,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { PostId, BoardId, PrincipalId } from '@quackback/ids'
@@ -220,6 +221,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     dateFrom,
     dateTo,
     minVotes,
+    responded,
     sort = 'newest',
     page = 1,
     limit = 20,
@@ -284,6 +286,13 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
       .from(postTags)
       .where(inArray(postTags.tagId, tagIds))
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
+  }
+
+  // Responded filter - filter by team response state
+  if (responded === 'responded') {
+    conditions.push(isNotNull(posts.officialResponseAt))
+  } else if (responded === 'unresponded') {
+    conditions.push(isNull(posts.officialResponseAt))
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
