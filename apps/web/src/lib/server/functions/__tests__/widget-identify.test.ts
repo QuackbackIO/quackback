@@ -16,7 +16,7 @@ const mockSessionFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 const mockInsertReturning = vi.fn()
 const mockInsertValues = vi.fn(() => ({ returning: mockInsertReturning }))
-const mockInsert = vi.fn(() => ({ values: mockInsertValues }))
+const mockInsert = vi.fn((_table: unknown) => ({ values: mockInsertValues }))
 const mockUpdateSet = vi.fn()
 const mockUpdateWhere = vi.fn()
 
@@ -125,7 +125,7 @@ describe('Widget Identify Endpoint', () => {
   })
 
   describe('request validation', () => {
-    it('should reject requests with missing email', () => {
+    it('should reject requests with missing email', async () => {
       // The identifySchema requires id and email
       const { z } = await import('zod')
       const identifySchema = z.object({
@@ -141,7 +141,7 @@ describe('Widget Identify Endpoint', () => {
       expect(result.success).toBe(false)
     })
 
-    it('should reject requests with invalid email', () => {
+    it('should reject requests with invalid email', async () => {
       const { z } = await import('zod')
       const identifySchema = z.object({
         id: z.string().min(1),
@@ -154,7 +154,7 @@ describe('Widget Identify Endpoint', () => {
       expect(result.success).toBe(false)
     })
 
-    it('should reject requests with empty user ID', () => {
+    it('should reject requests with empty user ID', async () => {
       const { z } = await import('zod')
       const identifySchema = z.object({
         id: z.string().min(1),
@@ -165,7 +165,7 @@ describe('Widget Identify Endpoint', () => {
       expect(result.success).toBe(false)
     })
 
-    it('should accept valid identify payload', () => {
+    it('should accept valid identify payload', async () => {
       const { z } = await import('zod')
       const identifySchema = z.object({
         id: z.string().min(1),
@@ -185,7 +185,7 @@ describe('Widget Identify Endpoint', () => {
       expect(result.success).toBe(true)
     })
 
-    it('should reject invalid avatarURL', () => {
+    it('should reject invalid avatarURL', async () => {
       const { z } = await import('zod')
       const identifySchema = z.object({
         id: z.string().min(1),

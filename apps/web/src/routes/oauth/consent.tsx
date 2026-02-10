@@ -94,7 +94,7 @@ function ConsentPage() {
             <div className="rounded-lg border p-4 space-y-3">
               <p className="text-sm font-medium">This will allow the application to:</p>
               <ul className="space-y-2">
-                {scopes.map((s) => (
+                {scopes.map((s: string) => (
                   <li key={s} className="flex items-start gap-2 text-sm">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
                     <span>{SCOPE_LABELS[s] ?? s}</span>

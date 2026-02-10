@@ -17,7 +17,8 @@ export const Route = createFileRoute('/.well-known/oauth-authorization-server')(
         const { getAuth } = await import('@/lib/server/auth/index')
         const { oauthProviderAuthServerMetadata } = await import('@better-auth/oauth-provider')
         const auth = await getAuth()
-        const handler = oauthProviderAuthServerMetadata(auth)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const handler = oauthProviderAuthServerMetadata(auth as any)
         return handler(request)
       },
     },

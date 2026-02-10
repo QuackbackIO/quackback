@@ -16,7 +16,8 @@ export const Route = createFileRoute('/.well-known/openid-configuration')({
         const { getAuth } = await import('@/lib/server/auth/index')
         const { oauthProviderOpenIdConfigMetadata } = await import('@better-auth/oauth-provider')
         const auth = await getAuth()
-        const handler = oauthProviderOpenIdConfigMetadata(auth)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const handler = oauthProviderOpenIdConfigMetadata(auth as any)
         return handler(request)
       },
     },

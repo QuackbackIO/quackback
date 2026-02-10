@@ -29,6 +29,8 @@ async function runMigrations() {
   const db = drizzle(sql)
 
   try {
+    // Ensure pgvector extension is available before running migrations
+    await sql`CREATE EXTENSION IF NOT EXISTS vector`
     await migrate(db, { migrationsFolder })
     console.log('✅ Migrations completed successfully!')
   } catch (error) {

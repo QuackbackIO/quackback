@@ -149,6 +149,8 @@ export interface ThemeColors {
   chart3?: string
   chart4?: string
   chart5?: string
+  /** Border radius CSS variable value */
+  radius?: string
 }
 
 /**
