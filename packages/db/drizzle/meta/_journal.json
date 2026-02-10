@@ -22,6 +22,13 @@
       "when": 1770656333437,
       "tag": "0002_groovy_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770712174017,
+      "tag": "0003_colorful_jocasta",
+      "breakpoints": true
     }
   ]
 }

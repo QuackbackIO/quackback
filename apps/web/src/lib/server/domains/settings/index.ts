@@ -25,6 +25,9 @@ export type {
   PublicPortalConfig,
   DeveloperConfig,
   UpdateDeveloperConfigInput,
+  WidgetConfig,
+  PublicWidgetConfig,
+  UpdateWidgetConfigInput,
 } from './settings.types'
 
 // Default config values (no DB dependency)
@@ -32,6 +35,7 @@ export {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
+  DEFAULT_WIDGET_CONFIG,
 } from './settings.types'
 
 // Consolidated tenant settings type

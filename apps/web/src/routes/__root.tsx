@@ -69,6 +69,7 @@ const ONBOARDING_EXEMPT_PATHS = [
   '/accept-invitation/',
   '/oauth/',
   '/.well-known/',
+  '/widget',
 ]
 
 function isOnboardingExempt(pathname: string): boolean {
@@ -138,11 +139,19 @@ function RootComponent() {
   return (
     <RootDocument>
       <Outlet />
-      <Suspense>
-        <ReactQueryDevtools buttonPosition="bottom-left" />
-        <TanStackRouterDevtools position="bottom-right" />
-      </Suspense>
+      <DevtoolsWrapper />
     </RootDocument>
+  )
+}
+
+function DevtoolsWrapper() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  if (pathname.startsWith('/widget')) return null
+  return (
+    <Suspense>
+      <ReactQueryDevtools buttonPosition="bottom-left" />
+      <TanStackRouterDevtools position="bottom-right" />
+    </Suspense>
   )
 }
 

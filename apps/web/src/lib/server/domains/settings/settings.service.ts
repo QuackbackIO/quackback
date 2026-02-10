@@ -11,12 +11,17 @@ import type {
   PublicPortalConfig,
   DeveloperConfig,
   UpdateDeveloperConfigInput,
+  WidgetConfig,
+  PublicWidgetConfig,
+  UpdateWidgetConfigInput,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
+  DEFAULT_WIDGET_CONFIG,
 } from './settings.types'
+import { randomBytes } from 'crypto'
 
 type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
 
@@ -154,6 +159,76 @@ export async function updateDeveloperConfig(
     return updated
   } catch (error) {
     wrapDbError('update developer config', error)
+  }
+}
+
+// ============================================================================
+// Widget Configuration
+// ============================================================================
+
+export async function getWidgetConfig(): Promise<WidgetConfig> {
+  try {
+    const org = await requireSettings()
+    return parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+  } catch (error) {
+    wrapDbError('fetch widget config', error)
+  }
+}
+
+export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promise<WidgetConfig> {
+  try {
+    const org = await requireSettings()
+    const existing = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const updated = deepMerge(existing, input as Partial<WidgetConfig>)
+    await db
+      .update(settings)
+      .set({ widgetConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    return updated
+  } catch (error) {
+    wrapDbError('update widget config', error)
+  }
+}
+
+export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
+  try {
+    const org = await requireSettings()
+    const config = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    return {
+      enabled: config.enabled,
+      defaultBoard: config.defaultBoard,
+      position: config.position,
+      buttonText: config.buttonText,
+    }
+  } catch (error) {
+    wrapDbError('fetch public widget config', error)
+  }
+}
+
+/** Generate a new widget secret: 'wgt_' + 32 random bytes (64 hex chars) */
+export function generateWidgetSecret(): string {
+  return 'wgt_' + randomBytes(32).toString('hex')
+}
+
+/** Get the widget secret (admin only — never expose in TenantSettings) */
+export async function getWidgetSecret(): Promise<string | null> {
+  try {
+    const org = await requireSettings()
+    return org.widgetSecret ?? null
+  } catch (error) {
+    wrapDbError('fetch widget secret', error)
+  }
+}
+
+/** Regenerate the widget secret. Returns the new secret once. */
+export async function regenerateWidgetSecret(): Promise<string> {
+  try {
+    const org = await requireSettings()
+    const secret = generateWidgetSecret()
+    await db.update(settings).set({ widgetSecret: secret }).where(eq(settings.id, org.id))
+    return secret
+  } catch (error) {
+    wrapDbError('regenerate widget secret', error)
   }
 }
 
@@ -443,6 +518,8 @@ export interface TenantSettings {
   customCss: string
   publicAuthConfig: PublicAuthConfig
   publicPortalConfig: PublicPortalConfig
+  /** Public widget config (no secret, safe for client) */
+  publicWidgetConfig: PublicWidgetConfig
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
 }
@@ -456,6 +533,8 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const brandingConfig = parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
     const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
+
+    const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -479,6 +558,12 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       publicPortalConfig: {
         oauth: portalConfig.oauth,
         features: portalConfig.features,
+      },
+      publicWidgetConfig: {
+        enabled: widgetConfig.enabled,
+        defaultBoard: widgetConfig.defaultBoard,
+        position: widgetConfig.position,
+        buttonText: widgetConfig.buttonText,
       },
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,
