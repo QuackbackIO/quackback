@@ -52,6 +52,7 @@ async function fetchInboxPosts(filters: InboxFilters, page: number): Promise<Inb
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       minVotes: filters.minVotes,
+      responded: filters.responded,
       sort: filters.sort || 'newest',
       page,
       limit: 20,

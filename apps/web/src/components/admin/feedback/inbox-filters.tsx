@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
-import { StatusFilterList, BoardFilterList } from './single-select-filter-list'
+import { FilterList, StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import { toggleItem } from './filter-utils'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
@@ -128,6 +128,23 @@ export function InboxFiltersPanel({
           </div>
         </FilterSection>
       )}
+
+      {/* Response Filter */}
+      <FilterSection title="Response">
+        <FilterList
+          items={[
+            { id: 'responded', name: 'Responded' },
+            { id: 'unresponded', name: 'Unresponded' },
+          ]}
+          selectedIds={filters.responded && filters.responded !== 'all' ? [filters.responded] : []}
+          onSelect={(id) => {
+            const isAlreadySelected = filters.responded === id
+            onFiltersChange({
+              responded: isAlreadySelected ? undefined : (id as 'responded' | 'unresponded'),
+            })
+          }}
+        />
+      </FilterSection>
     </div>
   )
 }

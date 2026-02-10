@@ -5,6 +5,7 @@ import {
   UserIcon,
   CalendarIcon,
   ArrowTrendingUpIcon,
+  ChatBubbleLeftRightIcon,
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
@@ -17,7 +18,7 @@ import type { TeamMember } from '@/lib/server/domains/principals'
 
 interface ActiveFilter {
   key: string
-  type: 'status' | 'board' | 'tags' | 'owner' | 'date' | 'minVotes'
+  type: 'status' | 'board' | 'tags' | 'owner' | 'date' | 'minVotes' | 'responded'
   label: string
   value: string
   valueId: string
@@ -39,7 +40,7 @@ interface ActiveFiltersBarProps {
   onToggleBoard: (id: string) => void
 }
 
-type FilterCategory = 'status' | 'board' | 'tags' | 'owner' | 'date' | 'votes'
+type FilterCategory = 'status' | 'board' | 'tags' | 'owner' | 'date' | 'votes' | 'response'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
@@ -54,6 +55,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'owner', label: 'Assigned to', icon: UserIcon },
   { key: 'date', label: 'Created date', icon: CalendarIcon },
   { key: 'votes', label: 'Vote count', icon: ArrowTrendingUpIcon },
+  { key: 'response', label: 'Response', icon: ChatBubbleLeftRightIcon },
 ]
 
 const VOTE_THRESHOLDS = [
@@ -150,6 +152,11 @@ function AddFilterButton({
 
   const handleSelectVotes = (minVotes: number) => {
     onFiltersChange({ minVotes })
+    closePopover()
+  }
+
+  const handleSelectResponse = (value: 'responded' | 'unresponded') => {
+    onFiltersChange({ responded: value })
     closePopover()
   }
 
@@ -270,6 +277,17 @@ function AddFilterButton({
                     {threshold.label}
                   </MenuButton>
                 ))}
+
+              {activeCategory === 'response' && (
+                <>
+                  <MenuButton onClick={() => handleSelectResponse('responded')}>
+                    Responded
+                  </MenuButton>
+                  <MenuButton onClick={() => handleSelectResponse('unresponded')}>
+                    Unresponded
+                  </MenuButton>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -286,6 +304,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     owner: UserIcon,
     date: CalendarIcon,
     minVotes: ArrowTrendingUpIcon,
+    responded: ChatBubbleLeftRightIcon,
   }
   return icons[type]
 }
@@ -495,6 +514,26 @@ function computeActiveFilters(
       options: voteOptions,
       onChange: (newValue) => onFiltersChange({ minVotes: parseInt(newValue, 10) }),
       onRemove: () => onFiltersChange({ minVotes: undefined }),
+    })
+  }
+
+  // Response filter
+  const respondedOptions: FilterOption[] = [
+    { id: 'responded', label: 'Responded' },
+    { id: 'unresponded', label: 'Unresponded' },
+  ]
+
+  if (filters.responded && filters.responded !== 'all') {
+    result.push({
+      key: 'responded',
+      type: 'responded',
+      label: 'Response:',
+      value: filters.responded === 'responded' ? 'Responded' : 'Unresponded',
+      valueId: filters.responded,
+      options: respondedOptions,
+      onChange: (newValue) =>
+        onFiltersChange({ responded: newValue as 'responded' | 'unresponded' }),
+      onRemove: () => onFiltersChange({ responded: undefined }),
     })
   }
 

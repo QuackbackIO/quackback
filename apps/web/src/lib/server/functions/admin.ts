@@ -47,6 +47,7 @@ const inboxPostListSchema = z.object({
   boardSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   minVotes: z.number().optional(),
+  responded: z.enum(['all', 'responded', 'unresponded']).optional(),
 }) as z.ZodType<InboxPostListParams>
 
 const listPortalUsersSchema = z.object({

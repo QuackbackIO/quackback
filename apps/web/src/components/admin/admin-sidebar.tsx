@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
+  HomeIcon,
   MapIcon,
   UsersIcon,
   ArrowRightOnRectangleIcon,
@@ -35,12 +36,18 @@ interface AdminSidebarProps {
 }
 
 const navItems = [
+  { label: 'Home', href: '/admin', icon: HomeIcon, exact: true },
   { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
   { label: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon },
 ]
+
+function isNavActive(pathname: string, href: string, exact?: boolean) {
+  if (exact) return pathname === href || pathname === href + '/'
+  return pathname === href || pathname.startsWith(href + '/')
+}
 
 function NavItem({
   href,
@@ -116,7 +123,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 href={item.href}
                 icon={item.icon}
                 label={item.label}
-                isActive={pathname === item.href || pathname.startsWith(item.href + '/')}
+                isActive={isNavActive(pathname, item.href, item.exact)}
               />
             ))}
           </nav>
@@ -203,7 +210,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
               {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isActive = isNavActive(pathname, item.href, item.exact)
                 const Icon = item.icon
                 return (
                   <Link
