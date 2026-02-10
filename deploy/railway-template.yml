@@ -5,7 +5,7 @@
 #
 # Template ID: bcnu9a
 # Template URL: https://railway.com/deploy/bcnu9a
-# Last updated: 2026-02-05
+# Last updated: 2026-02-10
 
 services:
   postgres:
@@ -16,6 +16,16 @@ services:
       POSTGRES_DB: quackback
       POSTGRES_USER: quackback
       POSTGRES_PASSWORD: ${{secret(32)}}
+    networking: private
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
+    # BullMQ requires cluster_mode=emulated + lock_on_hashtags for Lua script compatibility.
+    # Queue names use hashtags (e.g. {event-hooks}) to pin keys to a single thread.
+    # See: https://www.dragonflydb.io/docs/integrations/bullmq
+    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
+    volumes:
+      - mount: /data
     networking: private
 
   bucket:
@@ -34,6 +44,7 @@ services:
     networking: public
     env:
       DATABASE_URL: postgresql://quackback:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/quackback
+      REDIS_URL: redis://${{dragonfly.RAILWAY_PRIVATE_DOMAIN}}:6379
       SECRET_KEY: ${{secret(64)}}
       BASE_URL: https://${{RAILWAY_PUBLIC_DOMAIN}}
       PORT: '3000'
@@ -43,6 +54,8 @@ services:
       S3_REGION: ${{Bucket.REGION}}
       S3_ACCESS_KEY_ID: ${{Bucket.ACCESS_KEY_ID}}
       S3_SECRET_ACCESS_KEY: ${{Bucket.SECRET_ACCESS_KEY}}
+      S3_FORCE_PATH_STYLE: 'true'
+      S3_PUBLIC_URL: ${{Bucket.PUBLIC_URL}}
     optional_env:
       - EMAIL_SMTP_HOST
       - EMAIL_SMTP_PORT
@@ -54,3 +67,6 @@ services:
       - GITHUB_CLIENT_SECRET
       - GOOGLE_CLIENT_ID
       - GOOGLE_CLIENT_SECRET
+      - OPENAI_API_KEY
+      - OPENAI_BASE_URL
+      - SEED_DATABASE

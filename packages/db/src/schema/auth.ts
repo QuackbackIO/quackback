@@ -185,6 +185,16 @@ export const settings = pgTable('settings', {
    * }
    */
   setupState: text('setup_state'),
+  /**
+   * Widget configuration (JSON)
+   * Structure: { enabled, defaultBoard?, position?, buttonText?, identifyVerification? }
+   */
+  widgetConfig: text('widget_config'),
+  /**
+   * Widget HMAC verification secret (separate column — NOT in JSON config)
+   * Format: 'wgt_' + 64 hex chars
+   */
+  widgetSecret: text('widget_secret'),
 })
 
 /**

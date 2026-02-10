@@ -9,6 +9,8 @@ import {
   fetchUserProfile,
   fetchCustomCssFn,
   fetchDeveloperConfig,
+  fetchWidgetConfig,
+  fetchWidgetSecret,
 } from '@/lib/server/functions/settings'
 import {
   fetchSettingsLogoData,
@@ -88,5 +90,19 @@ export const settingsQueries = {
       queryKey: ['settings', 'userProfile', userId],
       queryFn: () => fetchUserProfile({ data: userId }),
       staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  widgetConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'widgetConfig'],
+      queryFn: fetchWidgetConfig,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  widgetSecret: () =>
+    queryOptions({
+      queryKey: ['settings', 'widgetSecret'],
+      queryFn: fetchWidgetSecret,
+      staleTime: STALE_TIME_LONG,
     }),
 }

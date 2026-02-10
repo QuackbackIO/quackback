@@ -219,6 +219,52 @@ export interface UpdateDeveloperConfigInput {
 }
 
 // =============================================================================
+// Widget Configuration (Embeddable feedback widget)
+// =============================================================================
+
+/**
+ * Widget configuration
+ * Controls the embeddable feedback widget behavior
+ * Note: widgetSecret is stored in its own DB column, NOT here
+ */
+export interface WidgetConfig {
+  enabled: boolean
+  /** Board slug to filter/default to */
+  defaultBoard?: string
+  /** Trigger button position */
+  position?: 'bottom-right' | 'bottom-left'
+  /** Trigger button text */
+  buttonText?: string
+  /** Whether to require HMAC verification on identify calls */
+  identifyVerification?: boolean
+}
+
+/**
+ * Public subset of widget config — safe to include in TenantSettings / bootstrap data
+ * Does NOT include identifyVerification (admin-only concern)
+ */
+export type PublicWidgetConfig = Pick<
+  WidgetConfig,
+  'enabled' | 'defaultBoard' | 'position' | 'buttonText'
+>
+
+export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
+  enabled: false,
+  identifyVerification: false,
+}
+
+/**
+ * Input for updating widget config (partial update)
+ */
+export interface UpdateWidgetConfigInput {
+  enabled?: boolean
+  defaultBoard?: string
+  position?: 'bottom-right' | 'bottom-left'
+  buttonText?: string
+  identifyVerification?: boolean
+}
+
+// =============================================================================
 // Update Input Types
 // =============================================================================
 

@@ -16,6 +16,10 @@ import {
   updatePortalConfig,
   getDeveloperConfig,
   updateDeveloperConfig,
+  getWidgetConfig,
+  updateWidgetConfig,
+  getWidgetSecret,
+  regenerateWidgetSecret,
   saveLogoKey,
   deleteLogoKey,
   saveHeaderLogoKey,
@@ -284,3 +288,37 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
     await requireAuth({ roles: ['admin'] })
     return updateDeveloperConfig(data)
   })
+
+// ============================================
+// Widget Config Operations
+// ============================================
+
+export const fetchWidgetConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return getWidgetConfig()
+})
+
+export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return getWidgetSecret()
+})
+
+const updateWidgetConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  defaultBoard: z.string().optional(),
+  position: z.enum(['bottom-right', 'bottom-left']).optional(),
+  buttonText: z.string().max(30).optional(),
+  identifyVerification: z.boolean().optional(),
+})
+
+export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateWidgetConfigSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+    return updateWidgetConfig(data)
+  })
+
+export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return regenerateWidgetSecret()
+})
