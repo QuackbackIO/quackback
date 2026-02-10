@@ -7,12 +7,12 @@
 <h1 align="center">Quackback</h1>
 
 <p align="center">
-  <strong>The open-source alternative to Canny, UserVoice, and Productboard.</strong>
+  <strong>Open source feedback for teams that ship.</strong>
 </p>
 
 <p align="center">
-  Collect, organize, and act on customer feedback with voting boards, roadmaps, and changelogs.<br />
-  Self-host for free. Managed cloud coming soon.
+  The open-source alternative to Canny, UserVoice, and Productboard.<br />
+  Collect feedback. Prioritize what matters. Close the loop.
 </p>
 
 <p align="center">
@@ -36,27 +36,28 @@
 
 **Cloud** coming soon at [quackback.io](https://quackback.io). Join the waitlist.
 
-**Self-Hosted** anywhere with [Docker](#self-hosted) or [one click on Railway](#one-click-deploy).
+**Self-hosted** anywhere with [Docker](#docker) or [one click on Railway](#one-click-deploy).
 
 ## Why Quackback?
 
-Most feedback tools are expensive, closed-source, and lock you into their platform. Quackback gives you a modern feedback system you actually own.
+Most feedback tools are expensive, closed-source, and lock you in. Quackback gives you a modern feedback system you actually own.
 
-- **Self-host for free.** Run it on your own infrastructure. Managed cloud coming soon.
-- **Own your data.** No vendor lock-in. Your feedback lives in your PostgreSQL database.
+- **Self-host for free.** Run on your own infrastructure. No per-seat pricing.
+- **Own your data.** Your feedback lives in your PostgreSQL database. No vendor lock-in.
 - **AI-native.** Built-in [MCP server](https://quackback.io/docs/mcp) lets AI agents search, triage, and act on feedback directly.
 - **14 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and more out of the box.
 
 ## Features
 
-- **Feedback Boards.** Public voting, status tracking, nested comments, reactions, and official responses.
-- **Admin Inbox.** Unified triage view with filtering, bulk actions, and automatic deduplication.
+- **Feedback boards.** Public voting, status tracking, nested comments, reactions, and official responses.
+- **Embeddable widget.** Drop a script tag into your app and collect feedback without leaving the page.
+- **Admin inbox.** Unified triage view with filtering, bulk actions, and automatic deduplication.
 - **Roadmap.** Show users what you're planning, working on, and what's shipped.
-- **Changelog.** Publish updates and keep users in the loop.
-- **Integrations.** Sync feedback with Slack, Linear, Jira, GitHub, Asana, ClickUp, Intercom, Zendesk, HubSpot, Discord, Teams, Shortcut, Azure DevOps, and Zapier.
-- **Inbound Webhooks.** Two-way status sync with your issue tracker.
-- **API & Webhooks.** API keys and outbound webhooks for custom workflows.
-- **MCP Server.** Let AI agents (Claude, Cursor, etc.) interact with your feedback data via the [Model Context Protocol](https://quackback.io/docs/mcp).
+- **Changelog.** Publish updates and close the loop when features ship.
+- **Integrations.** Sync with Slack, Linear, Jira, GitHub, Asana, ClickUp, Intercom, Zendesk, HubSpot, Discord, Teams, Shortcut, Azure DevOps, and Zapier.
+- **Inbound webhooks.** Two-way status sync with your issue tracker.
+- **API & webhooks.** API keys and outbound webhooks for custom workflows.
+- **MCP server.** Let AI agents interact with your feedback data via the [Model Context Protocol](https://quackback.io/docs/mcp).
 
 ## Tech Stack
 
@@ -96,13 +97,13 @@ bun run setup    # Install deps, start Docker, run migrations, seed data
 bun run dev      # http://localhost:3000
 ```
 
-Log in with `demo@example.com` (OTP code appears in the console).
+Log in with `demo@example.com`. The OTP code appears in the console.
 
 ## Contributing
 
-We'd love your help making Quackback better. See the [Contributing Guide](CONTRIBUTING.md) to get started.
+See the [Contributing Guide](CONTRIBUTING.md) to get started.
 
-- [GitHub Discussions](https://github.com/QuackbackIO/quackback/discussions) · Ask questions, share ideas
+- [GitHub Discussions](https://github.com/QuackbackIO/quackback/discussions) — ask questions, share ideas
 
 <a href="https://github.com/QuackbackIO/quackback/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=QuackbackIO/quackback" alt="Contributors" />
@@ -110,15 +111,9 @@ We'd love your help making Quackback better. See the [Contributing Guide](CONTRI
 
 ## License
 
-Quackback is licensed under [AGPL-3.0](LICENSE).
+[AGPL-3.0](LICENSE).
 
-- **Self-hosting**: Free and fully functional forever
-- **Modifications**: If you distribute or run a modified version as a service, you must open-source your changes under AGPL-3.0
+- **Self-hosting** — free and fully functional, no limits
+- **Modifications** — if you distribute or run a modified version as a service, open-source your changes under AGPL-3.0
 
 Contributions require signing our [CLA](CLA.md).
-
----
-
-<p align="center">
-  <sub>If Quackback is useful to you, consider giving it a star. It helps others discover the project.</sub>
-</p>
