@@ -28,7 +28,6 @@ interface FeedbackContainerProps {
   tags: Tag[]
   hasMore: boolean
   votedPostIds: string[]
-  postAvatarUrls: Record<string, string | null>
   currentBoard?: string
   currentSearch?: string
   currentSort?: 'top' | 'new' | 'trending'
@@ -46,7 +45,6 @@ export function FeedbackContainer({
   tags,
   hasMore: initialHasMore,
   votedPostIds,
-  postAvatarUrls: _initialAvatarUrls,
   currentBoard,
   currentSearch,
   currentSort = 'top',
@@ -266,7 +264,6 @@ export function FeedbackContainer({
                         authorName={post.authorName}
                         createdAt={post.createdAt}
                         boardSlug={post.board?.slug || ''}
-                        boardName={post.board?.name}
                         tags={post.tags}
                         isAuthenticated={!!effectiveUser}
                         showAvatar={false}

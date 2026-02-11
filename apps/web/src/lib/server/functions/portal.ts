@@ -88,29 +88,23 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     )
     const principalId = memberResult?.id ?? null
 
-    const avatarMap: Record<string, string | null> = {}
     // Return ALL voted post IDs (not just page 1) so infinite scroll pages show correct vote state
     const votedPostIds = Array.from(allVotedPosts)
 
     const posts = {
-      items: postsResult.items.map((post) => {
-        if (post.principalId && post.avatarUrl !== undefined) {
-          avatarMap[post.principalId] = post.avatarUrl
-        }
-        return {
-          id: post.id,
-          title: post.title,
-          content: post.content,
-          statusId: post.statusId,
-          voteCount: post.voteCount,
-          authorName: post.authorName,
-          principalId: post.principalId,
-          createdAt: post.createdAt.toISOString(),
-          commentCount: post.commentCount,
-          tags: post.tags,
-          board: post.board,
-        }
-      }),
+      items: postsResult.items.map((post) => ({
+        id: post.id,
+        title: post.title,
+        content: post.content,
+        statusId: post.statusId,
+        voteCount: post.voteCount,
+        authorName: post.authorName,
+        principalId: post.principalId,
+        createdAt: post.createdAt.toISOString(),
+        commentCount: post.commentCount,
+        tags: post.tags,
+        board: post.board,
+      })),
       hasMore: postsResult.hasMore,
       total: -1,
     }
@@ -121,7 +115,6 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
       statuses,
       tags,
       votedPostIds,
-      avatars: avatarMap,
       principalId,
     }
   })

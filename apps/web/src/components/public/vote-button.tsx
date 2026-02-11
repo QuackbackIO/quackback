@@ -42,12 +42,12 @@ export function VoteButton({
       }
       aria-pressed={hasVoted}
       className={cn(
-        'group relative flex items-center justify-center transition-all duration-200 cursor-pointer',
-        'border-2 rounded-lg',
-        compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-14 py-2',
+        'group relative flex items-center justify-center transition-colors duration-200 cursor-pointer',
+        'border-2 rounded-md',
+        compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-12 py-2 gap-0.5',
         hasVoted
-          ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/50 text-[var(--post-card-voted-color)]'
-          : 'bg-muted/40 border-border text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground/80',
+          ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)] text-[var(--post-card-voted-color)]'
+          : 'bg-muted/40 border-border/50 text-muted-foreground hover:border-border hover:text-foreground/80',
         isPending && 'opacity-70 cursor-wait',
         disabled && 'cursor-not-allowed opacity-50'
       )}
@@ -57,7 +57,7 @@ export function VoteButton({
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200',
-          compact ? 'h-3.5 w-3.5' : 'h-5 w-5',
+          compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
           hasVoted && 'fill-[var(--post-card-voted-color)]',
           !isPending && !disabled && 'group-hover:-translate-y-0.5'
         )}
@@ -66,7 +66,7 @@ export function VoteButton({
         data-testid="vote-count"
         className={cn(
           'font-semibold tabular-nums',
-          compact ? 'text-xs' : 'text-base',
+          compact ? 'text-xs' : 'text-sm',
           hasVoted ? 'text-[var(--post-card-voted-color)]' : 'text-foreground'
         )}
       >

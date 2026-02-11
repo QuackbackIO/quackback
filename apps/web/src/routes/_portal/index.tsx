@@ -114,7 +114,6 @@ function PublicPortalPage() {
         tags={portalData.tags}
         hasMore={portalData.posts.hasMore}
         votedPostIds={portalData.votedPostIds}
-        postAvatarUrls={portalData.avatars}
         currentBoard={currentBoard}
         currentSearch={currentSearch}
         currentSort={currentSort}

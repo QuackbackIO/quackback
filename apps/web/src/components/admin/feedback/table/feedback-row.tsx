@@ -21,7 +21,6 @@ export function FeedbackRow({ post, statuses, onClick }: FeedbackRowProps) {
       authorName={post.authorName}
       createdAt={post.createdAt}
       boardSlug={post.board.slug}
-      boardName={post.board.name}
       tags={post.tags}
       // Admin mode - click to open modal
       onClick={onClick}

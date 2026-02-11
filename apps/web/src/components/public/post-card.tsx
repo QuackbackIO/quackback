@@ -40,7 +40,6 @@ interface PostCardProps {
   authorAvatarUrl?: string | null
   createdAt: Date | string
   boardSlug: string
-  boardName?: string
   tags: { id: string; name: string; color?: string }[]
 
   // Portal mode props
@@ -91,7 +90,6 @@ export function PostCard({
   authorAvatarUrl,
   createdAt,
   boardSlug,
-  boardName: _boardName,
   tags,
   isAuthenticated = true,
   isCurrentUserAuthor = false,
@@ -158,27 +156,24 @@ export function PostCard({
       onClick={handleVoteClick}
       disabled={isVotePending}
       className={cn(
-        'group/vote flex flex-col items-center justify-center shrink-0 rounded-lg border-2 transition-all duration-200',
-        'w-14 py-2.5',
+        'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border-2 transition-colors duration-200',
+        'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/50'
-          : 'text-muted-foreground border-border bg-muted/40 hover:border-muted-foreground/50 hover:text-foreground/80',
+          ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]'
+          : 'text-muted-foreground border-border/50 bg-muted/40 hover:border-border hover:text-foreground/80',
         isVotePending && 'opacity-70 cursor-wait'
       )}
     >
       <ChevronUpIcon
         className={cn(
-          'transition-transform duration-200 h-5 w-5',
+          'transition-transform duration-200 h-4 w-4',
           currentHasVoted && 'fill-[var(--post-card-voted-color)]',
           !isVotePending && 'group-hover/vote:-translate-y-0.5'
         )}
       />
       <span
         data-testid="vote-count"
-        className={cn(
-          'font-semibold tabular-nums text-base',
-          !currentHasVoted && 'text-foreground'
-        )}
+        className={cn('font-semibold tabular-nums text-sm', !currentHasVoted && 'text-foreground')}
       >
         {currentVoteCount}
       </span>
