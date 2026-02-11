@@ -9,6 +9,11 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 
+/** Structural type matching what oauthProviderOpenIdConfigMetadata expects from the auth instance */
+interface AuthWithOpenIdConfig {
+  api: { getOpenIdConfig: (...args: never[]) => unknown }
+}
+
 export const Route = createFileRoute('/.well-known/openid-configuration')({
   server: {
     handlers: {
@@ -16,8 +21,8 @@ export const Route = createFileRoute('/.well-known/openid-configuration')({
         const { getAuth } = await import('@/lib/server/auth/index')
         const { oauthProviderOpenIdConfigMetadata } = await import('@better-auth/oauth-provider')
         const auth = await getAuth()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const handler = oauthProviderOpenIdConfigMetadata(auth as any)
+        // Plugin-added API methods aren't visible in the static type from getAuth()
+        const handler = oauthProviderOpenIdConfigMetadata(auth as unknown as AuthWithOpenIdConfig)
         return handler(request)
       },
     },

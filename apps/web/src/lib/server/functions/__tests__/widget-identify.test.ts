@@ -6,8 +6,8 @@ const mockGetWidgetConfig = vi.fn()
 const mockGetWidgetSecret = vi.fn()
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getWidgetConfig: (...args: unknown[]) => mockGetWidgetConfig(...args),
-  getWidgetSecret: (...args: unknown[]) => mockGetWidgetSecret(...args),
+  getWidgetConfig: () => mockGetWidgetConfig(),
+  getWidgetSecret: () => mockGetWidgetSecret(),
 }))
 
 // Mock db
@@ -16,24 +16,24 @@ const mockSessionFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 const mockInsertReturning = vi.fn()
 const mockInsertValues = vi.fn(() => ({ returning: mockInsertReturning }))
-const mockInsert = vi.fn((_table: unknown) => ({ values: mockInsertValues }))
+const mockInsert = vi.fn()
 const mockUpdateSet = vi.fn()
 const mockUpdateWhere = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
-      user: { findFirst: (...args: unknown[]) => mockUserFindFirst(...args) },
-      session: { findFirst: (...args: unknown[]) => mockSessionFindFirst(...args) },
-      principal: { findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...args) },
+      user: { findFirst: mockUserFindFirst },
+      session: { findFirst: mockSessionFindFirst },
+      principal: { findFirst: mockPrincipalFindFirst },
     },
-    insert: (...args: unknown[]) => {
-      mockInsert(...(args as [unknown]))
+    insert: (table: Record<string, string>) => {
+      mockInsert(table)
       return { values: mockInsertValues }
     },
     update: () => ({
-      set: (...args: unknown[]) => {
-        mockUpdateSet(...args)
+      set: (values: Record<string, string>) => {
+        mockUpdateSet(values)
         return { where: mockUpdateWhere }
       },
     }),
