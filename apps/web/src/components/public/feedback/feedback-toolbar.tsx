@@ -1,18 +1,14 @@
 import { useState } from 'react'
 import {
   ArrowTrendingUpIcon,
-  Bars3Icon,
   ClockIcon,
   FireIcon,
-  ListBulletIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/solid'
 import { FilterDropdown } from '@/components/public/feedback/filter-dropdown'
-import type { PostCardDensity } from '@/components/public/post-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
 
@@ -29,10 +25,6 @@ interface FeedbackToolbarProps {
   onTagChange: (tagIds: string[]) => void
   onClearFilters: () => void
   activeFilterCount: number
-  /** Display density for post cards */
-  density?: PostCardDensity
-  /** Callback when density changes */
-  onDensityChange?: (density: PostCardDensity) => void
   /** Show loading indicator */
   isLoading?: boolean
 }
@@ -56,8 +48,6 @@ export function FeedbackToolbar({
   onTagChange,
   onClearFilters,
   activeFilterCount,
-  density = 'comfortable',
-  onDensityChange,
   isLoading = false,
 }: FeedbackToolbarProps): React.ReactElement {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -105,56 +95,6 @@ export function FeedbackToolbar({
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
-        {/* Density Toggle */}
-        {onDensityChange && (
-          <TooltipProvider>
-            <div className="hidden sm:flex items-center border border-border/50 rounded-md overflow-hidden">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onDensityChange('comfortable')}
-                    className={cn(
-                      'p-1.5 transition-colors',
-                      density === 'comfortable'
-                        ? 'bg-muted text-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                    )}
-                    aria-label="Comfortable view"
-                    aria-pressed={density === 'comfortable'}
-                  >
-                    <Bars3Icon className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Comfortable</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onDensityChange('compact')}
-                    className={cn(
-                      'p-1.5 transition-colors',
-                      density === 'compact'
-                        ? 'bg-muted text-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                    )}
-                    aria-label="Compact view"
-                    aria-pressed={density === 'compact'}
-                  >
-                    <ListBulletIcon className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Compact</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </TooltipProvider>
-        )}
-
         {/* Search */}
         <Popover open={searchOpen} onOpenChange={setSearchOpen}>
           <PopoverTrigger asChild>

@@ -168,6 +168,7 @@ function PostDetailPage() {
         />
       )}
 
+      {/* Post detail card */}
       <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
         <div className="flex">
           <Suspense fallback={<VoteSidebarSkeleton />}>
@@ -206,17 +207,18 @@ function PostDetailPage() {
         </div>
 
         {renderHighlightedResponse()}
+      </div>
 
-        <div className="bg-muted/20">
-          <Suspense fallback={<CommentsSectionSkeleton />}>
-            <CommentsSection
-              postId={postId}
-              comments={post.comments}
-              pinnedCommentId={post.pinnedCommentId}
-              disableCommenting={!!post.mergeInfo}
-            />
-          </Suspense>
-        </div>
+      {/* Comments card */}
+      <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
+        <Suspense fallback={<CommentsSectionSkeleton />}>
+          <CommentsSection
+            postId={postId}
+            comments={post.comments}
+            pinnedCommentId={post.pinnedCommentId}
+            disableCommenting={!!post.mergeInfo}
+          />
+        </Suspense>
       </div>
 
       <DeletePostDialog

@@ -28,8 +28,6 @@ import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostId, StatusId } from '@quackback/ids'
 
-export type PostCardDensity = 'comfortable' | 'compact'
-
 interface PostCardProps {
   id: PostId
   title: string
@@ -79,9 +77,6 @@ interface PostCardProps {
   showQuickActions?: boolean
   /** Whether to show avatar in meta row */
   showAvatar?: boolean
-
-  /** Display density: comfortable (default) or compact */
-  density?: PostCardDensity
 }
 
 export function PostCard({
@@ -96,7 +91,7 @@ export function PostCard({
   authorAvatarUrl,
   createdAt,
   boardSlug,
-  boardName,
+  boardName: _boardName,
   tags,
   isAuthenticated = true,
   isCurrentUserAuthor = false,
@@ -114,11 +109,9 @@ export function PostCard({
   onMouseLeave,
   showQuickActions = false,
   showAvatar = true,
-  density = 'comfortable',
 }: PostCardProps): React.ReactElement {
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
   const authPopover = useAuthPopoverSafe()
-  const isCompact = density === 'compact'
   const isAdminMode = canChangeStatus || !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
   const createdAtDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
@@ -165,18 +158,17 @@ export function PostCard({
       onClick={handleVoteClick}
       disabled={isVotePending}
       className={cn(
-        'group/vote flex flex-col items-center justify-center shrink-0 self-center rounded-lg border transition-all duration-200',
-        isCompact ? 'w-11 py-1.5 mx-2' : 'w-13 py-2 mx-3',
+        'group/vote flex flex-col items-center justify-center shrink-0 rounded-lg border-2 transition-all duration-200',
+        'w-14 py-2.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/30'
-          : 'text-muted-foreground bg-muted/40 border-border/50 hover:bg-muted/60 hover:border-border',
+          ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/50'
+          : 'text-muted-foreground border-border bg-muted/40 hover:border-muted-foreground/50 hover:text-foreground/80',
         isVotePending && 'opacity-70 cursor-wait'
       )}
     >
       <ChevronUpIcon
         className={cn(
-          'transition-transform duration-200',
-          isCompact ? 'h-4 w-4' : 'h-5 w-5',
+          'transition-transform duration-200 h-5 w-5',
           currentHasVoted && 'fill-[var(--post-card-voted-color)]',
           !isVotePending && 'group-hover/vote:-translate-y-0.5'
         )}
@@ -184,8 +176,7 @@ export function PostCard({
       <span
         data-testid="vote-count"
         className={cn(
-          'font-semibold tabular-nums',
-          isCompact ? 'text-sm' : 'text-base',
+          'font-semibold tabular-nums text-base',
           !currentHasVoted && 'text-foreground'
         )}
       >
@@ -321,36 +312,22 @@ export function PostCard({
 
   // Main content
   const cardContent = (
-    <>
+    <div className="flex items-start p-4 gap-4">
       {/* Vote column */}
       {voteButton}
 
       {/* Main content */}
-      <div className={cn('flex-1 min-w-0', isCompact ? 'px-2 py-1.5' : 'px-3 py-2.5')}>
-        {/* Compact: Inline status and title */}
-        {isCompact ? (
-          <div className="flex items-center gap-2 mb-0.5">
-            {statusDisplay}
-            <h3 className="font-medium text-sm text-foreground line-clamp-1 flex-1 pr-20">
-              {title}
-            </h3>
-          </div>
-        ) : (
-          <>
-            {/* Status badge/dropdown - above title */}
-            {statusDisplay}
-            {/* Title */}
-            <h3 className="font-medium text-sm text-foreground line-clamp-1 pr-24">{title}</h3>
-          </>
-        )}
+      <div className="flex-1 min-w-0">
+        {/* Status badge/dropdown - above title */}
+        {statusDisplay}
+        {/* Title */}
+        <h3 className="font-semibold text-base text-foreground line-clamp-1">{title}</h3>
 
-        {/* Description - hidden in compact mode */}
-        {!isCompact && content && (
-          <p className="text-xs text-muted-foreground/70 line-clamp-1 mt-0.5 pr-24">{content}</p>
-        )}
+        {/* Description */}
+        {content && <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">{content}</p>}
 
-        {/* Tags - own row, hidden in compact mode */}
-        {!isCompact && tags.length > 0 && (
+        {/* Tags */}
+        {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => (
               <Badge
@@ -368,18 +345,13 @@ export function PostCard({
         )}
 
         {/* Meta row */}
-        <div
-          className={cn(
-            'flex items-center text-muted-foreground',
-            isCompact ? 'gap-1.5 text-[11px] mt-0.5' : 'gap-2 text-xs mt-1.5'
-          )}
-        >
+        <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
           {showAvatar && (
-            <Avatar className={isCompact ? 'h-4 w-4' : 'h-5 w-5'}>
+            <Avatar className="h-5 w-5">
               {authorAvatarUrl && (
                 <AvatarImage src={authorAvatarUrl} alt={authorName || 'Author'} />
               )}
-              <AvatarFallback className={cn('bg-muted', isCompact ? 'text-[8px]' : 'text-[10px]')}>
+              <AvatarFallback className="bg-muted text-[10px]">
                 {getInitials(authorName)}
               </AvatarFallback>
             </Avatar>
@@ -390,29 +362,22 @@ export function PostCard({
           <span className="text-muted-foreground/40">·</span>
           <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
           {commentCount > 0 && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="flex items-center gap-0.5 text-muted-foreground/70">
-                <ChatBubbleLeftIcon className={isCompact ? 'h-2.5 w-2.5' : 'h-3 w-3'} />
-                {commentCount}
-              </span>
-            </>
+            <span className="flex items-center gap-1 text-muted-foreground/50 ml-auto">
+              <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
+              {commentCount}
+            </span>
           )}
-          <span className="text-muted-foreground/40">·</span>
-          <span className="text-muted-foreground/70">in {boardName || boardSlug}</span>
         </div>
       </div>
 
       {/* Quick actions */}
       {adminQuickActions}
       {portalQuickActions}
-    </>
+    </div>
   )
 
-  const rootClassName = cn(
-    'post-card flex cursor-pointer transition-colors relative group hover:bg-muted/30',
-    isCompact ? 'py-1 px-2' : 'py-1 px-3'
-  )
+  const rootClassName =
+    'post-card cursor-pointer transition-colors relative group hover:bg-muted/20'
 
   // Render as div with onClick for modal navigation, or Link for full-page navigation
   if (onClick) {

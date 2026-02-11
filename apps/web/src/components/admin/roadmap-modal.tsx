@@ -221,7 +221,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
         )}
 
         {/* Comments section */}
-        <div className="bg-muted/20">
+        <div className="bg-muted/20 border-t border-border/30">
           <Suspense fallback={<CommentsSectionSkeleton />}>
             <CommentsSection
               postId={postId}

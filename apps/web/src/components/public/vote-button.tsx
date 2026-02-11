@@ -43,11 +43,11 @@ export function VoteButton({
       aria-pressed={hasVoted}
       className={cn(
         'group relative flex items-center justify-center transition-all duration-200 cursor-pointer',
-        'border rounded-lg',
+        'border-2 rounded-lg',
         compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-14 py-2',
         hasVoted
-          ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/30 text-[var(--post-card-voted-color)]'
-          : 'bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:border-border',
+          ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]/50 text-[var(--post-card-voted-color)]'
+          : 'bg-muted/40 border-border text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground/80',
         isPending && 'opacity-70 cursor-wait',
         disabled && 'cursor-not-allowed opacity-50'
       )}

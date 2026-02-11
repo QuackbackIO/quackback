@@ -7,7 +7,7 @@ import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import { MobileBoardSheet } from '@/components/public/feedback/mobile-board-sheet'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
-import { PostCard, type PostCardDensity } from '@/components/public/post-card'
+import { PostCard } from '@/components/public/post-card'
 import type { BoardWithStats } from '@/lib/server/domains/boards'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -46,7 +46,7 @@ export function FeedbackContainer({
   tags,
   hasMore: initialHasMore,
   votedPostIds,
-  postAvatarUrls: initialAvatarUrls,
+  postAvatarUrls: _initialAvatarUrls,
   currentBoard,
   currentSearch,
   currentSort = 'top',
@@ -56,7 +56,6 @@ export function FeedbackContainer({
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
-  const [density, setDensity] = useState<PostCardDensity>('comfortable')
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
@@ -229,8 +228,6 @@ export function FeedbackContainer({
                 onTagChange={handleTagChange}
                 onClearFilters={handleClearFilters}
                 activeFilterCount={activeFilterCount}
-                density={density}
-                onDensityChange={setDensity}
                 isLoading={isLoading}
               />
             </div>
@@ -248,14 +245,14 @@ export function FeedbackContainer({
                 <div
                   key={listKey}
                   className={cn(
-                    'rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40 transition-opacity duration-150',
+                    'space-y-3 transition-opacity duration-150',
                     isLoading && 'opacity-60'
                   )}
                 >
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="animate-in fade-in duration-200 fill-mode-backwards"
+                      className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard
@@ -267,15 +264,12 @@ export function FeedbackContainer({
                         voteCount={post.voteCount}
                         commentCount={post.commentCount}
                         authorName={post.authorName}
-                        authorAvatarUrl={
-                          post.principalId ? initialAvatarUrls[post.principalId] : null
-                        }
                         createdAt={post.createdAt}
                         boardSlug={post.board?.slug || ''}
                         boardName={post.board?.name}
                         tags={post.tags}
                         isAuthenticated={!!effectiveUser}
-                        density={density}
+                        showAvatar={false}
                       />
                     </div>
                   ))}

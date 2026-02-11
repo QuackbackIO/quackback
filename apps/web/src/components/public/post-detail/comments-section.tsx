@@ -37,7 +37,7 @@ function CommentSkeleton() {
 
 export function CommentsSectionSkeleton() {
   return (
-    <div className="border-t border-border/30 p-6">
+    <div className="p-6">
       <Skeleton className="h-4 w-24 mb-4" />
       <div className="space-y-6">
         <CommentSkeleton />
@@ -89,7 +89,7 @@ export function CommentsSection({
 
   return (
     <div
-      className="border-t border-border/30 p-6 animate-in fade-in duration-200 fill-mode-backwards"
+      className="p-6 animate-in fade-in duration-200 fill-mode-backwards"
       style={{ animationDelay: '150ms' }}
     >
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
