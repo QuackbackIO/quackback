@@ -8,6 +8,13 @@
  * - MinIO (for local development)
  *
  * Note: AWS SDK imports are dynamic to avoid build issues when packages aren't installed.
+ *
+ * Type safety: TypeScript with moduleResolution "bundler" cannot fully resolve
+ * the AWS SDK v3 barrel exports (deep re-export chains through commands/ and
+ * @smithy/smithy-client are only partially resolved). We define structural
+ * interfaces for the exact SDK surface we use, with `as unknown as S3Module`
+ * applied at the two dynamic import boundaries. All downstream code is fully
+ * typed with no `any`.
  */
 
 import { config } from '@/lib/server/config'
@@ -57,24 +64,90 @@ export function getS3Config(): S3Config {
 }
 
 // ============================================================================
-// S3 Client (Lazy Loading)
+// Dynamic Module Loading (Lazy Singletons)
 // ============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _s3Client: any = null
+/*
+ * Structural types for the AWS SDK surface we use.
+ *
+ * TypeScript's bundler module resolution cannot resolve all re-exports from
+ * the AWS SDK v3 barrel (commands/ and @smithy/smithy-client base class are
+ * only partially resolved). These interfaces define the exact shape we need.
+ */
+
+/** Common S3 command input shape (Bucket + Key). */
+interface BucketKeyInput {
+  Bucket: string
+  Key: string
+  ContentType?: string
+}
+
+/** Command instance produced by S3 command constructors. */
+interface S3Command {
+  readonly input: BucketKeyInput
+}
+
+/** S3 client instance with the `send` method we use. */
+interface S3ClientInstance {
+  send(command: S3Command): Promise<unknown>
+  destroy(): void
+}
+
+/** Typed subset of @aws-sdk/client-s3 exports used by this module. */
+interface S3Module {
+  S3Client: new (config: {
+    region: string
+    endpoint?: string
+    forcePathStyle: boolean
+    credentials: { accessKeyId: string; secretAccessKey: string }
+  }) => S3ClientInstance
+  PutObjectCommand: new (input: BucketKeyInput) => S3Command
+  GetObjectCommand: new (input: BucketKeyInput) => S3Command
+  DeleteObjectCommand: new (input: BucketKeyInput) => S3Command
+}
+
+/** Typed subset of @aws-sdk/s3-request-presigner exports used by this module. */
+interface PresignerModule {
+  getSignedUrl: (
+    client: S3ClientInstance,
+    command: S3Command,
+    options?: { expiresIn?: number }
+  ) => Promise<string>
+}
+
+let _s3Module: S3Module | null = null
+let _presignerModule: PresignerModule | null = null
+let _s3Client: S3ClientInstance | null = null
+
+/**
+ * Get the AWS S3 module singleton.
+ * Dynamically imports to avoid build issues when the package isn't installed.
+ */
+async function getS3Module(): Promise<S3Module> {
+  if (_s3Module) return _s3Module
+  // Cast required: TS bundler resolution only partially resolves the AWS SDK barrel
+  _s3Module = (await import('@aws-sdk/client-s3')) as unknown as S3Module
+  return _s3Module
+}
+
+/**
+ * Get the S3 request presigner module singleton.
+ */
+async function getPresignerModule(): Promise<PresignerModule> {
+  if (_presignerModule) return _presignerModule
+  _presignerModule = (await import('@aws-sdk/s3-request-presigner')) as unknown as PresignerModule
+  return _presignerModule
+}
 
 /**
  * Get the S3 client singleton.
  * Creates a new client on first call, reuses on subsequent calls.
- * Dynamically imports AWS SDK to avoid build issues.
  */
-async function getS3Client() {
+async function getS3Client(): Promise<S3ClientInstance> {
   if (_s3Client) return _s3Client
 
   const s3Config = getS3Config()
-
-  // Dynamic import to avoid build issues when packages aren't properly linked
-  const { S3Client } = await import('@aws-sdk/client-s3')
+  const { S3Client } = await getS3Module()
 
   _s3Client = new S3Client({
     region: s3Config.region,
@@ -87,6 +160,33 @@ async function getS3Client() {
   })
 
   return _s3Client
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+/**
+ * Build a public URL for a storage key based on the S3 configuration.
+ * Returns null if neither S3_PUBLIC_URL nor S3_ENDPOINT is configured.
+ */
+function buildPublicUrl(s3Config: S3Config, key: string): string | null {
+  if (s3Config.publicUrl) {
+    return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
+  }
+
+  if (s3Config.endpoint) {
+    if (s3Config.forcePathStyle) {
+      return `${s3Config.endpoint}/${s3Config.bucket}/${key}`
+    }
+    // Virtual-hosted style (bucket in subdomain)
+    const url = new URL(s3Config.endpoint)
+    url.hostname = `${s3Config.bucket}.${url.hostname}`
+    url.pathname = `/${key}`
+    return url.toString()
+  }
+
+  return null
 }
 
 // ============================================================================
@@ -116,10 +216,8 @@ export async function generatePresignedUploadUrl(
 ): Promise<PresignedUploadUrl> {
   const s3Config = getS3Config()
   const client = await getS3Client()
-
-  // Dynamic imports
-  const { PutObjectCommand } = await import('@aws-sdk/client-s3')
-  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner')
+  const { PutObjectCommand } = await getS3Module()
+  const { getSignedUrl } = await getPresignerModule()
 
   const command = new PutObjectCommand({
     Bucket: s3Config.bucket,
@@ -128,33 +226,15 @@ export async function generatePresignedUploadUrl(
   })
 
   const uploadUrl = await getSignedUrl(client, command, { expiresIn })
+  const publicUrl = buildPublicUrl(s3Config, key)
 
-  // Determine public URL
-  let publicUrl: string
-  if (s3Config.publicUrl) {
-    // Custom public URL (e.g., CDN)
-    publicUrl = `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
-  } else if (s3Config.endpoint) {
-    // S3-compatible endpoint (MinIO, R2, B2)
-    if (s3Config.forcePathStyle) {
-      publicUrl = `${s3Config.endpoint}/${s3Config.bucket}/${key}`
-    } else {
-      // Virtual-hosted style (bucket in subdomain)
-      const url = new URL(s3Config.endpoint)
-      url.hostname = `${s3Config.bucket}.${url.hostname}`
-      url.pathname = `/${key}`
-      publicUrl = url.toString()
-    }
-  } else {
-    // AWS S3 default
-    publicUrl = `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${key}`
+  if (!publicUrl) {
+    throw new Error(
+      'Cannot determine public URL for uploaded files. Set S3_PUBLIC_URL or S3_ENDPOINT.'
+    )
   }
 
-  return {
-    uploadUrl,
-    publicUrl,
-    key,
-  }
+  return { uploadUrl, publicUrl, key }
 }
 
 // ============================================================================
@@ -203,22 +283,7 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
   if (!key) return null
   if (!isS3Configured()) return null
 
-  const s3Config = getS3Config()
-
-  if (s3Config.publicUrl) {
-    return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
-  } else if (s3Config.endpoint) {
-    if (s3Config.forcePathStyle) {
-      return `${s3Config.endpoint}/${s3Config.bucket}/${key}`
-    } else {
-      const url = new URL(s3Config.endpoint)
-      url.hostname = `${s3Config.bucket}.${url.hostname}`
-      url.pathname = `/${key}`
-      return url.toString()
-    }
-  } else {
-    return `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${key}`
-  }
+  return buildPublicUrl(getS3Config(), key)
 }
 
 /**
@@ -228,9 +293,39 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
 export function getPublicUrl(key: string): string {
   const url = getPublicUrlOrNull(key)
   if (!url) {
-    throw new Error('Failed to generate public URL: S3 not configured or invalid key')
+    throw new Error(
+      'Failed to generate public URL. Ensure S3 is configured and S3_PUBLIC_URL or S3_ENDPOINT is set.'
+    )
   }
   return url
+}
+
+// ============================================================================
+// Presigned GET URLs (for private buckets like Railway)
+// ============================================================================
+
+/**
+ * Generate a presigned URL for reading a file from S3.
+ * Use this when the bucket is not publicly accessible (e.g., Railway Buckets).
+ *
+ * @param key - Storage key (path within bucket)
+ * @param expiresIn - URL expiration time in seconds (default: 172800 = 48 hours)
+ */
+export async function generatePresignedGetUrl(
+  key: string,
+  expiresIn: number = 172800
+): Promise<string> {
+  const s3Config = getS3Config()
+  const client = await getS3Client()
+  const { GetObjectCommand } = await getS3Module()
+  const { getSignedUrl } = await getPresignerModule()
+
+  const command = new GetObjectCommand({
+    Bucket: s3Config.bucket,
+    Key: key,
+  })
+
+  return getSignedUrl(client, command, { expiresIn })
 }
 
 // ============================================================================
@@ -245,11 +340,9 @@ export function getPublicUrl(key: string): string {
 export async function deleteObject(key: string): Promise<void> {
   const s3Config = getS3Config()
   const client = await getS3Client()
+  const { DeleteObjectCommand } = await getS3Module()
 
-  // Dynamic import for delete command
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s3Module = (await import('@aws-sdk/client-s3')) as any
-  const command = new s3Module.DeleteObjectCommand({
+  const command = new DeleteObjectCommand({
     Bucket: s3Config.bucket,
     Key: key,
   })
