@@ -168,9 +168,13 @@ async function getS3Client(): Promise<S3ClientInstance> {
 
 /**
  * Build a public URL for a storage key based on the S3 configuration.
- * Returns null if neither S3_PUBLIC_URL nor S3_ENDPOINT is configured.
+ *
+ * Priority:
+ * 1. S3_PUBLIC_URL — explicit CDN or custom domain
+ * 2. S3_ENDPOINT — construct from the S3-compatible endpoint
+ * 3. BASE_URL/api/storage — presigned URL redirect (works with any private bucket)
  */
-function buildPublicUrl(s3Config: S3Config, key: string): string | null {
+function buildPublicUrl(s3Config: S3Config, key: string): string {
   if (s3Config.publicUrl) {
     return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
   }
@@ -186,7 +190,8 @@ function buildPublicUrl(s3Config: S3Config, key: string): string | null {
     return url.toString()
   }
 
-  return null
+  // Fall back to the presigned URL redirect route
+  return `${config.baseUrl.replace(/\/$/, '')}/api/storage/${key}`
 }
 
 // ============================================================================
@@ -227,12 +232,6 @@ export async function generatePresignedUploadUrl(
 
   const uploadUrl = await getSignedUrl(client, command, { expiresIn })
   const publicUrl = buildPublicUrl(s3Config, key)
-
-  if (!publicUrl) {
-    throw new Error(
-      'Cannot determine public URL for uploaded files. Set S3_PUBLIC_URL or S3_ENDPOINT.'
-    )
-  }
 
   return { uploadUrl, publicUrl, key }
 }
