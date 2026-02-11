@@ -52,11 +52,17 @@ function getProvider(): EmailProvider {
 
 function getSmtpTransporter(): Transporter {
   if (!smtpTransporter) {
-    console.log('[Email] Initializing SMTP transporter')
+    const host = getEnv('EMAIL_SMTP_HOST')
+    const port = parseInt(getEnv('EMAIL_SMTP_PORT') || '587', 10)
+    const secure = getEnv('EMAIL_SMTP_SECURE') === 'true'
+    console.log(`[Email] Initializing SMTP transporter: ${host}:${port} (secure=${secure})`)
     smtpTransporter = nodemailer.createTransport({
-      host: getEnv('EMAIL_SMTP_HOST'),
-      port: parseInt(getEnv('EMAIL_SMTP_PORT') || '587', 10),
-      secure: getEnv('EMAIL_SMTP_SECURE') === 'true',
+      host,
+      port,
+      secure,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
       auth:
         getEnv('EMAIL_SMTP_USER') || getEnv('EMAIL_SMTP_PASS')
           ? {
@@ -90,13 +96,29 @@ async function sendEmail(options: {
 
   if (provider === 'smtp') {
     const html = await render(options.react)
-    const result = await getSmtpTransporter().sendMail({
-      from: getEmailFrom(),
-      to: options.to,
-      subject: options.subject,
-      html,
-    })
-    console.log(`[Email] Sent via SMTP to ${options.to}, messageId: ${result.messageId}`)
+    try {
+      const result = await getSmtpTransporter().sendMail({
+        from: getEmailFrom(),
+        to: options.to,
+        subject: options.subject,
+        html,
+      })
+      console.log(`[Email] Sent via SMTP to ${options.to}, messageId: ${result.messageId}`)
+    } catch (error) {
+      // Reset transporter on connection errors so next attempt creates a fresh connection
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: string }).code === 'ETIMEDOUT'
+      ) {
+        smtpTransporter = null
+      }
+      console.error(
+        `[Email] SMTP send failed to ${options.to}:`,
+        error instanceof Error ? error.message : error
+      )
+      throw error
+    }
     return
   }
 
