@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
-import type { PortalAuthMethods } from '@/lib/server/domains/settings'
 
 // Error messages for login failures
 const errorMessages: Record<string, string> = {
@@ -46,18 +45,8 @@ export const Route = createFileRoute('/admin/login')({
         ? callbackUrl
         : '/admin'
 
-    // Fetch which auth providers have credentials configured
-    const { getConfiguredIntegrationTypes } =
-      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-    const configuredTypes = await getConfiguredIntegrationTypes()
-
-    // Build auth config: email always true, OAuth providers based on credentials
-    const authConfig: PortalAuthMethods = { email: true }
-    for (const type of configuredTypes) {
-      if (type.startsWith('auth_')) {
-        authConfig[type.replace('auth_', '')] = true
-      }
-    }
+    // Auth config is already computed in TenantSettings (filtered by configured credentials)
+    const authConfig = settings.publicAuthConfig.oauth
 
     return {
       errorMessage,

@@ -86,6 +86,10 @@ const configSchema = z.object({
   // AI (optional)
   openaiApiKey: z.string().optional(),
   openaiBaseUrl: z.string().optional(),
+
+  // Telemetry (optional)
+  telemetryEnabled: envBoolean.default(true),
+  telemetryEndpoint: z.string().url().optional(),
 })
 
 type Config = z.infer<typeof configSchema>
@@ -131,6 +135,10 @@ function buildConfigFromEnv(): unknown {
     // AI
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiBaseUrl: process.env.OPENAI_BASE_URL,
+
+    // Telemetry
+    telemetryEnabled: process.env.TELEMETRY_ENABLED,
+    telemetryEndpoint: process.env.TELEMETRY_ENDPOINT,
   }
 }
 
@@ -253,6 +261,14 @@ export const config = {
   },
   get openaiBaseUrl() {
     return loadConfig().openaiBaseUrl
+  },
+
+  // Telemetry
+  get telemetryEnabled() {
+    return loadConfig().telemetryEnabled
+  },
+  get telemetryEndpoint() {
+    return loadConfig().telemetryEndpoint
   },
 
   // Convenience

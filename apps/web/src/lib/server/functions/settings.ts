@@ -29,6 +29,8 @@ import {
   updateWorkspaceName,
   getCustomCss,
   updateCustomCss,
+  getTelemetryConfig,
+  updateTelemetryConfig,
 } from '@/lib/server/domains/settings/settings.service'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { requireAuth } from './auth-helpers'
@@ -287,6 +289,26 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     return updateDeveloperConfig(data)
+  })
+
+// ============================================
+// Telemetry Config Operations
+// ============================================
+
+export const fetchTelemetryConfig = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  return getTelemetryConfig()
+})
+
+const updateTelemetryConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+})
+
+export const updateTelemetryConfigFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateTelemetryConfigSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+    return updateTelemetryConfig(data)
   })
 
 // ============================================

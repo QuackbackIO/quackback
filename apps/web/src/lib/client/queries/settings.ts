@@ -11,6 +11,7 @@ import {
   fetchDeveloperConfig,
   fetchWidgetConfig,
   fetchWidgetSecret,
+  fetchTelemetryConfig,
 } from '@/lib/server/functions/settings'
 import {
   fetchSettingsLogoData,
@@ -103,6 +104,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'widgetSecret'],
       queryFn: fetchWidgetSecret,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  telemetryConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'telemetryConfig'],
+      queryFn: fetchTelemetryConfig,
       staleTime: STALE_TIME_LONG,
     }),
 }

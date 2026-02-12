@@ -28,6 +28,8 @@ export type {
   WidgetConfig,
   PublicWidgetConfig,
   UpdateWidgetConfigInput,
+  TelemetryConfig,
+  UpdateTelemetryConfigInput,
 } from './settings.types'
 
 // Default config values (no DB dependency)
@@ -36,6 +38,7 @@ export {
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
+  DEFAULT_TELEMETRY_CONFIG,
 } from './settings.types'
 
 // Consolidated tenant settings type

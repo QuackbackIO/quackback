@@ -14,12 +14,15 @@ import type {
   WidgetConfig,
   PublicWidgetConfig,
   UpdateWidgetConfigInput,
+  TelemetryConfig,
+  UpdateTelemetryConfigInput,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
+  DEFAULT_TELEMETRY_CONFIG,
 } from './settings.types'
 import { randomBytes } from 'crypto'
 
@@ -261,6 +264,36 @@ export async function regenerateWidgetSecret(): Promise<string> {
     return secret
   } catch (error) {
     wrapDbError('regenerate widget secret', error)
+  }
+}
+
+// ============================================================================
+// Telemetry Configuration
+// ============================================================================
+
+export async function getTelemetryConfig(): Promise<TelemetryConfig> {
+  try {
+    const org = await requireSettings()
+    return parseJsonConfig(org.telemetryConfig, DEFAULT_TELEMETRY_CONFIG)
+  } catch (error) {
+    wrapDbError('fetch telemetry config', error)
+  }
+}
+
+export async function updateTelemetryConfig(
+  input: UpdateTelemetryConfigInput
+): Promise<TelemetryConfig> {
+  try {
+    const org = await requireSettings()
+    const existing = parseJsonConfig(org.telemetryConfig, DEFAULT_TELEMETRY_CONFIG)
+    const updated = deepMerge(existing, input as Partial<TelemetryConfig>)
+    await db
+      .update(settings)
+      .set({ telemetryConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    return updated
+  } catch (error) {
+    wrapDbError('update telemetry config', error)
   }
 }
 

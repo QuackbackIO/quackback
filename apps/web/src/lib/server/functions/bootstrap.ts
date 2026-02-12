@@ -50,6 +50,8 @@ async function getSessionInternal(): Promise<Session | null> {
   }
 }
 
+let _telemetryStarted = false
+
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
     // Fetch session and settings in parallel
@@ -64,6 +66,19 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
           })
           .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)
       : null
+
+    // Start telemetry on first request (delayed to let DB initialize)
+    if (!_telemetryStarted) {
+      _telemetryStarted = true
+      setTimeout(async () => {
+        try {
+          const { startTelemetry } = await import('@/lib/server/telemetry')
+          await startTelemetry()
+        } catch {
+          // Silent failure — telemetry must never affect the application
+        }
+      }, 10_000)
+    }
 
     return { session, settings, userRole }
   }

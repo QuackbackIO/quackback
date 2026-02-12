@@ -251,6 +251,29 @@ export interface UpdateWidgetConfigInput {
 }
 
 // =============================================================================
+// Telemetry Configuration
+// =============================================================================
+
+/**
+ * Telemetry configuration
+ * Controls anonymous phone-home usage statistics
+ */
+export interface TelemetryConfig {
+  enabled: boolean
+}
+
+export const DEFAULT_TELEMETRY_CONFIG: TelemetryConfig = {
+  enabled: true,
+}
+
+/**
+ * Input for updating telemetry config (partial update)
+ */
+export interface UpdateTelemetryConfigInput {
+  enabled?: boolean
+}
+
+// =============================================================================
 // Update Input Types
 // =============================================================================
 
