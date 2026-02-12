@@ -51,6 +51,12 @@ export { useEnableStatusSync, useDisableStatusSync, useUpdateStatusMappings } fr
 // Platform credential mutations
 export { useSavePlatformCredentials, useDeletePlatformCredentials } from './platform-credentials'
 
+// Auth provider credential mutations
+export {
+  useSaveAuthProviderCredentials,
+  useDeleteAuthProviderCredentials,
+} from './auth-provider-credentials'
+
 // Roadmap posts mutations
 export { useAddPostToRoadmap, useRemovePostFromRoadmap } from './roadmap-posts'
 

@@ -10,11 +10,11 @@
 // =============================================================================
 
 /**
- * OAuth provider settings
+ * OAuth provider settings — dynamic provider support.
+ * Keys are Better Auth provider IDs (github, google, discord, etc.).
  */
 export interface OAuthProviders {
-  google: boolean
-  github: boolean
+  [providerId: string]: boolean | undefined
 }
 
 /**
@@ -44,13 +44,14 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
 // =============================================================================
 
 /**
- * Portal OAuth settings (subset of providers available to portal users)
+ * Portal OAuth settings — dynamic provider support.
+ * 'email' controls email OTP; all other keys are Better Auth provider IDs.
  */
 export interface PortalAuthMethods {
   /** Whether email OTP authentication is enabled (defaults to true for backwards compatibility) */
   email?: boolean
-  google: boolean
-  github: boolean
+  /** Dynamic OAuth provider toggles keyed by provider ID (github, google, discord, etc.) */
+  [providerId: string]: boolean | undefined
 }
 
 /**
@@ -274,7 +275,7 @@ export interface UpdateWidgetConfigInput {
  * Input for updating auth config (partial update)
  */
 export interface UpdateAuthConfigInput {
-  oauth?: Partial<OAuthProviders>
+  oauth?: OAuthProviders
   openSignup?: boolean
 }
 

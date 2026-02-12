@@ -55,21 +55,29 @@ async function createAuth() {
     eq,
   } = await import('@/lib/server/db')
   const { sendSigninCodeEmail } = await import('@quackback/email')
+  const { getPlatformCredentials } =
+    await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+  const { getAllAuthProviders } = await import('./auth-providers')
 
-  // Build socialProviders config based on available env vars
-  const socialProviders: Parameters<typeof betterAuth>[0]['socialProviders'] = {}
+  // Build socialProviders config from DB-stored credentials
+  const socialProviders: Record<string, Record<string, string>> = {}
+  const trustedProviders: string[] = []
 
-  if (config.githubClientId && config.githubClientSecret) {
-    socialProviders.github = {
-      clientId: config.githubClientId,
-      clientSecret: config.githubClientSecret,
-    }
-  }
-
-  if (config.googleClientId && config.googleClientSecret) {
-    socialProviders.google = {
-      clientId: config.googleClientId,
-      clientSecret: config.googleClientSecret,
+  for (const provider of getAllAuthProviders()) {
+    const creds = await getPlatformCredentials(provider.credentialType)
+    if (creds?.clientId && creds?.clientSecret) {
+      const providerConfig: Record<string, string> = {
+        clientId: creds.clientId,
+        clientSecret: creds.clientSecret,
+      }
+      // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
+      for (const field of provider.platformCredentials) {
+        if (field.key !== 'clientId' && field.key !== 'clientSecret' && creds[field.key]) {
+          providerConfig[field.key] = creds[field.key]
+        }
+      }
+      socialProviders[provider.id] = providerConfig
+      trustedProviders.push(provider.id)
     }
   }
 
@@ -122,7 +130,7 @@ async function createAuth() {
     account: {
       accountLinking: {
         enabled: true,
-        trustedProviders: ['github', 'google'],
+        trustedProviders,
       },
     },
 
@@ -276,6 +284,14 @@ export async function getAuth() {
     _auth = await createAuth()
   }
   return _auth
+}
+
+/**
+ * Reset the auth instance so it's re-created on next access.
+ * Call after changing auth provider credentials in the DB.
+ */
+export function resetAuth(): void {
+  _auth = null
 }
 
 // Export a proxy object that lazily initializes auth on first access

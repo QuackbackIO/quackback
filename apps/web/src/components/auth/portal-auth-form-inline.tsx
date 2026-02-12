@@ -9,18 +9,14 @@ import {
   EnvelopeIcon,
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
-import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
+import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
+import { getEnabledOAuthProviders } from '@/components/auth/oauth-buttons'
 import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/server/auth/client'
 
-type OAuthProvider = 'google' | 'github'
-
 interface OrgAuthConfig {
   found: boolean
-  oauth: {
-    google: boolean
-    github: boolean
-  }
+  oauth: Record<string, boolean | undefined>
   openSignup?: boolean
 }
 
@@ -43,8 +39,7 @@ interface PortalAuthFormInlineProps {
 type Step = 'email' | 'code'
 
 interface OAuthButtonProps {
-  provider: string
-  icon: React.ReactNode
+  icon: React.ReactNode | null
   label: string
   mode: 'login' | 'signup'
   loading: boolean
@@ -95,9 +90,7 @@ export function PortalAuthFormInline({
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   // Track which specific action is loading (null = not loading)
-  const [loadingAction, setLoadingAction] = useState<'email' | 'code' | 'google' | 'github' | null>(
-    null
-  )
+  const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
   const [loadingInvitation, setLoadingInvitation] = useState(!!invitationId)
@@ -243,9 +236,11 @@ export function PortalAuthFormInline({
   }
 
   /**
-   * Initiate OAuth login using Better Auth's socialProviders
+   * Initiate OAuth login using Better Auth's socialProviders.
+   * Opens popup first (sync, to avoid browser popup blockers),
+   * then POSTs to /api/auth/sign-in/social to get the OAuth redirect URL.
    */
-  const initiateOAuth = (provider: OAuthProvider) => {
+  const initiateOAuth = async (provider: string) => {
     setError('')
 
     // If popup already open, just focus it
@@ -257,25 +252,41 @@ export function PortalAuthFormInline({
     setLoadingAction(provider)
     setPopupBlocked(false)
 
-    // Build OAuth URL using Better Auth's socialProviders
-    const params = new URLSearchParams({
-      callbackURL: '/auth/auth-complete',
-    })
-    const oauthUrl = `/api/auth/sign-in/${provider}?${params}`
-
-    const popup = openAuthPopup(oauthUrl)
+    // Open popup synchronously (must be in direct response to user click)
+    const popup = openAuthPopup('about:blank')
     if (!popup) {
       setPopupBlocked(true)
       setLoadingAction(null)
       return
     }
     trackPopup(popup)
+
+    try {
+      // POST to Better Auth's /sign-in/social endpoint to get OAuth URL
+      const result = await authClient.signIn.social({
+        provider,
+        callbackURL: '/auth/auth-complete',
+        disableRedirect: true,
+      })
+
+      if (result.data?.url) {
+        popup.location.href = result.data.url
+      } else {
+        popup.close()
+        setError(result.error?.message || 'Failed to initiate sign in')
+        setLoadingAction(null)
+      }
+    } catch (err) {
+      popup.close()
+      setError(err instanceof Error ? err.message : 'Failed to initiate sign in')
+      setLoadingAction(null)
+    }
   }
 
-  // Determine which OAuth methods to show
-  const showGoogle = authConfig?.oauth?.google ?? false
-  const showGithub = authConfig?.oauth?.github ?? false
-  const showOAuth = showGoogle || showGithub
+  // Derive which auth methods are enabled
+  const emailEnabled = authConfig?.oauth?.email !== false
+  const enabledProviders = getEnabledOAuthProviders(authConfig?.oauth ?? {})
+  const showOAuth = enabledProviders.length > 0
 
   // Loading invitation
   if (loadingInvitation) {
@@ -336,44 +347,39 @@ export function PortalAuthFormInline({
       {showOAuth && step === 'email' && !invitation && (
         <>
           <div className="space-y-3">
-            {showGoogle && (
-              <OAuthButton
-                provider="google"
-                icon={<GoogleIcon className="h-5 w-5" />}
-                label="Google"
-                mode={mode}
-                loading={loadingAction === 'google'}
-                disabled={loadingAction !== null}
-                onClick={() => initiateOAuth('google')}
-              />
-            )}
-            {showGithub && (
-              <OAuthButton
-                provider="github"
-                icon={<GitHubIcon className="h-5 w-5" />}
-                label="GitHub"
-                mode={mode}
-                loading={loadingAction === 'github'}
-                disabled={loadingAction !== null}
-                onClick={() => initiateOAuth('github')}
-              />
-            )}
+            {enabledProviders.map((provider) => {
+              const IconComp = AUTH_PROVIDER_ICON_MAP[provider.id]
+              return (
+                <OAuthButton
+                  key={provider.id}
+                  icon={IconComp ? <IconComp className="h-5 w-5" /> : null}
+                  label={provider.name}
+                  mode={mode}
+                  loading={loadingAction === provider.id}
+                  disabled={loadingAction !== null}
+                  onClick={() => initiateOAuth(provider.id)}
+                />
+              )
+            })}
           </div>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+          {/* Divider - only show when email is also enabled */}
+          {emailEnabled && (
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with email
+                </span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or continue with email
-              </span>
-            </div>
-          </div>
+          )}
         </>
       )}
 
-      {/* Step 1: Email Input */}
-      {step === 'email' && (
+      {/* Step 1: Email Input - only show when email auth is enabled */}
+      {step === 'email' && emailEnabled && (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           {error && <FormError message={error} />}
 

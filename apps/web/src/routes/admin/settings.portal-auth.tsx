@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { LockClosedIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -16,7 +17,10 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
 
     const { queryClient } = context
 
-    await queryClient.ensureQueryData(settingsQueries.portalConfig())
+    await Promise.all([
+      queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      queryClient.ensureQueryData(adminQueries.authProviderStatus()),
+    ])
 
     return {}
   },
@@ -25,6 +29,7 @@ export const Route = createFileRoute('/admin/settings/portal-auth')({
 
 function PortalAuthPage() {
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const credentialStatusQuery = useSuspenseQuery(adminQueries.authProviderStatus())
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -40,9 +45,12 @@ function PortalAuthPage() {
       {/* Authentication Methods */}
       <SettingsCard
         title="Sign-in Methods"
-        description="Choose which authentication methods are available to portal users"
+        description="Choose which authentication methods are available to portal users. Configure OAuth providers by adding your app credentials."
       >
-        <PortalAuthSettings initialConfig={{ oauth: portalConfigQuery.data.oauth }} />
+        <PortalAuthSettings
+          initialConfig={{ oauth: portalConfigQuery.data.oauth }}
+          credentialStatus={credentialStatusQuery.data}
+        />
       </SettingsCard>
     </div>
   )

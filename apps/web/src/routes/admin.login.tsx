@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
+import type { PortalAuthMethods } from '@/lib/server/domains/settings'
 
 // Error messages for login failures
 const errorMessages: Record<string, string> = {
@@ -22,7 +23,7 @@ const searchSchema = z.object({
  * Admin Login Page
  *
  * For team members (admin, member) to sign in to the admin dashboard.
- * Supports email OTP and OAuth (GitHub, Google).
+ * Supports email OTP and any configured OAuth providers.
  */
 export const Route = createFileRoute('/admin/login')({
   validateSearch: searchSchema,
@@ -45,16 +46,30 @@ export const Route = createFileRoute('/admin/login')({
         ? callbackUrl
         : '/admin'
 
+    // Fetch which auth providers have credentials configured
+    const { getConfiguredIntegrationTypes } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const configuredTypes = await getConfiguredIntegrationTypes()
+
+    // Build auth config: email always true, OAuth providers based on credentials
+    const authConfig: PortalAuthMethods = { email: true }
+    for (const type of configuredTypes) {
+      if (type.startsWith('auth_')) {
+        authConfig[type.replace('auth_', '')] = true
+      }
+    }
+
     return {
       errorMessage,
       safeCallbackUrl,
+      authConfig,
     }
   },
   component: AdminLoginPage,
 })
 
 function AdminLoginPage() {
-  const { errorMessage, safeCallbackUrl } = Route.useLoaderData()
+  const { errorMessage, safeCallbackUrl, authConfig } = Route.useLoaderData()
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -69,7 +84,7 @@ function AdminLoginPage() {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
-        <PortalAuthForm callbackUrl={safeCallbackUrl} authConfig={{ github: true, google: true }} />
+        <PortalAuthForm callbackUrl={safeCallbackUrl} authConfig={authConfig} />
       </div>
     </div>
   )

@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { GitHubIcon, GoogleIcon } from '@/components/icons/social-icons'
+import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
+import { AUTH_PROVIDERS } from '@/lib/server/auth/auth-providers'
 import {
   openAuthPopup,
   useAuthBroadcast,
   usePopupTracker,
 } from '@/lib/client/hooks/use-auth-broadcast'
+import { authClient } from '@/lib/server/auth/client'
 
 interface OAuthButtonsProps {
   callbackUrl?: string
-  /** Whether to show GitHub sign-in button (default: true) */
-  showGitHub?: boolean
-  /** Whether to show Google sign-in button (default: true) */
-  showGoogle?: boolean
+  /** Dynamic list of enabled providers keyed by provider ID */
+  providers: { id: string; name: string }[]
   /** Callback when auth succeeds (for popup flow) */
   onSuccess?: () => void
 }
@@ -20,15 +20,10 @@ interface OAuthButtonsProps {
 /**
  * OAuth Buttons Component
  *
- * Renders GitHub and Google sign-in buttons.
+ * Renders sign-in buttons for any configured OAuth provider.
  * All providers use popup windows for authentication.
  */
-export function OAuthButtons({
-  callbackUrl = '/',
-  showGitHub = true,
-  showGoogle = true,
-  onSuccess,
-}: OAuthButtonsProps) {
+export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
   const [popupBlocked, setPopupBlocked] = useState(false)
   const { trackPopup, hasPopup, focusPopup, clearPopup } = usePopupTracker({
@@ -49,32 +44,46 @@ export function OAuthButtons({
     },
   })
 
-  function handleOAuthLogin(provider: 'github' | 'google'): void {
+  async function handleOAuthLogin(providerId: string): Promise<void> {
     if (hasPopup()) {
       focusPopup()
       return
     }
 
-    setLoadingProvider(provider)
+    setLoadingProvider(providerId)
     setPopupBlocked(false)
 
-    // Build OAuth URL using Better Auth's socialProviders
-    const params = new URLSearchParams({
-      callbackURL: callbackUrl,
-    })
-    const oauthUrl = `/api/auth/sign-in/${provider}?${params}`
-
-    const popup = openAuthPopup(oauthUrl)
+    // Open popup synchronously (must be in direct response to user click)
+    const popup = openAuthPopup('about:blank')
     if (!popup) {
       setPopupBlocked(true)
       setLoadingProvider(null)
       return
     }
     trackPopup(popup)
+
+    try {
+      // POST to Better Auth's /sign-in/social endpoint to get OAuth URL
+      const result = await authClient.signIn.social({
+        provider: providerId,
+        callbackURL: callbackUrl,
+        disableRedirect: true,
+      })
+
+      if (result.data?.url) {
+        popup.location.href = result.data.url
+      } else {
+        popup.close()
+        setLoadingProvider(null)
+      }
+    } catch {
+      popup.close()
+      setLoadingProvider(null)
+    }
   }
 
-  // Don't render anything if all providers are disabled
-  if (!showGitHub && !showGoogle) {
+  // Don't render anything if no providers
+  if (providers.length === 0) {
     return null
   }
 
@@ -85,30 +94,43 @@ export function OAuthButtons({
           Popup blocked. Please allow popups for this site.
         </p>
       )}
-      {showGitHub && (
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() => handleOAuthLogin('github')}
-          disabled={loadingProvider !== null}
-        >
-          <GitHubIcon className="mr-2 h-4 w-4" />
-          {loadingProvider === 'github' ? 'Signing in...' : 'Continue with GitHub'}
-        </Button>
-      )}
-      {showGoogle && (
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() => handleOAuthLogin('google')}
-          disabled={loadingProvider !== null}
-        >
-          <GoogleIcon className="mr-2 h-4 w-4" />
-          {loadingProvider === 'google' ? 'Signing in...' : 'Continue with Google'}
-        </Button>
-      )}
+      {providers.map((provider) => {
+        const IconComponent = AUTH_PROVIDER_ICON_MAP[provider.id]
+        return (
+          <Button
+            key={provider.id}
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => handleOAuthLogin(provider.id)}
+            disabled={loadingProvider !== null}
+          >
+            {IconComponent && <IconComponent className="mr-2 h-4 w-4" />}
+            {loadingProvider === provider.id ? 'Signing in...' : `Continue with ${provider.name}`}
+          </Button>
+        )
+      })}
     </div>
   )
+}
+
+/**
+ * Build provider list from PortalAuthMethods config.
+ * Filters to only enabled OAuth providers (excludes 'email').
+ */
+export function getEnabledOAuthProviders(
+  authConfig: Record<string, boolean | undefined>
+): { id: string; name: string }[] {
+  const providerMap = new Map(AUTH_PROVIDERS.map((p) => [p.id, p]))
+  const result: { id: string; name: string }[] = []
+
+  for (const [key, enabled] of Object.entries(authConfig)) {
+    if (key === 'email' || !enabled) continue
+    const provider = providerMap.get(key)
+    if (provider) {
+      result.push({ id: provider.id, name: provider.name })
+    }
+  }
+
+  return result
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { OAuthButtons } from './oauth-buttons'
+import { OAuthButtons, getEnabledOAuthProviders } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
@@ -25,8 +25,6 @@ interface InvitationInfo {
 interface PortalAuthFormProps {
   invitationId?: string | null
   callbackUrl?: string
-  /** Whether to show OAuth buttons (GitHub, Google) - legacy prop, prefer authConfig */
-  showOAuth?: boolean
   /** Auth method configuration (which methods are enabled) */
   authConfig?: PortalAuthMethods
 }
@@ -48,11 +46,12 @@ type Step = 'email' | 'code'
 export function PortalAuthForm({
   invitationId,
   callbackUrl = '/',
-  showOAuth = false,
   authConfig,
 }: PortalAuthFormProps) {
   // Derive email enabled state from authConfig (defaults to true for backwards compatibility)
   const emailEnabled = authConfig?.email ?? true
+  // Build list of enabled OAuth providers from authConfig
+  const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig) : []
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -222,31 +221,25 @@ export function PortalAuthForm({
         </div>
       )}
 
-      {/* OAuth Providers (GitHub, Google) - show on initial email step for non-invitation flow */}
-      {step === 'email' &&
-        !invitation &&
-        (authConfig?.github || authConfig?.google || showOAuth) && (
-          <>
-            <OAuthButtons
-              callbackUrl={callbackUrl}
-              showGitHub={authConfig?.github ?? showOAuth}
-              showGoogle={authConfig?.google ?? showOAuth}
-            />
-            {/* Divider - only show when email is also enabled */}
-            {emailEnabled && (
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Or continue with email
-                  </span>
-                </div>
+      {/* OAuth Providers - show on initial email step for non-invitation flow */}
+      {step === 'email' && !invitation && oauthProviders.length > 0 && (
+        <>
+          <OAuthButtons callbackUrl={callbackUrl} providers={oauthProviders} />
+          {/* Divider - only show when email is also enabled */}
+          {emailEnabled && (
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
               </div>
-            )}
-          </>
-        )}
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with email
+                </span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Step 1: Email Input - only show when email auth is enabled */}
       {step === 'email' && emailEnabled && (

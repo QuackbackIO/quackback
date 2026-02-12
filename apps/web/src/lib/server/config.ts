@@ -74,12 +74,6 @@ const configSchema = z.object({
   emailSmtpSecure: envBoolean,
   emailResendApiKey: z.string().optional(),
 
-  // OAuth (optional pairs)
-  githubClientId: z.string().optional(),
-  githubClientSecret: z.string().optional(),
-  googleClientId: z.string().optional(),
-  googleClientSecret: z.string().optional(),
-
   // S3 (optional)
   s3Endpoint: z.string().optional(),
   s3Bucket: z.string().optional(),
@@ -124,12 +118,6 @@ function buildConfigFromEnv(): unknown {
     emailSmtpPass: process.env.EMAIL_SMTP_PASS,
     emailSmtpSecure: process.env.EMAIL_SMTP_SECURE,
     emailResendApiKey: process.env.EMAIL_RESEND_API_KEY,
-
-    // OAuth
-    githubClientId: process.env.GITHUB_CLIENT_ID,
-    githubClientSecret: process.env.GITHUB_CLIENT_SECRET,
-    googleClientId: process.env.GOOGLE_CLIENT_ID,
-    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
 
     // S3
     s3Endpoint: process.env.S3_ENDPOINT,
@@ -234,20 +222,6 @@ export const config = {
   },
   get emailResendApiKey() {
     return loadConfig().emailResendApiKey
-  },
-
-  // OAuth
-  get githubClientId() {
-    return loadConfig().githubClientId
-  },
-  get githubClientSecret() {
-    return loadConfig().githubClientSecret
-  },
-  get googleClientId() {
-    return loadConfig().googleClientId
-  },
-  get googleClientSecret() {
-    return loadConfig().googleClientSecret
   },
 
   // S3

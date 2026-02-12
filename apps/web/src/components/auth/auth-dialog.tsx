@@ -11,10 +11,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 
 interface OrgAuthConfig {
   found: boolean
-  oauth: {
-    google: boolean
-    github: boolean
-  }
+  oauth: Record<string, boolean | undefined>
   openSignup?: boolean
 }
 

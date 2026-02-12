@@ -14,6 +14,10 @@ import {
   listPortalUsersFn,
 } from '@/lib/server/functions/admin'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
+import {
+  fetchAuthProviderStatusFn,
+  fetchAuthProviderCredentialsMaskedFn,
+} from '@/lib/server/functions/auth-provider-credentials'
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
@@ -297,6 +301,26 @@ export const adminQueries = {
         }))
       },
       staleTime: 30 * 1000, // 30s - may change when creating/updating webhooks
+    }),
+
+  /**
+   * Auth provider credential status: which providers have credentials configured
+   */
+  authProviderStatus: () =>
+    queryOptions({
+      queryKey: ['admin', 'authProviderStatus'],
+      queryFn: () => fetchAuthProviderStatusFn(),
+      staleTime: 5 * 60 * 1000, // 5min - changes when credentials are saved/deleted
+    }),
+
+  /**
+   * Masked auth provider credentials for a credential type
+   */
+  authProviderCredentials: (credentialType: string) =>
+    queryOptions({
+      queryKey: ['admin', 'authProviderCredentials', credentialType],
+      queryFn: () => fetchAuthProviderCredentialsMaskedFn({ data: { credentialType } }),
+      staleTime: 5 * 60 * 1000,
     }),
 }
 
