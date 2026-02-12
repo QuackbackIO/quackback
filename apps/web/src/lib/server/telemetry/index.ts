@@ -25,14 +25,18 @@ async function sendPingIfEnabled(): Promise<void> {
 }
 
 export async function startTelemetry(): Promise<void> {
-  const enabled = await isTelemetryEnabled()
-  if (!enabled) return
+  try {
+    const enabled = await isTelemetryEnabled()
+    if (!enabled) return
 
-  console.log(
-    '[Telemetry] Anonymous usage statistics enabled. ' +
-      'Disable with TELEMETRY_ENABLED=false or in Admin > Settings > Telemetry.'
-  )
+    console.log(
+      '[Telemetry] Anonymous usage statistics enabled. ' +
+        'Disable with TELEMETRY_ENABLED=false or in Admin > Settings > Telemetry.'
+    )
 
-  await sendPingIfEnabled()
-  setInterval(sendPingIfEnabled, ONE_DAY)
+    await sendPingIfEnabled()
+    setInterval(() => void sendPingIfEnabled(), ONE_DAY)
+  } catch {
+    // Silent failure — telemetry must never affect application functionality
+  }
 }
