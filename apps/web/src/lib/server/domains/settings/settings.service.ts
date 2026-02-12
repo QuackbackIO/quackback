@@ -73,6 +73,38 @@ async function requireSettings(): Promise<SettingsRecord> {
   return org
 }
 
+async function getConfiguredAuthTypes(): Promise<Set<string>> {
+  const { getConfiguredIntegrationTypes } =
+    await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+  return getConfiguredIntegrationTypes()
+}
+
+function filterAdminOAuth(
+  oauth: Record<string, boolean | undefined>,
+  configuredTypes: Set<string>
+): Record<string, boolean | undefined> {
+  const filtered: Record<string, boolean | undefined> = {}
+  for (const [key, enabled] of Object.entries(oauth)) {
+    filtered[key] = enabled && configuredTypes.has(`auth_${key}`)
+  }
+  return filtered
+}
+
+function filterPortalOAuth(
+  oauth: Record<string, boolean | undefined>,
+  configuredTypes: Set<string>
+): Record<string, boolean | undefined> {
+  const filtered: Record<string, boolean | undefined> = {}
+  for (const [key, enabled] of Object.entries(oauth)) {
+    if (key === 'email') {
+      filtered[key] = enabled
+    } else {
+      filtered[key] = enabled && configuredTypes.has(`auth_${key}`)
+    }
+  }
+  return filtered
+}
+
 function wrapDbError(operation: string, error: unknown): never {
   if (error instanceof NotFoundError || error instanceof ValidationError) throw error
   const message = error instanceof Error ? error.message : 'Unknown error'
@@ -118,7 +150,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const updated = deepMerge(existing, input as Partial<PortalConfig>)
 
-    const hasAuthMethod = updated.oauth.email || updated.oauth.github || updated.oauth.google
+    const hasAuthMethod = Object.values(updated.oauth).some(Boolean)
     if (!hasAuthMethod) {
       throw new ValidationError(
         'AUTH_METHOD_REQUIRED',
@@ -475,7 +507,12 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
     const org = await requireSettings()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
-    return { oauth: authConfig.oauth, openSignup: authConfig.openSignup }
+
+    const configuredTypes = await getConfiguredAuthTypes()
+    return {
+      oauth: filterAdminOAuth(authConfig.oauth, configuredTypes),
+      openSignup: authConfig.openSignup,
+    }
   } catch (error) {
     wrapDbError('fetch public auth config', error)
   }
@@ -485,8 +522,10 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+
+    const configuredTypes = await getConfiguredAuthTypes()
     return {
-      oauth: portalConfig.oauth,
+      oauth: filterPortalOAuth(portalConfig.oauth, configuredTypes),
       features: portalConfig.features,
     }
   } catch (error) {
@@ -536,6 +575,10 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
 
+    const configuredTypes = await getConfiguredAuthTypes()
+    const filteredAuthOAuth = filterAdminOAuth(authConfig.oauth, configuredTypes)
+    const filteredPortalOAuth = filterPortalOAuth(portalConfig.oauth, configuredTypes)
+
     const brandingData: SettingsBrandingData = {
       name: org.name,
       logoUrl: getPublicUrlOrNull(org.logoKey),
@@ -554,9 +597,9 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       brandingConfig,
       developerConfig,
       customCss: org.customCss ?? '',
-      publicAuthConfig: { oauth: authConfig.oauth, openSignup: authConfig.openSignup },
+      publicAuthConfig: { oauth: filteredAuthOAuth, openSignup: authConfig.openSignup },
       publicPortalConfig: {
-        oauth: portalConfig.oauth,
+        oauth: filteredPortalOAuth,
         features: portalConfig.features,
       },
       publicWidgetConfig: {
