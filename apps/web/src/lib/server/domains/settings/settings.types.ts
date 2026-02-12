@@ -160,26 +160,9 @@ export interface ThemeColors {
 export type ThemeMode = 'light' | 'dark' | 'user'
 
 /**
- * Branding mode - controls which CSS source is applied to the portal
- * 'simple' = use generated CSS from color pickers
- * 'advanced' = use raw custom CSS (e.g., from tweakcn.com)
- */
-export const BRANDING_MODES = ['simple', 'advanced'] as const
-export type BrandingMode = (typeof BRANDING_MODES)[number]
-
-/**
- * Type guard for runtime validation of BrandingMode
- */
-export function isBrandingMode(value: unknown): value is BrandingMode {
-  return typeof value === 'string' && BRANDING_MODES.includes(value as BrandingMode)
-}
-
-/**
  * Branding/theme configuration
  */
 export interface BrandingConfig {
-  /** Branding mode: 'simple' (color pickers) or 'advanced' (custom CSS). Defaults to 'simple' */
-  brandingMode?: BrandingMode
   /** Theme preset name */
   preset?: string
   /** Theme mode: 'light' (force light), 'dark' (force dark), or 'user' (allow toggle) */

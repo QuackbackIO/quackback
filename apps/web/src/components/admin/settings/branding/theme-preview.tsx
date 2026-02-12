@@ -8,7 +8,7 @@ import {
   ClockIcon,
   FireIcon,
 } from '@heroicons/react/24/solid'
-import { oklchToHex, type ThemeVariables, type ParsedCssVariables } from '@/lib/shared/theme'
+import type { ParsedCssVariables } from '@/lib/shared/theme'
 import { cn } from '@/lib/shared/utils'
 
 /** Map font family names to Google Fonts URL */
@@ -48,116 +48,55 @@ function getGoogleFontsUrl(fontFamily: string | undefined): string | null {
 }
 
 interface ThemePreviewProps {
-  lightVars: ThemeVariables
-  darkVars: ThemeVariables
   previewMode: 'light' | 'dark'
-  radius?: string
-  fontFamily?: string
   logoUrl?: string | null
   workspaceName?: string
-  /** CSS variables extracted from custom CSS (for advanced mode live preview) */
-  customCssVariables?: ParsedCssVariables
+  /** Parsed CSS variables from the theme CSS (source of truth) */
+  cssVariables: ParsedCssVariables
 }
 
+/** Component-level aliases that reference base CSS variables */
+const COMPONENT_ALIASES: Record<string, string> = {
+  '--header-background': 'var(--background)',
+  '--header-foreground': 'var(--foreground)',
+  '--header-border': 'var(--border)',
+  '--post-card-background': 'var(--card)',
+  '--post-card-border': 'var(--border)',
+  '--post-card-voted-color': 'var(--primary)',
+  '--nav-active-background': 'var(--muted)',
+  '--nav-active-foreground': 'var(--foreground)',
+  '--nav-inactive-color': 'var(--muted-foreground)',
+  '--portal-button-background': 'var(--primary)',
+  '--portal-button-foreground': 'var(--primary-foreground)',
+}
+
+const DEFAULT_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif'
+
 export function ThemePreview({
-  lightVars,
-  darkVars,
   previewMode,
-  radius = '0.625rem',
-  fontFamily,
   logoUrl,
   workspaceName = 'Acme Feedback',
-  customCssVariables,
+  cssVariables,
 }: ThemePreviewProps) {
-  const vars = previewMode === 'light' ? lightVars : darkVars
-  const customVars = customCssVariables?.[previewMode] ?? {}
+  const modeVars = cssVariables[previewMode === 'dark' ? 'dark' : 'light']
 
-  // Convert OKLCH to hex for CSS custom properties
-  const cssVars = useMemo(() => {
-    const safeHex = (oklch: string | undefined, fallback: string) => {
-      if (!oklch) return fallback
-      try {
-        return oklchToHex(oklch)
-      } catch {
-        return fallback
-      }
-    }
+  const cssVars = useMemo(() => ({ ...modeVars, ...COMPONENT_ALIASES }), [modeVars])
 
-    // Base colors
-    const background = safeHex(vars.background, previewMode === 'light' ? '#ffffff' : '#0a0a0a')
-    const foreground = safeHex(vars.foreground, previewMode === 'light' ? '#171717' : '#fafafa')
-    const card = safeHex(vars.card, previewMode === 'light' ? '#ffffff' : '#171717')
-    const cardForeground = safeHex(
-      vars.cardForeground,
-      previewMode === 'light' ? '#171717' : '#fafafa'
-    )
-    const primary = safeHex(vars.primary, '#3b82f6')
-    const primaryForeground = safeHex(vars.primaryForeground, '#ffffff')
-    const muted = safeHex(vars.muted, previewMode === 'light' ? '#f5f5f5' : '#262626')
-    const mutedForeground = safeHex(
-      vars.mutedForeground,
-      previewMode === 'light' ? '#737373' : '#a3a3a3'
-    )
-    const border = safeHex(vars.border, previewMode === 'light' ? '#e5e5e5' : '#262626')
-
-    return {
-      // Global variables
-      '--background': background,
-      '--foreground': foreground,
-      '--card': card,
-      '--card-foreground': cardForeground,
-      '--primary': primary,
-      '--primary-foreground': primaryForeground,
-      '--secondary': safeHex(vars.secondary, previewMode === 'light' ? '#f5f5f5' : '#262626'),
-      '--secondary-foreground': safeHex(
-        vars.secondaryForeground,
-        previewMode === 'light' ? '#171717' : '#fafafa'
-      ),
-      '--muted': muted,
-      '--muted-foreground': mutedForeground,
-      '--border': border,
-      '--accent': safeHex(vars.accent, previewMode === 'light' ? '#f5f5f5' : '#262626'),
-      '--destructive': safeHex(vars.destructive, '#ef4444'),
-      '--success': safeHex(vars.success, '#22c55e'),
-      '--radius': radius,
-      // Component-level variables use var() references so they automatically
-      // pick up overrides from custom CSS (e.g., when --primary is overridden)
-      '--header-background': 'var(--background)',
-      '--header-foreground': 'var(--foreground)',
-      '--header-border': 'var(--border)',
-      '--post-card-background': 'var(--card)',
-      '--post-card-border': 'var(--border)',
-      '--post-card-voted-color': 'var(--primary)',
-      '--nav-active-background': 'var(--muted)',
-      '--nav-active-foreground': 'var(--foreground)',
-      '--nav-inactive-color': 'var(--muted-foreground)',
-      '--portal-button-background': 'var(--primary)',
-      '--portal-button-foreground': 'var(--primary-foreground)',
-    }
-  }, [vars, previewMode, radius])
-
-  // Merge custom CSS variables (from advanced mode) with generated theme variables
-  // Custom CSS variables take precedence to enable live preview in advanced mode
-  const effectiveCssVars = useMemo(() => {
-    return { ...cssVars, ...customVars }
-  }, [cssVars, customVars])
-
-  // Get Google Fonts URL for live preview
+  const fontFamily = modeVars['--font-sans'] || DEFAULT_FONT
   const googleFontsUrl = useMemo(() => getGoogleFontsUrl(fontFamily), [fontFamily])
 
   return (
     <>
-      {/* Load Google Font for preview */}
       {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
       <div
         className="rounded-lg border overflow-hidden"
         style={
           {
-            ...effectiveCssVars,
+            ...cssVars,
             backgroundColor: 'var(--background)',
             borderColor: 'var(--border)',
             color: 'var(--foreground)',
-            fontFamily: fontFamily || 'Inter, ui-sans-serif, system-ui, sans-serif',
+            fontFamily,
           } as React.CSSProperties
         }
       >

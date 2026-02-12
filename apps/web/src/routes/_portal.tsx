@@ -28,20 +28,17 @@ export const Route = createFileRoute('/_portal')({
     const customCss = settings?.customCss ?? ''
     const portalConfig = settings?.publicPortalConfig ?? null
 
-    // Determine branding mode (default to 'simple' for backwards compatibility)
-    const brandingMode = brandingConfig.brandingMode ?? 'simple'
-
-    // Determine theme mode (default to 'user' for backwards compatibility)
     const themeMode = brandingConfig.themeMode ?? 'user'
 
-    // Apply CSS based on branding mode - only one or the other, never both
-    const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
-    const themeStyles =
-      brandingMode === 'simple' && hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
-    const customCssToApply = brandingMode === 'advanced' ? customCss : ''
+    // Always generate CSS from theme config (if structured vars exist)
+    const hasThemeConfig = brandingConfig.light || brandingConfig.dark
+    const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
 
-    // Font loading only in simple mode (advanced mode handles its own fonts)
-    const googleFontsUrl = brandingMode === 'simple' ? getGoogleFontsUrl(brandingConfig) : null
+    // Always apply custom CSS on top (cascades over theme styles)
+    const customCssToApply = customCss
+
+    // Always load Google Fonts from theme config
+    const googleFontsUrl = getGoogleFontsUrl(brandingConfig)
 
     const initialUserData = session?.user
       ? {

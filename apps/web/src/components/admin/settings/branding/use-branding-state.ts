@@ -1,19 +1,18 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   themePresets,
-  expandTheme,
+  primaryPresetIds,
   extractMinimal,
-  hexToOklch,
-  oklchToHex,
   extractCssVariables,
+  generateReadableCSS,
+  parseCssToMinimal,
+  replaceCssVar,
   type ThemeConfig,
-  type ThemeVariables,
   type MinimalThemeVariables,
   type ThemeMode,
   type ParsedCssVariables,
 } from '@/lib/shared/theme'
 import { updateThemeFn, updateCustomCssFn } from '@/lib/server/functions/settings'
-import { type BrandingMode } from '@/lib/server/domains/settings/settings.types'
 
 export const FONT_OPTIONS = [
   {
@@ -137,212 +136,160 @@ export const ALL_FONTS_URL = `https://fonts.googleapis.com/css2?family=${FONT_OP
   .join('&family=')}&display=swap`
 
 const DEFAULT_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif'
+const DEFAULT_RADIUS = 0.625
+
+/** The 9 core color keys used for preset matching */
+const CORE_COLOR_KEYS = [
+  'primary',
+  'background',
+  'foreground',
+  'card',
+  'muted',
+  'mutedForeground',
+  'border',
+  'destructive',
+  'success',
+] as const
 
 interface UseBrandingStateOptions {
   initialLogoUrl: string | null
   initialThemeConfig: ThemeConfig
   initialCustomCss: string
-  initialBrandingMode?: BrandingMode
 }
 
 export interface BrandingState {
-  // Branding mode (simple = color pickers, advanced = custom CSS)
-  brandingMode: BrandingMode
-  setBrandingMode: (mode: BrandingMode) => void
-
-  // Logo
   logoUrl: string | null
   setLogoUrl: (url: string | null) => void
-
-  // Preview mode (light/dark) - for previewing the theme
   previewMode: 'light' | 'dark'
   setPreviewMode: (mode: 'light' | 'dark') => void
-
-  // Theme mode (controls portal behavior)
+  /** Which preview toggle is disabled based on themeMode ('light' | 'dark' | null) */
+  previewModeDisabled: 'light' | 'dark' | null
   themeMode: ThemeMode
   setThemeMode: (mode: ThemeMode) => void
-
-  // Colors (shared across light/dark modes)
-  primaryColor: string
-  setPrimaryColor: (hexColor: string) => void
-  secondaryColor: string
-  setSecondaryColor: (hexColor: string) => void
-  accentColor: string
-  setAccentColor: (hexColor: string) => void
-  backgroundColor: string
-  setBackgroundColor: (hexColor: string) => void
-  foregroundColor: string
-  setForegroundColor: (hexColor: string) => void
-
-  // Legacy alias for backwards compatibility
-  brandColor: string
-  setBrandColor: (hexColor: string) => void
-
-  // Typography
+  activePresetId: string | null
+  setPreset: (presetId: string) => void
   font: string
   setFont: (font: string) => void
   currentFontId: string
   radius: number
-  setRadius: (radius: number) => void
-
-  // Custom CSS
-  customCss: string
-  setCustomCss: (css: string) => void
-
-  // Computed theme variables for preview
-  effectiveLight: ThemeVariables
-  effectiveDark: ThemeVariables
-
-  // Parsed CSS variables (for live custom CSS preview)
+  setRadius: (r: number) => void
+  cssText: string
+  setCssText: (css: string) => void
   parsedCssVariables: ParsedCssVariables
-
-  // Save
   saveTheme: () => Promise<void>
   isSaving: boolean
   saveSuccess: boolean
 }
 
+function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConfig): string {
+  // If user already has custom CSS, use it as-is
+  if (initialCustomCss.trim()) return initialCustomCss
+
+  // Otherwise generate readable CSS from the structured config
+  const defaultPreset = themePresets.default
+  const lightMinimal = extractMinimal({
+    ...defaultPreset.light,
+    ...(initialThemeConfig.light ?? {}),
+  })
+  const darkMinimal = extractMinimal({
+    ...defaultPreset.dark,
+    ...(initialThemeConfig.dark ?? {}),
+  })
+
+  return generateReadableCSS(lightMinimal, darkMinimal, initialThemeConfig.themeMode)
+}
+
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {
-  const { initialLogoUrl, initialThemeConfig, initialCustomCss, initialBrandingMode } = options
+  const { initialLogoUrl, initialThemeConfig, initialCustomCss } = options
 
   // ============================================
-  // Branding mode state (simple vs advanced)
-  // ============================================
-  const [brandingMode, setBrandingMode] = useState<BrandingMode>(initialBrandingMode ?? 'simple')
-
-  // ============================================
-  // Logo state
+  // Primary state: CSS text is the source of truth
   // ============================================
   const [logoUrl, setLogoUrl] = useState<string | null>(initialLogoUrl)
-
-  // ============================================
-  // Theme state
-  // ============================================
-  const [editMode, setEditMode] = useState<'light' | 'dark'>('light')
-  const [themeMode, setThemeMode] = useState<ThemeMode>(
-    () => initialThemeConfig.themeMode ?? 'user'
+  const initialMode = initialThemeConfig.themeMode ?? 'user'
+  const [previewMode, setPreviewMode] = useState<'light' | 'dark'>(
+    initialMode === 'dark' ? 'dark' : 'light'
   )
+  const [themeMode, setThemeModeRaw] = useState<ThemeMode>(() => initialMode)
 
-  const defaultPreset = themePresets.default
-
-  const [lightValues, setLightValues] = useState<MinimalThemeVariables>(() => {
-    if (initialThemeConfig.light && Object.keys(initialThemeConfig.light).length > 0) {
-      return extractMinimal({ ...defaultPreset.light, ...initialThemeConfig.light })
-    }
-    return extractMinimal(defaultPreset.light)
-  })
-
-  const [darkValues, setDarkValues] = useState<MinimalThemeVariables>(() => {
-    if (initialThemeConfig.dark && Object.keys(initialThemeConfig.dark).length > 0) {
-      return extractMinimal({ ...defaultPreset.dark, ...initialThemeConfig.dark })
-    }
-    return extractMinimal(defaultPreset.dark)
-  })
-
-  const [font, setFont] = useState(() => lightValues.fontSans || DEFAULT_FONT)
-  const [radius, setRadius] = useState(() => {
-    const match = lightValues.radius?.match(/^([\d.]+)rem$/)
-    return match ? parseFloat(match[1]) : 0.625
-  })
-
-  // Custom CSS state
-  const [customCss, setCustomCss] = useState(initialCustomCss)
-
-  // Parsed CSS variables for live preview (debounced)
-  const [parsedCssVariables, setParsedCssVariables] = useState<ParsedCssVariables>(() =>
-    extractCssVariables(initialCustomCss)
+  // When theme mode changes, auto-switch preview to match and regenerate CSS
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeModeRaw(mode)
+    if (mode === 'dark') setPreviewMode('dark')
+    else if (mode === 'light') setPreviewMode('light')
+  }, [])
+  const [cssText, setCssText] = useState(() =>
+    buildInitialCss(initialCustomCss, initialThemeConfig)
   )
-
-  // Debounce CSS parsing for live preview
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setParsedCssVariables(extractCssVariables(customCss))
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [customCss])
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   // ============================================
-  // Computed values
+  // Parsed CSS variables (derived synchronously — regex is <1ms)
   // ============================================
-  const effectiveLight = useMemo(
-    () =>
-      expandTheme({ ...lightValues, fontSans: font, radius: `${radius}rem` }, { mode: 'light' }),
-    [lightValues, font, radius]
+  const parsedCssVariables = useMemo(() => extractCssVariables(cssText), [cssText])
+
+  // ============================================
+  // Derived values from parsed CSS
+  // ============================================
+  const previewModeDisabled: 'light' | 'dark' | null =
+    themeMode === 'dark' ? 'light' : themeMode === 'light' ? 'dark' : null
+
+  const defaultPreset = themePresets.default
+  const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
+  const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
+
+  const font = useMemo(
+    () => parsedCssVariables.light['--font-sans'] || DEFAULT_FONT,
+    [parsedCssVariables]
   )
 
-  const effectiveDark = useMemo(
-    () => expandTheme({ ...darkValues, fontSans: font, radius: `${radius}rem` }, { mode: 'dark' }),
-    [darkValues, font, radius]
+  const currentFontId = useMemo(
+    () => FONT_OPTIONS.find((f) => f.value === font)?.id || 'inter',
+    [font]
   )
 
-  const currentFontId = FONT_OPTIONS.find((f) => f.value === font)?.id || 'inter'
+  const radius = useMemo(() => {
+    const raw = parsedCssVariables.light['--radius']
+    if (!raw) return DEFAULT_RADIUS
+    const match = raw.match(/^([\d.]+)rem$/)
+    return match ? parseFloat(match[1]) : DEFAULT_RADIUS
+  }, [parsedCssVariables])
+
+  const activePresetId = useMemo(() => {
+    const parsedLight = parseCssToMinimal(parsedCssVariables.light)
+    for (const id of primaryPresetIds) {
+      const preset = themePresets[id]
+      if (!preset) continue
+      const presetLight = extractMinimal(preset.light)
+      const match = CORE_COLOR_KEYS.every((key) => parsedLight[key] === presetLight[key])
+      if (match) return id
+    }
+    return null
+  }, [parsedCssVariables])
 
   // ============================================
-  // Color management helpers
+  // Actions — all modify cssText
   // ============================================
-  const activeValues = editMode === 'light' ? lightValues : darkValues
-  const setActiveValues = editMode === 'light' ? setLightValues : setDarkValues
-
-  const getColorAsHex = useCallback(
-    (colorKey: keyof MinimalThemeVariables, defaultHex: string): string => {
-      const oklch = activeValues[colorKey]
-      if (!oklch || typeof oklch !== 'string') return defaultHex
-      try {
-        return oklchToHex(oklch)
-      } catch {
-        return defaultHex
-      }
+  const setPreset = useCallback(
+    (presetId: string) => {
+      const preset = themePresets[presetId]
+      if (!preset) return
+      const lightMinimal = extractMinimal(preset.light)
+      const darkMinimal = extractMinimal(preset.dark)
+      setCssText(generateReadableCSS(lightMinimal, darkMinimal, themeMode))
     },
-    [activeValues]
+    [themeMode]
   )
 
-  const setColorFromHex = useCallback(
-    (colorKey: keyof MinimalThemeVariables, hexColor: string) => {
-      const oklchColor = hexToOklch(hexColor)
-      setActiveValues((prev: MinimalThemeVariables) => ({ ...prev, [colorKey]: oklchColor }))
-    },
-    [setActiveValues]
-  )
+  const setFont = useCallback((fontValue: string) => {
+    setCssText((prev) => replaceCssVar(prev, '--font-sans', fontValue))
+  }, [])
 
-  // Primary color
-  const setPrimaryColor = useCallback(
-    (hexColor: string) => setColorFromHex('primary', hexColor),
-    [setColorFromHex]
-  )
-
-  // Secondary color
-  const setSecondaryColor = useCallback(
-    (hexColor: string) => setColorFromHex('secondary', hexColor),
-    [setColorFromHex]
-  )
-
-  // Accent color
-  const setAccentColor = useCallback(
-    (hexColor: string) => setColorFromHex('accent', hexColor),
-    [setColorFromHex]
-  )
-
-  // Background color
-  const setBackgroundColor = useCallback(
-    (hexColor: string) => setColorFromHex('background', hexColor),
-    [setColorFromHex]
-  )
-
-  // Foreground color
-  const setForegroundColor = useCallback(
-    (hexColor: string) => setColorFromHex('foreground', hexColor),
-    [setColorFromHex]
-  )
-
-  // Legacy alias
-  const setBrandColor = setPrimaryColor
-  const getBrandColor = useCallback(
-    (): string => getColorAsHex('primary', '#3b82f6'),
-    [getColorAsHex]
-  )
+  const setRadius = useCallback((r: number) => {
+    setCssText((prev) => replaceCssVar(prev, '--radius', `${r}rem`))
+  }, [])
 
   // ============================================
   // Save
@@ -352,19 +299,25 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     setSaveSuccess(false)
 
     try {
-      const themeConfig: ThemeConfig & { brandingMode: BrandingMode } = {
-        brandingMode,
+      // Parse cssText back to structured config for backward compat
+      const parsed = extractCssVariables(cssText)
+      const lightParsed = parseCssToMinimal(parsed.light)
+      const darkParsed = parseCssToMinimal(parsed.dark)
+
+      const lightMinimal: MinimalThemeVariables = { ...defaultLightMinimal, ...lightParsed }
+      const darkMinimal: MinimalThemeVariables = { ...defaultDarkMinimal, ...darkParsed }
+
+      const themeConfig: ThemeConfig = {
         themeMode,
-        light: { ...lightValues, fontSans: font, radius: `${radius}rem` },
-        dark: { ...darkValues, fontSans: font, radius: `${radius}rem` },
+        light: { ...lightMinimal, fontSans: font, radius: `${radius}rem` },
+        dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
-      // Save both theme config and custom CSS (both are always saved, mode determines which is applied)
       await Promise.all([
         updateThemeFn({
           data: { brandingConfig: themeConfig as unknown as Record<string, unknown> },
         }),
-        updateCustomCssFn({ data: { customCss } }),
+        updateCustomCssFn({ data: { customCss: cssText } }),
       ])
 
       setSaveSuccess(true)
@@ -374,61 +327,26 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     } finally {
       setIsSaving(false)
     }
-  }, [brandingMode, lightValues, darkValues, font, radius, themeMode, customCss])
+  }, [cssText, themeMode, font, radius, defaultLightMinimal, defaultDarkMinimal])
 
   return {
-    // Branding mode
-    brandingMode,
-    setBrandingMode,
-
-    // Logo
     logoUrl,
     setLogoUrl,
-
-    // Preview mode
-    previewMode: editMode,
-    setPreviewMode: setEditMode,
-
-    // Theme mode
+    previewMode,
+    setPreviewMode,
+    previewModeDisabled,
     themeMode,
     setThemeMode,
-
-    // Colors
-    primaryColor: getColorAsHex('primary', '#3b82f6'),
-    setPrimaryColor,
-    secondaryColor:
-      getColorAsHex('secondary', activeValues.muted) || getColorAsHex('muted', '#f1f5f9'),
-    setSecondaryColor,
-    accentColor: getColorAsHex('accent', activeValues.muted) || getColorAsHex('muted', '#f1f5f9'),
-    setAccentColor,
-    backgroundColor: getColorAsHex('background', editMode === 'light' ? '#ffffff' : '#0a0a0a'),
-    setBackgroundColor,
-    foregroundColor: getColorAsHex('foreground', editMode === 'light' ? '#0f172a' : '#fafafa'),
-    setForegroundColor,
-
-    // Legacy alias
-    brandColor: getBrandColor(),
-    setBrandColor,
-
-    // Typography
+    activePresetId,
+    setPreset,
     font,
     setFont,
     currentFontId,
     radius,
     setRadius,
-
-    // Custom CSS
-    customCss,
-    setCustomCss,
-
-    // Computed
-    effectiveLight,
-    effectiveDark,
-
-    // Parsed CSS variables for live preview
+    cssText,
+    setCssText,
     parsedCssVariables,
-
-    // Save
     saveTheme,
     isSaving,
     saveSuccess,

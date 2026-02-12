@@ -56,6 +56,9 @@ export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
 
 export {
   generateThemeCSS,
+  generateReadableCSS,
+  parseCssToMinimal,
+  replaceCssVar,
   parseThemeConfig,
   serializeThemeConfig,
   getGoogleFontsUrl,

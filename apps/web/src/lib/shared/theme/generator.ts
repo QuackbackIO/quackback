@@ -1,7 +1,7 @@
-import type { ThemeConfig, ThemeVariables } from './types'
+import type { ThemeConfig, ThemeMode, ThemeVariables } from './types'
 import { expandTheme, type MinimalThemeVariables } from './expand'
 
-const variableMap: Record<string, string> = {
+export const variableMap: Record<string, string> = {
   background: '--background',
   foreground: '--foreground',
   card: '--card',
@@ -37,6 +37,103 @@ const variableMap: Record<string, string> = {
   shadowLg: '--shadow-lg',
   shadowXl: '--shadow-xl',
   shadow2xl: '--shadow-2xl',
+}
+
+/** Reverse lookup: CSS variable name → ThemeVariables key */
+export const reverseVariableMap: Record<string, string> = Object.fromEntries(
+  Object.entries(variableMap).map(([key, cssVar]) => [cssVar, key])
+)
+
+/** Keys to skip in readable CSS output (shadows are verbose, generated automatically) */
+const SHADOW_KEYS = new Set([
+  'shadow2xs',
+  'shadowXs',
+  'shadowSm',
+  'shadow',
+  'shadowMd',
+  'shadowLg',
+  'shadowXl',
+  'shadow2xl',
+])
+
+/**
+ * Generate pretty-printed CSS from minimal theme variables.
+ * Outputs `:root { }` and `.dark { }` blocks with all expanded variables.
+ */
+export function generateReadableCSS(
+  lightMinimal: MinimalThemeVariables,
+  darkMinimal: MinimalThemeVariables,
+  themeMode?: ThemeMode
+): string {
+  const parts: string[] = []
+
+  if (themeMode !== 'dark') {
+    const lightVars = expandTheme(lightMinimal, { mode: 'light' })
+    parts.push(formatCssBlock(':root', lightVars))
+  }
+
+  if (themeMode !== 'light') {
+    const darkVars = expandTheme(darkMinimal, { mode: 'dark' })
+    parts.push(formatCssBlock('.dark', darkVars))
+  }
+
+  return parts.join('\n\n') + '\n'
+}
+
+function formatCssBlock(selector: string, vars: ThemeVariables): string {
+  const lines: string[] = [`${selector} {`]
+
+  for (const [key, cssVar] of Object.entries(variableMap)) {
+    if (SHADOW_KEYS.has(key)) continue
+    const value = vars[key as keyof ThemeVariables]
+    if (value) {
+      lines.push(`  ${cssVar}: ${value};`)
+    }
+  }
+
+  // Add font-family rule after variables if font is set
+  if (vars.fontSans) {
+    lines.push(`  font-family: ${vars.fontSans};`)
+  }
+
+  lines.push('}')
+  return lines.join('\n')
+}
+
+/**
+ * Convert parsed CSS variables back to MinimalThemeVariables.
+ * Takes a map like { '--primary': 'oklch(...)' } and returns { primary: 'oklch(...)' }.
+ */
+export function parseCssToMinimal(cssVars: Record<string, string>): Partial<MinimalThemeVariables> {
+  const result: Record<string, string> = {}
+
+  for (const [cssVar, value] of Object.entries(cssVars)) {
+    const key = reverseVariableMap[cssVar]
+    if (key) {
+      result[key] = value
+    }
+  }
+
+  return result as Partial<MinimalThemeVariables>
+}
+
+/**
+ * Replace a CSS variable's value in a CSS string.
+ * Handles the variable in all blocks (:root, .dark).
+ * For --font-sans, also updates the font-family rule if present.
+ */
+export function replaceCssVar(css: string, varName: string, newValue: string): string {
+  // Escape the varName for regex (handles -- prefix)
+  const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`(${escaped}\\s*:\\s*)([^;]+)(;)`, 'g')
+  let result = css.replace(pattern, `$1${newValue}$3`)
+
+  // For --font-sans, also update font-family declarations
+  if (varName === '--font-sans') {
+    result = result.replace(/(font-family\s*:\s*)([^;]+)(;)/g, `$1${newValue}$3`)
+  }
+
+  return result
 }
 
 function variablesToCSS(vars: ThemeVariables): string {

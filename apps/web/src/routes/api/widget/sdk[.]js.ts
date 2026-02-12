@@ -64,26 +64,34 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
         const theme: WidgetTheme = {}
         try {
           const brandingConfig = await getBrandingConfig()
-          const brandingMode = brandingConfig.brandingMode ?? 'simple'
           const themeMode = brandingConfig.themeMode ?? 'user'
 
           theme.themeMode = themeMode
 
-          if (brandingMode === 'advanced') {
-            const { getCustomCss } = await import('@/lib/server/domains/settings/settings.service')
-            const customCss = await getCustomCss()
-            Object.assign(theme, extractThemeFromCss(customCss))
-          } else {
-            const { oklchToHex } = await import('@/lib/shared/theme/colors')
-            const light = brandingConfig.light
-            const dark = brandingConfig.dark
-            if (light?.primary) theme.lightPrimary = oklchToHex(light.primary)
-            if (light?.primaryForeground)
-              theme.lightPrimaryForeground = oklchToHex(light.primaryForeground)
-            if (dark?.primary) theme.darkPrimary = oklchToHex(dark.primary)
-            if (dark?.primaryForeground)
-              theme.darkPrimaryForeground = oklchToHex(dark.primaryForeground)
-            if (light?.radius) theme.radius = light.radius
+          // Read from structured theme config
+          const { oklchToHex } = await import('@/lib/shared/theme/colors')
+          const light = brandingConfig.light
+          const dark = brandingConfig.dark
+          if (light?.primary) theme.lightPrimary = oklchToHex(light.primary)
+          if (light?.primaryForeground)
+            theme.lightPrimaryForeground = oklchToHex(light.primaryForeground)
+          if (dark?.primary) theme.darkPrimary = oklchToHex(dark.primary)
+          if (dark?.primaryForeground)
+            theme.darkPrimaryForeground = oklchToHex(dark.primaryForeground)
+          if (light?.radius) theme.radius = light.radius
+
+          // Custom CSS overrides (if any)
+          const { getCustomCss } = await import('@/lib/server/domains/settings/settings.service')
+          const customCss = await getCustomCss()
+          if (customCss) {
+            const cssOverrides = extractThemeFromCss(customCss)
+            if (cssOverrides.lightPrimary) theme.lightPrimary = cssOverrides.lightPrimary
+            if (cssOverrides.lightPrimaryForeground)
+              theme.lightPrimaryForeground = cssOverrides.lightPrimaryForeground
+            if (cssOverrides.darkPrimary) theme.darkPrimary = cssOverrides.darkPrimary
+            if (cssOverrides.darkPrimaryForeground)
+              theme.darkPrimaryForeground = cssOverrides.darkPrimaryForeground
+            if (cssOverrides.radius) theme.radius = cssOverrides.radius
           }
         } catch {
           // Fall back to SDK defaults

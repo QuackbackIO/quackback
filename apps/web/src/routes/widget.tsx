@@ -18,20 +18,18 @@ export const Route = createFileRoute('/widget')({
     const brandingData = settings.brandingData ?? null
     const brandingConfig = settings.brandingConfig ?? {}
     const customCss = settings.customCss ?? ''
-    const brandingMode = brandingConfig.brandingMode ?? 'simple'
     const themeMode = brandingConfig.themeMode ?? 'user'
 
-    const hasThemeConfig = brandingConfig.preset || brandingConfig.light || brandingConfig.dark
-    const themeStyles =
-      brandingMode === 'simple' && hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
+    const hasThemeConfig = brandingConfig.light || brandingConfig.dark
+    const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
 
     return {
       org,
       brandingData,
       themeMode,
       themeStyles,
-      customCss: brandingMode === 'advanced' ? customCss : '',
-      googleFontsUrl: brandingMode === 'simple' ? getGoogleFontsUrl(brandingConfig) : null,
+      customCss,
+      googleFontsUrl: getGoogleFontsUrl(brandingConfig),
     }
   },
   // Force theme via meta tag so the root's systemThemeScript applies it
