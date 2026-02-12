@@ -1,10 +1,6 @@
 import { config } from '@/lib/server/config'
 
-const DEFAULT_ENDPOINT = 'https://telemetry.quackback.io/v1/ping'
-
-export function getTelemetryEndpoint(): string {
-  return config.telemetryEndpoint ?? DEFAULT_ENDPOINT
-}
+export const TELEMETRY_ENDPOINT = 'https://telemetry.quackback.io/v1/ping'
 
 export function isEnvTelemetryEnabled(): boolean {
   // DO_NOT_TRACK is a standard env var (https://consoledonottrack.com/)

@@ -89,7 +89,6 @@ const configSchema = z.object({
 
   // Telemetry (optional)
   telemetryEnabled: envBoolean.default(true),
-  telemetryEndpoint: z.string().url().optional(),
 })
 
 type Config = z.infer<typeof configSchema>
@@ -138,7 +137,6 @@ function buildConfigFromEnv(): unknown {
 
     // Telemetry
     telemetryEnabled: process.env.TELEMETRY_ENABLED,
-    telemetryEndpoint: process.env.TELEMETRY_ENDPOINT,
   }
 }
 
@@ -266,9 +264,6 @@ export const config = {
   // Telemetry
   get telemetryEnabled() {
     return loadConfig().telemetryEnabled
-  },
-  get telemetryEndpoint() {
-    return loadConfig().telemetryEndpoint
   },
 
   // Convenience
