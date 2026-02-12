@@ -72,7 +72,7 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 
 ### One-Click Deploy
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/bcnu9a)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/quackback?referralCode=ez8Slg&utm_source=github&utm_medium=readme&utm_campaign=deploy-button)
 
 ### Docker
 
