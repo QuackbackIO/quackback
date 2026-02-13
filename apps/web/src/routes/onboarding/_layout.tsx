@@ -37,55 +37,68 @@ function OnboardingHeader() {
   const currentPath = location.pathname
   const currentStepIndex = ONBOARDING_STEPS.findIndex((s) => s.path === currentPath)
 
-  // Show step indicator on main setup steps (usecase, workspace, boards)
   const showSteps = currentStepIndex !== -1
 
   return (
-    <div className="mb-10">
-      {/* Logo - always visible */}
-      <div className="flex items-center justify-center gap-2 mb-6">
+    <div className="flex flex-col items-center">
+      {/* Logo */}
+      <div className="flex items-center justify-center gap-2 mb-8">
         <img src="/logo.png" alt="Quackback" width={32} height={32} />
         <span className="text-xl font-bold">Quackback</span>
       </div>
 
-      {/* Step indicator container - fixed height to prevent layout jumps */}
-      <div className="h-7">
-        {showSteps && (
-          <div className="flex items-center justify-center gap-3">
+      {/* Stepper */}
+      {showSteps && (
+        <div className="relative flex items-center w-full max-w-md mb-2">
+          {/* Background line */}
+          <div className="absolute top-3.5 left-0 right-0 h-px bg-border" />
+
+          {/* Progress line (filled portion) */}
+          {currentStepIndex > 0 && (
+            <div
+              className="absolute top-3.5 left-0 h-px bg-primary transition-all duration-500"
+              style={{
+                width: `${(currentStepIndex / (ONBOARDING_STEPS.length - 1)) * 100}%`,
+              }}
+            />
+          )}
+
+          {/* Step circles + labels */}
+          <div className="relative flex w-full justify-between">
             {ONBOARDING_STEPS.map((step, index) => {
               const isCompleted = index < currentStepIndex
               const isCurrent = index === currentStepIndex
 
               return (
-                <div key={step.path} className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`
-                        flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium transition-colors
-                        ${isCompleted ? 'bg-primary text-primary-foreground' : ''}
-                        ${isCurrent ? 'bg-primary text-primary-foreground' : ''}
-                        ${!isCompleted && !isCurrent ? 'bg-muted text-muted-foreground' : ''}
-                      `}
-                    >
-                      {isCompleted ? <CheckIcon className="h-3.5 w-3.5" /> : index + 1}
-                    </div>
-                    <span
-                      className={`text-sm ${isCurrent ? 'text-foreground font-medium' : 'text-muted-foreground'}`}
-                    >
-                      {step.label}
-                    </span>
+                <div key={step.path} className="flex flex-col items-center gap-2">
+                  <div
+                    className={`
+                      flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold
+                      transition-all duration-300
+                      ${isCompleted ? 'bg-primary text-primary-foreground' : ''}
+                      ${isCurrent ? 'bg-primary text-primary-foreground ring-[3px] ring-primary/25 shadow-[0_0_12px_rgba(255,212,59,0.3)]' : ''}
+                      ${!isCompleted && !isCurrent ? 'border border-border bg-background text-muted-foreground' : ''}
+                    `}
+                  >
+                    {isCompleted ? <CheckIcon className="h-3.5 w-3.5" /> : index + 1}
                   </div>
-                  {index < ONBOARDING_STEPS.length - 1 && (
-                    <div
-                      className={`h-px w-8 ${index < currentStepIndex ? 'bg-primary' : 'bg-border'}`}
-                    />
-                  )}
+                  <span
+                    className={`text-xs transition-colors duration-300 ${
+                      isCurrent
+                        ? 'text-foreground font-medium'
+                        : isCompleted
+                          ? 'text-muted-foreground'
+                          : 'text-muted-foreground/60'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
                 </div>
               )
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -104,10 +117,17 @@ function OnboardingLayout() {
         }}
       />
 
-      <main className="relative flex min-h-screen items-center justify-center px-4 py-16">
-        <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <main className="relative flex min-h-screen flex-col px-4">
+        {/* Zone 1: Header — pinned near top */}
+        <div className="shrink-0 pt-20">
           <OnboardingHeader />
-          <Outlet />
+        </div>
+
+        {/* Zone 2: Content — flows below header, top-aligned */}
+        <div className="flex flex-1 items-start justify-center pb-16 pt-10">
+          <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>
