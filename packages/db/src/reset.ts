@@ -73,20 +73,37 @@ async function reset() {
   console.log('Resetting all services...\n')
   console.log('WARNING: This will delete all data!\n')
 
-  // Stop and remove containers using docker compose down
-  console.log('Stopping and removing containers...')
-  await $`docker compose down --remove-orphans`.quiet().nothrow()
+  // Stop and remove containers and volumes
+  console.log('Stopping and removing containers and volumes...')
+  await $`docker compose down --remove-orphans --volumes`.quiet().nothrow()
 
   // Force remove containers if they still exist
-  await $`docker rm -f quackback-db`.quiet().nothrow()
+  await $`docker rm -f quackback-db quackback-minio quackback-dragonfly`.quiet().nothrow()
 
-  // Remove volumes (Docker prefixes with project directory name)
-  console.log('Removing volumes...')
-  await $`docker volume rm quackback_postgres_data`.quiet().nothrow()
+  // Wait for ports to be released
+  console.log('Waiting for ports to be released...')
+  await Bun.sleep(2000)
 
-  // Recreate containers
+  // Clear any other containers occupying our ports
+  for (const port of [5432, 9000, 9001, 6379]) {
+    const result = await $`docker ps --format '{{.ID}} {{.Names}}' --filter publish=${port}`
+      .quiet()
+      .nothrow()
+    const lines = result.stdout.toString().trim()
+    if (lines) {
+      for (const line of lines.split('\n')) {
+        const [id, name] = line.split(' ')
+        if (name && !name.startsWith('quackback-')) {
+          console.log(`  Stopping ${name} (port ${port})...`)
+          await $`docker stop ${id}`.quiet().nothrow()
+        }
+      }
+    }
+  }
+
+  // Recreate all containers
   console.log('Starting fresh containers...')
-  await $`docker compose up -d postgres`
+  await $`docker compose up -d postgres minio minio-init dragonfly`
 
   // Give containers a moment to initialize
   console.log('Waiting for containers to initialize...')
@@ -120,6 +137,20 @@ async function reset() {
   } else {
     console.log('✓ PostgreSQL is ready')
   }
+
+  // Wait for MinIO
+  if (!(await waitForHealthy('quackback-minio', 60))) {
+    console.error('\n❌ MinIO did not become healthy in time')
+    process.exit(1)
+  }
+  console.log('✓ MinIO is ready')
+
+  // Wait for Dragonfly
+  if (!(await waitForHealthy('quackback-dragonfly', 30))) {
+    console.error('\n❌ Dragonfly did not become healthy in time')
+    process.exit(1)
+  }
+  console.log('✓ Dragonfly is ready')
 
   console.log('\n✅ Reset complete!')
   console.log('')
