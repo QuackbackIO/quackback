@@ -98,11 +98,14 @@ type Config = z.infer<typeof configSchema>
 // =============================================================================
 
 function buildConfigFromEnv(): unknown {
+  // Empty strings → undefined so .optional() works with Docker/compose env vars
+  const env = (key: string) => process.env[key] || undefined
+
   return {
     // Core
     nodeEnv: process.env.NODE_ENV,
     baseUrl: process.env.BASE_URL,
-    port: process.env.PORT,
+    port: env('PORT'),
 
     // Database
     databaseUrl: process.env.DATABASE_URL,
@@ -114,29 +117,29 @@ function buildConfigFromEnv(): unknown {
     redisUrl: process.env.REDIS_URL,
 
     // Email
-    emailFrom: process.env.EMAIL_FROM,
-    emailSmtpHost: process.env.EMAIL_SMTP_HOST,
-    emailSmtpPort: process.env.EMAIL_SMTP_PORT,
-    emailSmtpUser: process.env.EMAIL_SMTP_USER,
-    emailSmtpPass: process.env.EMAIL_SMTP_PASS,
-    emailSmtpSecure: process.env.EMAIL_SMTP_SECURE,
-    emailResendApiKey: process.env.EMAIL_RESEND_API_KEY,
+    emailFrom: env('EMAIL_FROM'),
+    emailSmtpHost: env('EMAIL_SMTP_HOST'),
+    emailSmtpPort: env('EMAIL_SMTP_PORT'),
+    emailSmtpUser: env('EMAIL_SMTP_USER'),
+    emailSmtpPass: env('EMAIL_SMTP_PASS'),
+    emailSmtpSecure: env('EMAIL_SMTP_SECURE'),
+    emailResendApiKey: env('EMAIL_RESEND_API_KEY'),
 
     // S3
-    s3Endpoint: process.env.S3_ENDPOINT,
-    s3Bucket: process.env.S3_BUCKET,
-    s3Region: process.env.S3_REGION,
-    s3AccessKeyId: process.env.S3_ACCESS_KEY_ID,
-    s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-    s3ForcePathStyle: process.env.S3_FORCE_PATH_STYLE,
-    s3PublicUrl: process.env.S3_PUBLIC_URL,
+    s3Endpoint: env('S3_ENDPOINT'),
+    s3Bucket: env('S3_BUCKET'),
+    s3Region: env('S3_REGION'),
+    s3AccessKeyId: env('S3_ACCESS_KEY_ID'),
+    s3SecretAccessKey: env('S3_SECRET_ACCESS_KEY'),
+    s3ForcePathStyle: env('S3_FORCE_PATH_STYLE'),
+    s3PublicUrl: env('S3_PUBLIC_URL'),
 
     // AI
-    openaiApiKey: process.env.OPENAI_API_KEY,
-    openaiBaseUrl: process.env.OPENAI_BASE_URL,
+    openaiApiKey: env('OPENAI_API_KEY'),
+    openaiBaseUrl: env('OPENAI_BASE_URL'),
 
     // Telemetry
-    disableTelemetry: process.env.DISABLE_TELEMETRY,
+    disableTelemetry: env('DISABLE_TELEMETRY'),
   }
 }
 
