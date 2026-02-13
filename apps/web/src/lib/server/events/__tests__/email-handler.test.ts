@@ -9,38 +9,54 @@ vi.mock('@quackback/email', () => ({
 import { emailHook } from '../handlers/email'
 import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
 import type { EmailTarget, EmailConfig } from '../hook-types'
+import type { EventData } from '../types'
 
 const mockStatusChangeEmail = vi.mocked(sendStatusChangeEmail)
 const mockNewCommentEmail = vi.mocked(sendNewCommentEmail)
 
-const baseEvent = {
+// The email handler only reads event.type, so data is irrelevant for these tests
+const statusChangedEvent = {
   id: 'evt-test',
+  type: 'post.status_changed',
   timestamp: new Date().toISOString(),
-  actor: { id: 'user_test', type: 'user' as const, name: 'Test User' },
-  data: {},
-}
+  actor: { type: 'user', displayName: 'Test User' },
+} as EventData
+
+const commentCreatedEvent = {
+  id: 'evt-test',
+  type: 'comment.created',
+  timestamp: new Date().toISOString(),
+  actor: { type: 'user', displayName: 'Test User' },
+} as EventData
+
+const postCreatedEvent = {
+  id: 'evt-test',
+  type: 'post.created',
+  timestamp: new Date().toISOString(),
+  actor: { type: 'user', displayName: 'Test User' },
+} as EventData
 
 const baseTarget: EmailTarget = {
   email: 'user@example.com',
   unsubscribeUrl: 'https://example.com/unsubscribe',
 }
 
-const baseConfig: EmailConfig = {
+const baseConfig = {
   workspaceName: 'TestWorkspace',
   postUrl: 'https://example.com/post/1',
   postTitle: 'Test Post',
-}
+} satisfies EmailConfig
 
 describe('emailHook', () => {
   describe('when email is configured (sent: true)', () => {
     it('sends status change email and returns success', async () => {
       mockStatusChangeEmail.mockResolvedValue({ sent: true })
 
-      const result = await emailHook.run(
-        { ...baseEvent, type: 'post.status_changed' },
-        baseTarget,
-        { ...baseConfig, previousStatus: 'open', newStatus: 'in_progress' }
-      )
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'in_progress',
+      })
 
       expect(result).toEqual({ success: true })
       expect(mockStatusChangeEmail).toHaveBeenCalledWith({
@@ -57,7 +73,7 @@ describe('emailHook', () => {
     it('sends new comment email and returns success', async () => {
       mockNewCommentEmail.mockResolvedValue({ sent: true })
 
-      const result = await emailHook.run({ ...baseEvent, type: 'comment.created' }, baseTarget, {
+      const result = await emailHook.run(commentCreatedEvent, baseTarget, {
         ...baseConfig,
         commenterName: 'Commenter',
         commentPreview: 'Hello',
@@ -82,11 +98,11 @@ describe('emailHook', () => {
     it('returns success without error for status change', async () => {
       mockStatusChangeEmail.mockResolvedValue({ sent: false })
 
-      const result = await emailHook.run(
-        { ...baseEvent, type: 'post.status_changed' },
-        baseTarget,
-        { ...baseConfig, previousStatus: 'open', newStatus: 'closed' }
-      )
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'closed',
+      })
 
       expect(result).toEqual({ success: true })
       expect(result.shouldRetry).toBeUndefined()
@@ -95,7 +111,7 @@ describe('emailHook', () => {
     it('returns success without error for new comment', async () => {
       mockNewCommentEmail.mockResolvedValue({ sent: false })
 
-      const result = await emailHook.run({ ...baseEvent, type: 'comment.created' }, baseTarget, {
+      const result = await emailHook.run(commentCreatedEvent, baseTarget, {
         ...baseConfig,
         commenterName: 'Commenter',
         commentPreview: 'Hi',
@@ -111,11 +127,11 @@ describe('emailHook', () => {
       const error = Object.assign(new Error('Connection refused'), { code: 'ECONNREFUSED' })
       mockStatusChangeEmail.mockRejectedValue(error)
 
-      const result = await emailHook.run(
-        { ...baseEvent, type: 'post.status_changed' },
-        baseTarget,
-        { ...baseConfig, previousStatus: 'open', newStatus: 'closed' }
-      )
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'closed',
+      })
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Connection refused')
@@ -125,7 +141,7 @@ describe('emailHook', () => {
     it('returns failure without retry for non-retryable errors', async () => {
       mockNewCommentEmail.mockRejectedValue(new Error('Invalid template'))
 
-      const result = await emailHook.run({ ...baseEvent, type: 'comment.created' }, baseTarget, {
+      const result = await emailHook.run(commentCreatedEvent, baseTarget, {
         ...baseConfig,
         commenterName: 'X',
         commentPreview: 'Y',
@@ -138,11 +154,7 @@ describe('emailHook', () => {
   })
 
   it('returns failure for unsupported event types', async () => {
-    const result = await emailHook.run(
-      { ...baseEvent, type: 'post.created' },
-      baseTarget,
-      baseConfig
-    )
+    const result = await emailHook.run(postCreatedEvent, baseTarget, baseConfig)
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('Unsupported event type')
