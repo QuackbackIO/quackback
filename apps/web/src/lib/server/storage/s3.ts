@@ -170,27 +170,19 @@ async function getS3Client(): Promise<S3ClientInstance> {
  * Build a public URL for a storage key based on the S3 configuration.
  *
  * Priority:
- * 1. S3_PUBLIC_URL — explicit CDN or custom domain
- * 2. S3_ENDPOINT — construct from the S3-compatible endpoint
- * 3. BASE_URL/api/storage — presigned URL redirect (works with any private bucket)
+ * 1. S3_PUBLIC_URL — explicit CDN, custom domain, or proxy URL
+ * 2. BASE_URL/api/storage — presigned URL redirect (works with any bucket)
+ *
+ * The /api/storage route generates presigned GET URLs and returns a 302 redirect,
+ * so it works with both public and private buckets (e.g., Railway Buckets).
+ * Users who want direct endpoint URLs can set S3_PUBLIC_URL to their endpoint.
  */
 function buildPublicUrl(s3Config: S3Config, key: string): string {
   if (s3Config.publicUrl) {
     return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
   }
 
-  if (s3Config.endpoint) {
-    if (s3Config.forcePathStyle) {
-      return `${s3Config.endpoint}/${s3Config.bucket}/${key}`
-    }
-    // Virtual-hosted style (bucket in subdomain)
-    const url = new URL(s3Config.endpoint)
-    url.hostname = `${s3Config.bucket}.${url.hostname}`
-    url.pathname = `/${key}`
-    return url.toString()
-  }
-
-  // Fall back to the presigned URL redirect route
+  // Default to the presigned URL redirect route — works with any bucket
   return `${config.baseUrl.replace(/\/$/, '')}/api/storage/${key}`
 }
 
