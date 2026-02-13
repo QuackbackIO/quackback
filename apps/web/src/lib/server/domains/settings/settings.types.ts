@@ -48,7 +48,9 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
  * 'email' controls email OTP; all other keys are Better Auth provider IDs.
  */
 export interface PortalAuthMethods {
-  /** Whether email OTP authentication is enabled (defaults to true for backwards compatibility) */
+  /** Whether password authentication is enabled (defaults to true) */
+  password?: boolean
+  /** Whether email OTP authentication is enabled (defaults to false for new installs) */
   email?: boolean
   /** Dynamic OAuth provider toggles keyed by provider ID (github, google, discord, etc.) */
   [providerId: string]: boolean | undefined
@@ -90,7 +92,8 @@ export interface PortalConfig {
  */
 export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   oauth: {
-    email: true,
+    password: true,
+    email: false,
     google: true,
     github: true,
   },
@@ -248,29 +251,6 @@ export interface UpdateWidgetConfigInput {
   position?: 'bottom-right' | 'bottom-left'
   buttonText?: string
   identifyVerification?: boolean
-}
-
-// =============================================================================
-// Telemetry Configuration
-// =============================================================================
-
-/**
- * Telemetry configuration
- * Controls anonymous phone-home usage statistics
- */
-export interface TelemetryConfig {
-  enabled: boolean
-}
-
-export const DEFAULT_TELEMETRY_CONFIG: TelemetryConfig = {
-  enabled: true,
-}
-
-/**
- * Input for updating telemetry config (partial update)
- */
-export interface UpdateTelemetryConfigInput {
-  enabled?: boolean
 }
 
 // =============================================================================

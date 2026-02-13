@@ -13,7 +13,6 @@ import {
   BoltIcon,
   CommandLineIcon,
   ChatBubbleLeftRightIcon,
-  SignalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
@@ -29,10 +28,6 @@ interface NavSection {
 }
 
 const navSections: NavSection[] = [
-  {
-    label: 'General',
-    items: [{ label: 'Telemetry', to: '/admin/settings/telemetry', icon: SignalIcon }],
-  },
   {
     label: 'Workspace',
     items: [

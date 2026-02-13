@@ -14,15 +14,12 @@ import type {
   WidgetConfig,
   PublicWidgetConfig,
   UpdateWidgetConfigInput,
-  TelemetryConfig,
-  UpdateTelemetryConfigInput,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  DEFAULT_TELEMETRY_CONFIG,
 } from './settings.types'
 import { randomBytes } from 'crypto'
 
@@ -82,24 +79,15 @@ async function getConfiguredAuthTypes(): Promise<Set<string>> {
   return getConfiguredIntegrationTypes()
 }
 
-function filterAdminOAuth(
+function filterOAuthByCredentials(
   oauth: Record<string, boolean | undefined>,
-  configuredTypes: Set<string>
+  configuredTypes: Set<string>,
+  passthroughKeys: string[]
 ): Record<string, boolean | undefined> {
+  const passthrough = new Set(passthroughKeys)
   const filtered: Record<string, boolean | undefined> = {}
   for (const [key, enabled] of Object.entries(oauth)) {
-    filtered[key] = enabled && configuredTypes.has(`auth_${key}`)
-  }
-  return filtered
-}
-
-function filterPortalOAuth(
-  oauth: Record<string, boolean | undefined>,
-  configuredTypes: Set<string>
-): Record<string, boolean | undefined> {
-  const filtered: Record<string, boolean | undefined> = {}
-  for (const [key, enabled] of Object.entries(oauth)) {
-    if (key === 'email') {
+    if (passthrough.has(key)) {
       filtered[key] = enabled
     } else {
       filtered[key] = enabled && configuredTypes.has(`auth_${key}`)
@@ -264,36 +252,6 @@ export async function regenerateWidgetSecret(): Promise<string> {
     return secret
   } catch (error) {
     wrapDbError('regenerate widget secret', error)
-  }
-}
-
-// ============================================================================
-// Telemetry Configuration
-// ============================================================================
-
-export async function getTelemetryConfig(): Promise<TelemetryConfig> {
-  try {
-    const org = await requireSettings()
-    return parseJsonConfig(org.telemetryConfig, DEFAULT_TELEMETRY_CONFIG)
-  } catch (error) {
-    wrapDbError('fetch telemetry config', error)
-  }
-}
-
-export async function updateTelemetryConfig(
-  input: UpdateTelemetryConfigInput
-): Promise<TelemetryConfig> {
-  try {
-    const org = await requireSettings()
-    const existing = parseJsonConfig(org.telemetryConfig, DEFAULT_TELEMETRY_CONFIG)
-    const updated = deepMerge(existing, input as Partial<TelemetryConfig>)
-    await db
-      .update(settings)
-      .set({ telemetryConfig: JSON.stringify(updated) })
-      .where(eq(settings.id, org.id))
-    return updated
-  } catch (error) {
-    wrapDbError('update telemetry config', error)
   }
 }
 
@@ -543,7 +501,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
 
     const configuredTypes = await getConfiguredAuthTypes()
     return {
-      oauth: filterAdminOAuth(authConfig.oauth, configuredTypes),
+      oauth: filterOAuthByCredentials(authConfig.oauth, configuredTypes, ['password']),
       openSignup: authConfig.openSignup,
     }
   } catch (error) {
@@ -558,7 +516,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 
     const configuredTypes = await getConfiguredAuthTypes()
     return {
-      oauth: filterPortalOAuth(portalConfig.oauth, configuredTypes),
+      oauth: filterOAuthByCredentials(portalConfig.oauth, configuredTypes, ['email', 'password']),
       features: portalConfig.features,
     }
   } catch (error) {
@@ -609,8 +567,13 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
 
     const configuredTypes = await getConfiguredAuthTypes()
-    const filteredAuthOAuth = filterAdminOAuth(authConfig.oauth, configuredTypes)
-    const filteredPortalOAuth = filterPortalOAuth(portalConfig.oauth, configuredTypes)
+    const filteredAuthOAuth = filterOAuthByCredentials(authConfig.oauth, configuredTypes, [
+      'password',
+    ])
+    const filteredPortalOAuth = filterOAuthByCredentials(portalConfig.oauth, configuredTypes, [
+      'email',
+      'password',
+    ])
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
