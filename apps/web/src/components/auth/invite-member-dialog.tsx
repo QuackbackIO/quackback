@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import { CheckCircleIcon, LinkIcon } from '@heroicons/react/24/solid'
 import { inviteSchema, type InviteInput } from '@/lib/shared/schemas/auth'
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
+import { CopyButton } from '@/components/shared/copy-button'
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ interface InviteMemberDialogProps {
 export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
 
   const form = useForm<InviteInput>({
     resolver: standardSchemaResolver(inviteSchema),
@@ -53,7 +55,7 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
     setError('')
 
     try {
-      await sendInvitationFn({
+      const result = await sendInvitationFn({
         data: {
           email: data.email,
           name: data.name || undefined,
@@ -62,12 +64,17 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
       })
 
       setSuccess(true)
-      form.reset()
       onSuccess?.()
-      setTimeout(() => {
-        setSuccess(false)
-        onClose()
-      }, 2000)
+
+      if (result.emailSent === false && result.inviteLink) {
+        setInviteLink(result.inviteLink)
+      } else {
+        form.reset()
+        setTimeout(() => {
+          setSuccess(false)
+          onClose()
+        }, 2000)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send invitation')
     }
@@ -78,6 +85,7 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
       form.reset()
       setError('')
       setSuccess(false)
+      setInviteLink(null)
       onClose()
     }
   }
@@ -92,12 +100,31 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
         {success ? (
           <div className="py-8 flex flex-col items-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
-              <CheckCircleIcon className="h-6 w-6 text-primary" />
+              {inviteLink ? (
+                <LinkIcon className="h-6 w-6 text-primary" />
+              ) : (
+                <CheckCircleIcon className="h-6 w-6 text-primary" />
+              )}
             </div>
-            <div className="text-lg font-semibold text-foreground">Invitation sent!</div>
-            <p className="mt-2 text-sm text-muted-foreground text-center">
-              {form.getValues('email')} will receive an email with instructions to join.
-            </p>
+            {inviteLink ? (
+              <>
+                <div className="text-lg font-semibold text-foreground">Invitation created</div>
+                <p className="mt-2 text-sm text-muted-foreground text-center">
+                  Email is not configured. Share this link with {form.getValues('email')}:
+                </p>
+                <div className="mt-3 flex w-full items-center gap-2 rounded-lg border bg-muted/50 p-2">
+                  <code className="flex-1 truncate text-xs">{inviteLink}</code>
+                  <CopyButton value={inviteLink} variant="ghost" size="sm" />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-semibold text-foreground">Invitation sent!</div>
+                <p className="mt-2 text-sm text-muted-foreground text-center">
+                  {form.getValues('email')} will receive an email with instructions to join.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <Form {...form}>

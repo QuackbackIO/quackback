@@ -23,7 +23,7 @@ interface PortalAuthSettingsProps {
   initialConfig: {
     oauth: PortalAuthMethods
   }
-  credentialStatus: Record<string, boolean>
+  credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
 }
 
 export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAuthSettingsProps) {
@@ -61,6 +61,8 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
     const query = search.toLowerCase()
     return sorted.filter((p) => p.name.toLowerCase().includes(query))
   }, [credentialStatus, search])
+
+  const emailConfigured = credentialStatus._emailConfigured !== false
 
   // Count enabled auth methods to prevent disabling the last one
   const enabledMethodCount = Object.values(oauthState).filter(Boolean).length
@@ -161,14 +163,18 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
                   <Label htmlFor="email-toggle" className="font-medium cursor-pointer">
                     Email OTP
                   </Label>
-                  {isLastEnabledMethod('email') && (
+                  {(!emailConfigured || isLastEnabledMethod('email')) && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>At least one authentication method must be enabled</p>
+                          <p>
+                            {!emailConfigured
+                              ? 'Requires email to be configured (SMTP or Resend)'
+                              : 'At least one authentication method must be enabled'}
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -183,7 +189,7 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
               id="email-toggle"
               checked={oauthState.email ?? false}
               onCheckedChange={(checked) => handleToggle('email', checked)}
-              disabled={saving || isPending || isLastEnabledMethod('email')}
+              disabled={saving || isPending || !emailConfigured || isLastEnabledMethod('email')}
               aria-label="Email OTP authentication"
             />
           </div>

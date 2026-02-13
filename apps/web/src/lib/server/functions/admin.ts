@@ -695,7 +695,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       const callbackURL = `/accept-invitation/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(email, callbackURL, portalUrl)
 
-      await sendInvitationEmail({
+      const result = await sendInvitationEmail({
         to: email,
         invitedByName: auth.user.name,
         inviteeName: data.name || undefined,
@@ -703,8 +703,14 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         inviteLink,
       })
 
-      console.log(`[fn:admin] sendInvitationFn: sent id=${invitationId}`)
-      return { invitationId }
+      console.log(
+        `[fn:admin] sendInvitationFn: ${result.sent ? 'sent' : 'created (email not configured)'} id=${invitationId}`
+      )
+      return {
+        invitationId,
+        emailSent: result.sent,
+        inviteLink: !result.sent ? inviteLink : undefined,
+      }
     } catch (error) {
       console.error(`[fn:admin] ❌ sendInvitationFn failed:`, error)
       throw error
@@ -770,7 +776,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         portalUrl
       )
 
-      await sendInvitationEmail({
+      const result = await sendInvitationEmail({
         to: invitationRecord.email,
         invitedByName: auth.user.name,
         inviteeName: invitationRecord.name || undefined,
@@ -783,8 +789,14 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         .set({ lastSentAt: new Date() })
         .where(eq(invitation.id, invitationId))
 
-      console.log(`[fn:admin] resendInvitationFn: resent`)
-      return { invitationId }
+      console.log(
+        `[fn:admin] resendInvitationFn: ${result.sent ? 'resent' : 'regenerated (email not configured)'}`
+      )
+      return {
+        invitationId,
+        emailSent: result.sent,
+        inviteLink: !result.sent ? inviteLink : undefined,
+      }
     } catch (error) {
       console.error(`[fn:admin] ❌ resendInvitationFn failed:`, error)
       throw error

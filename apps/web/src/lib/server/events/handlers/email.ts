@@ -15,8 +15,10 @@ export const emailHook: HookHandler = {
     console.log(`[Email] Sending ${event.type} notification to ${email}`)
 
     try {
+      let result: { sent: boolean }
+
       if (event.type === 'post.status_changed') {
-        await sendStatusChangeEmail({
+        result = await sendStatusChangeEmail({
           to: email,
           postTitle: cfg.postTitle,
           postUrl: cfg.postUrl,
@@ -26,7 +28,7 @@ export const emailHook: HookHandler = {
           unsubscribeUrl,
         })
       } else if (event.type === 'comment.created') {
-        await sendNewCommentEmail({
+        result = await sendNewCommentEmail({
           to: email,
           postTitle: cfg.postTitle,
           postUrl: cfg.postUrl,
@@ -40,7 +42,12 @@ export const emailHook: HookHandler = {
         return { success: false, error: `Unsupported event type: ${event.type}` }
       }
 
-      console.log(`[Email] ✅ Sent to ${email}`)
+      if (!result.sent) {
+        console.log(`[Email] Skipped (not configured) for ${email}`)
+        return { success: true }
+      }
+
+      console.log(`[Email] Sent to ${email}`)
       return { success: true }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'

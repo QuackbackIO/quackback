@@ -54,7 +54,7 @@ async function createAuth() {
     oauthConsent: oauthConsentTable,
     eq,
   } = await import('@/lib/server/db')
-  const { sendSigninCodeEmail } = await import('@quackback/email')
+  const { sendSigninCodeEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
@@ -200,6 +200,11 @@ async function createAuth() {
       // Email OTP plugin for passwordless authentication (used by portal users)
       emailOTP({
         async sendVerificationOTP({ email, otp }) {
+          if (!isEmailConfigured()) {
+            console.warn(
+              `[auth] Email OTP requested for ${email} but email is not configured. OTP will not be delivered.`
+            )
+          }
           await sendSigninCodeEmail({ to: email, code: otp })
         },
         otpLength: 6,

@@ -102,6 +102,11 @@ function wrapDbError(operation: string, error: unknown): never {
   throw new InternalError('DATABASE_ERROR', `Failed to ${operation}: ${message}`, error)
 }
 
+async function getPortalPassthroughKeys(): Promise<string[]> {
+  const { isEmailConfigured } = await import('@quackback/email')
+  return isEmailConfigured() ? ['email', 'password'] : ['password']
+}
+
 export async function getAuthConfig(): Promise<AuthConfig> {
   try {
     const org = await requireSettings()
@@ -514,9 +519,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
 
-    const configuredTypes = await getConfiguredAuthTypes()
+    const [configuredTypes, passthroughKeys] = await Promise.all([
+      getConfiguredAuthTypes(),
+      getPortalPassthroughKeys(),
+    ])
     return {
-      oauth: filterOAuthByCredentials(portalConfig.oauth, configuredTypes, ['email', 'password']),
+      oauth: filterOAuthByCredentials(portalConfig.oauth, configuredTypes, passthroughKeys),
       features: portalConfig.features,
     }
   } catch (error) {
@@ -566,14 +574,18 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
 
-    const configuredTypes = await getConfiguredAuthTypes()
+    const [configuredTypes, portalPassthroughKeys] = await Promise.all([
+      getConfiguredAuthTypes(),
+      getPortalPassthroughKeys(),
+    ])
     const filteredAuthOAuth = filterOAuthByCredentials(authConfig.oauth, configuredTypes, [
       'password',
     ])
-    const filteredPortalOAuth = filterOAuthByCredentials(portalConfig.oauth, configuredTypes, [
-      'email',
-      'password',
-    ])
+    const filteredPortalOAuth = filterOAuthByCredentials(
+      portalConfig.oauth,
+      configuredTypes,
+      portalPassthroughKeys
+    )
 
     const brandingData: SettingsBrandingData = {
       name: org.name,

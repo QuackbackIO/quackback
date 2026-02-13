@@ -42,7 +42,13 @@ function getResendApiKey(): string | undefined {
 let smtpTransporter: Transporter | null = null
 let resendClient: Resend | null = null
 
+export type EmailResult = { sent: boolean }
+
 type EmailProvider = 'smtp' | 'resend' | 'console'
+
+export function isEmailConfigured(): boolean {
+  return getProvider() !== 'console'
+}
 
 function getProvider(): EmailProvider {
   if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
@@ -91,7 +97,7 @@ async function sendEmail(options: {
   to: string
   subject: string
   react: React.ReactElement
-}): Promise<void> {
+}): Promise<EmailResult> {
   const provider = getProvider()
 
   if (provider === 'smtp') {
@@ -119,7 +125,7 @@ async function sendEmail(options: {
       )
       throw error
     }
-    return
+    return { sent: true }
   }
 
   if (provider === 'resend') {
@@ -134,10 +140,11 @@ async function sendEmail(options: {
       throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
     }
     console.log(`[Email] Sent via Resend to ${options.to}, id: ${result.data?.id}`)
-    return
+    return { sent: true }
   }
 
   // Console mode - caller handles logging
+  return { sent: false }
 }
 
 // ============================================================================
@@ -152,7 +159,7 @@ interface SendInvitationParams {
   inviteLink: string
 }
 
-export async function sendInvitationEmail(params: SendInvitationParams) {
+export async function sendInvitationEmail(params: SendInvitationParams): Promise<EmailResult> {
   const { to, invitedByName, inviteeName, workspaceName, inviteLink } = params
 
   if (getProvider() === 'console') {
@@ -165,10 +172,10 @@ export async function sendInvitationEmail(params: SendInvitationParams) {
     console.log(`│ Workspace: ${workspaceName}`)
     console.log(`│ Invite link: ${inviteLink}`)
     console.log('└────────────────────────────────────────────────────────────\n')
-    return
+    return { sent: false }
   }
 
-  await sendEmail({
+  return sendEmail({
     to,
     subject: `You've been invited to join ${workspaceName} on Quackback`,
     react: InvitationEmail({
@@ -191,7 +198,7 @@ interface SendWelcomeParams {
   dashboardUrl: string
 }
 
-export async function sendWelcomeEmail(params: SendWelcomeParams) {
+export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<EmailResult> {
   const { to, name, workspaceName, dashboardUrl } = params
 
   if (getProvider() === 'console') {
@@ -203,10 +210,10 @@ export async function sendWelcomeEmail(params: SendWelcomeParams) {
     console.log(`│ Workspace: ${workspaceName}`)
     console.log(`│ Dashboard: ${dashboardUrl}`)
     console.log('└────────────────────────────────────────────────────────────\n')
-    return
+    return { sent: false }
   }
 
-  await sendEmail({
+  return sendEmail({
     to,
     subject: `Welcome to ${workspaceName} on Quackback!`,
     react: WelcomeEmail({ name, workspaceName, dashboardUrl }),
@@ -222,7 +229,7 @@ interface SendSigninCodeParams {
   code: string
 }
 
-export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
+export async function sendSigninCodeEmail(params: SendSigninCodeParams): Promise<EmailResult> {
   const { to, code } = params
 
   if (getProvider() === 'console') {
@@ -232,11 +239,11 @@ export async function sendSigninCodeEmail(params: SendSigninCodeParams) {
     console.log(`│ To: ${to}`)
     console.log(`│ Code: ${code}`)
     console.log('└────────────────────────────────────────────────────────────\n')
-    return
+    return { sent: false }
   }
 
   console.log(`[Email] Sending sign-in code to ${to}`)
-  await sendEmail({
+  return sendEmail({
     to,
     subject: `Your Quackback sign-in code is ${code}`,
     react: SigninCodeEmail({ code }),
@@ -257,7 +264,7 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
 }
 
-export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
+export async function sendStatusChangeEmail(params: SendStatusChangeParams): Promise<EmailResult> {
   const { to, postTitle, postUrl, previousStatus, newStatus, workspaceName, unsubscribeUrl } =
     params
 
@@ -271,12 +278,12 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams) {
     console.log(`│ URL: ${postUrl}`)
     console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
     console.log('└────────────────────────────────────────────────────────────\n')
-    return
+    return { sent: false }
   }
 
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
 
-  await sendEmail({
+  return sendEmail({
     to,
     subject: `Your feedback is now ${formattedNewStatus}!`,
     react: StatusChangeEmail({
@@ -305,7 +312,7 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
 }
 
-export async function sendNewCommentEmail(params: SendNewCommentParams) {
+export async function sendNewCommentEmail(params: SendNewCommentParams): Promise<EmailResult> {
   const {
     to,
     postTitle,
@@ -328,10 +335,10 @@ export async function sendNewCommentEmail(params: SendNewCommentParams) {
     console.log(`│ URL: ${postUrl}`)
     console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
     console.log('└────────────────────────────────────────────────────────────\n')
-    return
+    return { sent: false }
   }
 
-  await sendEmail({
+  return sendEmail({
     to,
     subject: `New comment on "${postTitle}"`,
     react: NewCommentEmail({

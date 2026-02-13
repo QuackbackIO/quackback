@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FormError } from '@/components/shared/form-error'
+import { CopyButton } from '@/components/shared/copy-button'
 import { cancelInvitationFn, resendInvitationFn } from '@/lib/server/functions/admin'
 import type { InviteId } from '@quackback/ids'
 
@@ -33,6 +34,7 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
   const [invitations, setInvitations] = useState(initialInvitations)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [inviteLinkMap, setInviteLinkMap] = useState<Record<string, string>>({})
 
   // Sync local state when prop changes (e.g., after query invalidation)
   useEffect(() => {
@@ -57,7 +59,7 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
     setError(null)
 
     try {
-      await resendInvitationFn({
+      const result = await resendInvitationFn({
         data: {
           invitationId: invitationId as InviteId,
         },
@@ -69,6 +71,10 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
           inv.id === invitationId ? { ...inv, lastSentAt: new Date().toISOString() } : inv
         )
       )
+
+      if (result.emailSent === false && result.inviteLink) {
+        setInviteLinkMap((prev) => ({ ...prev, [invitationId]: result.inviteLink! }))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend invitation')
     } finally {
@@ -122,75 +128,85 @@ export function PendingInvitations({ invitations: initialInvitations }: PendingI
           const minutesUntilResend = getTimeUntilResend(inv.lastSentAt, inv.createdAt)
           const isLoading = loadingId === inv.id
 
+          const shownInviteLink = inviteLinkMap[inv.id]
+
           return (
-            <li key={inv.id} className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                  <EnvelopeIcon className="h-5 w-5 text-muted-foreground" />
+            <li key={inv.id} className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                    <EnvelopeIcon className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{inv.name || inv.email}</p>
+                    {inv.name && <p className="text-sm text-muted-foreground">{inv.email}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Invited {formatDate(inv.createdAt)}
+                      {isExpired && <span className="text-destructive ml-1">(expired)</span>}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">{inv.name || inv.email}</p>
-                  {inv.name && <p className="text-sm text-muted-foreground">{inv.email}</p>}
-                  <p className="text-xs text-muted-foreground">
-                    Invited {formatDate(inv.createdAt)}
-                    {isExpired && <span className="text-destructive ml-1">(expired)</span>}
-                  </p>
+
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-500/10 text-amber-600 border-amber-500/30"
+                  >
+                    pending
+                  </Badge>
+                  <Badge variant="outline" className="bg-muted/50">
+                    {inv.role || 'member'}
+                  </Badge>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleResend(inv.id)}
+                          disabled={!canResendNow || isLoading}
+                          className="h-8 w-8"
+                        >
+                          {isLoading ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : minutesUntilResend ? (
+                            <ClockIcon className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ArrowPathIcon className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {getResendTooltipText(isExpired, minutesUntilResend)}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleCancel(inv.id)}
+                          disabled={isLoading}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Cancel invitation</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="bg-amber-500/10 text-amber-600 border-amber-500/30"
-                >
-                  pending
-                </Badge>
-                <Badge variant="outline" className="bg-muted/50">
-                  {inv.role || 'member'}
-                </Badge>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleResend(inv.id)}
-                        disabled={!canResendNow || isLoading}
-                        className="h-8 w-8"
-                      >
-                        {isLoading ? (
-                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                        ) : minutesUntilResend ? (
-                          <ClockIcon className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ArrowPathIcon className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {getResendTooltipText(isExpired, minutesUntilResend)}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleCancel(inv.id)}
-                        disabled={isLoading}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <XMarkIcon className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Cancel invitation</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+              {shownInviteLink && (
+                <div className="mt-2 ml-13 flex items-center gap-2 rounded-lg border bg-muted/50 p-2">
+                  <code className="flex-1 truncate text-xs">{shownInviteLink}</code>
+                  <CopyButton value={shownInviteLink} variant="ghost" size="sm" />
+                </div>
+              )}
             </li>
           )
         })}
