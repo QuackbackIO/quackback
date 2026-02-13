@@ -6,7 +6,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/.next/**'],
+    exclude: ['**/node_modules/**', '**/.next/**', '**/e2e/**', '**/.output/**'],
     // Use ts-node or vite's transformation instead of stripping
     typecheck: {
       enabled: false,
