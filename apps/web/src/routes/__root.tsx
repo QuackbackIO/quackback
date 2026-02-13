@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { lazy, Suspense, type ReactNode } from 'react'
+import { Component, lazy, Suspense, type ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import {
   Outlet,
@@ -11,10 +11,10 @@ import {
 } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
 import appCss from '../globals.css?url'
-import { cn } from '@/lib/shared/utils'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import { ThemeProvider } from '@/components/theme-provider'
+import { DefaultErrorPage } from '@/components/shared/error-page'
 
 // Lazy load devtools in development only
 const TanStackRouterDevtools = import.meta.env.DEV
@@ -73,7 +73,7 @@ const ONBOARDING_EXEMPT_PATHS = [
 ]
 
 function isOnboardingExempt(pathname: string): boolean {
-  return ONBOARDING_EXEMPT_PATHS.some((path) => pathname.startsWith(path) || pathname === path)
+  return ONBOARDING_EXEMPT_PATHS.some((path) => pathname.startsWith(path))
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -133,6 +133,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     ],
   }),
   component: RootComponent,
+  errorComponent: ({ error, reset }) => (
+    <SafeRootDocument>
+      <DefaultErrorPage error={error} reset={reset} />
+    </SafeRootDocument>
+  ),
 })
 
 function RootComponent() {
@@ -153,6 +158,39 @@ function DevtoolsWrapper() {
       <TanStackRouterDevtools position="bottom-right" />
     </Suspense>
   )
+}
+
+/**
+ * Wraps RootDocument with a fallback for when route context is unavailable
+ * (e.g. when the error occurred during beforeLoad).
+ */
+function MinimalDocument({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Quackback</title>
+        <HeadContent />
+      </head>
+      <body className="min-h-screen bg-background font-sans antialiased">{children}</body>
+    </html>
+  )
+}
+
+class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <MinimalDocument>{this.props.children}</MinimalDocument>
+    }
+    return <RootDocument>{this.props.children}</RootDocument>
+  }
 }
 
 // Non-portal routes that should never have a forced theme
@@ -176,7 +214,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
       </head>
-      <body className={cn('min-h-screen bg-background font-sans antialiased')}>
+      <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
