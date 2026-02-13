@@ -35,7 +35,7 @@ export function getOtpCode(email: string, host: string): string {
     return result.trim()
   } catch (error) {
     const err = error as { stderr?: string; message: string }
-    throw new Error(`Failed to get OTP code: ${err.stderr || err.message}`)
+    throw new Error(`Failed to get OTP code: ${err.stderr || err.message}`, { cause: error })
   }
 }
 
@@ -58,6 +58,6 @@ export function ensureTestUserHasRole(email: string, role: string = 'admin'): vo
     })
   } catch (error) {
     const err = error as { stderr?: string; message: string }
-    throw new Error(`Failed to ensure user role: ${err.stderr || err.message}`)
+    throw new Error(`Failed to ensure user role: ${err.stderr || err.message}`, { cause: error })
   }
 }

@@ -74,7 +74,10 @@ async function postMessage(
 
       if (!joinResult.ok) {
         console.error(`[Slack] Failed to join: ${joinResult.error}`)
-        throw new Error(`Cannot post to this channel. Please invite the bot to the channel first.`)
+        throw new Error(
+          `Cannot post to this channel. Please invite the bot to the channel first.`,
+          { cause: error }
+        )
       }
 
       console.log(`[Slack] Joined ${channelId}, retrying message`)

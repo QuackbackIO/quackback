@@ -112,7 +112,8 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
       } catch (error) {
         console.error(`[StatusSync] Failed to register webhook for ${data.integrationType}:`, error)
         throw new Error(
-          `Failed to register webhook: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to register webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          { cause: error }
         )
       }
     }
