@@ -3,6 +3,7 @@ import { useRouter } from '@tanstack/react-router'
 import {
   ArrowPathIcon,
   EnvelopeIcon,
+  KeyIcon,
   LockClosedIcon,
   Cog6ToothIcon,
   MagnifyingGlassIcon,
@@ -97,10 +98,56 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
 
   return (
     <div className="space-y-8">
-      {/* Email — always available, no credentials needed */}
+      {/* Password — always available, no credentials needed */}
       <div>
         <div className="mb-3">
-          <h2 className="text-sm font-semibold text-foreground">Email</h2>
+          <h2 className="text-sm font-semibold text-foreground">Password</h2>
+          <p className="text-xs text-muted-foreground">Email and password sign in</p>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-card p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+                <KeyIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="password-toggle" className="font-medium cursor-pointer">
+                    Password
+                  </Label>
+                  {isLastEnabledMethod('password') && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>At least one authentication method must be enabled</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Users sign in with their email and password
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="password-toggle"
+              checked={oauthState.password ?? true}
+              onCheckedChange={(checked) => handleToggle('password', checked)}
+              disabled={saving || isPending || isLastEnabledMethod('password')}
+              aria-label="Password authentication"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Email OTP — always available, no credentials needed */}
+      <div>
+        <div className="mb-3">
+          <h2 className="text-sm font-semibold text-foreground">Email OTP</h2>
           <p className="text-xs text-muted-foreground">Passwordless sign in with magic codes</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-card p-5 shadow-sm">
@@ -134,10 +181,10 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
             </div>
             <Switch
               id="email-toggle"
-              checked={oauthState.email ?? true}
+              checked={oauthState.email ?? false}
               onCheckedChange={(checked) => handleToggle('email', checked)}
               disabled={saving || isPending || isLastEnabledMethod('email')}
-              aria-label="Email authentication"
+              aria-label="Email OTP authentication"
             />
           </div>
         </div>

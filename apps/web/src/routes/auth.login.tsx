@@ -39,7 +39,7 @@ function LoginPage() {
           <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="mt-2 text-muted-foreground">Sign in to your account</p>
         </div>
-        <PortalAuthForm callbackUrl="/" authConfig={authConfig} />
+        <PortalAuthForm mode="login" callbackUrl="/" authConfig={authConfig} />
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}
           <Link to="/auth/signup" className="font-medium text-primary hover:underline">

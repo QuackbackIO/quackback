@@ -120,9 +120,12 @@ async function createAuth() {
     // Trusted origins for CORS/CSRF protection
     trustedOrigins: [baseURL],
 
-    // Password auth disabled - users sign in via OTP email codes
+    // Password auth — default sign-in method for self-hosted deployments
     emailAndPassword: {
-      enabled: false,
+      enabled: true,
+      minPasswordLength: 8,
+      maxPasswordLength: 128,
+      autoSignIn: true,
     },
 
     // Account linking - allow users to link multiple OAuth providers to their account

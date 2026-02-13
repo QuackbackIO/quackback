@@ -36,8 +36,8 @@ export async function isAuthMethodAllowed(
     return checkPortalAuthMethod(provider)
   }
 
-  // Team members: email is always allowed, OAuth needs credentials
-  if (provider === 'email') {
+  // Team members: email and password are always allowed, OAuth needs credentials
+  if (provider === 'email' || provider === 'password') {
     return { allowed: true }
   }
 
@@ -52,8 +52,13 @@ async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethod
   // getPublicPortalConfig already filters by credential availability
   const portalConfig = await getPublicPortalConfig()
 
+  if (provider === 'password') {
+    const enabled = portalConfig.oauth.password ?? true
+    return enabled ? { allowed: true } : { allowed: false, error: 'password_method_not_allowed' }
+  }
+
   if (provider === 'email') {
-    const enabled = portalConfig.oauth.email ?? true
+    const enabled = portalConfig.oauth.email ?? false
     return enabled ? { allowed: true } : { allowed: false, error: 'email_method_not_allowed' }
   }
 
@@ -70,10 +75,11 @@ export async function getAllowedAuthMethods(role: Role): Promise<Record<string, 
   if (role === 'user') {
     const portalConfig = await getPublicPortalConfig()
     const methods: Record<string, boolean> = {
-      email: portalConfig.oauth.email ?? true,
+      password: portalConfig.oauth.password ?? true,
+      email: portalConfig.oauth.email ?? false,
     }
     for (const [key, enabled] of Object.entries(portalConfig.oauth)) {
-      if (key !== 'email') {
+      if (key !== 'email' && key !== 'password') {
         methods[key] = !!enabled
       }
     }
@@ -85,7 +91,7 @@ export async function getAllowedAuthMethods(role: Role): Promise<Record<string, 
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const configuredTypes = await getConfiguredIntegrationTypes()
 
-  const methods: Record<string, boolean> = { email: true }
+  const methods: Record<string, boolean> = { password: true, email: true }
   for (const type of configuredTypes) {
     if (type.startsWith('auth_')) {
       methods[type.replace('auth_', '')] = true

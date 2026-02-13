@@ -22,7 +22,7 @@ import type {
   WorkspaceId,
   ChangelogId,
 } from '@quackback/ids'
-import { user, settings, principal } from './schema/auth'
+import { user, account, settings, principal } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
@@ -42,7 +42,13 @@ const CONFIG = {
 const DEMO_USER = {
   email: 'demo@example.com',
   name: 'Demo User',
+  password: 'password',
 }
+
+// Pre-computed scrypt hash of "password" (compatible with better-auth's hashPassword)
+// Format: {salt_hex}:{key_hex} using scrypt N=16384, r=16, p=1, dkLen=64
+const DEMO_PASSWORD_HASH =
+  '2180e82a0687f69e51799d64752d0093:b6aef896c3437e07e4fa8389a068b2f6baac8f413b987045cbd030e267b0ddba9362541876e4df03108b3c339e7d813c0bce49c8973da0d3d268cb8ec2c16d50'
 
 const DEMO_ORG = {
   name: 'Acme Corp',
@@ -336,6 +342,16 @@ async function seed() {
       role: 'admin',
       displayName: DEMO_USER.name,
       createdAt: new Date(),
+    })
+    // Create credential account for password login
+    await db.insert(account).values({
+      id: crypto.randomUUID(),
+      accountId: demoUserId,
+      providerId: 'credential',
+      userId: demoUserId,
+      password: DEMO_PASSWORD_HASH,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
     principals.push({ id: demoPrincipalId, name: DEMO_USER.name })
 
@@ -637,7 +653,7 @@ async function seed() {
   console.log('\n✅ Seed complete!\n')
   console.log('Demo account:')
   console.log(`  Email: ${DEMO_USER.email}`)
-  console.log('  Sign in with OTP code\n')
+  console.log(`  Password: ${DEMO_USER.password}\n`)
   console.log(`Portal: http://localhost:3000`)
 
   await client.end()

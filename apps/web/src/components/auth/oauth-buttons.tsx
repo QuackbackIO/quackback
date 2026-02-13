@@ -125,7 +125,7 @@ export function getEnabledOAuthProviders(
   const result: { id: string; name: string }[] = []
 
   for (const [key, enabled] of Object.entries(authConfig)) {
-    if (key === 'email' || !enabled) continue
+    if (key === 'email' || key === 'password' || !enabled) continue
     const provider = providerMap.get(key)
     if (provider) {
       result.push({ id: provider.id, name: provider.name })

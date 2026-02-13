@@ -202,7 +202,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
               portalConfig:
                 existingSettings.portalConfig ??
                 JSON.stringify({
-                  oauth: { google: true, github: true },
+                  oauth: { password: true, google: true, github: true },
                   features: { publicView: true, submissions: true, comments: true, voting: true },
                 }),
               authConfig:
@@ -254,7 +254,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             createdAt: new Date(),
             // Default portal config - all features enabled
             portalConfig: JSON.stringify({
-              oauth: { google: true, github: true },
+              oauth: { password: true, google: true, github: true },
               features: { publicView: true, submissions: true, comments: true, voting: true },
             }),
             // Default auth config

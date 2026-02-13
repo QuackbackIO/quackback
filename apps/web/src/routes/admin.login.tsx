@@ -11,6 +11,7 @@ const errorMessages: Record<string, string> = {
   not_team_member:
     "This account doesn't have team access. Team membership is by invitation only. Please contact your administrator.",
   oauth_method_not_allowed: 'This sign-in method is not enabled for team members.',
+  password_method_not_allowed: 'Password sign-in is not enabled. Please use another method.',
 }
 
 const searchSchema = z.object({
@@ -73,7 +74,7 @@ function AdminLoginPage() {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
-        <PortalAuthForm callbackUrl={safeCallbackUrl} authConfig={authConfig} />
+        <PortalAuthForm mode="login" callbackUrl={safeCallbackUrl} authConfig={authConfig} />
       </div>
     </div>
   )

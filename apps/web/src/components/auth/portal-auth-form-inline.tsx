@@ -36,7 +36,7 @@ interface PortalAuthFormInlineProps {
   onModeSwitch?: (mode: 'login' | 'signup') => void
 }
 
-type Step = 'email' | 'code'
+type Step = 'credentials' | 'email' | 'code' | 'forgot' | 'reset'
 
 interface OAuthButtonProps {
   icon: React.ReactNode | null
@@ -72,7 +72,7 @@ function OAuthButton({
 /**
  * Inline Portal Auth Form for use in dialogs/popovers
  *
- * Supports email OTP and OAuth (GitHub, Google) authentication.
+ * Supports password, email OTP, and OAuth authentication.
  *
  * Unlike the full-page PortalAuthForm, this version:
  * - Opens OAuth in popup windows instead of redirecting
@@ -85,11 +85,17 @@ export function PortalAuthFormInline({
   invitationId,
   onModeSwitch,
 }: PortalAuthFormInlineProps) {
-  const [step, setStep] = useState<Step>('email')
+  const passwordEnabled = authConfig?.oauth?.password ?? true
+  const emailOtpEnabled = authConfig?.oauth?.email !== false
+  const defaultStep: Step = passwordEnabled ? 'credentials' : 'email'
+
+  const [step, setStep] = useState<Step>(defaultStep)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState('')
-  // Track which specific action is loading (null = not loading)
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
@@ -101,7 +107,6 @@ export function PortalAuthFormInline({
   // Track popup windows
   const { trackPopup, clearPopup, hasPopup, focusPopup } = usePopupTracker({
     onPopupClosed: () => {
-      // User closed popup without completing auth
       setLoadingAction(null)
       setPopupBlocked(false)
     },
@@ -143,20 +148,67 @@ export function PortalAuthFormInline({
     }
   }, [resendCooldown])
 
-  // Focus code input when step changes
+  // Focus code input when entering code/reset steps
   useEffect(() => {
-    if (step === 'code' && codeInputRef.current) {
+    if ((step === 'code' || step === 'reset') && codeInputRef.current) {
       codeInputRef.current.focus()
     }
   }, [step])
 
-  // Clear popup tracking on success (called externally via BroadcastChannel)
+  // Clear popup tracking on unmount
   useEffect(() => {
     return () => {
       clearPopup()
     }
   }, [clearPopup])
 
+  // --- Password auth handlers ---
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!email.trim()) {
+      setError('Email is required')
+      return
+    }
+    if (!password) {
+      setError('Password is required')
+      return
+    }
+    if (mode === 'signup' && password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+
+    setLoadingAction('password')
+    try {
+      if (mode === 'signup') {
+        const result = await authClient.signUp.email({
+          name: name.trim() || email.split('@')[0],
+          email,
+          password,
+        })
+        if (result.error) {
+          throw new Error(result.error.message || 'Failed to create account')
+        }
+      } else {
+        const result = await authClient.signIn.email({
+          email,
+          password,
+        })
+        if (result.error) {
+          throw new Error(result.error.message || 'Invalid email or password')
+        }
+      }
+      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
+      postAuthSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed')
+      setLoadingAction(null)
+    }
+  }
+
+  // --- Email OTP handlers ---
   const sendCode = async () => {
     setError('')
     setLoadingAction('email')
@@ -194,17 +246,74 @@ export function PortalAuthFormInline({
         throw new Error(result.error.message || 'Failed to verify code')
       }
 
-      // Success - session is now established
-      // Broadcast success to other components (dialog will close, page will refresh)
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
-      // Loading will be cleared when parent handles the broadcast
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify code')
       setLoadingAction(null)
     }
   }
 
+  // --- Forgot/reset password handlers ---
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!email.trim()) {
+      setError('Email is required')
+      return
+    }
+
+    setLoadingAction('forgot')
+    try {
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'forget-password',
+      })
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to send reset code')
+      }
+      setStep('reset')
+      setResendCooldown(60)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send reset code')
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!code.trim() || code.length !== 6) {
+      setError('Please enter the 6-digit code')
+      return
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setError('New password must be at least 8 characters')
+      return
+    }
+
+    setLoadingAction('reset')
+    try {
+      const result = await authClient.emailOtp.resetPassword({
+        email,
+        otp: code,
+        password: newPassword,
+      })
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to reset password')
+      }
+      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
+      postAuthSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password')
+      setLoadingAction(null)
+    }
+  }
+
+  // --- Form submit handlers ---
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim()) {
@@ -229,21 +338,34 @@ export function PortalAuthFormInline({
     sendCode()
   }
 
+  const handleResendForgot = () => {
+    if (resendCooldown > 0) return
+    setCode('')
+    setNewPassword('')
+    setLoadingAction('forgot')
+    authClient.emailOtp
+      .sendVerificationOtp({ email, type: 'forget-password' })
+      .then((result) => {
+        if (result.error) setError(result.error.message || 'Failed to resend code')
+        else setResendCooldown(60)
+      })
+      .catch(() => setError('Failed to resend code'))
+      .finally(() => setLoadingAction(null))
+  }
+
   const handleBack = () => {
     setError('')
-    setStep('email')
     setCode('')
+    setNewPassword('')
+    setStep(defaultStep)
   }
 
   /**
    * Initiate OAuth login using Better Auth's socialProviders.
-   * Opens popup first (sync, to avoid browser popup blockers),
-   * then POSTs to /api/auth/sign-in/social to get the OAuth redirect URL.
    */
   const initiateOAuth = async (provider: string) => {
     setError('')
 
-    // If popup already open, just focus it
     if (hasPopup()) {
       focusPopup()
       return
@@ -252,7 +374,6 @@ export function PortalAuthFormInline({
     setLoadingAction(provider)
     setPopupBlocked(false)
 
-    // Open popup synchronously (must be in direct response to user click)
     const popup = openAuthPopup('about:blank')
     if (!popup) {
       setPopupBlocked(true)
@@ -262,7 +383,6 @@ export function PortalAuthFormInline({
     trackPopup(popup)
 
     try {
-      // POST to Better Auth's /sign-in/social endpoint to get OAuth URL
       const result = await authClient.signIn.social({
         provider,
         callbackURL: '/auth/auth-complete',
@@ -284,7 +404,6 @@ export function PortalAuthFormInline({
   }
 
   // Derive which auth methods are enabled
-  const emailEnabled = authConfig?.oauth?.email !== false
   const enabledProviders = getEnabledOAuthProviders(authConfig?.oauth ?? {})
   const showOAuth = enabledProviders.length > 0
 
@@ -324,6 +443,11 @@ export function PortalAuthFormInline({
     )
   }
 
+  const showOAuthOnDefault =
+    showOAuth && (step === 'credentials' || step === 'email') && !invitation
+  const hasCredentialForm = step === 'credentials' && passwordEnabled
+  const hasEmailForm = step === 'email' && emailOtpEnabled
+
   return (
     <div className="space-y-6">
       {/* Invitation Banner */}
@@ -343,8 +467,8 @@ export function PortalAuthFormInline({
         </div>
       )}
 
-      {/* OAuth Buttons - only show on initial email step for non-invitation flow */}
-      {showOAuth && step === 'email' && !invitation && (
+      {/* OAuth Buttons - only show on default step for non-invitation flow */}
+      {showOAuthOnDefault && (
         <>
           <div className="space-y-3">
             {enabledProviders.map((provider) => {
@@ -362,15 +486,15 @@ export function PortalAuthFormInline({
               )
             })}
           </div>
-          {/* Divider - only show when email is also enabled */}
-          {emailEnabled && (
+          {/* Divider - only show when another method is also enabled */}
+          {(passwordEnabled || emailOtpEnabled) && (
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with email
+                  Or continue with {passwordEnabled ? 'email' : 'email code'}
                 </span>
               </div>
             </div>
@@ -378,17 +502,34 @@ export function PortalAuthFormInline({
         </>
       )}
 
-      {/* Step 1: Email Input - only show when email auth is enabled */}
-      {step === 'email' && emailEnabled && (
-        <form onSubmit={handleEmailSubmit} className="space-y-4">
+      {/* Password credentials form */}
+      {hasCredentialForm && (
+        <form onSubmit={handlePasswordSubmit} className="space-y-4">
           {error && <FormError message={error} />}
 
+          {mode === 'signup' && (
+            <div className="space-y-2">
+              <label htmlFor="inline-name" className="text-sm font-medium">
+                Name
+              </label>
+              <Input
+                id="inline-name"
+                type="text"
+                placeholder="Jane Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={loadingAction !== null}
+                autoComplete="name"
+              />
+            </div>
+          )}
+
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
+            <label htmlFor="inline-email" className="text-sm font-medium">
               Email
             </label>
             <Input
-              id="email"
+              id="inline-email"
               type="email"
               placeholder="you@example.com"
               value={email}
@@ -402,16 +543,64 @@ export function PortalAuthFormInline({
             )}
           </div>
 
+          <div className="space-y-2">
+            <label htmlFor="inline-password" className="text-sm font-medium">
+              Password
+            </label>
+            <Input
+              id="inline-password"
+              type="password"
+              placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loadingAction !== null}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            />
+          </div>
+
+          {mode === 'login' && (
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  setError('')
+                  setStep('forgot')
+                }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           <Button type="submit" disabled={loadingAction !== null} className="w-full">
-            {loadingAction === 'email' ? (
-              <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Sending code...
-              </>
-            ) : (
-              'Continue with email'
+            {loadingAction === 'password' && (
+              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
             )}
+            {loadingAction === 'password'
+              ? mode === 'signup'
+                ? 'Creating account...'
+                : 'Signing in...'
+              : mode === 'signup'
+                ? 'Create account'
+                : 'Sign in'}
           </Button>
+
+          {/* Link to email OTP if also enabled */}
+          {emailOtpEnabled && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setError('')
+                  setStep('email')
+                }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Use email code instead
+              </button>
+            </div>
+          )}
 
           {/* Mode switch */}
           {onModeSwitch && (
@@ -444,7 +633,89 @@ export function PortalAuthFormInline({
         </form>
       )}
 
-      {/* Step 2: Code Input */}
+      {/* Email OTP: email input step */}
+      {hasEmailForm && (
+        <form onSubmit={handleEmailSubmit} className="space-y-4">
+          {error && <FormError message={error} />}
+
+          <div className="space-y-2">
+            <label htmlFor="inline-otp-email" className="text-sm font-medium">
+              Email
+            </label>
+            <Input
+              id="inline-otp-email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={!!invitation || loadingAction !== null}
+              className={invitation ? 'bg-muted' : ''}
+              autoComplete="email"
+            />
+            {invitation && (
+              <p className="text-xs text-muted-foreground">Email is set from your invitation</p>
+            )}
+          </div>
+
+          <Button type="submit" disabled={loadingAction !== null} className="w-full">
+            {loadingAction === 'email' ? (
+              <>
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                Sending code...
+              </>
+            ) : (
+              'Continue with email'
+            )}
+          </Button>
+
+          {/* Link back to password if also enabled */}
+          {passwordEnabled && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setError('')
+                  setStep('credentials')
+                }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Use password instead
+              </button>
+            </div>
+          )}
+
+          {/* Mode switch */}
+          {onModeSwitch && (
+            <p className="text-center text-sm text-muted-foreground">
+              {mode === 'login' ? (
+                <>
+                  Don&apos;t have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => onModeSwitch('signup')}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Sign up
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => onModeSwitch('login')}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
+            </p>
+          )}
+        </form>
+      )}
+
+      {/* Email OTP: code verification step */}
       {step === 'code' && (
         <form onSubmit={handleCodeSubmit} className="space-y-4">
           <button
@@ -465,12 +736,12 @@ export function PortalAuthFormInline({
           {error && <FormError message={error} />}
 
           <div className="space-y-2">
-            <label htmlFor="code" className="text-sm font-medium">
+            <label htmlFor="inline-code" className="text-sm font-medium">
               Verification code
             </label>
             <Input
               ref={codeInputRef}
-              id="code"
+              id="inline-code"
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
@@ -503,6 +774,149 @@ export function PortalAuthFormInline({
             <button
               type="button"
               onClick={handleResend}
+              disabled={resendCooldown > 0 || loadingAction !== null}
+              className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {resendCooldown > 0
+                ? `Resend code in ${resendCooldown}s`
+                : "Didn't receive a code? Resend"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Forgot password: enter email */}
+      {step === 'forgot' && (
+        <form onSubmit={handleForgotSubmit} className="space-y-4">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeftIcon className="mr-1 h-4 w-4" />
+            Back
+          </button>
+
+          <div className="text-center">
+            <h2 className="text-lg font-semibold">Reset your password</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Enter your email and we&apos;ll send you a code to reset your password.
+            </p>
+          </div>
+
+          {error && <FormError message={error} />}
+
+          <div className="space-y-2">
+            <label htmlFor="inline-forgot-email" className="text-sm font-medium">
+              Email
+            </label>
+            <Input
+              id="inline-forgot-email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loadingAction !== null}
+              autoComplete="email"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={loadingAction !== null || !email.trim()}
+            className="w-full"
+          >
+            {loadingAction === 'forgot' ? (
+              <>
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                Sending code...
+              </>
+            ) : (
+              'Send reset code'
+            )}
+          </Button>
+        </form>
+      )}
+
+      {/* Reset password: enter code + new password */}
+      {step === 'reset' && (
+        <form onSubmit={handleResetSubmit} className="space-y-4">
+          <button
+            type="button"
+            onClick={() => {
+              setError('')
+              setCode('')
+              setNewPassword('')
+              setStep('forgot')
+            }}
+            className="flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeftIcon className="mr-1 h-4 w-4" />
+            Back
+          </button>
+
+          <div className="rounded-lg bg-muted/50 p-4">
+            <p className="text-sm text-center">
+              We sent a reset code to <span className="font-medium text-foreground">{email}</span>
+            </p>
+          </div>
+
+          {error && <FormError message={error} />}
+
+          <div className="space-y-2">
+            <label htmlFor="inline-reset-code" className="text-sm font-medium">
+              Reset code
+            </label>
+            <Input
+              ref={codeInputRef}
+              id="inline-reset-code"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="000000"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              disabled={loadingAction !== null}
+              className="text-center text-2xl tracking-widest"
+              autoComplete="one-time-code"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="inline-new-password" className="text-sm font-medium">
+              New password
+            </label>
+            <Input
+              id="inline-new-password"
+              type="password"
+              placeholder="At least 8 characters"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={loadingAction !== null}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={loadingAction !== null || code.length !== 6 || newPassword.length < 8}
+            className="w-full"
+          >
+            {loadingAction === 'reset' ? (
+              <>
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                Resetting password...
+              </>
+            ) : (
+              'Reset password'
+            )}
+          </Button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={handleResendForgot}
               disabled={resendCooldown > 0 || loadingAction !== null}
               className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
             >

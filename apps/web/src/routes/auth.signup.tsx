@@ -40,7 +40,7 @@ function SignupPage() {
           <h1 className="text-2xl font-bold">Create an account</h1>
           <p className="mt-2 text-muted-foreground">Sign up to vote and comment</p>
         </div>
-        <PortalAuthForm callbackUrl="/" authConfig={authConfig} />
+        <PortalAuthForm mode="signup" callbackUrl="/" authConfig={authConfig} />
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}
           <Link to="/auth/login" className="font-medium text-primary hover:underline">

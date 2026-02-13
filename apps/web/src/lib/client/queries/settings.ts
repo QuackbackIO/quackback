@@ -11,16 +11,15 @@ import {
   fetchDeveloperConfig,
   fetchWidgetConfig,
   fetchWidgetSecret,
-  fetchTelemetryConfig,
 } from '@/lib/server/functions/settings'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
 } from '@/lib/server/functions/settings-utils'
 
-const STALE_TIME_LONG = 5 * 60 * 1000
 const STALE_TIME_SHORT = 30 * 1000
 const STALE_TIME_MEDIUM = 60 * 1000
+const STALE_TIME_LONG = 5 * 60 * 1000
 
 export const settingsQueries = {
   branding: () =>
@@ -104,13 +103,6 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'widgetSecret'],
       queryFn: fetchWidgetSecret,
-      staleTime: STALE_TIME_LONG,
-    }),
-
-  telemetryConfig: () =>
-    queryOptions({
-      queryKey: ['settings', 'telemetryConfig'],
-      queryFn: fetchTelemetryConfig,
       staleTime: STALE_TIME_LONG,
     }),
 }

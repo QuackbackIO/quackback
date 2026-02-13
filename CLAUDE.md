@@ -15,7 +15,7 @@ bun run setup    # One-time setup (deps, Docker, migrations, seed)
 bun run dev      # Start dev server at http://localhost:3000
 ```
 
-Login: `demo@example.com` (OTP code appears in console)
+Login: `demo@example.com` / `password`
 
 ## Commands
 
