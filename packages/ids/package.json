@@ -24,8 +24,8 @@
     "zod": ">=3.0.0"
   },
   "devDependencies": {
-    "drizzle-orm": "^0.45.0",
-    "vitest": "^4.0.15",
-    "zod": "^3.23.8"
+    "drizzle-orm": "^0.45.1",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
   }
 }
