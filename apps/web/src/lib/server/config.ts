@@ -16,35 +16,46 @@ import { z } from 'zod'
 // Schema Helpers
 // =============================================================================
 
+/** Treat empty strings as undefined (common in Docker/compose env vars). */
+const emptyToUndefined = (val: unknown) => (val === '' ? undefined : val)
+
 /**
  * Parse boolean from env var string.
  * Rejects ambiguous values - only accepts: true/false, 1/0, or actual booleans.
+ * Empty strings are treated as undefined.
  */
 const envBoolean = z
-  .union([
-    z.literal('true').transform(() => true),
-    z.literal('false').transform(() => false),
-    z.literal('1').transform(() => true),
-    z.literal('0').transform(() => false),
-    z.boolean(),
-  ])
+  .preprocess(
+    emptyToUndefined,
+    z.union([
+      z.literal('true').transform(() => true),
+      z.literal('false').transform(() => false),
+      z.literal('1').transform(() => true),
+      z.literal('0').transform(() => false),
+      z.boolean(),
+    ])
+  )
   .optional()
 
 /**
  * Parse integer from env var string.
  * Rejects NaN and non-integer values.
+ * Empty strings are treated as undefined.
  */
-const envInt = z
-  .string()
-  .transform((v, ctx) => {
-    const num = parseInt(v, 10)
-    if (isNaN(num)) {
-      ctx.addIssue({ code: 'custom', message: 'Invalid integer' })
-      return z.NEVER
-    }
-    return num
-  })
-  .or(z.number().int())
+const envInt = z.preprocess(
+  emptyToUndefined,
+  z
+    .string()
+    .transform((v, ctx) => {
+      const num = parseInt(v, 10)
+      if (isNaN(num)) {
+        ctx.addIssue({ code: 'custom', message: 'Invalid integer' })
+        return z.NEVER
+      }
+      return num
+    })
+    .or(z.number().int())
+)
 
 // =============================================================================
 // Schema Definition (camelCase property names)
