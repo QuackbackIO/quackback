@@ -4,7 +4,6 @@ import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { SearchInput } from '@/components/shared/search-input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ViewTabs } from '@/components/admin/feedback/view-tabs'
 import { cn } from '@/lib/shared/utils'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
@@ -146,11 +145,6 @@ export function FeedbackTableView({
 
   const headerContent = (
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
-      {/* View Tabs Row */}
-      <div className="flex items-center gap-1 mb-2">
-        <ViewTabs statuses={statuses} />
-      </div>
-
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <SearchInput
