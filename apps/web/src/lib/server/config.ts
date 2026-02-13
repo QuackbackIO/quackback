@@ -93,6 +93,7 @@ const configSchema = z.object({
   s3SecretAccessKey: z.string().optional(),
   s3ForcePathStyle: envBoolean,
   s3PublicUrl: z.string().optional(),
+  s3Proxy: envBoolean,
 
   // AI (optional)
   openaiApiKey: z.string().optional(),
@@ -144,6 +145,7 @@ function buildConfigFromEnv(): unknown {
     s3SecretAccessKey: env('S3_SECRET_ACCESS_KEY'),
     s3ForcePathStyle: env('S3_FORCE_PATH_STYLE'),
     s3PublicUrl: env('S3_PUBLIC_URL'),
+    s3Proxy: env('S3_PROXY'),
 
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
@@ -265,6 +267,9 @@ export const config = {
   },
   get s3PublicUrl() {
     return loadConfig().s3PublicUrl
+  },
+  get s3Proxy() {
+    return loadConfig().s3Proxy
   },
 
   // AI

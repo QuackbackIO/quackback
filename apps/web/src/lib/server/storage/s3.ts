@@ -320,6 +320,45 @@ export async function generatePresignedGetUrl(
 }
 
 // ============================================================================
+// Object Retrieval (for proxy mode)
+// ============================================================================
+
+/** Result of fetching an S3 object. */
+export interface S3ObjectResult {
+  body: ReadableStream<Uint8Array>
+  contentType: string
+}
+
+/**
+ * Fetch an object from S3 and return its body stream and content type.
+ * Used when S3_PROXY is enabled to stream file bytes through the server.
+ */
+export async function getS3Object(key: string): Promise<S3ObjectResult> {
+  const s3Config = getS3Config()
+  const client = await getS3Client()
+  const { GetObjectCommand } = await getS3Module()
+
+  const command = new GetObjectCommand({
+    Bucket: s3Config.bucket,
+    Key: key,
+  })
+
+  const response = (await client.send(command)) as {
+    Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
+    ContentType?: string
+  }
+
+  if (!response.Body) {
+    throw new Error(`S3 object not found: ${key}`)
+  }
+
+  return {
+    body: response.Body.transformToWebStream(),
+    contentType: response.ContentType || 'application/octet-stream',
+  }
+}
+
+// ============================================================================
 // Delete Operations
 // ============================================================================
 

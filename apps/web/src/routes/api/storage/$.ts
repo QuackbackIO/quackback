@@ -5,17 +5,18 @@ export const Route = createFileRoute('/api/storage/$')({
     handlers: {
       /**
        * GET /api/storage/*
-       * Redirect to a presigned S3 URL for the given storage key.
+       * Serve files from S3 storage.
        *
-       * This enables serving files from private S3 buckets (e.g., Railway Buckets)
-       * without exposing credentials. The browser follows the 302 redirect and loads
-       * the file directly from S3 — no bytes are proxied through the server.
+       * When S3_PROXY is enabled, streams file bytes through the server — useful when
+       * the browser can't reach the S3 endpoint directly (e.g., ngrok, mixed content).
        *
-       * Set S3_PUBLIC_URL to your app's base URL + /api/storage to use this route:
-       *   S3_PUBLIC_URL="https://your-app.railway.app/api/storage"
+       * Otherwise, redirects to a presigned S3 URL (302) so the browser fetches
+       * directly from S3 — no bytes are proxied through the server.
        */
       GET: async ({ request }) => {
-        const { isS3Configured, generatePresignedGetUrl } = await import('@/lib/server/storage/s3')
+        const { isS3Configured, generatePresignedGetUrl, getS3Object } =
+          await import('@/lib/server/storage/s3')
+        const { config } = await import('@/lib/server/config')
 
         if (!isS3Configured()) {
           return Response.json({ error: 'Storage not configured' }, { status: 503 })
@@ -30,6 +31,18 @@ export const Route = createFileRoute('/api/storage/$')({
         }
 
         try {
+          if (config.s3Proxy) {
+            const { body, contentType } = await getS3Object(key)
+
+            return new Response(body, {
+              status: 200,
+              headers: {
+                'Content-Type': contentType,
+                'Cache-Control': 'public, max-age=86400',
+              },
+            })
+          }
+
           const presignedUrl = await generatePresignedGetUrl(key)
 
           return new Response(null, {
@@ -40,7 +53,7 @@ export const Route = createFileRoute('/api/storage/$')({
             },
           })
         } catch (error) {
-          console.error('Error generating presigned GET URL:', error)
+          console.error('Error serving storage object:', error)
           return Response.json({ error: 'Failed to resolve storage URL' }, { status: 500 })
         }
       },
