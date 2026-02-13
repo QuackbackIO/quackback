@@ -136,7 +136,7 @@ describe('TypeID Core', () => {
     })
 
     it('works with different prefixes', () => {
-      const prefixes = ['post', 'board', 'comment', 'org', 'user'] as const
+      const prefixes = ['post', 'board', 'comment', 'workspace', 'user'] as const
 
       for (const prefix of prefixes) {
         const typeId = generateId(prefix)
