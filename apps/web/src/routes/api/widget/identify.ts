@@ -203,23 +203,19 @@ export const Route = createFileRoute('/api/widget/identify')({
         const userId = userRecord.id as UserId
 
         // Ensure principal record exists
-        let principalRecord = await db.query.principal.findFirst({
+        const principalRecord = await db.query.principal.findFirst({
           where: eq(principal.userId, userId),
         })
 
         if (!principalRecord) {
-          const [created] = await db
-            .insert(principal)
-            .values({
-              id: generateId('principal'),
-              userId,
-              role: 'user',
-              displayName: userRecord.name,
-              avatarUrl: userRecord.image ?? null,
-              createdAt: new Date(),
-            })
-            .returning()
-          principalRecord = created
+          await db.insert(principal).values({
+            id: generateId('principal'),
+            userId,
+            role: 'user',
+            displayName: userRecord.name,
+            avatarUrl: userRecord.image ?? null,
+            createdAt: new Date(),
+          })
         }
 
         // Find existing valid session or create new one
