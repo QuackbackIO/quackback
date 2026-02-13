@@ -34,11 +34,11 @@ export interface InboxPostListParams {
   tagIds?: TagId[]
   ownerId?: PrincipalId | null | undefined
   search?: string
-  dateFrom?: Date
-  dateTo?: Date
+  dateFrom?: string
+  dateTo?: string
   minVotes?: number
   responded?: 'all' | 'responded' | 'unresponded'
-  updatedBefore?: Date
+  updatedBefore?: string
   sort?: 'newest' | 'oldest' | 'votes'
   page?: number
   limit?: number

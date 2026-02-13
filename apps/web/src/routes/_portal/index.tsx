@@ -39,6 +39,8 @@ export const Route = createFileRoute('/_portal/')({
         boardSlug: searchParams.board,
         search: searchParams.search,
         sort: searchParams.sort ?? 'top',
+        statusSlugs: searchParams.status?.length ? searchParams.status : undefined,
+        tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
         userId: session?.user?.id,
       })
     )
@@ -71,6 +73,8 @@ function PublicPortalPage() {
       boardSlug: currentBoard,
       search: currentSearch,
       sort: currentSort,
+      statusSlugs: search.status?.length ? search.status : undefined,
+      tagIds: search.tagIds?.length ? search.tagIds : undefined,
       userId: session?.user?.id,
     }),
     placeholderData: keepPreviousData,

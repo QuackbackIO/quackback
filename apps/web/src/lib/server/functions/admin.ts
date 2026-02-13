@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { generateId, type InviteId, type UserId, type PrincipalId } from '@quackback/ids'
-import type { InboxPostListParams } from '@/lib/server/domains/posts/post.types'
+import type { BoardId, TagId } from '@quackback/ids'
 import {
   isOnboardingComplete as checkComplete,
   type BoardSettings,
@@ -41,15 +41,15 @@ const inboxPostListSchema = z.object({
   page: z.number().default(1),
   search: z.string().optional(),
   ownerId: z.string().nullable().optional(),
-  statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
   boardIds: z.array(z.string()).optional(),
-  boardSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
   minVotes: z.number().optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
-}) as z.ZodType<InboxPostListParams>
+})
 
 const listPortalUsersSchema = z.object({
   search: z.string().optional(),
@@ -76,10 +76,19 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
       await requireAuth({ roles: ['admin', 'member'] })
 
       const result = await listInboxPosts({
-        ...data,
-        updatedBefore: data.updatedBefore
-          ? new Date(data.updatedBefore as unknown as string)
-          : undefined,
+        boardIds: data.boardIds as BoardId[] | undefined,
+        statusSlugs: data.statusSlugs,
+        tagIds: data.tagIds as TagId[] | undefined,
+        ownerId: data.ownerId as PrincipalId | null | undefined,
+        search: data.search,
+        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        minVotes: data.minVotes,
+        responded: data.responded,
+        updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
+        sort: data.sort,
+        page: data.page,
+        limit: data.limit,
       })
       console.log(`[fn:admin] fetchInboxPosts: count=${result.items.length}`)
       // Serialize contentJson field and Date fields

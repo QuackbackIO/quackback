@@ -5,6 +5,7 @@ import {
   type PrincipalId,
   type RoadmapId,
   type StatusId,
+  type TagId,
   type UserId,
 } from '@quackback/ids'
 import type { BoardSettings } from '@quackback/db/types'
@@ -43,6 +44,8 @@ const fetchPortalDataSchema = z.object({
   boardSlug: z.string().optional(),
   search: z.string().optional(),
   sort: sortSchema,
+  statusSlugs: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
   userId: z.string().optional(),
 })
 
@@ -74,6 +77,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         listPublicPostsWithVotesAndAvatars({
           boardSlug: data.boardSlug,
           search: data.search,
+          statusSlugs: data.statusSlugs,
+          tagIds: data.tagIds as TagId[] | undefined,
           sort: data.sort,
           page: 1,
           limit: 20,

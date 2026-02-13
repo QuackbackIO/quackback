@@ -26,10 +26,20 @@ export const portalQueries = {
     boardSlug?: string
     search?: string
     sort: 'top' | 'new' | 'trending'
+    statusSlugs?: string[]
+    tagIds?: string[]
     userId?: string
   }) =>
     queryOptions({
-      queryKey: ['portal', 'data', params.boardSlug, params.search, params.sort],
+      queryKey: [
+        'portal',
+        'data',
+        params.boardSlug,
+        params.search,
+        params.sort,
+        params.statusSlugs,
+        params.tagIds,
+      ],
       queryFn: async () => {
         const data = await fetchPortalData({ data: params })
         // Deserialize dates and cast branded types from server response
