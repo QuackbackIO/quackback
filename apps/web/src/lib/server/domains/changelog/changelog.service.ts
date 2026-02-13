@@ -29,6 +29,8 @@ import {
 } from '@/lib/server/db'
 import type { BoardId, ChangelogId, PrincipalId, PostId, StatusId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { buildEventActor, dispatchChangelogPublished } from '@/lib/server/events/dispatch'
+import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import type {
   CreateChangelogInput,
   UpdateChangelogInput,
@@ -89,6 +91,29 @@ export async function createChangelog(
   // Link posts if provided
   if (input.linkedPostIds && input.linkedPostIds.length > 0) {
     await linkPostsToChangelog(entry.id, input.linkedPostIds)
+  }
+
+  // Dispatch event or schedule delayed job based on publish state
+  const actor = buildEventActor({ principalId: author.principalId })
+  if (input.publishState.type === 'published') {
+    dispatchChangelogPublished(actor, {
+      id: entry.id,
+      title: entry.title,
+      contentPreview: entry.content.slice(0, 200),
+      publishedAt: publishedAt!,
+      linkedPostCount: input.linkedPostIds?.length ?? 0,
+    }).catch((err) => console.error('[Changelog] Failed to dispatch published event:', err))
+  } else if (input.publishState.type === 'scheduled' && publishedAt) {
+    const delayMs = publishedAt.getTime() - Date.now()
+    if (delayMs > 0) {
+      scheduleDispatch({
+        jobId: `changelog-publish--${entry.id}`,
+        handler: '__changelog_publish__',
+        delayMs,
+        payload: { changelogId: entry.id, principalId: author.principalId },
+        actor,
+      }).catch((err) => console.error('[Changelog] Failed to schedule publish job:', err))
+    }
   }
 
   // Return with details
@@ -153,6 +178,43 @@ export async function updateChangelog(
     // Add new links
     if (input.linkedPostIds.length > 0) {
       await linkPostsToChangelog(id, input.linkedPostIds)
+    }
+  }
+
+  // Handle event dispatch / scheduling when publish state changes
+  if (input.publishState !== undefined) {
+    const jobId = `changelog-publish--${id}`
+    const actor = existing.principalId
+      ? buildEventActor({ principalId: existing.principalId })
+      : { type: 'service' as const, displayName: 'system' }
+
+    if (input.publishState.type === 'published') {
+      // Cancel any pending scheduled job, then dispatch immediately
+      cancelScheduledDispatch(jobId).catch(() => {})
+      const updated = await getChangelogById(id)
+      dispatchChangelogPublished(actor, {
+        id,
+        title: updated.title,
+        contentPreview: updated.content.slice(0, 200),
+        publishedAt: new Date(),
+        linkedPostCount: updated.linkedPosts.length,
+      }).catch((err) => console.error('[Changelog] Failed to dispatch published event:', err))
+    } else if (input.publishState.type === 'scheduled') {
+      const newPublishedAt = getPublishedAtFromState(input.publishState)
+      if (newPublishedAt) {
+        const delayMs = newPublishedAt.getTime() - Date.now()
+        if (delayMs > 0) {
+          scheduleDispatch({
+            jobId,
+            handler: '__changelog_publish__',
+            delayMs,
+            payload: { changelogId: id, principalId: existing.principalId },
+            actor,
+          }).catch((err) => console.error('[Changelog] Failed to schedule publish job:', err))
+        }
+      }
+    } else if (input.publishState.type === 'draft') {
+      cancelScheduledDispatch(jobId).catch(() => {})
     }
   }
 

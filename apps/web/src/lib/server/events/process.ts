@@ -5,7 +5,7 @@
  * Failed hooks are stored in the BullMQ failed job set (queryable).
  */
 
-import { Queue, Worker, UnrecoverableError } from 'bullmq'
+import { Queue, Worker, UnrecoverableError, type JobsOptions } from 'bullmq'
 import { config } from '@/lib/server/config'
 import { getHook } from './registry'
 import { getHookTargets } from './targets'
@@ -75,6 +75,13 @@ async function initializeQueue() {
     QUEUE_NAME,
     async (job) => {
       const { hookType, event, target, config: hookConfig } = job.data
+
+      // Handle delayed changelog publish sentinel
+      if (hookType === '__changelog_publish__') {
+        await handleDelayedChangelogPublish(hookConfig)
+        return
+      }
+
       const hook = getHook(hookType)
       if (!hook) throw new UnrecoverableError(`Unknown hook: ${hookType}`)
 
@@ -234,4 +241,88 @@ export async function closeQueue(): Promise<void> {
   } catch (e) {
     console.error('[Event] Queue close error:', e)
   }
+}
+
+// ============================================================================
+// Delayed Job Helpers
+// ============================================================================
+
+/**
+ * Add a delayed job to the event queue.
+ * Used for scheduled changelog publishing and similar deferred work.
+ */
+export async function addDelayedJob(
+  name: string,
+  data: HookJobData,
+  opts?: JobsOptions
+): Promise<void> {
+  const queue = await ensureQueue()
+  await queue.add(name, data, {
+    ...opts,
+    removeOnComplete: true,
+    removeOnFail: true,
+  })
+}
+
+/**
+ * Remove a delayed job by its ID.
+ * Returns silently if the job doesn't exist (already executed or was never created).
+ */
+export async function removeDelayedJob(jobId: string): Promise<void> {
+  const queue = await ensureQueue()
+  try {
+    const job = await queue.getJob(jobId)
+    if (job) {
+      await job.remove()
+      console.log(`[Event] Removed delayed job ${jobId}`)
+    }
+  } catch {
+    // Job may have already been processed or removed
+  }
+}
+
+/**
+ * Handle a delayed changelog publish job.
+ * Re-fetches the entry from DB to verify it's still published before dispatching.
+ */
+async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>): Promise<void> {
+  const changelogId = hookConfig.changelogId as string | undefined
+  const principalId = hookConfig.principalId as string | undefined
+  if (!changelogId) return
+
+  const { db, changelogEntries, eq } = await import('@/lib/server/db')
+  const entry = await db.query.changelogEntries.findFirst({
+    where: eq(changelogEntries.id, changelogId as import('@quackback/ids').ChangelogId),
+  })
+
+  if (!entry || !entry.publishedAt || entry.publishedAt > new Date()) {
+    console.log(
+      `[Event] Skipping delayed changelog publish for ${changelogId} — no longer published`
+    )
+    return
+  }
+
+  // Count linked posts
+  const { changelogEntryPosts } = await import('@/lib/server/db')
+  const linkedPosts = await db.query.changelogEntryPosts.findMany({
+    where: eq(
+      changelogEntryPosts.changelogEntryId,
+      changelogId as import('@quackback/ids').ChangelogId
+    ),
+    columns: { postId: true },
+  })
+
+  const { buildEventActor, dispatchChangelogPublished } = await import('./dispatch')
+
+  const actor = principalId
+    ? buildEventActor({ principalId: principalId as import('@quackback/ids').PrincipalId })
+    : { type: 'service' as const, displayName: 'scheduler' }
+
+  await dispatchChangelogPublished(actor, {
+    id: entry.id,
+    title: entry.title,
+    contentPreview: entry.content.slice(0, 200),
+    publishedAt: entry.publishedAt,
+    linkedPostCount: linkedPosts.length,
+  })
 }

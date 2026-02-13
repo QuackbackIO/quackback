@@ -6,7 +6,12 @@
  * Supported event types — single source of truth.
  * All UI components, webhook validators, and integration configs should reference this.
  */
-export const EVENT_TYPES = ['post.created', 'post.status_changed', 'comment.created'] as const
+export const EVENT_TYPES = [
+  'post.created',
+  'post.status_changed',
+  'comment.created',
+  'changelog.published',
+] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
 
@@ -77,6 +82,16 @@ export interface CommentCreatedPayload {
   post: EventPostRef
 }
 
+export interface ChangelogPublishedPayload {
+  changelog: {
+    id: string
+    title: string
+    contentPreview: string
+    publishedAt: string
+    linkedPostCount: number
+  }
+}
+
 // ============================================================================
 // Event Data (Discriminated Union)
 // ============================================================================
@@ -100,6 +115,10 @@ export interface CommentCreatedEvent extends EventBase<'comment.created'> {
   data: CommentCreatedPayload
 }
 
+export interface ChangelogPublishedEvent extends EventBase<'changelog.published'> {
+  data: ChangelogPublishedPayload
+}
+
 /**
  * Event data - discriminated union of all event types.
  *
@@ -109,4 +128,8 @@ export interface CommentCreatedEvent extends EventBase<'comment.created'> {
  *   console.log(event.data.post.title)
  * }
  */
-export type EventData = PostCreatedEvent | PostStatusChangedEvent | CommentCreatedEvent
+export type EventData =
+  | PostCreatedEvent
+  | PostStatusChangedEvent
+  | CommentCreatedEvent
+  | ChangelogPublishedEvent

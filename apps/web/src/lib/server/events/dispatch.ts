@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'crypto'
 
-import type { BoardId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
+import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
 
 import { processEvent } from './process'
 import type { EventActor, EventData } from './types.js'
@@ -123,5 +123,32 @@ export async function dispatchCommentCreated(
     ...eventEnvelope(actor),
     type: 'comment.created',
     data: { comment, post },
+  })
+}
+
+export interface ChangelogPublishedInput {
+  id: ChangelogId
+  title: string
+  contentPreview: string
+  publishedAt: Date
+  linkedPostCount: number
+}
+
+export async function dispatchChangelogPublished(
+  actor: EventActor,
+  changelog: ChangelogPublishedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'changelog.published',
+    data: {
+      changelog: {
+        id: changelog.id,
+        title: changelog.title,
+        contentPreview: changelog.contentPreview,
+        publishedAt: changelog.publishedAt.toISOString(),
+        linkedPostCount: changelog.linkedPostCount,
+      },
+    },
   })
 }

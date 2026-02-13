@@ -37,6 +37,11 @@ export const WEBHOOK_EVENT_CONFIG = [
     label: 'New Comment',
     description: 'When a comment is posted',
   },
+  {
+    id: 'changelog.published',
+    label: 'Changelog Published',
+    description: 'When a changelog entry is published',
+  },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 
 // ============================================
