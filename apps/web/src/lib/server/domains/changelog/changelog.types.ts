@@ -4,6 +4,9 @@
 
 import type { TiptapContent } from '@quackback/db/types'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
+import type { PublishState } from '@/lib/shared/schemas/changelog'
+
+export type { PublishState } from '@/lib/shared/schemas/changelog'
 
 // ============================================================================
 // Input Types
@@ -34,14 +37,6 @@ export interface UpdateChangelogInput {
   /** Publish state (if changing) */
   publishState?: PublishState
 }
-
-/**
- * Publish state for a changelog entry
- */
-export type PublishState =
-  | { type: 'draft' }
-  | { type: 'scheduled'; publishAt: Date }
-  | { type: 'published' }
 
 /**
  * Parameters for listing changelog entries

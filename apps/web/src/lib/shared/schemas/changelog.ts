@@ -75,3 +75,20 @@ export type CreateChangelogInput = z.infer<typeof createChangelogSchema>
 export type UpdateChangelogInput = z.infer<typeof updateChangelogSchema>
 export type ListChangelogsParams = z.infer<typeof listChangelogsSchema>
 export type PublishState = z.infer<typeof publishStateSchema>
+
+/**
+ * Convert a server-side status + publishedAt into a PublishState discriminated union.
+ */
+export function toPublishState(
+  status: 'draft' | 'scheduled' | 'published',
+  publishedAt: string | Date | null
+): PublishState {
+  switch (status) {
+    case 'draft':
+      return { type: 'draft' }
+    case 'scheduled':
+      return { type: 'scheduled', publishAt: publishedAt ? new Date(publishedAt) : new Date() }
+    case 'published':
+      return { type: 'published' }
+  }
+}

@@ -16,7 +16,7 @@ import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
-import { type PublishState } from './publish-controls'
+import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { JSONContent } from '@tiptap/react'
 import type { PostId } from '@quackback/ids'
 

@@ -22,7 +22,7 @@ import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
-import { type PublishState } from './publish-controls'
+import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
 import { Route } from '@/routes/admin/changelog'
 import { type ChangelogId, type PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
@@ -34,23 +34,6 @@ interface ChangelogModalProps {
 interface ChangelogModalContentProps {
   entryId: ChangelogId
   onClose: () => void
-}
-
-/**
- * Converts server status and publishedAt to a PublishState for the form.
- */
-function toPublishState(
-  status: 'draft' | 'scheduled' | 'published',
-  publishedAt: string | null
-): PublishState {
-  switch (status) {
-    case 'draft':
-      return { type: 'draft' }
-    case 'scheduled':
-      return { type: 'scheduled', publishAt: publishedAt ? new Date(publishedAt) : new Date() }
-    case 'published':
-      return { type: 'published' }
-  }
 }
 
 function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
