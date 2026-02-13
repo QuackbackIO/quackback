@@ -30,7 +30,9 @@ export {
 export {
   buildCommentTree,
   aggregateReactions,
+  toStatusChange,
   type CommentWithReactions,
   type CommentTreeNode,
   type CommentReactionCount,
+  type CommentStatusChange,
 } from './comment-tree'

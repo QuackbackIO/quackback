@@ -13,6 +13,8 @@ interface AuthCommentsSectionProps {
   /** Server-determined: user is authenticated member who can comment */
   allowCommenting?: boolean
   user?: { name: string | null; email: string; principalId?: PrincipalId }
+  /** Message to show when comments are locked (overrides "Sign in to comment") */
+  lockedMessage?: string
   /** ID of the pinned comment (for showing pinned indicator) */
   pinnedCommentId?: string | null
   // Admin mode props
@@ -24,6 +26,13 @@ interface AuthCommentsSectionProps {
   onUnpinComment?: () => void
   /** Whether pin/unpin is in progress */
   isPinPending?: boolean
+  // Status change props (admin only)
+  /** Available statuses for the comment form status selector */
+  statuses?: Array<{ id: string; name: string; color: string }>
+  /** Current post status ID */
+  currentStatusId?: string | null
+  /** Whether the current user is a team member */
+  isTeamMember?: boolean
 }
 
 /**
@@ -38,15 +47,19 @@ export function AuthCommentsSection({
   comments,
   allowCommenting: serverAllowCommenting = false,
   user: serverUser,
+  lockedMessage,
   pinnedCommentId,
   canPinComments = false,
   onPinComment,
   onUnpinComment,
   isPinPending = false,
+  statuses,
+  currentStatusId,
+  isTeamMember,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { session } = useRouteContext({ from: '__root__' })
+  const { session, settings } = useRouteContext({ from: '__root__' })
   // Use safe version - returns null in admin context where provider isn't available
   const authPopover = useAuthPopoverSafe()
 
@@ -85,6 +98,8 @@ export function AuthCommentsSection({
       comments={comments}
       allowCommenting={allowCommenting}
       user={userData}
+      teamBadgeLogoUrl={settings?.brandingData?.logoUrl ?? undefined}
+      lockedMessage={lockedMessage}
       onAuthRequired={() => authPopover?.openAuthPopover({ mode: 'login' })}
       createComment={createComment}
       pinnedCommentId={pinnedCommentId}
@@ -92,6 +107,9 @@ export function AuthCommentsSection({
       onPinComment={onPinComment}
       onUnpinComment={onUnpinComment}
       isPinPending={isPinPending}
+      statuses={statuses}
+      currentStatusId={currentStatusId}
+      isTeamMember={isTeamMember}
     />
   )
 }

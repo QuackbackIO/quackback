@@ -21,6 +21,7 @@ import {
   commentEditHistory,
   posts,
   boards,
+  postStatuses,
   type Comment,
 } from '@/lib/server/db'
 import {
@@ -29,11 +30,16 @@ import {
   type CommentId,
   type PostId,
   type PrincipalId,
+  type StatusId,
   type UserId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
-import { dispatchCommentCreated, buildEventActor } from '@/lib/server/events/dispatch'
+import {
+  dispatchCommentCreated,
+  dispatchPostStatusChanged,
+  buildEventActor,
+} from '@/lib/server/events/dispatch'
 import type {
   CreateCommentInput,
   CreateCommentResult,
@@ -42,7 +48,7 @@ import type {
   ReactionResult,
   CommentPermissionCheckResult,
 } from './comment.types'
-import { buildCommentTree, aggregateReactions } from '@/lib/shared'
+import { buildCommentTree, aggregateReactions, toStatusChange } from '@/lib/shared'
 import { getExecuteRows } from '@/lib/server/utils'
 
 // ============================================================================
@@ -109,6 +115,11 @@ export async function createComment(
   }
   const board = post.board
 
+  // Check if comments are locked (portal users blocked, team members bypass)
+  if (post.isCommentsLocked && author.role === 'user') {
+    throw new ForbiddenError('COMMENTS_LOCKED', 'Comments are locked on this post')
+  }
+
   // Validate parent comment exists if specified
   if (input.parentId) {
     const parentComment = await db.query.comments.findFirst({
@@ -138,17 +149,69 @@ export async function createComment(
   // Determine if user is a team member
   const isTeamMember = ['admin', 'member'].includes(author.role)
 
-  // Create the comment
-  const [comment] = await db
-    .insert(comments)
-    .values({
-      postId: input.postId,
-      content: input.content.trim(),
-      parentId: input.parentId || null,
-      principalId: author.principalId,
-      isTeamMember,
+  // Determine if a status change should be applied
+  // Only for team members, root-level comments, with a valid statusId
+  const shouldChangeStatus = !!(input.statusId && isTeamMember && !input.parentId)
+
+  let comment: Comment
+  let previousStatusName: string | null = null
+  let newStatusName: string | null = null
+
+  if (shouldChangeStatus) {
+    // Fetch new status and current post status in parallel
+    const [newStatus, prevStatus] = await Promise.all([
+      db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId as StatusId) }),
+      post.statusId
+        ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, post.statusId) })
+        : Promise.resolve(null),
+    ])
+
+    if (!newStatus) {
+      throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${input.statusId} not found`)
+    }
+
+    previousStatusName = prevStatus?.name ?? 'Open'
+    newStatusName = newStatus.name
+
+    // Atomic transaction: insert comment + update post status
+    const result = await db.transaction(async (tx) => {
+      const [insertedComment] = await tx
+        .insert(comments)
+        .values({
+          postId: input.postId,
+          content: input.content.trim(),
+          parentId: input.parentId || null,
+          principalId: author.principalId,
+          isTeamMember,
+          statusChangeFromId: prevStatus?.id ?? null,
+          statusChangeToId: newStatus.id,
+        })
+        .returning()
+
+      await tx
+        .update(posts)
+        .set({ statusId: input.statusId as StatusId })
+        .where(eq(posts.id, input.postId))
+
+      return insertedComment
     })
-    .returning()
+
+    comment = result
+  } else {
+    // Simple comment creation (no status change)
+    const [insertedComment] = await db
+      .insert(comments)
+      .values({
+        postId: input.postId,
+        content: input.content.trim(),
+        parentId: input.parentId || null,
+        principalId: author.principalId,
+        isTeamMember,
+      })
+      .returning()
+
+    comment = insertedComment
+  }
 
   // Auto-subscribe commenter to the post
   if (author.principalId) {
@@ -172,6 +235,21 @@ export async function createComment(
       boardSlug: board.slug,
     }
   )
+
+  // Dispatch status change event if status was changed
+  if (shouldChangeStatus && previousStatusName && newStatusName) {
+    await dispatchPostStatusChanged(
+      buildEventActor(author),
+      {
+        id: post.id,
+        title: post.title,
+        boardId: board.id,
+        boardSlug: board.slug,
+      },
+      previousStatusName,
+      newStatusName
+    )
+  }
 
   return { comment, post: { id: post.id, title: post.title, boardSlug: board.slug } }
 }
@@ -364,13 +442,19 @@ export async function getCommentsByPost(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Fetch all comments with reactions and author info via member->user relation
+  // Fetch all comments with reactions, author info, and status change data
   const commentsWithReactions = await db.query.comments.findMany({
     where: eq(comments.postId, postId),
     with: {
       reactions: true,
       author: {
         columns: { displayName: true },
+      },
+      statusChangeFrom: {
+        columns: { name: true, color: true },
+      },
+      statusChangeTo: {
+        columns: { name: true, color: true },
       },
     },
     orderBy: asc(comments.createdAt),
@@ -386,6 +470,7 @@ export async function getCommentsByPost(
     content: comment.content,
     isTeamMember: comment.isTeamMember,
     createdAt: comment.createdAt,
+    statusChange: toStatusChange(comment.statusChangeFrom, comment.statusChangeTo),
     reactions: comment.reactions.map((r) => ({
       emoji: r.emoji,
       principalId: r.principalId,
@@ -393,9 +478,7 @@ export async function getCommentsByPost(
   }))
 
   // Build comment tree with reaction aggregation
-  const commentTree = buildCommentTree(formattedComments, principalId)
-
-  return commentTree as CommentThread[]
+  return buildCommentTree(formattedComments, principalId) as CommentThread[]
 }
 
 // ============================================================================
@@ -740,7 +823,7 @@ export async function userEditComment(
   // Record edit history (always record for comments)
   if (actor.principalId) {
     await db.insert(commentEditHistory).values({
-      commentId: commentId,
+      commentId,
       editorPrincipalId: actor.principalId,
       previousContent: existingComment.content,
     })
@@ -803,18 +886,18 @@ export async function softDeleteComment(
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
 
-  // Auto-unpin if this comment was pinned as the official response
+  // Auto-unpin if this comment was pinned
   if (comment.post?.pinnedCommentId === commentId) {
     await db.update(posts).set({ pinnedCommentId: null }).where(eq(posts.id, comment.postId))
   }
 }
 
 // ============================================================================
-// Pin/Unpin Operations (Official Response)
+// Pin/Unpin Operations
 // ============================================================================
 
 /**
- * Check if a comment can be pinned as the official response
+ * Check if a comment can be pinned
  *
  * A comment can be pinned if:
  * - It exists and is not deleted
@@ -852,7 +935,7 @@ export async function canPinComment(commentId: CommentId): Promise<{
 }
 
 /**
- * Pin a comment as the official response for a post
+ * Pin a comment on a post
  *
  * Validates that:
  * - The comment can be pinned (team member, root-level, not deleted)

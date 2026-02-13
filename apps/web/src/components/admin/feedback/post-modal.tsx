@@ -6,7 +6,13 @@ import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
-import { ChevronLeftIcon, ChevronRightIcon, DocumentDuplicateIcon } from '@heroicons/react/24/solid'
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DocumentDuplicateIcon,
+  LockClosedIcon,
+  LockOpenIcon,
+} from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
@@ -22,7 +28,6 @@ import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { PinnedCommentSection } from '@/components/public/post-detail/official-response-section'
 import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
@@ -31,6 +36,7 @@ import {
   useUpdatePostTags,
   usePinComment,
   useUnpinComment,
+  useToggleCommentsLock,
 } from '@/lib/client/mutations'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
@@ -68,6 +74,7 @@ function toPortalComments(post: PostDetails): PublicCommentView[] {
     parentId: c.parentId as CommentId | null,
     isTeamMember: c.isTeamMember,
     avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
+    statusChange: c.statusChange ?? null,
     reactions: c.reactions,
     replies: c.replies.map(mapComment),
   })
@@ -111,6 +118,7 @@ function PostModalContent({
   const updateTags = useUpdatePostTags()
   const pinComment = usePinComment({ postId: post.id as PostId })
   const unpinComment = useUnpinComment({ postId: post.id as PostId })
+  const toggleCommentsLock = useToggleCommentsLock()
 
   // Initialize form with post data
   useEffect(() => {
@@ -242,6 +250,31 @@ function PostModalContent({
             <span className="hidden sm:inline">Mark as duplicate</span>
           </Button>
         )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            toggleCommentsLock.mutate({
+              postId: post.id as PostId,
+              locked: !post.isCommentsLocked,
+            })
+          }
+          disabled={toggleCommentsLock.isPending}
+          className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+        >
+          {post.isCommentsLocked ? (
+            <>
+              <LockClosedIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Unlock comments</span>
+            </>
+          ) : (
+            <>
+              <LockOpenIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Lock comments</span>
+            </>
+          )}
+        </Button>
         {navigationContext.total > 0 && (
           <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
             <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
@@ -359,11 +392,6 @@ function PostModalContent({
           onShowDialogChange={setShowMergeDialog}
         />
 
-        {/* Pinned comment section */}
-        {post.pinnedComment && (
-          <PinnedCommentSection comment={post.pinnedComment} workspaceName="Team" />
-        )}
-
         {/* Comments section */}
         <div className="bg-muted/20 border-t border-border/30">
           <Suspense fallback={<CommentsSectionSkeleton />}>
@@ -376,6 +404,9 @@ function PostModalContent({
               onUnpinComment={() => unpinComment.mutate()}
               isPinPending={pinComment.isPending || unpinComment.isPending}
               adminUser={{ name: currentUser.name, email: currentUser.email }}
+              statuses={statuses}
+              currentStatusId={post.statusId}
+              isTeamMember
             />
           </Suspense>
         </div>

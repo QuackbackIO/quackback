@@ -2,7 +2,8 @@
  * Input/Output types for CommentService operations
  */
 
-import type { PostId, CommentId, BoardId, PrincipalId } from '@quackback/ids'
+import type { PostId, CommentId, BoardId, PrincipalId, StatusId } from '@quackback/ids'
+import type { CommentStatusChange } from '@/lib/shared'
 
 /**
  * Input for creating a new comment
@@ -11,6 +12,8 @@ export interface CreateCommentInput {
   postId: PostId
   content: string
   parentId?: CommentId | null
+  /** Optional status change to apply atomically with the comment */
+  statusId?: StatusId | null
 }
 
 /**
@@ -32,6 +35,8 @@ export interface CreateCommentResult {
     principalId: PrincipalId
     isTeamMember: boolean
     createdAt: Date
+    statusChangeFromId: StatusId | null
+    statusChangeToId: StatusId | null
   }
   post: {
     id: PostId
@@ -61,6 +66,8 @@ export interface CommentThread {
   content: string
   isTeamMember: boolean
   createdAt: Date
+  avatarUrl?: string | null
+  statusChange?: CommentStatusChange | null
   replies: CommentThread[]
   reactions: CommentReactionCount[]
 }

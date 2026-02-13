@@ -12,10 +12,6 @@ import {
   MetadataSidebarSkeleton,
 } from '@/components/public/post-detail/metadata-sidebar'
 import {
-  OfficialResponseSection,
-  PinnedCommentSection,
-} from '@/components/public/post-detail/official-response-section'
-import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
@@ -72,7 +68,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 })
 
 function PostDetailPage() {
-  const { settings, postId, slug } = Route.useLoaderData()
+  const { postId, slug } = Route.useLoaderData()
 
   const [isEditingPost, setIsEditingPost] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -108,7 +104,6 @@ function PostDetailPage() {
   }
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
-  const workspaceName = settings?.settings?.name ?? 'Team'
 
   const typedPost: PublicPostDetailView = {
     ...post,
@@ -133,23 +128,6 @@ function PostDetailPage() {
 
     return () => clearTimeout(timeoutId)
   }, [post.comments])
-
-  function renderHighlightedResponse() {
-    if (post.pinnedComment) {
-      return <PinnedCommentSection comment={post.pinnedComment} workspaceName={workspaceName} />
-    }
-    if (post.officialResponse) {
-      return (
-        <OfficialResponseSection
-          content={post.officialResponse.content}
-          authorName={post.officialResponse.authorName}
-          respondedAt={post.officialResponse.respondedAt}
-          workspaceName={workspaceName}
-        />
-      )
-    }
-    return null
-  }
 
   return (
     <div className="py-6">
@@ -205,8 +183,6 @@ function PostDetailPage() {
             />
           </Suspense>
         </div>
-
-        {renderHighlightedResponse()}
       </div>
 
       {/* Comments card */}
@@ -216,7 +192,8 @@ function PostDetailPage() {
             postId={postId}
             comments={post.comments}
             pinnedCommentId={post.pinnedCommentId}
-            disableCommenting={!!post.mergeInfo}
+            disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
+            lockedMessage={post.isCommentsLocked ? 'Comments are locked on this post' : undefined}
           />
         </Suspense>
       </div>

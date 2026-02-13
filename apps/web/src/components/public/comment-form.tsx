@@ -13,6 +13,8 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { signOut } from '@/lib/server/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -29,6 +31,7 @@ export type CreateCommentMutation = UseMutationResult<
     authorName?: string | null
     authorEmail?: string | null
     principalId?: string | null
+    statusId?: string | null
   }
 >
 
@@ -40,6 +43,12 @@ interface CommentFormProps {
   user?: { name: string | null; email: string; principalId?: string }
   /** React Query mutation for creating comments with optimistic updates */
   createComment?: CreateCommentMutation
+  /** Available statuses for status change selector (admin only) */
+  statuses?: Array<{ id: string; name: string; color: string }>
+  /** Current post status ID */
+  currentStatusId?: string | null
+  /** Whether the current user is a team member (enables status selector) */
+  isTeamMember?: boolean
 }
 
 export function CommentForm({
@@ -49,10 +58,15 @@ export function CommentForm({
   onCancel,
   user,
   createComment,
+  statuses,
+  currentStatusId,
+  isTeamMember,
 }: CommentFormProps) {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
+  const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
+  const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)
 
   const authPopover = useAuthPopoverSafe()
 
@@ -78,6 +92,7 @@ export function CommentForm({
   })
 
   const isSubmitting = createComment?.isPending ?? false
+  const selectedStatus = statuses?.find((s) => s.id === selectedStatusId) ?? null
 
   function onSubmit(data: CommentInput) {
     setError(null)
@@ -95,10 +110,12 @@ export function CommentForm({
         authorName: effectiveUser?.name || null,
         authorEmail: effectiveUser?.email || null,
         principalId: effectiveUser?.principalId || null,
+        statusId: selectedStatusId,
       },
       {
         onSuccess: () => {
           form.reset()
+          setSelectedStatusId(null)
           onSuccess?.()
         },
         onError: (err) => {
@@ -149,6 +166,55 @@ export function CommentForm({
         />
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {/* Status selector for team members on root comments */}
+        {isTeamMember && !parentId && statuses && statuses.length > 0 && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Status:</span>
+            <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-xs"
+                >
+                  {selectedStatus ? (
+                    <StatusBadge name={selectedStatus.name} color={selectedStatus.color} />
+                  ) : (
+                    <span className="text-muted-foreground">No change</span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-1" align="start">
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded-sm hover:bg-muted transition-colors text-muted-foreground"
+                  onClick={() => {
+                    setSelectedStatusId(null)
+                    setStatusPopoverOpen(false)
+                  }}
+                >
+                  No change
+                </button>
+                {statuses.map((status) => (
+                  <button
+                    key={status.id}
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded-sm hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setSelectedStatusId(status.id === currentStatusId ? null : status.id)
+                      setStatusPopoverOpen(false)
+                    }}
+                  >
+                    <StatusBadge name={status.name} color={status.color} />
+                    {status.id === currentStatusId && (
+                      <span className="text-muted-foreground ml-1">(current)</span>
+                    )}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2">
           <p className="text-xs text-muted-foreground mr-auto">

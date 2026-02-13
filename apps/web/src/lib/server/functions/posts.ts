@@ -15,6 +15,7 @@ import {
 import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth } from './auth-helpers'
+import { db, eq, posts } from '@/lib/server/db'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import {
   listInboxPosts,
@@ -95,6 +96,7 @@ const listInboxPostsSchema = z.object({
   dateTo: z.string().optional(),
   minVotes: z.number().int().min(0).optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
+  updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
   page: z.number().int().min(1).optional().default(1),
   limit: z.number().int().min(1).max(100).optional().default(20),
@@ -140,6 +142,11 @@ const restorePostSchema = z.object({
   id: z.string(),
 })
 
+const toggleCommentsLockSchema = z.object({
+  id: z.string(),
+  locked: z.boolean(),
+})
+
 // ============================================
 // Type Exports
 // ============================================
@@ -178,6 +185,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
         minVotes: data.minVotes,
         responded: data.responded,
+        updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
         sort: data.sort,
         page: data.page,
         limit: data.limit,
@@ -188,12 +196,8 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
       return {
         ...result,
         items: result.items.map((p) => ({
-          ...p,
+          ...serializePostDates(p),
           contentJson: (p.contentJson ?? {}) as TiptapContent,
-          createdAt: toIsoString(p.createdAt),
-          updatedAt: toIsoString(p.updatedAt),
-          deletedAt: toIsoStringOrNull(p.deletedAt),
-          officialResponseAt: toIsoStringOrNull(p.officialResponseAt),
         })),
       }
     } catch (error) {
@@ -438,6 +442,29 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
       return { id: data.id }
     } catch (error) {
       console.error(`[fn:posts] ❌ updatePostTagsFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Toggle comments lock on a post
+ */
+export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
+  .inputValidator(toggleCommentsLockSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:posts] toggleCommentsLockFn: id=${data.id}, locked=${data.locked}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+
+      await db
+        .update(posts)
+        .set({ isCommentsLocked: data.locked })
+        .where(eq(posts.id, data.id as PostId))
+
+      console.log(`[fn:posts] toggleCommentsLockFn: updated id=${data.id}`)
+      return { id: data.id, isCommentsLocked: data.locked }
+    } catch (error) {
+      console.error(`[fn:posts] ❌ toggleCommentsLockFn failed:`, error)
       throw error
     }
   })

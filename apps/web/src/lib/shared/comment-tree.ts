@@ -15,6 +15,33 @@ export interface CommentReactionCount {
 }
 
 /**
+ * Status change recorded with a comment
+ */
+export interface CommentStatusChange {
+  fromName: string
+  fromColor: string
+  toName: string
+  toColor: string
+}
+
+/**
+ * Build a CommentStatusChange from optional from/to status relations.
+ * Returns null if either relation is missing.
+ */
+export function toStatusChange(
+  from: { name: string; color: string } | null | undefined,
+  to: { name: string; color: string } | null | undefined
+): CommentStatusChange | null {
+  if (!from || !to) return null
+  return {
+    fromName: from.name,
+    fromColor: from.color,
+    toName: to.name,
+    toColor: to.color,
+  }
+}
+
+/**
  * Raw comment data with reactions from database query
  */
 export interface CommentWithReactions {
@@ -27,6 +54,7 @@ export interface CommentWithReactions {
   isTeamMember: boolean
   createdAt: Date
   avatarUrl?: string | null
+  statusChange?: CommentStatusChange | null
   reactions: Array<{
     emoji: string
     principalId: string
@@ -46,6 +74,7 @@ export interface CommentTreeNode {
   isTeamMember: boolean
   createdAt: Date
   avatarUrl?: string | null
+  statusChange?: CommentStatusChange | null
   replies: CommentTreeNode[]
   reactions: CommentReactionCount[]
 }
@@ -106,6 +135,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       isTeamMember: comment.isTeamMember,
       createdAt: comment.createdAt,
       avatarUrl: comment.avatarUrl,
+      statusChange: comment.statusChange,
       replies: [],
       reactions: aggregateReactions(comment.reactions, principalId),
     }

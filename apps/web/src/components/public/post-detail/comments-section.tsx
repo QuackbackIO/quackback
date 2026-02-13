@@ -11,10 +11,7 @@ import type { CommentId, PostId } from '@quackback/ids'
 function countAllComments(comments: PublicCommentView[]): number {
   let count = 0
   for (const comment of comments) {
-    count += 1
-    if (comment.replies && comment.replies.length > 0) {
-      count += countAllComments(comment.replies)
-    }
+    count += 1 + countAllComments(comment.replies)
   }
   return count
 }
@@ -65,6 +62,15 @@ interface CommentsSectionProps {
   adminUser?: { name: string | null; email: string }
   /** Disable new comment submission (e.g. for merged posts) */
   disableCommenting?: boolean
+  /** Message to show when comments are locked (overrides "Sign in to comment") */
+  lockedMessage?: string
+  // Status change props (admin only)
+  /** Available statuses for the comment form status selector */
+  statuses?: Array<{ id: string; name: string; color: string }>
+  /** Current post status ID */
+  currentStatusId?: string | null
+  /** Whether the current user is a team member */
+  isTeamMember?: boolean
 }
 
 export function CommentsSection({
@@ -77,6 +83,10 @@ export function CommentsSection({
   isPinPending = false,
   adminUser,
   disableCommenting = false,
+  lockedMessage,
+  statuses,
+  currentStatusId,
+  isTeamMember,
 }: CommentsSectionProps) {
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
@@ -86,6 +96,16 @@ export function CommentsSection({
     ...portalDetailQueries.commentsSectionData(postId),
     enabled: !adminUser,
   })
+
+  // Determine commenting permission: disabled overrides all, admin always allowed, portal uses server data
+  let allowCommenting: boolean | undefined
+  if (disableCommenting) {
+    allowCommenting = false
+  } else if (adminUser) {
+    allowCommenting = true
+  } else {
+    allowCommenting = data?.canComment
+  }
 
   return (
     <div
@@ -99,13 +119,17 @@ export function CommentsSection({
       <AuthCommentsSection
         postId={postId}
         comments={comments}
-        allowCommenting={disableCommenting ? false : adminUser ? true : data?.canComment}
+        allowCommenting={allowCommenting}
         user={adminUser ?? data?.user}
+        lockedMessage={lockedMessage}
         pinnedCommentId={pinnedCommentId}
         canPinComments={canPinComments}
         onPinComment={onPinComment}
         onUnpinComment={onUnpinComment}
         isPinPending={isPinPending}
+        statuses={statuses}
+        currentStatusId={currentStatusId}
+        isTeamMember={isTeamMember}
       />
     </div>
   )

@@ -6,7 +6,7 @@ import {
   getCommentsSectionDataFn,
 } from '@/lib/server/functions/portal'
 import { getVoteSidebarDataFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
-import type { CommentReactionCount } from '@/lib/shared'
+import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 
 /**
  * Comment type for client components (Date fields may be strings after serialization)
@@ -20,6 +20,7 @@ export interface PublicCommentView {
   parentId: CommentId | null
   isTeamMember: boolean
   avatarUrl: string | null
+  statusChange?: CommentStatusChange | null
   replies: PublicCommentView[]
   reactions: CommentReactionCount[]
 }
@@ -62,6 +63,8 @@ export interface PublicPostDetailView {
   } | null
   pinnedComment: PinnedCommentView | null
   pinnedCommentId: CommentId | null
+  /** Whether comments are locked (portal users can't comment) */
+  isCommentsLocked?: boolean
   /** Merge/deduplication: info about canonical post if this is a merged duplicate */
   mergeInfo?: {
     canonicalPostId: string

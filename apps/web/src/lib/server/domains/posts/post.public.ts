@@ -27,7 +27,7 @@ import {
   type CommentId,
   type PrincipalId,
 } from '@quackback/ids'
-import { buildCommentTree } from '@/lib/shared'
+import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type {
   PublicPostListResult,
   RoadmapPost,
@@ -69,11 +69,14 @@ function parseAvatarData(json: string | null): string | null {
 type SortOrder = 'top' | 'new' | 'trending'
 
 function getPostSortOrder(sort: SortOrder) {
-  if (sort === 'new') return desc(posts.createdAt)
-  if (sort === 'trending') {
-    return sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
+  switch (sort) {
+    case 'new':
+      return desc(posts.createdAt)
+    case 'trending':
+      return sql`(${posts.voteCount} / GREATEST(1, EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 86400)) DESC`
+    default:
+      return desc(posts.voteCount)
   }
-  return desc(posts.voteCount)
 }
 
 export interface PostWithVotesAndAvatars {
@@ -299,6 +302,7 @@ export async function getPublicPostDetail(
         principalId: posts.principalId,
         createdAt: posts.createdAt,
         pinnedCommentId: posts.pinnedCommentId,
+        isCommentsLocked: posts.isCommentsLocked,
         officialResponse: posts.officialResponse,
         officialResponsePrincipalId: posts.officialResponsePrincipalId,
         officialResponseAt: posts.officialResponseAt,
@@ -343,8 +347,7 @@ export async function getPublicPostDetail(
       .where(eq(posts.id, postId))
       .limit(1),
 
-    // Query 2: Comments with avatars AND reactions (single query using GROUP BY + json_agg)
-    // This is more elegant than separate queries + app-side join
+    // Query 2: Comments with avatars, reactions, and status changes (single query using GROUP BY + json_agg)
     // Note: Raw SQL may return dates as strings depending on driver (neon-http vs postgres-js)
     db.execute<{
       id: string
@@ -359,6 +362,10 @@ export async function getPublicPostDetail(
       avatar_key: string | null
       avatar_url: string | null
       reactions_json: string
+      sc_from_name: string | null
+      sc_from_color: string | null
+      sc_to_name: string | null
+      sc_to_color: string | null
     }>(sql`
       SELECT
         c.id,
@@ -376,17 +383,23 @@ export async function getPublicPostDetail(
           json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
           FILTER (WHERE cr.id IS NOT NULL),
           '[]'
-        ) as reactions_json
+        ) as reactions_json,
+        scf.name as sc_from_name,
+        scf.color as sc_from_color,
+        sct.name as sc_to_name,
+        sct.color as sc_to_color
       FROM ${comments} c
       INNER JOIN ${principalTable} m ON c.principal_id = m.id
       LEFT JOIN ${commentReactions} cr ON cr.comment_id = c.id
+      LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
+      LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
       WHERE c.post_id IN (
         SELECT ${postUuid}::uuid
         UNION ALL
         SELECT p.id FROM ${posts} p
         WHERE p.canonical_post_id = ${postUuid}::uuid AND p.deleted_at IS NULL
       )
-      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url
+      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
       ORDER BY c.created_at ASC
     `),
   ])
@@ -418,6 +431,10 @@ export async function getPublicPostDetail(
     avatar_key: string | null
     avatar_url: string | null
     reactions_json: string
+    sc_from_name: string | null
+    sc_from_color: string | null
+    sc_to_name: string | null
+    sc_to_color: string | null
   }>(commentsWithReactions)
 
   // Helper to ensure Date objects (raw SQL may return strings depending on driver)
@@ -438,6 +455,10 @@ export async function getPublicPostDetail(
       avatarKey: comment.avatar_key,
       avatarUrl: comment.avatar_url,
     }),
+    statusChange: toStatusChange(
+      comment.sc_from_name ? { name: comment.sc_from_name, color: comment.sc_from_color! } : null,
+      comment.sc_to_name ? { name: comment.sc_to_name, color: comment.sc_to_color! } : null
+    ),
     reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
   }))
 
@@ -452,6 +473,7 @@ export async function getPublicPostDetail(
     parentId: node.parentId as CommentId | null,
     isTeamMember: node.isTeamMember,
     avatarUrl: node.avatarUrl ?? null,
+    statusChange: node.statusChange ?? null,
     replies: node.replies.map(mapToPublicComment),
     reactions: node.reactions,
   })
@@ -501,6 +523,7 @@ export async function getPublicPostDetail(
       : null,
     pinnedComment,
     pinnedCommentId: (postResult.pinnedCommentId as CommentId) ?? null,
+    isCommentsLocked: postResult.isCommentsLocked,
   }
 }
 

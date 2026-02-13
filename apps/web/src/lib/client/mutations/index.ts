@@ -13,6 +13,7 @@ export {
   useUpdatePost,
   useVotePost,
   useCreatePost,
+  useToggleCommentsLock,
 } from './posts'
 
 // Admin comment mutations

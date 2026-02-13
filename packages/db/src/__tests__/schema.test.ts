@@ -84,8 +84,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      // 20 business columns + 1 searchVector (generated) + 1 commentCount (denormalized) + 3 embedding columns + 3 merge columns (canonicalPostId, mergedAt, mergedByPrincipalId) - 2 = 26
-      expect(columns.length).toBe(26)
+      expect(columns.length).toBe(27)
     })
   })
 

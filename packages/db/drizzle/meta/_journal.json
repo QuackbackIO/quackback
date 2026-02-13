@@ -36,6 +36,13 @@
       "when": 1770712174018,
       "tag": "0004_deep_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770987666339,
+      "tag": "0005_greedy_stellaris",
+      "breakpoints": true
     }
   ]
 }

@@ -41,6 +41,7 @@ interface CreateCommentInput {
   authorName?: string | null
   authorEmail?: string | null
   principalId?: string | null
+  statusId?: string | null
 }
 
 interface UseCreateCommentOptions {
@@ -154,6 +155,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           postId,
           content: input.content,
           parentId: (input.parentId || undefined) as CommentId | undefined,
+          statusId: input.statusId || undefined,
         },
       }),
     onMutate: async (input) => {
@@ -209,6 +211,11 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           ),
         }
       })
+      // If a status change was included, invalidate to pick up new status + status badge
+      if (input.statusId) {
+        queryClient.invalidateQueries({ queryKey })
+        queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      }
       onSuccess?.(data)
     },
   })
@@ -274,7 +281,7 @@ export function useToggleReaction({
 }
 
 /**
- * Hook to pin a comment as the official response.
+ * Hook to pin a comment.
  */
 export function usePinComment({ postId, onSuccess, onError }: UsePinCommentOptions) {
   const queryClient = useQueryClient()

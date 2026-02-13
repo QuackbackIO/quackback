@@ -4,7 +4,7 @@
 
 import type { Post, Board, Tag, TiptapContent } from '@quackback/db/types'
 import type { PostId, BoardId, TagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
-import type { CommentReactionCount } from '@/lib/shared'
+import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 
 /**
  * Input for creating a new post
@@ -118,6 +118,7 @@ export interface InboxPostListParams {
   minVotes?: number
   /** Filter by team response state */
   responded?: 'all' | 'responded' | 'unresponded'
+  updatedBefore?: Date
   sort?: 'newest' | 'oldest' | 'votes'
   page?: number
   limit?: number
@@ -218,6 +219,7 @@ export interface PublicComment {
   parentId: CommentId | null
   isTeamMember: boolean
   avatarUrl: string | null
+  statusChange?: CommentStatusChange | null
   replies: PublicComment[]
   reactions: CommentReactionCount[]
 }
@@ -246,6 +248,8 @@ export interface PublicPostDetail {
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
   pinnedCommentId: CommentId | null
+  /** Whether comments are locked (portal users can't comment) */
+  isCommentsLocked: boolean
 }
 
 /**

@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type CommentId, type PostId, type UserId } from '@quackback/ids'
+import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
 
 import {
   canDeleteComment,
@@ -26,6 +26,7 @@ const createCommentSchema = z.object({
   postId: z.string(),
   content: z.string().min(1).max(5000),
   parentId: z.string().optional(),
+  statusId: z.string().optional(),
 })
 
 const updateCommentSchema = z.object({
@@ -77,6 +78,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
           postId: data.postId as PostId,
           content: data.content,
           parentId: data.parentId as CommentId | undefined,
+          statusId: data.statusId as StatusId | undefined,
         },
         {
           principalId: auth.principal.id,
@@ -231,7 +233,7 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     }
   })
 
-// Pin/Unpin Operations (Official Response)
+// Pin/Unpin Operations
 const pinCommentSchema = z.object({
   commentId: z.string(),
 })

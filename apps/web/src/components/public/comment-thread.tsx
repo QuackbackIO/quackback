@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
+  ArrowRightIcon,
   ArrowUturnLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   EllipsisVerticalIcon,
   FaceSmileIcon,
+  LockClosedIcon,
   MapPinIcon,
 } from '@heroicons/react/24/solid'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -23,6 +25,7 @@ import { toggleReactionFn } from '@/lib/server/functions/comments'
 import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
 import type { CommentId, PostId } from '@quackback/ids'
 
@@ -31,6 +34,10 @@ interface CommentThreadProps {
   comments: PublicCommentView[]
   allowCommenting?: boolean
   user?: { name: string | null; email: string }
+  /** Logo URL for the team badge (from branding settings) */
+  teamBadgeLogoUrl?: string
+  /** Message to show when comments are locked (overrides "Sign in to comment") */
+  lockedMessage?: string
   /** Called when unauthenticated user tries to comment */
   onAuthRequired?: () => void
   /** React Query mutation for creating comments with optimistic updates */
@@ -46,6 +53,13 @@ interface CommentThreadProps {
   onUnpinComment?: () => void
   /** Whether pin/unpin is in progress */
   isPinPending?: boolean
+  // Status change props (admin only)
+  /** Available statuses for the comment form status selector */
+  statuses?: Array<{ id: string; name: string; color: string }>
+  /** Current post status ID */
+  currentStatusId?: string | null
+  /** Whether the current user is a team member */
+  isTeamMember?: boolean
 }
 
 export function CommentThread({
@@ -53,6 +67,8 @@ export function CommentThread({
   comments,
   allowCommenting = true,
   user,
+  teamBadgeLogoUrl,
+  lockedMessage,
   onAuthRequired,
   createComment,
   pinnedCommentId,
@@ -60,23 +76,55 @@ export function CommentThread({
   onPinComment,
   onUnpinComment,
   isPinPending = false,
-}: CommentThreadProps): React.ReactElement {
-  const sortedComments = [...comments].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  )
+  statuses,
+  currentStatusId,
+  isTeamMember,
+}: CommentThreadProps) {
+  const sortedComments = [...comments].sort((a, b) => {
+    // Pinned comment always first
+    if (pinnedCommentId) {
+      if (a.id === pinnedCommentId) return -1
+      if (b.id === pinnedCommentId) return 1
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+
+  function renderCommentArea() {
+    if (allowCommenting) {
+      return (
+        <CommentForm
+          postId={postId}
+          user={user}
+          createComment={createComment}
+          statuses={statuses}
+          currentStatusId={currentStatusId}
+          isTeamMember={isTeamMember}
+        />
+      )
+    }
+
+    if (lockedMessage) {
+      return (
+        <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+          <LockClosedIcon className="h-4 w-4 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">{lockedMessage}</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+        <p className="text-sm text-muted-foreground">Sign in to comment</p>
+        <Button variant="outline" size="sm" onClick={onAuthRequired}>
+          Sign in
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {allowCommenting ? (
-        <CommentForm postId={postId} user={user} createComment={createComment} />
-      ) : (
-        <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-          <p className="text-sm text-muted-foreground">Sign in to comment</p>
-          <Button variant="outline" size="sm" onClick={onAuthRequired}>
-            Sign in
-          </Button>
-        </div>
-      )}
+      {renderCommentArea()}
 
       {comments.length === 0 ? (
         <p className="text-muted-foreground text-center py-4">
@@ -91,6 +139,7 @@ export function CommentThread({
               comment={comment}
               allowCommenting={allowCommenting}
               user={user}
+              teamBadgeLogoUrl={teamBadgeLogoUrl}
               createComment={createComment}
               pinnedCommentId={pinnedCommentId}
               canPinComments={canPinComments}
@@ -111,6 +160,7 @@ interface CommentItemProps {
   allowCommenting: boolean
   depth?: number
   user?: { name: string | null; email: string }
+  teamBadgeLogoUrl?: string
   createComment?: CreateCommentMutation
   pinnedCommentId?: string | null
   // Admin mode props
@@ -128,13 +178,14 @@ function CommentItem({
   allowCommenting,
   depth = 0,
   user,
+  teamBadgeLogoUrl,
   createComment,
   pinnedCommentId,
   canPinComments = false,
   onPinComment,
   onUnpinComment,
   isPinPending = false,
-}: CommentItemProps): React.ReactElement {
+}: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
@@ -190,10 +241,14 @@ function CommentItem({
             </Avatar>
             <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
             {comment.isTeamMember && (
-              <Badge
-                variant="default"
-                className="bg-primary text-primary-foreground text-xs px-1.5 py-0"
-              >
+              <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+                {teamBadgeLogoUrl ? (
+                  <img
+                    src={teamBadgeLogoUrl}
+                    alt=""
+                    className="h-2.5 w-2.5 mr-0.5 rounded-sm object-contain"
+                  />
+                ) : null}
                 Team
               </Badge>
             )}
@@ -221,7 +276,7 @@ function CommentItem({
                   {isPinned ? (
                     <DropdownMenuItem onClick={onUnpinComment} disabled={isPinPending}>
                       <MapPinIcon className="h-4 w-4 mr-2" />
-                      Unpin Response
+                      Unpin
                     </DropdownMenuItem>
                   ) : (
                     <DropdownMenuItem
@@ -229,7 +284,7 @@ function CommentItem({
                       disabled={isPinPending}
                     >
                       <MapPinIcon className="h-4 w-4 mr-2" />
-                      Pin as Official Response
+                      Pin
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -241,6 +296,18 @@ function CommentItem({
           <p className="text-sm whitespace-pre-wrap mt-1.5 ml-10 text-foreground/90 leading-relaxed">
             {comment.content}
           </p>
+
+          {/* Status change indicator */}
+          {comment.statusChange && (
+            <div className="flex items-center gap-1.5 ml-10 mt-1.5 text-xs text-muted-foreground">
+              <ArrowRightIcon className="h-3 w-3 shrink-0" />
+              <span>changed status to</span>
+              <StatusBadge
+                name={comment.statusChange.toName}
+                color={comment.statusChange.toColor}
+              />
+            </div>
+          )}
 
           {/* Actions row: expand/collapse, reactions, reply - always visible */}
           <div className="flex items-center gap-1 mt-2 ml-10">
@@ -365,6 +432,7 @@ function CommentItem({
                   allowCommenting={allowCommenting}
                   depth={depth + 1}
                   user={user}
+                  teamBadgeLogoUrl={teamBadgeLogoUrl}
                   createComment={createComment}
                   pinnedCommentId={pinnedCommentId}
                   canPinComments={canPinComments}

@@ -61,6 +61,8 @@ export interface PostDetails {
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
   pinnedCommentId: CommentId | null
+  /** Whether comments are locked (portal users can't comment) */
+  isCommentsLocked?: boolean
   /** Map of principalId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
   /** IDs of roadmaps this post belongs to */

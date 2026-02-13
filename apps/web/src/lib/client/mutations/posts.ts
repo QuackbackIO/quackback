@@ -10,6 +10,7 @@ import {
   updatePostFn,
   updatePostTagsFn,
   createPostFn,
+  toggleCommentsLockFn,
 } from '@/lib/server/functions/posts'
 import { toggleVoteFn } from '@/lib/server/functions/public-posts'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
@@ -344,6 +345,38 @@ export function useCreatePost() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+    },
+  })
+}
+
+// ============================================================================
+// Toggle Comments Lock Mutation
+// ============================================================================
+
+export function useToggleCommentsLock() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ postId, locked }: { postId: PostId; locked: boolean }) =>
+      toggleCommentsLockFn({ data: { id: postId, locked } }),
+    onMutate: async ({ postId, locked }) => {
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
+      const previous = queryClient.getQueryData<PostDetails>(inboxKeys.detail(postId))
+      if (previous) {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
+          ...previous,
+          isCommentsLocked: locked,
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, { postId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(inboxKeys.detail(postId), context.previous)
+      }
+    },
+    onSettled: (_data, _error, { postId }) => {
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
     },
   })
 }

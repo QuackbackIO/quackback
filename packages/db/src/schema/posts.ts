@@ -82,6 +82,8 @@ export const posts = pgTable(
       () => principal.id,
       { onDelete: 'set null' }
     ),
+    // Lock thread: prevent portal users from commenting (team members can still comment)
+    isCommentsLocked: boolean('is_comments_locked').default(false).notNull(),
     // Moderation state for imported/pending content
     moderationState: text('moderation_state', {
       enum: ['published', 'pending', 'spam', 'archived', 'closed', 'deleted'],
@@ -214,6 +216,15 @@ export const comments = pgTable(
       .references(() => principal.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
     isTeamMember: boolean('is_team_member').default(false).notNull(),
+    // Status change tracking: records which status transition occurred with this comment
+    statusChangeFromId: typeIdColumnNullable('status')('status_change_from_id').references(
+      () => postStatuses.id,
+      { onDelete: 'set null' }
+    ),
+    statusChangeToId: typeIdColumnNullable('status')('status_change_to_id').references(
+      () => postStatuses.id,
+      { onDelete: 'set null' }
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -404,6 +415,17 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
   }),
   replies: many(comments, { relationName: 'commentReplies' }),
   reactions: many(commentReactions),
+  // Status change tracking
+  statusChangeFrom: one(postStatuses, {
+    fields: [comments.statusChangeFromId],
+    references: [postStatuses.id],
+    relationName: 'commentStatusChangeFrom',
+  }),
+  statusChangeTo: one(postStatuses, {
+    fields: [comments.statusChangeToId],
+    references: [postStatuses.id],
+    relationName: 'commentStatusChangeTo',
+  }),
 }))
 
 export const commentReactionsRelations = relations(commentReactions, ({ one }) => ({

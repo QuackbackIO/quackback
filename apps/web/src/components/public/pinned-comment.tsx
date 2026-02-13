@@ -1,4 +1,4 @@
-import { MapPinIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
+import { MapPinIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -27,12 +27,9 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
             <span className="text-sm font-semibold text-foreground">
               {comment.authorName || workspaceName}
             </span>
-            <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground">
-              <CheckCircleIcon className="h-3 w-3" />
-            </span>
             <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
               <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
-              Official
+              Pinned
             </Badge>
             <span className="text-muted-foreground">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />

@@ -26,7 +26,7 @@ import {
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { PostId, BoardId, PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
-import { buildCommentTree, type CommentTreeNode } from '@/lib/shared'
+import { buildCommentTree, toStatusChange, type CommentTreeNode } from '@/lib/shared'
 import type {
   PostWithDetails,
   InboxPostListParams,
@@ -181,7 +181,7 @@ export async function getCommentsWithReplies(
   })
   const postIds = [postId, ...mergedPosts.map((p) => p.id)] as PostId[]
 
-  // Get all comments with reactions and author info (including from merged posts)
+  // Get all comments with reactions, author info, and status changes (including from merged posts)
   const allComments = await db.query.comments.findMany({
     where: postIds.length === 1 ? eq(comments.postId, postId) : inArray(comments.postId, postIds),
     with: {
@@ -189,19 +189,24 @@ export async function getCommentsWithReplies(
       author: {
         columns: { displayName: true },
       },
+      statusChangeFrom: {
+        columns: { name: true, color: true },
+      },
+      statusChangeTo: {
+        columns: { name: true, color: true },
+      },
     },
     orderBy: asc(comments.createdAt),
   })
 
   // Build nested tree using the utility function
-  // Map to include authorName from the principal's displayName
   const commentsWithAuthor = allComments.map((c) => ({
     ...c,
     authorName: c.author?.displayName ?? null,
+    statusChange: toStatusChange(c.statusChangeFrom, c.statusChangeTo),
   }))
-  const commentTree = buildCommentTree(commentsWithAuthor, principalId)
 
-  return commentTree
+  return buildCommentTree(commentsWithAuthor, principalId)
 }
 
 /**
@@ -222,6 +227,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     dateTo,
     minVotes,
     responded,
+    updatedBefore,
     sort = 'newest',
     page = 1,
     limit = 20,
@@ -295,6 +301,11 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(isNull(posts.officialResponseAt))
   }
 
+  // Updated before filter (for "stale" view)
+  if (updatedBefore) {
+    conditions.push(sql`${posts.updatedAt} < ${updatedBefore}`)
+  }
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
   // Sort order
@@ -359,9 +370,6 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
  * @returns Result containing posts for export or an error
  */
 export async function listPostsForExport(boardId: BoardId | undefined): Promise<PostForExport[]> {
-  // Build conditions
-  const conditions = []
-
   // Get board IDs - either specific board or all boards
   const allBoardIds = boardId
     ? [boardId]
@@ -375,14 +383,10 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
     return []
   }
 
-  conditions.push(inArray(posts.boardId, allBoardIds))
-
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-
   // Get posts with board and tags (limit to prevent memory exhaustion)
   const MAX_EXPORT_POSTS = 10000
   const rawPosts = await db.query.posts.findMany({
-    where: whereClause,
+    where: inArray(posts.boardId, allBoardIds),
     orderBy: desc(posts.createdAt),
     limit: MAX_EXPORT_POSTS,
     with: {
@@ -420,24 +424,24 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
   const statusMap = new Map(statusDetails.map((s) => [s.id, { name: s.name, color: s.color }]))
 
   // Transform to export format
-  const exportPosts: PostForExport[] = rawPosts.map((post) => ({
-    id: post.id,
-    title: post.title,
-    content: post.content,
-    statusId: post.statusId,
-    voteCount: post.voteCount,
-    authorName: post.author?.displayName ?? null,
-    authorEmail: post.author?.user?.email ?? null,
-    createdAt: post.createdAt,
-    updatedAt: post.updatedAt,
-    board: {
-      id: post.board.id,
-      name: post.board.name,
-      slug: post.board.slug,
-    },
-    tags: post.tags.map((pt) => pt.tag),
-    statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
-  }))
-
-  return exportPosts
+  return rawPosts.map(
+    (post): PostForExport => ({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      statusId: post.statusId,
+      voteCount: post.voteCount,
+      authorName: post.author?.displayName ?? null,
+      authorEmail: post.author?.user?.email ?? null,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      board: {
+        id: post.board.id,
+        name: post.board.name,
+        slug: post.board.slug,
+      },
+      tags: post.tags.map((pt) => pt.tag),
+      statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
+    })
+  )
 }
