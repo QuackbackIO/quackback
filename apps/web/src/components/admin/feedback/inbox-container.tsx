@@ -8,8 +8,6 @@ import { FeedbackTableView } from '@/components/admin/feedback/table'
 import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog'
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
-import { useUpdatePostStatus } from '@/lib/client/mutations/posts'
-import type { PostId, StatusId } from '@quackback/ids'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
@@ -64,9 +62,6 @@ export function InboxContainer({
 
   const posts = flattenInboxPosts(postsData)
 
-  // Mutations
-  const updateStatus = useUpdatePostStatus()
-
   // Handlers
   const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -93,13 +88,6 @@ export function InboxContainer({
       })
     },
     [navigate, posts, search]
-  )
-
-  const handleStatusChange = useCallback(
-    (postId: string, statusId: StatusId) => {
-      updateStatus.mutate({ postId: postId as PostId, statusId })
-    },
-    [updateStatus]
   )
 
   const refetchPosts = useCallback(() => {
@@ -134,15 +122,10 @@ export function InboxContainer({
         isLoadingMore={isLoadingMore}
         onNavigateToPost={handleNavigateToPost}
         onLoadMore={handleLoadMore}
-        sort={filters.sort}
-        onSortChange={(sort) => setFilters({ sort })}
-        search={filters.search}
-        onSearchChange={(search) => setFilters({ search })}
         hasActiveFilters={hasActiveFilters}
         onClearFilters={clearFilters}
         onToggleStatus={toggleStatus}
         onToggleBoard={toggleBoard}
-        onStatusChange={handleStatusChange}
         headerAction={
           <CreatePostDialog
             boards={boards}

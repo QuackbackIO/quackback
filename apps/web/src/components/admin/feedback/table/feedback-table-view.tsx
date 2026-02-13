@@ -3,21 +3,15 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { SearchInput } from '@/components/shared/search-input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ViewTabs } from '@/components/admin/feedback/view-tabs'
+import { cn } from '@/lib/shared/utils'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { StatusId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
@@ -32,16 +26,11 @@ interface FeedbackTableViewProps {
   isLoadingMore: boolean
   onNavigateToPost: (id: string) => void
   onLoadMore: () => void
-  sort: InboxFilters['sort']
-  onSortChange: (sort: InboxFilters['sort']) => void
-  search: string | undefined
-  onSearchChange: (search: string | undefined) => void
   hasActiveFilters: boolean
   onClearFilters: () => void
   headerAction?: React.ReactNode
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
-  onStatusChange: (postId: string, statusId: StatusId) => void
 }
 
 function TableSkeleton() {
@@ -93,17 +82,14 @@ export function FeedbackTableView({
   isLoadingMore,
   onNavigateToPost,
   onLoadMore,
-  sort,
-  onSortChange,
-  search,
-  onSearchChange,
   hasActiveFilters,
   onClearFilters,
   headerAction,
   onToggleStatus,
   onToggleBoard,
-  onStatusChange: _onStatusChange,
 }: FeedbackTableViewProps): React.ReactElement {
+  const sort = filters.sort
+  const search = filters.search
   const [searchValue, setSearchValue] = useState(search || '')
 
   // Sync input when parent search changes (e.g., clear filters)
@@ -115,11 +101,11 @@ export function FeedbackTableView({
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (searchValue !== (search || '')) {
-        onSearchChange(searchValue || undefined)
+        onFiltersChange({ search: searchValue || undefined })
       }
     }, 300)
     return () => clearTimeout(timeoutId)
-  }, [searchValue, search, onSearchChange])
+  }, [searchValue, search, onFiltersChange])
 
   const loadMoreRef = useInfiniteScroll({
     hasMore,
@@ -152,8 +138,19 @@ export function FeedbackTableView({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  const sortOptions = [
+    { value: 'newest', label: 'Newest' },
+    { value: 'oldest', label: 'Oldest' },
+    { value: 'votes', label: 'Top Votes' },
+  ] as const
+
   const headerContent = (
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+      {/* View Tabs Row */}
+      <div className="flex items-center gap-1 mb-2">
+        <ViewTabs statuses={statuses} />
+      </div>
+
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <SearchInput
@@ -162,19 +159,23 @@ export function FeedbackTableView({
           placeholder="Search..."
           data-search-input
         />
-        <Select
-          value={sort || 'newest'}
-          onValueChange={(value) => onSortChange(value as 'newest' | 'oldest' | 'votes')}
-        >
-          <SelectTrigger className="h-8 w-[90px] text-xs border-border/50">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Newest</SelectItem>
-            <SelectItem value="oldest">Oldest</SelectItem>
-            <SelectItem value="votes">Top Votes</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1">
+          {sortOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={cn(
+                'px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer',
+                sort === opt.value
+                  ? 'bg-muted text-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-muted/50'
+              )}
+              onClick={() => onFiltersChange({ sort: opt.value })}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         {headerAction}
       </div>
 

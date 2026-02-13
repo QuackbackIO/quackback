@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
-  HomeIcon,
   MapIcon,
   UsersIcon,
   ArrowRightOnRectangleIcon,
@@ -36,7 +35,6 @@ interface AdminSidebarProps {
 }
 
 const navItems = [
-  { label: 'Home', href: '/admin', icon: HomeIcon, exact: true },
   { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
@@ -44,8 +42,7 @@ const navItems = [
   { label: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon },
 ]
 
-function isNavActive(pathname: string, href: string, exact?: boolean) {
-  if (exact) return pathname === href || pathname === href + '/'
+function isNavActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/')
 }
 
@@ -109,7 +106,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
         <div className="flex flex-col h-full py-6">
           {/* Logo */}
           <Link
-            to="/admin"
+            to="/admin/feedback"
             className="flex items-center justify-center mb-8 opacity-90 hover:opacity-100 transition-opacity"
           >
             <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
@@ -123,7 +120,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 href={item.href}
                 icon={item.icon}
                 label={item.label}
-                isActive={isNavActive(pathname, item.href, item.exact)}
+                isActive={isNavActive(pathname, item.href)}
               />
             ))}
           </nav>
@@ -202,7 +199,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
           <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="px-5 pt-6 pb-4">
               <SheetTitle className="flex items-center gap-3">
-                <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
+                <Link to="/admin/feedback" onClick={() => setMobileMenuOpen(false)}>
                   <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
                 </Link>
                 <span className="text-base font-semibold">Quackback</span>
@@ -210,7 +207,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
               {navItems.map((item) => {
-                const isActive = isNavActive(pathname, item.href, item.exact)
+                const isActive = isNavActive(pathname, item.href)
                 const Icon = item.icon
                 return (
                   <Link
@@ -241,7 +238,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
           </SheetContent>
         </Sheet>
 
-        <Link to="/admin" className="absolute left-1/2 -translate-x-1/2">
+        <Link to="/admin/feedback" className="absolute left-1/2 -translate-x-1/2">
           <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
         </Link>
 

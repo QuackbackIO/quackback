@@ -48,6 +48,7 @@ const inboxPostListSchema = z.object({
   tagIds: z.array(z.string()).optional(),
   minVotes: z.number().optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
+  updatedBefore: z.string().optional(),
 }) as z.ZodType<InboxPostListParams>
 
 const listPortalUsersSchema = z.object({
@@ -74,7 +75,12 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await listInboxPosts(data)
+      const result = await listInboxPosts({
+        ...data,
+        updatedBefore: data.updatedBefore
+          ? new Date(data.updatedBefore as unknown as string)
+          : undefined,
+      })
       console.log(`[fn:admin] fetchInboxPosts: count=${result.items.length}`)
       // Serialize contentJson field and Date fields
       return {
