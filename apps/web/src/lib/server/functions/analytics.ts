@@ -11,6 +11,7 @@ import {
   getStalePlannedPosts,
   getNegativeHotspots,
   getActivityCounts,
+  getActivityTimeSeries,
   getStatusPipeline,
   getResponseHealth,
 } from '@/lib/server/domains/analytics'
@@ -49,6 +50,7 @@ export const getBriefingDataFn = createServerFn({ method: 'GET' })
         negativeHotspots,
         activity,
         prevActivity,
+        activityTimeSeries,
         sentiment,
         prevSentiment,
         pipeline,
@@ -61,6 +63,7 @@ export const getBriefingDataFn = createServerFn({ method: 'GET' })
         getNegativeHotspots(),
         getActivityCounts(start, end),
         getActivityCounts(prevStart, prevEnd),
+        getActivityTimeSeries(start, end),
         getSentimentBreakdown(start, end),
         getSentimentBreakdown(prevStart, prevEnd),
         getStatusPipeline(),
@@ -91,6 +94,7 @@ export const getBriefingDataFn = createServerFn({ method: 'GET' })
         activity: {
           current: activity,
           previous: prevActivity,
+          timeSeries: activityTimeSeries,
         },
         sentiment: {
           current: sentiment,

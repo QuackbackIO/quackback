@@ -230,6 +230,68 @@ export async function getActivityCounts(start: Date, end: Date) {
 }
 
 // ---------------------------------------------------------------------------
+// Activity Time Series (for sparklines)
+// ---------------------------------------------------------------------------
+
+/** Per-day counts of posts, votes, and comments over a date range. */
+export async function getActivityTimeSeries(start: Date, end: Date) {
+  const [postRows, voteRows, commentRows] = await Promise.all([
+    db
+      .select({
+        day: sql<string>`${posts.createdAt}::date::text`,
+        count: count(),
+      })
+      .from(posts)
+      .where(and(gte(posts.createdAt, start), lte(posts.createdAt, end), isNull(posts.deletedAt)))
+      .groupBy(sql`${posts.createdAt}::date`)
+      .orderBy(sql`${posts.createdAt}::date`),
+    db
+      .select({
+        day: sql<string>`${votes.createdAt}::date::text`,
+        count: count(),
+      })
+      .from(votes)
+      .where(and(gte(votes.createdAt, start), lte(votes.createdAt, end)))
+      .groupBy(sql`${votes.createdAt}::date`)
+      .orderBy(sql`${votes.createdAt}::date`),
+    db
+      .select({
+        day: sql<string>`${comments.createdAt}::date::text`,
+        count: count(),
+      })
+      .from(comments)
+      .where(
+        and(
+          gte(comments.createdAt, start),
+          lte(comments.createdAt, end),
+          isNull(comments.deletedAt)
+        )
+      )
+      .groupBy(sql`${comments.createdAt}::date`)
+      .orderBy(sql`${comments.createdAt}::date`),
+  ])
+
+  const postMap = new Map(postRows.map((r) => [r.day, Number(r.count)]))
+  const voteMap = new Map(voteRows.map((r) => [r.day, Number(r.count)]))
+  const commentMap = new Map(commentRows.map((r) => [r.day, Number(r.count)]))
+
+  // Fill in every day in the range so sparklines show zeros instead of gaps
+  const postCounts: number[] = []
+  const voteCounts: number[] = []
+  const commentCounts: number[] = []
+  const d = new Date(start)
+  while (d <= end) {
+    const key = d.toISOString().slice(0, 10)
+    postCounts.push(postMap.get(key) ?? 0)
+    voteCounts.push(voteMap.get(key) ?? 0)
+    commentCounts.push(commentMap.get(key) ?? 0)
+    d.setDate(d.getDate() + 1)
+  }
+
+  return { posts: postCounts, votes: voteCounts, comments: commentCounts }
+}
+
+// ---------------------------------------------------------------------------
 // Status Pipeline
 // ---------------------------------------------------------------------------
 

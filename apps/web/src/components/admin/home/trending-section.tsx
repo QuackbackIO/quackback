@@ -1,7 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronUpIcon, FireIcon } from '@heroicons/react/20/solid'
+import { FireIcon } from '@heroicons/react/20/solid'
+import { ChartBarIcon } from '@heroicons/react/24/outline'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 
 interface TrendingPost {
@@ -25,54 +27,86 @@ function computeHotThreshold(values: number[]): number {
 
 export function TrendingSection({ posts }: { posts: TrendingPost[] }) {
   const hotThreshold = computeHotThreshold(posts.map((p) => p.votesInPeriod))
+  const maxVotes = Math.max(...posts.map((p) => p.votesInPeriod), 1)
+
   return (
-    <Card>
+    <Card
+      className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-backwards"
+      style={{ animationDelay: '200ms' }}
+    >
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold">Trending Now</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-base font-semibold">Trending Now</CardTitle>
+          {posts.length > 0 && (
+            <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-2 py-0.5 tabular-nums">
+              {posts.length}
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {posts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No trending posts in this period. Once users start voting, trending posts will appear
-            here.
-          </p>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center mb-3">
+              <ChartBarIcon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium">No trending posts yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Share your feedback board to start collecting votes
+            </p>
+          </div>
         ) : (
-          <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
-            {posts.map((post, index) => (
-              <Link
-                key={post.id}
-                to="/admin/feedback"
-                search={{ post: post.id }}
-                className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-                style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-              >
-                {/* Vote count box */}
-                <div className="flex flex-col items-center w-11 py-1.5 rounded-lg border bg-muted/40 border-border/50 shrink-0">
-                  <ChevronUpIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold tabular-nums">{post.voteCount}</span>
-                </div>
-
-                {/* Content */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {post.statusName && (
-                      <StatusBadge name={post.statusName} color={post.statusColor} />
+          <div className="space-y-1">
+            {posts.slice(0, 5).map((post, index) => {
+              const barWidth = (post.votesInPeriod / maxVotes) * 100
+              const isHot = post.votesInPeriod >= hotThreshold
+              return (
+                <Link
+                  key={post.id}
+                  to="/admin/feedback"
+                  search={{ post: post.id }}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors group animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                  style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+                >
+                  {/* Rank */}
+                  <span
+                    className={cn(
+                      'text-xs font-bold tabular-nums w-5 text-center shrink-0',
+                      index < 3 ? 'text-foreground' : 'text-muted-foreground'
                     )}
-                    <span className="font-medium text-sm text-foreground line-clamp-1">
-                      {post.title}
+                  >
+                    #{index + 1}
+                  </span>
+
+                  {/* Content */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {post.statusName && (
+                        <StatusBadge name={post.statusName} color={post.statusColor} />
+                      )}
+                      <span className="font-medium text-sm text-foreground line-clamp-1">
+                        {post.title}
+                      </span>
+                      {isHot && <FireIcon className="h-3.5 w-3.5 text-orange-500 shrink-0" />}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{post.boardName}</span>
+                  </div>
+
+                  {/* Vote bar + count */}
+                  <div className="flex items-center gap-2 shrink-0 w-24">
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary/60 transition-all"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums w-6 text-right">
+                      {post.votesInPeriod}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                    <span>{post.boardName}</span>
-                    <span className="text-muted-foreground/40">&middot;</span>
-                    <span>{post.votesInPeriod} votes in period</span>
-                    {post.votesInPeriod >= hotThreshold && (
-                      <FireIcon className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
         )}
       </CardContent>
