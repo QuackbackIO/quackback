@@ -1,7 +1,7 @@
 /**
  * MCP Tools for Quackback
  *
- * 7 tools calling domain services directly (no HTTP self-loop):
+ * 15 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts and changelogs
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, owner, official response
@@ -9,6 +9,14 @@
  * - add_comment: Post a comment on a post
  * - create_post: Submit new feedback
  * - create_changelog: Create a changelog entry
+ * - update_changelog: Update title, content, publish state, linked posts
+ * - delete_changelog: Soft-delete a changelog entry
+ * - update_comment: Edit a comment's content
+ * - delete_comment: Hard-delete a comment and its replies
+ * - react_to_comment: Add or remove emoji reaction on a comment
+ * - manage_roadmap_post: Add or remove a post from a roadmap
+ * - merge_post: Merge a duplicate post into a canonical post
+ * - unmerge_post: Restore a merged post to independent state
  */
 
 import { z } from 'zod'
@@ -21,12 +29,25 @@ import {
 } from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
-import { createComment } from '@/lib/server/domains/comments/comment.service'
+import { mergePost, unmergePost } from '@/lib/server/domains/posts/post.merge'
+import {
+  createComment,
+  updateComment,
+  deleteComment,
+  addReaction,
+  removeReaction,
+} from '@/lib/server/domains/comments/comment.service'
 import {
   createChangelog,
+  updateChangelog,
+  deleteChangelog,
   listChangelogs,
   getChangelogById,
 } from '@/lib/server/domains/changelog/changelog.service'
+import {
+  addPostToRoadmap,
+  removePostFromRoadmap,
+} from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getTypeIdPrefix } from '@quackback/ids'
 import type { McpAuthContext, McpScope } from './types'
 import type {
@@ -37,6 +58,7 @@ import type {
   PrincipalId,
   CommentId,
   ChangelogId,
+  RoadmapId,
 } from '@quackback/ids'
 
 // ============================================================================
@@ -106,6 +128,12 @@ const READ_ONLY: ToolAnnotations = { readOnlyHint: true, openWorldHint: false }
 const WRITE: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+}
+const DESTRUCTIVE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: false,
 }
@@ -194,6 +222,55 @@ const createChangelogSchema = {
     .describe('Set to true to publish immediately. Defaults to draft.'),
 }
 
+const updateChangelogSchema = {
+  changelogId: z.string().describe('Changelog TypeID to update'),
+  title: z.string().max(200).optional().describe('New title'),
+  content: z
+    .string()
+    .max(50000)
+    .optional()
+    .describe('New content (markdown supported, max 50,000 chars)'),
+  publish: z.boolean().optional().describe('Set to true to publish, false to revert to draft'),
+  linkedPostIds: z
+    .array(z.string())
+    .optional()
+    .describe('Replace linked posts with these post TypeIDs'),
+}
+
+const deleteChangelogSchema = {
+  changelogId: z.string().describe('Changelog TypeID to delete'),
+}
+
+const updateCommentSchema = {
+  commentId: z.string().describe('Comment TypeID to edit'),
+  content: z.string().max(5000).describe('New comment text (max 5,000 characters)'),
+}
+
+const deleteCommentSchema = {
+  commentId: z.string().describe('Comment TypeID to delete'),
+}
+
+const reactToCommentSchema = {
+  action: z.enum(['add', 'remove']).describe('Whether to add or remove the reaction'),
+  commentId: z.string().describe('Comment TypeID to react to'),
+  emoji: z.string().max(32).describe('Emoji to react with (e.g., "👍", "❤️", "🎉")'),
+}
+
+const manageRoadmapPostSchema = {
+  action: z.enum(['add', 'remove']).describe('Whether to add or remove the post from the roadmap'),
+  roadmapId: z.string().describe('Roadmap TypeID'),
+  postId: z.string().describe('Post TypeID'),
+}
+
+const mergePostSchema = {
+  duplicatePostId: z.string().describe('Post TypeID of the duplicate to merge away'),
+  canonicalPostId: z.string().describe('Post TypeID of the canonical post to merge into'),
+}
+
+const unmergePostSchema = {
+  postId: z.string().describe('Post TypeID of the merged post to restore'),
+}
+
 // ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion
 // ============================================================================
@@ -240,6 +317,42 @@ type CreateChangelogArgs = {
   content: string
   publish: boolean
 }
+
+type UpdateChangelogArgs = {
+  changelogId: string
+  title?: string
+  content?: string
+  publish?: boolean
+  linkedPostIds?: string[]
+}
+
+type DeleteChangelogArgs = { changelogId: string }
+
+type UpdateCommentArgs = {
+  commentId: string
+  content: string
+}
+
+type DeleteCommentArgs = { commentId: string }
+
+type ReactToCommentArgs = {
+  action: 'add' | 'remove'
+  commentId: string
+  emoji: string
+}
+
+type ManageRoadmapPostArgs = {
+  action: 'add' | 'remove'
+  roadmapId: string
+  postId: string
+}
+
+type MergePostArgs = {
+  duplicatePostId: string
+  canonicalPostId: string
+}
+
+type UnmergePostArgs = { postId: string }
 
 // ============================================================================
 // Tool registration
@@ -503,6 +616,256 @@ Examples:
           status: result.status,
           publishedAt: result.publishedAt,
           createdAt: result.createdAt,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // update_changelog
+  server.tool(
+    'update_changelog',
+    `Update title, content, publish state, and/or linked posts on an existing changelog entry.
+
+Examples:
+- Update title: update_changelog({ changelogId: "changelog_01abc...", title: "v2.0 Release" })
+- Publish: update_changelog({ changelogId: "changelog_01abc...", publish: true })
+- Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })`,
+    updateChangelogSchema,
+    WRITE,
+    async (args: UpdateChangelogArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:changelog')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const result = await updateChangelog(args.changelogId as ChangelogId, {
+          title: args.title,
+          content: args.content,
+          linkedPostIds: args.linkedPostIds as PostId[] | undefined,
+          publishState:
+            args.publish === true
+              ? { type: 'published' }
+              : args.publish === false
+                ? { type: 'draft' }
+                : undefined,
+        })
+
+        return jsonResult({
+          id: result.id,
+          title: result.title,
+          status: result.status,
+          publishedAt: result.publishedAt,
+          updatedAt: result.updatedAt,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // delete_changelog
+  server.tool(
+    'delete_changelog',
+    `Soft-delete a changelog entry. This cannot be undone via the API.
+
+Examples:
+- Delete: delete_changelog({ changelogId: "changelog_01abc..." })`,
+    deleteChangelogSchema,
+    DESTRUCTIVE,
+    async (args: DeleteChangelogArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:changelog')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        await deleteChangelog(args.changelogId as ChangelogId)
+
+        return jsonResult({ deleted: true, changelogId: args.changelogId })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // update_comment
+  server.tool(
+    'update_comment',
+    `Edit a comment's content. Team members can edit any comment.
+
+Examples:
+- Edit: update_comment({ commentId: "comment_01abc...", content: "Updated feedback response." })`,
+    updateCommentSchema,
+    WRITE,
+    async (args: UpdateCommentArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const result = await updateComment(
+          args.commentId as CommentId,
+          { content: args.content },
+          { principalId: auth.principalId, role: auth.role }
+        )
+
+        return jsonResult({
+          id: result.id,
+          postId: result.postId,
+          content: result.content,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // delete_comment
+  server.tool(
+    'delete_comment',
+    `Hard-delete a comment and all its replies (cascade). This cannot be undone.
+
+Examples:
+- Delete: delete_comment({ commentId: "comment_01abc..." })`,
+    deleteCommentSchema,
+    DESTRUCTIVE,
+    async (args: DeleteCommentArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        await deleteComment(args.commentId as CommentId, {
+          principalId: auth.principalId,
+          role: auth.role,
+        })
+
+        return jsonResult({ deleted: true, commentId: args.commentId })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // react_to_comment
+  server.tool(
+    'react_to_comment',
+    `Add or remove an emoji reaction on a comment.
+
+Examples:
+- Add reaction: react_to_comment({ action: "add", commentId: "comment_01abc...", emoji: "👍" })
+- Remove reaction: react_to_comment({ action: "remove", commentId: "comment_01abc...", emoji: "👍" })`,
+    reactToCommentSchema,
+    WRITE,
+    async (args: ReactToCommentArgs): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:feedback')
+      if (denied) return denied
+      try {
+        const result =
+          args.action === 'add'
+            ? await addReaction(args.commentId as CommentId, args.emoji, auth.principalId)
+            : await removeReaction(args.commentId as CommentId, args.emoji, auth.principalId)
+
+        return jsonResult({
+          commentId: args.commentId,
+          emoji: args.emoji,
+          added: result.added,
+          reactions: result.reactions,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // manage_roadmap_post
+  server.tool(
+    'manage_roadmap_post',
+    `Add or remove a post from a roadmap.
+
+Examples:
+- Add: manage_roadmap_post({ action: "add", roadmapId: "roadmap_01abc...", postId: "post_01xyz..." })
+- Remove: manage_roadmap_post({ action: "remove", roadmapId: "roadmap_01abc...", postId: "post_01xyz..." })`,
+    manageRoadmapPostSchema,
+    WRITE,
+    async (args: ManageRoadmapPostArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        if (args.action === 'add') {
+          await addPostToRoadmap({
+            postId: args.postId as PostId,
+            roadmapId: args.roadmapId as RoadmapId,
+          })
+        } else {
+          await removePostFromRoadmap(args.postId as PostId, args.roadmapId as RoadmapId)
+        }
+
+        return jsonResult({
+          action: args.action,
+          postId: args.postId,
+          roadmapId: args.roadmapId,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // merge_post
+  server.tool(
+    'merge_post',
+    `Merge a duplicate post into a canonical post. Aggregates votes. Reversible via unmerge_post.
+
+Examples:
+- Merge: merge_post({ duplicatePostId: "post_01dup...", canonicalPostId: "post_01canon..." })`,
+    mergePostSchema,
+    WRITE,
+    async (args: MergePostArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const result = await mergePost(
+          args.duplicatePostId as PostId,
+          args.canonicalPostId as PostId,
+          auth.principalId
+        )
+
+        return jsonResult({
+          canonicalPost: result.canonicalPost,
+          duplicatePost: result.duplicatePost,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // unmerge_post
+  server.tool(
+    'unmerge_post',
+    `Restore a merged post to independent state. Recalculates vote counts.
+
+Examples:
+- Unmerge: unmerge_post({ postId: "post_01merged..." })`,
+    unmergePostSchema,
+    WRITE,
+    async (args: UnmergePostArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const result = await unmergePost(args.postId as PostId, auth.principalId)
+
+        return jsonResult({
+          post: result.post,
+          canonicalPost: result.canonicalPost,
         })
       } catch (err) {
         return errorResult(err)
