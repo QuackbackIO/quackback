@@ -8,18 +8,19 @@ vi.mock('@/lib/server/domains/api-keys', () => ({
   verifyApiKey: vi.fn(),
 }))
 
+vi.mock('better-auth/oauth2', () => ({
+  verifyAccessToken: vi.fn(),
+}))
+
 const mockFindFirst = vi.fn()
-const mockOAuthTokenFindFirst = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
       principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
-      oauthAccessToken: { findFirst: (...args: unknown[]) => mockOAuthTokenFindFirst(...args) },
     },
   },
   principal: { id: 'id', userId: 'user_id' },
-  oauthAccessToken: { token: 'token' },
   eq: vi.fn((_a: unknown, _b: unknown) => 'eq-condition'),
 }))
 
@@ -104,6 +105,17 @@ vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: vi.fn().mockResolvedValue({ voted: true, voteCount: 6 }),
 }))
 
+vi.mock('@/lib/server/domains/posts/post.merge', () => ({
+  mergePost: vi.fn().mockResolvedValue({
+    canonicalPost: { id: 'post_canon', voteCount: 10 },
+    duplicatePost: { id: 'post_dup' },
+  }),
+  unmergePost: vi.fn().mockResolvedValue({
+    post: { id: 'post_dup' },
+    canonicalPost: { id: 'post_canon', voteCount: 5 },
+  }),
+}))
+
 vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   createComment: vi.fn().mockResolvedValue({
     comment: {
@@ -117,6 +129,21 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
     },
     post: { id: 'post_test', title: 'Test Post', boardSlug: 'bugs' },
   }),
+  updateComment: vi.fn().mockResolvedValue({
+    id: 'comment_new',
+    postId: 'post_test',
+    content: 'Updated comment',
+    updatedAt: new Date('2026-01-02'),
+  }),
+  deleteComment: vi.fn().mockResolvedValue(undefined),
+  addReaction: vi.fn().mockResolvedValue({
+    added: true,
+    reactions: [{ emoji: '👍', count: 1, hasReacted: true }],
+  }),
+  removeReaction: vi.fn().mockResolvedValue({
+    added: false,
+    reactions: [],
+  }),
 }))
 
 vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
@@ -127,6 +154,14 @@ vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
     publishedAt: null,
     createdAt: new Date('2026-01-01'),
   }),
+  updateChangelog: vi.fn().mockResolvedValue({
+    id: 'changelog_01test',
+    title: 'Updated Release',
+    status: 'published',
+    publishedAt: new Date('2026-01-15'),
+    updatedAt: new Date('2026-01-20'),
+  }),
+  deleteChangelog: vi.fn().mockResolvedValue(undefined),
   listChangelogs: vi.fn().mockResolvedValue({
     items: [
       {
@@ -176,6 +211,8 @@ vi.mock('@/lib/server/domains/roadmaps/roadmap.service', () => ({
   listRoadmaps: vi
     .fn()
     .mockResolvedValue([{ id: 'roadmap_test', name: 'Q1 2026', slug: 'q1-2026' }]),
+  addPostToRoadmap: vi.fn().mockResolvedValue(undefined),
+  removePostFromRoadmap: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/server/domains/principals/principal.service', () => ({
@@ -269,18 +306,16 @@ function oauthRequest(body: unknown, token = 'oauth_test_token_abc123'): Request
   })
 }
 
-/** Set up mocks for a valid OAuth token lookup. */
+/** Set up mocks for a valid OAuth JWT verification. */
 async function setupValidOAuth(overrides?: { role?: string; scopes?: string[] }) {
-  const futureDate = new Date(Date.now() + 3600_000)
-  mockOAuthTokenFindFirst.mockResolvedValue({
-    token: 'hashed_token',
-    userId: MOCK_USER_ID,
-    expiresAt: futureDate,
-    scopes: overrides?.scopes ?? ['read:feedback', 'write:feedback', 'write:changelog'],
-  })
-  mockFindFirst.mockResolvedValue({
-    ...MOCK_MEMBER_RECORD,
+  const { verifyAccessToken } = await import('better-auth/oauth2')
+  vi.mocked(verifyAccessToken).mockResolvedValue({
+    sub: MOCK_USER_ID,
+    principalId: MOCK_MEMBER_ID,
     role: overrides?.role ?? 'admin',
+    scope: (overrides?.scopes ?? ['read:feedback', 'write:feedback', 'write:changelog']).join(' '),
+    name: 'Jane Admin',
+    email: 'jane@example.com',
   })
 }
 
@@ -382,13 +417,8 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 for expired OAuth token', async () => {
-      const pastDate = new Date(Date.now() - 3600_000)
-      mockOAuthTokenFindFirst.mockResolvedValue({
-        token: 'hashed_token',
-        userId: MOCK_USER_ID,
-        expiresAt: pastDate,
-        scopes: ['read:feedback'],
-      })
+      const { verifyAccessToken } = await import('better-auth/oauth2')
+      vi.mocked(verifyAccessToken).mockRejectedValue(new Error('token expired'))
 
       const { handleMcpRequest } = await import('../handler')
       const response = await handleMcpRequest(oauthRequest(jsonRpcRequest('initialize')))
@@ -396,8 +426,9 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(401)
     })
 
-    it('should return 401 for unknown OAuth token', async () => {
-      mockOAuthTokenFindFirst.mockResolvedValue(null)
+    it('should return 401 for invalid OAuth token', async () => {
+      const { verifyAccessToken } = await import('better-auth/oauth2')
+      vi.mocked(verifyAccessToken).mockRejectedValue(new Error('token invalid'))
 
       const { handleMcpRequest } = await import('../handler')
       const response = await handleMcpRequest(oauthRequest(jsonRpcRequest('initialize')))
@@ -490,7 +521,15 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('add_comment')
       expect(toolNames).toContain('create_post')
       expect(toolNames).toContain('create_changelog')
-      expect(toolNames).toHaveLength(7)
+      expect(toolNames).toContain('update_changelog')
+      expect(toolNames).toContain('delete_changelog')
+      expect(toolNames).toContain('update_comment')
+      expect(toolNames).toContain('delete_comment')
+      expect(toolNames).toContain('react_to_comment')
+      expect(toolNames).toContain('manage_roadmap_post')
+      expect(toolNames).toContain('merge_post')
+      expect(toolNames).toContain('unmerge_post')
+      expect(toolNames).toHaveLength(15)
     })
 
     it('should handle resources/list request', async () => {

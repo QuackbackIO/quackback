@@ -2,7 +2,7 @@
  * MCP HTTP Request Handler
  *
  * Supports dual authentication:
- * 1. OAuth access token (opaque reference token from Better Auth OAuth 2.1 flow)
+ * 1. OAuth access token (JWT verified via JWKS, no DB round-trip)
  * 2. API key (from CI/programmatic use with qb_xxx tokens)
  *
  * When neither auth method succeeds, returns 401 with WWW-Authenticate
@@ -11,9 +11,10 @@
  */
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { verifyAccessToken } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
-import { db, principal, oauthAccessToken, eq } from '@/lib/server/db'
+import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
 import { createMcpServer } from './server'
 import type { McpAuthContext, McpScope } from './types'
@@ -41,57 +42,41 @@ function extractBearerToken(request: Request): string | null {
 }
 
 /**
- * Hash an OAuth token the same way Better Auth does for storage:
- * SHA-256 digest → base64url (no padding).
- */
-async function hashOAuthToken(token: string): Promise<string> {
-  const data = new TextEncoder().encode(token)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  // base64url encode without padding
-  let b64 = Buffer.from(hashBuffer).toString('base64')
-  b64 = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  return b64
-}
-
-/**
- * Resolve auth from OAuth opaque access token.
- * Better Auth stores tokens as SHA-256 base64url hashes, so we hash
- * the incoming token and look it up in the oauthAccessToken table.
- * Returns McpAuthContext if valid, null if not an OAuth token or lookup fails.
+ * Resolve auth from OAuth JWT access token.
+ * Verifies the token signature via JWKS (no DB round-trip).
+ * Custom claims (principalId, role) are embedded by the auth config.
+ * Returns McpAuthContext if valid, null if not an OAuth token or verification fails.
  */
 async function resolveOAuthContext(token: string): Promise<McpAuthContext | null> {
   if (token.startsWith(API_KEY_PREFIX)) return null
 
   try {
-    const hashedToken = await hashOAuthToken(token)
-    const tokenRecord = await db.query.oauthAccessToken.findFirst({
-      where: eq(oauthAccessToken.token, hashedToken),
+    const payload = await verifyAccessToken(token, {
+      verifyOptions: {
+        audience: `${config.baseUrl}/api/mcp`,
+        issuer: `${config.baseUrl}/api/auth`,
+      },
+      jwksUrl: `${config.baseUrl}/api/auth/jwks`,
     })
 
-    if (!tokenRecord?.userId) return null
+    const principalId = payload.principalId as string | undefined
+    const role = (payload.role as string) ?? 'user'
+    const sub = payload.sub
 
-    // Check expiration
-    if (tokenRecord.expiresAt && tokenRecord.expiresAt < new Date()) return null
+    if (!principalId || !sub) return null
 
-    // Find the principal for this user
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, tokenRecord.userId!),
-      with: { user: true },
-    })
-
-    if (!principalRecord?.user) return null
-
-    // Parse granted scopes from token's scopes array
-    const scopes = (tokenRecord.scopes ?? []).filter((s): s is McpScope =>
-      ALL_SCOPES.includes(s as McpScope)
-    )
+    // Parse granted scopes from space-separated string
+    const scopeStr = (payload.scope as string) ?? ''
+    const scopes = scopeStr
+      .split(' ')
+      .filter((s): s is McpScope => ALL_SCOPES.includes(s as McpScope))
 
     return {
-      principalId: principalRecord.id,
-      userId: principalRecord.user.id,
-      name: principalRecord.displayName ?? principalRecord.user.name,
-      email: principalRecord.user.email,
-      role: principalRecord.role as 'admin' | 'member' | 'user',
+      principalId: principalId as McpAuthContext['principalId'],
+      userId: sub as McpAuthContext['userId'],
+      name: (payload.name as string) ?? 'Unknown',
+      email: payload.email as string | undefined,
+      role: role as 'admin' | 'member' | 'user',
       authMethod: 'oauth',
       scopes,
     }
