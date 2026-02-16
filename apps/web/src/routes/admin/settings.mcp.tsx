@@ -23,10 +23,16 @@ export const Route = createFileRoute('/admin/settings/mcp')({
   component: McpSettingsPage,
 })
 
-function McpSettingsPage() {
+function useEndpointUrl() {
   const { baseUrl } = Route.useLoaderData()
+  if (baseUrl) return `${baseUrl}/api/mcp`
+  if (typeof window !== 'undefined') return `${window.location.origin}/api/mcp`
+  return '/api/mcp'
+}
+
+function McpSettingsPage() {
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
-  const endpointUrl = `${baseUrl}/api/mcp`
+  const endpointUrl = useEndpointUrl()
 
   return (
     <div className="space-y-6 max-w-5xl">
