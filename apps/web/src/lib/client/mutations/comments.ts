@@ -5,7 +5,7 @@
  */
 
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
-import { createCommentFn, toggleReactionFn } from '@/lib/server/functions/comments'
+import { createCommentFn, addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostDetails, CommentReaction, CommentWithReplies } from '@/lib/shared/types'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
@@ -19,6 +19,8 @@ interface ToggleReactionInput {
   postId: PostId
   commentId: CommentId
   emoji: string
+  /** Whether the current user has already reacted with this emoji */
+  hasReacted: boolean
 }
 
 interface ToggleReactionResponse {
@@ -179,10 +181,10 @@ export function useToggleCommentReaction() {
     mutationFn: async ({
       commentId,
       emoji,
+      hasReacted,
     }: ToggleReactionInput): Promise<ToggleReactionResponse> => {
-      const result = await toggleReactionFn({ data: { commentId, emoji } })
-      // The action returns { added, reactions } from the domain service
-      // reactions already has { emoji, count, hasReacted } for each reaction
+      const fn = hasReacted ? removeReactionFn : addReactionFn
+      const result = await fn({ data: { commentId, emoji } })
       return { reactions: result.reactions }
     },
     onMutate: async ({ postId, commentId, emoji }) => {

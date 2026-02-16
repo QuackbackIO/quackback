@@ -7,14 +7,15 @@ import { createServerFn } from '@tanstack/react-start'
 import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
 
 import {
+  addReaction,
   canDeleteComment,
   canEditComment,
   canPinComment,
   createComment,
   deleteComment,
   pinComment,
+  removeReaction,
   softDeleteComment,
-  toggleReaction,
   unpinComment,
   updateComment,
   userEditComment,
@@ -38,7 +39,7 @@ const deleteCommentSchema = z.object({
   id: z.string(),
 })
 
-const toggleReactionSchema = z.object({
+const reactionSchema = z.object({
   commentId: z.string(),
   emoji: z.string(),
 })
@@ -60,7 +61,7 @@ const userDeleteCommentSchema = z.object({
 export type CreateCommentInput = z.infer<typeof createCommentSchema>
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>
 export type DeleteCommentInput = z.infer<typeof deleteCommentSchema>
-export type ToggleReactionInput = z.infer<typeof toggleReactionSchema>
+export type ReactionInput = z.infer<typeof reactionSchema>
 export type GetCommentPermissionsInput = z.infer<typeof getCommentPermissionsSchema>
 export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
 export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
@@ -143,21 +144,36 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
     }
   })
 
-export const toggleReactionFn = createServerFn({ method: 'POST' })
-  .inputValidator(toggleReactionSchema)
+export const addReactionFn = createServerFn({ method: 'POST' })
+  .inputValidator(reactionSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:comments] toggleReactionFn: commentId=${data.commentId}, emoji=${data.emoji}`)
+    console.log(`[fn:comments] addReactionFn: commentId=${data.commentId}, emoji=${data.emoji}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      const result = await toggleReaction(
+      const result = await addReaction(data.commentId as CommentId, data.emoji, auth.principal.id)
+      console.log(`[fn:comments] addReactionFn: added=${result.added}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:comments] ❌ addReactionFn failed:`, error)
+      throw error
+    }
+  })
+
+export const removeReactionFn = createServerFn({ method: 'POST' })
+  .inputValidator(reactionSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:comments] removeReactionFn: commentId=${data.commentId}, emoji=${data.emoji}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const result = await removeReaction(
         data.commentId as CommentId,
         data.emoji,
         auth.principal.id
       )
-      console.log(`[fn:comments] toggleReactionFn: toggled`)
+      console.log(`[fn:comments] removeReactionFn: removed`)
       return result
     } catch (error) {
-      console.error(`[fn:comments] ❌ toggleReactionFn failed:`, error)
+      console.error(`[fn:comments] ❌ removeReactionFn failed:`, error)
       throw error
     }
   })
