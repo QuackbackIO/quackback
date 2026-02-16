@@ -308,15 +308,18 @@ function oauthRequest(body: unknown, token = 'oauth_test_token_abc123'): Request
 
 /** Set up mocks for a valid OAuth JWT verification. */
 async function setupValidOAuth(overrides?: { role?: string; scopes?: string[] }) {
+  const role = overrides?.role ?? 'admin'
   const { verifyAccessToken } = await import('better-auth/oauth2')
   vi.mocked(verifyAccessToken).mockResolvedValue({
     sub: MOCK_USER_ID,
     principalId: MOCK_MEMBER_ID,
-    role: overrides?.role ?? 'admin',
+    role,
     scope: (overrides?.scopes ?? ['read:feedback', 'write:feedback', 'write:changelog']).join(' '),
     name: 'Jane Admin',
     email: 'jane@example.com',
   })
+  // resolveOAuthContext re-reads the principal's current role from DB
+  mockFindFirst.mockResolvedValue({ role })
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

@@ -692,7 +692,7 @@ Examples:
   // update_comment
   server.tool(
     'update_comment',
-    `Edit a comment's content. Team members can edit any comment.
+    `Edit a comment's content. Team members can edit any comment; authors can edit their own.
 
 Examples:
 - Edit: update_comment({ commentId: "comment_01abc...", content: "Updated feedback response." })`,
@@ -701,8 +701,7 @@ Examples:
     async (args: UpdateCommentArgs): Promise<CallToolResult> => {
       const scopeDenied = requireScope(auth, 'write:feedback')
       if (scopeDenied) return scopeDenied
-      const roleDenied = requireTeamRole(auth)
-      if (roleDenied) return roleDenied
+      // No team role gate — the service layer allows comment authors OR team members
       try {
         const result = await updateComment(
           args.commentId as CommentId,
@@ -725,6 +724,7 @@ Examples:
   server.tool(
     'delete_comment',
     `Hard-delete a comment and all its replies (cascade). This cannot be undone.
+Authors can delete their own comments; team members can delete any comment.
 
 Examples:
 - Delete: delete_comment({ commentId: "comment_01abc..." })`,
@@ -733,8 +733,7 @@ Examples:
     async (args: DeleteCommentArgs): Promise<CallToolResult> => {
       const scopeDenied = requireScope(auth, 'write:feedback')
       if (scopeDenied) return scopeDenied
-      const roleDenied = requireTeamRole(auth)
-      if (roleDenied) return roleDenied
+      // No team role gate — the service layer allows comment authors OR team members
       try {
         await deleteComment(args.commentId as CommentId, {
           principalId: auth.principalId,

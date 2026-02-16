@@ -17,6 +17,7 @@ import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.servi
 import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
 import { createMcpServer } from './server'
+import type { PrincipalId } from '@quackback/ids'
 import type { McpAuthContext, McpScope } from './types'
 
 /** Build a JSON-RPC error response (used for MCP-level denials). */
@@ -43,8 +44,9 @@ function extractBearerToken(request: Request): string | null {
 
 /**
  * Resolve auth from OAuth JWT access token.
- * Verifies the token signature via JWKS (no DB round-trip).
- * Custom claims (principalId, role) are embedded by the auth config.
+ * Verifies the token signature via JWKS, then re-reads the principal's
+ * current role from the database so that role changes (demotions, etc.)
+ * take effect immediately rather than at token expiry.
  * Returns McpAuthContext if valid, null if not an OAuth token or verification fails.
  */
 async function resolveOAuthContext(token: string): Promise<McpAuthContext | null> {
@@ -60,10 +62,17 @@ async function resolveOAuthContext(token: string): Promise<McpAuthContext | null
     })
 
     const principalId = payload.principalId as string | undefined
-    const role = (payload.role as string) ?? 'user'
     const sub = payload.sub
 
     if (!principalId || !sub) return null
+
+    // Re-read the principal's current role from the database so that
+    // role changes made after token issuance take effect immediately.
+    const principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.id, principalId as PrincipalId),
+      columns: { role: true },
+    })
+    const role = principalRecord?.role ?? 'user'
 
     // Parse granted scopes from space-separated string
     const scopeStr = (payload.scope as string) ?? ''
