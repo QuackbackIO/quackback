@@ -78,3 +78,6 @@ export {
 
 // User mutations
 export { useRemovePortalUser } from './users'
+
+// Avatar mutations
+export { useUploadAvatar, useDeleteAvatar } from './avatar'

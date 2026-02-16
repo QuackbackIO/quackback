@@ -6,6 +6,7 @@ import { requireAuth } from './auth-helpers'
 import { getCurrentUserRole } from './workspace'
 import { db, user, principal, eq } from '@/lib/server/db'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
+import { deleteObject } from '@/lib/server/storage/s3'
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -21,6 +22,10 @@ import {
 
 const updateProfileNameSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
+})
+
+const saveAvatarKeySchema = z.object({
+  key: z.string().min(1),
 })
 
 const updateNotificationPreferencesSchema = z.object({
@@ -60,6 +65,24 @@ export interface NotificationPreferences {
 async function requirePrincipalId(): Promise<PrincipalId> {
   const ctx = await requireAuth()
   return ctx.principal.id
+}
+
+/** Delete a user's existing S3 avatar if one exists. Silently ignores missing files. */
+async function deleteExistingAvatar(userId: string): Promise<string | null> {
+  const currentUser = await db.query.user.findFirst({
+    where: eq(user.id, userId as UserId),
+    columns: { imageKey: true },
+  })
+
+  if (currentUser?.imageKey) {
+    try {
+      await deleteObject(currentUser.imageKey)
+    } catch {
+      // Ignore deletion errors - old file may not exist
+    }
+  }
+
+  return currentUser?.imageKey ?? null
 }
 
 // ============================================
@@ -171,27 +194,11 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
         throw new Error('Authentication required')
       }
 
-      // Get current user to check for existing S3 key
-      const currentUser = await db.query.user.findFirst({
-        where: eq(user.id, session.user.id),
-        columns: { imageKey: true },
-      })
-
-      // Delete old S3 image if exists
-      if (currentUser?.imageKey) {
-        try {
-          const { deleteObject } = await import('@/lib/server/storage/s3')
-          await deleteObject(currentUser.imageKey)
-        } catch {
-          // Ignore deletion errors - old file may not exist
-        }
-      }
+      await deleteExistingAvatar(session.user.id)
 
       const [updated] = await db
         .update(user)
-        .set({
-          imageKey: null,
-        })
+        .set({ imageKey: null })
         .where(eq(user.id, session.user.id))
         .returning()
 
@@ -207,6 +214,36 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
     }
   }
 )
+
+/**
+ * Save an S3 key as the user's avatar.
+ * Called after the client uploads directly to S3 via a presigned URL.
+ */
+export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
+  .inputValidator(saveAvatarKeySchema)
+  .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
+    console.log(`[fn:user] saveAvatarKeyFn`)
+    try {
+      const session = await getSession()
+      if (!session?.user) {
+        throw new Error('Authentication required')
+      }
+
+      await deleteExistingAvatar(session.user.id)
+
+      const [updated] = await db
+        .update(user)
+        .set({ imageKey: data.key })
+        .where(eq(user.id, session.user.id))
+        .returning()
+
+      await syncPrincipalProfile(updated.id as UserId, { avatarKey: data.key })
+      console.log(`[fn:user] saveAvatarKeyFn: saved for id=${updated.id}`)
+    } catch (error) {
+      console.error(`[fn:user] ❌ saveAvatarKeyFn failed:`, error)
+      throw error
+    }
+  })
 
 /**
  * Get current user's role.
