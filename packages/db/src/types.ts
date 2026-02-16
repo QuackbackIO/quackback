@@ -14,9 +14,6 @@ import type { integrations } from './schema/integrations'
 import type { changelogEntries, changelogEntryPosts } from './schema/changelog'
 import type { principal } from './schema/auth'
 
-// Note: Billing types (Subscription, Invoice) are no longer in the tenant database.
-// Billing is managed in the catalog database. See apps/web/src/lib/catalog/schema.ts
-
 // Status categories (defined here to avoid circular imports in tests)
 export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
@@ -166,9 +163,6 @@ export type NewChangelogEntryPost = InferInsertModel<typeof changelogEntryPosts>
 // Principal types
 export type Principal = InferSelectModel<typeof principal>
 export type NewPrincipal = InferInsertModel<typeof principal>
-
-// Note: Subscription and Invoice types have been moved to the catalog database.
-// For subscription types, see apps/web/src/lib/subscription.ts (WorkspaceSubscription)
 
 // Extended types for queries with relations
 export type CommentWithReplies = Comment & {

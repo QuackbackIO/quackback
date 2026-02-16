@@ -55,7 +55,6 @@ Server-side business logic. Runs on Node.js only.
 | `domains/`   | Business logic services by domain |
 | `events/`    | Event dispatch & handlers         |
 | `auth/`      | Better Auth configuration         |
-| `tenant/`    | Multi-tenant context              |
 | `config/`    | Server configuration              |
 | `db.ts`      | Database connection               |
 

@@ -83,10 +83,9 @@ const post = await db.query.posts.findFirst({
 })
 ```
 
-### Multi-tenancy
+### Architecture
 
-- **Self-hosted**: Single workspace, `DATABASE_URL` singleton
-- **Cloud**: Multi-tenant via domain resolution with per-tenant Neon databases
+- Single workspace, `DATABASE_URL` singleton
 
 ## Development Guidelines
 

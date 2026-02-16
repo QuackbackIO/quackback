@@ -27,8 +27,6 @@ export default defineConfig({
     alias: {
       '@quackback/db/client': path.resolve(__dirname, './packages/db/src/client.ts'),
       '@quackback/db/schema': path.resolve(__dirname, './packages/db/src/schema/index.ts'),
-      '@quackback/db/catalog': path.resolve(__dirname, './packages/db/src/catalog/index.ts'),
-      '@quackback/db/tenant': path.resolve(__dirname, './packages/db/src/tenant/index.ts'),
       '@quackback/db/types': path.resolve(__dirname, './packages/db/src/types.ts'),
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),
       // Path alias for apps/web (matches tsconfig.json baseUrl: "./src" + "@/*": ["./*"])

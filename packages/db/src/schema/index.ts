@@ -13,8 +13,3 @@ export * from './sentiment'
 export * from './api-keys'
 export * from './webhooks'
 export * from './external-links'
-
-// Note: Billing tables are NOT in the tenant database.
-// Billing is managed in the catalog database (website codebase).
-// See apps/web/src/lib/catalog/schema.ts for billing schema used by quackback.
-// The billing.ts file is kept for migration compatibility but not exported.

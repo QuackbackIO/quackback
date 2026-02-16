@@ -11,27 +11,18 @@
     "./client": "./src/client.ts",
     "./schema": "./src/schema/index.ts",
     "./schema/statuses": "./src/schema/statuses.ts",
-    "./catalog": "./src/catalog/index.ts",
-    "./tenant": "./src/tenant/index.ts",
     "./migrate": "./src/migrate-runtime.ts",
-    "./init-sql": "./src/init-sql.generated.ts",
     "./queries/public": "./src/queries/public.ts",
     "./types": "./src/types.ts",
-    "./drizzle/*": "./drizzle/*",
-    "./tenant-schema.sql": "./dist/tenant-schema.sql"
+    "./drizzle/*": "./drizzle/*"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:generate-init-sql": "bun scripts/generate-init-sql.ts",
-    "db:generate-tenant-schema": "bun scripts/generate-tenant-schema.ts",
-    "db:generate:catalog": "drizzle-kit generate --config=drizzle-catalog.config.ts",
-    "db:generate:tenant": "drizzle-kit generate --config=drizzle-tenant.config.ts",
     "db:migrate": "bun run src/migrate.ts",
     "db:migrate:cli": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun src/seed.ts",
-    "db:reset": "bun src/reset.ts",
-    "db:migrate-tenants": "bun run ../../scripts/migrate-neon-dbs.ts"
+    "db:reset": "bun src/reset.ts"
   },
   "dependencies": {
     "@quackback/ids": "workspace:*",
