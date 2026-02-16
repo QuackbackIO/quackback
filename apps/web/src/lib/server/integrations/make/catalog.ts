@@ -20,4 +20,5 @@ export const makeCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/make',
   available: true,
   configurable: false,
+  docsUrl: 'https://www.quackback.io/docs/integrations/make',
 }

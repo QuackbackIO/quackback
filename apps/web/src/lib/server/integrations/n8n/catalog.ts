@@ -20,4 +20,5 @@ export const n8nCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/n8n',
   available: true,
   configurable: false,
+  docsUrl: 'https://www.quackback.io/docs/integrations/n8n',
 }

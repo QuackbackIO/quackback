@@ -20,4 +20,5 @@ export const zendeskCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/zendesk',
   available: true,
   configurable: true,
+  docsUrl: 'https://www.quackback.io/docs/integrations/zendesk',
 }

@@ -116,6 +116,8 @@ export interface IntegrationCatalogEntry {
   configurable: boolean
   /** Field definitions for platform credentials. Present in catalog API response, empty array if none needed. */
   platformCredentialFields?: PlatformCredentialField[]
+  /** Link to the setup guide on the docs site */
+  docsUrl?: string
 }
 
 export interface IntegrationDefinition {

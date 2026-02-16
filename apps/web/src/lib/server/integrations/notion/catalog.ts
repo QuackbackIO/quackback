@@ -25,4 +25,5 @@ export const notionCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/notion',
   available: true,
   configurable: true,
+  docsUrl: 'https://www.quackback.io/docs/integrations/notion',
 }

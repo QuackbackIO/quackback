@@ -24,4 +24,5 @@ export const mondayCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/monday',
   available: true,
   configurable: true,
+  docsUrl: 'https://www.quackback.io/docs/integrations/monday',
 }

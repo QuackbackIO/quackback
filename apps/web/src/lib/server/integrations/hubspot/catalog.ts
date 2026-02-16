@@ -21,4 +21,5 @@ export const hubspotCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/hubspot',
   available: true,
   configurable: true,
+  docsUrl: 'https://www.quackback.io/docs/integrations/hubspot',
 }
