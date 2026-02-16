@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { UserIcon } from '@heroicons/react/24/solid'
 import { PageHeader } from '@/components/shared/page-header'
@@ -27,10 +26,6 @@ export const Route = createFileRoute('/_portal/settings/profile')({
 function ProfilePage() {
   const { user } = Route.useLoaderData()
 
-  // Read pre-fetched data from React Query cache
-  const profileQuery = useSuspenseQuery(settingsQueries.userProfile(user.id))
-  const { avatarUrl, oauthAvatarUrl, hasCustomAvatar } = profileQuery.data
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -50,9 +45,6 @@ function ProfilePage() {
             name: user.name,
             email: user.email,
           }}
-          initialAvatarUrl={avatarUrl}
-          oauthAvatarUrl={oauthAvatarUrl}
-          hasCustomAvatar={hasCustomAvatar}
         />
       </div>
     </div>

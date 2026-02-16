@@ -1,18 +1,17 @@
 import { useState, useRef } from 'react'
-import { z } from 'zod'
 import { toast } from 'sonner'
 import { CameraIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import type { UserId } from '@quackback/ids'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { authClient } from '@/lib/server/auth/client'
 import { useRouter } from '@tanstack/react-router'
-import { updateProfileNameFn, removeAvatarFn } from '@/lib/server/functions/user'
-
-const errorResponseSchema = z.object({
-  error: z.string().optional(),
-})
+import { updateProfileNameFn } from '@/lib/server/functions/user'
+import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
+import { settingsQueries } from '@/lib/client/queries/settings'
 
 interface ProfileFormProps {
   user: {
@@ -20,27 +19,24 @@ interface ProfileFormProps {
     name: string
     email: string
   }
-  initialAvatarUrl: string | null
-  /** OAuth avatar URL (GitHub, Google, etc.) - fallback when custom avatar is deleted */
-  oauthAvatarUrl: string | null
-  hasCustomAvatar: boolean
 }
 
-export function ProfileForm({
-  user,
-  initialAvatarUrl,
-  oauthAvatarUrl,
-  hasCustomAvatar: initialHasCustomAvatar,
-}: ProfileFormProps) {
+export function ProfileForm({ user }: ProfileFormProps) {
   const router = useRouter()
+  const userId = user.id as UserId
+
+  // Avatar state from React Query
+  const { data: profileData } = useSuspenseQuery(settingsQueries.userProfile(userId))
+  const { avatarUrl, hasCustomAvatar } = profileData
+
+  // Avatar mutations
+  const uploadMutation = useUploadAvatar(userId)
+  const deleteMutation = useDeleteAvatar(userId)
+
   const [name, setName] = useState(user.name)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
-  const [isDeletingAvatar, setIsDeletingAvatar] = useState(false)
-  const [hasCustomAvatar, setHasCustomAvatar] = useState(initialHasCustomAvatar)
-  // Store the current avatar URL - starts with SSR value, updated after uploads
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
   // Cropper state
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
@@ -52,7 +48,6 @@ export function ProfileForm({
     .toUpperCase()
     .slice(0, 2)
 
-  // Use the current avatar URL (base64 from SSR, or local preview after upload)
   const avatarSrc = avatarUrl || undefined
 
   const handleAvatarClick = () => {
@@ -87,46 +82,21 @@ export function ProfileForm({
     }
   }
 
-  const handleCropComplete = async (croppedBlob: Blob) => {
-    // Clean up the original image URL
+  const handleCropComplete = (croppedBlob: Blob) => {
     if (cropImageSrc) {
       URL.revokeObjectURL(cropImageSrc)
       setCropImageSrc(null)
     }
 
-    // Create local preview from cropped blob
-    const localPreviewUrl = URL.createObjectURL(croppedBlob)
-
-    setIsUploadingAvatar(true)
-
-    try {
-      const formData = new FormData()
-      formData.append('avatar', croppedBlob, 'avatar.png')
-
-      const response = await fetch('/api/user/profile', {
-        method: 'PATCH',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const data = errorResponseSchema.parse(await response.json())
-        throw new Error(data.error || 'Failed to upload avatar')
-      }
-
-      // Update to local preview URL (already loaded, no flicker)
-      setAvatarUrl(localPreviewUrl)
-      setHasCustomAvatar(true)
-
-      // Refetch session to pick up the custom avatar URL from customSession plugin
-      router.invalidate()
-      toast.success('Avatar updated')
-    } catch (error) {
-      // Revoke the object URL on error
-      URL.revokeObjectURL(localPreviewUrl)
-      toast.error(error instanceof Error ? error.message : 'Failed to upload avatar')
-    } finally {
-      setIsUploadingAvatar(false)
-    }
+    uploadMutation.mutate(croppedBlob, {
+      onSuccess: () => {
+        router.invalidate()
+        toast.success('Avatar updated')
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to upload avatar')
+      },
+    })
   }
 
   const handleCropperClose = (open: boolean) => {
@@ -137,24 +107,16 @@ export function ProfileForm({
     setShowCropper(open)
   }
 
-  const handleDeleteAvatar = async () => {
-    setIsDeletingAvatar(true)
-
-    try {
-      await removeAvatarFn()
-
-      setHasCustomAvatar(false)
-      // Fall back to OAuth avatar (GitHub, Google, etc.) or initials
-      setAvatarUrl(oauthAvatarUrl)
-
-      // Refetch session - customSession plugin will return OAuth URL as fallback
-      router.invalidate()
-      toast.success('Avatar removed')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')
-    } finally {
-      setIsDeletingAvatar(false)
-    }
+  const handleDeleteAvatar = () => {
+    deleteMutation.mutate(undefined, {
+      onSuccess: () => {
+        router.invalidate()
+        toast.success('Avatar removed')
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')
+      },
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -191,6 +153,9 @@ export function ProfileForm({
       setIsSubmitting(false)
     }
   }
+
+  const isUploadingAvatar = uploadMutation.isPending
+  const isDeletingAvatar = deleteMutation.isPending
 
   return (
     <div className="space-y-6">

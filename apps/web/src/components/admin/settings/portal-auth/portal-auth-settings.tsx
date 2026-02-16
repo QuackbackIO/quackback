@@ -171,9 +171,21 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>
-                            {!emailConfigured
-                              ? 'Requires email to be configured (SMTP or Resend)'
-                              : 'At least one authentication method must be enabled'}
+                            {!emailConfigured ? (
+                              <>
+                                Requires email to be configured (SMTP or Resend).{' '}
+                                <a
+                                  href="https://www.quackback.io/docs/auth/email-otp"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline"
+                                >
+                                  Learn more
+                                </a>
+                              </>
+                            ) : (
+                              'At least one authentication method must be enabled'
+                            )}
                           </p>
                         </TooltipContent>
                       </Tooltip>

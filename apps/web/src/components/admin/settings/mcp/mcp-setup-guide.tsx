@@ -95,7 +95,7 @@ function windsurfConfig(endpointUrl: string) {
   )
 }
 
-function claudeDesktopConfig(endpointUrl: string) {
+function claudeDesktopApiKeyConfig(endpointUrl: string) {
   return JSON.stringify(
     {
       mcpServers: {
@@ -108,6 +108,36 @@ function claudeDesktopConfig(endpointUrl: string) {
             '--header',
             'Authorization: Bearer qb_YOUR_API_KEY',
           ],
+        },
+      },
+    },
+    null,
+    2
+  )
+}
+
+function claudeCodeOAuthConfig(endpointUrl: string) {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        quackback: {
+          type: 'http',
+          url: endpointUrl,
+        },
+      },
+    },
+    null,
+    2
+  )
+}
+
+function claudeDesktopOAuthConfig(endpointUrl: string) {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        quackback: {
+          command: 'npx',
+          args: ['mcp-remote@latest', '--http', endpointUrl],
         },
       },
     },
@@ -130,14 +160,25 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
 
         <div>
           <h4 className="font-medium text-foreground mb-1.5">Authentication</h4>
-          <p>
-            All MCP requests must include an API key via the{' '}
-            <InlineCode>Authorization: Bearer qb_...</InlineCode> header.{' '}
-            <Link to="/admin/settings/api-keys" className="text-primary hover:underline">
-              Create an API key
-            </Link>{' '}
-            in the API Keys settings if you haven't already.
-          </p>
+          <div className="space-y-2">
+            <p>Two authentication methods are supported:</p>
+            <ul className="list-disc list-inside space-y-1 text-xs">
+              <li>
+                <span className="font-medium text-foreground">API Key</span> - for CI/automation.
+                Requires a <InlineCode>qb_</InlineCode> token in the{' '}
+                <InlineCode>Authorization</InlineCode> header.{' '}
+                <Link to="/admin/settings/api-keys" className="text-primary hover:underline">
+                  Create an API key
+                </Link>{' '}
+                if you haven't already.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">OAuth</span> - for interactive use.
+                The client opens a browser-based login flow, no API key needed. Supported by Claude
+                Code and Claude Desktop.
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -154,19 +195,30 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
           </TabsList>
 
           <TabsContent value="claude-code">
-            <div className="space-y-3">
-              <p>
-                Add to <InlineCode>.mcp.json</InlineCode> in your project root. Set the{' '}
-                <InlineCode>QUACKBACK_API_KEY</InlineCode> environment variable to your API key.
-              </p>
-              <CodeBlock>{claudeCodeConfig(endpointUrl)}</CodeBlock>
-              <p className="text-xs">
-                Or use the CLI:{' '}
-                <InlineCode>
-                  claude mcp add --transport http quackback {endpointUrl} --header
-                  &quot;Authorization: Bearer $QUACKBACK_API_KEY&quot;
-                </InlineCode>
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <p className="font-medium text-foreground text-xs">With OAuth (recommended)</p>
+                <p>
+                  Add to <InlineCode>.mcp.json</InlineCode> in your project root. Claude Code will
+                  open a browser login flow on first use.
+                </p>
+                <CodeBlock>{claudeCodeOAuthConfig(endpointUrl)}</CodeBlock>
+              </div>
+              <div className="space-y-3">
+                <p className="font-medium text-foreground text-xs">With API Key</p>
+                <p>
+                  Set the <InlineCode>QUACKBACK_API_KEY</InlineCode> environment variable to your
+                  API key.
+                </p>
+                <CodeBlock>{claudeCodeConfig(endpointUrl)}</CodeBlock>
+                <p className="text-xs">
+                  Or use the CLI:{' '}
+                  <InlineCode>
+                    claude mcp add --transport http quackback {endpointUrl} --header
+                    &quot;Authorization: Bearer $QUACKBACK_API_KEY&quot;
+                  </InlineCode>
+                </p>
+              </div>
             </div>
           </TabsContent>
 
@@ -179,7 +231,8 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               <CodeBlock>{cursorConfig(endpointUrl)}</CodeBlock>
               <p className="text-xs">
                 Cursor uses <InlineCode>{'${env:VAR}'}</InlineCode> syntax for environment
-                variables. Requires Cursor v0.48.0+.
+                variables. Requires Cursor v0.48.0+. OAuth is not supported by Cursor - use an API
+                key.
               </p>
             </div>
           </TabsContent>
@@ -193,7 +246,8 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               <CodeBlock>{vscodeConfig(endpointUrl)}</CodeBlock>
               <p className="text-xs">
                 Note: VS Code uses <InlineCode>servers</InlineCode> (not{' '}
-                <InlineCode>mcpServers</InlineCode>) as the top-level key.
+                <InlineCode>mcpServers</InlineCode>) as the top-level key. OAuth is not supported by
+                VS Code - use an API key.
               </p>
             </div>
           </TabsContent>
@@ -207,23 +261,31 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               <CodeBlock>{windsurfConfig(endpointUrl)}</CodeBlock>
               <p className="text-xs">
                 Note: Windsurf uses <InlineCode>serverUrl</InlineCode> instead of{' '}
-                <InlineCode>url</InlineCode>.
+                <InlineCode>url</InlineCode>. OAuth is not supported by Windsurf - use an API key.
               </p>
             </div>
           </TabsContent>
 
           <TabsContent value="claude-desktop">
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p>
-                Claude Desktop doesn't support custom HTTP headers natively. Use{' '}
-                <InlineCode>mcp-remote</InlineCode> as a bridge. Add to{' '}
+                Claude Desktop requires <InlineCode>mcp-remote</InlineCode> as a bridge. Add to{' '}
                 <InlineCode>claude_desktop_config.json</InlineCode>:
               </p>
-              <CodeBlock>{claudeDesktopConfig(endpointUrl)}</CodeBlock>
-              <p className="text-xs">
-                Replace <InlineCode>qb_YOUR_API_KEY</InlineCode> with your actual API key. Requires
-                Node.js installed.
-              </p>
+              <div className="space-y-3">
+                <p className="font-medium text-foreground text-xs">With OAuth (recommended)</p>
+                <CodeBlock>{claudeDesktopOAuthConfig(endpointUrl)}</CodeBlock>
+                <p className="text-xs">
+                  A browser login flow will open on first use. Requires Node.js installed.
+                </p>
+              </div>
+              <div className="space-y-3">
+                <p className="font-medium text-foreground text-xs">With API Key</p>
+                <CodeBlock>{claudeDesktopApiKeyConfig(endpointUrl)}</CodeBlock>
+                <p className="text-xs">
+                  Replace <InlineCode>qb_YOUR_API_KEY</InlineCode> with your actual API key.
+                </p>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -234,26 +296,29 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
         <div>
           <h4 className="font-medium text-foreground mb-2">Tools</h4>
           <div className="space-y-2">
-            <ToolItem name="search" description="Search across posts and changelogs" />
-            <ToolItem name="get_details" description="Get full details for any entity by ID" />
-            <ToolItem
-              name="triage_post"
+            <DefinitionItem label="search" description="Search across posts and changelogs" />
+            <DefinitionItem
+              label="get_details"
+              description="Get full details for any entity by ID"
+            />
+            <DefinitionItem
+              label="triage_post"
               description="Update status, tags, owner, or official response"
             />
-            <ToolItem name="add_comment" description="Post a comment on a feedback post" />
-            <ToolItem name="create_post" description="Submit new feedback" />
-            <ToolItem name="create_changelog" description="Create a changelog entry" />
+            <DefinitionItem label="add_comment" description="Post a comment on a feedback post" />
+            <DefinitionItem label="create_post" description="Submit new feedback" />
+            <DefinitionItem label="create_changelog" description="Create a changelog entry" />
           </div>
         </div>
 
         <div>
           <h4 className="font-medium text-foreground mb-2">Resources</h4>
           <div className="space-y-2">
-            <ResourceItem uri="quackback://boards" description="List all boards" />
-            <ResourceItem uri="quackback://statuses" description="List all statuses" />
-            <ResourceItem uri="quackback://tags" description="List all tags" />
-            <ResourceItem uri="quackback://roadmaps" description="List all roadmaps" />
-            <ResourceItem uri="quackback://members" description="List all team members" />
+            <DefinitionItem label="quackback://boards" description="List all boards" />
+            <DefinitionItem label="quackback://statuses" description="List all statuses" />
+            <DefinitionItem label="quackback://tags" description="List all tags" />
+            <DefinitionItem label="quackback://roadmaps" description="List all roadmaps" />
+            <DefinitionItem label="quackback://members" description="List all team members" />
           </div>
         </div>
       </div>
@@ -261,22 +326,11 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
   )
 }
 
-function ToolItem({ name, description }: { name: string; description: string }) {
+function DefinitionItem({ label, description }: { label: string; description: string }) {
   return (
     <div className="flex items-start gap-2">
       <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-mono mt-0.5">
-        {name}
-      </code>
-      <span className="text-xs text-muted-foreground">{description}</span>
-    </div>
-  )
-}
-
-function ResourceItem({ uri, description }: { uri: string; description: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-mono mt-0.5">
-        {uri}
+        {label}
       </code>
       <span className="text-xs text-muted-foreground">{description}</span>
     </div>

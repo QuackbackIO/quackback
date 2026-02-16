@@ -255,13 +255,22 @@ async function createAuth() {
         ],
 
         // Default scopes for dynamically registered clients
-        clientRegistrationDefaultScopes: ['openid', 'profile', 'read:feedback'],
-
-        // Additional scopes allowed for dynamically registered clients
-        clientRegistrationAllowedScopes: ['offline_access', 'write:feedback', 'write:changelog'],
+        clientRegistrationDefaultScopes: [
+          'openid',
+          'profile',
+          'read:feedback',
+          'offline_access',
+          'write:feedback',
+          'write:changelog',
+        ],
 
         // MCP endpoint is a valid token audience
         validAudiences: [`${baseURL}/api/mcp`],
+
+        // Better Auth warns that /.well-known/oauth-authorization-server/api/auth
+        // doesn't exist, but we intentionally serve metadata at the root well-known
+        // path (matching the official Better Auth demo pattern — see #7453)
+        silenceWarnings: { oauthAuthServerConfig: true },
 
         // Embed principal info in the JWT so MCP handler can avoid extra DB lookups
         customAccessTokenClaims: async ({ user }) => {
