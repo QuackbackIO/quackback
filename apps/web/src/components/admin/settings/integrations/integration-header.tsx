@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { BackLink } from '@/components/ui/back-link'
 import { Badge } from '@/components/ui/badge'
+import { DocsLink } from '@/components/ui/docs-link'
 import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 
 interface IntegrationHeaderProps {
@@ -57,6 +58,11 @@ export function IntegrationHeader({
               )}
             </div>
             <p className="text-sm text-muted-foreground">{catalog.description}</p>
+            {catalog.docsUrl && (
+              <DocsLink href={catalog.docsUrl} className="mt-1 text-xs">
+                Learn how to set up {catalog.name}
+              </DocsLink>
+            )}
             {workspaceName && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Connected to <span className="font-medium">{workspaceName}</span>

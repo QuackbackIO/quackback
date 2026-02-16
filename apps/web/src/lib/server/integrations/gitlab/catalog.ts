@@ -24,4 +24,5 @@ export const gitlabCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/gitlab',
   available: true,
   configurable: true,
+  docsUrl: 'https://www.quackback.io/docs/integrations/gitlab',
 }

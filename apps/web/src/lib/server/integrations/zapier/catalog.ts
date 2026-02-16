@@ -21,4 +21,5 @@ export const zapierCatalog: IntegrationCatalogEntry = {
   settingsPath: '/admin/settings/integrations/zapier',
   available: true,
   configurable: false,
+  docsUrl: 'https://www.quackback.io/docs/integrations/zapier',
 }

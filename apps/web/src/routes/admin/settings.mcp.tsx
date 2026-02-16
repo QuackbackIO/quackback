@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { CommandLineIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
+import { DocsLink } from '@/components/ui/docs-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-settings'
@@ -49,6 +50,11 @@ function McpSettingsPage() {
         title="Setup Guide"
         description="Connect AI tools to your Quackback instance via MCP"
       >
+        <div className="mb-4">
+          <DocsLink href="https://www.quackback.io/docs/mcp" className="text-sm">
+            Learn how to set up the MCP server
+          </DocsLink>
+        </div>
         <McpSetupGuide endpointUrl={endpointUrl} />
       </SettingsCard>
     </div>
