@@ -9,12 +9,6 @@ import type { Board, Tag } from '@/lib/shared/db-types'
 import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
-export interface OfficialResponse {
-  content: string
-  authorName: string | null
-  respondedAt: Date
-}
-
 export interface PinnedComment {
   id: CommentId
   content: string
@@ -56,8 +50,7 @@ export interface PostDetails {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
-  officialResponse: OfficialResponse | null
-  /** Pinned comment as official response (new approach) */
+  /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
   pinnedCommentId: CommentId | null

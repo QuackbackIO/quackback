@@ -56,11 +56,6 @@ export interface PublicPostDetailView {
   tags: Array<{ id: string; name: string; color: string }>
   roadmaps: Array<{ id: string; name: string; slug: string }>
   comments: PublicCommentView[]
-  officialResponse: {
-    content: string
-    authorName: string | null
-    respondedAt: Date | string
-  } | null
   pinnedComment: PinnedCommentView | null
   pinnedCommentId: CommentId | null
   /** Whether comments are locked (portal users can't comment) */

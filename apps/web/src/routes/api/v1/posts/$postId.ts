@@ -21,7 +21,6 @@ const updatePostSchema = z.object({
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional(),
   ownerPrincipalId: z.string().nullable().optional(),
-  officialResponse: z.string().nullable().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/posts/$postId')({
@@ -62,9 +61,6 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             authorName: post.authorName ?? null,
             authorEmail: post.authorEmail ?? null,
             ownerPrincipalId: post.ownerPrincipalId,
-            officialResponse: post.officialResponse,
-            officialResponseAuthorName: post.officialResponseAuthorName ?? null,
-            officialResponseAt: post.officialResponseAt?.toISOString() ?? null,
             tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
             roadmapIds: post.roadmapIds,
             pinnedComment: post.pinnedComment
@@ -92,7 +88,6 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
         // Authenticate
         const authResult = await withApiKeyAuth(request, { role: 'team' })
         if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
 
         try {
           const { postId } = params
@@ -121,29 +116,16 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           bodyValidationError = validateTypeIdArray(parsed.data.tagIds, 'tag', 'tag IDs')
           if (bodyValidationError) return bodyValidationError
 
-          // Import service and get principal details
+          // Import service
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
-          const { db, principal, eq } = await import('@/lib/server/db')
 
-          const principalRecord = await db.query.principal.findFirst({
-            where: eq(principal.id, principalId),
-            columns: { id: true, displayName: true },
+          const result = await updatePost(postId as PostId, {
+            title: parsed.data.title,
+            content: parsed.data.content,
+            statusId: parsed.data.statusId as StatusId | undefined,
+            tagIds: parsed.data.tagIds as TagId[] | undefined,
+            ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
           })
-
-          const result = await updatePost(
-            postId as PostId,
-            {
-              title: parsed.data.title,
-              content: parsed.data.content,
-              statusId: parsed.data.statusId as StatusId | undefined,
-              tagIds: parsed.data.tagIds as TagId[] | undefined,
-              ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
-              officialResponse: parsed.data.officialResponse,
-            },
-            principalRecord?.displayName
-              ? { principalId, name: principalRecord.displayName }
-              : undefined
-          )
 
           return successResponse({
             id: result.id,
@@ -154,8 +136,6 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             boardId: result.boardId,
             statusId: result.statusId,
             ownerPrincipalId: result.ownerPrincipalId,
-            officialResponse: result.officialResponse,
-            officialResponseAt: result.officialResponseAt?.toISOString() ?? null,
             createdAt: result.createdAt.toISOString(),
             updatedAt: result.updatedAt.toISOString(),
           })

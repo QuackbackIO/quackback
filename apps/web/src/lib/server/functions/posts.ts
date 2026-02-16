@@ -60,22 +60,19 @@ function serializePostDates<
     createdAt: Date | string
     updatedAt: Date | string
     deletedAt?: Date | string | null
-    officialResponseAt?: Date | string | null
   },
 >(
   post: T
-): Omit<T, 'createdAt' | 'updatedAt' | 'deletedAt' | 'officialResponseAt'> & {
+): Omit<T, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
-  officialResponseAt: string | null
 } {
   return {
     ...post,
     createdAt: toIsoString(post.createdAt),
     updatedAt: toIsoString(post.updatedAt),
     deletedAt: toIsoStringOrNull(post.deletedAt),
-    officialResponseAt: toIsoStringOrNull(post.officialResponseAt),
   }
 }
 
@@ -98,7 +95,7 @@ const listInboxPostsSchema = z.object({
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
-  page: z.number().int().min(1).optional().default(1),
+  cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
 })
 
@@ -121,7 +118,6 @@ const updatePostSchema = z.object({
   content: z.string().max(10000).optional(),
   contentJson: tiptapContentSchema.optional(),
   ownerId: z.string().nullable().optional(),
-  officialResponse: z.string().max(5000).nullable().optional(),
 })
 
 const deletePostSchema = z.object({
@@ -187,11 +183,11 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         responded: data.responded,
         updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
         sort: data.sort,
-        page: data.page,
+        cursor: data.cursor,
         limit: data.limit,
       })
       console.log(
-        `[fn:posts] fetchInboxPostsForAdmin: count=${result.items.length}, page=${data.page}`
+        `[fn:posts] fetchInboxPostsForAdmin: count=${result.items.length}, cursor=${data.cursor ?? 'none'}`
       )
       return {
         ...result,
@@ -327,22 +323,14 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostFn: id=${data.id}`)
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await updatePost(
-        data.id as PostId,
-        {
-          title: data.title,
-          content: data.content,
-          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-          ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
-          officialResponse: data.officialResponse,
-        },
-        {
-          principalId: auth.principal.id,
-          name: auth.user.name,
-        }
-      )
+      const result = await updatePost(data.id as PostId, {
+        title: data.title,
+        content: data.content,
+        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+        ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
+      })
       console.log(`[fn:posts] updatePostFn: updated id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -426,18 +414,11 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostTagsFn: id=${data.id}, tagCount=${data.tagIds.length}`)
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ roles: ['admin', 'member'] })
 
-      await updatePost(
-        data.id as PostId,
-        {
-          tagIds: data.tagIds as TagId[],
-        },
-        {
-          principalId: auth.principal.id,
-          name: auth.user.name,
-        }
-      )
+      await updatePost(data.id as PostId, {
+        tagIds: data.tagIds as TagId[],
+      })
       console.log(`[fn:posts] updatePostTagsFn: updated id=${data.id}`)
       return { id: data.id }
     } catch (error) {

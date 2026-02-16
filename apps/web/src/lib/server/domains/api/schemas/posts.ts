@@ -80,14 +80,6 @@ const PostDetailSchema = z.object({
   authorName: z.string().nullable().meta({ example: 'John Doe' }),
   authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
   ownerId: z.string().nullable().meta({ description: 'Assigned team member ID' }),
-  officialResponse: z.string().nullable().meta({ description: 'Official team response text' }),
-  officialResponseAuthorName: z
-    .string()
-    .nullable()
-    .meta({ description: 'Name of team member who wrote the official response' }),
-  officialResponseAt: NullableTimestampSchema.meta({
-    description: 'When the official response was posted',
-  }),
   tags: z.array(TagSchema).meta({ description: 'Tags assigned to this post' }),
   roadmapIds: z.array(z.string()).meta({ description: 'IDs of roadmaps this post belongs to' }),
   pinnedComment: PinnedCommentSchema.meta({
@@ -124,9 +116,6 @@ const PostUpdateResponseSchema = z.object({
   statusId: TypeIdSchema.nullable(),
   authorName: z.string().nullable(),
   ownerId: z.string().nullable(),
-  officialResponse: z.string().nullable(),
-  officialResponseAuthorName: z.string().nullable(),
-  officialResponseAt: NullableTimestampSchema,
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 })
@@ -167,11 +156,6 @@ const UpdatePostSchema = z
       .nullable()
       .optional()
       .meta({ description: 'Assigned team member ID (set to null to unassign)' }),
-    officialResponse: z
-      .string()
-      .nullable()
-      .optional()
-      .meta({ description: 'Official team response (set to null to clear)' }),
   })
   .meta({ description: 'Update post request body' })
 

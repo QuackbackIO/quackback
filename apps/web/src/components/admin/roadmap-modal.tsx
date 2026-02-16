@@ -86,7 +86,6 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
         replies: [],
       })),
     })),
-    officialResponse: post.officialResponse,
     pinnedComment: post.pinnedComment,
     pinnedCommentId: post.pinnedCommentId,
   }

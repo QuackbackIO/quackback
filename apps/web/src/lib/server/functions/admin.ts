@@ -38,7 +38,7 @@ import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
 const inboxPostListSchema = z.object({
   sort: z.enum(['votes', 'newest', 'oldest']).default('newest'),
   limit: z.number().default(20),
-  page: z.number().default(1),
+  cursor: z.string().optional(),
   search: z.string().optional(),
   ownerId: z.string().nullable().optional(),
   statusSlugs: z.array(z.string()).optional(),
@@ -71,7 +71,7 @@ const portalUserByIdSchema = z.object({
 export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .inputValidator(inboxPostListSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:admin] fetchInboxPosts: sort=${data.sort}, page=${data.page}`)
+    console.log(`[fn:admin] fetchInboxPosts: sort=${data.sort}, cursor=${data.cursor ?? 'none'}`)
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -87,7 +87,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
         responded: data.responded,
         updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
         sort: data.sort,
-        page: data.page,
+        cursor: data.cursor,
         limit: data.limit,
       })
       console.log(`[fn:admin] fetchInboxPosts: count=${result.items.length}`)
@@ -100,7 +100,6 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
           createdAt: p.createdAt.toISOString(),
           updatedAt: p.updatedAt.toISOString(),
           deletedAt: p.deletedAt?.toISOString() || null,
-          officialResponseAt: p.officialResponseAt?.toISOString() || null,
         })),
       }
     } catch (error) {

@@ -244,7 +244,6 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
         createdAt: result.createdAt.toISOString(),
         updatedAt: result.updatedAt.toISOString(),
         deletedAt: result.deletedAt?.toISOString() || null,
-        officialResponseAt: result.officialResponseAt?.toISOString() || null,
       }
     } catch (error) {
       console.error(`[fn:public-posts] ❌ userEditPostFn failed:`, error)

@@ -4,7 +4,7 @@
  * 15 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts and changelogs
  * - get_details: Get full details for any entity by TypeID
- * - triage_post: Update post status, tags, owner, official response
+ * - triage_post: Update post status, tags, and owner
  * - vote_post: Toggle vote on a post
  * - add_comment: Post a comment on a post
  * - create_post: Submit new feedback
@@ -184,12 +184,6 @@ const triagePostSchema = {
     .nullable()
     .optional()
     .describe('Assign to member TypeID, or null to unassign'),
-  officialResponse: z
-    .string()
-    .max(5000)
-    .nullable()
-    .optional()
-    .describe('Set official response text (max 5,000 chars), or null to clear'),
 }
 
 const addCommentSchema = {
@@ -272,7 +266,9 @@ const unmergePostSchema = {
 }
 
 // ============================================================================
-// Type aliases — manually defined to avoid deep Zod type recursion
+// Type aliases — manually defined to avoid deep Zod type recursion.
+// WARNING: These must stay in sync with the Zod schemas above.
+// If you add/remove/rename a field in a schema, update the matching type here.
 // ============================================================================
 
 type SearchArgs = {
@@ -293,7 +289,6 @@ type TriagePostArgs = {
   statusId?: string
   tagIds?: string[]
   ownerPrincipalId?: string | null
-  officialResponse?: string | null
 }
 
 type AddCommentArgs = {
@@ -430,11 +425,11 @@ Examples:
   // triage_post
   server.tool(
     'triage_post',
-    `Update a post: set status, tags, owner, and/or official response. All fields optional — only provided fields are updated.
+    `Update a post: set status, tags, and/or owner. All fields optional — only provided fields are updated.
 
 Examples:
 - Change status: triage_post({ postId: "post_01abc...", statusId: "status_01xyz..." })
-- Assign owner and set response: triage_post({ postId: "post_01abc...", ownerPrincipalId: "principal_01xyz...", officialResponse: "We're working on this!" })
+- Assign owner: triage_post({ postId: "post_01abc...", ownerPrincipalId: "principal_01xyz..." })
 - Replace tags: triage_post({ postId: "post_01abc...", tagIds: ["tag_01a...", "tag_01b..."] })`,
     triagePostSchema,
     WRITE,
@@ -444,24 +439,17 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
-        const result = await updatePost(
-          args.postId as PostId,
-          {
-            statusId: args.statusId as StatusId | undefined,
-            tagIds: args.tagIds as TagId[] | undefined,
-            ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
-            officialResponse: args.officialResponse,
-          },
-          { principalId: auth.principalId, name: auth.name }
-        )
+        const result = await updatePost(args.postId as PostId, {
+          statusId: args.statusId as StatusId | undefined,
+          tagIds: args.tagIds as TagId[] | undefined,
+          ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
+        })
 
         return jsonResult({
           id: result.id,
           title: result.title,
           statusId: result.statusId,
           ownerPrincipalId: result.ownerPrincipalId,
-          officialResponse: result.officialResponse,
-          officialResponseAt: result.officialResponseAt,
           updatedAt: result.updatedAt,
         })
       } catch (err) {
@@ -885,22 +873,22 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
       new Error('Cursor is from a different entity type. Do not reuse cursors across entity types.')
     )
   }
-  const offset = typeof decoded.value === 'number' ? decoded.value : 0
-  const limit = args.limit || 20
-  const page = Math.floor(offset / limit) + 1
+  // The cursor value is a PostId string from the previous page's last item
+  const cursorValue = typeof decoded.value === 'string' ? decoded.value : undefined
 
   const result = await listInboxPosts({
     search: args.query,
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as TagId[] | undefined,
-    sort: args.sort || 'newest',
-    page,
-    limit,
+    sort: args.sort,
+    cursor: cursorValue,
+    limit: args.limit,
   })
 
-  const nextOffset = offset + result.items.length
-  const nextCursor = result.hasMore ? encodeSearchCursor('posts', nextOffset) : null
+  // Encode nextCursor with entity type to prevent cross-entity misuse
+  const lastItem = result.items[result.items.length - 1]
+  const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('posts', lastItem.id) : null
 
   return jsonResult({
     posts: result.items.map((p) => ({
@@ -919,7 +907,6 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     })),
     nextCursor,
     hasMore: result.hasMore,
-    total: result.total,
   })
 }
 
@@ -942,7 +929,7 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
   const result = await listChangelogs({
     status,
     cursor: cursorValue,
-    limit: args.limit || 20,
+    limit: args.limit,
   })
 
   // Encode next cursor using the last item's ID
@@ -992,9 +979,6 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
     statusId: post.statusId,
     authorName: post.authorName,
     ownerPrincipalId: post.ownerPrincipalId,
-    officialResponse: post.officialResponse,
-    officialResponseAuthorName: post.officialResponseAuthorName,
-    officialResponseAt: post.officialResponseAt,
     tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     roadmapIds: post.roadmapIds,
     pinnedComment: post.pinnedComment

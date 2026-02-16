@@ -195,7 +195,7 @@ export interface InboxPostListParams {
   dateTo?: Date
   minVotes?: number
   sort?: 'newest' | 'oldest' | 'votes'
-  page?: number
+  cursor?: string
   limit?: number
 }
 
@@ -208,6 +208,6 @@ export type PostListItem = Post & {
 
 export interface InboxPostListResult {
   items: PostListItem[]
-  total: number
+  nextCursor: string | null
   hasMore: boolean
 }

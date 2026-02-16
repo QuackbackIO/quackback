@@ -22,7 +22,6 @@ export type {
   RoadmapPostListResult,
   PublicPostDetail,
   PublicComment,
-  OfficialResponse,
   PublicPostListResult,
   PublicPostListItem,
   InboxPostListParams,

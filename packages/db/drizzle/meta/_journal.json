@@ -43,6 +43,13 @@
       "when": 1770987666339,
       "tag": "0005_greedy_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771260577775,
+      "tag": "0006_thick_arclight",
+      "breakpoints": true
     }
   ]
 }

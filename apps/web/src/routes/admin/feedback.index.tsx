@@ -57,7 +57,6 @@ export const Route = createFileRoute('/admin/feedback/')({
           responded: deps.responded,
           updatedBefore: deps.updatedBefore,
           sort: deps.sort,
-          page: 1,
           limit: 20,
         })
       ),
@@ -119,7 +118,6 @@ function FeedbackIndexPage() {
       responded: search.responded,
       updatedBefore: search.updatedBefore,
       sort: search.sort,
-      page: 1,
       limit: 20,
     })
   )

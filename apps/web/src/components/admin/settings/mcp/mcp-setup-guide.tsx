@@ -301,10 +301,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               label="get_details"
               description="Get full details for any entity by ID"
             />
-            <DefinitionItem
-              label="triage_post"
-              description="Update status, tags, owner, or official response"
-            />
+            <DefinitionItem label="triage_post" description="Update status, tags, or owner" />
             <DefinitionItem label="add_comment" description="Post a comment on a feedback post" />
             <DefinitionItem label="create_post" description="Submit new feedback" />
             <DefinitionItem label="create_changelog" description="Create a changelog entry" />

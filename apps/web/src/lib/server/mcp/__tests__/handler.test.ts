@@ -57,7 +57,7 @@ vi.mock('@/lib/server/config', () => ({
 
 // Mock all domain services called by tools/resources
 vi.mock('@/lib/server/domains/posts/post.query', () => ({
-  listInboxPosts: vi.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
+  listInboxPosts: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
   getPostWithDetails: vi.fn().mockResolvedValue({
     id: 'post_test',
     title: 'Test Post',
@@ -70,9 +70,6 @@ vi.mock('@/lib/server/domains/posts/post.query', () => ({
     authorName: 'Jane',
     authorEmail: 'jane@example.com',
     ownerPrincipalId: null,
-    officialResponse: null,
-    officialResponseAuthorName: null,
-    officialResponseAt: null,
     tags: [],
     roadmapIds: [],
     pinnedComment: null,
@@ -95,8 +92,6 @@ vi.mock('@/lib/server/domains/posts/post.service', () => ({
     title: 'Test Post',
     statusId: 'status_updated',
     ownerPrincipalId: null,
-    officialResponse: null,
-    officialResponseAt: null,
     updatedAt: new Date('2026-01-01'),
   }),
 }))
@@ -573,7 +568,7 @@ describe('MCP HTTP Handler', () => {
       }
       const text = JSON.parse(body.result.content[0].text)
       expect(text.posts).toBeDefined()
-      expect(text.total).toBe(0)
+      expect(text.nextCursor).toBeNull()
       expect(text.hasMore).toBe(false)
     })
 
@@ -695,6 +690,283 @@ describe('MCP HTTP Handler', () => {
       }
       expect(body.result.isError).toBe(true)
       expect(body.result.content[0].text).toContain('Unsupported entity type')
+    })
+
+    // ── triage_post tool ──────────────────────────────────────────────────
+
+    it('should handle tools/call for triage_post', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'triage_post',
+            arguments: { postId: 'post_test', statusId: 'status_updated' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('post_test')
+      expect(text.statusId).toBe('status_updated')
+    })
+
+    // ── vote_post tool ──────────────────────────────────────────────────
+
+    it('should handle tools/call for vote_post', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'vote_post',
+            arguments: { postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.voted).toBe(true)
+      expect(text.voteCount).toBe(6)
+    })
+
+    // ── add_comment tool ────────────────────────────────────────────────
+
+    it('should handle tools/call for add_comment', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'add_comment',
+            arguments: { postId: 'post_test', content: 'Great feedback!' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('comment_new')
+      expect(text.content).toBe('Great feedback!')
+    })
+
+    // ── update_comment tool ─────────────────────────────────────────────
+
+    it('should handle tools/call for update_comment', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'update_comment',
+            arguments: { commentId: 'comment_new', content: 'Updated comment' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('comment_new')
+      expect(text.content).toBe('Updated comment')
+    })
+
+    // ── delete_comment tool ─────────────────────────────────────────────
+
+    it('should handle tools/call for delete_comment', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'delete_comment',
+            arguments: { commentId: 'comment_new' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.deleted).toBe(true)
+      expect(text.commentId).toBe('comment_new')
+    })
+
+    // ── react_to_comment tool ───────────────────────────────────────────
+
+    it('should handle tools/call for react_to_comment', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'react_to_comment',
+            arguments: { action: 'add', commentId: 'comment_new', emoji: '👍' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.added).toBe(true)
+      expect(text.emoji).toBe('👍')
+    })
+
+    // ── manage_roadmap_post tool ────────────────────────────────────────
+
+    it('should handle tools/call for manage_roadmap_post', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'manage_roadmap_post',
+            arguments: { action: 'add', roadmapId: 'roadmap_test', postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.action).toBe('add')
+      expect(text.postId).toBe('post_test')
+      expect(text.roadmapId).toBe('roadmap_test')
+    })
+
+    // ── merge_post tool ─────────────────────────────────────────────────
+
+    it('should handle tools/call for merge_post', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'merge_post',
+            arguments: { duplicatePostId: 'post_dup', canonicalPostId: 'post_canon' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.canonicalPost.id).toBe('post_canon')
+      expect(text.duplicatePost.id).toBe('post_dup')
+    })
+
+    // ── unmerge_post tool ───────────────────────────────────────────────
+
+    it('should handle tools/call for unmerge_post', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'unmerge_post',
+            arguments: { postId: 'post_dup' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.post.id).toBe('post_dup')
+      expect(text.canonicalPost.id).toBe('post_canon')
+    })
+
+    // ── create_changelog tool ───────────────────────────────────────────
+
+    it('should handle tools/call for create_changelog', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'create_changelog',
+            arguments: { title: 'v1.0', content: 'New features' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('changelog_new')
+      expect(text.status).toBe('draft')
+    })
+
+    // ── update_changelog tool ───────────────────────────────────────────
+
+    it('should handle tools/call for update_changelog', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'update_changelog',
+            arguments: { changelogId: 'changelog_01test', title: 'Updated Release', publish: true },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('changelog_01test')
+      expect(text.status).toBe('published')
+    })
+
+    // ── delete_changelog tool ───────────────────────────────────────────
+
+    it('should handle tools/call for delete_changelog', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'delete_changelog',
+            arguments: { changelogId: 'changelog_01test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.deleted).toBe(true)
+      expect(text.changelogId).toBe('changelog_01test')
     })
 
     it('should handle resources/read for boards', async () => {
@@ -883,6 +1155,45 @@ describe('MCP HTTP Handler', () => {
         result: { content: Array<{ text: string }> }
       }
       expect(body.result.content[0].text).toContain('posts')
+    })
+
+    it('should deny triage_post for OAuth portal user (role enforcement)', async () => {
+      const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+      const handleMcpRequest = await initializeOAuthSession([
+        'read:feedback',
+        'write:feedback',
+        'write:changelog',
+      ])
+      // Override the OAuth mock to return role: 'user' for the tool call
+      await setupValidOAuth({
+        role: 'user',
+        scopes: ['read:feedback', 'write:feedback', 'write:changelog'],
+      })
+      // Also need portal access enabled for the tool call auth
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'triage_post',
+            arguments: { postId: 'post_test', statusId: 'status_updated' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('team member')
     })
 
     it('should grant all scopes to API key users', async () => {
