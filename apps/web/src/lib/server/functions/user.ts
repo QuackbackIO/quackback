@@ -25,7 +25,7 @@ const updateProfileNameSchema = z.object({
 })
 
 const saveAvatarKeySchema = z.object({
-  key: z.string().min(1),
+  key: z.string().min(1).startsWith('avatars/', 'Avatar key must start with "avatars/"'),
 })
 
 const updateNotificationPreferencesSchema = z.object({

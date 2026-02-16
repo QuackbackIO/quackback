@@ -32,6 +32,16 @@ interface OAuthClientInfo {
   tos_uri?: string
 }
 
+/** Returns true if the URL uses an http or https scheme. */
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 const SCOPE_LABELS: Record<string, { label: string; description: string }> = {
   openid: { label: 'User ID', description: 'Access your user identifier' },
   profile: { label: 'Profile', description: 'View your name and avatar' },
@@ -81,7 +91,7 @@ function ConsentPage() {
 
   const clientName = client?.client_name || 'An application'
   const clientDomain = (() => {
-    if (!client?.client_uri) return null
+    if (!client?.client_uri || !isSafeUrl(client.client_uri)) return null
     try {
       return new URL(client.client_uri).hostname
     } catch {
@@ -227,10 +237,11 @@ function ConsentPage() {
           </div>
 
           {/* Legal links */}
-          {(client.tos_uri || client.policy_uri) && (
+          {((client.tos_uri && isSafeUrl(client.tos_uri)) ||
+            (client.policy_uri && isSafeUrl(client.policy_uri))) && (
             <p className="text-center text-xs text-muted-foreground">
               {'By authorizing, you agree to '}
-              {client.tos_uri && (
+              {client.tos_uri && isSafeUrl(client.tos_uri) && (
                 <a
                   href={client.tos_uri}
                   target="_blank"
@@ -240,8 +251,12 @@ function ConsentPage() {
                   Terms of Service
                 </a>
               )}
-              {client.tos_uri && client.policy_uri && ' and '}
-              {client.policy_uri && (
+              {client.tos_uri &&
+                isSafeUrl(client.tos_uri) &&
+                client.policy_uri &&
+                isSafeUrl(client.policy_uri) &&
+                ' and '}
+              {client.policy_uri && isSafeUrl(client.policy_uri) && (
                 <a
                   href={client.policy_uri}
                   target="_blank"
