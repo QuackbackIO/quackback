@@ -88,16 +88,17 @@ Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_
 
 ### Local Development
 
-Prerequisites: [Bun](https://bun.sh/) v1.3.4+ and [Docker](https://docker.com/)
+Prerequisites: [Bun](https://bun.sh/) v1.3.7+ and [Docker](https://docker.com/)
 
 ```bash
 git clone https://github.com/QuackbackIO/quackback.git
 cd quackback
-bun run setup    # Install deps, start Docker, run migrations, seed data
+bun run setup    # Install deps, start Docker, run migrations
+bun run db:seed  # Optional: seed demo data
 bun run dev      # http://localhost:3000
 ```
 
-Log in with `demo@example.com`. The OTP code appears in the console.
+Log in with `demo@example.com` / `password`.
 
 ## Contributing
 

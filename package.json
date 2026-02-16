@@ -13,7 +13,7 @@
     "prettier": "3.8.1",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.55.0",
+    "typescript-eslint": "^8.56.0",
     "vitest": "^4.0.18"
   },
   "license": "AGPL-3.0",

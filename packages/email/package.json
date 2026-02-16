@@ -17,7 +17,7 @@
     "resend": "^6.9.2"
   },
   "devDependencies": {
-    "@types/nodemailer": "^7.0.9",
+    "@types/nodemailer": "^7.0.10",
     "@types/react": "^19.2.14"
   }
 }
