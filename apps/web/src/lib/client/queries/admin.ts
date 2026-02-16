@@ -40,7 +40,7 @@ export interface InboxPostListParams {
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: string
   sort?: 'newest' | 'oldest' | 'votes'
-  page?: number
+  cursor?: string
   limit?: number
 }
 
@@ -66,7 +66,6 @@ export const adminQueries = {
             createdAt: new Date(p.createdAt),
             updatedAt: new Date(p.updatedAt),
             deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-            officialResponseAt: p.officialResponseAt ? new Date(p.officialResponseAt) : null,
           })),
         }
       },
@@ -257,7 +256,6 @@ export const adminQueries = {
           createdAt: new Date(data.createdAt),
           updatedAt: new Date(data.updatedAt),
           deletedAt: data.deletedAt ? new Date(data.deletedAt) : null,
-          officialResponseAt: data.officialResponseAt ? new Date(data.officialResponseAt) : null,
           comments: data.comments.map(deserializeComment),
           pinnedComment: data.pinnedComment
             ? { ...data.pinnedComment, createdAt: new Date(data.pinnedComment.createdAt) }

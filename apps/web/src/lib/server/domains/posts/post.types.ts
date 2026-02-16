@@ -28,7 +28,6 @@ export interface UpdatePostInput {
   statusId?: StatusId
   tagIds?: TagId[]
   ownerPrincipalId?: PrincipalId | null
-  officialResponse?: string | null
 }
 
 /**
@@ -65,14 +64,12 @@ export interface PostWithDetails extends Post {
   }>
   commentCount: number
   roadmapIds: string[]
-  /** Pinned comment as official response (new approach) */
+  /** Pinned comment displayed as official response */
   pinnedComment: PinnedComment | null
   /** Author name resolved from member->user relation */
   authorName: string | null
   /** Author email resolved from member->user relation */
   authorEmail: string | null
-  /** Official response author name resolved from member->user relation */
-  officialResponseAuthorName: string | null
 }
 
 /**
@@ -120,7 +117,7 @@ export interface InboxPostListParams {
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date
   sort?: 'newest' | 'oldest' | 'votes'
-  page?: number
+  cursor?: string
   limit?: number
 }
 
@@ -129,7 +126,7 @@ export interface InboxPostListParams {
  */
 export interface InboxPostListResult {
   items: PostListItem[]
-  total: number
+  nextCursor: string | null
   hasMore: boolean
 }
 
@@ -186,15 +183,6 @@ export interface RoadmapPostListResult {
 }
 
 /**
- * Official response on a post (legacy - being replaced by pinned comments)
- */
-export interface OfficialResponse {
-  content: string
-  authorName: string | null
-  respondedAt: Date
-}
-
-/**
  * Pinned comment serving as the official response
  */
 export interface PinnedComment {
@@ -242,9 +230,7 @@ export interface PublicPostDetail {
   tags: Array<{ id: string; name: string; color: string }>
   roadmaps: Array<{ id: string; name: string; slug: string }>
   comments: PublicComment[]
-  /** Legacy official response (text stored directly on post) */
-  officialResponse: OfficialResponse | null
-  /** Pinned comment as official response (new approach) */
+  /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
   pinnedCommentId: CommentId | null

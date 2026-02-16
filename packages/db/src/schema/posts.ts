@@ -63,15 +63,7 @@ export const posts = pgTable(
     // Denormalized comment count for performance
     // Automatically maintained by database trigger (see 0006_add_comment_count_trigger.sql)
     commentCount: integer('comment_count').default(0).notNull(),
-    // Official team response (principal-scoped)
-    officialResponse: text('official_response'),
-    officialResponsePrincipalId: typeIdColumnNullable('principal')(
-      'official_response_principal_id'
-    ).references(() => principal.id, {
-      onDelete: 'set null',
-    }),
-    officialResponseAt: timestamp('official_response_at', { withTimezone: true }),
-    // Pinned comment as official response (replaces direct official response text)
+    // Pinned comment as official response
     // References a team member's root-level comment that serves as the official response
     pinnedCommentId: typeIdColumnNullable('comment')('pinned_comment_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -345,12 +337,6 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.ownerPrincipalId],
     references: [principal.id],
     relationName: 'postOwner',
-  }),
-  // Principal-scoped official response author
-  officialResponseAuthor: one(principal, {
-    fields: [posts.officialResponsePrincipalId],
-    references: [principal.id],
-    relationName: 'postOfficialResponseAuthor',
   }),
   // Pinned comment as official response
   pinnedComment: one(comments, {

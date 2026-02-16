@@ -14,7 +14,6 @@ export type { InboxFilters, PublicFeedbackFilters, UsersFilters } from './filter
 
 // Inbox/post detail types
 export type {
-  OfficialResponse,
   PinnedComment,
   CommentReaction,
   CommentWithReplies,

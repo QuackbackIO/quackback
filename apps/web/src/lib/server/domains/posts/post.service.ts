@@ -142,14 +142,9 @@ export async function createPost(
  *
  * @param id - Post ID to update
  * @param input - Update data
- * @param responder - Optional responder info for official response (principalId, name)
  * @returns Result containing the updated post or an error
  */
-export async function updatePost(
-  id: PostId,
-  input: UpdatePostInput,
-  responder?: { principalId: PrincipalId; name: string }
-): Promise<Post> {
+export async function updatePost(id: PostId, input: UpdatePostInput): Promise<Post> {
   // Get existing post
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, id) })
   if (!existingPost) {
@@ -184,21 +179,6 @@ export async function updatePost(
   if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
   if (input.statusId !== undefined) updateData.statusId = input.statusId
   if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
-
-  // Handle official response update
-  if (input.officialResponse !== undefined) {
-    if (input.officialResponse === null || input.officialResponse === '') {
-      // Clear the official response
-      updateData.officialResponse = null
-      updateData.officialResponsePrincipalId = null
-      updateData.officialResponseAt = null
-    } else {
-      // Set or update official response — always use the authenticated responder
-      updateData.officialResponse = input.officialResponse
-      updateData.officialResponsePrincipalId = responder?.principalId ?? null
-      updateData.officialResponseAt = new Date()
-    }
-  }
 
   // Update the post only if there's data to update
   let updatedPost: Post

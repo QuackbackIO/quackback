@@ -178,12 +178,6 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       contentJson: result.contentJson ?? {},
       createdAt: toISOString(result.createdAt),
       comments: result.comments.map(serializeComment),
-      officialResponse: result.officialResponse
-        ? {
-            ...result.officialResponse,
-            respondedAt: toISOString(result.officialResponse.respondedAt),
-          }
-        : null,
       mergeInfo,
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
     }

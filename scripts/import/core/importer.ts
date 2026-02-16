@@ -9,7 +9,7 @@ import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { eq, sql } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
-import type { PostId, BoardId, StatusId, TagId, RoadmapId } from '@quackback/ids'
+import type { PostId, BoardId, StatusId, TagId, RoadmapId, CommentId } from '@quackback/ids'
 
 import {
   boards,
@@ -406,6 +406,8 @@ export class Importer {
     const postInserts: (typeof posts.$inferInsert)[] = []
     const postTagInserts: (typeof postTags.$inferInsert)[] = []
     const postRoadmapInserts: (typeof postRoadmaps.$inferInsert)[] = []
+    const commentInserts: (typeof comments.$inferInsert)[] = []
+    const pinnedCommentUpdates: Array<{ postId: PostId; commentId: CommentId }> = []
     const newTags: Array<{ id: TagId; name: string }> = []
 
     // Process posts
@@ -460,12 +462,24 @@ export class Importer {
           statusId,
           voteCount: post.voteCount ?? 0,
           moderationState: post.moderation ?? 'published',
-          officialResponse: post.response,
-          officialResponsePrincipalId: responsePrincipalId,
-          officialResponseAt: responseAt,
           createdAt,
           updatedAt: new Date(),
         })
+
+        // Convert official response to a pinned comment
+        if (post.response && responsePrincipalId) {
+          const commentId = generateId('comment')
+          commentInserts.push({
+            id: commentId,
+            postId,
+            principalId: responsePrincipalId,
+            content: post.response,
+            isTeamMember: true,
+            createdAt: responseAt ?? new Date(),
+          })
+          // Mark the post to have this comment pinned after insert
+          pinnedCommentUpdates.push({ postId, commentId })
+        }
 
         // Handle tags
         if (post.tags) {
@@ -519,6 +533,11 @@ export class Importer {
       if (newTags.length > 0) {
         this.progress.info(`[DRY RUN] Would create ${newTags.length} new tags`)
       }
+      if (pinnedCommentUpdates.length > 0) {
+        this.progress.info(
+          `[DRY RUN] Would convert ${pinnedCommentUpdates.length} official responses to pinned comments`
+        )
+      }
       return stats
     }
 
@@ -537,6 +556,17 @@ export class Importer {
     await this.batchInsert(posts, postInserts, 'Posts')
     await this.batchInsert(postTags, postTagInserts, 'Post-Tags', 'ignore')
     await this.batchInsert(postRoadmaps, postRoadmapInserts, 'Post-Roadmaps', 'ignore')
+
+    // Insert pinned comments from official responses and set pinnedCommentId
+    if (commentInserts.length > 0) {
+      await this.batchInsert(comments, commentInserts, 'Official-Response-Comments', 'ignore')
+      for (const { postId, commentId } of pinnedCommentUpdates) {
+        await this.db.update(posts).set({ pinnedCommentId: commentId }).where(eq(posts.id, postId))
+      }
+      this.progress.step(
+        `Converted ${pinnedCommentUpdates.length} official responses to pinned comments`
+      )
+    }
 
     return stats
   }

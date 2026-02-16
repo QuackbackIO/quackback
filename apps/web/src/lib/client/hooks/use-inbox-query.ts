@@ -41,7 +41,10 @@ export const inboxKeys = {
 // Fetch Functions
 // ============================================================================
 
-async function fetchInboxPosts(filters: InboxFilters, page: number): Promise<InboxPostListResult> {
+async function fetchInboxPosts(
+  filters: InboxFilters,
+  cursor?: string
+): Promise<InboxPostListResult> {
   return (await fetchInboxPostsForAdmin({
     data: {
       boardIds: filters.board as BoardId[] | undefined,
@@ -54,8 +57,8 @@ async function fetchInboxPosts(filters: InboxFilters, page: number): Promise<Inb
       minVotes: filters.minVotes,
       responded: filters.responded,
       updatedBefore: filters.updatedBefore,
-      sort: filters.sort || 'newest',
-      page,
+      sort: filters.sort,
+      cursor,
       limit: 20,
     },
   })) as unknown as InboxPostListResult
@@ -77,12 +80,12 @@ export function useInboxPosts({ filters, initialData }: UseInboxPostsOptions) {
   return useInfiniteQuery({
     queryKey: inboxKeys.list(filters),
     queryFn: ({ pageParam }) => fetchInboxPosts(filters, pageParam),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialData: initialData
       ? {
           pages: [initialData],
-          pageParams: [1],
+          pageParams: [undefined],
         }
       : undefined,
     refetchOnMount: !initialData,

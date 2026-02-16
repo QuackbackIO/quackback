@@ -6,8 +6,6 @@ import {
   createdResponse,
   badRequestResponse,
   handleDomainError,
-  decodeCursor,
-  encodeCursor,
 } from '@/lib/server/domains/api/responses'
 import {
   validateTypeId,
@@ -40,14 +38,12 @@ export const Route = createFileRoute('/api/v1/posts/')({
         try {
           const url = new URL(request.url)
 
-          // Parse pagination (cursor-based)
+          // Parse pagination (cursor-based keyset)
           const cursor = url.searchParams.get('cursor') ?? undefined
           const limit = Math.min(
             100,
             Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
           )
-          const offset = decodeCursor(cursor)
-          const page = Math.floor(offset / limit) + 1
 
           // Parse filters
           const boardIdParam = url.searchParams.get('boardId') ?? undefined
@@ -79,12 +75,8 @@ export const Route = createFileRoute('/api/v1/posts/')({
             search,
             sort,
             limit,
-            page,
+            cursor,
           })
-
-          // Calculate next cursor
-          const nextOffset = offset + result.items.length
-          const nextCursor = result.hasMore ? encodeCursor(nextOffset) : null
 
           return successResponse(
             result.items.map((post) => ({
@@ -105,9 +97,8 @@ export const Route = createFileRoute('/api/v1/posts/')({
             })),
             {
               pagination: {
-                cursor: nextCursor,
+                cursor: result.nextCursor,
                 hasMore: result.hasMore,
-                total: result.total,
               },
             }
           )

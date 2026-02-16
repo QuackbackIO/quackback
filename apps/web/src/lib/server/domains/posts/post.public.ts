@@ -303,9 +303,6 @@ export async function getPublicPostDetail(
         createdAt: posts.createdAt,
         pinnedCommentId: posts.pinnedCommentId,
         isCommentsLocked: posts.isCommentsLocked,
-        officialResponse: posts.officialResponse,
-        officialResponsePrincipalId: posts.officialResponsePrincipalId,
-        officialResponseAt: posts.officialResponseAt,
         boardId: boards.id,
         boardName: boards.name,
         boardSlug: boards.slug,
@@ -337,10 +334,6 @@ export async function getPublicPostDetail(
           FROM ${principalTable} m
           WHERE m.id = ${posts.principalId}
         )`.as('author_avatar_data'),
-        officialResponseAuthorName: sql<string | null>`(
-          SELECT m.display_name FROM ${principalTable} m
-          WHERE m.id = ${posts.officialResponsePrincipalId}
-        )`.as('official_response_author_name'),
       })
       .from(posts)
       .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -514,13 +507,6 @@ export async function getPublicPostDetail(
     tags: tagsResult,
     roadmaps: roadmapsResult,
     comments: rootComments,
-    officialResponse: postResult.officialResponse
-      ? {
-          content: postResult.officialResponse,
-          authorName: postResult.officialResponseAuthorName,
-          respondedAt: postResult.officialResponseAt!,
-        }
-      : null,
     pinnedComment,
     pinnedCommentId: (postResult.pinnedCommentId as CommentId) ?? null,
     isCommentsLocked: postResult.isCommentsLocked,

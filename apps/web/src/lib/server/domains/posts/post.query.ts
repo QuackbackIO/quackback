@@ -13,7 +13,6 @@ import {
   postRoadmaps,
   tags,
   comments,
-  principal,
   eq,
   and,
   inArray,
@@ -21,7 +20,6 @@ import {
   asc,
   sql,
   isNull,
-  isNotNull,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { PostId, BoardId, PrincipalId } from '@quackback/ids'
@@ -120,16 +118,6 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     }
   }
 
-  // Resolve official response author name if needed
-  let officialResponseAuthorName: string | null = null
-  if (post.officialResponsePrincipalId) {
-    const responderPrincipal = await db.query.principal.findFirst({
-      where: eq(principal.id, post.officialResponsePrincipalId),
-      columns: { displayName: true },
-    })
-    officialResponseAuthorName = responderPrincipal?.displayName ?? null
-  }
-
   const postWithDetails: PostWithDetails = {
     ...post,
     board: {
@@ -146,7 +134,6 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     pinnedComment,
     authorName: post.author?.displayName ?? null,
     authorEmail: post.author?.user?.email ?? null,
-    officialResponseAuthorName,
   }
 
   return postWithDetails
@@ -229,7 +216,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     responded,
     updatedBefore,
     sort = 'newest',
-    page = 1,
+    cursor,
     limit = 20,
   } = params
 
@@ -294,11 +281,15 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 
-  // Responded filter - filter by team response state
+  // Responded filter - filter by whether any team member has commented
   if (responded === 'responded') {
-    conditions.push(isNotNull(posts.officialResponseAt))
+    conditions.push(
+      sql`EXISTS (SELECT 1 FROM ${comments} WHERE ${comments.postId} = ${posts.id} AND ${comments.isTeamMember} = true)`
+    )
   } else if (responded === 'unresponded') {
-    conditions.push(isNull(posts.officialResponseAt))
+    conditions.push(
+      sql`NOT EXISTS (SELECT 1 FROM ${comments} WHERE ${comments.postId} = ${posts.id} AND ${comments.isTeamMember} = true)`
+    )
   }
 
   // Updated before filter (for "stale" view)
@@ -306,47 +297,67 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(sql`${posts.updatedAt} < ${updatedBefore}`)
   }
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-
-  // Sort order
-  const orderByMap = {
-    newest: desc(posts.createdAt),
-    oldest: asc(posts.createdAt),
-    votes: desc(posts.voteCount),
+  // Cursor-based keyset pagination: resolve cursor to sort-field values
+  if (cursor) {
+    const cursorPost = await db.query.posts.findFirst({
+      where: eq(posts.id, cursor as PostId),
+      columns: { id: true, createdAt: true, voteCount: true },
+    })
+    if (cursorPost) {
+      if (sort === 'votes') {
+        conditions.push(
+          sql`(${posts.voteCount}, ${posts.createdAt}, ${posts.id}) < (${cursorPost.voteCount}, ${cursorPost.createdAt}, ${cursorPost.id})`
+        )
+      } else if (sort === 'oldest') {
+        conditions.push(
+          sql`(${posts.createdAt}, ${posts.id}) > (${cursorPost.createdAt}, ${cursorPost.id})`
+        )
+      } else {
+        // newest (default)
+        conditions.push(
+          sql`(${posts.createdAt}, ${posts.id}) < (${cursorPost.createdAt}, ${cursorPost.id})`
+        )
+      }
+    }
   }
 
-  // Fetch posts with pagination and count in parallel
-  const [rawPosts, countResult] = await Promise.all([
-    db.query.posts.findMany({
-      where: whereClause,
-      orderBy: orderByMap[sort],
-      limit,
-      offset: (page - 1) * limit,
-      with: {
-        board: {
-          columns: { id: true, name: true, slug: true },
-        },
-        tags: {
-          with: {
-            tag: {
-              columns: { id: true, name: true, color: true },
-            },
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+  // Sort order with id tiebreaker for deterministic keyset pagination
+  const orderByMap = {
+    newest: [desc(posts.createdAt), desc(posts.id)],
+    oldest: [asc(posts.createdAt), asc(posts.id)],
+    votes: [desc(posts.voteCount), desc(posts.createdAt), desc(posts.id)],
+  }
+
+  // Fetch limit+1 to determine hasMore without a COUNT query
+  const rawPosts = await db.query.posts.findMany({
+    where: whereClause,
+    orderBy: orderByMap[sort],
+    limit: limit + 1,
+    with: {
+      board: {
+        columns: { id: true, name: true, slug: true },
+      },
+      tags: {
+        with: {
+          tag: {
+            columns: { id: true, name: true, color: true },
           },
         },
-        author: {
-          columns: { displayName: true },
-        },
       },
-    }),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .where(whereClause),
-  ])
+      author: {
+        columns: { displayName: true },
+      },
+    },
+  })
+
+  const hasMore = rawPosts.length > limit
+  const sliced = hasMore ? rawPosts.slice(0, limit) : rawPosts
 
   // Transform to PostListItem format
   // Use denormalized commentCount field (maintained by database trigger)
-  const items = rawPosts.map((post) => ({
+  const items = sliced.map((post) => ({
     ...post,
     board: post.board,
     tags: post.tags.map((pt) => pt.tag),
@@ -354,12 +365,13 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     authorName: post.author?.displayName ?? null,
   }))
 
-  const total = Number(countResult[0].count)
+  const lastItem = items[items.length - 1]
+  const nextCursor = hasMore && lastItem ? lastItem.id : null
 
   return {
     items,
-    total,
-    hasMore: page * limit < total,
+    nextCursor,
+    hasMore,
   }
 }
 

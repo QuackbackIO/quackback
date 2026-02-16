@@ -4,7 +4,6 @@
  * Prefer importing directly from '@/lib/shared/types' in new code.
  */
 export type {
-  OfficialResponse,
   PinnedComment,
   CommentReaction,
   CommentWithReplies,
