@@ -4,8 +4,8 @@
  * DO NOT EDIT MANUALLY - regenerate with:
  *   bun packages/db/scripts/generate-init-sql.ts
  *
- * Generated: 2026-02-09T13:00:30.665Z
- * Migrations: 2
+ * Generated: 2026-02-16T17:50:22.346Z
+ * Migrations: 7
  */
 
 export interface Migration {
@@ -37,12 +37,42 @@ export const MIGRATIONS: Migration[] = [
     hash: '1112de23b4f5471cac363a9cc2f080009822cc9c4e31372d7bc35b82fab8ad15',
     sql: 'CREATE TABLE "jwks" (\n\t"id" text PRIMARY KEY NOT NULL,\n\t"public_key" text NOT NULL,\n\t"private_key" text NOT NULL,\n\t"created_at" timestamp with time zone NOT NULL,\n\t"expires_at" timestamp with time zone\n);\n--> statement-breakpoint\nCREATE TABLE "oauth_access_token" (\n\t"id" text PRIMARY KEY NOT NULL,\n\t"token" text,\n\t"client_id" text NOT NULL,\n\t"session_id" text,\n\t"user_id" uuid,\n\t"reference_id" text,\n\t"refresh_id" text,\n\t"expires_at" timestamp with time zone,\n\t"created_at" timestamp with time zone,\n\t"scopes" text[] NOT NULL,\n\tCONSTRAINT "oauth_access_token_token_unique" UNIQUE("token")\n);\n--> statement-breakpoint\nCREATE TABLE "oauth_client" (\n\t"id" text PRIMARY KEY NOT NULL,\n\t"client_id" text NOT NULL,\n\t"client_secret" text,\n\t"disabled" boolean DEFAULT false,\n\t"skip_consent" boolean,\n\t"enable_end_session" boolean,\n\t"scopes" text[],\n\t"user_id" uuid,\n\t"created_at" timestamp with time zone,\n\t"updated_at" timestamp with time zone,\n\t"name" text,\n\t"uri" text,\n\t"icon" text,\n\t"contacts" text[],\n\t"tos" text,\n\t"policy" text,\n\t"software_id" text,\n\t"software_version" text,\n\t"software_statement" text,\n\t"redirect_uris" text[] NOT NULL,\n\t"post_logout_redirect_uris" text[],\n\t"token_endpoint_auth_method" text,\n\t"grant_types" text[],\n\t"response_types" text[],\n\t"public" boolean,\n\t"type" text,\n\t"reference_id" text,\n\t"metadata" jsonb,\n\tCONSTRAINT "oauth_client_client_id_unique" UNIQUE("client_id")\n);\n--> statement-breakpoint\nCREATE TABLE "oauth_consent" (\n\t"id" text PRIMARY KEY NOT NULL,\n\t"client_id" text NOT NULL,\n\t"user_id" uuid,\n\t"reference_id" text,\n\t"scopes" text[] NOT NULL,\n\t"created_at" timestamp with time zone,\n\t"updated_at" timestamp with time zone\n);\n--> statement-breakpoint\nCREATE TABLE "oauth_refresh_token" (\n\t"id" text PRIMARY KEY NOT NULL,\n\t"token" text NOT NULL,\n\t"client_id" text NOT NULL,\n\t"session_id" text,\n\t"user_id" uuid NOT NULL,\n\t"reference_id" text,\n\t"expires_at" timestamp with time zone,\n\t"created_at" timestamp with time zone,\n\t"revoked" timestamp with time zone,\n\t"scopes" text[] NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_refresh_id_oauth_refresh_token_id_fk" FOREIGN KEY ("refresh_id") REFERENCES "public"."oauth_refresh_token"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_client" ADD CONSTRAINT "oauth_client_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_consent" ADD CONSTRAINT "oauth_consent_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_consent" ADD CONSTRAINT "oauth_consent_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;',
   },
+  {
+    tag: '0002_groovy_pretty_boy',
+    when: 1770656333437,
+    hash: '79abd320f6421d17d920694a03472a876c228049bef237549067c59b3596dd95',
+    sql: 'ALTER TABLE "api_keys" DROP CONSTRAINT "api_keys_created_by_id_principal_id_fk";\n--> statement-breakpoint\nDROP INDEX "principal_user_idx";--> statement-breakpoint\nALTER TABLE "principal" ALTER COLUMN "user_id" DROP NOT NULL;--> statement-breakpoint\nALTER TABLE "api_keys" ALTER COLUMN "created_by_id" DROP NOT NULL;--> statement-breakpoint\nALTER TABLE "principal" ADD COLUMN "avatar_url" text;--> statement-breakpoint\nALTER TABLE "principal" ADD COLUMN "avatar_key" text;--> statement-breakpoint\nALTER TABLE "integrations" ADD COLUMN "principal_id" uuid;--> statement-breakpoint\nALTER TABLE "api_keys" ADD COLUMN "principal_id" uuid NOT NULL;--> statement-breakpoint\nALTER TABLE "integrations" ADD CONSTRAINT "integrations_principal_id_principal_id_fk" FOREIGN KEY ("principal_id") REFERENCES "public"."principal"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_principal_id_principal_id_fk" FOREIGN KEY ("principal_id") REFERENCES "public"."principal"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_created_by_id_principal_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."principal"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nCREATE INDEX "api_keys_principal_id_idx" ON "api_keys" USING btree ("principal_id");--> statement-breakpoint\nCREATE UNIQUE INDEX "principal_user_idx" ON "principal" USING btree ("user_id") WHERE user_id IS NOT NULL;--> statement-breakpoint\nUPDATE "principal" SET display_name = u.name, avatar_url = u.image, avatar_key = u.image_key FROM "user" u WHERE "principal".user_id = u.id AND "principal".user_id IS NOT NULL AND "principal".display_name IS NULL;',
+  },
+  {
+    tag: '0003_colorful_jocasta',
+    when: 1770712174017,
+    hash: 'b0eb7940153e27bb535b9889f72f2250d12a0bd8259d97a2d86280177d1e8698',
+    sql: 'ALTER TABLE "settings" ADD COLUMN "widget_config" text;--> statement-breakpoint\nALTER TABLE "settings" ADD COLUMN "widget_secret" text;',
+  },
+  {
+    tag: '0004_deep_sauron',
+    when: 1770712174018,
+    hash: 'cf9111c59357b73feb6b12ab19753816da96107e4036c8ad66c390d2c32bc9fb',
+    sql: 'ALTER TABLE "settings" ADD COLUMN "telemetry_config" text;',
+  },
+  {
+    tag: '0005_greedy_stellaris',
+    when: 1770987666339,
+    hash: '15b68a034a86ef1bcffbe0f7aa308ac59b54c45f8beb0bfde7c66ce764a8556d',
+    sql: 'ALTER TABLE "comments" ADD COLUMN "status_change_from_id" uuid;--> statement-breakpoint\nALTER TABLE "comments" ADD COLUMN "status_change_to_id" uuid;--> statement-breakpoint\nALTER TABLE "posts" ADD COLUMN "is_comments_locked" boolean DEFAULT false NOT NULL;--> statement-breakpoint\nALTER TABLE "comments" ADD CONSTRAINT "comments_status_change_from_id_post_statuses_id_fk" FOREIGN KEY ("status_change_from_id") REFERENCES "public"."post_statuses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "comments" ADD CONSTRAINT "comments_status_change_to_id_post_statuses_id_fk" FOREIGN KEY ("status_change_to_id") REFERENCES "public"."post_statuses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\nALTER TABLE "settings" DROP COLUMN "telemetry_config";',
+  },
+  {
+    tag: '0006_thick_arclight',
+    when: 1771260577775,
+    hash: '1672c90b0da91e03f3631a4ea6229240a371d6e3f232ef608a7a39b77b63505b',
+    sql: '-- Backfill: convert existing official responses into pinned comments\n-- before dropping the columns. Uses the official_response_principal_id as\n-- the comment author, falling back to the post\'s own principal_id.\nWITH inserted_comments AS (\n  INSERT INTO "comments" ("id", "post_id", "principal_id", "content", "is_team_member", "created_at")\n  SELECT\n    gen_random_uuid(),\n    p."id",\n    COALESCE(p."official_response_principal_id", p."principal_id"),\n    p."official_response",\n    true,\n    COALESCE(p."official_response_at", p."created_at")\n  FROM "posts" p\n  WHERE p."official_response" IS NOT NULL\n    AND p."pinned_comment_id" IS NULL\n  RETURNING "id", "post_id"\n)\nUPDATE "posts"\nSET "pinned_comment_id" = inserted_comments."id",\n    "comment_count" = "posts"."comment_count" + 1\nFROM inserted_comments\nWHERE "posts"."id" = inserted_comments."post_id";\n--> statement-breakpoint\nALTER TABLE "posts" DROP CONSTRAINT "posts_official_response_principal_id_principal_id_fk";\n--> statement-breakpoint\nALTER TABLE "posts" DROP COLUMN "official_response";--> statement-breakpoint\nALTER TABLE "posts" DROP COLUMN "official_response_principal_id";--> statement-breakpoint\nALTER TABLE "posts" DROP COLUMN "official_response_at";\n',
+  },
 ]
 
 /**
  * Schema version identifier (tag of last migration)
  */
-export const SCHEMA_VERSION = '0001_loud_justice'
+export const SCHEMA_VERSION = '0006_thick_arclight'
 
 /**
  * Parse a migration SQL into individual statements.
@@ -98,9 +128,9 @@ SELECT hash FROM drizzle.__drizzle_migrations
  */
 export const SEED_SQL = `INSERT INTO "post_statuses" ("id", "name", "slug", "color", "category", "position", "show_on_roadmap", "is_default", "created_at")
 VALUES
-  ('019c427d-4049-711b-9bc9-61e459860607', 'Open', 'open', '#3b82f6', 'active', 0, false, true, NOW()),
-  ('019c427d-4049-711b-9bc9-69f43a36b197', 'Under Review', 'under_review', '#eab308', 'active', 1, false, false, NOW()),
-  ('019c427d-4049-711b-9bc9-77a1525cb520', 'Planned', 'planned', '#a855f7', 'active', 2, true, false, NOW()),
-  ('019c427d-4049-711b-9bc9-7a21c23991af', 'In Progress', 'in_progress', '#f97316', 'active', 3, true, false, NOW()),
-  ('019c427d-4049-711b-9bc9-82f0086e7e0f', 'Complete', 'complete', '#22c55e', 'complete', 0, true, false, NOW()),
-  ('019c427d-404a-711b-9bc9-880c35950e9e', 'Closed', 'closed', '#6b7280', 'closed', 0, false, false, NOW());`
+  ('019c6793-248b-7224-9b80-d0b0a96a5fa6', 'Open', 'open', '#3b82f6', 'active', 0, false, true, NOW()),
+  ('019c6793-248c-7224-9b80-d848a2444384', 'Under Review', 'under_review', '#eab308', 'active', 1, false, false, NOW()),
+  ('019c6793-248c-7224-9b80-e098ce8e2f6e', 'Planned', 'planned', '#a855f7', 'active', 2, true, false, NOW()),
+  ('019c6793-248c-7224-9b80-efd2ce6a8faa', 'In Progress', 'in_progress', '#f97316', 'active', 3, true, false, NOW()),
+  ('019c6793-248c-7224-9b80-f3ed78424326', 'Complete', 'complete', '#22c55e', 'complete', 0, true, false, NOW()),
+  ('019c6793-248c-7224-9b80-fa7b16280c3e', 'Closed', 'closed', '#6b7280', 'closed', 0, false, false, NOW());`
