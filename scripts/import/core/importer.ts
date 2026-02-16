@@ -467,12 +467,14 @@ export class Importer {
         })
 
         // Convert official response to a pinned comment
-        if (post.response && responsePrincipalId) {
+        // Fall back to the post author if no responder is specified
+        const commentPrincipalId = responsePrincipalId ?? principalId
+        if (post.response && commentPrincipalId) {
           const commentId = generateId('comment')
           commentInserts.push({
             id: commentId,
             postId,
-            principalId: responsePrincipalId,
+            principalId: commentPrincipalId,
             content: post.response,
             isTeamMember: true,
             createdAt: responseAt ?? new Date(),
