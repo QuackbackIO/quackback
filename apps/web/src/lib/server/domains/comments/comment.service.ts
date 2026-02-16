@@ -15,7 +15,6 @@ import {
   and,
   asc,
   isNull,
-  sql,
   comments,
   commentReactions,
   commentEditHistory,
@@ -25,8 +24,6 @@ import {
   type Comment,
 } from '@/lib/server/db'
 import {
-  createId,
-  toUuid,
   type CommentId,
   type PostId,
   type PrincipalId,
@@ -49,7 +46,6 @@ import type {
   CommentPermissionCheckResult,
 } from './comment.types'
 import { buildCommentTree, aggregateReactions, toStatusChange } from '@/lib/shared'
-import { getExecuteRows } from '@/lib/server/utils'
 
 // ============================================================================
 // Helper Functions (Internal)
@@ -602,86 +598,6 @@ export async function removeReaction(
   )
 
   return { added: false, reactions: aggregatedReactions }
-}
-
-/**
- * Toggle reaction on a comment (add if not exists, remove if exists)
- *
- * Simplifies the API by combining add/remove logic.
- *
- * @param commentId - Comment ID to react to
- * @param emoji - Emoji to toggle
- * @param principalId - Principal ID for tracking reactions (required - auth only)
- * @returns Result containing reaction status or an error
- */
-export async function toggleReaction(
-  commentId: CommentId,
-  emoji: string,
-  principalId: PrincipalId
-): Promise<ReactionResult> {
-  // Verify comment exists with post and board in single query
-  const comment = await db.query.comments.findFirst({
-    where: eq(comments.id, commentId),
-    with: {
-      post: {
-        with: { board: true },
-      },
-    },
-  })
-  if (!comment) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-  }
-  if (!comment.post || !comment.post.board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-  }
-
-  const commentUuid = toUuid(commentId)
-  const principalUuid = toUuid(principalId)
-  const reactionId = toUuid(createId('reaction'))
-
-  // Atomic toggle: delete if exists, insert if not
-  // Uses CTE to avoid race conditions between check and action
-  const toggleResult = await db.execute(sql`
-    WITH existing AS (
-      SELECT id FROM comment_reactions
-      WHERE comment_id = ${commentUuid}
-        AND principal_id = ${principalUuid}
-        AND emoji = ${emoji}
-    ),
-    deleted AS (
-      DELETE FROM comment_reactions
-      WHERE id IN (SELECT id FROM existing)
-      RETURNING id
-    ),
-    inserted AS (
-      INSERT INTO comment_reactions (id, comment_id, principal_id, emoji, created_at)
-      SELECT ${reactionId}::uuid, ${commentUuid}, ${principalUuid}, ${emoji}, NOW()
-      WHERE NOT EXISTS (SELECT 1 FROM existing)
-      ON CONFLICT (comment_id, principal_id, emoji) DO NOTHING
-      RETURNING id
-    )
-    SELECT
-      EXISTS (SELECT 1 FROM inserted) as added,
-      EXISTS (SELECT 1 FROM deleted) as removed
-  `)
-
-  const toggleRows = getExecuteRows<{ added: boolean; removed: boolean }>(toggleResult)
-  const added = toggleRows[0]?.added ?? false
-
-  // Fetch updated reactions
-  const reactions = await db.query.commentReactions.findMany({
-    where: eq(commentReactions.commentId, commentId),
-  })
-
-  const aggregatedReactions = aggregateReactions(
-    reactions.map((r) => ({
-      emoji: r.emoji,
-      principalId: r.principalId,
-    })),
-    principalId
-  )
-
-  return { added, reactions: aggregatedReactions }
 }
 
 // ============================================================================

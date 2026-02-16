@@ -10,7 +10,8 @@ import {
   createCommentFn,
   userEditCommentFn,
   userDeleteCommentFn,
-  toggleReactionFn,
+  addReactionFn,
+  removeReactionFn,
   pinCommentFn,
   unpinCommentFn,
 } from '@/lib/server/functions/comments'
@@ -271,7 +272,10 @@ export function useToggleReaction({
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (emoji: string) => toggleReactionFn({ data: { commentId, emoji } }),
+    mutationFn: ({ emoji, hasReacted }: { emoji: string; hasReacted: boolean }) => {
+      const fn = hasReacted ? removeReactionFn : addReactionFn
+      return fn({ data: { commentId, emoji } })
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       onSuccess?.(data)

@@ -21,7 +21,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
-import { toggleReactionFn } from '@/lib/server/functions/comments'
+import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
@@ -206,12 +206,14 @@ function CommentItem({
     setShowEmojiPicker(false)
     setIsPending(true)
     try {
-      const result = await toggleReactionFn({
+      const hasReacted = reactions.some((r) => r.emoji === emoji && r.hasReacted)
+      const fn = hasReacted ? removeReactionFn : addReactionFn
+      const result = await fn({
         data: { commentId: comment.id, emoji },
       })
       setReactions(result.reactions)
     } catch (error) {
-      console.error('Failed to toggle reaction:', error)
+      console.error('Failed to update reaction:', error)
     } finally {
       setIsPending(false)
     }
