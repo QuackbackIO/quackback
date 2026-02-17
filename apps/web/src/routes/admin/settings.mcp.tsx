@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { CommandLineIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
@@ -8,7 +8,6 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-settings'
 import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { getBaseUrl } from '@/lib/shared/routing'
 
 export const Route = createFileRoute('/admin/settings/mcp')({
   loader: async ({ context }) => {
@@ -24,7 +23,7 @@ export const Route = createFileRoute('/admin/settings/mcp')({
 })
 
 function useEndpointUrl() {
-  const baseUrl = getBaseUrl()
+  const { baseUrl } = useRouteContext({ from: '__root__' })
   return baseUrl ? `${baseUrl}/api/mcp` : '/api/mcp'
 }
 

@@ -54,6 +54,7 @@ const systemThemeScript = `
 
 export interface RouterContext {
   queryClient: QueryClient
+  baseUrl?: string
   session?: BootstrapData['session']
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
@@ -78,7 +79,7 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const { session, settings, userRole } = await getBootstrapData()
+    const { baseUrl, session, settings, userRole } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
@@ -87,7 +88,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       }
     }
 
-    return { session, settings, userRole }
+    return { baseUrl, session, settings, userRole }
   },
   head: () => ({
     meta: [
