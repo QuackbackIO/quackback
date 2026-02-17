@@ -56,7 +56,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'owner', label: 'Assigned to', icon: UserIcon },
   { key: 'date', label: 'Created date', icon: CalendarIcon },
   { key: 'votes', label: 'Vote count', icon: ArrowTrendingUpIcon },
-  { key: 'response', label: 'Response', icon: ChatBubbleLeftRightIcon },
+  { key: 'response', label: 'Team response', icon: ChatBubbleLeftRightIcon },
 ]
 
 const VOTE_THRESHOLDS = [
@@ -529,7 +529,7 @@ function computeActiveFilters(
     result.push({
       key: 'responded',
       type: 'responded',
-      label: 'Response:',
+      label: 'Team response:',
       value: filters.responded === 'responded' ? 'Responded' : 'Unresponded',
       valueId: filters.responded,
       options: respondedOptions,

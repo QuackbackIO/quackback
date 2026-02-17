@@ -129,8 +129,8 @@ export function InboxFiltersPanel({
         </FilterSection>
       )}
 
-      {/* Response Filter */}
-      <FilterSection title="Response">
+      {/* Team Response Filter */}
+      <FilterSection title="Team response">
         <FilterList
           items={[
             { id: 'responded', name: 'Responded' },
