@@ -58,6 +58,7 @@ async function fetchInboxPosts(
       responded: filters.responded,
       updatedBefore: filters.updatedBefore,
       sort: filters.sort,
+      showDeleted: filters.showDeleted,
       cursor,
       limit: 20,
     },

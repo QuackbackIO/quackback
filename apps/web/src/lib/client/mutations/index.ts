@@ -13,6 +13,8 @@ export {
   useUpdatePost,
   useVotePost,
   useCreatePost,
+  useDeletePost,
+  useRestorePost,
   useToggleCommentsLock,
 } from './posts'
 

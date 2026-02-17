@@ -21,6 +21,7 @@ export const Route = createFileRoute('/admin/feedback/')({
     responded: search.responded,
     updatedBefore: search.updatedBefore,
     sort: search.sort,
+    deleted: search.deleted,
   }),
   errorComponent: FeedbackErrorComponent,
   loader: async ({ deps, context }) => {
@@ -57,6 +58,7 @@ export const Route = createFileRoute('/admin/feedback/')({
           responded: deps.responded,
           updatedBefore: deps.updatedBefore,
           sort: deps.sort,
+          showDeleted: deps.deleted || undefined,
           limit: 20,
         })
       ),
@@ -118,6 +120,7 @@ function FeedbackIndexPage() {
       responded: search.responded,
       updatedBefore: search.updatedBefore,
       sort: search.sort,
+      showDeleted: search.deleted || undefined,
       limit: 20,
     })
   )

@@ -6,6 +6,7 @@ import {
   CalendarIcon,
   ArrowTrendingUpIcon,
   ChatBubbleLeftRightIcon,
+  TrashIcon,
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
@@ -18,7 +19,7 @@ import type { TeamMember } from '@/lib/server/domains/principals'
 
 interface ActiveFilter {
   key: string
-  type: 'status' | 'board' | 'tags' | 'owner' | 'date' | 'minVotes' | 'responded'
+  type: 'status' | 'board' | 'tags' | 'owner' | 'date' | 'minVotes' | 'responded' | 'deleted'
   label: string
   value: string
   valueId: string
@@ -305,6 +306,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     date: CalendarIcon,
     minVotes: ArrowTrendingUpIcon,
     responded: ChatBubbleLeftRightIcon,
+    deleted: TrashIcon,
   }
   return icons[type]
 }
@@ -534,6 +536,18 @@ function computeActiveFilters(
       onChange: (newValue) =>
         onFiltersChange({ responded: newValue as 'responded' | 'unresponded' }),
       onRemove: () => onFiltersChange({ responded: undefined }),
+    })
+  }
+
+  // Deleted posts filter
+  if (filters.showDeleted) {
+    result.push({
+      key: 'deleted',
+      type: 'deleted',
+      label: '',
+      value: 'Deleted posts',
+      valueId: 'deleted',
+      onRemove: () => onFiltersChange({ showDeleted: undefined }),
     })
   }
 

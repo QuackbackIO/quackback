@@ -20,6 +20,7 @@ import {
   asc,
   sql,
   isNull,
+  isNotNull,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { PostId, BoardId, PrincipalId } from '@quackback/ids'
@@ -60,7 +61,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
   }
 
   // Get the board, tags, and roadmaps in parallel
-  // Uses denormalized comment_count instead of counting comments
+  // Uses denormalized comment_count (maintained by comment.service.ts)
   const [board, postTagsResult, roadmapsResult] = await Promise.all([
     db.query.boards.findFirst({ where: eq(boards.id, post.boardId) }),
     db
@@ -215,6 +216,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     minVotes,
     responded,
     updatedBefore,
+    showDeleted,
     sort = 'newest',
     cursor,
     limit = 20,
@@ -223,8 +225,15 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   // Build conditions array
   const conditions = []
 
-  // Exclude soft-deleted posts
-  conditions.push(isNull(posts.deletedAt))
+  // Deleted posts filter
+  if (showDeleted) {
+    // Only show posts deleted within the last 30 days (restorable window)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    conditions.push(isNotNull(posts.deletedAt))
+    conditions.push(sql`${posts.deletedAt} >= ${thirtyDaysAgo}`)
+  } else {
+    conditions.push(isNull(posts.deletedAt))
+  }
 
   // Exclude merged/duplicate posts from inbox listing
   conditions.push(isNull(posts.canonicalPostId))
@@ -356,7 +365,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   const sliced = hasMore ? rawPosts.slice(0, limit) : rawPosts
 
   // Transform to PostListItem format
-  // Use denormalized commentCount field (maintained by database trigger)
+  // Use denormalized commentCount field (maintained by comment.service.ts)
   const items = sliced.map((post) => ({
     ...post,
     board: post.board,

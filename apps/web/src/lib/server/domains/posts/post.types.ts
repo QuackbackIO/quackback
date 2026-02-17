@@ -117,6 +117,8 @@ export interface InboxPostListParams {
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date
   sort?: 'newest' | 'oldest' | 'votes'
+  /** Show only soft-deleted posts (within 30-day restorable window) */
+  showDeleted?: boolean
   cursor?: string
   limit?: number
 }

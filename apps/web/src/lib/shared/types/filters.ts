@@ -21,6 +21,7 @@ export interface InboxFilters {
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: string
   sort?: 'newest' | 'oldest' | 'votes'
+  showDeleted?: boolean
 }
 
 /**
