@@ -108,7 +108,11 @@ interface PostListParams {
 
 function buildPostFilterConditions(params: PostListParams) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
-  const conditions = [eq(boards.isPublic, true), isNull(posts.canonicalPostId)]
+  const conditions = [
+    eq(boards.isPublic, true),
+    isNull(posts.canonicalPostId),
+    isNull(posts.deletedAt),
+  ]
 
   if (boardSlug) {
     conditions.push(eq(boards.slug, boardSlug))
@@ -337,7 +341,7 @@ export async function getPublicPostDetail(
       })
       .from(posts)
       .innerJoin(boards, eq(posts.boardId, boards.id))
-      .where(eq(posts.id, postId))
+      .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
       .limit(1),
 
     // Query 2: Comments with avatars, reactions, and status changes (single query using GROUP BY + json_agg)
@@ -534,7 +538,8 @@ export async function getPublicRoadmapPosts(statusIds: StatusId[]): Promise<Road
       and(
         eq(boards.isPublic, true),
         inArray(posts.statusId, statusIds),
-        isNull(posts.canonicalPostId)
+        isNull(posts.canonicalPostId),
+        isNull(posts.deletedAt)
       )
     )
     .orderBy(desc(posts.voteCount))
@@ -573,7 +578,12 @@ export async function getPublicRoadmapPostsPaginated(params: {
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(
-      and(eq(boards.isPublic, true), eq(posts.statusId, statusId), isNull(posts.canonicalPostId))
+      and(
+        eq(boards.isPublic, true),
+        eq(posts.statusId, statusId),
+        isNull(posts.canonicalPostId),
+        isNull(posts.deletedAt)
+      )
     )
     .orderBy(desc(posts.voteCount))
     .limit(limit + 1)

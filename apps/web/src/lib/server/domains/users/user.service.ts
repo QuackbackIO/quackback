@@ -62,6 +62,7 @@ export async function listPortalUsers(
         postCount: sql<number>`count(*)::int`.as('post_count'),
       })
       .from(posts)
+      .where(sql`${posts.deletedAt} IS NULL`)
       .groupBy(posts.principalId)
       .as('post_counts')
 
@@ -244,7 +245,7 @@ export async function getPortalUserDetail(
         .from(posts)
         .innerJoin(boards, eq(posts.boardId, boards.id))
         .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-        .where(eq(posts.principalId, principalIdForQuery))
+        .where(and(eq(posts.principalId, principalIdForQuery), sql`${posts.deletedAt} IS NULL`))
         .orderBy(desc(posts.createdAt))
         .limit(100),
 
@@ -304,7 +305,7 @@ export async function getPortalUserDetail(
             .from(posts)
             .innerJoin(boards, eq(posts.boardId, boards.id))
             .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-            .where(inArray(posts.id, otherPostIds))
+            .where(and(inArray(posts.id, otherPostIds), sql`${posts.deletedAt} IS NULL`))
         : Promise.resolve([]),
 
       // Get comment counts for authored posts (we'll add otherPosts counts after)

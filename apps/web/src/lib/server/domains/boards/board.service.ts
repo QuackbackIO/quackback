@@ -264,7 +264,7 @@ export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
       count: sql<number>`count(*)`.as('count'),
     })
     .from(posts)
-    .where(inArray(posts.boardId, boardIds))
+    .where(and(inArray(posts.boardId, boardIds), sql`${posts.deletedAt} IS NULL`))
     .groupBy(posts.boardId)
 
   // Create a map of board ID -> post count
