@@ -40,6 +40,7 @@ export interface InboxPostListParams {
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: string
   sort?: 'newest' | 'oldest' | 'votes'
+  showDeleted?: boolean
   cursor?: string
   limit?: number
 }

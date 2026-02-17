@@ -145,6 +145,17 @@ export function InboxFiltersPanel({
           }}
         />
       </FilterSection>
+
+      {/* Other Filters */}
+      <FilterSection title="Other">
+        <FilterList
+          items={[{ id: 'deleted', name: 'Deleted posts' }]}
+          selectedIds={filters.showDeleted ? ['deleted'] : []}
+          onSelect={() => {
+            onFiltersChange({ showDeleted: !filters.showDeleted || undefined })
+          }}
+        />
+      </FilterSection>
     </div>
   )
 }

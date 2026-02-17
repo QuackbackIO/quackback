@@ -8,6 +8,8 @@ interface DeletePostDialogProps {
   postTitle: string
   onConfirm: () => void
   isPending: boolean
+  /** Override the default description text */
+  description?: React.ReactNode
 }
 
 export function DeletePostDialog({
@@ -16,6 +18,7 @@ export function DeletePostDialog({
   postTitle,
   onConfirm,
   isPending,
+  description,
 }: DeletePostDialogProps) {
   return (
     <ConfirmDialog
@@ -23,9 +26,11 @@ export function DeletePostDialog({
       onOpenChange={onOpenChange}
       title="Delete Post"
       description={
-        <>
-          Are you sure you want to delete &ldquo;{postTitle}&rdquo;? This action cannot be undone.
-        </>
+        description ?? (
+          <>
+            Are you sure you want to delete &ldquo;{postTitle}&rdquo;? This action cannot be undone.
+          </>
+        )
       }
       variant="destructive"
       confirmLabel={isPending ? 'Deleting...' : 'Delete'}

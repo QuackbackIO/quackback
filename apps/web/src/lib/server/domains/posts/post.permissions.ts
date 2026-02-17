@@ -465,6 +465,15 @@ export async function restorePost(postId: PostId): Promise<Post> {
     throw new ValidationError('VALIDATION_ERROR', 'Post is not deleted')
   }
 
+  // Enforce 30-day restore window
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  if (new Date(existingPost.deletedAt) < thirtyDaysAgo) {
+    throw new ValidationError(
+      'RESTORE_EXPIRED',
+      'Posts can only be restored within 30 days of deletion'
+    )
+  }
+
   // Clear deletedAt and deletedByPrincipalId
   const [restoredPost] = await db
     .update(posts)

@@ -23,6 +23,7 @@ export function useInboxFilters() {
       responded: search.responded,
       updatedBefore: search.updatedBefore,
       sort: search.sort,
+      showDeleted: search.deleted,
     }),
     [search]
   )
@@ -45,6 +46,7 @@ export function useInboxFilters() {
           ...('responded' in updates && { responded: updates.responded }),
           ...('updatedBefore' in updates && { updatedBefore: updates.updatedBefore }),
           ...('sort' in updates && { sort: updates.sort }),
+          ...('showDeleted' in updates && { deleted: updates.showDeleted || undefined }),
         },
         replace: true,
       })
@@ -73,7 +75,8 @@ export function useInboxFilters() {
       filters.dateTo ||
       filters.minVotes ||
       (filters.responded && filters.responded !== 'all') ||
-      filters.updatedBefore
+      filters.updatedBefore ||
+      filters.showDeleted
     )
   }, [filters])
 

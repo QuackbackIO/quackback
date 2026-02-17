@@ -11,6 +11,8 @@ import {
   updatePostTagsFn,
   createPostFn,
   toggleCommentsLockFn,
+  deletePostFn,
+  restorePostFn,
 } from '@/lib/server/functions/posts'
 import { toggleVoteFn } from '@/lib/server/functions/public-posts'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
@@ -345,6 +347,72 @@ export function useCreatePost() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+    },
+  })
+}
+
+// ============================================================================
+// Delete Post Mutation (admin soft delete)
+// ============================================================================
+
+export function useDeletePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (postId: PostId) => deletePostFn({ data: { id: postId } }),
+    onSuccess: (_data, postId) => {
+      // Remove from all list caches
+      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
+        { queryKey: inboxKeys.lists() },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((post) => post.id !== postId),
+            })),
+          }
+        }
+      )
+      // Remove detail cache
+      queryClient.removeQueries({ queryKey: inboxKeys.detail(postId) })
+      // Invalidate lists and roadmap
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+    },
+  })
+}
+
+// ============================================================================
+// Restore Post Mutation (admin restore soft-deleted)
+// ============================================================================
+
+export function useRestorePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (postId: PostId) => restorePostFn({ data: { id: postId } }),
+    onSuccess: (_data, postId) => {
+      // Remove from current (deleted) list cache
+      queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
+        { queryKey: inboxKeys.lists() },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((post) => post.id !== postId),
+            })),
+          }
+        }
+      )
+      // Remove detail cache
+      queryClient.removeQueries({ queryKey: inboxKeys.detail(postId) })
+      // Invalidate all lists and roadmap (restored posts may reappear in roadmaps)
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },
   })
 }
