@@ -49,6 +49,7 @@ const inboxPostListSchema = z.object({
   minVotes: z.number().optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
+  showDeleted: z.boolean().optional(),
 })
 
 const listPortalUsersSchema = z.object({
@@ -87,6 +88,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
         responded: data.responded,
         updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
         sort: data.sort,
+        showDeleted: data.showDeleted,
         cursor: data.cursor,
         limit: data.limit,
       })

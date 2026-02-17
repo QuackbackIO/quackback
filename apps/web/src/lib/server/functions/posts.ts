@@ -95,6 +95,7 @@ const listInboxPostsSchema = z.object({
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
+  showDeleted: z.boolean().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
 })
@@ -183,6 +184,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         responded: data.responded,
         updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
         sort: data.sort,
+        showDeleted: data.showDeleted,
         cursor: data.cursor,
         limit: data.limit,
       })

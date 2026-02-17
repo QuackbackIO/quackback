@@ -12,6 +12,8 @@ import {
   DocumentDuplicateIcon,
   LockClosedIcon,
   LockOpenIcon,
+  TrashIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { ModalHeader } from '@/components/shared/modal-header'
@@ -37,7 +39,10 @@ import {
   usePinComment,
   useUnpinComment,
   useToggleCommentsLock,
+  useDeletePost,
+  useRestorePost,
 } from '@/lib/client/mutations'
+import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/feedback'
@@ -108,6 +113,7 @@ function PostModalContent({
   const [isUpdating, setIsUpdating] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   // Navigation context
   const navigationContext = useNavigationContext(post.id)
@@ -119,6 +125,8 @@ function PostModalContent({
   const pinComment = usePinComment({ postId: post.id as PostId })
   const unpinComment = useUnpinComment({ postId: post.id as PostId })
   const toggleCommentsLock = useToggleCommentsLock()
+  const deletePost = useDeletePost()
+  const restorePostMutation = useRestorePost()
 
   // Initialize form with post data
   useEffect(() => {
@@ -275,6 +283,40 @@ function PostModalContent({
             </>
           )}
         </Button>
+        {post.deletedAt ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                await restorePostMutation.mutateAsync(post.id as PostId)
+                toast.success('Post restored')
+                onClose()
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Failed to restore post')
+              }
+            }}
+            disabled={restorePostMutation.isPending}
+            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowPathIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">
+              {restorePostMutation.isPending ? 'Restoring...' : 'Restore'}
+            </span>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDeleteDialog(true)}
+            className="gap-1.5 h-8 text-muted-foreground hover:text-destructive"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Delete</span>
+          </Button>
+        )}
         {navigationContext.total > 0 && (
           <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
             <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
@@ -420,6 +462,31 @@ function PostModalContent({
         submitType="button"
         onSubmit={handleSubmit}
         submitDisabled={!hasChanges}
+      />
+
+      {/* Delete confirmation dialog */}
+      <DeletePostDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        postTitle={post.title}
+        isPending={deletePost.isPending}
+        description={
+          <>
+            Are you sure you want to delete &ldquo;{post.title}&rdquo;? This will remove the post
+            from the public portal and all board listings. Votes and comments will be preserved. You
+            can restore it from the Deleted filter within 30 days.
+          </>
+        }
+        onConfirm={async () => {
+          try {
+            await deletePost.mutateAsync(post.id as PostId)
+            toast.success('Post deleted')
+            setShowDeleteDialog(false)
+            onClose()
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete post')
+          }
+        }}
       />
     </div>
   )
