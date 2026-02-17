@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { updateWidgetConfigFn, regenerateWidgetSecretFn } from '@/lib/server/functions/settings'
+import { getBaseUrl } from '@/lib/shared/routing'
 
 export const Route = createFileRoute('/admin/settings/widget')({
   loader: async ({ context }) => {
@@ -32,8 +33,7 @@ export const Route = createFileRoute('/admin/settings/widget')({
       queryClient.ensureQueryData(adminQueries.boards()),
     ])
 
-    const { getBaseUrl } = await import('@/lib/server/config')
-    return { baseUrl: getBaseUrl() }
+    return {}
   },
   component: WidgetSettingsPage,
 })
@@ -52,10 +52,10 @@ function SavingIndicator({ visible }: { visible: boolean }) {
 }
 
 function WidgetSettingsPage() {
-  const { baseUrl } = Route.useLoaderData()
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const widgetSecretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
+  const baseUrl = getBaseUrl()
 
   return (
     <div className="space-y-6 max-w-5xl">
