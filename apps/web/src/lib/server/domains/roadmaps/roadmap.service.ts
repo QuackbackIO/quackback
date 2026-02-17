@@ -310,7 +310,7 @@ export async function getRoadmapPosts(
   const { statusId, limit = 20, offset = 0 } = options
 
   // Build conditions
-  const conditions = [eq(postRoadmaps.roadmapId, roadmapId)]
+  const conditions = [eq(postRoadmaps.roadmapId, roadmapId), isNull(posts.deletedAt)]
   if (statusId) {
     conditions.push(eq(posts.statusId, statusId))
   }
@@ -384,7 +384,7 @@ export async function getPublicRoadmapPosts(
   const { statusId, limit = 20, offset = 0 } = options
 
   // Build conditions
-  const conditions = [eq(postRoadmaps.roadmapId, roadmapId)]
+  const conditions = [eq(postRoadmaps.roadmapId, roadmapId), isNull(posts.deletedAt)]
   if (statusId) {
     conditions.push(eq(posts.statusId, statusId))
   }

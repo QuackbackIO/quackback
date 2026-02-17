@@ -398,7 +398,7 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
   // Get posts with board and tags (limit to prevent memory exhaustion)
   const MAX_EXPORT_POSTS = 10000
   const rawPosts = await db.query.posts.findMany({
-    where: inArray(posts.boardId, allBoardIds),
+    where: and(inArray(posts.boardId, allBoardIds), isNull(posts.deletedAt)),
     orderBy: desc(posts.createdAt),
     limit: MAX_EXPORT_POSTS,
     with: {
