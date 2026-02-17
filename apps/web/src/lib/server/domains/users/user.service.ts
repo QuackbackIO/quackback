@@ -17,6 +17,7 @@ import {
   or,
   ilike,
   inArray,
+  isNull,
   desc,
   asc,
   sql,
@@ -62,7 +63,7 @@ export async function listPortalUsers(
         postCount: sql<number>`count(*)::int`.as('post_count'),
       })
       .from(posts)
-      .where(sql`${posts.deletedAt} IS NULL`)
+      .where(isNull(posts.deletedAt))
       .groupBy(posts.principalId)
       .as('post_counts')
 
@@ -245,29 +246,33 @@ export async function getPortalUserDetail(
         .from(posts)
         .innerJoin(boards, eq(posts.boardId, boards.id))
         .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-        .where(and(eq(posts.principalId, principalIdForQuery), sql`${posts.deletedAt} IS NULL`))
+        .where(and(eq(posts.principalId, principalIdForQuery), isNull(posts.deletedAt)))
         .orderBy(desc(posts.createdAt))
         .limit(100),
 
       // Get post IDs the user has commented on (via principalId)
+      // Join to posts to exclude deleted posts before the limit
       db
         .select({
           postId: comments.postId,
           latestCommentAt: sql<Date>`max(${comments.createdAt})`.as('latest_comment_at'),
         })
         .from(comments)
-        .where(eq(comments.principalId, principalIdForQuery))
+        .innerJoin(posts, eq(posts.id, comments.postId))
+        .where(and(eq(comments.principalId, principalIdForQuery), isNull(posts.deletedAt)))
         .groupBy(comments.postId)
         .limit(100),
 
       // Get post IDs the user has voted on (via indexed principalId column)
+      // Join to posts to exclude deleted posts before the limit
       db
         .select({
           postId: votes.postId,
           votedAt: votes.createdAt,
         })
         .from(votes)
-        .where(eq(votes.principalId, principalIdForQuery))
+        .innerJoin(posts, eq(posts.id, votes.postId))
+        .where(and(eq(votes.principalId, principalIdForQuery), isNull(posts.deletedAt)))
         .orderBy(desc(votes.createdAt))
         .limit(100),
     ])
@@ -305,7 +310,7 @@ export async function getPortalUserDetail(
             .from(posts)
             .innerJoin(boards, eq(posts.boardId, boards.id))
             .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-            .where(and(inArray(posts.id, otherPostIds), sql`${posts.deletedAt} IS NULL`))
+            .where(and(inArray(posts.id, otherPostIds), isNull(posts.deletedAt)))
         : Promise.resolve([]),
 
       // Get comment counts for authored posts (we'll add otherPosts counts after)
