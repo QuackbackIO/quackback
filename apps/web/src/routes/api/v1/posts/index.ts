@@ -51,7 +51,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
           const tagIdsParam = url.searchParams.get('tagIds') ?? undefined
           const search = url.searchParams.get('search') ?? undefined
           const sort = (url.searchParams.get('sort') as 'newest' | 'oldest' | 'votes') ?? 'newest'
-          const showDeleted = url.searchParams.get('deleted') === 'true'
+          const showDeleted = url.searchParams.get('showDeleted') === 'true'
 
           // Validate boardId filter if provided
           const { isValidTypeId } = await import('@quackback/ids')
@@ -96,6 +96,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
               tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
               createdAt: post.createdAt.toISOString(),
               updatedAt: post.updatedAt.toISOString(),
+              deletedAt: post.deletedAt?.toISOString() ?? null,
             })),
             {
               pagination: {

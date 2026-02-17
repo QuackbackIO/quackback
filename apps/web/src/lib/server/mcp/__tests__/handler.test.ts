@@ -584,9 +584,9 @@ describe('MCP HTTP Handler', () => {
       expect(text.hasMore).toBe(false)
     })
 
-    // ── search tool (includeDeleted) ──────────────────────────────────────
+    // ── search tool (showDeleted) ───────────────────────────────────────
 
-    it('should pass showDeleted to listInboxPosts when includeDeleted is true', async () => {
+    it('should pass showDeleted to listInboxPosts when showDeleted is true', async () => {
       const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
       const handleMcpRequest = await initializeSession()
 
@@ -594,7 +594,7 @@ describe('MCP HTTP Handler', () => {
         mcpRequest(
           jsonRpcRequest('tools/call', {
             name: 'search',
-            arguments: { query: 'deleted stuff', includeDeleted: true },
+            arguments: { query: 'deleted stuff', showDeleted: true },
           })
         )
       )
@@ -604,7 +604,7 @@ describe('MCP HTTP Handler', () => {
       )
     })
 
-    it('should not pass showDeleted when includeDeleted is false', async () => {
+    it('should not pass showDeleted when showDeleted is false', async () => {
       const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
       const handleMcpRequest = await initializeSession()
 
@@ -1388,6 +1388,39 @@ describe('MCP HTTP Handler', () => {
       }
       expect(body.result.isError).toBe(true)
       expect(body.result.content[0].text).toContain('write:feedback')
+    })
+
+    it('should deny search showDeleted for OAuth portal user (role enforcement)', async () => {
+      const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback', 'write:feedback'])
+      await setupValidOAuth({
+        role: 'user',
+        scopes: ['read:feedback', 'write:feedback'],
+      })
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'deleted', showDeleted: true },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('team member')
     })
 
     it('should deny delete_post for OAuth portal user (role enforcement)', async () => {
