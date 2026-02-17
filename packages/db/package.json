@@ -22,7 +22,8 @@
     "db:migrate:cli": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun src/seed.ts",
-    "db:reset": "bun src/reset.ts"
+    "db:reset": "bun src/reset.ts",
+    "db:sync-counts": "bun src/sync-counts.ts"
   },
   "dependencies": {
     "@quackback/ids": "workspace:*",
