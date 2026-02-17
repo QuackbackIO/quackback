@@ -1,13 +1,15 @@
 /**
  * MCP Tools for Quackback
  *
- * 15 tools calling domain services directly (no HTTP self-loop):
+ * 17 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts and changelogs
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, and owner
  * - vote_post: Toggle vote on a post
  * - add_comment: Post a comment on a post
  * - create_post: Submit new feedback
+ * - delete_post: Soft-delete a post
+ * - restore_post: Restore a soft-deleted post
  * - create_changelog: Create a changelog entry
  * - update_changelog: Update title, content, publish state, linked posts
  * - delete_changelog: Soft-delete a changelog entry
@@ -30,6 +32,7 @@ import {
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import { mergePost, unmergePost } from '@/lib/server/domains/posts/post.merge'
+import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
 import {
   createComment,
   updateComment,
@@ -163,6 +166,10 @@ const searchSchema = {
     .enum(['newest', 'oldest', 'votes'])
     .default('newest')
     .describe('Sort order. "votes" only applies to posts.'),
+  showDeleted: z
+    .boolean()
+    .default(false)
+    .describe('Show only soft-deleted posts instead of active ones (team only, last 30 days)'),
   limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
 }
@@ -265,6 +272,14 @@ const unmergePostSchema = {
   postId: z.string().describe('Post TypeID of the merged post to restore'),
 }
 
+const deletePostSchema = {
+  postId: z.string().describe('Post TypeID to delete'),
+}
+
+const restorePostSchema = {
+  postId: z.string().describe('Post TypeID to restore'),
+}
+
 // ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion.
 // WARNING: These must stay in sync with the Zod schemas above.
@@ -277,6 +292,7 @@ type SearchArgs = {
   boardId?: string
   status?: string
   tagIds?: string[]
+  showDeleted: boolean
   sort: 'newest' | 'oldest' | 'votes'
   limit: number
   cursor?: string
@@ -349,6 +365,10 @@ type MergePostArgs = {
 
 type UnmergePostArgs = { postId: string }
 
+type DeletePostArgs = { postId: string }
+
+type RestorePostArgs = { postId: string }
+
 // ============================================================================
 // Tool registration
 // ============================================================================
@@ -370,6 +390,11 @@ Examples:
     async (args: SearchArgs): Promise<CallToolResult> => {
       const denied = requireScope(auth, 'read:feedback')
       if (denied) return denied
+      // showDeleted requires team role
+      if (args.showDeleted) {
+        const roleDenied = requireTeamRole(auth)
+        if (roleDenied) return roleDenied
+      }
       try {
         if (args.entity === 'changelogs') {
           return await searchChangelogs(args)
@@ -859,6 +884,57 @@ Examples:
       }
     }
   )
+
+  // delete_post
+  server.tool(
+    'delete_post',
+    `Soft-delete a feedback post. The post is hidden from public views but can be restored within 30 days.
+
+Examples:
+- Delete: delete_post({ postId: "post_01abc..." })`,
+    deletePostSchema,
+    DESTRUCTIVE,
+    async (args: DeletePostArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        await softDeletePost(args.postId as PostId, {
+          principalId: auth.principalId,
+          role: auth.role,
+        })
+
+        return jsonResult({ deleted: true, postId: args.postId })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // restore_post
+  server.tool(
+    'restore_post',
+    `Restore a soft-deleted post. Posts can only be restored within 30 days of deletion.
+
+Examples:
+- Restore: restore_post({ postId: "post_01abc..." })`,
+    restorePostSchema,
+    WRITE,
+    async (args: RestorePostArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const result = await restorePost(args.postId as PostId)
+
+        return jsonResult({ restored: true, postId: args.postId, title: result.title })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
 }
 
 // ============================================================================
@@ -881,6 +957,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as TagId[] | undefined,
+    showDeleted: args.showDeleted || undefined,
     sort: args.sort,
     cursor: cursorValue,
     limit: args.limit,
@@ -904,6 +981,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
       ownerPrincipalId: p.ownerPrincipalId,
       tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
       createdAt: p.createdAt,
+      deletedAt: p.deletedAt ?? null,
     })),
     nextCursor,
     hasMore: result.hasMore,
@@ -991,6 +1069,7 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
       : null,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
+    deletedAt: post.deletedAt ?? null,
     comments,
   })
 }

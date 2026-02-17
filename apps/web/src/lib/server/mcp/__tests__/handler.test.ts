@@ -111,6 +111,16 @@ vi.mock('@/lib/server/domains/posts/post.merge', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/domains/posts/post.permissions', () => ({
+  softDeletePost: vi.fn().mockResolvedValue(undefined),
+  restorePost: vi.fn().mockResolvedValue({
+    id: 'post_test',
+    title: 'Restored Post',
+    deletedAt: null,
+    deletedByPrincipalId: null,
+  }),
+}))
+
 vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   createComment: vi.fn().mockResolvedValue({
     comment: {
@@ -527,7 +537,9 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('manage_roadmap_post')
       expect(toolNames).toContain('merge_post')
       expect(toolNames).toContain('unmerge_post')
-      expect(toolNames).toHaveLength(15)
+      expect(toolNames).toContain('delete_post')
+      expect(toolNames).toContain('restore_post')
+      expect(toolNames).toHaveLength(17)
     })
 
     it('should handle resources/list request', async () => {
@@ -570,6 +582,44 @@ describe('MCP HTTP Handler', () => {
       expect(text.posts).toBeDefined()
       expect(text.nextCursor).toBeNull()
       expect(text.hasMore).toBe(false)
+    })
+
+    // ── search tool (showDeleted) ───────────────────────────────────────
+
+    it('should pass showDeleted to listInboxPosts when showDeleted is true', async () => {
+      const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
+      const handleMcpRequest = await initializeSession()
+
+      await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'deleted stuff', showDeleted: true },
+          })
+        )
+      )
+
+      expect(vi.mocked(listInboxPosts)).toHaveBeenCalledWith(
+        expect.objectContaining({ showDeleted: true })
+      )
+    })
+
+    it('should not pass showDeleted when showDeleted is false', async () => {
+      const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
+      const handleMcpRequest = await initializeSession()
+
+      await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'test' },
+          })
+        )
+      )
+
+      expect(vi.mocked(listInboxPosts)).toHaveBeenCalledWith(
+        expect.objectContaining({ showDeleted: undefined })
+      )
     })
 
     // ── search tool (changelogs) ────────────────────────────────────────────
@@ -900,6 +950,110 @@ describe('MCP HTTP Handler', () => {
       expect(text.canonicalPost.id).toBe('post_canon')
     })
 
+    // ── delete_post tool ──────────────────────────────────────────────
+
+    it('should handle tools/call for delete_post', async () => {
+      const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'delete_post',
+            arguments: { postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.deleted).toBe(true)
+      expect(text.postId).toBe('post_test')
+      expect(vi.mocked(softDeletePost)).toHaveBeenCalledWith(
+        'post_test',
+        expect.objectContaining({ principalId: MOCK_MEMBER_ID })
+      )
+    })
+
+    // ── restore_post tool ─────────────────────────────────────────────
+
+    it('should handle tools/call for restore_post', async () => {
+      const { restorePost } = await import('@/lib/server/domains/posts/post.permissions')
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'restore_post',
+            arguments: { postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.restored).toBe(true)
+      expect(text.postId).toBe('post_test')
+      expect(text.title).toBe('Restored Post')
+      expect(vi.mocked(restorePost)).toHaveBeenCalledWith('post_test')
+    })
+
+    // ── delete_post error handling ──────────────────────────────────
+
+    it('should return error when delete_post fails', async () => {
+      const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
+      vi.mocked(softDeletePost).mockRejectedValueOnce(new Error('Post has already been deleted'))
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'delete_post',
+            arguments: { postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('Post has already been deleted')
+    })
+
+    // ── restore_post error handling ─────────────────────────────────
+
+    it('should return error when restore_post fails (expired)', async () => {
+      const { restorePost } = await import('@/lib/server/domains/posts/post.permissions')
+      vi.mocked(restorePost).mockRejectedValueOnce(
+        new Error('Posts can only be restored within 30 days of deletion')
+      )
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'restore_post',
+            arguments: { postId: 'post_old' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('30 days')
+    })
+
     // ── create_changelog tool ───────────────────────────────────────────
 
     it('should handle tools/call for create_changelog', async () => {
@@ -1184,6 +1338,112 @@ describe('MCP HTTP Handler', () => {
           jsonRpcRequest('tools/call', {
             name: 'triage_post',
             arguments: { postId: 'post_test', statusId: 'status_updated' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('team member')
+    })
+
+    it('should deny delete_post when write:feedback scope missing', async () => {
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback'])
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'delete_post',
+            arguments: { postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('write:feedback')
+    })
+
+    it('should deny restore_post when write:feedback scope missing', async () => {
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback'])
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'restore_post',
+            arguments: { postId: 'post_test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('write:feedback')
+    })
+
+    it('should deny search showDeleted for OAuth portal user (role enforcement)', async () => {
+      const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback', 'write:feedback'])
+      await setupValidOAuth({
+        role: 'user',
+        scopes: ['read:feedback', 'write:feedback'],
+      })
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'deleted', showDeleted: true },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('team member')
+    })
+
+    it('should deny delete_post for OAuth portal user (role enforcement)', async () => {
+      const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback', 'write:feedback'])
+      await setupValidOAuth({
+        role: 'user',
+        scopes: ['read:feedback', 'write:feedback'],
+      })
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'delete_post',
+            arguments: { postId: 'post_test' },
           })
         )
       )
