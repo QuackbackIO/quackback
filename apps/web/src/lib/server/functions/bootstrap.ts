@@ -3,11 +3,13 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal, eq } from '@/lib/server/db'
+import { config } from '@/lib/server/config'
 import type { Session } from './auth'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
 
 export interface BootstrapData {
+  baseUrl: string
   session: Session | null
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
@@ -80,6 +82,6 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
       }, 10_000)
     }
 
-    return { session, settings, userRole }
+    return { baseUrl: config.baseUrl, session, settings, userRole }
   }
 )

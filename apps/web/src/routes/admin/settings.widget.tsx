@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useTransition, useMemo } from 'react'
 import {
@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { updateWidgetConfigFn, regenerateWidgetSecretFn } from '@/lib/server/functions/settings'
-import { getBaseUrl } from '@/lib/shared/routing'
 
 export const Route = createFileRoute('/admin/settings/widget')({
   loader: async ({ context }) => {
@@ -55,7 +54,7 @@ function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const widgetSecretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
-  const baseUrl = getBaseUrl()
+  const { baseUrl } = useRouteContext({ from: '__root__' })
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -71,7 +70,7 @@ function WidgetSettingsPage() {
       <WidgetToggle initialEnabled={widgetConfigQuery.data.enabled} />
       <WidgetGeneralSettings config={widgetConfigQuery.data} boards={boardsQuery.data} />
       <WidgetIdentifySettings config={widgetConfigQuery.data} secret={widgetSecretQuery.data} />
-      <WidgetEmbedCode baseUrl={baseUrl} />
+      <WidgetEmbedCode baseUrl={baseUrl ?? ''} />
     </div>
   )
 }
