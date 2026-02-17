@@ -166,10 +166,10 @@ const searchSchema = {
     .enum(['newest', 'oldest', 'votes'])
     .default('newest')
     .describe('Sort order. "votes" only applies to posts.'),
-  includeDeleted: z
+  showDeleted: z
     .boolean()
     .default(false)
-    .describe('Include soft-deleted posts (team only, last 30 days)'),
+    .describe('Show only soft-deleted posts instead of active ones (team only, last 30 days)'),
   limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
 }
@@ -292,7 +292,7 @@ type SearchArgs = {
   boardId?: string
   status?: string
   tagIds?: string[]
-  includeDeleted: boolean
+  showDeleted: boolean
   sort: 'newest' | 'oldest' | 'votes'
   limit: number
   cursor?: string
@@ -390,8 +390,8 @@ Examples:
     async (args: SearchArgs): Promise<CallToolResult> => {
       const denied = requireScope(auth, 'read:feedback')
       if (denied) return denied
-      // includeDeleted requires team role
-      if (args.includeDeleted) {
+      // showDeleted requires team role
+      if (args.showDeleted) {
         const roleDenied = requireTeamRole(auth)
         if (roleDenied) return roleDenied
       }
@@ -957,7 +957,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as TagId[] | undefined,
-    showDeleted: args.includeDeleted || undefined,
+    showDeleted: args.showDeleted || undefined,
     sort: args.sort,
     cursor: cursorValue,
     limit: args.limit,
@@ -981,6 +981,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
       ownerPrincipalId: p.ownerPrincipalId,
       tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
       createdAt: p.createdAt,
+      deletedAt: p.deletedAt ?? null,
     })),
     nextCursor,
     hasMore: result.hasMore,
@@ -1068,6 +1069,7 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
       : null,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
+    deletedAt: post.deletedAt ?? null,
     comments,
   })
 }
