@@ -374,17 +374,23 @@ export async function deleteComment(
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
   }
 
-  // Atomic transaction: delete comment + decrement comment count
+  // Only decrement count if comment is not already soft-deleted
+  // (soft-delete already decremented the count)
+  const wasActive = !existingComment.deletedAt
+
+  // Atomic transaction: delete comment + conditionally decrement comment count
   await db.transaction(async (tx) => {
     const result = await tx.delete(comments).where(eq(comments.id, id)).returning()
     if (result.length === 0) {
       throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
-    await tx
-      .update(posts)
-      .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${result.length})` })
-      .where(eq(posts.id, existingComment.postId))
+    if (wasActive) {
+      await tx
+        .update(posts)
+        .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${result.length})` })
+        .where(eq(posts.id, existingComment.postId))
+    }
   })
 }
 
@@ -810,17 +816,19 @@ export async function softDeleteComment(
   }
 
   // Atomic transaction: soft-delete comment + decrement comment count + auto-unpin
+  // Guard: only update comments that aren't already soft-deleted (idempotent)
   await db.transaction(async (tx) => {
     const [updatedComment] = await tx
       .update(comments)
       .set({
         deletedAt: new Date(),
       })
-      .where(eq(comments.id, commentId))
+      .where(and(eq(comments.id, commentId), isNull(comments.deletedAt)))
       .returning()
 
     if (!updatedComment) {
-      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+      // Already soft-deleted or gone — no-op
+      return
     }
 
     // Decrement comment count and auto-unpin if this comment was pinned

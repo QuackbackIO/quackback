@@ -264,5 +264,43 @@ describe('Comment count maintenance', () => {
       })
       expect(hasCommentCountUpdate).toBe(true)
     })
+
+    it('should NOT decrement comment_count when hard-deleting a soft-deleted comment', async () => {
+      const { db } = await import('@/lib/server/db')
+      // Override mock to return a soft-deleted comment
+      vi.mocked(db.query.comments.findFirst).mockResolvedValueOnce({
+        id: 'comment_mock',
+        postId: 'post_mock',
+        content: 'test comment',
+        parentId: null,
+        principalId: 'principal_mock',
+        isTeamMember: false,
+        createdAt: new Date(),
+        deletedAt: new Date('2026-01-01'), // already soft-deleted
+        post: {
+          id: 'post_mock',
+          title: 'Test Post',
+          boardId: 'board_mock',
+          statusId: 'status_mock',
+          pinnedCommentId: null,
+          board: { id: 'board_mock', slug: 'test' },
+        },
+      } as never)
+
+      const { deleteComment } = await import('../comment.service')
+      setCalls.length = 0
+
+      await deleteComment('comment_mock' as CommentId, {
+        principalId: 'principal_mock' as PrincipalId,
+        role: 'admin',
+      })
+
+      // Should NOT have any set() call with commentCount
+      const hasCommentCountUpdate = setCalls.some((args) => {
+        const setArg = (args as unknown[])[0] as Record<string, unknown>
+        return 'commentCount' in setArg
+      })
+      expect(hasCommentCountUpdate).toBe(false)
+    })
   })
 })
