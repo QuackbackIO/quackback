@@ -25,10 +25,11 @@ import { randomBytes } from 'crypto'
 
 type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
 
-function parseJsonConfig<T>(json: string | null, defaultValue: T): T {
+/** @internal Exported for testing */
+export function parseJsonConfig<T extends object>(json: string | null, defaultValue: T): T {
   if (!json) return defaultValue
   try {
-    return { ...defaultValue, ...JSON.parse(json) } as T
+    return deepMerge(defaultValue, JSON.parse(json))
   } catch {
     return defaultValue
   }
