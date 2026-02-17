@@ -8,6 +8,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-settings'
 import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { getBaseUrl } from '@/lib/shared/routing'
 
 export const Route = createFileRoute('/admin/settings/mcp')({
   loader: async ({ context }) => {
@@ -17,17 +18,14 @@ export const Route = createFileRoute('/admin/settings/mcp')({
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.developerConfig())
 
-    const { getBaseUrl } = await import('@/lib/server/config')
-    return { baseUrl: getBaseUrl() }
+    return {}
   },
   component: McpSettingsPage,
 })
 
 function useEndpointUrl() {
-  const { baseUrl } = Route.useLoaderData()
-  if (baseUrl) return `${baseUrl}/api/mcp`
-  if (typeof window !== 'undefined') return `${window.location.origin}/api/mcp`
-  return '/api/mcp'
+  const baseUrl = getBaseUrl()
+  return baseUrl ? `${baseUrl}/api/mcp` : '/api/mcp'
 }
 
 function McpSettingsPage() {
