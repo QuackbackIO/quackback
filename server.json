@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.QuackbackIO/quackback",
+  "description": "Open-source feedback platform. Agents can search, triage, comment, vote, and manage changelogs.",
+  "repository": {
+    "url": "https://github.com/QuackbackIO/quackback",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/api/mcp",
+      "variables": {
+        "host": {
+          "description": "Hostname of your Quackback instance (e.g., feedback.yourcompany.com)",
+          "isRequired": true,
+          "format": "string"
+        }
+      }
+    }
+  ],
+  "tools": [
+    { "name": "search", "description": "Search feedback posts or changelog entries with filtering and pagination" },
+    { "name": "get_details", "description": "Get full details for any entity by TypeID (post, changelog)" },
+    { "name": "triage_post", "description": "Update a post: set status, tags, and/or owner" },
+    { "name": "vote_post", "description": "Toggle vote on a feedback post" },
+    { "name": "add_comment", "description": "Post a comment on a feedback post, with threaded reply support" },
+    { "name": "create_post", "description": "Submit new feedback on a board" },
+    { "name": "create_changelog", "description": "Create a changelog entry (draft or published)" },
+    { "name": "update_changelog", "description": "Update title, content, publish state, and linked posts on a changelog" },
+    { "name": "delete_changelog", "description": "Soft-delete a changelog entry" },
+    { "name": "update_comment", "description": "Edit a comment's content" },
+    { "name": "delete_comment", "description": "Hard-delete a comment and its replies" },
+    { "name": "react_to_comment", "description": "Add or remove an emoji reaction on a comment" },
+    { "name": "manage_roadmap_post", "description": "Add or remove a post from a roadmap" },
+    { "name": "merge_post", "description": "Merge a duplicate post into a canonical post" },
+    { "name": "unmerge_post", "description": "Restore a merged post to independent state" }
+  ]
+}
