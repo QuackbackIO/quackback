@@ -410,8 +410,9 @@ export function useRestorePost() {
       )
       // Remove detail cache
       queryClient.removeQueries({ queryKey: inboxKeys.detail(postId) })
-      // Invalidate all lists
+      // Invalidate all lists and roadmap (restored posts may reappear in roadmaps)
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },
   })
 }
