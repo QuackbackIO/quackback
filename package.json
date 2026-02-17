@@ -47,6 +47,7 @@
     "db:studio": "bun run --cwd packages/db db:studio",
     "db:seed": "bun packages/db/src/seed.ts",
     "db:reset": "bun packages/db/src/reset.ts",
+    "db:sync-counts": "bun packages/db/src/sync-counts.ts",
     "db:generate-csv": "bun packages/db/src/generate-sample-csv.ts",
     "reset": "bun packages/db/src/reset.ts",
     "import": "bun scripts/import/cli.ts",

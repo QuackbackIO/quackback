@@ -61,7 +61,7 @@ export const posts = pgTable(
     ),
     voteCount: integer('vote_count').default(0).notNull(),
     // Denormalized comment count for performance
-    // Automatically maintained by database trigger (see 0006_add_comment_count_trigger.sql)
+    // Maintained by application code in comment.service.ts (create/delete operations)
     commentCount: integer('comment_count').default(0).notNull(),
     // Pinned comment as official response
     // References a team member's root-level comment that serves as the official response

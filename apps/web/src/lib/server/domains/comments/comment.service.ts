@@ -15,6 +15,7 @@ import {
   and,
   asc,
   isNull,
+  sql,
   comments,
   commentReactions,
   commentEditHistory,
@@ -169,7 +170,7 @@ export async function createComment(
     previousStatusName = prevStatus?.name ?? 'Open'
     newStatusName = newStatus.name
 
-    // Atomic transaction: insert comment + update post status
+    // Atomic transaction: insert comment + update post status + increment comment count
     const result = await db.transaction(async (tx) => {
       const [insertedComment] = await tx
         .insert(comments)
@@ -186,7 +187,10 @@ export async function createComment(
 
       await tx
         .update(posts)
-        .set({ statusId: input.statusId as StatusId })
+        .set({
+          statusId: input.statusId as StatusId,
+          commentCount: sql`${posts.commentCount} + 1`,
+        })
         .where(eq(posts.id, input.postId))
 
       return insertedComment
@@ -194,19 +198,28 @@ export async function createComment(
 
     comment = result
   } else {
-    // Simple comment creation (no status change)
-    const [insertedComment] = await db
-      .insert(comments)
-      .values({
-        postId: input.postId,
-        content: input.content.trim(),
-        parentId: input.parentId || null,
-        principalId: author.principalId,
-        isTeamMember,
-      })
-      .returning()
+    // Atomic transaction: insert comment + increment comment count
+    const result = await db.transaction(async (tx) => {
+      const [insertedComment] = await tx
+        .insert(comments)
+        .values({
+          postId: input.postId,
+          content: input.content.trim(),
+          parentId: input.parentId || null,
+          principalId: author.principalId,
+          isTeamMember,
+        })
+        .returning()
 
-    comment = insertedComment
+      await tx
+        .update(posts)
+        .set({ commentCount: sql`${posts.commentCount} + 1` })
+        .where(eq(posts.id, input.postId))
+
+      return insertedComment
+    })
+
+    comment = result
   }
 
   // Auto-subscribe commenter to the post
@@ -361,11 +374,18 @@ export async function deleteComment(
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
   }
 
-  // Delete the comment
-  const result = await db.delete(comments).where(eq(comments.id, id)).returning()
-  if (result.length === 0) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
-  }
+  // Atomic transaction: delete comment + decrement comment count
+  await db.transaction(async (tx) => {
+    const result = await tx.delete(comments).where(eq(comments.id, id)).returning()
+    if (result.length === 0) {
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
+    }
+
+    await tx
+      .update(posts)
+      .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${result.length})` })
+      .where(eq(posts.id, existingComment.postId))
+  })
 }
 
 /**
@@ -789,23 +809,29 @@ export async function softDeleteComment(
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
   }
 
-  // Set deletedAt
-  const [updatedComment] = await db
-    .update(comments)
-    .set({
-      deletedAt: new Date(),
-    })
-    .where(eq(comments.id, commentId))
-    .returning()
+  // Atomic transaction: soft-delete comment + decrement comment count + auto-unpin
+  await db.transaction(async (tx) => {
+    const [updatedComment] = await tx
+      .update(comments)
+      .set({
+        deletedAt: new Date(),
+      })
+      .where(eq(comments.id, commentId))
+      .returning()
 
-  if (!updatedComment) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-  }
+    if (!updatedComment) {
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+    }
 
-  // Auto-unpin if this comment was pinned
-  if (comment.post?.pinnedCommentId === commentId) {
-    await db.update(posts).set({ pinnedCommentId: null }).where(eq(posts.id, comment.postId))
-  }
+    // Decrement comment count and auto-unpin if this comment was pinned
+    await tx
+      .update(posts)
+      .set({
+        commentCount: sql`GREATEST(0, ${posts.commentCount} - 1)`,
+        ...(comment.post?.pinnedCommentId === commentId ? { pinnedCommentId: null } : {}),
+      })
+      .where(eq(posts.id, comment.postId))
+  })
 }
 
 // ============================================================================
