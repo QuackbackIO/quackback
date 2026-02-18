@@ -5,12 +5,36 @@ import viteReact from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { execSync } from 'child_process'
+import { readFileSync } from 'fs'
+
+function getBuildInfo() {
+  const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
+  let gitCommit = 'unknown'
+  try {
+    gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+  } catch {
+    // git unavailable
+  }
+  return {
+    version: pkg.version ?? '0.0.0',
+    commit: gitCommit,
+    buildTime: new Date().toISOString(),
+  }
+}
 
 export default defineConfig(({ mode }) => {
   // Load env from monorepo root where .env file lives
   loadEnv(mode, path.resolve(__dirname, '../../'), '')
 
+  const buildInfo = getBuildInfo()
+
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(buildInfo.version),
+      __GIT_COMMIT__: JSON.stringify(buildInfo.commit),
+      __BUILD_TIME__: JSON.stringify(buildInfo.buildTime),
+    },
     server: {
       port: 3000,
       allowedHosts: true,

@@ -52,7 +52,7 @@ async function getSessionInternal(): Promise<Session | null> {
   }
 }
 
-let _telemetryStarted = false
+let _initialized = false
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
@@ -69,15 +69,20 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
           .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)
       : null
 
-    // Start telemetry on first request (delayed to let DB initialize)
-    if (!_telemetryStarted) {
-      _telemetryStarted = true
+    // One-time initialization on first request
+    if (!_initialized) {
+      _initialized = true
+
+      const { logStartupBanner } = await import('@/lib/server/startup')
+      logStartupBanner()
+
+      // Delay telemetry to let the DB connection initialize
       setTimeout(async () => {
         try {
           const { startTelemetry } = await import('@/lib/server/telemetry')
           await startTelemetry()
         } catch {
-          // Silent failure — telemetry must never affect the application
+          // Silent failure -- telemetry must never affect the application
         }
       }, 10_000)
     }

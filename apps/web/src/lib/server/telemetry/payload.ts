@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from 'fs'
-import { resolve } from 'path'
+import { existsSync } from 'fs'
 import { getOrCreateInstanceId } from './instance-id'
 
 export interface TelemetryPayload {
@@ -25,25 +24,12 @@ export interface TelemetryPayload {
   }
 }
 
-let _version: string | undefined
-
-function getVersion(): string {
-  if (_version) return _version
-  try {
-    const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf-8'))
-    _version = pkg.version ?? '0.0.0'
-  } catch {
-    _version = '0.0.0'
-  }
-  return _version!
-}
-
 function getRuntime(): 'bun' | 'node' {
   return typeof globalThis.Bun !== 'undefined' ? 'bun' : 'node'
 }
 
 function getRuntimeVersion(): string {
-  const raw = getRuntime() === 'bun' ? (Bun?.version ?? process.version) : process.version
+  const raw = getRuntime() === 'bun' ? Bun.version : process.version
   const [major, minor] = raw.replace(/^v/, '').split('.')
   return major && minor ? `${major}.${minor}` : raw
 }
@@ -119,7 +105,7 @@ export async function buildPayload(): Promise<TelemetryPayload> {
   ])
 
   return {
-    version: getVersion(),
+    version: __APP_VERSION__,
     runtime: getRuntime(),
     runtimeVersion: getRuntimeVersion(),
     os: process.platform,
