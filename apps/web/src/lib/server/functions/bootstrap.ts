@@ -73,9 +73,6 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
     if (!_initialized) {
       _initialized = true
 
-      const { logStartupBanner } = await import('@/lib/server/startup')
-      logStartupBanner()
-
       // Delay telemetry to let the DB connection initialize
       setTimeout(async () => {
         try {
