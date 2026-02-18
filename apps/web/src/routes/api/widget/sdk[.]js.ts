@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { config } from '@/lib/server/config'
 import { buildWidgetSDK, type WidgetTheme } from '@/lib/shared/widget/sdk-template'
 
 function jsResponse(body: string, maxAge: number): Response {
@@ -45,7 +46,7 @@ function extractThemeFromCss(css: string): WidgetTheme {
 export const Route = createFileRoute('/api/widget/sdk.js')({
   server: {
     handlers: {
-      GET: async ({ request }) => {
+      GET: async () => {
         const { getWidgetConfig, getBrandingConfig } =
           await import('@/lib/server/domains/settings/settings.service')
         const widgetConfig = await getWidgetConfig()
@@ -57,8 +58,7 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
           )
         }
 
-        const url = new URL(request.url)
-        const baseUrl = `${url.protocol}//${url.host}`
+        const baseUrl = config.baseUrl
 
         // Resolve theme from branding for trigger button styling
         const theme: WidgetTheme = {}
