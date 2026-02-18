@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { config } from '@/lib/server/config'
 
 export const Route = createFileRoute('/api/v1/docs')({
   server: {
@@ -9,9 +10,8 @@ export const Route = createFileRoute('/api/v1/docs')({
        *
        * This endpoint is public and does not require authentication.
        */
-      GET: async ({ request }) => {
-        const url = new URL(request.url)
-        const baseUrl = `${url.protocol}//${url.host}`
+      GET: async () => {
+        const baseUrl = config.baseUrl
 
         const html = `<!DOCTYPE html>
 <html lang="en">
