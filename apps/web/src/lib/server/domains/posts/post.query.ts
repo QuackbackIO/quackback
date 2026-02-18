@@ -297,11 +297,11 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   // becomes "posts"."post_id" instead of "comments"."post_id".
   if (responded === 'responded') {
     conditions.push(
-      sql`EXISTS (SELECT 1 FROM comments WHERE comments.post_id = ${posts.id} AND comments.is_team_member = true)`
+      sql`EXISTS (SELECT 1 FROM comments WHERE comments.post_id = ${posts.id} AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
     )
   } else if (responded === 'unresponded') {
     conditions.push(
-      sql`NOT EXISTS (SELECT 1 FROM comments WHERE comments.post_id = ${posts.id} AND comments.is_team_member = true)`
+      sql`NOT EXISTS (SELECT 1 FROM comments WHERE comments.post_id = ${posts.id} AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
     )
   }
 

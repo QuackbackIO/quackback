@@ -169,11 +169,11 @@ export async function deleteStatus(id: StatusId): Promise<void> {
     )
   }
 
-  // Check if any posts are using this status
+  // Check if any non-deleted posts are using this status
   const result = await db
     .select({ count: sql<number>`count(*)` })
     .from(posts)
-    .where(eq(posts.statusId, id))
+    .where(and(eq(posts.statusId, id), isNull(posts.deletedAt)))
 
   const usageCount = Number(result[0].count)
   if (usageCount > 0) {
@@ -310,6 +310,7 @@ export async function getStatusBySlug(slug: string): Promise<Status> {
 export async function listPublicStatuses(): Promise<Status[]> {
   try {
     return await db.query.postStatuses.findMany({
+      where: isNull(postStatuses.deletedAt),
       orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
     })
   } catch (error) {

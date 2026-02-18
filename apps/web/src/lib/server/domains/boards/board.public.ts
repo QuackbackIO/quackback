@@ -40,7 +40,7 @@ export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
         postCount: sql<number>`count(${posts.id})::int`.as('post_count'),
       })
       .from(boards)
-      .leftJoin(posts, eq(posts.boardId, boards.id))
+      .leftJoin(posts, and(eq(posts.boardId, boards.id), isNull(posts.deletedAt)))
       .where(and(eq(boards.isPublic, true), isNull(boards.deletedAt)))
       .groupBy(boards.id)
       .orderBy(boards.name)

@@ -194,13 +194,13 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
     throw new ValidationError('VALIDATION_ERROR', `Board with ID ${boardId} not found`)
   }
 
-  // Get unique tag IDs used by posts in this board
+  // Get unique tag IDs used by non-deleted posts in this board
   const tagResults = await db
     .selectDistinct({ id: tags.id })
     .from(tags)
     .innerJoin(postTags, eq(tags.id, postTags.tagId))
     .innerJoin(posts, eq(postTags.postId, posts.id))
-    .where(eq(posts.boardId, boardId))
+    .where(and(eq(posts.boardId, boardId), isNull(posts.deletedAt)))
 
   if (tagResults.length === 0) {
     return []
@@ -225,6 +225,7 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
 export async function listPublicTags(): Promise<Tag[]> {
   try {
     return await db.query.tags.findMany({
+      where: isNull(tags.deletedAt),
       orderBy: [asc(tags.name)],
     })
   } catch (error) {

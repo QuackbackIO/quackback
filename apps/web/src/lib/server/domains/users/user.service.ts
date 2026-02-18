@@ -74,6 +74,7 @@ export async function listPortalUsers(
         commentCount: sql<number>`count(*)::int`.as('comment_count'),
       })
       .from(comments)
+      .where(isNull(comments.deletedAt))
       .groupBy(comments.principalId)
       .as('comment_counts')
 
@@ -322,9 +323,12 @@ export async function getPortalUserDetail(
             })
             .from(comments)
             .where(
-              inArray(
-                comments.postId,
-                authoredPosts.map((p) => p.id)
+              and(
+                inArray(
+                  comments.postId,
+                  authoredPosts.map((p) => p.id)
+                ),
+                isNull(comments.deletedAt)
               )
             )
             .groupBy(comments.postId)
@@ -341,9 +345,12 @@ export async function getPortalUserDetail(
             })
             .from(comments)
             .where(
-              inArray(
-                comments.postId,
-                otherPosts.map((p) => p.id)
+              and(
+                inArray(
+                  comments.postId,
+                  otherPosts.map((p) => p.id)
+                ),
+                isNull(comments.deletedAt)
               )
             )
             .groupBy(comments.postId)
