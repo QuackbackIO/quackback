@@ -102,9 +102,9 @@ export async function createComment(
     role: 'admin' | 'member' | 'user'
   }
 ): Promise<CreateCommentResult> {
-  // Validate post exists and eagerly load board in single query
+  // Validate post exists (and is not deleted) and eagerly load board in single query
   const post = await db.query.posts.findFirst({
-    where: eq(posts.id, input.postId),
+    where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
     with: { board: true },
   })
   if (!post || !post.board) {

@@ -39,7 +39,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   }>(sql`
     WITH post_check AS (
       SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid
+      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}

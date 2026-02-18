@@ -472,9 +472,8 @@ function PostModalContent({
         isPending={deletePost.isPending}
         description={
           <>
-            Are you sure you want to delete &ldquo;{post.title}&rdquo;? This will remove the post
-            from the public portal and all board listings. Votes and comments will be preserved. You
-            can restore it from the Deleted filter within 30 days.
+            This will delete &ldquo;{post.title}&rdquo; from the portal. You can restore it within
+            30 days, after which it will be permanently deleted.
           </>
         }
         onConfirm={async () => {

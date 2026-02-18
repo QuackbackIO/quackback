@@ -500,7 +500,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
   }
 
   // Get linked posts with board slugs and status
-  const linkedPostRecords = await db.query.changelogEntryPosts.findMany({
+  const allLinkedPostRecords = await db.query.changelogEntryPosts.findMany({
     where: eq(changelogEntryPosts.changelogEntryId, id),
     with: {
       post: {
@@ -510,6 +510,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
           voteCount: true,
           boardId: true,
           statusId: true,
+          deletedAt: true,
         },
         with: {
           board: {
@@ -521,6 +522,9 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
       },
     },
   })
+
+  // Exclude deleted posts from public changelog
+  const linkedPostRecords = allLinkedPostRecords.filter((lp) => !lp.post.deletedAt)
 
   // Get status info for linked posts
   const statusIds = new Set<StatusId>()
@@ -595,7 +599,7 @@ export async function listPublicChangelogs(params: {
 
   // Get linked posts for all entries
   const entryIds = items.map((e) => e.id)
-  const allLinkedPosts =
+  const allLinkedPosts = (
     entryIds.length > 0
       ? await db.query.changelogEntryPosts.findMany({
           where: inArray(changelogEntryPosts.changelogEntryId, entryIds),
@@ -607,6 +611,7 @@ export async function listPublicChangelogs(params: {
                 voteCount: true,
                 boardId: true,
                 statusId: true,
+                deletedAt: true,
               },
               with: {
                 board: {
@@ -619,6 +624,7 @@ export async function listPublicChangelogs(params: {
           },
         })
       : []
+  ).filter((lp) => !lp.post.deletedAt)
 
   // Group linked posts by changelog entry
   const linkedPostsMap = new Map<ChangelogId, typeof allLinkedPosts>()

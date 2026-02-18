@@ -21,6 +21,7 @@ import {
   eq,
   and,
   inArray,
+  isNull,
   postSubscriptions,
   notificationPreferences,
   unsubscribeTokens,
@@ -233,7 +234,7 @@ export async function getMemberSubscriptions(principalId: PrincipalId): Promise<
       createdAt: postSubscriptions.createdAt,
     })
     .from(postSubscriptions)
-    .innerJoin(posts, eq(postSubscriptions.postId, posts.id))
+    .innerJoin(posts, and(eq(postSubscriptions.postId, posts.id), isNull(posts.deletedAt)))
     .where(eq(postSubscriptions.principalId, principalId))
 
   return rows.map((row) => ({
